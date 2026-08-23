@@ -52,6 +52,12 @@ public sealed class SingBoxOptions
     /// </remarks>
     public int LatencyTolerance { get; init; } = 50;
 
+    /// <summary>
+    /// Закреплённый сервер: селектор будет указывать на него, а не на автоподбор.
+    /// <c>null</c> — выбирать по задержке.
+    /// </summary>
+    public string? PreferredServerTag { get; init; }
+
     public string LogLevel { get; init; } = "warn";
 
     /// <summary>
@@ -509,12 +515,19 @@ public sealed class SingBoxConfigCompiler
         foreach (var server in servers)
             selectorMembers.Add(tags[server]);
 
+        // Закреплённый сервер должен существовать: тег из настроек мог остаться
+        // от прежней подписки, а ссылка на отсутствующий outbound не даст
+        // конфигу даже запуститься.
+        var pinned = options.PreferredServerTag is { } wanted
+            ? servers.Select(s => tags[s]).FirstOrDefault(t => t.Equals(wanted, StringComparison.OrdinalIgnoreCase))
+            : null;
+
         outbounds.Add(new JsonObject
         {
             ["type"] = "selector",
             ["tag"] = options.SelectorTag,
             ["outbounds"] = selectorMembers,
-            ["default"] = LatencyTag,
+            ["default"] = pinned ?? LatencyTag,
         });
 
         return outbounds;

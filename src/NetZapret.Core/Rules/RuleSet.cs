@@ -3,7 +3,7 @@ namespace NetZapret.Core.Rules;
 /// <summary>
 /// Полный набор правил маршрутизации + поведение по умолчанию.
 /// </summary>
-public sealed class RuleSet
+public sealed record RuleSet
 {
     /// <summary>Правила в порядке вычисления (уже отсортированы по приоритету класса).</summary>
     public required IReadOnlyList<RoutingRule> Rules { get; init; }

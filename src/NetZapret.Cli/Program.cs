@@ -35,6 +35,7 @@ internal static class Program
                 "status" => SupervisorCommands.Status(cmd),
                 "doctor" => DoctorCommand.Run(cmd),
                 "autostart" => AutostartCommand.Run(cmd),
+                "menu" => await MenuCommand.RunAsync(cmd, cts.Token),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
             };
@@ -69,6 +70,7 @@ internal static class Program
             netzapret — диспетчер маршрутизации трафика
 
             КОМАНДЫ
+              menu     Интерактивное меню: режим, пресет, сервер, запуск
               watch    Наблюдать за соединениями и показывать применяемые правила
               rules    Показать разобранный набор правил в порядке вычисления
               test     Прогнать синтетическое соединение через правила
