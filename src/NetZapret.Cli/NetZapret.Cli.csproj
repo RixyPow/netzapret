@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>netzapret</AssemblyName>
+    <RootNamespace>NetZapret.Cli</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetZapret.Core\NetZapret.Core.csproj" />
+    <ProjectReference Include="..\NetZapret.Wfp\NetZapret.Wfp.csproj" />
+    <ProjectReference Include="..\NetZapret.Etw\NetZapret.Etw.csproj" />
+    <ProjectReference Include="..\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
+    <ProjectReference Include="..\NetZapret.Proxy\NetZapret.Proxy.csproj" />
+    <ProjectReference Include="..\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+    <ProjectReference Include="..\NetZapret.Dns\NetZapret.Dns.csproj" />
+  </ItemGroup>
+
+</Project>

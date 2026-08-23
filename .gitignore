@@ -1,0 +1,15 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+
+# Внешние движки: качаются отдельно, в репозиторий не кладутся
+tools/
+
+# Рантайм-артефакты диспетчера
+logs/
+runtime/
+config/rules.yaml
+config/subscription.cache.json

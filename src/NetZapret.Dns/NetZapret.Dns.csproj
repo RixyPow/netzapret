@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetZapret.Core\NetZapret.Core.csproj" />
+  </ItemGroup>
+
+</Project>

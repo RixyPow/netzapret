@@ -1,0 +1,32 @@
+# Конфиг для одной задачи: доказать, что доменные правила срабатывают
+# на живом трафике.
+#
+# Домены выбраны не случайно — это те, что в прошлом прогоне реально получили
+# имена через ETW. Приложения, которые к ним ходят, используют системный
+# резолвер, а не встроенный, как Chrome.
+#
+# Запуск:
+#   netzapret watch --config config/rules.dnstest.yaml --duration 30
+#
+# Ожидание: строки с api.anthropic.com получают proxy, а с visualstudio.com —
+# direct, и «совпало с правилом» перестаёт быть нулём.
+
+mode: selective
+
+rules:
+  # claude.exe стучится сюда постоянно и резолвит через системный DNS.
+  - match: domain
+    value: "*.anthropic.com"
+    mode: proxy
+    server: "auto"
+
+  # Телеметрия dotnet.exe — второй домен, который резолвится системно.
+  - match: domain
+    value: "*.visualstudio.com"
+    mode: direct
+
+  # Проверка правила по процессу заодно: у steam.exe имени не будет никогда,
+  # он ходит по голым адресам — и это нормально, process-правилам имя не нужно.
+  - match: process
+    value: "steam.exe"
+    mode: direct
