@@ -37,7 +37,9 @@ internal static class ProbeCommand
         var options = new ProbeOptions
         {
             ListenPort = cmd.Int("port", 21080),
-            RequestTimeout = TimeSpan.FromSeconds(cmd.Int("timeout", 15)),
+            RequestTimeout = TimeSpan.FromSeconds(cmd.Int("timeout", 6)),
+            TotalTimeout = TimeSpan.FromSeconds(cmd.Int("budget", 14)),
+            Parallelism = cmd.Int("parallel", 5),
             LogLevel = cmd.Value("log-level", "debug"),
         };
 
@@ -60,23 +62,14 @@ internal static class ProbeCommand
         Console.WriteLine("  " + new string('-', 88));
 
         var probe = new ProxyProbe(singBox);
-        var working = new List<ProbeResult>();
-        var failed = new List<ProbeResult>();
+        var results = await probe.RunManyAsync(
+            candidates,
+            options,
+            result => PrintRow(result, directIp),
+            cancellationToken);
 
-        foreach (var server in candidates)
-        {
-            var result = await probe.RunAsync(server, options, cancellationToken);
-
-            if (result.Success)
-                working.Add(result);
-            else
-                failed.Add(result);
-
-            PrintRow(result, directIp);
-
-            if (cancellationToken.IsCancellationRequested)
-                break;
-        }
+        var working = results.Where(r => r.Success).ToList();
+        var failed = results.Where(r => !r.Success).ToList();
 
         PrintSummary(working, failed, directIp);
 
@@ -97,16 +90,19 @@ internal static class ProbeCommand
                 .ToList();
         }
 
-        if (cmd.Has("all"))
-            return usable;
+        if (cmd.Has("quick"))
+        {
+            // Быстрый срез: по одному серверу каждого протокола. Годится, чтобы
+            // отличить «сломан транспорт» от «сломан конкретный сервер», но
+            // выборка может целиком состоять из неудачников — так и вышло
+            // на подписке пользователя.
+            return usable
+                .GroupBy(s => s.Protocol)
+                .Select(g => g.First())
+                .ToList();
+        }
 
-        // По умолчанию берём по одному серверу каждого протокола: этого хватает,
-        // чтобы отличить «сломан транспорт» от «сломан конкретный сервер»,
-        // и не занимает полчаса на восемнадцати проверках.
-        return usable
-            .GroupBy(s => s.Protocol)
-            .Select(g => g.First())
-            .ToList();
+        return usable;
     }
 
     private static void PrintRow(ProbeResult result, string? directIp)

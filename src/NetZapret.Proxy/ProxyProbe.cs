@@ -4,14 +4,34 @@ using NetZapret.Subscriptions;
 
 namespace NetZapret.Proxy;
 
-public sealed class ProbeOptions
+public sealed record ProbeOptions
 {
     /// <summary>Локальный порт для инбаунда пробника.</summary>
     public int ListenPort { get; init; } = 21080;
 
-    public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(12);
+    public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(8);
 
-    public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(15);
+    public TimeSpan RequestTimeout { get; init; } = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// Общий бюджет времени на один сервер.
+    /// </summary>
+    /// <remarks>
+    /// Обязателен: без него мёртвый сервер съедает таймаут за каждую службу
+    /// определения адреса подряд, и проверка четырнадцати серверов занимает
+    /// минуты вместо десятков секунд.
+    /// </remarks>
+    public TimeSpan TotalTimeout { get; init; } = TimeSpan.FromSeconds(14);
+
+    /// <summary>
+    /// Сколько серверов проверять одновременно.
+    /// </summary>
+    /// <remarks>
+    /// Каждая проверка поднимает свой процесс sing-box на своём порту,
+    /// так что они независимы. Ограничение нужно, чтобы не поднимать
+    /// полтора десятка движков разом.
+    /// </remarks>
+    public int Parallelism { get; init; } = 5;
 
     /// <summary>Каталог для конфигов и логов пробника.</summary>
     public string WorkDirectory { get; init; } = "runtime/probe";
@@ -74,9 +94,57 @@ public sealed class ProxyProbe
         return await TryServicesAsync(http, options.IpServices, cancellationToken);
     }
 
+    /// <summary>
+    /// Проверяет несколько серверов одновременно.
+    /// </summary>
+    /// <param name="onResult">Вызывается по мере готовности каждого результата.</param>
+    public async Task<IReadOnlyList<ProbeResult>> RunManyAsync(
+        IReadOnlyList<ProxyServer> servers,
+        ProbeOptions options,
+        Action<ProbeResult>? onResult,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<ProbeResult>();
+        var sync = new object();
+
+        using var limit = new SemaphoreSlim(Math.Max(1, options.Parallelism));
+
+        var tasks = servers.Select(async (server, index) =>
+        {
+            await limit.WaitAsync(cancellationToken);
+
+            try
+            {
+                // Каждой проверке свой порт: процессы sing-box поднимаются
+                // одновременно и за один порт подрались бы.
+                var own = options with { ListenPort = options.ListenPort + index };
+                var result = await RunAsync(server, own, cancellationToken);
+
+                lock (sync)
+                {
+                    results.Add(result);
+                    onResult?.Invoke(result);
+                }
+            }
+            finally
+            {
+                limit.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
+        return results;
+    }
+
     public async Task<ProbeResult> RunAsync(ProxyServer server, ProbeOptions options, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(options.WorkDirectory);
+
+        // Общий бюджет на сервер: иначе мёртвый узел удерживает проверку
+        // столько, сколько служб определения адреса мы перебираем.
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        budget.CancelAfter(options.TotalTimeout);
+        cancellationToken = budget.Token;
 
         var safeTag = MakeFileSafe(server.Tag);
         var configPath = Path.Combine(options.WorkDirectory, $"probe-{safeTag}.json");
@@ -92,7 +160,17 @@ public sealed class ProxyProbe
         var stopwatch = Stopwatch.StartNew();
         await using var runner = new SingBoxRunner(_singBoxPath, configPath);
 
-        bool ready = await runner.StartAsync(options.ListenPort, options.StartupTimeout, cancellationToken);
+        bool ready;
+
+        try
+        {
+            ready = await runner.StartAsync(options.ListenPort, options.StartupTimeout, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            return Failure(server, stopwatch.Elapsed, logPath, "превышен бюджет времени при запуске");
+        }
 
         if (!ready)
         {
@@ -109,7 +187,12 @@ public sealed class ProxyProbe
             stopwatch.Stop();
 
             if (ip is null)
-                return Failure(server, stopwatch.Elapsed, logPath, error ?? "внешний адрес не получен");
+            {
+                return Failure(server, stopwatch.Elapsed, logPath,
+                    budget.IsCancellationRequested && !budget.Token.IsCancellationRequested
+                        ? "превышен бюджет времени"
+                        : error ?? "внешний адрес не получен");
+            }
 
             return new ProbeResult
             {
