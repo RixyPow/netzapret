@@ -191,6 +191,58 @@ public sealed class WinwsCommandLineTests : IDisposable
     }
 
     [Fact]
+    public void ExactPresetNameWinsOverALongerMatch()
+    {
+        // Найдено на живом запуске: «Universal V6» уводило на
+        // «Universal V6 voicefix», потому что пробел сортируется раньше точки.
+        // Пользователь получал не тот десинк и замечал не сразу.
+        var directory = Path.Combine(_root, "presets", "winws2");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "Universal V6 voicefix.txt"), Preset);
+        File.WriteAllText(Path.Combine(directory, "Universal V6.txt"), Preset);
+
+        var paths = ZapretPaths.Discover(_root)!;
+
+        Assert.Equal("Universal V6", Path.GetFileNameWithoutExtension(paths.FindPreset("Universal V6")));
+        Assert.Equal("Universal V6 voicefix", Path.GetFileNameWithoutExtension(paths.FindPreset("voicefix")));
+    }
+
+    [Fact]
+    public void PresetNameWithExtensionIsAccepted()
+    {
+        var directory = Path.Combine(_root, "presets", "winws2");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "Universal V6.txt"), Preset);
+
+        var paths = ZapretPaths.Discover(_root)!;
+
+        Assert.NotNull(paths.FindPreset("Universal V6.txt"));
+    }
+
+    [Fact]
+    public void ShortestMatchWinsWhenThereIsNoExactOne()
+    {
+        var directory = Path.Combine(_root, "presets", "winws2");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "Universal V6 voicefix.txt"), Preset);
+        File.WriteAllText(Path.Combine(directory, "Universal V6 game filter.txt"), Preset);
+
+        var paths = ZapretPaths.Discover(_root)!;
+
+        Assert.Equal(
+            "Universal V6 voicefix",
+            Path.GetFileNameWithoutExtension(paths.FindPreset("Universal V6")));
+    }
+
+    [Fact]
+    public void UnknownPresetYieldsNull()
+    {
+        Directory.CreateDirectory(Path.Combine(_root, "presets", "winws2"));
+
+        Assert.Null(ZapretPaths.Discover(_root)!.FindPreset("нет такого"));
+    }
+
+    [Fact]
     public void ExecutableIsLookedUpInTheExeSubdirectory()
     {
         // Найдено командой doctor: winws2.exe лежит в exe/ рядом с WinDivert.dll,

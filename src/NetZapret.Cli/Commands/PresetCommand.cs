@@ -27,7 +27,7 @@ internal static class PresetCommand
             return 0;
         }
 
-        var path = ResolvePreset(paths, name);
+        var path = paths.FindPreset(name);
 
         if (path is null)
         {
@@ -125,18 +125,6 @@ internal static class PresetCommand
 
             Console.ForegroundColor = previous;
         }
-    }
-
-    private static string? ResolvePreset(ZapretPaths paths, string name)
-    {
-        var direct = Path.Combine(paths.PresetDirectory, name.EndsWith(".txt") ? name : name + ".txt");
-        if (File.Exists(direct))
-            return direct;
-
-        return Directory
-            .EnumerateFiles(paths.PresetDirectory, "*.txt")
-            .FirstOrDefault(p => Path.GetFileNameWithoutExtension(p)
-                .Contains(name, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string HeadOf(string recipe)

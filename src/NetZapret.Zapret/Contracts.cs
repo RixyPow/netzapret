@@ -51,6 +51,38 @@ public sealed record ZapretPaths
     public string ExecutablePath => Path.Combine(Root, "exe", "winws2.exe");
 
     /// <summary>
+    /// Находит файл пресета по названию.
+    /// </summary>
+    /// <remarks>
+    /// Точное совпадение имеет приоритет над подстрокой. Иначе запрос
+    /// «Universal V6» уводит на «Universal V6 voicefix»: тот сортируется
+    /// раньше, потому что пробел идёт до точки. Пользователь при этом
+    /// получает не тот десинк, о котором просил, и замечает не сразу.
+    /// </remarks>
+    public string? FindPreset(string name)
+    {
+        if (!Directory.Exists(PresetDirectory))
+            return null;
+
+        var files = Directory.EnumerateFiles(PresetDirectory, "*.txt").ToList();
+        var wanted = name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetFileNameWithoutExtension(name)
+            : name;
+
+        var exact = files.FirstOrDefault(p => string.Equals(
+            Path.GetFileNameWithoutExtension(p), wanted, StringComparison.OrdinalIgnoreCase));
+
+        if (exact is not null)
+            return exact;
+
+        return files
+            .Where(p => Path.GetFileNameWithoutExtension(p)
+                .Contains(wanted, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => Path.GetFileNameWithoutExtension(p).Length)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
     /// Ищет установку Zapret в обычных местах.
     /// </summary>
     public static ZapretPaths? Discover(string? hint = null)
