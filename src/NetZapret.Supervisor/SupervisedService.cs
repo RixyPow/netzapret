@@ -36,6 +36,25 @@ public abstract class SupervisedService
 
     protected Process? Process { get; set; }
 
+    /// <summary>
+    /// Куда складывать вывод службы. Если не задан, вывод отбрасывается,
+    /// но всё равно вычитывается.
+    /// </summary>
+    public string? OutputLogPath { get; set; }
+
+    /// <summary>Последние строки вывода — для диагностики при падении.</summary>
+    public IReadOnlyList<string> RecentOutput
+    {
+        get
+        {
+            lock (_outputLock)
+                return _recentOutput.ToList();
+        }
+    }
+
+    private readonly object _outputLock = new();
+    private readonly Queue<string> _recentOutput = new();
+
     public int? ProcessId => Process is { HasExited: false } ? Process.Id : null;
 
     public DateTimeOffset? StartedAt { get; private set; }
@@ -83,6 +102,12 @@ public abstract class SupervisedService
             LastError = "процесс не запустился";
             return false;
         }
+
+        // Вывод обязан вычитываться. Перенаправленный и никем не читаемый
+        // конвейер заполняется и намертво блокирует дочерний процесс на записи
+        // в stdout — служба при этом выглядит живой и проходит проверку порта.
+        StartOutputPump(Process.StandardOutput);
+        StartOutputPump(Process.StandardError);
 
         StartedAt = DateTimeOffset.Now;
 
@@ -136,6 +161,49 @@ public abstract class SupervisedService
     }
 
     internal void NoteRestart() => RestartCount++;
+
+    private void StartOutputPump(StreamReader reader)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await reader.ReadLineAsync() is { } line)
+                    RecordOutput(line);
+            }
+            catch (Exception)
+            {
+                // Поток закрывается вместе с процессом — это штатное завершение насоса.
+            }
+        });
+    }
+
+    private void RecordOutput(string line)
+    {
+        lock (_outputLock)
+        {
+            _recentOutput.Enqueue(line);
+
+            while (_recentOutput.Count > 100)
+                _recentOutput.Dequeue();
+        }
+
+        if (OutputLogPath is null)
+            return;
+
+        try
+        {
+            var directory = Path.GetDirectoryName(OutputLogPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            File.AppendAllText(OutputLogPath, line + Environment.NewLine, System.Text.Encoding.UTF8);
+        }
+        catch (IOException)
+        {
+            // Лог не должен ронять службу.
+        }
+    }
 }
 
 /// <summary>

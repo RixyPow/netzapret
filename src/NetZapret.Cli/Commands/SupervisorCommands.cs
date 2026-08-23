@@ -50,6 +50,7 @@ internal static class SupervisorCommands
         };
 
         Console.WriteLine($"Служб под присмотром: {services.Count} ({string.Join(", ", services.Select(s => s.Name))})");
+        Console.WriteLine($"Логи служб: {Path.GetFullPath("runtime")}");
         Console.WriteLine("Ctrl+C — остановить всё и выйти.");
         Console.WriteLine();
 
@@ -87,7 +88,10 @@ internal static class SupervisorCommands
             configPath,
             cmd.Int("clash-port", 9090),
             trafficPort,
-            cmd.Int("traffic-check-every", 6)));
+            cmd.Int("traffic-check-every", 6))
+        {
+            OutputLogPath = Path.Combine("runtime", "sing-box.log"),
+        });
 
         return true;
     }
@@ -133,7 +137,10 @@ internal static class SupervisorCommands
             "ВНИМАНИЕ: запуск winws2 требует прав администратора (драйвер WinDivert). " +
             "Без них служба не поднимется — это ожидаемо.");
 
-        services.Add(new WinwsService(paths.ExecutablePath, arguments, paths.Root));
+        services.Add(new WinwsService(paths.ExecutablePath, arguments, paths.Root)
+        {
+            OutputLogPath = Path.Combine("runtime", "winws2.log"),
+        });
     }
 
     public static int Status(CommandLine cmd)
