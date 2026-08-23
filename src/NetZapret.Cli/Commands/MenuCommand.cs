@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Principal;
 using NetZapret.Core;
+using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
@@ -93,11 +94,12 @@ internal static class MenuCommand
         Console.WriteLine($"  3. Сервер VPN ............ {settings.DescribeServer()}");
         Console.WriteLine($"  4. Подписка .............. {DescribeSubscription(settings)}");
         Console.WriteLine($"  5. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
+        Console.WriteLine($"  6. Маршруты приложений ... {DescribeRoutes()}");
         Console.WriteLine();
-        Console.WriteLine("  6. Собрать конфиг");
-        Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить");
-        Console.WriteLine("  8. Проверить серверы");
-        Console.WriteLine("  9. Обзор состояния");
+        Console.WriteLine("  7. Собрать конфиг");
+        Console.WriteLine(running ? "  8. Остановить" : "  8. Запустить");
+        Console.WriteLine("  9. Проверить серверы");
+        Console.WriteLine(" 10. Обзор состояния");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -137,15 +139,18 @@ internal static class MenuCommand
                 ToggleAutostart(settings);
                 return settings;
             case "6":
-                await BuildConfigAsync(settings, cancellationToken);
+                EditRoutes(settings);
                 return settings;
             case "7":
-                await ToggleRunAsync(settings, cancellationToken);
+                await BuildConfigAsync(settings, cancellationToken);
                 return settings;
             case "8":
-                await ProbeAsync(settings, cancellationToken);
+                await ToggleRunAsync(settings, cancellationToken);
                 return settings;
             case "9":
+                await ProbeAsync(settings, cancellationToken);
+                return settings;
+            case "10":
                 RunDoctor(settings);
                 return settings;
             default:
@@ -235,6 +240,192 @@ internal static class MenuCommand
         return settings with { SubscriptionUrl = url.ToString() };
     }
 
+    private static string DescribeRoutes()
+    {
+        var file = UserRulesFile.Load();
+        int active = file.Entries.Count(e => e.Enabled);
+
+        if (file.Entries.Count == 0)
+            return "нет своих";
+
+        return active == file.Entries.Count
+            ? $"{active}"
+            : $"{active} из {file.Entries.Count}";
+    }
+
+    /// <summary>
+    /// Правка маршрутов: спросить про сервис, показать текущее решение, дать выбрать.
+    /// </summary>
+    /// <remarks>
+    /// Задумано как ответ на вопрос «а куда пойдёт вот это»: человек вводит
+    /// имя, видит путь с основанием и тут же может его сменить. Тип совпадения
+    /// определяется по виду строки, чтобы не заставлять помнить ключи.
+    /// </remarks>
+    private static void EditRoutes(AppSettings settings)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Маршруты приложений");
+            Console.WriteLine(new string('=', 62));
+
+            var file = UserRulesFile.Load();
+
+            if (file.Entries.Count == 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine("  Своих маршрутов нет — всё идёт по базовому набору.");
+            }
+            else
+            {
+                Console.WriteLine();
+
+                for (int i = 0; i < file.Entries.Count; i++)
+                {
+                    var entry = file.Entries[i];
+                    var previous = Console.ForegroundColor;
+
+                    if (!entry.Enabled)
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+                    Console.WriteLine(
+                        $"  {i + 1,-3} {entry.DescribeMatch(),-10} {Truncate(entry.Value, 30),-30} " +
+                        $"{entry.DescribeMode(),-10} {(entry.Enabled ? string.Empty : "выключено")}");
+
+                    Console.ForegroundColor = previous;
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  Введите приложение или сайт — покажу, куда он пойдёт.");
+            Console.WriteLine("  Номер из списка — включить или выключить запись.");
+            Console.WriteLine("  Пусто — назад.");
+            Console.WriteLine();
+            Console.Write("> ");
+
+            var input = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
+                return;
+
+            if (int.TryParse(input, out var index) && index >= 1 && index <= file.Entries.Count)
+            {
+                file.Toggle(index - 1);
+                file.Save();
+                continue;
+            }
+
+            AskRoute(settings, input);
+        }
+    }
+
+    private static void AskRoute(AppSettings settings, string target)
+    {
+        RuleEngine engine;
+
+        try
+        {
+            engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+            RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
+        }
+        catch (RuleConfigurationException ex)
+        {
+            Message($"Не удалось прочитать правила: {ex.Message}", ConsoleColor.Red);
+            return;
+        }
+
+        var match = RouteCommand.Detect(target);
+        var connection = BuildProbe(target, match);
+        var decision = engine.Evaluate(connection);
+
+        Console.WriteLine();
+        Console.WriteLine($"  {target}  →  {RouteCommand.Describe(decision.Mode)}");
+        Console.WriteLine($"  Опознано как: {DescribeMatch(match)}");
+        Console.WriteLine($"  Основание:    {decision.Reason ?? "правило по умолчанию"}");
+
+        if (decision.Rule is not null)
+            Console.WriteLine($"  Слой:         {(decision.Rule.Source == RuleSource.User ? "ваш выбор" : "базовый набор")}");
+
+        Console.WriteLine();
+        Console.WriteLine("  1. Напрямую");
+        Console.WriteLine("  2. Десинк");
+        Console.WriteLine("  3. VPN");
+        Console.WriteLine("  4. Убрать свой выбор");
+        Console.WriteLine("  0. Оставить как есть");
+        Console.Write("Выбор: ");
+
+        var choice = Console.ReadLine()?.Trim();
+        var file = UserRulesFile.Load();
+
+        switch (choice)
+        {
+            case "1":
+                file.Set(match, target, RoutingMode.Direct);
+                break;
+            case "2":
+                file.Set(match, target, RoutingMode.Desync);
+                break;
+            case "3":
+                file.Set(match, target, RoutingMode.Proxy);
+                break;
+            case "4":
+                if (!file.Remove(match, target))
+                {
+                    Message("Своего правила для него и не было.", ConsoleColor.Yellow);
+                    return;
+                }
+
+                break;
+            default:
+                return;
+        }
+
+        file.Save();
+
+        // Перехват решается по адресу назначения, поэтому правило по программе
+        // сработает лишь для трафика, который вообще дошёл до туннеля.
+        if (choice == "3" && match == MatchKind.Process)
+        {
+            Message(
+                "Записано. Учтите: приложениям, которые ходят по голым адресам без DNS, " +
+                "нужны их подсети в секции capture — иначе правило не сработает.",
+                ConsoleColor.Yellow);
+
+            return;
+        }
+
+        Message("Записано. Чтобы применить, пересоберите конфиг (пункт 7).", ConsoleColor.Green);
+    }
+
+    private static ConnectionEvent BuildProbe(string target, MatchKind match)
+    {
+        var connection = new ConnectionEvent
+        {
+            Timestamp = DateTimeOffset.Now,
+            Protocol = ProtocolKind.Tcp,
+            RemotePort = 443,
+            Direction = ConnectionDirection.Outbound,
+        };
+
+        return match switch
+        {
+            MatchKind.Process => connection with { ExecutablePath = target },
+            MatchKind.Ip => connection with { RemoteAddress = System.Net.IPAddress.Parse(target) },
+            _ => connection with { Hostname = target.Trim('.') },
+        };
+    }
+
+    private static string DescribeMatch(MatchKind match) => match switch
+    {
+        MatchKind.Process => "программа",
+        MatchKind.Ip => "адрес",
+        MatchKind.IpSet => "список адресов",
+        _ => "домен",
+    };
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : string.Concat(value.AsSpan(0, max - 1), "…");
+
     private static void ToggleAutostart(AppSettings settings)
     {
         bool installed = AutostartTask.IsInstalled(AutostartTask.DefaultTaskName);
@@ -287,10 +478,10 @@ internal static class MenuCommand
 
         try
         {
-            var engine = RuleSetLoader.LoadFromFile(settings.RulesPath);
+            var engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
 
             // Режим из настроек перекрывает файл правил: меню не должно
-            // переписывать YAML, который человек ведёт руками.
+            // переписывать базовый YAML, который ведётся руками.
             var ruleSet = engine.RuleSet with { Operating = settings.Mode };
 
             using var client = new SubscriptionClient();
@@ -301,6 +492,9 @@ internal static class MenuCommand
 
             foreach (var problem in captureProblems)
                 Console.WriteLine($"Внимание, секция capture — {problem}");
+
+            foreach (var problem in RuleSetExpander.Expand(ruleSet, zapretRoot))
+                Console.WriteLine($"Внимание: {problem}");
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
             {
