@@ -49,6 +49,45 @@ internal static class SupervisorCommands
             return 2;
         }
 
+        // Осиротевшие движки от прошлых запусков ломают старт неочевидно:
+        // старый sing-box держит TUN-адаптер, старый winws2 — WinDivert.
+        var orphans = ProcessSupervisor.FindOrphans(services);
+
+        if (orphans.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Найдены движки от прошлого запуска: {orphans.Count}");
+
+            foreach (var orphan in orphans)
+                Console.WriteLine($"  {orphan.ProcessName} (PID {orphan.Id})");
+
+            if (!cmd.Has("kill-orphans"))
+            {
+                Console.Error.WriteLine();
+                Console.Error.WriteLine(
+                    "Они удержат TUN-адаптер и WinDivert, и новые движки не поднимутся. " +
+                    "Остановите их или запустите с ключом --kill-orphans.");
+
+                return 2;
+            }
+
+            foreach (var orphan in orphans)
+            {
+                try
+                {
+                    orphan.Kill(entireProcessTree: true);
+                    await orphan.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                    Console.WriteLine($"  остановлен {orphan.ProcessName} (PID {orphan.Id})");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"  не удалось остановить PID {orphan.Id}: {ex.GetBaseException().Message}");
+                }
+            }
+
+            Console.WriteLine();
+        }
+
         var supervisor = new ProcessSupervisor(services, new SupervisorOptions
         {
             StatePath = statePath,
@@ -189,6 +228,48 @@ internal static class SupervisorCommands
         Console.WriteLine($"  … и ещё {Math.Max(0, arguments.Count - 25)}");
     }
 
+    /// <summary>
+    /// Останавливает движки, оставшиеся без супервизора.
+    /// </summary>
+    private static int StopOrphans()
+    {
+        var names = new[] { "sing-box", "winws2", "winws" };
+        var orphans = new List<System.Diagnostics.Process>();
+
+        foreach (var name in names)
+        {
+            try
+            {
+                orphans.AddRange(System.Diagnostics.Process.GetProcessesByName(name));
+            }
+            catch (Exception)
+            {
+                // Перечисление может отказать; не критично.
+            }
+        }
+
+        if (orphans.Count == 0)
+            return 0;
+
+        Console.WriteLine($"Найдены движки без супервизора: {orphans.Count}. Останавливаю.");
+
+        foreach (var orphan in orphans)
+        {
+            try
+            {
+                Console.WriteLine($"  {orphan.ProcessName} (PID {orphan.Id})");
+                orphan.Kill(entireProcessTree: true);
+                orphan.WaitForExit(5000);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  не удалось: {ex.GetBaseException().Message}");
+            }
+        }
+
+        return 0;
+    }
+
     public static int Status(CommandLine cmd)
     {
         var statePath = cmd.Value("state", SupervisorState.DefaultPath);
@@ -246,14 +327,18 @@ internal static class SupervisorCommands
         if (state is null)
         {
             Console.WriteLine("Супервизор не запущен.");
-            return 0;
+
+            // Движки могли пережить супервизор, закрытый крестиком. Раньше
+            // stop в этом случае молчал, а осиротевшие процессы продолжали
+            // держать TUN-адаптер и WinDivert.
+            return StopOrphans();
         }
 
         if (!state.IsSupervisorAlive())
         {
             Console.WriteLine("Супервизор уже мёртв, убираю устаревшее состояние.");
             SupervisorState.Clear(statePath);
-            return 0;
+            return StopOrphans();
         }
 
         try

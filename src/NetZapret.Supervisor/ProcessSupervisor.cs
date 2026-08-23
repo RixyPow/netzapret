@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 
 namespace NetZapret.Supervisor;
@@ -71,9 +72,46 @@ public sealed class ProcessSupervisor
     /// <summary>Вызывается при изменении состояния — для вывода в консоль.</summary>
     public Action<string>? OnEvent { get; set; }
 
+    /// <summary>
+    /// Находит движки, оставшиеся от прошлых запусков.
+    /// </summary>
+    /// <remarks>
+    /// Осиротевший движок ломает запуск молча и неочевидно: старый sing-box
+    /// держит TUN-адаптер, и новый падает с «Cannot create a file when that
+    /// file already exists», а старый winws2 удерживает WinDivert. Наблюдалось
+    /// вживую после закрытия окна супервизора крестиком.
+    /// </remarks>
+    public static IReadOnlyList<Process> FindOrphans(IReadOnlyList<SupervisedService> services)
+    {
+        var names = services.SelectMany(s => s.EngineProcessNames).Distinct(StringComparer.OrdinalIgnoreCase);
+        var found = new List<Process>();
+
+        foreach (var name in names)
+        {
+            try
+            {
+                found.AddRange(Process.GetProcessesByName(name));
+            }
+            catch (Exception)
+            {
+                // Перечисление процессов может отказать; это не повод падать.
+            }
+        }
+
+        return found;
+    }
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Log($"супервизор запущен, PID {Environment.ProcessId}");
+
+        using var job = new ProcessJob();
+
+        if (!job.IsAvailable)
+            Log("объект задания недоступен: движки могут пережить супервизор при аварийном завершении");
+
+        foreach (var service in _services)
+            service.Job = job;
 
         foreach (var service in _services)
             await StartServiceAsync(service, cancellationToken);

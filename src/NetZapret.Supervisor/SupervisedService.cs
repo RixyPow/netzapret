@@ -77,6 +77,15 @@ public abstract class SupervisedService
     /// <summary>Проверяет, что всё нужное для запуска на месте.</summary>
     public abstract string? ValidatePrerequisites();
 
+    /// <summary>
+    /// Задание, в которое включаются запущенные процессы, чтобы они
+    /// не пережили супервизор.
+    /// </summary>
+    public ProcessJob? Job { get; set; }
+
+    /// <summary>Имена процессов движка — для поиска осиротевших экземпляров.</summary>
+    public abstract IReadOnlyList<string> EngineProcessNames { get; }
+
     public async Task<bool> StartAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
     {
         var problem = ValidatePrerequisites();
@@ -102,6 +111,10 @@ public abstract class SupervisedService
             LastError = "процесс не запустился";
             return false;
         }
+
+        // Включаем в задание сразу после запуска: если супервизор умрёт
+        // аварийно, система погасит движок вместе с ним.
+        Job?.Assign(Process);
 
         // Вывод обязан вычитываться. Перенаправленный и никем не читаемый
         // конвейер заполняется и намертво блокирует дочерний процесс на записи
@@ -248,6 +261,8 @@ public sealed class SingBoxService : SupervisedService
 
     public override string Name => "sing-box";
 
+    public override IReadOnlyList<string> EngineProcessNames => ["sing-box"];
+
     public override string? ValidatePrerequisites()
     {
         if (!File.Exists(_executablePath))
@@ -342,6 +357,8 @@ public sealed class WinwsService : SupervisedService
     }
 
     public override string Name => "winws2";
+
+    public override IReadOnlyList<string> EngineProcessNames => ["winws2", "winws"];
 
     public override string? ValidatePrerequisites() =>
         File.Exists(_executablePath) ? null : $"движок не найден: {_executablePath}";
