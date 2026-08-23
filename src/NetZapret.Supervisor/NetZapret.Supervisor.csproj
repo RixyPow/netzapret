@@ -1,6 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!--
+      Нужен ради кодовой страницы 866: планировщик отвечает в кодировке OEM,
+      а .NET Core устаревшие страницы по умолчанию не содержит, и обращение
+      к ним падает с NotSupportedException.
+    -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NetZapret.Core\NetZapret.Core.csproj" />
     <ProjectReference Include="..\NetZapret.Proxy\NetZapret.Proxy.csproj" />
     <ProjectReference Include="..\NetZapret.Zapret\NetZapret.Zapret.csproj" />

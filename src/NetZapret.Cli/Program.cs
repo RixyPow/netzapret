@@ -34,6 +34,7 @@ internal static class Program
                 "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
                 "status" => SupervisorCommands.Status(cmd),
                 "doctor" => DoctorCommand.Run(cmd),
+                "autostart" => AutostartCommand.Run(cmd),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
             };
@@ -79,6 +80,7 @@ internal static class Program
               stop     Остановить супервизор и все службы
               status   Состояние супервизора и служб
               doctor   Обзор: что найдено и что готово к работе
+              autostart Управление автозапуском: install / remove / status
               help     Эта справка
 
             ОБЩИЕ ОПЦИИ
@@ -136,6 +138,16 @@ internal static class Program
 
               start работает в переднем плане, Ctrl+C останавливает всё.
               Запуск winws2 требует прав администратора.
+
+            autostart <install|remove|status>
+              --preset <название>    Какой пресет запускать при входе
+              --proxy-config <путь>  Конфиг прокси; сохраняется абсолютным
+              --work-dir <путь>      Рабочий каталог задачи (текущий по умолчанию)
+              --dry-run              Показать параметры задачи, не создавая её
+
+              Автозапуск сделан задачей планировщика с наивысшими привилегиями:
+              так права администратора выдаются без запроса UAC при входе.
+              install и remove требуют консоли администратора.
 
             ПРИМЕРЫ
               netzapret rules --config config/rules.example.yaml
