@@ -81,7 +81,16 @@ public sealed class RollingLog : IDisposable
         var info = new FileInfo(_path);
         _written = info.Exists ? info.Length : 0;
 
-        _writer = new StreamWriter(_path, append: true, new UTF8Encoding(false))
+        // FileShare.ReadWrite обязателен: иначе лог невозможно прочитать,
+        // пока служба работает, — а именно тогда он и нужен. Проверено
+        // на себе: разбор падения упёрся в «файл занят другим процессом».
+        var stream = new FileStream(
+            _path,
+            FileMode.Append,
+            FileAccess.Write,
+            FileShare.ReadWrite);
+
+        _writer = new StreamWriter(stream, new UTF8Encoding(false))
         {
             AutoFlush = true,
         };

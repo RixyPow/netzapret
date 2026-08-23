@@ -107,6 +107,20 @@ public sealed class RollingLogTests : IDisposable
     }
 
     [Fact]
+    public void LogCanBeReadWhileTheServiceIsWriting()
+    {
+        // Разбирают лог именно во время работы службы. Первая версия
+        // держала файл монопольно, и прочитать его было нельзя.
+        using var log = new RollingLog(_path);
+        log.AppendLine("строка при живом писателе");
+
+        using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+
+        Assert.Contains("строка при живом писателе", reader.ReadToEnd());
+    }
+
+    [Fact]
     public void ConcurrentWritersDoNotLoseOrCorruptLines()
     {
         // stdout и stderr пишутся двумя независимыми задачами.
