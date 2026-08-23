@@ -293,6 +293,64 @@ public class SingBoxConfigCompilerTests
         }
     }
 
+    /// <summary>
+    /// Конфиг пробника обязан оставаться валидным: на нём держится вся проверка
+    /// «прокси жив», и его ломала уже одна регрессия — detour DNS-сервера
+    /// в пустой direct-исходящий, который sing-box 1.13 отвергает.
+    /// </summary>
+    [Fact]
+    public void ProbeConfigPassesSingBoxCheck()
+    {
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        var json = new SingBoxConfigCompiler()
+            .CompileProbeConfig(Server("probe", ProxyProtocol.Vless, "tcp"), 21099, logPath: null);
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-probe-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, json);
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, $"конфиг пробника не проходит проверку: {stderr}");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ProbeConfigHasNoTunAndListensOnLoopbackOnly()
+    {
+        // Пробник обязан работать без прав администратора: никакого TUN,
+        // инбаунд только на петле.
+        var json = new SingBoxConfigCompiler()
+            .CompileProbeConfig(Server(), 21099, logPath: null);
+
+        var root = JsonDocument.Parse(json).RootElement;
+        var inbounds = root.GetProperty("inbounds").EnumerateArray().ToList();
+
+        Assert.Single(inbounds);
+        Assert.Equal("mixed", inbounds[0].GetProperty("type").GetString());
+        Assert.Equal("127.0.0.1", inbounds[0].GetProperty("listen").GetString());
+        Assert.DoesNotContain("\"tun\"", json);
+    }
+
     private static string? FindSingBox()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
