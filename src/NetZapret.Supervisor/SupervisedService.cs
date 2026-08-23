@@ -40,7 +40,19 @@ public abstract class SupervisedService
     /// Куда складывать вывод службы. Если не задан, вывод отбрасывается,
     /// но всё равно вычитывается.
     /// </summary>
-    public string? OutputLogPath { get; set; }
+    public string? OutputLogPath
+    {
+        get => _outputLogPath;
+        set
+        {
+            _outputLogPath = value;
+            _log?.Dispose();
+            _log = value is null ? null : new RollingLog(value);
+        }
+    }
+
+    private string? _outputLogPath;
+    private RollingLog? _log;
 
     /// <summary>Последние строки вывода — для диагностики при падении.</summary>
     public IReadOnlyList<string> RecentOutput
@@ -201,21 +213,7 @@ public abstract class SupervisedService
                 _recentOutput.Dequeue();
         }
 
-        if (OutputLogPath is null)
-            return;
-
-        try
-        {
-            var directory = Path.GetDirectoryName(OutputLogPath);
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-
-            File.AppendAllText(OutputLogPath, line + Environment.NewLine, System.Text.Encoding.UTF8);
-        }
-        catch (IOException)
-        {
-            // Лог не должен ронять службу.
-        }
+        _log?.AppendLine(line);
     }
 }
 

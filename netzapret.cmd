@@ -17,11 +17,12 @@ if %errorlevel% neq 0 (
 
 cd /d "%~dp0"
 
-set "NETZAPRET_EXE=%~dp0src\NetZapret.Cli\bin\Debug\net8.0-windows\netzapret.exe"
+rem Runs from build\, not from the project's bin\: see build.cmd for why.
+set "NETZAPRET_EXE=%~dp0build\netzapret.exe"
 
 if not exist "%NETZAPRET_EXE%" (
-    echo Build not found: %NETZAPRET_EXE%
-    echo Run: dotnet build "%~dp0NetZapret.sln"
+    echo Not deployed yet: %NETZAPRET_EXE%
+    echo Run: "%~dp0build.cmd"
     pause
     exit /b 1
 )

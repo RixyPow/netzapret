@@ -56,11 +56,13 @@ public sealed class ProcessSupervisor
     private readonly SupervisorOptions _options;
     private readonly Dictionary<string, int> _degradedStreak = new();
     private readonly Dictionary<string, ServiceHealth> _health = new();
+    private readonly RollingLog _log;
 
     public ProcessSupervisor(IReadOnlyList<SupervisedService> services, SupervisorOptions? options = null)
     {
         _services = services;
         _options = options ?? new SupervisorOptions();
+        _log = new RollingLog(_options.LogPath);
 
         foreach (var service in services)
         {
@@ -143,6 +145,7 @@ public sealed class ProcessSupervisor
 
             SupervisorState.Clear(_options.StatePath);
             Log("супервизор остановлен");
+            _log.Dispose();
         }
     }
 
@@ -271,18 +274,6 @@ public sealed class ProcessSupervisor
         var line = $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {message}";
 
         OnEvent?.Invoke(line);
-
-        try
-        {
-            var directory = Path.GetDirectoryName(_options.LogPath);
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-
-            File.AppendAllText(_options.LogPath, line + Environment.NewLine, new UTF8Encoding(false));
-        }
-        catch (IOException)
-        {
-            // Лог не должен ронять супервизор.
-        }
+        _log.AppendLine(line);
     }
 }
