@@ -33,6 +33,17 @@ public sealed class RoutingRule
     // потому что Matches вызывается на каждое новое соединение.
     private GlobMatcher? _glob;
     private IpCidrRange? _cidr;
+    private IReadOnlyList<IpCidrRange>? _cidrSet;
+
+    /// <summary>
+    /// Подсети, загруженные из файла для <see cref="MatchKind.IpSet"/>.
+    /// </summary>
+    /// <remarks>
+    /// Пусто, пока не вызван <see cref="LoadIpSet"/>: загрузка требует знания
+    /// корня Zapret, а модель правил о нём не знает и знать не должна.
+    /// Непрогруженное правило просто не совпадает ни с чем.
+    /// </remarks>
+    public IReadOnlyList<string> IpSetCidrs { get; private set; } = Array.Empty<string>();
 
     /// <summary>
     /// Готовит правило к использованию и валидирует <see cref="Value"/>.
@@ -49,6 +60,10 @@ public sealed class RoutingRule
 
             case MatchKind.Ip:
                 _cidr = IpCidrRange.Parse(Value);
+                break;
+
+            case MatchKind.IpSet:
+                // Путь к файлу проверяется при загрузке списка, а не здесь.
                 break;
 
             default:
@@ -118,9 +133,39 @@ public sealed class RoutingRule
                 return true;
             }
 
+            case MatchKind.IpSet:
+            {
+                var addr = connection.RemoteAddress;
+                if (addr is null || _cidrSet is null)
+                    return false;
+
+                foreach (var range in _cidrSet)
+                {
+                    if (!range.Contains(addr))
+                        continue;
+
+                    reason = $"ip {addr} в списке {Value}";
+                    return true;
+                }
+
+                return false;
+            }
+
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Загружает подсети для правила по списку.
+    /// </summary>
+    public void LoadIpSet(IReadOnlyList<string> cidrs)
+    {
+        if (Match != MatchKind.IpSet)
+            throw new InvalidOperationException($"Правило #{Ordinal} не ссылается на список адресов.");
+
+        IpSetCidrs = cidrs;
+        _cidrSet = cidrs.Select(IpCidrRange.Parse).ToList();
     }
 
     public override string ToString() => $"#{Ordinal} {Match.ToString().ToLowerInvariant()}:{Value} -> {Mode.ToString().ToLowerInvariant()}";

@@ -34,6 +34,9 @@ internal static class ConfigCommand
         foreach (var problem in captureProblems)
             Console.WriteLine($"Внимание, секция capture — {problem}");
 
+        foreach (var problem in RuleSetExpander.Expand(engine.RuleSet, zapretRoot))
+            Console.WriteLine($"Внимание: {problem}");
+
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
         {

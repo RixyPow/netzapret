@@ -2,8 +2,12 @@ namespace NetZapret.Core.Rules;
 
 /// <summary>
 /// По какому признаку правило сопоставляется с соединением.
-/// Порядок значений задаёт приоритет класса правил (меньше — раньше).
 /// </summary>
+/// <remarks>
+/// Приоритет задаётся не значением, а <see cref="MatchKindPriority.Of"/>:
+/// <see cref="Ip"/> и <see cref="IpSet"/> — это одно и то же по сути,
+/// различаются лишь способом записи, и приоритет у них общий.
+/// </remarks>
 public enum MatchKind
 {
     /// <summary>
@@ -22,4 +26,27 @@ public enum MatchKind
     /// IP-адрес или CIDR-подсеть назначения.
     /// </summary>
     Ip = 2,
+
+    /// <summary>
+    /// Список адресов из файла — например <c>lists/ipset-ru.txt</c> из Zapret.
+    /// </summary>
+    /// <remarks>
+    /// Приоритет тот же, что у <see cref="Ip"/>: это он и есть, только заданный
+    /// файлом. Списки Zapret уже собраны и обновляются вместе с ним, поэтому
+    /// ссылаться на них надёжнее, чем копировать сотни подсетей в свой конфиг.
+    /// </remarks>
+    IpSet = 3,
+}
+
+/// <summary>
+/// Приоритет класса правил: меньше — проверяется раньше.
+/// </summary>
+public static class MatchKindPriority
+{
+    public static int Of(MatchKind kind) => kind switch
+    {
+        MatchKind.Process => 0,
+        MatchKind.Domain => 1,
+        _ => 2,
+    };
 }

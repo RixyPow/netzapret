@@ -794,6 +794,22 @@ public sealed class SingBoxConfigCompiler
                 node["ip_cidr"] = new JsonArray { rule.Value };
                 break;
 
+            case MatchKind.IpSet:
+            {
+                // Непрогруженный список означает, что файл не нашёлся.
+                // Правило без адресов совпало бы с чем попало, поэтому
+                // безопаснее его не выпускать вовсе.
+                if (rule.IpSetCidrs.Count == 0)
+                    return null;
+
+                var cidrs = new JsonArray();
+                foreach (var cidr in rule.IpSetCidrs)
+                    cidrs.Add(cidr);
+
+                node["ip_cidr"] = cidrs;
+                break;
+            }
+
             default:
                 return null;
         }

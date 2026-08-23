@@ -50,7 +50,7 @@ public sealed class RuleEngine
 
         // OrderBy устойчив в LINQ-to-objects, поэтому порядок внутри одного
         // MatchKind останется таким же, как в файле.
-        var sorted = ordered.OrderBy(r => (int)r.Match).ToList();
+        var sorted = ordered.OrderBy(r => MatchKindPriority.Of(r.Match)).ToList();
 
         return new RuleEngine(new RuleSet
         {

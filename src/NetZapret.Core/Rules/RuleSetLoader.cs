@@ -113,9 +113,11 @@ public static class RuleSetLoader
             "process" => MatchKind.Process,
             "domain" => MatchKind.Domain,
             "ip" or "cidr" => MatchKind.Ip,
+            "ipset" or "iplist" => MatchKind.IpSet,
             "" => throw new RuleConfigurationException($"Правило #{index}: не задано поле 'match'."),
             var other => throw new RuleConfigurationException(
-                $"Правило #{index}: неизвестный тип совпадения '{other}'. Допустимы: process, domain, ip."),
+                $"Правило #{index}: неизвестный тип совпадения '{other}'. " +
+                "Допустимы: process, domain, ip, ipset."),
         };
 
     private static RoutingMode ParseMode(string? value, string context) =>

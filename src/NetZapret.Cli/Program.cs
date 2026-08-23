@@ -26,6 +26,7 @@ internal static class Program
                 "watch" => await WatchCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "rules" => RulesCommand.Run(cmd, DefaultConfigPath),
                 "test" => TestCommand.Run(cmd, DefaultConfigPath),
+                "where" => WhereCommand.Run(cmd, DefaultConfigPath),
                 "sub" => await SubCommand.RunAsync(cmd, cts.Token),
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
@@ -74,6 +75,7 @@ internal static class Program
               menu     Интерактивное меню: режим, пресет, сервер, запуск
               watch    Наблюдать за соединениями и показывать применяемые правила
               rules    Показать разобранный набор правил в порядке вычисления
+              where    Куда пойдёт приложение или сайт: напрямую, десинк или VPN
               test     Прогнать синтетическое соединение через правила
               sub      Показать содержимое подписки: квоту, срок, серверы
               config   Сгенерировать конфиг sing-box из правил и подписки
