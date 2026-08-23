@@ -12,6 +12,16 @@ internal static class SupervisorCommands
     public static async Task<int> StartAsync(CommandLine cmd, CancellationToken cancellationToken)
     {
         var statePath = cmd.Value("state", SupervisorState.DefaultPath);
+
+        // Холостой прогон проверяется до всего остального: он ничего не
+        // запускает, поэтому уже работающий супервизор ему не помеха.
+        if (cmd.Has("dry-run"))
+        {
+            Console.WriteLine("Холостой прогон: ничего не запускается.");
+            PrintDryRun(cmd);
+            return 0;
+        }
+
         var existing = SupervisorState.Load(statePath);
 
         if (existing is not null && existing.IsSupervisorAlive())
@@ -133,6 +143,11 @@ internal static class SupervisorCommands
         }
 
         Console.WriteLine($"Пресет: {preset.Name} ({arguments.Count} аргументов)");
+        Console.WriteLine($"Рабочий каталог: {paths.Root}");
+        Console.WriteLine($"Движок: {paths.ExecutablePath}");
+        Console.WriteLine(
+            $"Списки: {preset.Sections.Sum(s => s.HostListPaths.Count)} hostlist, " +
+            $"{preset.Sections.Sum(s => s.IpSetPaths.Count)} ipset — читаются winws2 из вашей установки как есть");
         Console.WriteLine(
             "ВНИМАНИЕ: запуск winws2 требует прав администратора (драйвер WinDivert). " +
             "Без них служба не поднимется — это ожидаемо.");
@@ -141,6 +156,43 @@ internal static class SupervisorCommands
         {
             OutputLogPath = Path.Combine("runtime", "winws2.log"),
         });
+    }
+
+    /// <summary>
+    /// Показывает командную строку winws2 без запуска.
+    /// </summary>
+    /// <remarks>
+    /// Отвечает на вопрос «что именно уедет движку»: аргументы передаются
+    /// как есть, а пути к спискам остаются относительными, потому что winws2
+    /// резолвит их от своего рабочего каталога.
+    /// </remarks>
+    private static void PrintDryRun(CommandLine cmd)
+    {
+        if (!cmd.Has("preset"))
+            return;
+
+        var paths = ZapretPaths.Discover(cmd.Value("zapret-root"));
+        if (paths is null)
+            return;
+
+        var presetPath = Directory
+            .EnumerateFiles(paths.PresetDirectory, "*.txt")
+            .FirstOrDefault(p => Path.GetFileNameWithoutExtension(p)
+                .Contains(cmd.Value("preset")!, StringComparison.OrdinalIgnoreCase));
+
+        if (presetPath is null)
+            return;
+
+        var preset = new PresetReader().Load(presetPath);
+        var arguments = WinwsCommandLine.Build(preset);
+
+        Console.WriteLine();
+        Console.WriteLine("Командная строка winws2 (первые 25 аргументов):");
+
+        foreach (var argument in arguments.Take(25))
+            Console.WriteLine($"  {argument}");
+
+        Console.WriteLine($"  … и ещё {Math.Max(0, arguments.Count - 25)}");
     }
 
     public static int Status(CommandLine cmd)
