@@ -296,11 +296,18 @@ internal static class MenuCommand
             using var client = new SubscriptionClient();
             var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
 
+            var zapretRoot = ZapretPaths.Discover()?.Root;
+            var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out var captureProblems);
+
+            foreach (var problem in captureProblems)
+                Console.WriteLine($"Внимание, секция capture — {problem}");
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = settings.ProxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
                 PreferredServerTag = settings.PreferredServer,
+                CaptureAddresses = capture,
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);

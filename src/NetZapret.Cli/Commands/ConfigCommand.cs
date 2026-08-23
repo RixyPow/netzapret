@@ -28,6 +28,12 @@ internal static class ConfigCommand
             ? LoadPresetAddresses(cmd)
             : Array.Empty<string>();
 
+        var zapretRoot = ZapretPaths.Discover(cmd.Value("zapret-root"))?.Root;
+        var capture = AddressListReader.Expand(engine.RuleSet.CaptureEntries, zapretRoot, out var captureProblems);
+
+        foreach (var problem in captureProblems)
+            Console.WriteLine($"Внимание, секция capture — {problem}");
+
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
         {
@@ -36,6 +42,7 @@ internal static class ConfigCommand
             Scope = proxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
             DnsServerAddresses = proxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
             DesyncAddresses = desyncAddresses,
+            CaptureAddresses = capture,
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);
@@ -60,6 +67,9 @@ internal static class ConfigCommand
 
         if (options.DesyncAddresses.Count > 0)
             Console.WriteLine($"Исключено из туннеля: {options.DesyncAddresses.Count} подсетей из пресета");
+
+        if (options.CaptureAddresses.Count > 0)
+            Console.WriteLine($"Заведено в туннель дополнительно: {options.CaptureAddresses.Count} подсетей из секции capture");
 
         if (result.UsedServers.Count == 0)
         {

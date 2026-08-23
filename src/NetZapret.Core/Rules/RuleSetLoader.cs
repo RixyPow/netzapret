@@ -89,7 +89,11 @@ public static class RuleSetLoader
 
         var defaultServer = string.IsNullOrWhiteSpace(dto.Default?.Server) ? null : dto.Default!.Server!.Trim();
 
-        return RuleEngine.Build(rules, defaultMode, defaultServer, operating);
+        var engine = RuleEngine.Build(rules, defaultMode, defaultServer, operating);
+
+        return dto.Capture is { Count: > 0 }
+            ? new RuleEngine(engine.RuleSet with { CaptureEntries = dto.Capture })
+            : engine;
     }
 
     private static OperatingMode ParseOperatingMode(string? value) =>
@@ -132,6 +136,9 @@ public static class RuleSetLoader
 
         public List<RuleDto>? Rules { get; set; }
         public DefaultDto? Default { get; set; }
+
+        /// <summary>Что дополнительно заводить в туннель: CIDR или пути к спискам.</summary>
+        public List<string>? Capture { get; set; }
     }
 
     private sealed class RuleDto

@@ -15,8 +15,20 @@ namespace NetZapret.Proxy;
 public static class SystemResolvers
 {
     /// <summary>
+    /// Признаки собственного туннельного адаптера в описании драйвера.
+    /// </summary>
+    private static readonly string[] TunnelMarkers = ["sing-tun", "wintun", "netzapret"];
+
+    /// <summary>
     /// Возвращает адреса резолверов активных интерфейсов в виде префиксов.
     /// </summary>
+    /// <remarks>
+    /// Собственный TUN пропускается намеренно. Его резолвер живёт внутри
+    /// туннеля, и заведя этот адрес в перехват, мы получили бы петлю:
+    /// запрос к резолверу туннеля отправлялся бы в тот же туннель.
+    /// Адаптер вдобавок может остаться поднятым после жёсткой остановки,
+    /// и тогда его DNS попадёт в выборку, даже когда sing-box не работает.
+    /// </remarks>
     public static IReadOnlyList<string> Discover()
     {
         var result = new List<string>();
@@ -28,6 +40,9 @@ public static class SystemResolvers
                 continue;
 
             if (adapter.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                continue;
+
+            if (IsOwnTunnel(adapter))
                 continue;
 
             foreach (var address in adapter.GetIPProperties().DnsAddresses)
@@ -46,5 +61,19 @@ public static class SystemResolvers
         }
 
         return result;
+    }
+
+    private static bool IsOwnTunnel(NetworkInterface adapter)
+    {
+        foreach (var marker in TunnelMarkers)
+        {
+            if (adapter.Description.Contains(marker, StringComparison.OrdinalIgnoreCase)
+                || adapter.Name.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

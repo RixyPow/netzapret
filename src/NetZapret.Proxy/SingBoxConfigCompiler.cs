@@ -94,6 +94,12 @@ public sealed class SingBoxOptions
     /// <c>route_exclude_address</c>. Источник — файлы <c>--ipset</c> пресета.
     /// </summary>
     public IReadOnlyList<string> DesyncAddresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Дополнительные префиксы для перехвата: развёрнутая секция <c>capture</c>
+    /// из конфига правил.
+    /// </summary>
+    public IReadOnlyList<string> CaptureAddresses { get; init; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -455,6 +461,12 @@ public sealed class SingBoxConfigCompiler
             // Правила mode: proxy по адресу тоже должны попадать в туннель:
             // им fakeip не выдаётся, домена у них нет.
             foreach (var cidr in proxyAddresses)
+                captured.Add(cidr);
+
+            // Секция capture из конфига: диапазоны приложений, которые ходят
+            // по голым адресам без DNS. Без них правило по процессу для такого
+            // приложения не сработает — его трафик просто не дойдёт до туннеля.
+            foreach (var cidr in options.CaptureAddresses)
                 captured.Add(cidr);
 
             tun["route_address"] = captured;
