@@ -112,6 +112,63 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void AutoRoutesThroughLatencyTestNotAFixedFirstServer()
+    {
+        // Раньше по умолчанию брался первый сервер подписки. У пользователя
+        // это оказалась мёртвая нода, и прокси не работал вовсе.
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var result = new SingBoxConfigCompiler()
+            .Compile(engine.RuleSet, [Server("first"), Server("second")], new SingBoxOptions());
+
+        var outbounds = JsonDocument.Parse(result.Json).RootElement
+            .GetProperty("outbounds").EnumerateArray().ToList();
+
+        var urltest = outbounds.Single(o => o.GetProperty("type").GetString() == "urltest");
+        var selector = outbounds.Single(o => o.GetProperty("type").GetString() == "selector");
+
+        // Автоподбор перебирает все серверы.
+        Assert.Equal(2, urltest.GetProperty("outbounds").GetArrayLength());
+        Assert.True(urltest.TryGetProperty("interval", out _));
+
+        // Селектор по умолчанию указывает на автоподбор, а не на конкретный сервер.
+        Assert.Equal("auto-latency", selector.GetProperty("default").GetString());
+
+        // При этом в селекторе есть и все серверы: только так их можно
+        // закрепить вручную через Clash API.
+        Assert.Equal(3, selector.GetProperty("outbounds").GetArrayLength());
+    }
+
+    [Fact]
+    public void LatencyToleranceIsSetToAvoidFlapping()
+    {
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var result = new SingBoxConfigCompiler()
+            .Compile(engine.RuleSet, [Server()], new SingBoxOptions { LatencyTolerance = 120 });
+
+        var urltest = JsonDocument.Parse(result.Json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .Single(o => o.GetProperty("type").GetString() == "urltest");
+
+        Assert.Equal(120, urltest.GetProperty("tolerance").GetInt32());
+    }
+
+    [Fact]
+    public void NoSelectorIsEmittedWithoutServers()
+    {
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var result = new SingBoxConfigCompiler()
+            .Compile(engine.RuleSet, Array.Empty<ProxyServer>(), new SingBoxOptions());
+
+        var types = JsonDocument.Parse(result.Json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .Select(o => o.GetProperty("type").GetString())
+            .ToList();
+
+        Assert.DoesNotContain("urltest", types);
+        Assert.DoesNotContain("selector", types);
+    }
+
+    [Fact]
     public void DuplicateServerNamesGetUniqueTags()
     {
         // sing-box адресует outbound'ы по тегу, а подписки повторяют названия.

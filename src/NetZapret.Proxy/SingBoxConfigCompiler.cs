@@ -33,6 +33,25 @@ public sealed class SingBoxOptions
     /// <summary>Тег селектора, к которому обращаются правила с <c>server: auto</c>.</summary>
     public string SelectorTag { get; init; } = "auto";
 
+    /// <summary>
+    /// Адрес для замера задержки. Запрос уходит через сам прокси, поэтому
+    /// проверяется не доступность сайта, а работоспособность сервера.
+    /// </summary>
+    public string LatencyTestUrl { get; init; } = "https://www.gstatic.com/generate_204";
+
+    /// <summary>Как часто перезамерять задержку.</summary>
+    public string LatencyTestInterval { get; init; } = "3m";
+
+    /// <summary>
+    /// На сколько миллисекунд новый сервер должен опережать текущий,
+    /// чтобы произошло переключение.
+    /// </summary>
+    /// <remarks>
+    /// Без допуска соединения перескакивали бы между серверами при каждом
+    /// колебании сети, обрывая уже установленные сессии.
+    /// </remarks>
+    public int LatencyTolerance { get; init; } = 50;
+
     public string LogLevel { get; init; } = "warn";
 
     /// <summary>
@@ -182,6 +201,9 @@ public sealed class SingBoxConfigCompiler
     /// маршрутизации.
     /// </remarks>
     private const string ProbeDnsServer = "8.8.8.8";
+
+    /// <summary>Тег автоподбора по задержке; спрятан за селектором.</summary>
+    private const string LatencyTag = "auto-latency";
 
     public string CompileProbeConfig(ProxyServer server, int listenPort, string? logPath, string logLevel = "debug")
     {
@@ -460,20 +482,40 @@ public sealed class SingBoxConfigCompiler
         foreach (var server in servers)
             outbounds.Add(BuildOutbound(server, tags[server]));
 
-        if (servers.Count > 0)
-        {
-            var members = new JsonArray();
-            foreach (var server in servers)
-                members.Add(tags[server]);
+        if (servers.Count == 0)
+            return outbounds;
 
-            outbounds.Add(new JsonObject
-            {
-                ["type"] = "selector",
-                ["tag"] = options.SelectorTag,
-                ["outbounds"] = members,
-                ["default"] = tags[servers[0]],
-            });
-        }
+        var members = new JsonArray();
+        foreach (var server in servers)
+            members.Add(tags[server]);
+
+        // urltest сам опрашивает серверы и выбирает быстрейший из живых.
+        // Статический список этого не умеет: раньше по умолчанию брался
+        // первый сервер подписки, и если он мёртв — а у провайдера
+        // это обычное дело, — прокси не работал вовсе.
+        outbounds.Add(new JsonObject
+        {
+            ["type"] = "urltest",
+            ["tag"] = LatencyTag,
+            ["outbounds"] = members,
+            ["url"] = options.LatencyTestUrl,
+            ["interval"] = options.LatencyTestInterval,
+            ["tolerance"] = options.LatencyTolerance,
+        });
+
+        // Поверх — селектор: только он позволяет закрепить конкретный сервер
+        // вручную через Clash API. По умолчанию указывает на автоподбор.
+        var selectorMembers = new JsonArray { LatencyTag };
+        foreach (var server in servers)
+            selectorMembers.Add(tags[server]);
+
+        outbounds.Add(new JsonObject
+        {
+            ["type"] = "selector",
+            ["tag"] = options.SelectorTag,
+            ["outbounds"] = selectorMembers,
+            ["default"] = LatencyTag,
+        });
 
         return outbounds;
     }
