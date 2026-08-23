@@ -40,7 +40,15 @@ public sealed record ZapretPaths
 
     public string ListDirectory => Path.Combine(Root, "lists");
 
-    public string ExecutablePath => Path.Combine(Root, "winws2.exe");
+    /// <summary>
+    /// Путь к winws2.exe.
+    /// </summary>
+    /// <remarks>
+    /// Движок лежит в подкаталоге <c>exe</c> рядом с WinDivert.dll и cygwin1.dll,
+    /// а не в корне установки. Рабочим каталогом при запуске всё равно должен
+    /// быть <see cref="Root"/>: пути к спискам в пресетах заданы относительно него.
+    /// </remarks>
+    public string ExecutablePath => Path.Combine(Root, "exe", "winws2.exe");
 
     /// <summary>
     /// Ищет установку Zapret в обычных местах.

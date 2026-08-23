@@ -33,6 +33,7 @@ internal static class Program
                 "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
                 "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
                 "status" => SupervisorCommands.Status(cmd),
+                "doctor" => DoctorCommand.Run(cmd),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
             };
@@ -77,6 +78,7 @@ internal static class Program
               start    Запустить службы под присмотром супервизора
               stop     Остановить супервизор и все службы
               status   Состояние супервизора и служб
+              doctor   Обзор: что найдено и что готово к работе
               help     Эта справка
 
             ОБЩИЕ ОПЦИИ

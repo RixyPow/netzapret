@@ -18,7 +18,8 @@
 | `NetZapret.Dns` | Статическая карта имён для отладки | Вспомогательная |
 | `NetZapret.Subscriptions` | Разбор ссылок и подписок, квота и срок из заголовков | Готов, покрыт тестами |
 | `NetZapret.Proxy` | Генерация конфига sing-box из правил и подписки | Готов, проверяется `sing-box check` |
-| `NetZapret.Zapret` | Разбор пресетов winws2, супервизор `winws2.exe` | Только контракты |
+| `NetZapret.Zapret` | Разбор пресетов winws2, сборка его командной строки | Готов, покрыт тестами |
+| `NetZapret.Supervisor` | Запуск служб, слежение за живостью, перезапуск | Готов для прокси; winws2 не тестирован |
 
 ## Как это устроено
 
@@ -98,6 +99,25 @@ dotnet run --project src/NetZapret.Cli -- test --config config/rules.example.yam
 dotnet run --project src/NetZapret.Cli -- watch --config config/rules.example.yaml
 ```
 
+Обзор: что найдено и что готово к работе.
+
+```bash
+dotnet run --project src/NetZapret.Cli -- doctor
+```
+
+Проверить, что прокси жив и через него идёт трафик. Прав администратора
+не требует: поднимается локальный инбаунд, TUN не создаётся.
+
+```bash
+dotnet run --project src/NetZapret.Cli -- probe --sub https://example.com/sub/token
+```
+
+Запустить службы под присмотром супервизора:
+
+```bash
+dotnet run --project src/NetZapret.Cli -- start --proxy-config runtime/singbox.json --verify-traffic
+```
+
 Посмотреть подписку — квоту, срок и список серверов:
 
 ```bash
@@ -113,6 +133,10 @@ dotnet run --project src/NetZapret.Cli -- config --sub https://example.com/sub/t
 Результат сразу проверяется командой `sing-box check`, если движок найден
 в `tools/`. Права администратора для генерации и проверки не нужны.
 Серверы с транспортом `xhttp` пропускаются — см. [docs/singbox.md](docs/singbox.md).
+
+Ключ `--proxy-only` заводит в туннель только трафик прокси, чтобы десинк
+Zapret работал на исходных потоках приложений; `--no-tun` собирает конфиг
+с локальным прокси вместо туннеля — он запускается без прав администратора.
 
 ### Про права и завершение
 

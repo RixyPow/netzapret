@@ -189,4 +189,18 @@ public sealed class WinwsCommandLineTests : IDisposable
 
         Assert.Empty(WinwsCommandLine.FindMissingFiles(Load(), _root));
     }
+
+    [Fact]
+    public void ExecutableIsLookedUpInTheExeSubdirectory()
+    {
+        // Найдено командой doctor: winws2.exe лежит в exe/ рядом с WinDivert.dll,
+        // а не в корне установки, как я предположил сначала.
+        Directory.CreateDirectory(Path.Combine(_root, "presets", "winws2"));
+        Directory.CreateDirectory(Path.Combine(_root, "exe"));
+
+        var paths = ZapretPaths.Discover(_root);
+
+        Assert.NotNull(paths);
+        Assert.Equal(Path.Combine(_root, "exe", "winws2.exe"), paths!.ExecutablePath);
+    }
 }
