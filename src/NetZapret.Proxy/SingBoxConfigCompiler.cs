@@ -34,6 +34,20 @@ public sealed class SingBoxOptions
     public string SelectorTag { get; init; } = "auto";
 
     public string LogLevel { get; init; } = "warn";
+
+    /// <summary>
+    /// Поднимать TUN. Если выключено, вместо туннеля создаётся локальный
+    /// инбаунд <c>mixed</c> на <see cref="LocalListenPort"/>.
+    /// </summary>
+    /// <remarks>
+    /// Режим без TUN нужен для проверки и отладки: он не требует прав
+    /// администратора и не трогает маршруты. Правила маршрутизации при этом
+    /// работают ровно те же, так что поведение движка можно проверить
+    /// до того, как поднимать туннель.
+    /// </remarks>
+    public bool UseTun { get; init; } = true;
+
+    public int LocalListenPort { get; init; } = 21080;
 }
 
 /// <summary>
@@ -246,7 +260,26 @@ public sealed class SingBoxConfigCompiler
         ["independent_cache"] = true,
     };
 
-    private static JsonArray BuildInbounds(SingBoxOptions options) => new()
+    private static JsonArray BuildInbounds(SingBoxOptions options)
+    {
+        if (!options.UseTun)
+        {
+            return new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "mixed",
+                    ["tag"] = "local-in",
+                    ["listen"] = "127.0.0.1",
+                    ["listen_port"] = options.LocalListenPort,
+                },
+            };
+        }
+
+        return BuildTunInbound(options);
+    }
+
+    private static JsonArray BuildTunInbound(SingBoxOptions options) => new()
     {
         new JsonObject
         {

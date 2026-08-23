@@ -30,7 +30,9 @@ internal static class Program
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
                 "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
-                "status" => StatusCommand.Run(),
+                "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
+                "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
+                "status" => SupervisorCommands.Status(cmd),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
             };
@@ -72,7 +74,9 @@ internal static class Program
               config   Сгенерировать конфиг sing-box из правил и подписки
               preset   Показать пресеты Zapret и их покрытие десинком
               probe    Проверить, идёт ли трафик через серверы подписки
-              status   Состояние подключения к прокси-серверу
+              start    Запустить службы под присмотром супервизора
+              stop     Остановить супервизор и все службы
+              status   Состояние супервизора и служб
               help     Эта справка
 
             ОБЩИЕ ОПЦИИ
@@ -102,6 +106,8 @@ internal static class Program
             sub / config
               --sub <ссылка|файл>  Подписка: URL либо файл с её телом
               --out <путь>         Куда писать конфиг (по умолчанию runtime/singbox.json)
+              --no-tun             Локальный прокси вместо TUN: без прав администратора
+              --local-port <порт>  Порт локального прокси для --no-tun (21080)
 
               Сгенерированный конфиг сразу проверяется командой sing-box check,
               если движок найден в tools/. Права администратора для этого не нужны.
@@ -110,6 +116,19 @@ internal static class Program
               --zapret-root <путь> Корень установки Zapret (ищется сам)
               --preset <название>  Разобрать конкретный пресет
               --verbose            Показать все секции с рецептами
+
+            start / stop / status
+              --proxy-config <путь>  Конфиг sing-box (по умолчанию runtime/singbox.json)
+              --clash-port <порт>    Порт Clash API для проверки живости (9090)
+              --preset <название>    Запускать ещё и winws2 с этим пресетом
+              --no-proxy             Не запускать sing-box
+              --max-restarts <N>     Сколько раз перезапускать упавшую службу (5)
+              --check-interval <с>   Период опроса служб (5)
+              --verify-traffic       Проверять не только порт, но и проход трафика
+              --local-port <порт>    Порт локального прокси для --verify-traffic (21080)
+
+              start работает в переднем плане, Ctrl+C останавливает всё.
+              Запуск winws2 требует прав администратора.
 
             ПРИМЕРЫ
               netzapret rules --config config/rules.example.yaml

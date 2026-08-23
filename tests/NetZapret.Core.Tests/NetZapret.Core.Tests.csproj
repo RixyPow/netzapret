@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
@@ -16,6 +16,8 @@
     <ProjectReference Include="..\..\src\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Supervisor\NetZapret.Supervisor.csproj" />
   </ItemGroup>
 
 </Project>
+

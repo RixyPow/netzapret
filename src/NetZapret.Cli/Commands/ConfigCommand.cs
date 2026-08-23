@@ -19,7 +19,13 @@ internal static class ConfigCommand
             return 2;
 
         var compiler = new SingBoxConfigCompiler();
-        var result = compiler.Compile(engine.RuleSet, info.Servers, new SingBoxOptions());
+        var options = new SingBoxOptions
+        {
+            UseTun = !cmd.Has("no-tun"),
+            LocalListenPort = cmd.Int("local-port", 21080),
+        };
+
+        var result = compiler.Compile(engine.RuleSet, info.Servers, options);
 
         var outputPath = cmd.Value("out", "runtime/singbox.json");
         SingBoxConfigCompiler.WriteToFile(outputPath, result.Json);
@@ -28,6 +34,9 @@ internal static class ConfigCommand
         Console.WriteLine($"Правила:  {configPath} (режим {engine.RuleSet.Operating.ToString().ToLowerInvariant()})");
         Console.WriteLine($"Серверов: {result.UsedServers.Count} использовано, {result.SkippedServers.Count} пропущено");
         Console.WriteLine($"Конфиг:   {Path.GetFullPath(outputPath)}");
+        Console.WriteLine(options.UseTun
+            ? "Режим:    TUN (запуск требует прав администратора)"
+            : $"Режим:    локальный прокси на 127.0.0.1:{options.LocalListenPort} (прав администратора не нужно)");
 
         if (result.UsedServers.Count == 0)
         {

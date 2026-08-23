@@ -13,6 +13,7 @@
     <ProjectReference Include="..\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
     <ProjectReference Include="..\NetZapret.Proxy\NetZapret.Proxy.csproj" />
     <ProjectReference Include="..\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+    <ProjectReference Include="..\NetZapret.Supervisor\NetZapret.Supervisor.csproj" />
     <ProjectReference Include="..\NetZapret.Dns\NetZapret.Dns.csproj" />
   </ItemGroup>
 
