@@ -20,8 +20,16 @@ public sealed record AppSettings
     /// <summary>Ссылка на подписку.</summary>
     public string? SubscriptionUrl { get; init; }
 
-    /// <summary>Файл правил маршрутизации.</summary>
-    public string RulesPath { get; init; } = Path.Combine("config", "rules.example.yaml");
+    /// <summary>
+    /// Базовый файл правил. Поверх него накладывается пользовательский слой
+    /// из <see cref="Rules.UserRulesFile.DefaultPath"/>.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию — рабочий <c>rules.yaml</c>, а не <c>rules.example.yaml</c>.
+    /// Ссылка на пример однажды уже стоила поломки: конфиг пересобрался
+    /// из примера, и Telegram потерял маршрут через VPN.
+    /// </remarks>
+    public string RulesPath { get; init; } = Path.Combine("config", "rules.yaml");
 
     /// <summary>
     /// Режим работы. Перекрывает значение из файла правил.
