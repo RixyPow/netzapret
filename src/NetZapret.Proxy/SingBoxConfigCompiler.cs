@@ -723,8 +723,12 @@ public sealed class SingBoxConfigCompiler
             // правила срабатывали и на соединениях без обращения к DNS.
             new JsonObject { ["action"] = "sniff" },
             new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" },
-            new JsonObject { ["ip_is_private"] = true, ["outbound"] = "direct" },
         };
+
+        foreach (var node in BuildDohRejects(options))
+            rules.Add(node);
+
+        rules.Add(new JsonObject { ["ip_is_private"] = true, ["outbound"] = "direct" });
 
         if (ruleSet.Operating == OperatingMode.Selective)
         {
@@ -743,6 +747,54 @@ public sealed class SingBoxConfigCompiler
             ["auto_detect_interface"] = true,
             // Обязателен начиная с sing-box 1.12: без него запуск падает.
             ["default_domain_resolver"] = new JsonObject { ["server"] = "remote" },
+        };
+    }
+
+    /// <summary>
+    /// Закрывает DNS over HTTPS к системным резолверам, чтобы Windows
+    /// вернулась на обычный UDP, который мы умеем перехватывать.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Без этого вся схема выборочного перехвата рушится в первом звене.
+    /// Windows 11 включает DoH сама: запрос уходит по TCP/443 на dns.google,
+    /// правило <c>hijack-dns</c> его не видит (оно ловит DNS на UDP/53),
+    /// домен резолвится в настоящий адрес, fakeip не выдаётся, и трафик,
+    /// который должен был уйти в туннель, идёт напрямую под блокировку.
+    /// </para>
+    /// <para>
+    /// Отказ безопасен, потому что в системе стоит <c>DohFlags = 6</c> —
+    /// DoH с разрешённым откатом на открытый UDP. Получив RST, резолвер
+    /// переспрашивает по 53 порту, и запрос попадает к нам. Приватность
+    /// при этом не страдает: наружу запрос всё равно уходит по DoH, только
+    /// его делает sing-box, а не сама Windows.
+    /// </para>
+    /// <para>
+    /// Правило ограничено входящим <c>tun-in</c> намеренно. Наш собственный
+    /// DNS-сервер — тоже DoH и тоже на 8.8.8.8; без этой оговорки отказ
+    /// накрыл бы его самого, и резолвить стало бы нечем.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<JsonObject> BuildDohRejects(SingBoxOptions options)
+    {
+        // Вне выборочного режима резолверы в туннель не заводятся,
+        // и перехватывать нечего.
+        if (options.Scope != TunnelScope.ProxyOnly || options.DnsServerAddresses.Count == 0)
+            yield break;
+
+        var addresses = new JsonArray();
+        foreach (var address in options.DnsServerAddresses)
+            addresses.Add(address);
+
+        // Адрес DoH-эндпоинта совпадает с адресом обычного резолвера:
+        // Windows поднимает 8.8.8.8 до https://dns.google/dns-query,
+        // а тот живёт там же. Поэтому отдельного списка не требуется.
+        yield return new JsonObject
+        {
+            ["inbound"] = new JsonArray { "tun-in" },
+            ["ip_cidr"] = addresses,
+            ["port"] = new JsonArray { 443 },
+            ["action"] = "reject",
         };
     }
 

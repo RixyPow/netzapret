@@ -40,6 +40,89 @@ public class SingBoxConfigCompilerTests
     private static IEnumerable<JsonElement> Rules(JsonElement root) =>
         root.GetProperty("route").GetProperty("rules").EnumerateArray();
 
+    private static JsonElement CompileProxyOnly(string yaml, params string[] resolvers)
+    {
+        var engine = RuleSetLoader.Load(yaml);
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server()],
+            new SingBoxOptions
+            {
+                Scope = TunnelScope.ProxyOnly,
+                DnsServerAddresses = resolvers,
+            });
+
+        return JsonDocument.Parse(result.Json).RootElement.Clone();
+    }
+
+    private const string ProxyOnlyRules = """
+        mode: selective
+        rules:
+          - match: domain
+            value: "*.rutracker.org"
+            mode: proxy
+        """;
+
+    [Fact]
+    public void DohToSystemResolversIsRejected()
+    {
+        // Windows 11 сама поднимает запрос до DNS over HTTPS, и тогда он уходит
+        // по TCP/443 мимо hijack-dns: домен резолвится по-настоящему, fakeip
+        // не выдаётся, и трафик, которому положен туннель, идёт напрямую.
+        // Отказ возвращает резолвер на UDP/53, где мы его перехватываем.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32", "1.1.1.1/32");
+
+        var reject = Rules(root).Single(r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+
+        var addresses = reject.GetProperty("ip_cidr").EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+
+        Assert.Equal(["8.8.8.8/32", "1.1.1.1/32"], addresses);
+        Assert.Equal(443, reject.GetProperty("port")[0].GetInt32());
+    }
+
+    [Fact]
+    public void DohRejectAppliesOnlyToTunnelTraffic()
+    {
+        // Наш собственный резолвер — тоже DoH и живёт по тем же адресам.
+        // Без привязки к входящему отказ накрыл бы его самого.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32");
+
+        var reject = Rules(root).Single(r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+
+        Assert.Equal("tun-in", reject.GetProperty("inbound")[0].GetString());
+    }
+
+    [Fact]
+    public void DohRejectStandsBeforeAnyRoutingDecision()
+    {
+        // Порядок существенный: правило, отправившее запрос в исходящий,
+        // сделало бы отказ недостижимым.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32");
+        var rules = Rules(root).ToArray();
+
+        int reject = Array.FindIndex(rules, r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+        int firstOutbound = Array.FindIndex(rules, r => r.TryGetProperty("outbound", out _));
+
+        Assert.True(reject >= 0, "правило отказа отсутствует");
+        Assert.True(reject < firstOutbound, "отказ должен стоять раньше маршрутизации");
+    }
+
+    [Fact]
+    public void WithoutSelectiveCaptureThereIsNothingToReject()
+    {
+        // При сплошном перехвате резолверы в туннель не заводятся отдельно,
+        // и ломать DoH незачем.
+        var root = CompileToJson(ProxyOnlyRules, Server());
+
+        Assert.DoesNotContain(Rules(root), r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+    }
+
     [Fact]
     public void ProxyRuleWithAutoServerPointsAtTheSelector()
     {
