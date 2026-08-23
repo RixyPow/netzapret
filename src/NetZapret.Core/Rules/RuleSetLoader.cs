@@ -33,7 +33,89 @@ public static class RuleSetLoader
         }
     }
 
+    /// <summary>
+    /// Загружает базовый набор и накладывает поверх пользовательский.
+    /// </summary>
+    /// <param name="basePath">Выверенный набор: то, что заблокировано наверняка.</param>
+    /// <param name="userPath">Выбор пользователя; может отсутствовать.</param>
+    /// <remarks>
+    /// Два файла, а не один: базовый обновляется вместе с программой, и правки
+    /// человека в нём затирались бы. Разделение позволяет обновлять первый,
+    /// не трогая второй.
+    /// </remarks>
+    public static RuleEngine LoadLayered(string basePath, string? userPath)
+    {
+        var baseEngine = LoadFromFile(basePath);
+
+        if (userPath is null || !File.Exists(userPath))
+            return baseEngine;
+
+        var userEngine = LoadFromFile(userPath);
+
+        foreach (var rule in userEngine.RuleSet.Rules)
+            rule.Source = RuleSource.User;
+
+        var merged = userEngine.RuleSet.Rules.Concat(baseEngine.RuleSet.Rules).ToList();
+
+        // Режим и умолчание берутся из базового: пользовательский файл описывает
+        // только отдельные маршруты, общие настройки живут в меню.
+        return RuleEngine.Build(
+            merged,
+            baseEngine.RuleSet.DefaultMode,
+            baseEngine.RuleSet.DefaultServer,
+            baseEngine.RuleSet.Operating)
+            .WithCapture(baseEngine.RuleSet.CaptureEntries
+                .Concat(userEngine.RuleSet.CaptureEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList());
+    }
+
+    /// <summary>
+    /// Разбирает правила из файла, не отбрасывая выключенные.
+    /// </summary>
+    /// <remarks>
+    /// Нужен редактору пользовательского слоя: движок выключенные правила
+    /// отбрасывает, и файл-модель, читая через него, теряла бы их при
+    /// первом же сохранении.
+    /// </remarks>
+    public static IReadOnlyList<RoutingRule> LoadRawRules(string path)
+    {
+        if (!File.Exists(path))
+            return Array.Empty<RoutingRule>();
+
+        try
+        {
+            return ParseRules(File.ReadAllText(path));
+        }
+        catch (IOException ex)
+        {
+            throw new RuleConfigurationException($"Не удалось прочитать {path}: {ex.Message}", ex);
+        }
+    }
+
+    private static IReadOnlyList<RoutingRule> ParseRules(string yaml) => ParseFile(yaml).Rules;
+
     public static RuleEngine Load(string yaml)
+    {
+        var parsed = ParseFile(yaml);
+
+        var engine = RuleEngine.Build(
+            parsed.Rules,
+            parsed.DefaultMode,
+            parsed.DefaultServer,
+            parsed.Operating);
+
+        return parsed.Capture.Count > 0 ? engine.WithCapture(parsed.Capture) : engine;
+    }
+
+    private readonly record struct ParsedFile(
+        IReadOnlyList<RoutingRule> Rules,
+        RoutingMode DefaultMode,
+        string? DefaultServer,
+        OperatingMode Operating,
+        IReadOnlyList<string> Capture);
+
+    private static ParsedFile ParseFile(string yaml)
     {
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
@@ -69,6 +151,7 @@ public static class RuleSetLoader
                 Value = raw.Value.Trim(),
                 Mode = ParseMode(raw.Mode, $"правило #{i}"),
                 Server = string.IsNullOrWhiteSpace(raw.Server) ? null : raw.Server.Trim(),
+                Enabled = raw.Enabled ?? true,
                 Ordinal = i,
             });
         }
@@ -89,11 +172,12 @@ public static class RuleSetLoader
 
         var defaultServer = string.IsNullOrWhiteSpace(dto.Default?.Server) ? null : dto.Default!.Server!.Trim();
 
-        var engine = RuleEngine.Build(rules, defaultMode, defaultServer, operating);
-
-        return dto.Capture is { Count: > 0 }
-            ? new RuleEngine(engine.RuleSet with { CaptureEntries = dto.Capture })
-            : engine;
+        return new ParsedFile(
+            rules,
+            defaultMode,
+            defaultServer,
+            operating,
+            dto.Capture ?? (IReadOnlyList<string>)Array.Empty<string>());
     }
 
     private static OperatingMode ParseOperatingMode(string? value) =>
@@ -149,6 +233,9 @@ public static class RuleSetLoader
         public string? Value { get; set; }
         public string? Mode { get; set; }
         public string? Server { get; set; }
+
+        /// <summary>Выключенное правило хранится, но не применяется.</summary>
+        public bool? Enabled { get; set; }
     }
 
     private sealed class DefaultDto

@@ -29,6 +29,18 @@ public sealed class RoutingRule
     /// </summary>
     public int Ordinal { get; set; }
 
+    /// <summary>
+    /// Выключенное правило хранится, но не применяется.
+    /// </summary>
+    /// <remarks>
+    /// Нужно, чтобы можно было отключить свой выбор, не теряя его: иначе
+    /// человеку пришлось бы удалять запись и заводить заново.
+    /// </remarks>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>Откуда правило пришло — для показа в выводе.</summary>
+    public RuleSource Source { get; set; } = RuleSource.Base;
+
     // Скомпилированные представления Value. Считаются один раз при загрузке конфига,
     // потому что Matches вызывается на каждое новое соединение.
     private GlobMatcher? _glob;
@@ -169,6 +181,23 @@ public sealed class RoutingRule
     }
 
     public override string ToString() => $"#{Ordinal} {Match.ToString().ToLowerInvariant()}:{Value} -> {Mode.ToString().ToLowerInvariant()}";
+}
+
+/// <summary>
+/// Слой, из которого пришло правило.
+/// </summary>
+/// <remarks>
+/// Пользовательские правила проверяются раньше базовых внутри своего класса
+/// совпадения: выбор человека должен перекрывать заводскую настройку,
+/// а не спорить с ней.
+/// </remarks>
+public enum RuleSource
+{
+    /// <summary>Базовый набор: то, что заблокировано наверняка.</summary>
+    Base,
+
+    /// <summary>Выбор пользователя.</summary>
+    User,
 }
 
 /// <summary>

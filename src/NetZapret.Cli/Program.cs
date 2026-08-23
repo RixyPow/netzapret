@@ -27,6 +27,7 @@ internal static class Program
                 "rules" => RulesCommand.Run(cmd, DefaultConfigPath),
                 "test" => TestCommand.Run(cmd, DefaultConfigPath),
                 "where" => WhereCommand.Run(cmd, DefaultConfigPath),
+                "route" => RouteCommand.Run(cmd),
                 "sub" => await SubCommand.RunAsync(cmd, cts.Token),
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
@@ -76,6 +77,7 @@ internal static class Program
               watch    Наблюдать за соединениями и показывать применяемые правила
               rules    Показать разобранный набор правил в порядке вычисления
               where    Куда пойдёт приложение или сайт: напрямую, десинк или VPN
+              route    Задать свой маршрут для приложения или сайта
               test     Прогнать синтетическое соединение через правила
               sub      Показать содержимое подписки: квоту, срок, серверы
               config   Сгенерировать конфиг sing-box из правил и подписки
@@ -154,6 +156,18 @@ internal static class Program
               Автозапуск сделан задачей планировщика с наивысшими привилегиями:
               так права администратора выдаются без запроса UAC при входе.
               install и remove требуют консоли администратора.
+
+            where / route
+              Правила лежат в двух слоях. Базовый config/rules.yaml мы ведём
+              сами: там то, что заблокировано наверняка. Ваши решения пишутся
+              в config/rules.user.yaml и проверяются раньше базовых.
+
+              nz where <что>              куда пойдёт и почему
+              nz route                    список ваших правил
+              nz route <что> vpn          через VPN
+              nz route <что> десинк       через Zapret
+              nz route <что> напрямую     не трогать
+              nz route off <что>          убрать, вернуть базовую настройку
 
             ПРИМЕРЫ
               netzapret rules --config config/rules.example.yaml

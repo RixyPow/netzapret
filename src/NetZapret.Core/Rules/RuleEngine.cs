@@ -40,7 +40,9 @@ public sealed class RuleEngine
         string? defaultServer = null,
         OperatingMode operating = OperatingMode.Selective)
     {
-        var ordered = rules.ToList();
+        // Выключенные правила отбрасываются здесь: дальше по конвейеру они
+        // только мешали бы — попадали в конфиг движка и в подсчёты.
+        var ordered = rules.Where(r => r.Enabled).ToList();
 
         for (int i = 0; i < ordered.Count; i++)
         {
@@ -48,9 +50,14 @@ public sealed class RuleEngine
             ordered[i].Compile();
         }
 
-        // OrderBy устойчив в LINQ-to-objects, поэтому порядок внутри одного
-        // MatchKind останется таким же, как в файле.
-        var sorted = ordered.OrderBy(r => MatchKindPriority.Of(r.Match)).ToList();
+        // OrderBy устойчив в LINQ-to-objects, поэтому порядок внутри одной
+        // группы останется таким же, как в файле. Сортировка двухуровневая:
+        // сперва класс совпадения, затем слой — выбор человека проверяется
+        // раньше заводской настройки того же класса.
+        var sorted = ordered
+            .OrderBy(r => MatchKindPriority.Of(r.Match))
+            .ThenBy(r => r.Source == RuleSource.User ? 0 : 1)
+            .ToList();
 
         return new RuleEngine(new RuleSet
         {
@@ -130,4 +137,8 @@ public sealed class RuleEngine
 
     /// <summary>Есть ли в наборе доменные правила — от этого зависит, нужен ли источник имён.</summary>
     public bool RequiresHostnames => _hasDomainRules;
+
+    /// <summary>Возвращает движок с заменённой секцией перехвата.</summary>
+    internal RuleEngine WithCapture(IReadOnlyList<string> capture) =>
+        new(_ruleSet with { CaptureEntries = capture });
 }

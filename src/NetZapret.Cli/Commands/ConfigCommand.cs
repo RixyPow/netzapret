@@ -13,7 +13,9 @@ internal static class ConfigCommand
     public static async Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
     {
         var configPath = cmd.Value("config", defaultConfigPath);
-        var engine = RuleSetLoader.LoadFromFile(configPath);
+        var engine = RuleSetLoader.LoadLayered(
+            configPath,
+            cmd.Value("user-rules", UserRulesFile.DefaultPath));
 
         var info = await SubscriptionSource.LoadAsync(cmd, cancellationToken);
         if (info is null)

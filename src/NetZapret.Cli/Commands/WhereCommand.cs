@@ -28,7 +28,9 @@ internal static class WhereCommand
         }
 
         var configPath = cmd.Value("config", defaultConfigPath);
-        var engine = RuleSetLoader.LoadFromFile(configPath);
+        var engine = RuleSetLoader.LoadLayered(
+            configPath,
+            cmd.Value("user-rules", UserRulesFile.DefaultPath));
 
         var problems = RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover(cmd.Value("zapret-root"))?.Root);
 
@@ -45,7 +47,10 @@ internal static class WhereCommand
         Console.WriteLine($"  Основание:    {decision.Reason ?? "правило по умолчанию"}");
 
         if (decision.Rule is not null)
+        {
             Console.WriteLine($"  Правило:      {decision.Rule}");
+            Console.WriteLine($"  Слой:         {(decision.Rule.Source == RuleSource.User ? "ваш выбор" : "базовый набор")}");
+        }
 
         if (decision.Mode == RoutingMode.Proxy)
             Console.WriteLine($"  Сервер:       {decision.Server ?? "авто"}");
@@ -57,6 +62,13 @@ internal static class WhereCommand
         }
 
         PrintCaveats(connection, decision);
+
+        Console.WriteLine();
+        Console.WriteLine("  Изменить:");
+        Console.WriteLine($"    nz route {target.Trim()} vpn");
+        Console.WriteLine($"    nz route {target.Trim()} десинк");
+        Console.WriteLine($"    nz route {target.Trim()} напрямую");
+
         return 0;
     }
 
