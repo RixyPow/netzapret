@@ -15,6 +15,18 @@ public sealed class SingBoxOptions
     /// <summary>Адрес TUN-интерфейса.</summary>
     public string TunAddress { get; init; } = "172.19.0.1/30";
 
+    /// <summary>Адрес TUN-интерфейса для IPv6.</summary>
+    /// <remarks>
+    /// Без него <c>auto_route</c> не ставит ни одного маршрута IPv6, и всё,
+    /// что перечислено в <c>route_address</c> из адресов IPv6, туда не
+    /// попадает. На практике это означало, что резолвер провайдера
+    /// (адрес вида <c>fd7d:…::1</c>) оставался вне туннеля и отвечал
+    /// настоящими адресами в обход fakeip — то есть выборочный перехват
+    /// обходился через IPv6, даже когда с IPv4 всё было верно.
+    /// Диапазон взят из документации sing-box.
+    /// </remarks>
+    public string TunAddressV6 { get; init; } = "fdfe:dcba:9876::1/126";
+
     /// <summary>Диапазон fakeip для IPv4 — по умолчанию зарезервированный под тесты.</summary>
     public string FakeIpV4Range { get; init; } = "198.18.0.0/15";
 
@@ -434,7 +446,7 @@ public sealed class SingBoxConfigCompiler
             ["type"] = "tun",
             ["tag"] = "tun-in",
             ["interface_name"] = options.TunInterfaceName,
-            ["address"] = new JsonArray { options.TunAddress },
+            ["address"] = new JsonArray { options.TunAddress, options.TunAddressV6 },
             ["auto_route"] = true,
             // strict_route выключен намеренно: он добавляет фильтры WFP,
             // блокирующие трафик мимо туннеля, а нам нужно, чтобы direct

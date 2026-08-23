@@ -64,6 +64,23 @@ public class SingBoxConfigCompilerTests
         """;
 
     [Fact]
+    public void TunGetsAnIpV6AddressSoIpV6RoutesAreInstalled()
+    {
+        // Без адреса IPv6 auto_route не ставит ни одного маршрута IPv6,
+        // и резолвер провайдера по адресу fd7d:…::1 остаётся вне туннеля:
+        // отвечает настоящими адресами в обход fakeip. Перехват при этом
+        // выглядит исправным — обход идёт по второму протоколу.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32");
+
+        var addresses = root.GetProperty("inbounds")[0].GetProperty("address")
+            .EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+
+        Assert.Contains(addresses, a => a.Contains(':'));
+    }
+
+    [Fact]
     public void DohToSystemResolversIsRejected()
     {
         // Windows 11 сама поднимает запрос до DNS over HTTPS, и тогда он уходит

@@ -97,9 +97,10 @@ internal static class MenuCommand
         Console.WriteLine($"  6. Маршруты приложений ... {DescribeRoutes()}");
         Console.WriteLine();
         Console.WriteLine("  7. Собрать конфиг");
-        Console.WriteLine(running ? "  8. Остановить" : "  8. Запустить");
+        Console.WriteLine(running ? "  8. Остановить" : "  8. Запустить (конфиг соберётся сам)");
         Console.WriteLine("  9. Проверить серверы");
         Console.WriteLine(" 10. Обзор состояния");
+        Console.WriteLine(" 11. Журнал супервизора");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -152,6 +153,9 @@ internal static class MenuCommand
                 return settings;
             case "10":
                 RunDoctor(settings);
+                return settings;
+            case "11":
+                ShowSupervisorLog();
                 return settings;
             default:
                 return settings;
@@ -465,12 +469,12 @@ internal static class MenuCommand
             result.Ok ? ConsoleColor.Green : ConsoleColor.Red);
     }
 
-    private static async Task BuildConfigAsync(AppSettings settings, CancellationToken cancellationToken)
+    private static async Task<bool> BuildConfigAsync(AppSettings settings, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
         {
             Message("Сначала задайте подписку (пункт 4).", ConsoleColor.Yellow);
-            return;
+            return false;
         }
 
         Console.WriteLine();
@@ -509,10 +513,13 @@ internal static class MenuCommand
             Message(
                 $"Готово: {result.UsedServers.Count} серверов, {result.SkippedServers.Count} пропущено.",
                 ConsoleColor.Green);
+
+            return true;
         }
         catch (Exception ex)
         {
             Message($"Не удалось: {ex.GetBaseException().Message}", ConsoleColor.Red);
+            return false;
         }
     }
 
@@ -538,14 +545,20 @@ internal static class MenuCommand
             return;
         }
 
-        if (!File.Exists(settings.ProxyConfigPath))
+        // Конфиг пересобирается перед каждым запуском. Раздельные пункты
+        // «собрать» и «запустить» стоили нам двух вечеров: движок молча
+        // поднимался с файлом от прошлой версии правил, и симптом выглядел
+        // как «сайт не работает», а не как «вы забыли нажать шестёрку».
+        // Правила, подписка и список резолверов меняются чаще, чем человек
+        // о них вспоминает, так что дешевле собирать всегда.
+        if (!await BuildConfigAsync(settings, cancellationToken))
         {
-            Message("Конфиг не собран — сначала пункт 6.", ConsoleColor.Yellow);
-            return;
+            if (!File.Exists(settings.ProxyConfigPath))
+                return;
+
+            Message("Запускаю с ранее собранным конфигом.", ConsoleColor.Yellow);
         }
 
-        // Супервизор запускается в отдельном окне: он работает в переднем плане
-        // до Ctrl+C, и запуск его здесь заблокировал бы меню.
         var executable = Environment.ProcessPath;
 
         if (executable is null)
@@ -554,23 +567,42 @@ internal static class MenuCommand
             return;
         }
 
+        // Без окна: супервизор работает до остановки, и отдельная консоль
+        // рядом с меню только мешала — закрыть её случайно значило убить
+        // движки. Вывод уходит в журнал, он же показывается пунктом меню.
         Process.Start(new ProcessStartInfo
         {
             FileName = executable,
             Arguments = BuildStartArguments(settings),
             WorkingDirectory = Directory.GetCurrentDirectory(),
-            UseShellExecute = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
         });
 
         // Даём супервизору записать состояние, иначе меню перерисуется
         // с надписью «остановлено» сразу после запуска.
         await Task.Delay(1500, cancellationToken);
-        Message("Запущено в отдельном окне.", ConsoleColor.Green);
+
+        var started = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (started is not null && started.IsSupervisorAlive())
+        {
+            Message("Запущено.", ConsoleColor.Green);
+        }
+        else
+        {
+            // Раньше об этом сообщало собственное окно супервизора. Без него
+            // молчание выглядело бы как успех, поэтому смотрим на состояние.
+            Message("Супервизор не поднялся — смотрите журнал (пункт 11).", ConsoleColor.Red);
+        }
     }
+
+    public static string SupervisorLogPath => Path.Combine("runtime", "supervisor.log");
 
     private static string BuildStartArguments(AppSettings settings)
     {
-        var arguments = $"start --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\"";
+        var arguments = $"start --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\"" +
+            $" --log \"{Path.GetFullPath(SupervisorLogPath)}\"";
 
         if (settings.PresetName is { } preset)
             arguments += $" --preset \"{preset}\"";
@@ -578,7 +610,55 @@ internal static class MenuCommand
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";
 
+        // Без окна некому подтвердить снятие осиротевших движков, а они
+        // удержат TUN и WinDivert, и запуск провалится молча.
+        arguments += " --kill-orphans";
+
         return arguments;
+    }
+
+    private static void ShowSupervisorLog()
+    {
+        var path = Path.GetFullPath(SupervisorLogPath);
+
+        Console.WriteLine();
+
+        if (!File.Exists(path))
+        {
+            Message("Журнала пока нет — супервизор ещё не запускался.", ConsoleColor.Yellow);
+            Pause();
+            return;
+        }
+
+        Console.WriteLine($"{path}");
+        Console.WriteLine(new string('-', 72));
+
+        try
+        {
+            // Через FileShare.ReadWrite: файл открыт супервизором на запись,
+            // и без этого прочитать его во время работы было бы нельзя.
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(stream);
+
+            var lines = new Queue<string>();
+
+            while (reader.ReadLine() is { } line)
+            {
+                lines.Enqueue(line);
+
+                if (lines.Count > 40)
+                    lines.Dequeue();
+            }
+
+            foreach (var line in lines)
+                Console.WriteLine(line);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не удалось прочитать: {ex.GetBaseException().Message}", ConsoleColor.Red);
+        }
+
+        Pause();
     }
 
     private static async Task ProbeAsync(AppSettings settings, CancellationToken cancellationToken)

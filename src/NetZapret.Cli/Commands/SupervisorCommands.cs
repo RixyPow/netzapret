@@ -22,6 +22,13 @@ internal static class SupervisorCommands
             return 0;
         }
 
+        // Меню запускает супервизор без окна, и писать в консоль ему некуда.
+        // Весь вывод уходит в файл, а меню показывает его отдельным пунктом.
+        var logPath = cmd.Value("log", string.Empty);
+
+        if (!string.IsNullOrWhiteSpace(logPath))
+            RedirectOutputTo(logPath);
+
         var existing = SupervisorState.Load(statePath);
 
         if (existing is not null && existing.IsSupervisorAlive())
@@ -105,6 +112,80 @@ internal static class SupervisorCommands
 
         await supervisor.RunAsync(cancellationToken);
         return 0;
+    }
+
+    /// <summary>
+    /// Уводит весь вывод процесса в файл.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Через <see cref="Console.SetOut"/>, а не заменой вызовов: писать сюда
+    /// будет и супервизор, и код запуска движков, и обработчик ошибок верхнего
+    /// уровня. Перечислять их поимённо значит однажды забыть один и потерять
+    /// именно то сообщение, ради которого журнал и заводился.
+    /// </para>
+    /// <para>
+    /// Файл открывается с общим доступом на чтение: иначе меню не смогло бы
+    /// показать журнал, пока супервизор работает, — а показывать его нужно
+    /// именно тогда.
+    /// </para>
+    /// <para>
+    /// Дописывание, а не перезапись: между перезапусками полезно видеть,
+    /// чем закончился прошлый. Разрастание ограничивается усечением при
+    /// открытии — иначе за недели работы файл станет неподъёмным.
+    /// </para>
+    /// </remarks>
+    private static void RedirectOutputTo(string path)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            TrimIfLarge(path);
+
+            var stream = new FileStream(
+                path,
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.ReadWrite);
+
+            var writer = new StreamWriter(stream) { AutoFlush = true };
+
+            Console.SetOut(writer);
+            Console.SetError(writer);
+
+            Console.WriteLine();
+            Console.WriteLine($"===== запуск {DateTime.Now:dd.MM.yyyy HH:mm:ss} =====");
+        }
+        catch (Exception ex)
+        {
+            // Невозможность вести журнал — не повод не запускаться:
+            // движки важнее записи о них.
+            Console.Error.WriteLine($"Журнал {path} недоступен: {ex.GetBaseException().Message}");
+        }
+    }
+
+    private const int LogSizeLimit = 512 * 1024;
+
+    private static void TrimIfLarge(string path)
+    {
+        try
+        {
+            if (!File.Exists(path) || new FileInfo(path).Length <= LogSizeLimit)
+                return;
+
+            // Хвост полезнее головы: интересно, чем кончилось, а не с чего
+            // начиналось месяц назад.
+            var lines = File.ReadAllLines(path);
+            File.WriteAllLines(path, lines.Skip(Math.Max(0, lines.Length - 500)));
+        }
+        catch (IOException)
+        {
+            // Занят или недоступен — оставляем как есть.
+        }
     }
 
     private static bool TryAddSingBox(CommandLine cmd, List<SupervisedService> services)
