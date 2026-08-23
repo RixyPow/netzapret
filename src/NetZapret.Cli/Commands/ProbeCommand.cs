@@ -41,6 +41,7 @@ internal static class ProbeCommand
             TotalTimeout = TimeSpan.FromSeconds(cmd.Int("budget", 14)),
             Parallelism = cmd.Int("parallel", 5),
             LogLevel = cmd.Value("log-level", "debug"),
+            KeepArtifacts = cmd.Has("keep-artifacts"),
         };
 
         Console.WriteLine();

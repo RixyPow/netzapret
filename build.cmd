@@ -23,13 +23,20 @@ if %errorlevel% neq 0 (
 )
 
 echo Deploying to %TARGET%
-robocopy "%SOURCE%" "%TARGET%" /E /NJH /NJS /NP /NDL /NFL >nul
+
+rem /R and /W are not optional here. Robocopy defaults to one million retries
+rem with a thirty second wait, so a single locked file hangs the script for
+rem what is effectively forever. Observed exactly that when a stray instance
+rem held the deployed assemblies. Two quick retries, then fail loudly.
+robocopy "%SOURCE%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 
 rem robocopy returns 0-7 for success; 8 and above mean real failure.
 if %errorlevel% geq 8 (
     echo.
-    echo Could not update %TARGET% - the program is probably running.
+    echo Could not update %TARGET% - a running instance is holding the files.
     echo Stop it first:  nz stop
+    echo If that is not enough, check for stray processes:
+    echo   tasklist ^| findstr /i "netzapret sing-box winws2"
     exit /b 1
 )
 

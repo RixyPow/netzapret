@@ -34,6 +34,7 @@ internal static class Program
                 "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
                 "status" => SupervisorCommands.Status(cmd),
                 "doctor" => DoctorCommand.Run(cmd),
+                "clean" => CleanCommand.Run(cmd),
                 "autostart" => AutostartCommand.Run(cmd),
                 "menu" => await MenuCommand.RunAsync(cmd, cts.Token),
                 "help" or "--help" or "-h" => PrintUsage(0),
@@ -82,6 +83,7 @@ internal static class Program
               stop     Остановить супервизор и все службы
               status   Состояние супервизора и служб
               doctor   Обзор: что найдено и что готово к работе
+              clean    Убрать рабочие файлы и логи из runtime
               autostart Управление автозапуском: install / remove / status
               help     Эта справка
 

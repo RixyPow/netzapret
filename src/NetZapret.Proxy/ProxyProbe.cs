@@ -36,6 +36,17 @@ public sealed record ProbeOptions
     /// <summary>Каталог для конфигов и логов пробника.</summary>
     public string WorkDirectory { get; init; } = "runtime/probe";
 
+    /// <summary>
+    /// Оставлять временные файлы после проверки.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию конфиги удаляются: они одноразовые и содержат UUID
+    /// и пароли открытым текстом, а копятся по одному на каждый сервер.
+    /// Логи неудачных попыток сохраняются — по ним разбирают причину.
+    /// Флаг нужен только при отладке самого пробника.
+    /// </remarks>
+    public bool KeepArtifacts { get; init; }
+
     public string LogLevel { get; init; } = "debug";
 
     /// <summary>
@@ -104,6 +115,9 @@ public sealed class ProxyProbe
         Action<ProbeResult>? onResult,
         CancellationToken cancellationToken)
     {
+        if (!options.KeepArtifacts)
+            CleanWorkDirectory(options.WorkDirectory);
+
         var results = new List<ProbeResult>();
         var sync = new object();
 
@@ -194,18 +208,69 @@ public sealed class ProxyProbe
                         : error ?? "внешний адрес не получен");
             }
 
+            // Лог удачной проверки не нужен: разбирают только неудачи,
+            // а лишние файлы мешают найти нужный.
+            if (!options.KeepArtifacts)
+                Delete(logPath);
+
             return new ProbeResult
             {
                 ServerTag = server.Tag,
                 Success = true,
                 ExternalIp = ip,
                 Elapsed = stopwatch.Elapsed,
-                LogPath = logPath,
+                LogPath = options.KeepArtifacts ? logPath : null,
             };
         }
         finally
         {
             await runner.StopAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+
+            // Конфиг содержит учётные данные и больше не нужен — удаляем
+            // сразу, не дожидаясь следующего запуска.
+            if (!options.KeepArtifacts)
+                Delete(configPath);
+        }
+    }
+
+    /// <summary>
+    /// Убирает файлы прошлых проверок.
+    /// </summary>
+    /// <remarks>
+    /// Конфиги содержат UUID и пароли открытым текстом, поэтому уходят все.
+    /// Логи тоже: они относятся к прошлому прогону и только сбивают с толку
+    /// при разборе текущего.
+    /// </remarks>
+    private static void CleanWorkDirectory(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return;
+
+        foreach (var file in Directory.EnumerateFiles(directory))
+        {
+            var extension = Path.GetExtension(file);
+
+            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".log", StringComparison.OrdinalIgnoreCase))
+            {
+                Delete(file);
+            }
+        }
+    }
+
+    private static void Delete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Файл мог быть занят движком, который ещё не завершился.
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
