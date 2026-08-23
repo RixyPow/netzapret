@@ -101,6 +101,81 @@ public sealed class SingBoxConfigCompiler
     }
 
     /// <summary>
+    /// Собирает минимальный конфиг для проверки одного сервера.
+    /// </summary>
+    /// <remarks>
+    /// Ни TUN, ни fakeip, ни маршрутов: только локальный инбаунд <c>mixed</c>
+    /// (он же SOCKS, он же HTTP-прокси) и один исходящий. Такой конфиг
+    /// запускается без прав администратора и не трогает систему — именно то,
+    /// что нужно, чтобы отделить неисправность транспорта от проблем
+    /// маршрутизации.
+    /// </remarks>
+    private const string ProbeDnsServer = "8.8.8.8";
+
+    public string CompileProbeConfig(ProxyServer server, int listenPort, string? logPath, string logLevel = "debug")
+    {
+        var log = new JsonObject { ["level"] = logLevel, ["timestamp"] = true };
+
+        if (!string.IsNullOrEmpty(logPath))
+            log["output"] = Path.GetFullPath(logPath);
+
+        var root = new JsonObject
+        {
+            ["log"] = log,
+            ["inbounds"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "mixed",
+                    ["tag"] = "probe-in",
+                    ["listen"] = "127.0.0.1",
+                    ["listen_port"] = listenPort,
+                },
+            },
+            ["outbounds"] = new JsonArray
+            {
+                BuildOutbound(server, "probe-out"),
+                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
+            },
+            ["route"] = new JsonObject
+            {
+                ["rules"] = new JsonArray
+                {
+                    // Запросы к резолверу обязаны идти мимо прокси. Иначе выходит
+                    // замкнутый круг: чтобы разрешить имя сервера, нужен прокси,
+                    // а чтобы поднять прокси — разрешить имя.
+                    //
+                    // Через detour у DNS-сервера это не выражается: sing-box 1.13
+                    // отвергает detour в пустой direct-исходящий с формулировкой
+                    // «makes no sense». Поэтому развязка сделана правилом маршрута.
+                    new JsonObject
+                    {
+                        ["ip_cidr"] = new JsonArray { ProbeDnsServer + "/32" },
+                        ["outbound"] = "direct",
+                    },
+                },
+                ["final"] = "probe-out",
+                ["auto_detect_interface"] = true,
+                ["default_domain_resolver"] = new JsonObject { ["server"] = "probe-dns" },
+            },
+            ["dns"] = new JsonObject
+            {
+                ["servers"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["tag"] = "probe-dns",
+                        ["type"] = "udp",
+                        ["server"] = ProbeDnsServer,
+                    },
+                },
+            },
+        };
+
+        return root.ToJsonString(SerializerOptions);
+    }
+
+    /// <summary>
     /// Пишет конфиг на диск в UTF-8 <b>без BOM</b>.
     /// </summary>
     /// <remarks>

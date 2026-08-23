@@ -29,6 +29,7 @@ internal static class Program
                 "sub" => await SubCommand.RunAsync(cmd, cts.Token),
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
+                "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
                 "status" => StatusCommand.Run(),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
@@ -70,6 +71,7 @@ internal static class Program
               sub      Показать содержимое подписки: квоту, срок, серверы
               config   Сгенерировать конфиг sing-box из правил и подписки
               preset   Показать пресеты Zapret и их покрытие десинком
+              probe    Проверить, идёт ли трафик через серверы подписки
               status   Состояние подключения к прокси-серверу
               help     Эта справка
 
