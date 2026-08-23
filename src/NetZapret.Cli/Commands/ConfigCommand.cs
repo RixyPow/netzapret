@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
+using NetZapret.Zapret;
 
 namespace NetZapret.Cli.Commands;
 
@@ -18,11 +19,23 @@ internal static class ConfigCommand
         if (info is null)
             return 2;
 
+        bool proxyOnly = cmd.Has("proxy-only");
+
+        // Исключения по спискам пресета имеют смысл только при сплошном
+        // перехвате. При выборочном в туннель и так заходит лишь fakeip,
+        // а установка семи тысяч маршрутов ради страховки того не стоит.
+        var desyncAddresses = cmd.Has("exclude-preset")
+            ? LoadPresetAddresses(cmd)
+            : Array.Empty<string>();
+
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
         {
             UseTun = !cmd.Has("no-tun"),
             LocalListenPort = cmd.Int("local-port", 21080),
+            Scope = proxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
+            DnsServerAddresses = proxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
+            DesyncAddresses = desyncAddresses,
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);
@@ -38,6 +51,16 @@ internal static class ConfigCommand
             ? "Режим:    TUN (запуск требует прав администратора)"
             : $"Режим:    локальный прокси на 127.0.0.1:{options.LocalListenPort} (прав администратора не нужно)");
 
+        if (options.Scope == TunnelScope.ProxyOnly)
+        {
+            Console.WriteLine(
+                $"Перехват: выборочный — в туннель заходит только трафик прокси " +
+                $"(fakeip + {options.DnsServerAddresses.Count} резолвер(ов))");
+        }
+
+        if (options.DesyncAddresses.Count > 0)
+            Console.WriteLine($"Исключено из туннеля: {options.DesyncAddresses.Count} подсетей из пресета");
+
         if (result.UsedServers.Count == 0)
         {
             Console.WriteLine();
@@ -47,6 +70,39 @@ internal static class ConfigCommand
         }
 
         return Validate(outputPath);
+    }
+
+    /// <summary>
+    /// Достаёт из пресета Zapret подсети, покрытые десинком.
+    /// </summary>
+    private static IReadOnlyList<string> LoadPresetAddresses(CommandLine cmd)
+    {
+        var paths = ZapretPaths.Discover(cmd.Value("zapret-root"));
+
+        if (paths is null)
+        {
+            Console.WriteLine("Установка Zapret не найдена — исключения по спискам пресета не добавлены.");
+            return Array.Empty<string>();
+        }
+
+        var presetName = cmd.Value("preset");
+        var reader = new PresetReader();
+
+        var presetPath = presetName is null
+            ? null
+            : Directory.EnumerateFiles(paths.PresetDirectory, "*.txt")
+                .FirstOrDefault(p => Path.GetFileNameWithoutExtension(p)
+                    .Contains(presetName, StringComparison.OrdinalIgnoreCase));
+
+        if (presetPath is null)
+        {
+            if (presetName is not null)
+                Console.WriteLine($"Пресет '{presetName}' не найден — исключения не добавлены.");
+
+            return Array.Empty<string>();
+        }
+
+        return reader.CollectCoveredAddresses(reader.Load(presetPath), paths.Root);
     }
 
     /// <summary>

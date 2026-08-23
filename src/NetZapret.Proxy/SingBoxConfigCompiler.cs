@@ -48,6 +48,63 @@ public sealed class SingBoxOptions
     public bool UseTun { get; init; } = true;
 
     public int LocalListenPort { get; init; } = 21080;
+
+    /// <summary>Что именно заводить в туннель.</summary>
+    public TunnelScope Scope { get; init; } = TunnelScope.Everything;
+
+    /// <summary>
+    /// Адреса резолверов, которые нужно завести в туннель при
+    /// <see cref="TunnelScope.ProxyOnly"/>.
+    /// </summary>
+    /// <remarks>
+    /// Без них fakeip не работает: чтобы подменить ответ, sing-box должен
+    /// увидеть запрос, а при выборочном перехвате запросы к резолверу
+    /// в туннель не попадают. Заводим только сами адреса резолверов —
+    /// перехват остаётся выборочным.
+    /// </remarks>
+    public IReadOnlyList<string> DnsServerAddresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Подсети, покрытые десинком: они выводятся из туннеля через
+    /// <c>route_exclude_address</c>. Источник — файлы <c>--ipset</c> пресета.
+    /// </summary>
+    public IReadOnlyList<string> DesyncAddresses { get; init; } = Array.Empty<string>();
+}
+
+/// <summary>
+/// Какой трафик перехватывает TUN.
+/// </summary>
+public enum TunnelScope
+{
+    /// <summary>
+    /// Весь трафик, дальше решают правила маршрутизации.
+    /// </summary>
+    /// <remarks>
+    /// Простой вариант, но именно он ломает часть рецептов Zapret: трафик
+    /// десинка проходит через туннель и выходит переоткрытым сокетом sing-box,
+    /// а WinDivert рассчитывает увидеть исходный поток приложения.
+    /// </remarks>
+    Everything,
+
+    /// <summary>
+    /// Только то, что идёт в прокси.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Реализовано инверсией: вместо «исключить весь десинк» — «завести только
+    /// прокси». Опирается на fakeip: адрес из диапазона fakeip выдаётся лишь
+    /// доменам, у которых правило <c>mode: proxy</c>, а <c>route_address</c>
+    /// у TUN ограничен этим диапазоном. Всё прочее туннеля не касается вовсе,
+    /// и WinDivert видит исходные потоки.
+    /// </para>
+    /// <para>
+    /// Почему не через <c>route_exclude_address</c> по спискам пресета: из
+    /// 20 секций Universal V6 с рецептом <c>fake</c> четырнадцать сопоставляются
+    /// только по доменам, а поле принимает лишь адреса. Разрешать 117 тысяч
+    /// доменов заранее неосуществимо. Подробнее — docs/coexistence.md.
+    /// </para>
+    /// </remarks>
+    ProxyOnly,
 }
 
 /// <summary>
@@ -95,8 +152,8 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
-            ["dns"] = BuildDns(options),
-            ["inbounds"] = BuildInbounds(options),
+            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet)),
+            ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options),
             ["route"] = BuildRoute(ruleSet, tags, options),
             ["experimental"] = new JsonObject
@@ -228,39 +285,96 @@ public sealed class SingBoxConfigCompiler
         return tags;
     }
 
-    private static JsonObject BuildDns(SingBoxOptions options) => new()
+    /// <summary>
+    /// Домены, которые по правилам уходят в прокси. При выборочном перехвате
+    /// только им выдаётся адрес fakeip — и только они попадают в туннель.
+    /// </summary>
+    private static IReadOnlyList<string> CollectProxyDomains(RuleSet ruleSet)
     {
-        ["servers"] = new JsonArray
+        if (ruleSet.Operating != OperatingMode.Selective)
+            return Array.Empty<string>();
+
+        return ruleSet.Rules
+            .Where(r => r.Mode == RoutingMode.Proxy && r.Match == MatchKind.Domain)
+            .Select(r => r.Value.StartsWith("*.", StringComparison.Ordinal) ? r.Value[2..] : r.Value)
+            .Where(v => !v.Contains('*'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> CollectProxyAddresses(RuleSet ruleSet)
+    {
+        if (ruleSet.Operating != OperatingMode.Selective)
+            return Array.Empty<string>();
+
+        return ruleSet.Rules
+            .Where(r => r.Mode == RoutingMode.Proxy && r.Match == MatchKind.Ip)
+            .Select(r => r.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static JsonObject BuildDns(SingBoxOptions options, IReadOnlyList<string> proxyDomains)
+    {
+        var dns = new JsonObject
         {
-            new JsonObject
+            ["servers"] = new JsonArray
             {
-                ["tag"] = "remote",
-                ["type"] = options.DnsServerType,
-                ["server"] = options.DnsServer,
+                new JsonObject
+                {
+                    ["tag"] = "remote",
+                    ["type"] = options.DnsServerType,
+                    ["server"] = options.DnsServer,
+                },
+                new JsonObject
+                {
+                    ["tag"] = "fake",
+                    ["type"] = "fakeip",
+                    ["inet4_range"] = options.FakeIpV4Range,
+                    ["inet6_range"] = options.FakeIpV6Range,
+                },
             },
-            new JsonObject
-            {
-                ["tag"] = "fake",
-                ["type"] = "fakeip",
-                ["inet4_range"] = options.FakeIpV4Range,
-                ["inet6_range"] = options.FakeIpV6Range,
-            },
-        },
+            ["independent_cache"] = true,
+        };
+
         // Fakeip выдаёт каждому домену собственный адрес, поэтому соответствие
-        // «адрес → домен» становится точным 1:1 и доменные правила работают
-        // без догадок по реальным адресам CDN.
-        ["rules"] = new JsonArray
+        // «адрес → домен» точное 1:1, и доменные правила работают без догадок
+        // по реальным адресам CDN.
+        var rules = new JsonArray();
+
+        if (options.Scope == TunnelScope.ProxyOnly && proxyDomains.Count > 0)
         {
-            new JsonObject
+            // Выборочный fakeip: подменяем ответ только тем доменам, которые
+            // идут в прокси. Всем остальным отдаётся настоящий адрес, и их
+            // трафик в туннель не попадает — этим и достигается развод
+            // с десинком.
+            var suffixes = new JsonArray();
+            foreach (var domain in proxyDomains)
+                suffixes.Add(domain);
+
+            rules.Add(new JsonObject
+            {
+                ["domain_suffix"] = suffixes,
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = "fake",
+            });
+        }
+        else if (options.Scope != TunnelScope.ProxyOnly)
+        {
+            rules.Add(new JsonObject
             {
                 ["query_type"] = new JsonArray { "A", "AAAA" },
                 ["server"] = "fake",
-            },
-        },
-        ["independent_cache"] = true,
-    };
+            });
+        }
 
-    private static JsonArray BuildInbounds(SingBoxOptions options)
+        dns["rules"] = rules;
+        dns["final"] = "remote";
+
+        return dns;
+    }
+
+    private static JsonArray BuildInbounds(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
         if (!options.UseTun)
         {
@@ -276,12 +390,12 @@ public sealed class SingBoxConfigCompiler
             };
         }
 
-        return BuildTunInbound(options);
+        return BuildTunInbound(options, proxyAddresses);
     }
 
-    private static JsonArray BuildTunInbound(SingBoxOptions options) => new()
+    private static JsonArray BuildTunInbound(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
-        new JsonObject
+        var tun = new JsonObject
         {
             ["type"] = "tun",
             ["tag"] = "tun-in",
@@ -293,8 +407,45 @@ public sealed class SingBoxConfigCompiler
             // и desync спокойно уходили на реальный интерфейс к WinDivert.
             ["strict_route"] = false,
             ["stack"] = "gvisor",
-        },
-    };
+        };
+
+        if (options.Scope == TunnelScope.ProxyOnly)
+        {
+            var captured = new JsonArray
+            {
+                options.FakeIpV4Range,
+                options.FakeIpV6Range,
+            };
+
+            // Адреса резолверов заводим в туннель намеренно: без перехвата
+            // запроса fakeip нечего подменять. Правило hijack-dns в маршрутах
+            // стоит раньше исключения приватных сетей, поэтому запрос к роутеру
+            // тоже будет перехвачен.
+            foreach (var address in options.DnsServerAddresses)
+                captured.Add(address);
+
+            // Правила mode: proxy по адресу тоже должны попадать в туннель:
+            // им fakeip не выдаётся, домена у них нет.
+            foreach (var cidr in proxyAddresses)
+                captured.Add(cidr);
+
+            tun["route_address"] = captured;
+        }
+
+        if (options.DesyncAddresses.Count > 0)
+        {
+            // Подсети из ipset-списков пресета. При выборочном перехвате они уже
+            // и так вне туннеля, но исключение остаётся страховкой: правило
+            // mode: proxy может случайно накрыть адрес, который чинит десинк.
+            var excluded = new JsonArray();
+            foreach (var cidr in options.DesyncAddresses)
+                excluded.Add(cidr);
+
+            tun["route_exclude_address"] = excluded;
+        }
+
+        return new JsonArray { tun };
+    }
 
     private static JsonArray BuildOutbounds(
         IReadOnlyList<ProxyServer> servers,
