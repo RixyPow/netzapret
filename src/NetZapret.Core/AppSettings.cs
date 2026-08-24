@@ -106,15 +106,24 @@ public sealed record AppSettings
 
     /// <summary>Нужен ли в этом режиме туннель.</summary>
     /// <remarks>
+    /// <para>
     /// Поднимать sing-box там, где он никуда не ведёт, значит без причины
     /// держать TUN и путать поиск неисправностей: адаптер есть, маршруты
     /// стоят, а трафик через них не идёт.
+    /// </para>
+    /// <para>
+    /// Не сохраняется: выводится из режима. Попав в файл, такое поле выглядит
+    /// настройкой — его правят, а оно не действует, потому что при чтении
+    /// пересчитывается заново.
+    /// </para>
     /// </remarks>
+    [JsonIgnore]
     public bool NeedsProxy => Mode is OperatingMode.Selective
         or OperatingMode.ProxyAll
         or OperatingMode.ProxyStrict;
 
     /// <summary>Нужен ли в этом режиме десинк.</summary>
+    [JsonIgnore]
     public bool NeedsDesync => Mode is not OperatingMode.Off && PresetName is not null;
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
