@@ -189,33 +189,45 @@ internal static class EngineLocator
 
     public static string? FindXray() => Find("xray.exe");
 
+    /// <summary>
+    /// Ищет движок: сперва во встроенной копии, затем в скачанном вручную.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>engines/</c> ищется только рядом с программой, без подъёма вверх.
+    /// Сборка кладёт его именно туда, так что подниматься незачем, а поиск
+    /// до корня диска подхватывал чужое: обзор состояния в распакованном
+    /// дистрибутиве показывал xray, найденный тремя каталогами выше,
+    /// в постороннем проекте.
+    /// </para>
+    /// <para>
+    /// <c>tools/</c> — наоборот, только с подъёмом: при отладке программа
+    /// запускается из bin\Debug\net8.0-windows, а движки лежат в корне
+    /// проекта, четырьмя уровнями выше.
+    /// </para>
+    /// </remarks>
     private static string? Find(string fileName)
     {
+        var bundled = Path.Combine(AppContext.BaseDirectory, "engines");
+
+        if (FindIn(bundled, fileName) is { } inBundle)
+            return inBundle;
+
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 
         while (directory is not null)
         {
-            // engines/ впереди tools/: там лежит копия, положенная сборкой
-            // и версионируемая вместе с программой. tools/ — то, что человек
-            // скачал руками, и оно остаётся запасным вариантом.
-            foreach (var name in new[] { "engines", "tools" })
-            {
-                var root = Path.Combine(directory.FullName, name);
-
-                if (!Directory.Exists(root))
-                    continue;
-
-                var found = Directory
-                    .EnumerateFiles(root, fileName, SearchOption.AllDirectories)
-                    .FirstOrDefault();
-
-                if (found is not null)
-                    return found;
-            }
+            if (FindIn(Path.Combine(directory.FullName, "tools"), fileName) is { } inTools)
+                return inTools;
 
             directory = directory.Parent;
         }
 
         return null;
     }
+
+    private static string? FindIn(string root, string fileName) =>
+        Directory.Exists(root)
+            ? Directory.EnumerateFiles(root, fileName, SearchOption.AllDirectories).FirstOrDefault()
+            : null;
 }

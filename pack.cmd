@@ -18,9 +18,27 @@ set "ROOT=%~dp0"
 set "DIST=%ROOT%dist"
 set "STAGE=%DIST%\NetZapret"
 
+rem dist\ gets wiped below, and a running instance holds its own executable.
+rem Refusing rather than killing it: the thing running is quite possibly the
+rem live setup carrying all of this machine's traffic, and taking it down
+rem without asking to build an archive is not a trade anyone agreed to.
+tasklist /fi "imagename eq netzapret.exe" 2>nul | find /i "netzapret.exe" >nul
+if not errorlevel 1 (
+    echo NetZapret is running - most likely the copy in dist\, which is about
+    echo to be replaced. Stop it from its menu, then run this again.
+    exit /b 1
+)
+
 echo Cleaning %DIST%
 if exist "%DIST%" rd /s /q "%DIST%"
 mkdir "%STAGE%" 2>nul
+
+rem Partially deleted by a failed run, for instance because something was
+rem holding a file. Publishing into that leaves a mixture of old and new.
+if exist "%STAGE%\netzapret.exe" (
+    echo Could not clean %DIST% - something is still holding files there.
+    exit /b 1
+)
 
 rem Single file so the folder stays readable. A plain self-contained publish
 rem scatters 217 runtime assemblies next to the program, and whoever opens the
@@ -118,6 +136,26 @@ rem travel with the copies. The installation ships no licence file at all,
 rem so the text comes from upstream and is placed beside the engine.
 copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
+
+rem Last line of defence before the archive exists. dist\ is wiped at the start,
+rem so these files should never be here - but testing happens in the unpacked
+rem folder, and config\netzapret.json holds a subscription link, which is a
+rem password. A leaked release cannot be recalled, so this is checked rather
+rem than assumed.
+for %%F in ("%STAGE%\config\netzapret.json" "%STAGE%\config\rules.user.yaml") do (
+    if exist "%%~F" (
+        echo.
+        echo Refusing to archive: %%~nxF is personal and must not ship.
+        exit /b 1
+    )
+)
+
+if exist "%STAGE%\runtime" (
+    echo.
+    echo Refusing to archive: runtime\ holds generated configs with server
+    echo credentials. Remove it and pack again.
+    exit /b 1
+)
 
 echo Archiving
 powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%' -DestinationPath '%DIST%\NetZapret.zip' -Force"

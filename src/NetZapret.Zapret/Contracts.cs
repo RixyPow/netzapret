@@ -123,21 +123,15 @@ public sealed record ZapretPaths
     public const string BundleDirectory = "engines";
 
     /// <summary>
-    /// Возможные расположения встроенной копии.
+    /// Расположение встроенной копии — только рядом с программой.
     /// </summary>
     /// <remarks>
-    /// Поиск идёт вверх по каталогам от исполняемого файла, а не по одному
-    /// пути: при запуске из build\ движки лежат рядом, а при отладке из bin\ —
-    /// на несколько уровней выше, в корне проекта.
+    /// Без подъёма по каталогам: сборка кладёт движки ровно сюда, а поиск
+    /// вверх до корня диска подхватывал бы посторонние каталоги с таким же
+    /// именем — и молча запускал бы чужой winws2 вместо своего.
     /// </remarks>
     private static IEnumerable<string> BundledRoots()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            yield return Path.Combine(directory.FullName, BundleDirectory, "zapret");
-            directory = directory.Parent;
-        }
+        yield return Path.Combine(AppContext.BaseDirectory, BundleDirectory, "zapret");
     }
 }
