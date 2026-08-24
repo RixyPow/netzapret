@@ -12,6 +12,19 @@
   </PropertyGroup>
 
   <!--
+    Сведения о продукте попадают в свойства собранных файлов: у распространяемой
+    программы они видны в «Свойствах» файла, и пустые поля там выглядят так же,
+    как у winws2.exe, чью лицензию нам пришлось выяснять на стороне.
+  -->
+  <PropertyGroup>
+    <Product>NetZapret</Product>
+    <Company>RixyPow</Company>
+    <Copyright>Copyright (c) 2026 RixyPow. MIT License.</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/RixyPow/netzapret</RepositoryUrl>
+  </PropertyGroup>
+
+  <!--
     Проект целиком x64-only: WFP-интероп содержит зашитые смещения полей
     структур для x64 ABI. Сборка под x86/ARM64 даст молча неверный разбор,
     поэтому лучше упасть на этапе компиляции.

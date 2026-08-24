@@ -47,6 +47,7 @@ copy /y "%ROOT%config\rules.yaml" "%STAGE%\config\" >nul
 copy /y "%ROOT%config\netzapret.example.json" "%STAGE%\config\" >nul
 
 copy /y "%ROOT%README.md" "%STAGE%\" >nul
+copy /y "%ROOT%LICENSE" "%STAGE%\" >nul
 copy /y "%ROOT%NetZapret.cmd" "%STAGE%\" >nul
 
 rem Engines. Same selection as build.cmd, and for the same reasons - see
