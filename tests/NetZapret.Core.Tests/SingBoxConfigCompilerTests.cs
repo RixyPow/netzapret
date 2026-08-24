@@ -155,6 +155,19 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void TunMtuIsSetAndFitsAnOrdinaryPath()
+    {
+        // Без явного значения адаптер поднимался с MTU 65535 при физическом
+        // интерфейсе в 1500: мелкие запросы проходили, крупные загрузки
+        // рассыпались. В Telegram это выглядело как «переписка работает,
+        // фотографии не грузятся» — на неисправность маршрутов непохоже вовсе.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32");
+        var mtu = root.GetProperty("inbounds")[0].GetProperty("mtu").GetInt32();
+
+        Assert.InRange(mtu, 1280, 1452);
+    }
+
+    [Fact]
     public void TunGetsAnIpV6AddressSoIpV6RoutesAreInstalled()
     {
         // Без адреса IPv6 auto_route не ставит ни одного маршрута IPv6,

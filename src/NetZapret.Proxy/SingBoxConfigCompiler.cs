@@ -15,6 +15,26 @@ public sealed class SingBoxOptions
     /// <summary>Адрес TUN-интерфейса.</summary>
     public string TunAddress { get; init; } = "172.19.0.1/30";
 
+    /// <summary>
+    /// MTU туннеля.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Задаётся явно, потому что без этого адаптер поднимался с MTU 65535 при
+    /// физическом интерфейсе в 1500. Приложение отдавало в туннель огромные
+    /// сегменты, наружу они уходили по пути с обычным MTU и рассыпались:
+    /// мелкие запросы проходили, крупные загрузки — нет. В Telegram это
+    /// выглядело так, что переписка работает, а фотографии и видео не грузятся
+    /// вовсе, и на маршруты это не походило совершенно.
+    /// </para>
+    /// <para>
+    /// 1400 с запасом: из 1500 вычитаются заголовки IP и UDP плюс обвязка
+    /// QUIC у Hysteria2 — около восьмидесяти байт. У TCP-транспортов
+    /// накладные расходы меньше, так что значение годится и им.
+    /// </para>
+    /// </remarks>
+    public int TunMtu { get; init; } = 1400;
+
     /// <summary>Адрес TUN-интерфейса для IPv6.</summary>
     /// <remarks>
     /// Без него <c>auto_route</c> не ставит ни одного маршрута IPv6, и всё,
@@ -447,6 +467,7 @@ public sealed class SingBoxConfigCompiler
             ["tag"] = "tun-in",
             ["interface_name"] = options.TunInterfaceName,
             ["address"] = new JsonArray { options.TunAddress, options.TunAddressV6 },
+            ["mtu"] = options.TunMtu,
             ["auto_route"] = true,
             // strict_route выключен намеренно: он добавляет фильтры WFP,
             // блокирующие трафик мимо туннеля, а нам нужно, чтобы direct
