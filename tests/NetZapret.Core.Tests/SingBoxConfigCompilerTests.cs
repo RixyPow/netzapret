@@ -63,6 +63,58 @@ public class SingBoxConfigCompilerTests
             mode: proxy
         """;
 
+    private const string ProxyAllWithRuExclusion = """
+        mode: proxy
+        rules:
+          - match: ip
+            value: "5.255.255.0/24"
+            mode: direct
+          - match: domain
+            value: "*.rutracker.org"
+            mode: proxy
+        """;
+
+    [Fact]
+    public void ProxyAllStillSendsRussianAddressesDirect()
+    {
+        // «Всё через VPN» не должно означать «в том числе туда, где VPN ломает
+        // работу»: российские сервисы через зарубежный адрес требуют
+        // подтверждений или отказывают вовсе.
+        var root = CompileToJson(ProxyAllWithRuExclusion, Server());
+
+        var direct = Rules(root).Single(r =>
+            r.TryGetProperty("ip_cidr", out _) &&
+            r.TryGetProperty("outbound", out var o) && o.GetString() == "direct");
+
+        Assert.Equal("5.255.255.0/24", direct.GetProperty("ip_cidr")[0].GetString());
+    }
+
+    [Fact]
+    public void ProxyAllDropsRulesThatOnlyRepeatTheDefault()
+    {
+        // Правила на прокси в этом режиме избыточны: всё, что не выведено
+        // явно, и так уходит в туннель по final. Лишние строки в конфиге
+        // потом читаются как «здесь что-то особенное».
+        var root = CompileToJson(ProxyAllWithRuExclusion, Server());
+
+        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain_suffix", out _));
+    }
+
+    [Fact]
+    public void OffModeRoutesNothingThroughTheTunnel()
+    {
+        var root = CompileToJson("""
+            mode: off
+            rules:
+              - match: domain
+                value: "*.rutracker.org"
+                mode: proxy
+            """, Server());
+
+        Assert.Equal("direct", root.GetProperty("route").GetProperty("final").GetString());
+        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain_suffix", out _));
+    }
+
     [Fact]
     public void TunGetsAnIpV6AddressSoIpV6RoutesAreInstalled()
     {
@@ -298,8 +350,11 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
-    public void ProxyAllModeSendsEverythingToTheSelectorAndSkipsRules()
+    public void ProxyAllModeSendsEverythingToTheSelectorButKeepsDirectRules()
     {
+        // Прежде этот режим отбрасывал правила целиком, и вместе с ними
+        // исключения на прямой проход. Оставлять их обязательно: см.
+        // ProxyAllStillSendsRussianAddressesDirect.
         var root = CompileToJson("""
             mode: proxy
             rules:
@@ -309,7 +364,10 @@ public class SingBoxConfigCompilerTests
             """, Server());
 
         Assert.Equal("auto", root.GetProperty("route").GetProperty("final").GetString());
-        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain", out _));
+
+        var kept = Rules(root).Single(r => r.TryGetProperty("domain", out _));
+
+        Assert.Equal("direct", kept.GetProperty("outbound").GetString());
     }
 
     [Fact]

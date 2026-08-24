@@ -98,9 +98,8 @@ internal static class MenuCommand
         Console.WriteLine();
         Console.WriteLine("  7. Собрать конфиг");
         Console.WriteLine(running ? "  8. Остановить" : "  8. Запустить (конфиг соберётся сам)");
-        Console.WriteLine("  9. Проверить серверы");
-        Console.WriteLine(" 10. Обзор состояния");
-        Console.WriteLine(" 11. Журнал супервизора");
+        Console.WriteLine("  9. Обзор состояния");
+        Console.WriteLine(" 10. Журнал супервизора");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -134,7 +133,7 @@ internal static class MenuCommand
                 settings = await ChooseServerAsync(settings, cancellationToken);
                 break;
             case "4":
-                settings = AskSubscription(settings);
+                settings = await SubscriptionMenuAsync(settings, cancellationToken);
                 break;
             case "5":
                 ToggleAutostart(settings);
@@ -149,12 +148,9 @@ internal static class MenuCommand
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
             case "9":
-                await ProbeAsync(settings, cancellationToken);
-                return settings;
-            case "10":
                 RunDoctor(settings);
                 return settings;
-            case "11":
+            case "10":
                 ShowSupervisorLog();
                 return settings;
             default:
@@ -227,6 +223,43 @@ internal static class MenuCommand
 
         var chosen = PickNullable("Сервер VPN", items, settings.PreferredServer);
         return chosen.Cancelled ? settings : settings with { PreferredServer = chosen.Value };
+    }
+
+    /// <summary>
+    /// Подписка и её серверы — одним пунктом.
+    /// </summary>
+    /// <remarks>
+    /// Проверка серверов жила отдельным пунктом верхнего уровня, хотя без
+    /// подписки она бессмысленна и обращаться к ней приходится сразу после
+    /// смены ссылки. Смысловая пара, разнесённая по меню, заставляла
+    /// вспоминать, где что лежит.
+    /// </remarks>
+    private static async Task<AppSettings> SubscriptionMenuAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Подписка: {DescribeSubscription(settings)}");
+            Console.WriteLine();
+            Console.WriteLine("  1. Изменить ссылку");
+            Console.WriteLine("  2. Проверить серверы");
+            Console.WriteLine("  0. Назад");
+            Console.Write("Выбор: ");
+
+            switch (Console.ReadLine()?.Trim())
+            {
+                case "1":
+                    settings = AskSubscription(settings);
+                    return settings;
+                case "2":
+                    await ProbeAsync(settings, cancellationToken);
+                    break;
+                default:
+                    return settings;
+            }
+        }
     }
 
     private static AppSettings AskSubscription(AppSettings settings)
@@ -303,6 +336,7 @@ internal static class MenuCommand
             Console.WriteLine();
             Console.WriteLine("  Введите приложение или сайт — покажу, куда он пойдёт.");
             Console.WriteLine("  Номер из списка — включить или выключить запись.");
+            Console.WriteLine("  Минус перед номером (-2) — удалить запись насовсем.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -312,15 +346,45 @@ internal static class MenuCommand
             if (string.IsNullOrWhiteSpace(input))
                 return;
 
-            if (int.TryParse(input, out var index) && index >= 1 && index <= file.Entries.Count)
+            if (int.TryParse(input, out var index))
             {
-                file.Toggle(index - 1);
-                file.Save();
-                continue;
+                // Отрицательный номер — удаление. Выключение запись сохраняет,
+                // и накопившийся список выключенного со временем начинает
+                // мешать читать нужное.
+                if (index < 0 && -index >= 1 && -index <= file.Entries.Count)
+                {
+                    DeleteRoute(file, -index - 1);
+                    continue;
+                }
+
+                if (index >= 1 && index <= file.Entries.Count)
+                {
+                    file.Toggle(index - 1);
+                    file.Save();
+                    continue;
+                }
             }
 
             AskRoute(settings, input);
         }
+    }
+
+    private static void DeleteRoute(UserRulesFile file, int index)
+    {
+        var entry = file.Entries[index];
+
+        // Подтверждение потому, что промах по клавише здесь необратим:
+        // «-2» вместо «2» стирает запись, а выглядят они рядом.
+        Console.WriteLine();
+        Console.Write($"Удалить «{entry.Value}» ({entry.DescribeMode()})? [y/N] ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (!string.Equals(answer, "y", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        file.RemoveAt(index);
+        file.Save();
     }
 
     private static void AskRoute(AppSettings settings, string target)
@@ -469,7 +533,10 @@ internal static class MenuCommand
             result.Ok ? ConsoleColor.Green : ConsoleColor.Red);
     }
 
-    private static async Task<bool> BuildConfigAsync(AppSettings settings, CancellationToken cancellationToken)
+    private static async Task<bool> BuildConfigAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken,
+        bool pause = true)
     {
         if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
         {
@@ -510,15 +577,16 @@ internal static class MenuCommand
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
-            Message(
+            Say(
                 $"Готово: {result.UsedServers.Count} серверов, {result.SkippedServers.Count} пропущено.",
-                ConsoleColor.Green);
+                ConsoleColor.Green,
+                pause);
 
             return true;
         }
         catch (Exception ex)
         {
-            Message($"Не удалось: {ex.GetBaseException().Message}", ConsoleColor.Red);
+            Say($"Не удалось: {ex.GetBaseException().Message}", ConsoleColor.Red, pause);
             return false;
         }
     }
@@ -551,10 +619,15 @@ internal static class MenuCommand
         // как «сайт не работает», а не как «вы забыли нажать шестёрку».
         // Правила, подписка и список резолверов меняются чаще, чем человек
         // о них вспоминает, так что дешевле собирать всегда.
-        if (!await BuildConfigAsync(settings, cancellationToken))
+        // Без паузы: следом идёт запуск, и «Enter — назад в меню» посреди
+        // одного действия читается как его конец.
+        if (!await BuildConfigAsync(settings, cancellationToken, pause: false))
         {
             if (!File.Exists(settings.ProxyConfigPath))
+            {
+                Pause();
                 return;
+            }
 
             Message("Запускаю с ранее собранным конфигом.", ConsoleColor.Yellow);
         }
@@ -570,7 +643,7 @@ internal static class MenuCommand
         // Без окна: супервизор работает до остановки, и отдельная консоль
         // рядом с меню только мешала — закрыть её случайно значило убить
         // движки. Вывод уходит в журнал, он же показывается пунктом меню.
-        Process.Start(new ProcessStartInfo
+        using var supervisor = Process.Start(new ProcessStartInfo
         {
             FileName = executable,
             Arguments = BuildStartArguments(settings),
@@ -579,22 +652,46 @@ internal static class MenuCommand
             CreateNoWindow = true,
         });
 
-        // Даём супервизору записать состояние, иначе меню перерисуется
-        // с надписью «остановлено» сразу после запуска.
-        await Task.Delay(1500, cancellationToken);
+        Console.WriteLine("Запускаю движки…");
 
-        var started = SupervisorState.Load(SupervisorState.DefaultPath);
-
-        if (started is not null && started.IsSupervisorAlive())
-        {
+        if (await WaitForSupervisorAsync(supervisor, cancellationToken))
             Message("Запущено.", ConsoleColor.Green);
-        }
         else
+            Message("Супервизор не поднялся — смотрите журнал (пункт 10).", ConsoleColor.Red);
+    }
+
+    /// <summary>
+    /// Ждёт, пока супервизор объявит себя работающим.
+    /// </summary>
+    /// <remarks>
+    /// Опрос, а не фиксированная пауза. Раньше здесь стояла задержка в полторы
+    /// секунды, и её не хватало: состояние пишется после того, как поднялись
+    /// оба движка, а winws2 с большим пресетом разбирает сотни аргументов
+    /// и читает полсотни списков. Меню объявляло неудачу там, где всё
+    /// поднималось нормально, — а такое сообщение хуже отсутствия сообщения,
+    /// потому что учит не верить сообщениям.
+    /// </remarks>
+    private static async Task<bool> WaitForSupervisorAsync(
+        Process? process,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+
+        while (DateTime.UtcNow < deadline)
         {
-            // Раньше об этом сообщало собственное окно супервизора. Без него
-            // молчание выглядело бы как успех, поэтому смотрим на состояние.
-            Message("Супервизор не поднялся — смотрите журнал (пункт 11).", ConsoleColor.Red);
+            // Выход процесса — сразу отказ, ждать дальше нечего.
+            if (process is { HasExited: true })
+                return false;
+
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            if (state is not null && state.IsSupervisorAlive())
+                return true;
+
+            await Task.Delay(250, cancellationToken);
         }
+
+        return false;
     }
 
     public static string SupervisorLogPath => Path.Combine("runtime", "supervisor.log");
@@ -733,7 +830,9 @@ internal static class MenuCommand
             : (true, current);
     }
 
-    private static void Message(string text, ConsoleColor color)
+    private static void Message(string text, ConsoleColor color) => Say(text, color, pause: true);
+
+    private static void Say(string text, ConsoleColor color, bool pause)
     {
         var previous = Console.ForegroundColor;
         Console.ForegroundColor = color;
@@ -741,7 +840,8 @@ internal static class MenuCommand
         Console.WriteLine(text);
         Console.ForegroundColor = previous;
 
-        Pause();
+        if (pause)
+            Pause();
     }
 
     private static void Pause()

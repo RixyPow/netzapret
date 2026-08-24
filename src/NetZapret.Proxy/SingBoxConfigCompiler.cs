@@ -742,14 +742,25 @@ public sealed class SingBoxConfigCompiler
 
         rules.Add(new JsonObject { ["ip_is_private"] = true, ["outbound"] = "direct" });
 
-        if (ruleSet.Operating == OperatingMode.Selective)
+        // В режиме «всё через VPN» правила не отбрасываются целиком, как было
+        // раньше: исключения на прямой проход обязаны пережить его. Российские
+        // сервисы через зарубежный адрес не работают вовсе — банки и госуслуги
+        // потребуют подтверждений, часть откажет наотрез, — и «всё через VPN»
+        // без этой оговорки означает «интернет наполовину сломан».
+        // Остальные правила при этом действительно лишние: всё, что не выведено
+        // явно, и так уходит в туннель по final.
+        IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
-            foreach (var rule in ruleSet.Rules)
-            {
-                var node = BuildRule(rule, tags, options, haveServers);
-                if (node is not null)
-                    rules.Add(node);
-            }
+            OperatingMode.Selective => ruleSet.Rules,
+            OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct).ToList(),
+            _ => Array.Empty<RoutingRule>(),
+        };
+
+        foreach (var rule in applicable)
+        {
+            var node = BuildRule(rule, tags, options, haveServers);
+            if (node is not null)
+                rules.Add(node);
         }
 
         return new JsonObject

@@ -149,6 +149,41 @@ public sealed class LayeredRulesTests : IDisposable
     }
 
     [Fact]
+    public void DeletedRuleIsGoneAfterReload()
+    {
+        // Отличие от выключения: выключенная запись остаётся в файле,
+        // удалённая исчезает, и базовое правило снова становится видно.
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "www.youtube.com", RoutingMode.Proxy);
+        file.Set(MatchKind.Domain, "example.com", RoutingMode.Direct);
+        file.Save();
+
+        var reopened = UserRulesFile.Load(_userPath);
+        var removed = reopened.RemoveAt(0);
+        reopened.Save();
+
+        Assert.Equal("www.youtube.com", removed!.Value);
+
+        var reloaded = UserRulesFile.Load(_userPath);
+
+        Assert.Single(reloaded.Entries);
+        Assert.Equal("example.com", reloaded.Entries[0].Value);
+        Assert.Equal(RoutingMode.Desync, RuleSetLoader.LoadLayered(_basePath, _userPath)
+            .Evaluate(Connection("www.youtube.com")).Mode);
+    }
+
+    [Fact]
+    public void DeletingOutsideTheListChangesNothing()
+    {
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "example.com", RoutingMode.Proxy);
+
+        Assert.Null(file.RemoveAt(5));
+        Assert.Null(file.RemoveAt(-1));
+        Assert.Single(file.Entries);
+    }
+
+    [Fact]
     public void CorruptedUserFileDoesNotBreakLoading()
     {
         File.WriteAllText(_userPath, "это не yaml: [[[");

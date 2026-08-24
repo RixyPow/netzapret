@@ -98,6 +98,25 @@ public sealed class UserRulesFile
         return true;
     }
 
+    /// <summary>
+    /// Удаляет запись по номеру в списке.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="Remove(MatchKind, string)"/>: тот ищет по паре
+    /// «тип и значение», а редактор показывает нумерованный список, и
+    /// восстанавливать по номеру пару ради поиска — лишний шаг, на котором
+    /// можно ошибиться.
+    /// </remarks>
+    public UserRuleEntry? RemoveAt(int index)
+    {
+        if (index < 0 || index >= _entries.Count)
+            return null;
+
+        var removed = _entries[index];
+        _entries.RemoveAt(index);
+        return removed;
+    }
+
     public bool Toggle(int index)
     {
         if (index < 0 || index >= _entries.Count)
