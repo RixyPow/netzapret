@@ -87,6 +87,87 @@ if %errorlevel% geq 8 (
     exit /b 1
 )
 
+rem ---------------------------------------------------------------------------
+rem Engines, bundled next to the program so build\ runs on its own.
+rem
+rem Copied at build time rather than committed. Two reasons. The lists are
+rem Zapret's data and change with it - a copy in git would be a stale fork of
+rem someone else's work within weeks. And they are third-party binaries: keeping
+rem them out of the repository keeps the licences out of it too, which matters
+rem because cygwin1.dll is GPLv3 and WinDivert is LGPL/GPL.
+rem
+rem Only what the engine actually reads gets copied. The installation is 219 MB,
+rem of which _internal is the GUI's Python runtime and logs\ is its history;
+rem neither is any use to us.
+rem ---------------------------------------------------------------------------
+
+set "ENGINES=%TARGET%\engines"
+
+rem The whole folder, not just the executable. sing-box ships with wintun.dll,
+rem and without it the TUN adapter never comes up - a bundle carrying only the
+rem .exe would build cleanly and then fail at runtime for no visible reason.
+rem libcronet.dll and LICENSE travel with it for the same kind of reason.
+rem
+rem Found by search because the release unpacks into a versioned directory
+rem (sing-box-1.13.19-windows-amd64), and pinning that name would break on
+rem the next upgrade.
+set "SINGBOX_DIR="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\sing-box.exe" 2^>nul') do set "SINGBOX_DIR=%%~dpF"
+
+if defined SINGBOX_DIR (
+    echo Bundling sing-box
+    robocopy "%SINGBOX_DIR%." "%ENGINES%\sing-box" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 (
+        echo Failed to bundle sing-box
+        exit /b 1
+    )
+) else (
+    echo sing-box not found in tools\ - VPN will be unavailable in this build.
+)
+
+rem xray is deliberately left out: it is not wired up yet, and its geoip and
+rem geosite databases alone are 27 MB of dead weight.
+
+set "ZAPRET="
+if exist "C:\Zapret\Dev\presets\winws2" set "ZAPRET=C:\Zapret\Dev"
+if not defined ZAPRET if exist "C:\Zapret\presets\winws2" set "ZAPRET=C:\Zapret"
+
+if not defined ZAPRET (
+    echo.
+    echo Zapret not found - desync engine not bundled. Everything else works.
+    goto :done
+)
+
+echo Bundling Zapret from %ZAPRET%
+
+rem exe    - winws2 itself, WinDivert and the Cygwin runtime it links against
+rem lists  - hostlists and ipsets the presets reference
+rem lua    - desync recipes loaded by --lua-init and --lua-desync
+rem bin    - blobs referenced by --blob=
+rem windivert.filter - filter templates
+for %%D in (exe lists lua bin windivert.filter) do (
+    if exist "%ZAPRET%\%%D" (
+        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+        if errorlevel 8 (
+            echo Failed to bundle %%D
+            exit /b 1
+        )
+    )
+)
+
+rem Only the winws2 presets. winws1 belongs to the previous engine, and we
+rem never load it - copying it would just make the menu list unusable entries.
+for %%D in (winws2 winws2_builtin) do (
+    if exist "%ZAPRET%\presets\%%D" (
+        robocopy "%ZAPRET%\presets\%%D" "%ENGINES%\zapret\presets\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+        if errorlevel 8 (
+            echo Failed to bundle presets\%%D
+            exit /b 1
+        )
+    )
+)
+
+:done
 echo.
 echo Done. Nothing is running now - start it from the menu.
 exit /b 0

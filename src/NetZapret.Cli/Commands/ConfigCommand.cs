@@ -181,29 +181,8 @@ internal static class ConfigCommand
         return 1;
     }
 
-    /// <summary>Ищет sing-box.exe в tools/, не завися от точного имени каталога с версией.</summary>
-    private static string? FindSingBox()
-    {
-        var roots = new[]
-        {
-            Path.Combine(AppContext.BaseDirectory, "tools"),
-            Path.Combine(Directory.GetCurrentDirectory(), "tools"),
-            @"C:\Users\rogfa\Projects\netzapret\tools",
-        };
-
-        foreach (var root in roots)
-        {
-            if (!Directory.Exists(root))
-                continue;
-
-            var found = Directory
-                .EnumerateFiles(root, "sing-box.exe", SearchOption.AllDirectories)
-                .FirstOrDefault();
-
-            if (found is not null)
-                return found;
-        }
-
-        return null;
-    }
+    // Свой поиск движка здесь был лишним и вдобавок содержал абсолютный путь
+    // к моему каталогу проекта — у всех остальных он не значит ничего.
+    // Единственный поиск живёт в EngineLocator.
+    private static string? FindSingBox() => EngineLocator.FindSingBox();
 }

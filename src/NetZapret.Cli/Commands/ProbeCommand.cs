@@ -195,12 +195,18 @@ internal static class EngineLocator
 
         while (directory is not null)
         {
-            var tools = Path.Combine(directory.FullName, "tools");
-
-            if (Directory.Exists(tools))
+            // engines/ впереди tools/: там лежит копия, положенная сборкой
+            // и версионируемая вместе с программой. tools/ — то, что человек
+            // скачал руками, и оно остаётся запасным вариантом.
+            foreach (var name in new[] { "engines", "tools" })
             {
+                var root = Path.Combine(directory.FullName, name);
+
+                if (!Directory.Exists(root))
+                    continue;
+
                 var found = Directory
-                    .EnumerateFiles(tools, fileName, SearchOption.AllDirectories)
+                    .EnumerateFiles(root, fileName, SearchOption.AllDirectories)
                     .FirstOrDefault();
 
                 if (found is not null)

@@ -83,14 +83,29 @@ public sealed record ZapretPaths
     }
 
     /// <summary>
-    /// Ищет установку Zapret в обычных местах.
+    /// Ищет Zapret: сперва встроенную копию, затем установку в системе.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Встроенная копия впереди намеренно. Она кладётся рядом с программой
+    /// при сборке и версионируется вместе с ней, тогда как установка в системе
+    /// живёт своей жизнью: обновилась — и пресет, на который мы ссылаемся,
+    /// может измениться или исчезнуть, а выяснится это при запуске.
+    /// </para>
+    /// <para>
+    /// Установка при этом остаётся запасным вариантом: собранная из исходников
+    /// копия без шага упаковки движков её не имеет, и без этого отката
+    /// программа у разработчика просто не находила бы десинк.
+    /// </para>
+    /// </remarks>
     public static ZapretPaths? Discover(string? hint = null)
     {
         var candidates = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(hint))
-            candidates.Add(hint);
+            candidates.Add(hint!);
+
+        candidates.AddRange(BundledRoots());
 
         candidates.Add(@"C:\Zapret\Dev");
         candidates.Add(@"C:\Zapret");
@@ -102,5 +117,27 @@ public sealed record ZapretPaths
         }
 
         return null;
+    }
+
+    /// <summary>Каталог встроенных движков — <c>engines/</c> рядом с программой.</summary>
+    public const string BundleDirectory = "engines";
+
+    /// <summary>
+    /// Возможные расположения встроенной копии.
+    /// </summary>
+    /// <remarks>
+    /// Поиск идёт вверх по каталогам от исполняемого файла, а не по одному
+    /// пути: при запуске из build\ движки лежат рядом, а при отладке из bin\ —
+    /// на несколько уровней выше, в корне проекта.
+    /// </remarks>
+    private static IEnumerable<string> BundledRoots()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            yield return Path.Combine(directory.FullName, BundleDirectory, "zapret");
+            directory = directory.Parent;
+        }
     }
 }

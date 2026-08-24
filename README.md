@@ -35,11 +35,15 @@ winget install Microsoft.DotNet.SDK.8
 
 **2. sing-box** — для VPN. Скачать сборку `windows-amd64` с
 [github.com/SagerNet/sing-box/releases](https://github.com/SagerNet/sing-box/releases)
-и положить `sing-box.exe` в `tools/`. Нужна версия не ниже 1.11; проверялось
-на 1.13.19. Подробности — [tools/README.md](tools/README.md).
+и распаковать в `tools/` целиком, вместе с `wintun.dll` — без неё не поднимется TUN.
+Нужна версия не ниже 1.11; проверялось на 1.13.19.
 
 **3. Zapret 2** — для десинка. Ставится отдельно; NetZapret находит установку сам
-и читает её пресеты, hostlist'ы и ipset'ы как есть, ничего не копируя.
+и читает её пресеты, hostlist'ы и ipset'ы как есть.
+
+`build.cmd` складывает всё это в `build\engines\` — собранная копия работает сама
+по себе и переносится на другую машину целиком. Что именно копируется и почему
+не через репозиторий — в [tools/README.md](tools/README.md).
 
 Плюс **ссылка на подписку** любого провайдера: VLESS, Trojan, Hysteria2,
 Shadowsocks. Она равносильна паролю — по ней выдаётся весь список серверов
