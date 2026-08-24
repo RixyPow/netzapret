@@ -1,5 +1,6 @@
 using System.Security.Principal;
 using NetZapret.Core.Rules;
+using NetZapret.Proxy;
 using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
@@ -187,10 +188,35 @@ internal static class DoctorCommand
 
         var age = DateTime.Now - File.GetLastWriteTime(path);
 
-        return
-        [
-            new Check(Level.Ok, $"{path}, собран {FormatAge(age)} назад"),
-        ];
+        var checks = new List<Check>
+        {
+            new(Level.Ok, $"{path}, собран {FormatAge(age)} назад"),
+        };
+
+        // Кто собрал, а не когда. Развёрнутых копий бывает несколько, и старая
+        // молча пересобирает конфиг по-своему: файл свежий, а полей, которых
+        // та версия не знает, в нём нет. По времени это не отличить никак,
+        // и трижды за день мы искали неисправность не там.
+        var built = SingBoxConfigCompiler.ReadStamp(path);
+        var running = typeof(DoctorCommand).Assembly.GetName().Version?.ToString();
+
+        if (built is null)
+        {
+            checks.Add(new Check(Level.Warning,
+                "собран версией до появления отметки — пересоберите на всякий случай"));
+        }
+        else if (running is not null && built != running)
+        {
+            checks.Add(new Check(Level.Problem,
+                $"собран версией {built}, а работает {running} — " +
+                "запущена не та копия, что собирала конфиг"));
+        }
+        else
+        {
+            checks.Add(new Check(Level.Ok, $"собран этой же версией ({built})"));
+        }
+
+        return checks;
     }
 
     private static IReadOnlyList<Check> CheckSupervisor(CommandLine cmd)

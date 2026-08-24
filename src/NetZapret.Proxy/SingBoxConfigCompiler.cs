@@ -326,6 +326,63 @@ public sealed class SingBoxConfigCompiler
             Directory.CreateDirectory(directory);
 
         File.WriteAllText(path, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        WriteStamp(path);
+    }
+
+    /// <summary>Путь к отметке о том, кто собрал конфиг.</summary>
+    public static string StampPathFor(string configPath) => configPath + ".built-by";
+
+    /// <summary>
+    /// Оставляет рядом с конфигом отметку о собравшей его версии.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельным файлом, а не полем внутри: sing-box разбирает свой конфиг
+    /// строго и на незнакомый ключ ругается.
+    /// </para>
+    /// <para>
+    /// Заведено потому, что развёрнутых копий бывает несколько, и старая молча
+    /// пересобирает конфиг по-своему. Трижды за один день выходило так, что
+    /// исправление внесено, конфиг свежий по времени, а собрала его прошлая
+    /// версия — и поле, которого она не знает, в файл не попадало. По времени
+    /// это не видно никак: конфиг пересобирается при каждом запуске.
+    /// </para>
+    /// </remarks>
+    private static void WriteStamp(string configPath)
+    {
+        try
+        {
+            var version = typeof(SingBoxConfigCompiler).Assembly.GetName().Version?.ToString() ?? "неизвестна";
+
+            File.WriteAllText(
+                StampPathFor(configPath),
+                $"{version}\n{DateTimeOffset.Now:O}\n",
+                new UTF8Encoding(false));
+        }
+        catch (Exception)
+        {
+            // Отметка — удобство, а не условие работы.
+        }
+    }
+
+    /// <summary>
+    /// Возвращает версию, собравшую конфиг; <c>null</c> — отметки нет.
+    /// </summary>
+    public static string? ReadStamp(string configPath)
+    {
+        try
+        {
+            var stamp = StampPathFor(configPath);
+
+            return File.Exists(stamp)
+                ? File.ReadAllLines(stamp).FirstOrDefault()
+                : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
