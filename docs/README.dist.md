@@ -81,6 +81,12 @@ Windows вдобавок покажет SmartScreen: программа не п�
 `config\rules.yaml` — базовый набор правил. `config\rules.user.yaml` — ваши
 маршруты, его ведёт меню; правьте через него.
 
+## Поддержать
+
+Если программа пригодилась — [boosty.to/rixypow](https://boosty.to/rixypow/donate).
+
+Она бесплатная и останется такой.
+
 ## Лицензии
 
 NetZapret распространяется под лицензией MIT — см. `LICENSE`.

@@ -265,6 +265,12 @@ dotnet test
 и драйвер `Monkey64.sys` — сторонней организацией, не связанной с проектом
 WinDivert. Подробности в [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
 
+## Поддержать
+
+[boosty.to/rixypow](https://boosty.to/rixypow/donate)
+
+Программа бесплатная и останется такой: лицензия MIT это и закрепляет.
+
 ## Лицензия
 
 [MIT](LICENSE) — берите, меняйте, распространяйте, в том числе в составе
