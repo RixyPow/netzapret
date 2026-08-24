@@ -93,10 +93,12 @@ set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal FULL.txt" "Universal LITE.txt" "U
 robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF %PRESET_EXCLUDE% >nul
 if errorlevel 8 exit /b 1
 
-rem Licences of what we redistribute. cygwin1.dll is GPLv3 and WinDivert is
-rem LGPL/GPL, so an archive carrying them has obligations attached; the file
-rem states plainly what is inside and under what terms.
+rem Licences of what we redistribute, and the one obligation that actually
+rem needs an action from us: Zapret is MIT, and MIT requires the notice to
+rem travel with the copies. The installation ships no licence file at all,
+rem so the text comes from upstream and is placed beside the engine.
 copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
+copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
 
 echo Archiving
 powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%' -DestinationPath '%DIST%\NetZapret.zip' -Force"
