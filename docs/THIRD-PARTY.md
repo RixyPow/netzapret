@@ -10,7 +10,7 @@ NetZapret не работает сам по себе: он управляет д
 | Что | Лицензия | Текст в комплекте |
 | --- | --- | --- |
 | sing-box | GPL v3 или новее | `engines/sing-box/LICENSE` |
-| wintun.dll | © WireGuard LLC, в составе релиза sing-box | там же |
+| wintun.dll | проприетарная, © WireGuard LLC | см. wintun.net |
 | Zapret (winws2, списки, пресеты) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
 | cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
@@ -48,6 +48,19 @@ GPLv3 прямо оговаривает такой случай: объедин�
 `engines/sing-box/wintun.dll`, версия 0.14.1, © 2018–2021 WireGuard LLC —
 драйвер туннельного адаптера, [wintun.net](https://www.wintun.net/).
 Поставляется в составе релиза sing-box. Без него туннель не поднимается.
+
+**Лицензия проприетарная, не GPL** — «Prebuilt Binaries License». Существенны
+два пункта:
+
+* распространять его отдельно нельзя, но разрешено «в составе другого
+  программного обеспечения, использующего Software только через Permitted API».
+  sing-box обращается к нему именно так, поэтому наш архив под это исключение
+  подпадает;
+* нельзя использовать названия WireGuard, WireGuard LLC и Wintun для
+  продвижения продукта.
+
+Запрета на коммерческое использование в лицензии нет. Изменять библиотеку
+и извлекать из неё что-либо запрещено — мы этого и не делаем.
 
 ## Cygwin
 
