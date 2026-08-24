@@ -165,8 +165,8 @@ public static class RuleSetLoader
             ? ParseMode(explicitMode, "секция 'default'")
             : operating switch
             {
-                OperatingMode.ProxyAll => RoutingMode.Proxy,
-                OperatingMode.Selective => RoutingMode.Desync,
+                OperatingMode.ProxyAll or OperatingMode.ProxyStrict => RoutingMode.Proxy,
+                OperatingMode.Selective or OperatingMode.DesyncOnly => RoutingMode.Desync,
                 _ => RoutingMode.Direct,
             };
 
@@ -184,11 +184,14 @@ public static class RuleSetLoader
         (value ?? string.Empty).Trim().ToLowerInvariant() switch
         {
             "off" or "disabled" => OperatingMode.Off,
-            "selective" or "desync" => OperatingMode.Selective,
+            "selective" => OperatingMode.Selective,
+            "desync" or "desync_only" => OperatingMode.DesyncOnly,
             "proxy" or "proxy_all" or "vpn" => OperatingMode.ProxyAll,
+            "proxy_strict" or "vpn_only" => OperatingMode.ProxyStrict,
             "" => OperatingMode.Selective,
             var other => throw new RuleConfigurationException(
-                $"Неизвестный режим работы '{other}'. Допустимы: off, selective, proxy."),
+                $"Неизвестный режим работы '{other}'. Допустимы: off, selective, " +
+                "desync, proxy, proxy_strict."),
         };
 
     private static MatchKind ParseMatchKind(string? value, int index) =>

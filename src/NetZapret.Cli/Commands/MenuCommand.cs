@@ -234,9 +234,11 @@ internal static class MenuCommand
         var chosen = Pick(
             "Режим работы",
             [
-                ("Выключено — весь трафик напрямую", OperatingMode.Off),
+                ("Выключено — весь трафик напрямую, движки не запускаются", OperatingMode.Off),
+                ("Только десинк — VPN не поднимается", OperatingMode.DesyncOnly),
                 ("Выборочно — десинк по умолчанию, VPN по правилам", OperatingMode.Selective),
-                ("Всё через VPN", OperatingMode.ProxyAll),
+                ("Всё через VPN, российские напрямую", OperatingMode.ProxyAll),
+                ("Всё через VPN без исключений — российские сломаются", OperatingMode.ProxyStrict),
             ],
             settings.Mode);
 
@@ -286,38 +288,62 @@ internal static class MenuCommand
             return settings;
         }
 
-        var probed = await ProbeForSelectionAsync(servers, cancellationToken);
+        var cache = ServerHealthCache.Load();
+        cache.KeepOnly(servers.Select(s => s.Tag));
 
-        return PickServer(settings, probed);
+        // Проверяем только когда нечего показать. Иначе список появляется
+        // сразу, с пометкой о давности, а перепроверка остаётся выбором.
+        bool complete = servers.All(s => cache.Find(s.Tag) is not null);
+
+        if (!complete)
+            await ProbeForSelectionAsync(servers, cache, cancellationToken);
+
+        while (true)
+        {
+            var choice = PickServer(settings, servers, cache);
+
+            if (choice.Recheck)
+            {
+                await ProbeForSelectionAsync(servers, cache, cancellationToken);
+                continue;
+            }
+
+            return choice.Cancelled ? settings : settings with { PreferredServer = choice.Tag };
+        }
     }
 
     /// <summary>
-    /// Проверяет серверы и раскладывает их от быстрого к мёртвому.
+    /// Проверяет серверы, печатая каждый результат по мере готовности.
     /// </summary>
     /// <remarks>
-    /// Проверка запускается сама, без отдельного действия: список без неё
-    /// показывает четырнадцать одинаковых строк, из которых половина мертва,
-    /// и выбирать приходится наугад.
+    /// Построчно, а не полосой точек в конце. Точки не говорили, чей это
+    /// ответ, а список появлялся разом в самом конце — и всё ожидание
+    /// выглядело зависанием, при том что первые серверы отвечали за доли
+    /// секунды и их уже можно было показать.
     /// </remarks>
-    private static async Task<IReadOnlyList<(ProxyServer Server, ProbeResult? Result)>> ProbeForSelectionAsync(
+    private static async Task ProbeForSelectionAsync(
         IReadOnlyList<ProxyServer> servers,
+        ServerHealthCache cache,
         CancellationToken cancellationToken)
     {
         var singBox = EngineLocator.FindSingBox();
 
         if (singBox is null)
         {
-            Console.WriteLine("sing-box.exe не найден — показываю список без проверки.");
-            return servers.Select(s => (s, (ProbeResult?)null)).ToList();
+            Message("sing-box.exe не найден — проверить нечем.", ConsoleColor.Yellow);
+            return;
         }
 
-        Console.WriteLine($"Проверяю серверы ({servers.Count})…");
+        Console.WriteLine();
+        Console.WriteLine($"Проверяю серверы ({servers.Count}), мёртвые отвечают дольше живых…");
+        Console.WriteLine();
 
-        var byTag = new Dictionary<string, ProbeResult>(StringComparer.Ordinal);
+        var previous = Console.ForegroundColor;
+        int done = 0;
 
         try
         {
-            var results = await new ProxyProbe(singBox).RunManyAsync(
+            await new ProxyProbe(singBox).RunManyAsync(
                 servers,
                 new ProbeOptions
                 {
@@ -328,63 +354,85 @@ internal static class MenuCommand
                     // Короче общего: выбор сервера — это ожидание перед
                     // экраном, и полминуты на мёртвую Европу тут не окупаются.
                     TotalTimeout = TimeSpan.FromSeconds(8),
+
+                    // Больше общего: все проверки независимы, а ждать их
+                    // тремя очередями вместо двух незачем.
+                    Parallelism = 7,
                 },
                 result =>
                 {
-                    // Точка за каждый ответ: проверка идёт секунды, и
-                    // неподвижный экран выглядит зависанием.
-                    Console.Write(result.Success ? "+" : ".");
+                    done++;
+
+                    cache.Set(new ServerHealth
+                    {
+                        Tag = result.ServerTag,
+                        Success = result.Success,
+                        LatencyMs = result.Latency?.TotalMilliseconds,
+                        CheckedAt = DateTimeOffset.Now,
+                    });
+
+                    Console.ForegroundColor = result.Success ? ConsoleColor.Green : ConsoleColor.Red;
+
+                    var state = result.Latency is { } latency
+                        ? $"{latency.TotalMilliseconds,5:0} мс"
+                        : "не работает";
+
+                    Console.WriteLine($"  [{done,2}/{servers.Count}] {state,-12} {Truncate(result.ServerTag, 34)}");
+                    Console.ForegroundColor = previous;
                 },
                 cancellationToken);
-
-            foreach (var result in results)
-                byTag[result.ServerTag] = result;
         }
         catch (Exception ex)
         {
+            Console.ForegroundColor = previous;
             Console.WriteLine();
             Console.WriteLine($"Проверка не удалась: {ex.GetBaseException().Message}");
         }
 
-        Console.WriteLine();
-
-        return servers
-            .Select(s => (Server: s, Result: byTag.GetValueOrDefault(s.Tag)))
-            // Живые впереди, среди них — по отклику. Мёртвые в конец: они
-            // нужны в списке (выбор может быть осознанным), но не первыми.
-            .OrderBy(x => x.Result?.Success == true ? 0 : 1)
-            .ThenBy(x => x.Result?.Latency ?? TimeSpan.MaxValue)
-            .ToList();
+        // Сохраняем сразу: следующий заход в список покажет эти цифры
+        // без повторного ожидания.
+        cache.Save();
     }
 
-    private static AppSettings PickServer(
+    private readonly record struct ServerChoice(bool Cancelled, bool Recheck, string? Tag);
+
+    private static ServerChoice PickServer(
         AppSettings settings,
-        IReadOnlyList<(ProxyServer Server, ProbeResult? Result)> servers)
+        IReadOnlyList<ProxyServer> servers,
+        ServerHealthCache cache)
     {
+        // Живые впереди, среди них — по отклику. Мёртвые в конец: они нужны
+        // в списке (выбор может быть осознанным), но не первыми.
+        var ordered = servers
+            .Select(s => (Server: s, Health: cache.Find(s.Tag)))
+            .OrderBy(x => x.Health?.Success == true ? 0 : 1)
+            .ThenBy(x => x.Health?.LatencyMs ?? double.MaxValue)
+            .ToList();
+
         Console.WriteLine();
         Console.WriteLine("Сервер VPN");
         Console.WriteLine(new string('-', 62));
 
         var previous = Console.ForegroundColor;
-        bool autoActive = settings.PreferredServer is null;
 
-        Console.WriteLine($"  1. Авто — быстрейший из живых{(autoActive ? "   <- сейчас" : string.Empty)}");
+        Console.WriteLine(
+            $"   1. Авто — быстрейший из живых{(settings.PreferredServer is null ? "   <- сейчас" : string.Empty)}");
 
-        for (int i = 0; i < servers.Count; i++)
+        for (int i = 0; i < ordered.Count; i++)
         {
-            var (server, result) = servers[i];
+            var (server, health) = ordered[i];
             bool active = string.Equals(server.Tag, settings.PreferredServer, StringComparison.OrdinalIgnoreCase);
 
-            Console.ForegroundColor = result switch
+            Console.ForegroundColor = health switch
             {
                 { Success: true } => ConsoleColor.Green,
                 { Success: false } => ConsoleColor.Red,
                 _ => previous,
             };
 
-            var state = result switch
+            var state = health switch
             {
-                { Success: true, Latency: { } latency } => $"{latency.TotalMilliseconds,5:0} мс",
+                { Success: true, LatencyMs: { } ms } => $"{ms,5:0} мс",
                 { Success: true } => "работает",
                 { Success: false } => "не работает",
                 _ => "не проверен",
@@ -397,20 +445,39 @@ internal static class MenuCommand
             Console.ForegroundColor = previous;
         }
 
+        Console.WriteLine();
+
+        // Давность показывается всегда: цифры из кэша выглядят как свежий
+        // замер, и без пометки по ним судили бы о том, что уже изменилось.
+        if (cache.OldestAge is { } age)
+            Console.WriteLine($"  Проверено: {DescribeAge(age)}");
+
+        Console.WriteLine("   п. Проверить заново");
         Console.WriteLine("   0. Отмена");
         Console.Write("Выбор: ");
 
         var input = Console.ReadLine()?.Trim();
 
-        if (!int.TryParse(input, out var index) || index < 1 || index > servers.Count + 1)
-            return settings;
+        if (string.Equals(input, "п", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(input, "p", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ServerChoice(false, Recheck: true, null);
+        }
+
+        if (!int.TryParse(input, out var index) || index < 1 || index > ordered.Count + 1)
+            return new ServerChoice(Cancelled: true, false, null);
 
         // Первый пункт — автоподбор, дальше идут серверы.
-        return settings with
-        {
-            PreferredServer = index == 1 ? null : servers[index - 2].Server.Tag,
-        };
+        return new ServerChoice(false, false, index == 1 ? null : ordered[index - 2].Server.Tag);
     }
+
+    private static string DescribeAge(TimeSpan age) => age switch
+    {
+        { TotalSeconds: < 90 } => "только что",
+        { TotalMinutes: < 60 } => $"{age.TotalMinutes:0} мин назад",
+        { TotalHours: < 24 } => $"{age.TotalHours:0} ч назад",
+        _ => $"{age.TotalDays:0} дн назад — стоит перепроверить",
+    };
 
     private static string DescribeVpn(AppSettings settings) =>
         $"{DescribeSubscription(settings)}, {settings.DescribeServer()}";
@@ -819,7 +886,15 @@ internal static class MenuCommand
         // о них вспоминает, так что дешевле собирать всегда.
         // Без паузы: следом идёт запуск, и «Enter — назад в меню» посреди
         // одного действия читается как его конец.
-        if (!await BuildConfigAsync(settings, cancellationToken, pause: false))
+        if (!settings.NeedsProxy && !settings.NeedsDesync)
+        {
+            Message(
+                "В этом режиме запускать нечего: VPN выключен, пресет не выбран.",
+                ConsoleColor.Yellow);
+            return;
+        }
+
+        if (settings.NeedsProxy && !await BuildConfigAsync(settings, cancellationToken, pause: false))
         {
             if (!File.Exists(settings.ProxyConfigPath))
             {
@@ -896,11 +971,18 @@ internal static class MenuCommand
 
     private static string BuildStartArguments(AppSettings settings)
     {
-        var arguments = $"start --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\"" +
-            $" --log \"{Path.GetFullPath(SupervisorLogPath)}\"";
+        var arguments = $"start --log \"{Path.GetFullPath(SupervisorLogPath)}\"";
 
-        if (settings.PresetName is { } preset)
-            arguments += $" --preset \"{preset}\"";
+        // Туннель поднимается только там, где он куда-то ведёт. В режиме
+        // «только десинк» sing-box был бы вхолостую поднятым TUN: адаптер
+        // есть, маршруты стоят, трафика через них нет — и первая же
+        // неисправность ищется вдвое дольше.
+        arguments += settings.NeedsProxy
+            ? $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\""
+            : " --no-proxy";
+
+        if (settings.NeedsDesync)
+            arguments += $" --preset \"{settings.PresetName}\"";
 
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";

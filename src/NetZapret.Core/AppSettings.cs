@@ -98,9 +98,24 @@ public sealed record AppSettings
     public string DescribeMode() => Mode switch
     {
         OperatingMode.Off => "выключено",
-        OperatingMode.ProxyAll => "всё через VPN",
+        OperatingMode.DesyncOnly => "только десинк",
+        OperatingMode.ProxyAll => "всё через VPN, кроме РФ",
+        OperatingMode.ProxyStrict => "всё через VPN без исключений",
         _ => "выборочно",
     };
+
+    /// <summary>Нужен ли в этом режиме туннель.</summary>
+    /// <remarks>
+    /// Поднимать sing-box там, где он никуда не ведёт, значит без причины
+    /// держать TUN и путать поиск неисправностей: адаптер есть, маршруты
+    /// стоят, а трафик через них не идёт.
+    /// </remarks>
+    public bool NeedsProxy => Mode is OperatingMode.Selective
+        or OperatingMode.ProxyAll
+        or OperatingMode.ProxyStrict;
+
+    /// <summary>Нужен ли в этом режиме десинк.</summary>
+    public bool NeedsDesync => Mode is not OperatingMode.Off && PresetName is not null;
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 

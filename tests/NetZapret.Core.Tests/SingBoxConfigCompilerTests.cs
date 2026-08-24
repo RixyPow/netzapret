@@ -101,6 +101,45 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void StrictProxyKeepsNoExceptionsAtAll()
+    {
+        // «Без исключений» буквально: даже прямые правила отбрасываются,
+        // и российские сервисы уходят в туннель вместе со всем остальным.
+        // Это осознанный выбор режима, а не недосмотр.
+        var root = CompileToJson("""
+            mode: proxy_strict
+            rules:
+              - match: ip
+                value: "5.255.255.0/24"
+                mode: direct
+              - match: domain
+                value: "*.rutracker.org"
+                mode: proxy
+            """, Server());
+
+        Assert.Equal("auto", root.GetProperty("route").GetProperty("final").GetString());
+        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("ip_cidr", out _));
+        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain_suffix", out _));
+    }
+
+    [Fact]
+    public void DesyncOnlyLeavesTheTunnelEmpty()
+    {
+        // Для sing-box этот режим неотличим от выключенного: десинк
+        // туннеля не касается вовсе.
+        var root = CompileToJson("""
+            mode: desync
+            rules:
+              - match: domain
+                value: "*.rutracker.org"
+                mode: proxy
+            """, Server());
+
+        Assert.Equal("direct", root.GetProperty("route").GetProperty("final").GetString());
+        Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain_suffix", out _));
+    }
+
+    [Fact]
     public void OffModeRoutesNothingThroughTheTunnel()
     {
         var root = CompileToJson("""

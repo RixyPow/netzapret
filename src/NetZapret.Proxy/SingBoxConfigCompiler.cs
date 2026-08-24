@@ -753,6 +753,10 @@ public sealed class SingBoxConfigCompiler
         {
             OperatingMode.Selective => ruleSet.Rules,
             OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct).ToList(),
+
+            // ProxyStrict — «без исключений» буквально: ни одного правила,
+            // включая прямые. Российские сервисы при этом сломаются, и это
+            // осознанный выбор режима, а не недосмотр.
             _ => Array.Empty<RoutingRule>(),
         };
 
@@ -896,8 +900,11 @@ public sealed class SingBoxConfigCompiler
     private static string ResolveFinal(RuleSet ruleSet, SingBoxOptions options, bool haveServers) =>
         ruleSet.Operating switch
         {
-            OperatingMode.Off => "direct",
-            OperatingMode.ProxyAll => haveServers ? options.SelectorTag : "direct",
+            // Десинк туннеля не касается вовсе, так что для sing-box этот
+            // режим неотличим от выключенного.
+            OperatingMode.Off or OperatingMode.DesyncOnly => "direct",
+            OperatingMode.ProxyAll or OperatingMode.ProxyStrict =>
+                haveServers ? options.SelectorTag : "direct",
             _ => ResolveOutbound(ruleSet.DefaultMode, ruleSet.DefaultServer, null, options, haveServers),
         };
 
