@@ -1,0 +1,25 @@
+{
+  "_comment": "Образец личных настроек. Скопируйте в netzapret.json и впишите свою подписку. Сам netzapret.json в репозиторий не попадает: ссылка на подписку равносильна паролю.",
+
+  "SubscriptionUrl": "https://пример.provider/sub/ВАШ-КЛЮЧ",
+
+  "_RulesPath": "Базовый набор правил. Поверх него накладывается config/rules.user.yaml, который ведёт меню.",
+  "RulesPath": "config\\rules.yaml",
+
+  "_Mode": "Off | DesyncOnly | Selective | ProxyAll | ProxyStrict",
+  "Mode": "Selective",
+
+  "_PresetName": "Имя пресета Zapret; null — не запускать десинк.",
+  "PresetName": null,
+
+  "_PreferredServer": "Тег сервера; null — выбирать быстрейший из живых.",
+  "PreferredServer": null,
+
+  "ProxyConfigPath": "runtime\\singbox.json",
+
+  "_ProxyOnly": "true — в туннель заходит только трафик прокси, десинк работает рядом. Ради этого проект и делался.",
+  "ProxyOnly": true,
+
+  "_VerifyTraffic": "Проверять не только живость процесса, но и реальный проход трафика.",
+  "VerifyTraffic": false
+}
