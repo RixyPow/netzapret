@@ -37,6 +37,18 @@ for /f "delims=" %%S in ('git -C "%ROOT%." status --porcelain') do (
     exit /b 1
 )
 
+rem The archive is built from the working copy, but the tag is placed on what
+rem the server has. Unpushed commits would give a release whose contents and
+rem whose tag describe different code - and nothing would say so.
+git -C "%ROOT%." fetch --quiet origin
+for /f "delims=" %%C in ('git -C "%ROOT%." rev-list --count "@{upstream}..HEAD" 2^>nul') do set "AHEAD=%%C"
+
+if not "%AHEAD%"=="0" (
+    echo Local commits are not pushed ^(%AHEAD%^). The tag would point at
+    echo different code than the archive contains. Run: git push
+    exit /b 1
+)
+
 echo Building the distribution...
 call "%ROOT%pack.cmd"
 if %errorlevel% neq 0 (
@@ -57,11 +69,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem From %ROOT%: gh works out which repository to publish to from the current
+rem directory, and this script is normally started by its full path from
+rem wherever the shell happened to be. Called from outside a working copy it
+rem fails with "not a git repository" after the archive is already built.
 echo Publishing release v%VERSION%
+pushd "%ROOT%"
+
 "%GH%" release create "v%VERSION%" "%ROOT%dist\NetZapret.zip" ^
     --title "NetZapret %VERSION%" ^
     --notes-file "%ROOT%docs\release-notes.md"
-if %errorlevel% neq 0 (
+
+set "PUBLISHED=%errorlevel%"
+popd
+
+if not "%PUBLISHED%"=="0" (
     echo Publishing failed.
     exit /b 1
 )
