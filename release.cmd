@@ -49,6 +49,19 @@ if not "%AHEAD%"=="0" (
     exit /b 1
 )
 
+rem Checked before building, not after. Packing takes a minute and produces
+rem 55 MB; discovering at the end that the version was already published wastes
+rem all of it, which is exactly how this was found.
+"%GH%" release view "v%VERSION%" --repo RixyPow/netzapret >nul 2>&1
+if not errorlevel 1 (
+    echo Release v%VERSION% already exists.
+    echo.
+    echo A published release is not rebuilt in place - people may already have
+    echo the file. Raise ^<Version^> in Directory.Build.props, commit, and use
+    echo the new number.
+    exit /b 1
+)
+
 echo Building the distribution...
 call "%ROOT%pack.cmd"
 if %errorlevel% neq 0 (
