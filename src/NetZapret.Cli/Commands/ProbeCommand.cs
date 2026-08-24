@@ -12,40 +12,6 @@ namespace NetZapret.Cli.Commands;
 /// </remarks>
 internal static class ProbeCommand
 {
-    /// <summary>
-    /// Предупреждает, что проверка при поднятых движках ничего не значит.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Проба поднимает свой инбаунд на loopback и ходит наружу напрямую.
-    /// Когда работает winws2, он обрабатывает и эти соединения — те самые
-    /// рукопожатия TLS к серверам подписки, — и рецепты десинка ломают их.
-    /// Когда поднят TUN, часть адресов вдобавок уводится в туннель.
-    /// </para>
-    /// <para>
-    /// Результат получается уверенно неверным: в журнале sing-box соединения
-    /// проходят, а проба показывает «не работает» по всем серверам сразу.
-    /// Ровно так и выглядело «VPN сломался» — при полностью исправном VPN.
-    /// </para>
-    /// </remarks>
-    private static void WarnIfEnginesRunning()
-    {
-        var state = Supervisor.SupervisorState.Load(Supervisor.SupervisorState.DefaultPath);
-
-        if (state is null || !state.IsSupervisorAlive())
-            return;
-
-        var previous = Console.ForegroundColor;
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine();
-        Console.WriteLine("ВНИМАНИЕ: движки сейчас работают, и проверке нельзя верить.");
-        Console.WriteLine("Десинк обрабатывает и её соединения к серверам подписки, ломая их,");
-        Console.WriteLine("а часть адресов уводится в туннель. Серверы покажутся мёртвыми,");
-        Console.WriteLine("даже если они живы. Остановите движки и повторите.");
-        Console.ForegroundColor = previous;
-        Console.WriteLine();
-    }
-
     public static async Task<int> RunAsync(CommandLine cmd, CancellationToken cancellationToken)
     {
         var singBox = EngineLocator.FindSingBox();
@@ -55,8 +21,6 @@ internal static class ProbeCommand
             Console.Error.WriteLine("sing-box.exe не найден в tools/.");
             return 2;
         }
-
-        WarnIfEnginesRunning();
 
         var info = await SubscriptionSource.LoadAsync(cmd, cancellationToken);
         if (info is null)
@@ -95,7 +59,7 @@ internal static class ProbeCommand
         Console.WriteLine();
         Console.WriteLine($"Проверяю серверов: {candidates.Count}");
         Console.WriteLine();
-        Console.WriteLine($"  {"РЕЗУЛЬТАТ",-12} {"ВРЕМЯ",-9} {"ВНЕШНИЙ IP",-17} СЕРВЕР");
+        Console.WriteLine($"  {"РЕЗУЛЬТАТ",-12} {"ОТКЛИК",-9} {"ВНЕШНИЙ IP",-17} СЕРВЕР");
         Console.WriteLine("  " + new string('-', 88));
 
         var probe = new ProxyProbe(singBox);
@@ -164,8 +128,12 @@ internal static class ProbeCommand
             verdict = "РАБОТАЕТ";
         }
 
+        var latency = result.Latency is { } value
+            ? $"{value.TotalMilliseconds,6:0} мс"
+            : $"{result.Elapsed.TotalSeconds,6:0.0} с ";
+
         Console.WriteLine(
-            $"  {verdict,-12} {result.Elapsed.TotalSeconds,6:0.0} с  {result.ExternalIp ?? "-",-17} {Truncate(result.ServerTag, 40)}");
+            $"  {verdict,-12} {latency} {result.ExternalIp ?? "-",-17} {Truncate(result.ServerTag, 40)}");
 
         Console.ForegroundColor = previous;
 
@@ -183,10 +151,14 @@ internal static class ProbeCommand
 
         if (working.Count > 0)
         {
-            var best = working.MinBy(r => r.Elapsed)!;
-            Console.WriteLine($"Быстрейший: {best.ServerTag} ({best.Elapsed.TotalSeconds:0.0} с, {best.ExternalIp})");
+            // По отклику, а не по общему времени: то включает запуск sing-box
+            // и говорит больше о нашей машине, чем о сервере.
+            var best = working.MinBy(r => r.Latency ?? r.Elapsed)!;
+            var latency = best.Latency is { } value ? $"{value.TotalMilliseconds:0} мс" : "время неизвестно";
 
-            if (directIp is not null)
+            Console.WriteLine($"Быстрейший: {best.ServerTag} ({latency})");
+
+            if (directIp is not null && best.ExternalIp is not null)
                 Console.WriteLine($"Адрес сменился: {directIp} -> {best.ExternalIp}");
 
             return;

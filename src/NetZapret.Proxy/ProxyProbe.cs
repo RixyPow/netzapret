@@ -50,11 +50,37 @@ public sealed record ProbeOptions
     public string LogLevel { get; init; } = "debug";
 
     /// <summary>
+    /// Адреса, по которым определяется, идёт ли через сервер трафик.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельно от <see cref="IpServices"/>, и это принципиально. Раньше
+    /// признаком работоспособности был полученный внешний адрес, а когда
+    /// провайдер перекрыл службы его определения, проверка стала показывать
+    /// ноль рабочих серверов из четырнадцати — при полностью живом VPN.
+    /// Замер это подтвердил: через каждый сервер <c>generate_204</c>
+    /// отвечает за 63–568 мс, а ipify не доходит ни через один.
+    /// </para>
+    /// <para>
+    /// Здесь нарочно лёгкие и общеизвестные адреса, отдающие пустой ответ:
+    /// вопрос «доходит ли трафик» не должен зависеть от живости стороннего
+    /// сервиса. Их несколько, чтобы отказ одного не выглядел отказом сервера.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ConnectivityUrls { get; init; } =
+    [
+        "http://cp.cloudflare.com/generate_204",
+        "http://www.gstatic.com/generate_204",
+        "http://www.msftconnecttest.com/connecttest.txt",
+    ];
+
+    /// <summary>
     /// Службы, возвращающие внешний адрес открытым текстом.
     /// </summary>
     /// <remarks>
-    /// Их несколько, потому что часть может быть недоступна или заблокирована,
-    /// и тогда неудача одной службы выглядела бы как неисправность прокси.
+    /// Сведения приятные, но не решающие: адрес показывает, куда именно
+    /// вышел трафик, а вот его отсутствие сервер не порочит — служба может
+    /// быть перекрыта, что у этого провайдера и произошло.
     /// </remarks>
     public IReadOnlyList<string> IpServices { get; init; } =
     [
@@ -69,8 +95,18 @@ public sealed record ProbeResult
     public required string ServerTag { get; init; }
     public required bool Success { get; init; }
 
-    /// <summary>Внешний адрес, увиденный через прокси.</summary>
+    /// <summary>Внешний адрес, увиденный через прокси; может отсутствовать.</summary>
     public string? ExternalIp { get; init; }
+
+    /// <summary>
+    /// Время отклика через сервер — по нему и сортируют.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="Elapsed"/>: тот включает запуск sing-box
+    /// и определение внешнего адреса, то есть больше говорит о нашей машине,
+    /// чем о сервере. Сравнивать серверы по нему нельзя.
+    /// </remarks>
+    public TimeSpan? Latency { get; init; }
 
     public TimeSpan Elapsed { get; init; }
     public string? Error { get; init; }
@@ -102,7 +138,8 @@ public sealed class ProxyProbe
     public static async Task<string?> GetDirectIpAsync(ProbeOptions options, CancellationToken cancellationToken)
     {
         using var http = new HttpClient { Timeout = options.RequestTimeout };
-        return await TryServicesAsync(http, options.IpServices, cancellationToken);
+        var (ip, _) = await TryServicesAsync(http, options.IpServices, cancellationToken);
+        return ip;
     }
 
     /// <summary>
@@ -197,16 +234,34 @@ public sealed class ProxyProbe
 
         try
         {
-            var (ip, error) = await QueryThroughProxyAsync(options, cancellationToken);
-            stopwatch.Stop();
-
-            if (ip is null)
+            using var handler = new HttpClientHandler
             {
+                // Инбаунд mixed обслуживает и SOCKS, и HTTP CONNECT, поэтому
+                // обычного HTTP-прокси достаточно и не нужен клиент SOCKS.
+                Proxy = new WebProxy($"http://127.0.0.1:{options.ListenPort}"),
+                UseProxy = true,
+            };
+
+            using var http = new HttpClient(handler) { Timeout = options.RequestTimeout };
+
+            var (latency, error) = await MeasureAsync(http, options.ConnectivityUrls, cancellationToken);
+
+            if (latency is null)
+            {
+                stopwatch.Stop();
+
                 return Failure(server, stopwatch.Elapsed, logPath,
                     budget.IsCancellationRequested && !budget.Token.IsCancellationRequested
                         ? "превышен бюджет времени"
-                        : error ?? "внешний адрес не получен");
+                        : error ?? "трафик через сервер не пошёл");
             }
+
+            // Внешний адрес — сведения сверх необходимого. Его недоступность
+            // сервер не порочит: службы определения адреса бывают перекрыты,
+            // и раньше именно это выдавалось за неисправность сервера.
+            var (ip, _) = await TryServicesAsync(http, options.IpServices, cancellationToken);
+
+            stopwatch.Stop();
 
             // Лог удачной проверки не нужен: разбирают только неудачи,
             // а лишние файлы мешают найти нужный.
@@ -218,6 +273,7 @@ public sealed class ProxyProbe
                 ServerTag = server.Tag,
                 Success = true,
                 ExternalIp = ip,
+                Latency = latency,
                 Elapsed = stopwatch.Elapsed,
                 LogPath = options.KeepArtifacts ? logPath : null,
             };
@@ -274,36 +330,53 @@ public sealed class ProxyProbe
         }
     }
 
-    private async Task<(string? Ip, string? Error)> QueryThroughProxyAsync(
-        ProbeOptions options,
+    /// <summary>
+    /// Замеряет отклик через прокси; <c>null</c> — трафик не пошёл.
+    /// </summary>
+    private static async Task<(TimeSpan? Latency, string? Error)> MeasureAsync(
+        HttpClient http,
+        IReadOnlyList<string> urls,
         CancellationToken cancellationToken)
     {
-        // Инбаунд mixed обслуживает и SOCKS, и HTTP CONNECT, поэтому обычного
-        // HTTP-прокси достаточно и не нужен отдельный клиент SOCKS.
-        var handler = new HttpClientHandler
-        {
-            Proxy = new WebProxy($"http://127.0.0.1:{options.ListenPort}"),
-            UseProxy = true,
-        };
+        var reasons = new List<string>();
 
-        using var http = new HttpClient(handler) { Timeout = options.RequestTimeout };
+        foreach (var url in urls)
+        {
+            var stopwatch = Stopwatch.StartNew();
 
-        try
-        {
-            var ip = await TryServicesAsync(http, options.IpServices, cancellationToken);
-            return ip is null ? (null, "ни одна служба определения адреса не ответила через прокси") : (ip, null);
+            try
+            {
+                using var response = await http.GetAsync(
+                    url,
+                    HttpCompletionOption.ResponseHeadersRead,
+                    cancellationToken);
+
+                stopwatch.Stop();
+
+                if (response.IsSuccessStatusCode)
+                    return (stopwatch.Elapsed, null);
+
+                reasons.Add($"{Short(url)}: {(int)response.StatusCode}");
+            }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Причины по каждому адресу, а не общее «не ответило»: без них
+                // разбор упирался в догадки, и мы приняли сломанную проверку
+                // за сломанный VPN.
+                reasons.Add($"{Short(url)}: {ex.GetBaseException().Message}");
+            }
         }
-        catch (Exception ex)
-        {
-            return (null, ex.GetBaseException().Message);
-        }
+
+        return (null, reasons.Count > 0 ? string.Join("; ", reasons) : null);
     }
 
-    private static async Task<string?> TryServicesAsync(
+    private static async Task<(string? Ip, IReadOnlyList<string> Reasons)> TryServicesAsync(
         HttpClient http,
         IReadOnlyList<string> services,
         CancellationToken cancellationToken)
     {
+        var reasons = new List<string>();
+
         foreach (var service in services)
         {
             try
@@ -312,16 +385,21 @@ public sealed class ProxyProbe
                 var ip = text.Trim();
 
                 if (IPAddress.TryParse(ip, out _))
-                    return ip;
+                    return (ip, reasons);
+
+                reasons.Add($"{Short(service)}: ответ не похож на адрес");
             }
-            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
-                // Пробуем следующую службу.
+                reasons.Add($"{Short(service)}: {ex.GetBaseException().Message}");
             }
         }
 
-        return null;
+        return (null, reasons);
     }
+
+    private static string Short(string service) =>
+        Uri.TryCreate(service, UriKind.Absolute, out var url) ? url.Host : service;
 
     private static ProbeResult Failure(ProxyServer server, TimeSpan elapsed, string logPath, string error) => new()
     {

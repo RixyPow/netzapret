@@ -34,12 +34,84 @@ internal static class MenuCommand
             var choice = Console.ReadLine()?.Trim();
 
             if (choice is null or "0" or "q" or "Q")
-                return 0;
+            {
+                if (AskOnExit())
+                    return 0;
+
+                continue;
+            }
 
             settings = await HandleAsync(choice, settings, settingsPath, cancellationToken);
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Спрашивает при выходе, что делать с работающими движками.
+    /// </summary>
+    /// <returns><c>true</c> — выходить, <c>false</c> — вернуться в меню.</returns>
+    /// <remarks>
+    /// <para>
+    /// Раньше выход просто закрывал меню, а движки продолжали работать —
+    /// и это правильное поведение, но незаметное. Со стороны программа
+    /// выглядела закрытой, при том что весь трафик шёл через неё; чтобы
+    /// её остановить, надо было догадаться зайти обратно.
+    /// </para>
+    /// <para>
+    /// Вопрос задаётся, только когда есть что останавливать: спрашивать
+    /// при остановленных движках значит приучать жать Enter не глядя.
+    /// </para>
+    /// </remarks>
+    private static bool AskOnExit()
+    {
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (state is null || !state.IsSupervisorAlive())
+            return true;
+
+        Console.WriteLine();
+        Console.WriteLine($"  Движки работают: {string.Join(", ", state.Services.Select(s => s.Name))}");
+        Console.WriteLine();
+        Console.WriteLine("  1. Закрыть меню, оставить работать");
+        Console.WriteLine("  2. Остановить всё и выйти");
+        Console.WriteLine("  0. Вернуться в меню");
+        Console.Write("Выбор: ");
+
+        switch (Console.ReadLine()?.Trim())
+        {
+            case "1":
+                Console.WriteLine();
+                Console.WriteLine("Движки продолжают работать. Вернуться к управлению — запустите NetZapret снова.");
+                return true;
+
+            case "2":
+                StopEngines(state);
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private static void StopEngines(SupervisorState state)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Останавливаю…");
+
+        try
+        {
+            using var process = Process.GetProcessById(state.SupervisorProcessId);
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit(10_000);
+        }
+        catch (Exception)
+        {
+            // Мог завершиться сам, пока мы спрашивали.
+        }
+
+        SupervisorState.Clear(SupervisorState.DefaultPath);
+        Console.WriteLine("Остановлено.");
     }
 
     /// <summary>
@@ -214,11 +286,121 @@ internal static class MenuCommand
             return settings;
         }
 
-        var items = new List<(string, string?)> { ("Авто — быстрейший из живых", null) };
-        items.AddRange(servers.Select(s => ($"{s.Tag}  [{s.Protocol.ToString().ToLowerInvariant()}]", (string?)s.Tag)));
+        var probed = await ProbeForSelectionAsync(servers, cancellationToken);
 
-        var chosen = PickNullable("Сервер VPN", items, settings.PreferredServer);
-        return chosen.Cancelled ? settings : settings with { PreferredServer = chosen.Value };
+        return PickServer(settings, probed);
+    }
+
+    /// <summary>
+    /// Проверяет серверы и раскладывает их от быстрого к мёртвому.
+    /// </summary>
+    /// <remarks>
+    /// Проверка запускается сама, без отдельного действия: список без неё
+    /// показывает четырнадцать одинаковых строк, из которых половина мертва,
+    /// и выбирать приходится наугад.
+    /// </remarks>
+    private static async Task<IReadOnlyList<(ProxyServer Server, ProbeResult? Result)>> ProbeForSelectionAsync(
+        IReadOnlyList<ProxyServer> servers,
+        CancellationToken cancellationToken)
+    {
+        var singBox = EngineLocator.FindSingBox();
+
+        if (singBox is null)
+        {
+            Console.WriteLine("sing-box.exe не найден — показываю список без проверки.");
+            return servers.Select(s => (s, (ProbeResult?)null)).ToList();
+        }
+
+        Console.WriteLine($"Проверяю серверы ({servers.Count})…");
+
+        var byTag = new Dictionary<string, ProbeResult>(StringComparer.Ordinal);
+
+        try
+        {
+            var results = await new ProxyProbe(singBox).RunManyAsync(
+                servers,
+                new ProbeOptions(),
+                result =>
+                {
+                    // Точка за каждый ответ: проверка идёт секунды, и
+                    // неподвижный экран выглядит зависанием.
+                    Console.Write(result.Success ? "+" : ".");
+                },
+                cancellationToken);
+
+            foreach (var result in results)
+                byTag[result.ServerTag] = result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Проверка не удалась: {ex.GetBaseException().Message}");
+        }
+
+        Console.WriteLine();
+
+        return servers
+            .Select(s => (Server: s, Result: byTag.GetValueOrDefault(s.Tag)))
+            // Живые впереди, среди них — по отклику. Мёртвые в конец: они
+            // нужны в списке (выбор может быть осознанным), но не первыми.
+            .OrderBy(x => x.Result?.Success == true ? 0 : 1)
+            .ThenBy(x => x.Result?.Latency ?? TimeSpan.MaxValue)
+            .ToList();
+    }
+
+    private static AppSettings PickServer(
+        AppSettings settings,
+        IReadOnlyList<(ProxyServer Server, ProbeResult? Result)> servers)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Сервер VPN");
+        Console.WriteLine(new string('-', 62));
+
+        var previous = Console.ForegroundColor;
+        bool autoActive = settings.PreferredServer is null;
+
+        Console.WriteLine($"  1. Авто — быстрейший из живых{(autoActive ? "   <- сейчас" : string.Empty)}");
+
+        for (int i = 0; i < servers.Count; i++)
+        {
+            var (server, result) = servers[i];
+            bool active = string.Equals(server.Tag, settings.PreferredServer, StringComparison.OrdinalIgnoreCase);
+
+            Console.ForegroundColor = result switch
+            {
+                { Success: true } => ConsoleColor.Green,
+                { Success: false } => ConsoleColor.Red,
+                _ => previous,
+            };
+
+            var state = result switch
+            {
+                { Success: true, Latency: { } latency } => $"{latency.TotalMilliseconds,5:0} мс",
+                { Success: true } => "работает",
+                { Success: false } => "не работает",
+                _ => "не проверен",
+            };
+
+            Console.WriteLine(
+                $"  {i + 2,2}. {Truncate(server.Tag, 32),-32} {state,-12}" +
+                $"{(active ? "   <- сейчас" : string.Empty)}");
+
+            Console.ForegroundColor = previous;
+        }
+
+        Console.WriteLine("   0. Отмена");
+        Console.Write("Выбор: ");
+
+        var input = Console.ReadLine()?.Trim();
+
+        if (!int.TryParse(input, out var index) || index < 1 || index > servers.Count + 1)
+            return settings;
+
+        // Первый пункт — автоподбор, дальше идут серверы.
+        return settings with
+        {
+            PreferredServer = index == 1 ? null : servers[index - 2].Server.Tag,
+        };
     }
 
     private static string DescribeVpn(AppSettings settings) =>
