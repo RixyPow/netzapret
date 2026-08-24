@@ -118,6 +118,18 @@ internal static class AutostartCommand
             .Append(Path.GetFullPath(cmd.Value("state", SupervisorState.DefaultPath)))
             .Append('"');
 
+        // Журнал обязателен именно здесь. Задача стартует без окна и без
+        // человека рядом, так что вывод девать некуда: без --log запуск при
+        // входе в систему не оставляет следов вообще, и разбирать нечего
+        // ровно в том случае, когда разбирать нужнее всего.
+        builder.Append(" --log \"")
+            .Append(Path.GetFullPath(cmd.Value("log", Path.Combine("runtime", "supervisor.log"))))
+            .Append('"');
+
+        // Осиротевшие движки от прошлого сеанса держат TUN и WinDivert.
+        // Спросить некого, а без снятия запуск просто не состоится.
+        builder.Append(" --kill-orphans");
+
         return builder.ToString();
     }
 
