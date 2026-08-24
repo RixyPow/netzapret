@@ -23,13 +23,32 @@
 туннель заводится лишь то, что этими адресами адресовано. Десинк-трафик туннеля
 не касается вовсе. Подробности — [docs/coexistence.md](docs/coexistence.md).
 
-## Как запустить
+## Что нужно поставить
 
-Нужен .NET SDK 8 или новее:
+Три вещи, и ни одна не входит в репозиторий.
+
+**1. .NET SDK 8 или новее.**
 
 ```bash
 winget install Microsoft.DotNet.SDK.8
 ```
+
+**2. sing-box** — для VPN. Скачать сборку `windows-amd64` с
+[github.com/SagerNet/sing-box/releases](https://github.com/SagerNet/sing-box/releases)
+и положить `sing-box.exe` в `tools/`. Нужна версия не ниже 1.11; проверялось
+на 1.13.19. Подробности — [tools/README.md](tools/README.md).
+
+**3. Zapret 2** — для десинка. Ставится отдельно; NetZapret находит установку сам
+и читает её пресеты, hostlist'ы и ipset'ы как есть, ничего не копируя.
+
+Без sing-box работает всё, кроме VPN. Без Zapret — всё, кроме десинка.
+Что именно нашлось, показывает:
+
+```bash
+nz doctor
+```
+
+## Как запустить
 
 Собрать и развернуть:
 

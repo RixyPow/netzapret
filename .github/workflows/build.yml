@@ -1,0 +1,47 @@
+# Сборка и тесты при каждом изменении.
+#
+# Раннер именно windows: проекты нацелены на net8.0-windows, на linux они
+# не соберутся. Это не придирка к платформе — программа обращается к WFP,
+# WinDivert и планировщику задач, которых на другой системе нет.
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # Отдельным шагом от сборки: так в логе видно, что именно упало —
+      # восстановление зависимостей или компиляция.
+      - name: Восстановить зависимости
+        run: dotnet restore
+
+      - name: Собрать
+        run: dotnet build --no-restore --configuration Release -warnaserror
+
+      - name: Прогнать тесты
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      # Проверка того, что важнее сборки: правила, которые мы поставляем,
+      # должны разбираться. Опечатка в YAML не ломает компиляцию, но делает
+      # программу неработоспособной у всех, кто её скачал.
+      - name: Проверить поставляемые правила
+        run: |
+          $exe = "src/NetZapret.Cli/bin/Release/net8.0-windows/netzapret.exe"
+          foreach ($f in Get-ChildItem config/*.yaml) {
+            Write-Host "-- $($f.Name)"
+            & $exe rules --config $f.FullName
+            if ($LASTEXITCODE -ne 0) { throw "не разобрался: $($f.Name)" }
+          }
+        shell: pwsh
