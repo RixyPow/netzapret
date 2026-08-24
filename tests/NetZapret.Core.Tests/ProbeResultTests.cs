@@ -15,6 +15,45 @@ namespace NetZapret.Core.Tests;
 public sealed class ProbeResultTests
 {
     [Fact]
+    public async Task OneBrokenServerDoesNotLoseTheOthers()
+    {
+        // Регрессия: отмена по бюджету времени уходила наружу и роняла
+        // Task.WhenAll, так что из четырнадцати серверов до отчёта доходило
+        // восемь — молча, с кодом возврата 0. Здесь то же самое достигается
+        // заведомо нерабочим движком: важно, что результат приходит на каждый
+        // сервер, а не что именно в нём написано.
+        var servers = Enumerable.Range(1, 6)
+            .Select(i => new NetZapret.Subscriptions.ProxyServer
+            {
+                Protocol = NetZapret.Subscriptions.ProxyProtocol.Trojan,
+                Tag = $"сервер-{i}",
+                Host = "example.invalid",
+                Port = 443,
+                Credential = "PLACEHOLDER",
+            })
+            .ToList();
+
+        var probe = new ProxyProbe(Path.Combine(Path.GetTempPath(), "нет-такого-sing-box.exe"));
+
+        var results = await probe.RunManyAsync(
+            servers,
+            new ProbeOptions
+            {
+                WorkDirectory = Path.Combine(Path.GetTempPath(), $"netzapret-probe-{Guid.NewGuid():N}"),
+                StartupTimeout = TimeSpan.FromMilliseconds(200),
+                TotalTimeout = TimeSpan.FromSeconds(2),
+            },
+            onResult: null,
+            CancellationToken.None);
+
+        Assert.Equal(servers.Count, results.Count);
+        Assert.All(results, r => Assert.False(r.Success));
+        Assert.Equal(
+            servers.Select(s => s.Tag).OrderBy(t => t),
+            results.Select(r => r.ServerTag).OrderBy(t => t));
+    }
+
+    [Fact]
     public void ConnectivityAndIpLookupUseDifferentAddresses()
     {
         var options = new ProbeOptions();

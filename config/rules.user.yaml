@@ -8,8 +8,4 @@
 # ваш выбор перекрывает заводскую настройку. Выключенная запись
 # сохраняется, но не применяется.
 
-rules:
-  - match: domain
-    value: "canva"
-    mode: proxy
-    enabled: false
+rules: []

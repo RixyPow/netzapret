@@ -75,6 +75,16 @@ public sealed record ProbeOptions
     ];
 
     /// <summary>
+    /// Определять внешний адрес после успешной проверки связности.
+    /// </summary>
+    /// <remarks>
+    /// Отключается там, где адрес не показывают. Службы бывают перекрыты —
+    /// у этого провайдера так и есть, — и тогда на каждом живом сервере
+    /// впустую перебираются все три подряд.
+    /// </remarks>
+    public bool LookupExternalIp { get; init; } = true;
+
+    /// <summary>
     /// Службы, возвращающие внешний адрес открытым текстом.
     /// </summary>
     /// <remarks>
@@ -164,26 +174,47 @@ public sealed class ProxyProbe
         {
             await limit.WaitAsync(cancellationToken);
 
+            ProbeResult result;
+
             try
             {
                 // Каждой проверке свой порт: процессы sing-box поднимаются
                 // одновременно и за один порт подрались бы.
                 var own = options with { ListenPort = options.ListenPort + index };
-                var result = await RunAsync(server, own, cancellationToken);
-
-                lock (sync)
+                result = await RunAsync(server, own, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                // Один сервер не вправе оборвать проверку остальных. Любая
+                // его беда — это его отрицательный результат, а не отказ
+                // всей проверки: иначе отчёт молча недосчитывается серверов,
+                // и понять, каких именно, уже нельзя.
+                result = new ProbeResult
                 {
-                    results.Add(result);
-                    onResult?.Invoke(result);
-                }
+                    ServerTag = server.Tag,
+                    Success = false,
+                    Error = ex.GetBaseException().Message,
+                };
             }
             finally
             {
                 limit.Release();
             }
+
+            lock (sync)
+            {
+                results.Add(result);
+                onResult?.Invoke(result);
+            }
         });
 
-        await Task.WhenAll(tasks);
+        // Дожидаемся всех, не пробрасывая исключение: тело задачи уже
+        // превращает любую беду в отрицательный результат, а наружу отсюда
+        // может выйти разве что отмена пользователем. Пробросить её значило бы
+        // потерять то, что успели измерить, и уничтожить семафор под теми,
+        // кто ещё не вернулся.
+        await Task.WhenAll(tasks).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
         return results;
     }
 
@@ -192,7 +223,8 @@ public sealed class ProxyProbe
         Directory.CreateDirectory(options.WorkDirectory);
 
         // Общий бюджет на сервер: иначе мёртвый узел удерживает проверку
-        // столько, сколько служб определения адреса мы перебираем.
+        // столько, сколько адресов мы перебираем.
+        var outer = cancellationToken;
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budget.CancelAfter(options.TotalTimeout);
         cancellationToken = budget.Token;
@@ -259,7 +291,9 @@ public sealed class ProxyProbe
             // Внешний адрес — сведения сверх необходимого. Его недоступность
             // сервер не порочит: службы определения адреса бывают перекрыты,
             // и раньше именно это выдавалось за неисправность сервера.
-            var (ip, _) = await TryServicesAsync(http, options.IpServices, cancellationToken);
+            var ip = options.LookupExternalIp
+                ? (await TryServicesAsync(http, options.IpServices, cancellationToken)).Ip
+                : null;
 
             stopwatch.Stop();
 
@@ -277,6 +311,15 @@ public sealed class ProxyProbe
                 Elapsed = stopwatch.Elapsed,
                 LogPath = options.KeepArtifacts ? logPath : null,
             };
+        }
+        catch (OperationCanceledException) when (!outer.IsCancellationRequested)
+        {
+            // Исчерпанный бюджет — обычный отрицательный результат, а не сбой.
+            // Без этого отмена уходила наружу и роняла Task.WhenAll: первый же
+            // сервер, упёршийся в таймаут, обрывал проверку остальных, и
+            // из четырнадцати серверов до отчёта доходило восемь.
+            stopwatch.Stop();
+            return Failure(server, stopwatch.Elapsed, logPath, "превышен бюджет времени");
         }
         finally
         {

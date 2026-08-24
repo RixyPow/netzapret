@@ -319,7 +319,16 @@ internal static class MenuCommand
         {
             var results = await new ProxyProbe(singBox).RunManyAsync(
                 servers,
-                new ProbeOptions(),
+                new ProbeOptions
+                {
+                    // Внешний адрес здесь не показывают, а его поиск на каждом
+                    // живом сервере перебирает три перекрытые службы подряд.
+                    LookupExternalIp = false,
+
+                    // Короче общего: выбор сервера — это ожидание перед
+                    // экраном, и полминуты на мёртвую Европу тут не окупаются.
+                    TotalTimeout = TimeSpan.FromSeconds(8),
+                },
                 result =>
                 {
                     // Точка за каждый ответ: проверка идёт секунды, и
