@@ -41,7 +41,15 @@ public sealed record AppSettings
     public OperatingMode Mode { get; init; } = OperatingMode.Selective;
 
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
-    public string? PresetName { get; init; }
+    /// <remarks>
+    /// По умолчанию — Universal V6: он идёт в сборке и покрывает больше всего
+    /// случаев. Пустое значение означало бы, что при первом запуске десинк
+    /// молча не работает, а человек об этом узнаёт по неоткрывающимся сайтам.
+    /// Если такого пресета нет, обзор состояния скажет об этом прямо.
+    /// </remarks>
+    public string? PresetName { get; init; } = DefaultPresetName;
+
+    public const string DefaultPresetName = "Universal V6";
 
     /// <summary>Тег сервера либо <c>null</c> для автоподбора по задержке.</summary>
     public string? PreferredServer { get; init; }

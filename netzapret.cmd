@@ -17,12 +17,15 @@ if %errorlevel% neq 0 (
 
 cd /d "%~dp0"
 
-rem Runs from build\, not from the project's bin\: see build.cmd for why.
-set "NETZAPRET_EXE=%~dp0build\netzapret.exe"
+rem Two layouts, one launcher. In a downloaded distribution the program sits
+rem right here; in a working copy it lives in build\, because running it from
+rem the project's bin\ breaks every rebuild - see build.cmd.
+set "NETZAPRET_EXE=%~dp0netzapret.exe"
+if not exist "%NETZAPRET_EXE%" set "NETZAPRET_EXE=%~dp0build\netzapret.exe"
 
 if not exist "%NETZAPRET_EXE%" (
-    echo Not deployed yet: %NETZAPRET_EXE%
-    echo Run: "%~dp0build.cmd"
+    echo netzapret.exe not found next to this file or in build\.
+    echo In a working copy, build it first: "%~dp0build.cmd"
     pause
     exit /b 1
 )

@@ -10,7 +10,7 @@
   "Mode": "Selective",
 
   "_PresetName": "Имя пресета Zapret; null — не запускать десинк.",
-  "PresetName": null,
+  "PresetName": "Universal V6",
 
   "_PreferredServer": "Тег сервера; null — выбирать быстрейший из живых.",
   "PreferredServer": null,

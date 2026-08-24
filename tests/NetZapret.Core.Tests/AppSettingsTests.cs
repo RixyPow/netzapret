@@ -55,7 +55,11 @@ public sealed class AppSettingsTests : IDisposable
 
         Assert.Equal(OperatingMode.Selective, settings.Mode);
         Assert.True(settings.ProxyOnly);
-        Assert.Null(settings.PresetName);
+
+        // Пресет по умолчанию задан, а не пуст: с пустым первый запуск молча
+        // остаётся без десинка, и человек узнаёт об этом по неоткрывающимся
+        // сайтам, а не из настроек.
+        Assert.Equal(AppSettings.DefaultPresetName, settings.PresetName);
     }
 
     [Fact]
@@ -70,8 +74,20 @@ public sealed class AppSettingsTests : IDisposable
     [Fact]
     public void NullPresetMeansDesyncIsNotStarted()
     {
-        Assert.Equal("не запускать", new AppSettings().DescribePreset());
-        Assert.Equal("авто (по задержке)", new AppSettings().DescribeServer());
+        var withoutPreset = new AppSettings { PresetName = null };
+
+        Assert.Equal("не запускать", withoutPreset.DescribePreset());
+        Assert.False(withoutPreset.NeedsDesync);
+    }
+
+    [Fact]
+    public void OutOfTheBoxThereIsAPresetAndNoChosenServer()
+    {
+        var settings = new AppSettings();
+
+        Assert.Equal(AppSettings.DefaultPresetName, settings.DescribePreset());
+        Assert.True(settings.NeedsDesync);
+        Assert.Equal("авто (по задержке)", settings.DescribeServer());
     }
 }
 
