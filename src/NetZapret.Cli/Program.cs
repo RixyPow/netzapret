@@ -10,6 +10,14 @@ internal static class Program
 
     private static async Task<int> Main(string[] args)
     {
+        // Двойной щелчок по программе — обычный способ её запустить, и он
+        // должен открывать меню. Раньше без аргументов печаталась справка
+        // об ошибке, окно моргало и закрывалось, а запускать полагалось
+        // соседний .cmd — то есть из двух файлов рядом правильным был
+        // менее очевидный.
+        if (args.Length == 0)
+            return await StartMenuAsync();
+
         var cmd = CommandLine.Parse(args);
 
         using var cts = new CancellationTokenSource();
@@ -38,7 +46,7 @@ internal static class Program
                 "doctor" => DoctorCommand.Run(cmd),
                 "clean" => CleanCommand.Run(cmd),
                 "autostart" => AutostartCommand.Run(cmd),
-                "menu" => await MenuCommand.RunAsync(cmd, cts.Token),
+                "menu" => await RunMenuAsync(cmd, cts.Token),
                 "help" or "--help" or "-h" => PrintUsage(0),
                 _ => PrintUnknown(cmd.Command),
             };
@@ -57,6 +65,84 @@ internal static class Program
         {
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Запуск двойным щелчком: поднимает права и открывает меню.
+    /// </summary>
+    /// <remarks>
+    /// Права запрашиваются здесь, а не по месту нужды: TUN и драйвер WinDivert
+    /// требуют администратора, и без него запуск проваливается уже на середине,
+    /// когда часть работы сделана. Один запрос в начале понятнее.
+    /// </remarks>
+    private static async Task<int> StartMenuAsync()
+    {
+        if (!IsElevated())
+        {
+            try
+            {
+                var self = Environment.ProcessPath;
+
+                if (self is null)
+                {
+                    Console.Error.WriteLine("Не удалось определить путь к программе.");
+                    return 1;
+                }
+
+                using var elevated = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = self,
+                    Arguments = "menu",
+                    WorkingDirectory = AppContext.BaseDirectory,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                });
+
+                return 0;
+            }
+            catch (Exception)
+            {
+                // Отказ в запросе прав — не ошибка программы, а решение человека.
+                // Продолжаем без них: меню работает, просто движки не поднимутся,
+                // и оно об этом скажет.
+            }
+        }
+
+        using var cts = new CancellationTokenSource();
+        return await RunMenuAsync(CommandLine.Parse(["menu"]), cts.Token);
+    }
+
+    private static async Task<int> RunMenuAsync(CommandLine cmd, CancellationToken cancellationToken)
+    {
+        UseUtf8();
+        return await MenuCommand.RunAsync(cmd, cancellationToken);
+    }
+
+    /// <summary>
+    /// Переключает вывод на UTF-8, иначе кириллица в меню превращается в мусор.
+    /// </summary>
+    /// <remarks>
+    /// Здесь, а не через <c>chcp</c> в обёртке: программа теперь запускается
+    /// и напрямую, и обёртки может не быть вовсе.
+    /// </remarks>
+    private static void UseUtf8()
+    {
+        try
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch (Exception)
+        {
+            // Консоли может не быть — при перенаправленном выводе, например.
+        }
+    }
+
+    private static bool IsElevated()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+
+        return new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
     }
 
     private static int PrintUnknown(string command)

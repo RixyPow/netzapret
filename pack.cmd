@@ -46,9 +46,16 @@ mkdir "%STAGE%\config" 2>nul
 copy /y "%ROOT%config\rules.yaml" "%STAGE%\config\" >nul
 copy /y "%ROOT%config\netzapret.example.json" "%STAGE%\config\" >nul
 
-copy /y "%ROOT%README.md" "%STAGE%\" >nul
+rem A separate README for the archive. The repository one is written for
+rem someone with the sources - it explains building and the module layout,
+rem and tells the reader to run build.cmd, which does not exist here.
+copy /y "%ROOT%docs\README.dist.md" "%STAGE%\README.md" >nul
 copy /y "%ROOT%LICENSE" "%STAGE%\" >nul
-copy /y "%ROOT%NetZapret.cmd" "%STAGE%\" >nul
+
+rem No launcher script: the program opens the menu and asks for elevation
+rem itself when started with no arguments. Two files side by side, of which
+rem the correct one to double-click was the less obvious, is a choice nobody
+rem should have to make.
 
 rem Engines. Same selection as build.cmd, and for the same reasons - see
 rem tools\README.md. Without them the archive is not self-contained at all,
@@ -80,9 +87,20 @@ if not defined ZAPRET (
 )
 
 echo Bundling Zapret from %ZAPRET%
+
+rem Three files from exe\ are left out.
+rem
+rem   winws.exe    the previous engine. Our presets drive it through
+rem                --lua-desync, which that binary has no notion of, so it
+rem                cannot run any of them.
+rem   aaaaaaaaa1   byte-for-byte identical to Monkey64.sys, and nothing refers
+rem                to it: WinDivert.dll names Monkey64.sys and only that.
+rem   stop.bat     belongs to the Zapret GUI. Running it kills the engines
+rem                behind the supervisor's back, which then restarts them -
+rem                a fight nobody wins.
 for %%D in (exe lists lua bin windivert.filter) do (
     if exist "%ZAPRET%\%%D" (
-        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF winws.exe aaaaaaaaa1 stop.bat >nul
         if errorlevel 8 exit /b 1
     )
 )
@@ -108,6 +126,9 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+rem Size read through PowerShell: %%~z on a file created earlier in the same
+rem script comes back empty, because cmd expanded the loop variable before
+rem Compress-Archive had finished writing.
 echo.
-for %%F in ("%DIST%\NetZapret.zip") do echo Done: %%~fF (%%~zF bytes)
+powershell -NoProfile -Command "$f = Get-Item '%DIST%\NetZapret.zip'; Write-Host ('Done: {0} ({1:N1} MB)' -f $f.FullName, ($f.Length/1MB))"
 exit /b 0
