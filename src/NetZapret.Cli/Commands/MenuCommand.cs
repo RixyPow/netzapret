@@ -91,15 +91,14 @@ internal static class MenuCommand
         Console.WriteLine();
         Console.WriteLine($"  1. Режим работы .......... {settings.DescribeMode()}");
         Console.WriteLine($"  2. Пресет Zapret ......... {settings.DescribePreset()}");
-        Console.WriteLine($"  3. Сервер VPN ............ {settings.DescribeServer()}");
-        Console.WriteLine($"  4. Подписка .............. {DescribeSubscription(settings)}");
-        Console.WriteLine($"  5. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
-        Console.WriteLine($"  6. Маршруты приложений ... {DescribeRoutes()}");
+        Console.WriteLine($"  3. VPN ................... {DescribeVpn(settings)}");
+        Console.WriteLine($"  4. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
+        Console.WriteLine($"  5. Маршруты приложений ... {DescribeRoutes()}");
         Console.WriteLine();
-        Console.WriteLine("  7. Собрать конфиг");
-        Console.WriteLine(running ? "  8. Остановить" : "  8. Запустить (конфиг соберётся сам)");
-        Console.WriteLine("  9. Обзор состояния");
-        Console.WriteLine(" 10. Журнал супервизора");
+        Console.WriteLine("  6. Собрать конфиг");
+        Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить (конфиг соберётся сам)");
+        Console.WriteLine("  8. Обзор состояния");
+        Console.WriteLine("  9. Журнал супервизора");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -130,27 +129,24 @@ internal static class MenuCommand
                 settings = ChoosePreset(settings);
                 break;
             case "3":
-                settings = await ChooseServerAsync(settings, cancellationToken);
+                settings = await VpnMenuAsync(settings, cancellationToken);
                 break;
             case "4":
-                settings = await SubscriptionMenuAsync(settings, cancellationToken);
-                break;
-            case "5":
                 ToggleAutostart(settings);
                 return settings;
-            case "6":
+            case "5":
                 EditRoutes(settings);
                 return settings;
-            case "7":
+            case "6":
                 await BuildConfigAsync(settings, cancellationToken);
                 return settings;
-            case "8":
+            case "7":
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
-            case "9":
+            case "8":
                 RunDoctor(settings);
                 return settings;
-            case "10":
+            case "9":
                 ShowSupervisorLog();
                 return settings;
             default:
@@ -197,7 +193,7 @@ internal static class MenuCommand
     {
         if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
         {
-            Message("Сначала задайте подписку (пункт 4).", ConsoleColor.Yellow);
+            Message("Сначала задайте подписку — пункт «VPN».", ConsoleColor.Yellow);
             return settings;
         }
 
@@ -225,16 +221,19 @@ internal static class MenuCommand
         return chosen.Cancelled ? settings : settings with { PreferredServer = chosen.Value };
     }
 
+    private static string DescribeVpn(AppSettings settings) =>
+        $"{DescribeSubscription(settings)}, {settings.DescribeServer()}";
+
     /// <summary>
-    /// Подписка и её серверы — одним пунктом.
+    /// Всё, что относится к VPN: подписка, выбор сервера, проверка.
     /// </summary>
     /// <remarks>
-    /// Проверка серверов жила отдельным пунктом верхнего уровня, хотя без
-    /// подписки она бессмысленна и обращаться к ней приходится сразу после
-    /// смены ссылки. Смысловая пара, разнесённая по меню, заставляла
-    /// вспоминать, где что лежит.
+    /// Три пункта верхнего уровня на одну тему заставляли вспоминать, где
+    /// что лежит, хотя порядок действий всегда один: вставить ссылку,
+    /// посмотреть, что живо, выбрать сервер. Ни один из трёх не имеет
+    /// смысла без остальных.
     /// </remarks>
-    private static async Task<AppSettings> SubscriptionMenuAsync(
+    private static async Task<AppSettings> VpnMenuAsync(
         AppSettings settings,
         CancellationToken cancellationToken)
     {
@@ -242,20 +241,23 @@ internal static class MenuCommand
         {
             Console.WriteLine();
             Console.WriteLine($"  Подписка: {DescribeSubscription(settings)}");
+            Console.WriteLine($"  Сервер:   {settings.DescribeServer()}");
             Console.WriteLine();
-            Console.WriteLine("  1. Изменить ссылку");
+            Console.WriteLine("  1. Выбрать сервер");
             Console.WriteLine("  2. Проверить серверы");
+            Console.WriteLine("  3. Изменить ссылку подписки");
             Console.WriteLine("  0. Назад");
             Console.Write("Выбор: ");
 
             switch (Console.ReadLine()?.Trim())
             {
                 case "1":
-                    settings = AskSubscription(settings);
-                    return settings;
+                    return await ChooseServerAsync(settings, cancellationToken);
                 case "2":
                     await ProbeAsync(settings, cancellationToken);
                     break;
+                case "3":
+                    return AskSubscription(settings);
                 default:
                     return settings;
             }
@@ -462,7 +464,7 @@ internal static class MenuCommand
             return;
         }
 
-        Message("Записано. Чтобы применить, пересоберите конфиг (пункт 7).", ConsoleColor.Green);
+        Message("Записано. Применится при следующем запуске.", ConsoleColor.Green);
     }
 
     private static ConnectionEvent BuildProbe(string target, MatchKind match)
@@ -540,7 +542,7 @@ internal static class MenuCommand
     {
         if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
         {
-            Message("Сначала задайте подписку (пункт 4).", ConsoleColor.Yellow);
+            Message("Сначала задайте подписку — пункт «VPN».", ConsoleColor.Yellow);
             return false;
         }
 
@@ -567,12 +569,17 @@ internal static class MenuCommand
             foreach (var problem in RuleSetExpander.Expand(ruleSet, zapretRoot))
                 Console.WriteLine($"Внимание: {problem}");
 
+            var pinned = HostsFile.CollectPinnedProxyAddresses(ruleSet, out var pinnedNotes);
+
+            foreach (var note in pinnedNotes)
+                Console.WriteLine($"Внимание, hosts: {note}");
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = settings.ProxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
                 PreferredServerTag = settings.PreferredServer,
-                CaptureAddresses = capture,
+                CaptureAddresses = [.. capture, .. pinned],
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
@@ -657,7 +664,7 @@ internal static class MenuCommand
         if (await WaitForSupervisorAsync(supervisor, cancellationToken))
             Message("Запущено.", ConsoleColor.Green);
         else
-            Message("Супервизор не поднялся — смотрите журнал (пункт 10).", ConsoleColor.Red);
+            Message("Супервизор не поднялся — смотрите журнал супервизора.", ConsoleColor.Red);
     }
 
     /// <summary>
@@ -762,7 +769,7 @@ internal static class MenuCommand
     {
         if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
         {
-            Message("Сначала задайте подписку (пункт 4).", ConsoleColor.Yellow);
+            Message("Сначала задайте подписку — пункт «VPN».", ConsoleColor.Yellow);
             return;
         }
 

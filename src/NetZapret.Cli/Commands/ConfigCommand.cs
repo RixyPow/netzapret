@@ -39,6 +39,13 @@ internal static class ConfigCommand
         foreach (var problem in RuleSetExpander.Expand(engine.RuleSet, zapretRoot))
             Console.WriteLine($"Внимание: {problem}");
 
+        // hosts бьёт любой резолв, включая наш: прибитый там домен не получит
+        // fakeip и уйдёт мимо туннеля, сколько бы правил на него ни стояло.
+        var pinned = HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out var pinnedNotes);
+
+        foreach (var note in pinnedNotes)
+            Console.WriteLine($"Внимание, hosts: {note}");
+
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
         {
@@ -47,7 +54,7 @@ internal static class ConfigCommand
             Scope = proxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
             DnsServerAddresses = proxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
             DesyncAddresses = desyncAddresses,
-            CaptureAddresses = capture,
+            CaptureAddresses = [.. capture, .. pinned],
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);

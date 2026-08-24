@@ -12,6 +12,40 @@ namespace NetZapret.Cli.Commands;
 /// </remarks>
 internal static class ProbeCommand
 {
+    /// <summary>
+    /// Предупреждает, что проверка при поднятых движках ничего не значит.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Проба поднимает свой инбаунд на loopback и ходит наружу напрямую.
+    /// Когда работает winws2, он обрабатывает и эти соединения — те самые
+    /// рукопожатия TLS к серверам подписки, — и рецепты десинка ломают их.
+    /// Когда поднят TUN, часть адресов вдобавок уводится в туннель.
+    /// </para>
+    /// <para>
+    /// Результат получается уверенно неверным: в журнале sing-box соединения
+    /// проходят, а проба показывает «не работает» по всем серверам сразу.
+    /// Ровно так и выглядело «VPN сломался» — при полностью исправном VPN.
+    /// </para>
+    /// </remarks>
+    private static void WarnIfEnginesRunning()
+    {
+        var state = Supervisor.SupervisorState.Load(Supervisor.SupervisorState.DefaultPath);
+
+        if (state is null || !state.IsSupervisorAlive())
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine();
+        Console.WriteLine("ВНИМАНИЕ: движки сейчас работают, и проверке нельзя верить.");
+        Console.WriteLine("Десинк обрабатывает и её соединения к серверам подписки, ломая их,");
+        Console.WriteLine("а часть адресов уводится в туннель. Серверы покажутся мёртвыми,");
+        Console.WriteLine("даже если они живы. Остановите движки и повторите.");
+        Console.ForegroundColor = previous;
+        Console.WriteLine();
+    }
+
     public static async Task<int> RunAsync(CommandLine cmd, CancellationToken cancellationToken)
     {
         var singBox = EngineLocator.FindSingBox();
@@ -21,6 +55,8 @@ internal static class ProbeCommand
             Console.Error.WriteLine("sing-box.exe не найден в tools/.");
             return 2;
         }
+
+        WarnIfEnginesRunning();
 
         var info = await SubscriptionSource.LoadAsync(cmd, cancellationToken);
         if (info is null)
