@@ -155,17 +155,33 @@ for %%D in (exe lists lua bin windivert.filter) do (
     )
 )
 
-rem Only the winws2 presets. winws1 belongs to the previous engine, and we
-rem never load it - copying it would just make the menu list unusable entries.
-for %%D in (winws2 winws2_builtin) do (
-    if exist "%ZAPRET%\presets\%%D" (
-        robocopy "%ZAPRET%\presets\%%D" "%ENGINES%\zapret\presets\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
-        if errorlevel 8 (
-            echo Failed to bundle presets\%%D
-            exit /b 1
-        )
+rem Only presets\winws2. winws1 is the previous engine, and winws2_builtin is
+rem never read by us either - the program looks in winws2 alone, so those 107
+rem files were dead weight in the bundle.
+rem
+rem The pre-V5 Universal line is left out: those are superseded by V5 and V6,
+rem and a menu offering nine near-identical entries makes the choice harder,
+rem not richer. This only affects what ships - the installation keeps all of
+rem them, so anything can be brought back by copying the file across.
+if exist "%ZAPRET%\presets\winws2" (
+    robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL ^
+        /XF "Universal.txt" "Universal V2.txt" "Universal V2.1.txt" "Universal V2.1 voice ALT.txt" ^
+            "Universal V3.txt" "Universal V3 AUTO.txt" "Universal V4.txt" >nul
+    if errorlevel 8 (
+        echo Failed to bundle presets
+        exit /b 1
     )
 )
+
+rem Stale copies from an earlier build would otherwise survive: robocopy without
+rem /PURGE only adds. Dropping a preset from the list above has to actually drop
+rem it, or the exclusion is decorative.
+for %%F in ("Universal.txt" "Universal V2.txt" "Universal V2.1.txt" "Universal V2.1 voice ALT.txt" ^
+            "Universal V3.txt" "Universal V3 AUTO.txt" "Universal V4.txt") do (
+    if exist "%ENGINES%\zapret\presets\winws2\%%~F" del /q "%ENGINES%\zapret\presets\winws2\%%~F"
+)
+
+if exist "%ENGINES%\zapret\presets\winws2_builtin" rd /s /q "%ENGINES%\zapret\presets\winws2_builtin"
 
 :done
 echo.
