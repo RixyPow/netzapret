@@ -11,7 +11,12 @@ internal static class RulesCommand
     public static int Run(CommandLine cmd, string defaultConfigPath)
     {
         var configPath = cmd.Value("config", defaultConfigPath);
-        var engine = RuleSetLoader.LoadFromFile(configPath);
+        // Оба слоя, как и везде: показывать базовый набор в отрыве от выбора
+        // человека значит показывать не то, что применяется. Команды разошлись
+        // в этом незаметно — where и config читали два слоя, rules один.
+        var engine = RuleSetLoader.LoadLayered(
+            configPath,
+            cmd.Value("user-rules", UserRulesFile.DefaultPath));
         var ruleSet = engine.RuleSet;
 
         Console.WriteLine($"Конфиг: {configPath}");

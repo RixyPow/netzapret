@@ -23,7 +23,12 @@ internal static class WatchCommand
     public static async Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
     {
         var configPath = cmd.Value("config", defaultConfigPath);
-        var engine = RuleSetLoader.LoadFromFile(configPath);
+        // Оба слоя обязательны именно здесь: наблюдатель показывает, какое
+        // правило применилось бы, и расхождение с настоящим поведением делает
+        // его не диагностикой, а источником ложных выводов.
+        var engine = RuleSetLoader.LoadLayered(
+            configPath,
+            cmd.Value("user-rules", UserRulesFile.DefaultPath));
 
         bool showAll = cmd.Has("all");
         bool useWfp = string.Equals(cmd.Value("source", "etw"), "wfp", StringComparison.OrdinalIgnoreCase);

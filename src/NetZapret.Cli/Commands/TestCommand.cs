@@ -16,7 +16,9 @@ internal static class TestCommand
     public static int Run(CommandLine cmd, string defaultConfigPath)
     {
         var configPath = cmd.Value("config", defaultConfigPath);
-        var engine = RuleSetLoader.LoadFromFile(configPath);
+        var engine = RuleSetLoader.LoadLayered(
+            configPath,
+            cmd.Value("user-rules", UserRulesFile.DefaultPath));
 
         var process = cmd.Value("process");
         var domain = cmd.Value("domain");

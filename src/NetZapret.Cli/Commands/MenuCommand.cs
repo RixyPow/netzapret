@@ -182,16 +182,17 @@ internal static class MenuCommand
         Console.WriteLine($"  1. Режим работы .......... {settings.DescribeMode()}");
         Console.WriteLine($"  2. Пресет Zapret ......... {settings.DescribePreset()}");
         Console.WriteLine($"  3. VPN ................... {DescribeVpn(settings)}");
-        Console.WriteLine($"  4. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
-        Console.WriteLine($"  5. Сервисы и маршруты .... {DescribeRoutes()}");
+        Console.WriteLine($"  4. DNS ................... {DescribeDns(settings)}");
+        Console.WriteLine($"  5. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
+        Console.WriteLine($"  6. Сервисы и маршруты .... {DescribeRoutes()}");
         Console.WriteLine();
         // Отдельного «собрать конфиг» здесь нет намеренно: он собирается при
         // каждом запуске, а сам по себе ничего не применяет — действует только
         // перезапуск. Пункт предлагал мнимое действие и создавал впечатление
         // обязательного шага, который на деле выполняется сам.
-        Console.WriteLine(running ? "  6. Остановить" : "  6. Запустить");
-        Console.WriteLine("  7. Обзор состояния");
-        Console.WriteLine("  8. Журнал супервизора");
+        Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить");
+        Console.WriteLine("  8. Обзор состояния");
+        Console.WriteLine("  9. Журнал супервизора");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -225,18 +226,21 @@ internal static class MenuCommand
                 settings = await VpnMenuAsync(settings, cancellationToken);
                 break;
             case "4":
+                settings = await DnsMenuAsync(settings, cancellationToken);
+                break;
+            case "5":
                 ToggleAutostart(settings);
                 return settings;
-            case "5":
+            case "6":
                 EditServices(settings);
                 return settings;
-            case "6":
+            case "7":
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
-            case "7":
+            case "8":
                 RunDoctor(settings);
                 return settings;
-            case "8":
+            case "9":
                 ShowSupervisorLog();
                 return settings;
             default:
@@ -496,6 +500,156 @@ internal static class MenuCommand
         { TotalHours: < 24 } => $"{age.TotalHours:0} ч назад",
         _ => $"{age.TotalDays:0} дн назад — стоит перепроверить",
     };
+
+    private static string DescribeDns(AppSettings settings)
+    {
+        var known = DnsProbe.Known.FirstOrDefault(r =>
+            string.Equals(r.Address, settings.DnsServer, StringComparison.Ordinal));
+
+        var name = known is null ? settings.DnsServer : $"{known.Name} ({known.Address})";
+
+        return settings.DnsThroughTunnel ? $"{name}, через туннель" : name;
+    }
+
+    /// <summary>
+    /// Выбор апстрим-резолвера с проверкой.
+    /// </summary>
+    /// <remarks>
+    /// Список не сортируется по отклику и «быстрейший» не подставляется сам:
+    /// резолвер решает, какие ответы получит человек. Один отсекает рекламу,
+    /// другой вредоносные домены, третий не фильтрует ничего — это выбор,
+    /// а не оптимизация, и делать его молча нельзя.
+    /// </remarks>
+    private static async Task<AppSettings> DnsMenuAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Апстрим DNS: {DescribeDns(settings)}");
+            Console.WriteLine();
+            Console.WriteLine("  1. Выбрать резолвер");
+            Console.WriteLine("  2. Проверить резолверы");
+            Console.WriteLine(settings.DnsThroughTunnel
+                ? "  3. Разрешать имена напрямую"
+                : "  3. Разрешать имена через туннель");
+            Console.WriteLine("  0. Назад");
+            Console.Write("Выбор: ");
+
+            switch (Console.ReadLine()?.Trim())
+            {
+                case "1":
+                    return await ChooseResolverAsync(settings, cancellationToken);
+
+                case "2":
+                    await CheckResolversAsync(settings, cancellationToken);
+                    break;
+
+                case "3":
+                    var next = settings with { DnsThroughTunnel = !settings.DnsThroughTunnel };
+
+                    Message(next.DnsThroughTunnel
+                        ? "Имена будут разрешаться внутри туннеля — оператор их не увидит. " +
+                          "Пока туннель не поднят, не откроется ничего."
+                        : "Имена будут разрешаться напрямую.", ConsoleColor.Green);
+
+                    return next;
+
+                default:
+                    return settings;
+            }
+        }
+    }
+
+    private static async Task CheckResolversAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        Console.WriteLine();
+
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (state is not null && state.IsSupervisorAlive())
+        {
+            // Мы сами закрываем DoH к системным резолверам внутри туннеля,
+            // и наш собственный запрос попадает под то же правило.
+            Message(
+                "Туннель поднят — замер занизит доступность: мы сами закрываем DoH " +
+                "внутри туннеля. Для чистой картины остановите движки.",
+                ConsoleColor.Yellow);
+        }
+
+        Console.WriteLine("Проверяю резолверы…");
+        Console.WriteLine();
+
+        var previous = Console.ForegroundColor;
+
+        await DnsProbe.CheckAllAsync(
+            DnsProbe.Known,
+            TimeSpan.FromSeconds(5),
+            r =>
+            {
+                Console.ForegroundColor = r.Works ? ConsoleColor.Green : ConsoleColor.Red;
+
+                var latency = r.Works && r.Latency is { } l ? $"{l.TotalMilliseconds,5:0} мс" : "не отвечает";
+
+                Console.WriteLine($"  {r.Resolver.Name,-14} {r.Resolver.Address,-18} {latency}");
+                Console.ForegroundColor = previous;
+            },
+            cancellationToken);
+
+        Pause();
+    }
+
+    private static async Task<AppSettings> ChooseResolverAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Проверяю…");
+
+        var results = await DnsProbe.CheckAllAsync(
+            DnsProbe.Known, TimeSpan.FromSeconds(5), null, cancellationToken);
+
+        var byAddress = results.ToDictionary(r => r.Resolver.Address, StringComparer.Ordinal);
+        var previous = Console.ForegroundColor;
+
+        Console.WriteLine();
+
+        for (int i = 0; i < DnsProbe.Known.Count; i++)
+        {
+            var resolver = DnsProbe.Known[i];
+            var result = byAddress.GetValueOrDefault(resolver.Address);
+
+            Console.ForegroundColor = result switch
+            {
+                { Works: true } => ConsoleColor.Green,
+                { Works: false } => ConsoleColor.Red,
+                _ => previous,
+            };
+
+            var latency = result is { Works: true, Latency: { } l } ? $"{l.TotalMilliseconds,5:0} мс" : "не отвечает";
+            var active = string.Equals(resolver.Address, settings.DnsServer, StringComparison.Ordinal)
+                ? "   <- сейчас"
+                : string.Empty;
+
+            Console.WriteLine($"  {i + 1}. {resolver.Name,-12} {resolver.Address,-18} {latency}{active}");
+            Console.ForegroundColor = previous;
+
+            if (resolver.Note is { } note)
+                Console.WriteLine($"     {note}");
+        }
+
+        Console.WriteLine("  0. Отмена");
+        Console.Write("Выбор: ");
+
+        var input = Console.ReadLine()?.Trim();
+
+        if (!int.TryParse(input, out var index) || index < 1 || index > DnsProbe.Known.Count)
+            return settings;
+
+        var chosen = DnsProbe.Known[index - 1];
+
+        Message($"Апстрим DNS: {chosen.Name} ({chosen.Address}). Применится при следующем запуске.",
+            ConsoleColor.Green);
+
+        return settings with { DnsServer = chosen.Address };
+    }
 
     private static string DescribeVpn(AppSettings settings) =>
         $"{DescribeSubscription(settings)}, {settings.DescribeServer()}";

@@ -90,6 +90,7 @@ internal static class Program
                 "sub" => await SubCommand.RunAsync(cmd, cts.Token),
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
+            "dns" => await DnsCommand.RunAsync(cmd, cts.Token),
                 "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
                 "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
                 "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
@@ -251,6 +252,7 @@ internal static class Program
               sub       Показать содержимое подписки: квоту, срок, серверы
               config    Сгенерировать конфиг sing-box из правил и подписки
               preset    Показать пресеты Zapret и их покрытие десинком
+              dns       Проверить резолверы и выбрать апстрим
               probe     Проверить, идёт ли трафик через серверы подписки
               start     Запустить службы под присмотром супервизора
               stop      Остановить супервизор и все службы

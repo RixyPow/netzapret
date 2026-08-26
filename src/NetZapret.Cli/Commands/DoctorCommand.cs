@@ -175,13 +175,17 @@ internal static class DoctorCommand
 
         try
         {
-            var engine = RuleSetLoader.LoadFromFile(path);
+            var userPath = cmd.Value("user-rules", UserRulesFile.DefaultPath);
+            var engine = RuleSetLoader.LoadLayered(path, userPath);
+
+            var own = engine.RuleSet.Rules.Count(r => r.Source == RuleSource.User);
 
             return
             [
                 new Check(Level.Ok,
                     $"{path}: режим {engine.RuleSet.Operating.ToString().ToLowerInvariant()}, " +
-                    $"правил {engine.RuleSet.Rules.Count}"),
+                    $"правил {engine.RuleSet.Rules.Count}" +
+                    (own > 0 ? $", из них ваших {own}" : string.Empty)),
             ];
         }
         catch (RuleConfigurationException ex)
