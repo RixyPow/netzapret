@@ -194,6 +194,26 @@ public sealed class LayeredRulesTests : IDisposable
     }
 
     [Fact]
+    public void CorruptedUserFileIsSetAsideRatherThanOverwritten()
+    {
+        // Иначе следующее сохранение перезапишет его пустым, и правки человека
+        // исчезнут вместе с опечаткой, из-за которой файл не разобрался.
+        File.WriteAllText(_userPath, "тут была опечатка: [[[");
+
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "example.com", RoutingMode.Proxy);
+        file.Save();
+
+        var broken = _userPath + UserRulesFile.BrokenSuffix;
+
+        Assert.True(File.Exists(broken), "неразобранный файл должен сохраниться рядом");
+        Assert.Contains("тут была опечатка", File.ReadAllText(broken));
+
+        // А новый файл при этом рабочий.
+        Assert.Single(UserRulesFile.Load(_userPath).Entries);
+    }
+
+    [Fact]
     public void RepeatedChoiceReplacesRatherThanDuplicates()
     {
         var file = UserRulesFile.Load(_userPath);

@@ -59,9 +59,40 @@ public sealed class UserRulesFile
         }
         catch (RuleConfigurationException)
         {
-            // Испорченный файл не должен мешать работе: берём пустой набор,
-            // сохранение перезапишет его корректным.
+            // Испорченный файл не должен мешать работе, но и пропадать
+            // не должен: следующее сохранение перезаписало бы его пустым,
+            // и правки человека исчезли бы вместе с опечаткой, из-за которой
+            // файл не разобрался. Отодвигаем в сторону — починить или
+            // подсмотреть можно, работе не мешает.
+            SetAside(target);
             return new UserRulesFile(target, []);
+        }
+    }
+
+    /// <summary>Расширение, под которым сохраняется неразобранный файл.</summary>
+    public const string BrokenSuffix = ".broken";
+
+    private static void SetAside(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return;
+
+            var broken = path + BrokenSuffix;
+
+            // Затираем предыдущий сохранённый: две поломки подряд означают,
+            // что чинят прямо сейчас, и интересна последняя.
+            if (File.Exists(broken))
+                File.Delete(broken);
+
+            File.Move(path, broken);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 
