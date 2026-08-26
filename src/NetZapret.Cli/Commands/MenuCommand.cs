@@ -836,8 +836,11 @@ internal static class MenuCommand
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = settings.ProxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
+                DnsServer = settings.DnsServer,
+                DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
-                CaptureAddresses = [.. capture, .. pinned],
+                CaptureAddresses = capture,
+                PinnedProxyAddresses = pinned,
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);

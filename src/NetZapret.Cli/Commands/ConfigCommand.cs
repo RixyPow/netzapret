@@ -53,8 +53,11 @@ internal static class ConfigCommand
             LocalListenPort = cmd.Int("local-port", 21080),
             Scope = proxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
             DnsServerAddresses = proxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
+            DnsServer = cmd.Value("dns", "8.8.8.8"),
+            DnsThroughTunnel = cmd.Has("dns-through-tunnel"),
             DesyncAddresses = desyncAddresses,
-            CaptureAddresses = [.. capture, .. pinned],
+            CaptureAddresses = capture,
+            PinnedProxyAddresses = pinned,
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);

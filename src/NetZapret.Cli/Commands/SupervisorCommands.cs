@@ -125,9 +125,11 @@ internal static class SupervisorCommands
     /// именно то сообщение, ради которого журнал и заводился.
     /// </para>
     /// <para>
-    /// Файл открывается с общим доступом на чтение: иначе меню не смогло бы
-    /// показать журнал, пока супервизор работает, — а показывать его нужно
-    /// именно тогда.
+    /// Запись идёт через <see cref="SharedLogWriter"/>, а не обычным
+    /// потоком поверх файла: два супервизора, открывшие журнал одновременно,
+    /// писали поверх написанного соседом и портили его. Разбор утреннего сбоя
+    /// на этом и споткнулся — пропало ровно то сообщение, которое объясняло
+    /// причину.
     /// </para>
     /// <para>
     /// Дописывание, а не перезапись: между перезапусками полезно видеть,
@@ -137,55 +139,21 @@ internal static class SupervisorCommands
     /// </remarks>
     private static void RedirectOutputTo(string path)
     {
-        try
-        {
-            var directory = Path.GetDirectoryName(Path.GetFullPath(path));
+        var writer = SharedLogWriter.TryOpen(path);
 
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-
-            TrimIfLarge(path);
-
-            var stream = new FileStream(
-                path,
-                FileMode.Append,
-                FileAccess.Write,
-                FileShare.ReadWrite);
-
-            var writer = new StreamWriter(stream) { AutoFlush = true };
-
-            Console.SetOut(writer);
-            Console.SetError(writer);
-
-            Console.WriteLine();
-            Console.WriteLine($"===== запуск {DateTime.Now:dd.MM.yyyy HH:mm:ss} =====");
-        }
-        catch (Exception ex)
+        if (writer is null)
         {
             // Невозможность вести журнал — не повод не запускаться:
             // движки важнее записи о них.
-            Console.Error.WriteLine($"Журнал {path} недоступен: {ex.GetBaseException().Message}");
+            Console.Error.WriteLine($"Журнал {path} недоступен, продолжаю без него.");
+            return;
         }
-    }
 
-    private const int LogSizeLimit = 512 * 1024;
+        Console.SetOut(writer);
+        Console.SetError(writer);
 
-    private static void TrimIfLarge(string path)
-    {
-        try
-        {
-            if (!File.Exists(path) || new FileInfo(path).Length <= LogSizeLimit)
-                return;
-
-            // Хвост полезнее головы: интересно, чем кончилось, а не с чего
-            // начиналось месяц назад.
-            var lines = File.ReadAllLines(path);
-            File.WriteAllLines(path, lines.Skip(Math.Max(0, lines.Length - 500)));
-        }
-        catch (IOException)
-        {
-            // Занят или недоступен — оставляем как есть.
-        }
+        Console.WriteLine();
+        Console.WriteLine($"===== запуск {DateTime.Now:dd.MM.yyyy HH:mm:ss}, PID {Environment.ProcessId} =====");
     }
 
     private static bool TryAddSingBox(CommandLine cmd, List<SupervisedService> services)

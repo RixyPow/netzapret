@@ -62,6 +62,28 @@ public sealed record AppSettings
     /// <summary>Проверять не только порт, но и реальный проход трафика.</summary>
     public bool VerifyTraffic { get; init; }
 
+    /// <summary>
+    /// Разрешать имена через туннель, а не напрямую.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пригодится, если оператор перекроет DoH: запрос внутри туннеля от
+    /// прочего трафика неотличим, и заблокировать его отдельно нельзя.
+    /// В августе 2026 такие ограничения появились у нескольких российских
+    /// операторов.
+    /// </para>
+    /// <para>
+    /// Выключено по умолчанию: включённое, оно ставит разрешение имён
+    /// в зависимость от туннеля, и пока тот не поднялся, не открывается
+    /// ничего — включая то, что работало на десинке. Включать, когда прямой
+    /// DoH уже отказал, а не заранее.
+    /// </para>
+    /// </remarks>
+    public bool DnsThroughTunnel { get; init; }
+
+    /// <summary>Апстрим DNS; адресом, не именем.</summary>
+    public string DnsServer { get; init; } = "8.8.8.8";
+
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
     private static readonly JsonSerializerOptions Options = new()

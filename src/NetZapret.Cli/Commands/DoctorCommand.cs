@@ -1,4 +1,5 @@
 using System.Security.Principal;
+using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
@@ -28,6 +29,7 @@ internal static class DoctorCommand
         allGood &= Section("Zapret", CheckZapret(cmd));
         allGood &= Section("Правила", CheckRules(cmd));
         allGood &= Section("Конфиг прокси", CheckProxyConfig(cmd));
+        allGood &= Section("DNS", CheckDns(cmd));
         allGood &= Section("Супервизор", CheckSupervisor(cmd));
 
         Console.WriteLine();
@@ -214,6 +216,62 @@ internal static class DoctorCommand
         else
         {
             checks.Add(new Check(Level.Ok, $"собран этой же версией ({built})"));
+        }
+
+        return checks;
+    }
+
+    /// <summary>
+    /// Достижим ли апстрим-резолвер.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Проверка появилась после того, как российские операторы начали
+    /// перекрывать DoH и DoT. Отказ апстрима выглядит как «перестало
+    /// открываться вообще всё»: имена не разрешаются, и на маршруты это
+    /// не походит ничем. Лучше назвать причину прямо.
+    /// </para>
+    /// <para>
+    /// Проверяется TCP на 443, а не запрос: настоящий запрос требовал бы
+    /// разбора DoH, а закрывают обычно само соединение.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<Check> CheckDns(CommandLine cmd)
+    {
+        var settings = AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath));
+        var server = settings.DnsServer;
+
+        if (settings.DnsThroughTunnel)
+        {
+            return
+            [
+                new Check(Level.Ok,
+                    $"{server} через туннель — оператор такой запрос не видит"),
+            ];
+        }
+
+        var checks = new List<Check>();
+
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+
+            if (client.ConnectAsync(server, 443).Wait(TimeSpan.FromSeconds(4)))
+            {
+                checks.Add(new Check(Level.Ok, $"{server} отвечает по 443 (DoH напрямую)"));
+            }
+            else
+            {
+                checks.Add(new Check(Level.Problem,
+                    $"{server} не отвечает по 443 — возможно, оператор перекрыл DoH"));
+                checks.Add(new Check(Level.Warning,
+                    "лечится так: DnsThroughTunnel = true в config/netzapret.json, " +
+                    "тогда имена будут разрешаться внутри туннеля"));
+            }
+        }
+        catch (Exception ex)
+        {
+            checks.Add(new Check(Level.Problem, $"{server}: {ex.GetBaseException().Message}"));
         }
 
         return checks;

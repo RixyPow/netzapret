@@ -62,6 +62,31 @@ public sealed class SingBoxOptions
 
     public string DnsServerType { get; init; } = "https";
 
+    /// <summary>
+    /// Разрешать имена через туннель, а не напрямую.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ответ на блокировку DoH и DoT у российских операторов: запрос,
+    /// уходящий внутри туннеля, для провайдера неотличим от прочего трафика,
+    /// и перекрыть его отдельно нельзя.
+    /// </para>
+    /// <para>
+    /// По умолчанию выключено, и намеренно. Включённое, оно ставит разрешение
+    /// имён в зависимость от туннеля: пока тот не поднялся или лёг, не
+    /// открывается вообще ничего, включая то, что прекрасно работало
+    /// на десинке. Это хуже исходной беды, поэтому включать стоит тогда,
+    /// когда прямой DoH уже перестал отвечать, а не заранее.
+    /// </para>
+    /// <para>
+    /// При включении добавляется отдельный резолвер <c>bootstrap</c> для имён
+    /// самих серверов подписки — иначе получается замкнутый круг: чтобы
+    /// разрешить имя сервера, нужен туннель, а чтобы поднять туннель, нужно
+    /// разрешить имя.
+    /// </para>
+    /// </remarks>
+    public bool DnsThroughTunnel { get; init; }
+
     /// <summary>Тег селектора, к которому обращаются правила с <c>server: auto</c>.</summary>
     public string SelectorTag { get; init; } = "auto";
 
@@ -126,6 +151,25 @@ public sealed class SingBoxOptions
     /// <c>route_exclude_address</c>. Источник — файлы <c>--ipset</c> пресета.
     /// </summary>
     public IReadOnlyList<string> DesyncAddresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Адреса, прибитые в hosts к доменам с правилом <c>mode: proxy</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Заводятся в туннель <b>и</b> получают правило на прокси —둘 вместе,
+    /// одним полем, потому что порознь получается хуже, чем ничего.
+    /// </para>
+    /// <para>
+    /// Так и вышло в первой редакции: адрес заводился в перехват, правила
+    /// ему не доставалось, и он уходил в <c>direct</c> по умолчанию. То есть
+    /// трафик входил в туннель и выходил из него переоткрытым сокетом —
+    /// до VPN не доезжал, а десинк ломался, потому что WinDivert видел уже
+    /// не исходный поток приложения. Canva в логе давала на этом сотни
+    /// оборванных соединений подряд.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> PinnedProxyAddresses { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Дополнительные префиксы для перехвата: развёрнутая секция <c>capture</c>
@@ -215,7 +259,7 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
-            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet)),
+            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet), tags.Count > 0),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options),
             ["route"] = BuildRoute(ruleSet, tags, options),
@@ -248,6 +292,9 @@ public sealed class SingBoxConfigCompiler
 
     /// <summary>Тег автоподбора по задержке; спрятан за селектором.</summary>
     private const string LatencyTag = "auto-latency";
+
+    /// <summary>Резолвер для имён самих серверов подписки, всегда в обход туннеля.</summary>
+    private const string BootstrapTag = "bootstrap";
 
     public string CompileProbeConfig(ProxyServer server, int listenPort, string? logPath, string logLevel = "debug")
     {
@@ -437,26 +484,53 @@ public sealed class SingBoxConfigCompiler
             .ToList();
     }
 
-    private static JsonObject BuildDns(SingBoxOptions options, IReadOnlyList<string> proxyDomains)
+    private static JsonObject BuildDns(
+        SingBoxOptions options,
+        IReadOnlyList<string> proxyDomains,
+        bool haveServers)
     {
+        var remote = new JsonObject
+        {
+            ["tag"] = "remote",
+            ["type"] = options.DnsServerType,
+            ["server"] = options.DnsServer,
+        };
+
+        // Через туннель — только если ему есть куда вести. Иначе detour
+        // указывал бы на селектор без единого сервера, и разрешение имён
+        // умерло бы целиком.
+        bool throughTunnel = options.DnsThroughTunnel && haveServers;
+
+        if (throughTunnel)
+            remote["detour"] = options.SelectorTag;
+
+        var servers = new JsonArray
+        {
+            remote,
+            new JsonObject
+            {
+                ["tag"] = "fake",
+                ["type"] = "fakeip",
+                ["inet4_range"] = options.FakeIpV4Range,
+                ["inet6_range"] = options.FakeIpV6Range,
+            },
+        };
+
+        if (throughTunnel)
+        {
+            // Имена самих серверов подписки разрешаются в обход туннеля,
+            // иначе замкнутый круг: чтобы поднять туннель, нужно разрешить
+            // имя сервера, а чтобы разрешить — уже иметь туннель.
+            servers.Add(new JsonObject
+            {
+                ["tag"] = BootstrapTag,
+                ["type"] = "local",
+            });
+        }
+
         var dns = new JsonObject
         {
-            ["servers"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["tag"] = "remote",
-                    ["type"] = options.DnsServerType,
-                    ["server"] = options.DnsServer,
-                },
-                new JsonObject
-                {
-                    ["tag"] = "fake",
-                    ["type"] = "fakeip",
-                    ["inet4_range"] = options.FakeIpV4Range,
-                    ["inet6_range"] = options.FakeIpV6Range,
-                },
-            },
+            ["servers"] = servers,
             ["independent_cache"] = true,
         };
 
@@ -557,6 +631,12 @@ public sealed class SingBoxConfigCompiler
             // по голым адресам без DNS. Без них правило по процессу для такого
             // приложения не сработает — его трафик просто не дойдёт до туннеля.
             foreach (var cidr in options.CaptureAddresses)
+                captured.Add(cidr);
+
+            // Прибитые в hosts адреса проксируемых доменов. Правило на прокси
+            // для них добавляется в BuildRoute — заводить сюда без правила
+            // означает отправить их в direct переоткрытым сокетом.
+            foreach (var cidr in options.PinnedProxyAddresses)
                 captured.Add(cidr);
 
             tun["route_address"] = captured;
@@ -838,6 +918,22 @@ public sealed class SingBoxConfigCompiler
             _ => Array.Empty<RoutingRule>(),
         };
 
+        // Раньше пользовательских правил: адрес прибит в hosts именно потому,
+        // что домен иначе не разрешается, и общее правило по подсети не должно
+        // перехватить его первым.
+        if (options.PinnedProxyAddresses.Count > 0 && ruleSet.Operating != OperatingMode.Off)
+        {
+            var pinned = new JsonArray();
+            foreach (var cidr in options.PinnedProxyAddresses)
+                pinned.Add(cidr);
+
+            rules.Add(new JsonObject
+            {
+                ["ip_cidr"] = pinned,
+                ["outbound"] = haveServers ? options.SelectorTag : "direct",
+            });
+        }
+
         foreach (var rule in applicable)
         {
             var node = BuildRule(rule, tags, options, haveServers);
@@ -850,8 +946,16 @@ public sealed class SingBoxConfigCompiler
             ["rules"] = rules,
             ["final"] = ResolveFinal(ruleSet, options, haveServers),
             ["auto_detect_interface"] = true,
+
             // Обязателен начиная с sing-box 1.12: без него запуск падает.
-            ["default_domain_resolver"] = new JsonObject { ["server"] = "remote" },
+            //
+            // Когда remote ходит через туннель, разрешать по нему имена самих
+            // серверов подписки нельзя — они нужны, чтобы туннель поднялся.
+            // Для этого и заведён bootstrap.
+            ["default_domain_resolver"] = new JsonObject
+            {
+                ["server"] = options.DnsThroughTunnel && haveServers ? BootstrapTag : "remote",
+            },
         };
     }
 

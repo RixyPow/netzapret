@@ -154,6 +154,140 @@ public class SingBoxConfigCompilerTests
         Assert.DoesNotContain(Rules(root), r => r.TryGetProperty("domain_suffix", out _));
     }
 
+    private static JsonElement CompileWith(string yaml, SingBoxOptions options)
+    {
+        var engine = RuleSetLoader.Load(yaml);
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], options);
+
+        return JsonDocument.Parse(result.Json).RootElement.Clone();
+    }
+
+    private static JsonElement DnsServer(JsonElement root, string tag) =>
+        root.GetProperty("dns").GetProperty("servers").EnumerateArray()
+            .Single(s => s.GetProperty("tag").GetString() == tag);
+
+    [Fact]
+    public void APinnedAddressGetsBothCaptureAndARule()
+    {
+        // Порознь получается хуже, чем ничего: адрес заводится в туннель,
+        // правила ему не достаётся, и он уходит в direct переоткрытым сокетом.
+        // До VPN не доезжает, а десинк ломается — WinDivert видит уже не поток
+        // приложения. Canva давала на этом сотни оборванных соединений.
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            PinnedProxyAddresses = ["72.56.93.144/32"],
+        });
+
+        Assert.Contains("72.56.93.144/32",
+            root.GetProperty("inbounds")[0].GetProperty("route_address")
+                .EnumerateArray().Select(e => e.GetString()));
+
+        var rule = Rules(root).Single(r =>
+            r.TryGetProperty("ip_cidr", out var c) &&
+            c.EnumerateArray().Any(e => e.GetString() == "72.56.93.144/32"));
+
+        Assert.Equal("auto", rule.GetProperty("outbound").GetString());
+    }
+
+    [Fact]
+    public void APinnedAddressIsRoutedBeforeBroaderRules()
+    {
+        // Адрес прибит в hosts именно потому, что домен иначе не разрешается.
+        // Общее правило по подсети не должно перехватить его первым.
+        var root = CompileWith("""
+            mode: selective
+            rules:
+              - match: ip
+                value: "72.0.0.0/8"
+                mode: direct
+              - match: domain
+                value: "*.canva.com"
+                mode: proxy
+            """, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            PinnedProxyAddresses = ["72.56.93.144/32"],
+        });
+
+        var all = Rules(root).ToArray();
+
+        int pinnedAt = Array.FindIndex(all, r =>
+            r.TryGetProperty("ip_cidr", out var c) &&
+            c.EnumerateArray().Any(e => e.GetString() == "72.56.93.144/32"));
+
+        int broadAt = Array.FindIndex(all, r =>
+            r.TryGetProperty("ip_cidr", out var c) &&
+            c.EnumerateArray().Any(e => e.GetString() == "72.0.0.0/8"));
+
+        Assert.True(pinnedAt >= 0 && broadAt >= 0);
+        Assert.True(pinnedAt < broadAt, "прибитый адрес должен проверяться раньше общего правила");
+    }
+
+    [Fact]
+    public void ByDefaultNamesAreResolvedDirectly()
+    {
+        // Разрешение имён не должно зависеть от туннеля: пока тот не поднялся,
+        // иначе не открывается ничего, включая работающее на десинке.
+        var root = CompileProxyOnly(ProxyOnlyRules, "8.8.8.8/32");
+
+        Assert.False(DnsServer(root, "remote").TryGetProperty("detour", out _));
+        Assert.Equal("remote",
+            root.GetProperty("route").GetProperty("default_domain_resolver").GetProperty("server").GetString());
+    }
+
+    [Fact]
+    public void ThroughTunnelTheResolverIsHiddenFromTheOperator()
+    {
+        // Ответ на блокировку DoH у операторов: запрос внутри туннеля
+        // неотличим от прочего трафика.
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsThroughTunnel = true,
+        });
+
+        Assert.Equal("auto", DnsServer(root, "remote").GetProperty("detour").GetString());
+    }
+
+    [Fact]
+    public void ThroughTunnelSubscriptionHostnamesStillResolveOutsideIt()
+    {
+        // Иначе замкнутый круг: чтобы поднять туннель, нужно разрешить имя
+        // сервера, а чтобы разрешить — уже иметь туннель.
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsThroughTunnel = true,
+        });
+
+        Assert.Equal("bootstrap",
+            root.GetProperty("route").GetProperty("default_domain_resolver").GetProperty("server").GetString());
+        Assert.Equal("local", DnsServer(root, "bootstrap").GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void WithoutServersTheTunnelDetourIsNotUsed()
+    {
+        // Detour на селектор без единого сервера убил бы разрешение имён
+        // целиком — а это состояние наступает при пустой подписке.
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, [], new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsThroughTunnel = true,
+        });
+
+        var root = JsonDocument.Parse(result.Json).RootElement;
+
+        Assert.False(DnsServer(root, "remote").TryGetProperty("detour", out _));
+    }
+
     [Fact]
     public void TunMtuIsSetAndFitsAnOrdinaryPath()
     {
