@@ -15,6 +15,8 @@ internal static class Program
         // об ошибке, окно моргало и закрывалось, а запускать полагалось
         // соседний .cmd — то есть из двух файлов рядом правильным был
         // менее очевидный.
+        MoveToConfigDirectory();
+
         if (args.Length == 0)
             return await StartMenuAsync();
 
@@ -99,6 +101,53 @@ internal static class Program
             "help" or "--help" or "-h" => PrintUsage(0),
             _ => PrintUnknown(cmd.Command),
         };
+    }
+
+    /// <summary>
+    /// Переходит в каталог, где лежит <c>config/</c>, если его нет в текущем.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пути к правилам, настройкам и <c>runtime/</c> заданы относительно
+    /// рабочего каталога. При запуске из проводника им становится папка
+    /// с программой, и в рабочей копии это не то место: там программа лежит
+    /// в <c>build\</c>, а <c>config\</c> — уровнем выше. Меню открывалось
+    /// с пустыми настройками, будто его запустили впервые.
+    /// </para>
+    /// <para>
+    /// Поиск вверх покрывает обе раскладки: в дистрибутиве <c>config\</c>
+    /// лежит рядом с программой, в рабочей копии — на уровень выше.
+    /// </para>
+    /// <para>
+    /// Только если в текущем каталоге его нет: запуск из своего каталога
+    /// со своим набором правил — законный случай, и уводить из него нельзя.
+    /// </para>
+    /// </remarks>
+    private static void MoveToConfigDirectory()
+    {
+        try
+        {
+            if (Directory.Exists("config"))
+                return;
+
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+            while (directory is not null)
+            {
+                if (Directory.Exists(Path.Combine(directory.FullName, "config")))
+                {
+                    Directory.SetCurrentDirectory(directory.FullName);
+                    return;
+                }
+
+                directory = directory.Parent;
+            }
+        }
+        catch (Exception)
+        {
+            // Не вышло — остаёмся где были: команда сама скажет,
+            // чего ей не хватает.
+        }
     }
 
     /// <summary>
