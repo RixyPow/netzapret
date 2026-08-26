@@ -137,10 +137,27 @@ internal static class MenuCommand
         }
     }
 
+    /// <summary>
+    /// Версия для заголовка меню.
+    /// </summary>
+    /// <remarks>
+    /// Три числа вместо четырёх: последнее всегда ноль и в разговоре о версии
+    /// только мешает. Нужна на виду, потому что вопрос «а какая у тебя стоит»
+    /// возникает при первом же разборе неисправности.
+    /// </remarks>
+    private static string Version
+    {
+        get
+        {
+            var v = typeof(MenuCommand).Assembly.GetName().Version;
+            return v is null ? string.Empty : $"{v.Major}.{v.Minor}.{v.Build}";
+        }
+    }
+
     private static void Draw(AppSettings settings)
     {
         ClearScreen();
-        Console.WriteLine("NetZapret");
+        Console.WriteLine($"NetZapret {Version}");
         Console.WriteLine(new string('=', 62));
 
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
@@ -167,10 +184,13 @@ internal static class MenuCommand
         Console.WriteLine($"  4. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
         Console.WriteLine($"  5. Маршруты приложений ... {DescribeRoutes()}");
         Console.WriteLine();
-        Console.WriteLine("  6. Собрать конфиг");
-        Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить (конфиг соберётся сам)");
-        Console.WriteLine("  8. Обзор состояния");
-        Console.WriteLine("  9. Журнал супервизора");
+        // Отдельного «собрать конфиг» здесь нет намеренно: он собирается при
+        // каждом запуске, а сам по себе ничего не применяет — действует только
+        // перезапуск. Пункт предлагал мнимое действие и создавал впечатление
+        // обязательного шага, который на деле выполняется сам.
+        Console.WriteLine(running ? "  6. Остановить" : "  6. Запустить");
+        Console.WriteLine("  7. Обзор состояния");
+        Console.WriteLine("  8. Журнал супервизора");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -210,15 +230,12 @@ internal static class MenuCommand
                 EditRoutes(settings);
                 return settings;
             case "6":
-                await BuildConfigAsync(settings, cancellationToken);
-                return settings;
-            case "7":
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
-            case "8":
+            case "7":
                 RunDoctor(settings);
                 return settings;
-            case "9":
+            case "8":
                 ShowSupervisorLog();
                 return settings;
             default:

@@ -142,6 +142,21 @@ internal static class DoctorCommand
             checks.Add(new Check(Level.Warning, $"пресеты не читаются: {ex.GetBaseException().Message}"));
         }
 
+        // Выбранный пресет мог исчезнуть: в сборку входит не всё, что было
+        // в установке, а настройки переживают обновление. Без этой проверки
+        // супервизор поднимется без десинка, сказав об этом только в журнал,
+        // и со стороны это выглядит как «работает, но сайты не открываются».
+        var chosen = AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath)).PresetName;
+
+        if (chosen is not null)
+        {
+            checks.Add(paths.FindPreset(chosen) is not null
+                ? new Check(Level.Ok, $"выбран пресет: {chosen}")
+                : new Check(Level.Problem,
+                    $"выбранного пресета '{chosen}' здесь нет — десинк не запустится. " +
+                    "Выберите другой в меню."));
+        }
+
         return checks;
     }
 

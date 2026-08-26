@@ -63,12 +63,49 @@ internal sealed class CommandLine
         return result;
     }
 
-    public bool Has(string key) => _values.ContainsKey(key);
+    private readonly HashSet<string> _read = new(StringComparer.OrdinalIgnoreCase);
 
-    public string? Value(string key) => _values.GetValueOrDefault(key);
+    public bool Has(string key)
+    {
+        _read.Add(key);
+        return _values.ContainsKey(key);
+    }
 
-    public string Value(string key, string fallback) => _values.GetValueOrDefault(key) ?? fallback;
+    public string? Value(string key)
+    {
+        _read.Add(key);
+        return _values.GetValueOrDefault(key);
+    }
 
-    public int Int(string key, int fallback) =>
-        int.TryParse(_values.GetValueOrDefault(key), out var value) ? value : fallback;
+    public string Value(string key, string fallback)
+    {
+        _read.Add(key);
+        return _values.GetValueOrDefault(key) ?? fallback;
+    }
+
+    public int Int(string key, int fallback)
+    {
+        _read.Add(key);
+        return int.TryParse(_values.GetValueOrDefault(key), out var value) ? value : fallback;
+    }
+
+    /// <summary>
+    /// Переданные опции, которых команда не спрашивала.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Неизвестная опция раньше молча отбрасывалась, и команда делала не то,
+    /// о чём её просили, ничем этого не выдавая. На <c>preset --name</c>
+    /// вместо <c>--preset</c> попался автор этих строк: команда невозмутимо
+    /// вывалила весь список вместо запрошенного пресета, и время ушло
+    /// на поиск несуществующей неисправности.
+    /// </para>
+    /// <para>
+    /// Учитываются прочитанные ключи, а не перечень допустимых для каждой
+    /// команды: такой перечень пришлось бы держать в двух местах и однажды
+    /// забыть обновить.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> UnusedOptions() =>
+        _values.Keys.Where(k => !_read.Contains(k)).OrderBy(k => k, StringComparer.Ordinal).ToList();
 }

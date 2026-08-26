@@ -29,27 +29,10 @@ internal static class Program
 
         try
         {
-            return cmd.Command switch
-            {
-                "watch" => await WatchCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
-                "rules" => RulesCommand.Run(cmd, DefaultConfigPath),
-                "test" => TestCommand.Run(cmd, DefaultConfigPath),
-                "where" => WhereCommand.Run(cmd, DefaultConfigPath),
-                "route" => RouteCommand.Run(cmd),
-                "sub" => await SubCommand.RunAsync(cmd, cts.Token),
-                "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
-                "preset" => PresetCommand.Run(cmd),
-                "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
-                "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
-                "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
-                "status" => SupervisorCommands.Status(cmd),
-                "doctor" => DoctorCommand.Run(cmd),
-                "clean" => CleanCommand.Run(cmd),
-                "autostart" => AutostartCommand.Run(cmd),
-                "menu" => await RunMenuAsync(cmd, cts.Token),
-                "help" or "--help" or "-h" => PrintUsage(0),
-                _ => PrintUnknown(cmd.Command),
-            };
+            var code = await DispatchAsync(cmd, cts.Token);
+
+            WarnAboutUnusedOptions(cmd);
+            return code;
         }
         catch (RuleConfigurationException ex)
         {
@@ -65,6 +48,57 @@ internal static class Program
         {
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Сообщает об опциях, которых команда не спрашивала.
+    /// </summary>
+    /// <remarks>
+    /// Молча отброшенная опция означает, что команда сделала не то, о чём
+    /// её просили, ничем этого не выдав. Предупреждение, а не отказ: команда
+    /// уже отработала, и обрывать её из-за опечатки в необязательном ключе
+    /// было бы хуже самой опечатки.
+    /// </remarks>
+    private static void WarnAboutUnusedOptions(CommandLine cmd)
+    {
+        var unused = cmd.UnusedOptions();
+
+        if (unused.Count == 0)
+            return;
+
+        Console.Error.WriteLine();
+
+        foreach (var key in unused)
+            Console.Error.WriteLine($"Внимание: команда '{cmd.Command}' не знает опции --{key} и не учла её.");
+
+        Console.Error.WriteLine($"Что она понимает: netzapret help");
+    }
+
+    private static async Task<int> DispatchAsync(CommandLine cmd, CancellationToken token)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
+
+        return cmd.Command switch
+        {
+                "watch" => await WatchCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
+                "rules" => RulesCommand.Run(cmd, DefaultConfigPath),
+                "test" => TestCommand.Run(cmd, DefaultConfigPath),
+                "where" => WhereCommand.Run(cmd, DefaultConfigPath),
+                "route" => RouteCommand.Run(cmd),
+                "sub" => await SubCommand.RunAsync(cmd, cts.Token),
+                "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
+                "preset" => PresetCommand.Run(cmd),
+                "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
+                "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
+                "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
+                "status" => SupervisorCommands.Status(cmd),
+                "doctor" => DoctorCommand.Run(cmd),
+                "clean" => CleanCommand.Run(cmd),
+                "autostart" => AutostartCommand.Run(cmd),
+            "menu" => await RunMenuAsync(cmd, cts.Token),
+            "help" or "--help" or "-h" => PrintUsage(0),
+            _ => PrintUnknown(cmd.Command),
+        };
     }
 
     /// <summary>
