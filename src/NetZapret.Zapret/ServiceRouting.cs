@@ -63,9 +63,15 @@ public static class ServiceRouting
 
         foreach (var part in service.Parts)
         {
-            var domains = HostListReader.Read(part.List, zapretRoot, out _);
+            // Адресные части спрашиваются по адресу, доменные — по домену.
+            // Спросить не тем способом значит получить ответ про другой
+            // трафик: Telegram показывался идущим через десинк, потому что
+            // его правило работает по подсетям, а спрашивали мы про домен.
+            var entries = part.ByAddress
+                ? AddressListReader.Expand([part.List], zapretRoot, out _)
+                : HostListReader.Read(part.List, zapretRoot, out _);
 
-            if (domains.Count == 0)
+            if (entries.Count == 0)
             {
                 result.Add(new PartStatus
                 {
@@ -78,20 +84,47 @@ public static class ServiceRouting
                 continue;
             }
 
+            var kind = part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
+
             bool set = userRules.Entries.Any(e =>
-                e.Match == MatchKind.HostList && e.Enabled && e.Matches(part.List));
+                e.Match == kind && e.Enabled && e.Matches(part.List));
 
             result.Add(new PartStatus
             {
                 Part = part,
-                Mode = ModeFor(domains[0], engine),
-                DomainCount = domains.Count,
+                Mode = part.ByAddress ? ModeForAddress(entries[0], engine) : ModeFor(entries[0], engine),
+                DomainCount = entries.Count,
                 Explicit = set,
-                Example = domains[0],
+                Example = entries[0],
             });
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Куда движок отправит соединение на этот адрес.
+    /// </summary>
+    /// <remarks>
+    /// Имя не подставляется по той же причине, по которой не подставляется
+    /// адрес в <see cref="ModeFor"/>: выдуманное значение попадает в чужие
+    /// правила и уводит ответ.
+    /// </remarks>
+    private static RoutingMode ModeForAddress(string cidr, RuleEngine engine)
+    {
+        var text = cidr.Split('/')[0].Trim();
+
+        if (!IPAddress.TryParse(text, out var address))
+            return RoutingMode.Direct;
+
+        return engine.Evaluate(new ConnectionEvent
+        {
+            Timestamp = DateTimeOffset.Now,
+            Protocol = ProtocolKind.Tcp,
+            RemoteAddress = address,
+            RemotePort = 443,
+            Hostname = null,
+        }).Mode;
     }
 
     /// <summary>

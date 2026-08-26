@@ -698,8 +698,10 @@ internal static class MenuCommand
                 // именно можно вернуть к заводскому, а что и так заводское.
                 var mark = p.Explicit ? "  <- ваш выбор" : string.Empty;
 
+                var unit = p.Part.ByAddress ? "подс." : "дом.";
+
                 Console.WriteLine(
-                    $"  {i + 1}. {p.Part.Name,-24} {p.DescribeMode(),-10} {p.DomainCount,3} дом.{mark}");
+                    $"  {i + 1}. {p.Part.Name,-26} {p.DescribeMode(),-10} {p.DomainCount,4} {unit}{mark}");
 
                 Console.ForegroundColor = previous;
 
@@ -738,7 +740,9 @@ internal static class MenuCommand
     {
         Console.WriteLine();
         Console.WriteLine($"  {part.Part.Name}: сейчас {part.DescribeMode()}");
-        Console.WriteLine($"  Список: {part.Part.List} ({part.DomainCount} доменов, например {part.Example})");
+        Console.WriteLine(part.Part.ByAddress
+            ? $"  Список: {part.Part.List} ({part.DomainCount} подсетей, например {part.Example})"
+            : $"  Список: {part.Part.List} ({part.DomainCount} доменов, например {part.Example})");
         Console.WriteLine();
         Console.WriteLine("  1. Напрямую");
         Console.WriteLine("  2. Десинк");
@@ -750,19 +754,24 @@ internal static class MenuCommand
         var choice = Console.ReadLine()?.Trim();
         var file = UserRulesFile.Load();
 
+        // Правило пишется того же вида, каким часть задана: адресная часть
+        // доменным правилом не направляется — оно попросту не совпадёт
+        // с трафиком, который ходит мимо DNS.
+        var kind = part.Part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
+
         switch (choice)
         {
             case "1":
-                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Direct);
+                file.Set(kind, part.Part.List, RoutingMode.Direct);
                 break;
             case "2":
-                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Desync);
+                file.Set(kind, part.Part.List, RoutingMode.Desync);
                 break;
             case "3":
-                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Proxy);
+                file.Set(kind, part.Part.List, RoutingMode.Proxy);
                 break;
             case "4":
-                file.Remove(MatchKind.HostList, part.Part.List);
+                file.Remove(kind, part.Part.List);
                 break;
             default:
                 return;

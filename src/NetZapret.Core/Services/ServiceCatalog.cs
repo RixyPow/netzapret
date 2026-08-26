@@ -9,14 +9,32 @@ public sealed record ServicePart
     public required string Name { get; init; }
 
     /// <summary>
-    /// Список Zapret, задающий состав части — например <c>lists/discord-media.txt</c>.
+    /// Список Zapret, задающий состав части.
     /// </summary>
     /// <remarks>
-    /// Ссылка на файл, а не выписанные домены. Списки ведёт проект Zapret
-    /// и обновляет вместе с собой; выписанная копия устареет молча, и мы
+    /// <para>
+    /// Ссылка на файл, а не выписанные домены или подсети. Списки ведёт проект
+    /// Zapret и обновляет вместе с собой; выписанная копия устареет молча, и мы
     /// узнаем об этом, когда у кого-нибудь перестанет работать голос.
+    /// </para>
+    /// <para>
+    /// Доменный (<c>lists/discord-media.txt</c>) либо адресный
+    /// (<c>lists/ipset-telegram.txt</c>) — см. <see cref="ByAddress"/>.
+    /// </para>
     /// </remarks>
     public required string List { get; init; }
+
+    /// <summary>
+    /// Часть задана подсетями, а не доменами.
+    /// </summary>
+    /// <remarks>
+    /// Так устроен Telegram: у него в пресете вообще нет доменной секции —
+    /// клиент ходит по адресам, не спрашивая DNS. Различать это обязательно,
+    /// иначе показ врёт: спросив про домен там, где правило работает
+    /// по адресу, мы получим ответ про совсем другой трафик. Именно так
+    /// Telegram и показывался идущим через десинк, хотя шёл через VPN.
+    /// </remarks>
+    public bool ByAddress { get; init; }
 
     /// <summary>Пояснение, зачем эту часть трогать.</summary>
     public string? Note { get; init; }
@@ -79,6 +97,13 @@ public static class ServiceCatalog
                     Name = "Обновления",
                     List = "lists/discord-updates.txt",
                 },
+                new ServicePart
+                {
+                    Name = "Запасной путь по адресам",
+                    List = "lists/ipset-discord.txt",
+                    ByAddress = true,
+                    Note = "3,4 млн адресов, среди них куски Google Cloud и Amazon — включать в крайнем случае",
+                },
             ],
         },
 
@@ -104,6 +129,12 @@ public static class ServiceCatalog
                     Name = "Превью",
                     List = "lists/i-ytimg.txt",
                 },
+                new ServicePart
+                {
+                    Name = "QUIC по адресам",
+                    List = "lists/ipset-youtube.txt",
+                    ByAddress = true,
+                },
             ],
         },
 
@@ -114,9 +145,15 @@ public static class ServiceCatalog
             [
                 new ServicePart
                 {
-                    Name = "Всё",
+                    Name = "Приложение",
+                    List = "lists/ipset-telegram.txt",
+                    ByAddress = true,
+                    Note = "клиент ходит по адресам, не спрашивая DNS — поэтому подсети, а не домены",
+                },
+                new ServicePart
+                {
+                    Name = "Сайт и веб-версия",
                     List = "lists/telegram.txt",
-                    Note = "клиент ходит и по голым адресам — см. секцию capture",
                 },
             ],
         },
@@ -222,6 +259,12 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "Twitter / X", List = "lists/twitter.txt" },
+                new ServicePart
+                {
+                    Name = "Twitter / X по адресам",
+                    List = "lists/ipset-twitter.txt",
+                    ByAddress = true,
+                },
                 new ServicePart { Name = "LinkedIn", List = "lists/linkedin.txt" },
             ],
         },

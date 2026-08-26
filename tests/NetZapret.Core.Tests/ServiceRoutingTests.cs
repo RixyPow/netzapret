@@ -147,6 +147,65 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     [Fact]
+    public void AnAddressBasedPartIsAskedAboutByAddress()
+    {
+        // Так устроен Telegram: доменной секции у него нет вовсе, клиент ходит
+        // по адресам мимо DNS. Спросив про домен, мы получали ответ про другой
+        // трафик — и приложение показывалось идущим через десинк, хотя шло
+        // через VPN.
+        File.WriteAllLines(Path.Combine(_root, "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
+        Write("telegram.txt", "telegram.org");
+
+        var engine = Load("""
+            mode: selective
+            rules:
+              - match: ipset
+                value: "lists/ipset-telegram.txt"
+                mode: proxy
+            default:
+              mode: desync
+            """);
+
+        var telegram = new ServiceDefinition
+        {
+            Name = "Telegram",
+            Parts =
+            [
+                new ServicePart { Name = "Приложение", List = "lists/ipset-telegram.txt", ByAddress = true },
+                new ServicePart { Name = "Сайт", List = "lists/telegram.txt" },
+            ],
+        };
+
+        var parts = ServiceRouting.Describe(telegram, engine, _root, EmptyUserRules());
+
+        Assert.Equal(RoutingMode.Proxy, parts[0].Mode);
+        Assert.Equal(RoutingMode.Desync, parts[1].Mode);
+    }
+
+    [Fact]
+    public void AnAddressPartRemembersItsOwnChoice()
+    {
+        // Правило пишется того же вида, каким часть задана; пометка «ваш выбор»
+        // должна узнавать именно его, а не искать доменное.
+        File.WriteAllLines(Path.Combine(_root, "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
+
+        var users = Path.Combine(_root, "rules.user.yaml");
+        var file = UserRulesFile.Load(users);
+        file.Set(MatchKind.IpSet, "lists/ipset-telegram.txt", RoutingMode.Proxy);
+        file.Save();
+
+        var service = new ServiceDefinition
+        {
+            Name = "Telegram",
+            Parts = [new ServicePart { Name = "Приложение", List = "lists/ipset-telegram.txt", ByAddress = true }],
+        };
+
+        var parts = ServiceRouting.Describe(service, Load("mode: selective"), _root, UserRulesFile.Load(users));
+
+        Assert.True(parts[0].Explicit);
+    }
+
+    [Fact]
     public void WhenEverythingAgreesTheSummaryIsShort()
     {
         var engine = Load("""
