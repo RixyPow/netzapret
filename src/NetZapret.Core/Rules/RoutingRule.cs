@@ -58,6 +58,18 @@ public sealed class RoutingRule
     public IReadOnlyList<string> IpSetCidrs { get; private set; } = Array.Empty<string>();
 
     /// <summary>
+    /// Домены, загруженные из файла для <see cref="MatchKind.HostList"/>.
+    /// </summary>
+    /// <remarks>
+    /// Как и подсети выше, пусто до вызова <see cref="LoadHostList"/>:
+    /// путь разрешается относительно корня Zapret, о котором модель правил
+    /// не знает.
+    /// </remarks>
+    public IReadOnlyList<string> HostListDomains { get; private set; } = Array.Empty<string>();
+
+    private IReadOnlyList<GlobMatcher>? _hostGlobs;
+
+    /// <summary>
     /// Готовит правило к использованию и валидирует <see cref="Value"/>.
     /// Бросает <see cref="RuleConfigurationException"/> на неразбираемом значении.
     /// </summary>
@@ -75,6 +87,7 @@ public sealed class RoutingRule
                 break;
 
             case MatchKind.IpSet:
+            case MatchKind.HostList:
                 // Путь к файлу проверяется при загрузке списка, а не здесь.
                 break;
 
@@ -145,6 +158,24 @@ public sealed class RoutingRule
                 return true;
             }
 
+            case MatchKind.HostList:
+            {
+                var host = connection.Hostname;
+                if (host is null || _hostGlobs is null)
+                    return false;
+
+                for (int i = 0; i < _hostGlobs.Count; i++)
+                {
+                    if (!_hostGlobs[i].IsMatch(host))
+                        continue;
+
+                    reason = $"domain {host} в списке {Value}";
+                    return true;
+                }
+
+                return false;
+            }
+
             case MatchKind.IpSet:
             {
                 var addr = connection.RemoteAddress;
@@ -178,6 +209,27 @@ public sealed class RoutingRule
 
         IpSetCidrs = cidrs;
         _cidrSet = cidrs.Select(IpCidrRange.Parse).ToList();
+    }
+
+    /// <summary>
+    /// Загружает домены для правила по списку.
+    /// </summary>
+    /// <remarks>
+    /// Каждое имя из списка Zapret считается зоной: там пишут <c>discord.media</c>,
+    /// подразумевая и его поддомены — голосовые серверы называются
+    /// <c>russia1234.discord.media</c>. Толковать записи буквально значило бы
+    /// не поймать ровно то, ради чего список и нужен.
+    /// </remarks>
+    public void LoadHostList(IReadOnlyList<string> domains)
+    {
+        if (Match != MatchKind.HostList)
+            throw new InvalidOperationException($"Правило #{Ordinal} не ссылается на список доменов.");
+
+        HostListDomains = domains;
+
+        _hostGlobs = domains
+            .Select(d => GlobMatcher.Compile(d.StartsWith("*.", StringComparison.Ordinal) ? d : "*." + d))
+            .ToList();
     }
 
     public override string ToString() => $"#{Ordinal} {Match.ToString().ToLowerInvariant()}:{Value} -> {Mode.ToString().ToLowerInvariant()}";

@@ -32,6 +32,19 @@ public static class RuleSetExpander
             rule.LoadIpSet(cidrs);
         }
 
+        foreach (var rule in ruleSet.Rules.Where(r => r.Match == MatchKind.HostList))
+        {
+            var domains = HostListReader.Read(rule.Value, zapretRoot, out var listProblems);
+
+            if (listProblems.Count > 0)
+            {
+                problems.AddRange(listProblems.Select(p => $"правило #{rule.Ordinal}: {p}"));
+                continue;
+            }
+
+            rule.LoadHostList(domains);
+        }
+
         return problems;
     }
 }

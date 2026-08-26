@@ -3,6 +3,7 @@ using System.Security.Principal;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
+using NetZapret.Core.Services;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
@@ -182,7 +183,7 @@ internal static class MenuCommand
         Console.WriteLine($"  2. Пресет Zapret ......... {settings.DescribePreset()}");
         Console.WriteLine($"  3. VPN ................... {DescribeVpn(settings)}");
         Console.WriteLine($"  4. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
-        Console.WriteLine($"  5. Маршруты приложений ... {DescribeRoutes()}");
+        Console.WriteLine($"  5. Сервисы и маршруты .... {DescribeRoutes()}");
         Console.WriteLine();
         // Отдельного «собрать конфиг» здесь нет намеренно: он собирается при
         // каждом запуске, а сам по себе ничего не применяет — действует только
@@ -227,7 +228,7 @@ internal static class MenuCommand
                 ToggleAutostart(settings);
                 return settings;
             case "5":
-                EditRoutes(settings);
+                EditServices(settings);
                 return settings;
             case "6":
                 await ToggleRunAsync(settings, cancellationToken);
@@ -575,12 +576,208 @@ internal static class MenuCommand
     /// имя, видит путь с основанием и тут же может его сменить. Тип совпадения
     /// определяется по виду строки, чтобы не заставлять помнить ключи.
     /// </remarks>
+    /// <summary>
+    /// Список сервисов: Discord, YouTube и прочее, как о них думает человек.
+    /// </summary>
+    /// <remarks>
+    /// Плоский список доменов остаётся ниже отдельным пунктом: домен, добавленный
+    /// руками и не относящийся ни к одному сервису, не должен пропасть из виду.
+    /// </remarks>
+    private static void EditServices(AppSettings settings)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Сервисы и маршруты");
+            Console.WriteLine(new string('=', 62));
+
+            RuleEngine engine;
+            var zapretRoot = ZapretPaths.Discover()?.Root;
+            var userRules = UserRulesFile.Load();
+
+            try
+            {
+                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+                RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
+            }
+            catch (Exception ex)
+            {
+                Message($"Правила не читаются: {ex.GetBaseException().Message}", ConsoleColor.Red);
+                return;
+            }
+
+            var services = ServiceCatalog.All;
+            var previous = Console.ForegroundColor;
+
+            Console.WriteLine();
+
+            for (int i = 0; i < services.Count; i++)
+            {
+                var parts = ServiceRouting.Describe(services[i], engine, zapretRoot, userRules);
+                var summary = ServiceRouting.Summarize(parts);
+
+                Console.WriteLine($"  {i + 1,2}. {services[i].Name,-22} {summary}");
+            }
+
+            Console.ForegroundColor = previous;
+
+            Console.WriteLine();
+            Console.WriteLine("  Номер — открыть сервис и направить его части.");
+            Console.WriteLine("  д — свои домены и программы списком.");
+            Console.WriteLine("  Пусто — назад.");
+            Console.WriteLine();
+            Console.Write("> ");
+
+            var input = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
+                return;
+
+            if (string.Equals(input, "д", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(input, "d", StringComparison.OrdinalIgnoreCase))
+            {
+                EditRoutes(settings);
+                continue;
+            }
+
+            if (int.TryParse(input, out var index) && index >= 1 && index <= services.Count)
+                EditService(settings, services[index - 1], zapretRoot);
+        }
+    }
+
+    /// <summary>
+    /// Части одного сервиса и их направление.
+    /// </summary>
+    private static void EditService(AppSettings settings, ServiceDefinition service, string? zapretRoot)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine(service.Name);
+            Console.WriteLine(new string('=', 62));
+
+            RuleEngine engine;
+            var userRules = UserRulesFile.Load();
+
+            try
+            {
+                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+                RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
+            }
+            catch (Exception ex)
+            {
+                Message($"Правила не читаются: {ex.GetBaseException().Message}", ConsoleColor.Red);
+                return;
+            }
+
+            var parts = ServiceRouting.Describe(service, engine, zapretRoot, userRules);
+            var previous = Console.ForegroundColor;
+
+            Console.WriteLine();
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var p = parts[i];
+
+                if (p.DomainCount == 0)
+                {
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    Console.WriteLine($"  {i + 1}. {p.Part.Name,-24} список не найден");
+                    Console.ForegroundColor = previous;
+                    continue;
+                }
+
+                Console.ForegroundColor = p.Mode switch
+                {
+                    RoutingMode.Proxy => ConsoleColor.Cyan,
+                    RoutingMode.Desync => ConsoleColor.Green,
+                    _ => ConsoleColor.DarkGray,
+                };
+
+                // Пометка «ваш выбор» существенна: без неё непонятно, что
+                // именно можно вернуть к заводскому, а что и так заводское.
+                var mark = p.Explicit ? "  <- ваш выбор" : string.Empty;
+
+                Console.WriteLine(
+                    $"  {i + 1}. {p.Part.Name,-24} {p.DescribeMode(),-10} {p.DomainCount,3} дом.{mark}");
+
+                Console.ForegroundColor = previous;
+
+                if (p.Part.Note is { } note)
+                    Console.WriteLine($"     {note}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  Номер — изменить направление части.");
+            Console.WriteLine("  Пусто — назад.");
+            Console.WriteLine();
+            Console.Write("> ");
+
+            var input = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
+                return;
+
+            if (int.TryParse(input, out var index) && index >= 1 && index <= parts.Count)
+            {
+                if (parts[index - 1].DomainCount == 0)
+                {
+                    Message("Списка нет — направлять нечего.", ConsoleColor.Yellow);
+                    continue;
+                }
+
+                ChoosePartMode(parts[index - 1]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Куда направить часть сервиса.
+    /// </summary>
+    private static void ChoosePartMode(ServiceRouting.PartStatus part)
+    {
+        Console.WriteLine();
+        Console.WriteLine($"  {part.Part.Name}: сейчас {part.DescribeMode()}");
+        Console.WriteLine($"  Список: {part.Part.List} ({part.DomainCount} доменов, например {part.Example})");
+        Console.WriteLine();
+        Console.WriteLine("  1. Напрямую");
+        Console.WriteLine("  2. Десинк");
+        Console.WriteLine("  3. VPN");
+        Console.WriteLine("  4. Убрать свой выбор — вернуть как было");
+        Console.WriteLine("  0. Оставить как есть");
+        Console.Write("Выбор: ");
+
+        var choice = Console.ReadLine()?.Trim();
+        var file = UserRulesFile.Load();
+
+        switch (choice)
+        {
+            case "1":
+                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Direct);
+                break;
+            case "2":
+                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Desync);
+                break;
+            case "3":
+                file.Set(MatchKind.HostList, part.Part.List, RoutingMode.Proxy);
+                break;
+            case "4":
+                file.Remove(MatchKind.HostList, part.Part.List);
+                break;
+            default:
+                return;
+        }
+
+        file.Save();
+        Message("Записано. Применится при следующем запуске.", ConsoleColor.Green);
+    }
+
     private static void EditRoutes(AppSettings settings)
     {
         while (true)
         {
             ClearScreen();
-            Console.WriteLine("Маршруты приложений");
+            Console.WriteLine("Свои домены и программы");
             Console.WriteLine(new string('=', 62));
 
             var file = UserRulesFile.Load();

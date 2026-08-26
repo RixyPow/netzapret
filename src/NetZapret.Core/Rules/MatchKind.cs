@@ -36,6 +36,19 @@ public enum MatchKind
     /// ссылаться на них надёжнее, чем копировать сотни подсетей в свой конфиг.
     /// </remarks>
     IpSet = 3,
+
+    /// <summary>
+    /// Список доменов из файла — например <c>lists/discord-media.txt</c>.
+    /// </summary>
+    /// <remarks>
+    /// Приоритет тот же, что у <see cref="Domain"/>: это он и есть, только
+    /// заданный файлом. Нужен, чтобы говорить о сервисе целиком, не переписывая
+    /// его домены к себе: списки Zapret собраны и обновляются вместе с ним,
+    /// а копия устареет молча. На нём же держится вид по сервисам — «голос
+    /// Discord» это <c>lists/discord-media.txt</c>, а не горсть строк,
+    /// выписанных однажды и с тех пор не проверявшихся.
+    /// </remarks>
+    HostList = 4,
 }
 
 /// <summary>
@@ -46,7 +59,7 @@ public static class MatchKindPriority
     public static int Of(MatchKind kind) => kind switch
     {
         MatchKind.Process => 0,
-        MatchKind.Domain => 1,
+        MatchKind.Domain or MatchKind.HostList => 1,
         _ => 2,
     };
 }

@@ -464,9 +464,20 @@ public sealed class SingBoxConfigCompiler
         if (ruleSet.Operating != OperatingMode.Selective)
             return Array.Empty<string>();
 
-        return ruleSet.Rules
-            .Where(r => r.Mode == RoutingMode.Proxy && r.Match == MatchKind.Domain)
-            .Select(r => r.Value.StartsWith("*.", StringComparison.Ordinal) ? r.Value[2..] : r.Value)
+        var proxied = ruleSet.Rules.Where(r => r.Mode == RoutingMode.Proxy);
+
+        // Домены из правил по одному имени и из списков — вперемешку: для
+        // fakeip разницы нет, а для человека список это тот же набор доменов,
+        // только записанный одной строкой.
+        var domains = proxied
+            .Where(r => r.Match == MatchKind.Domain)
+            .Select(r => r.Value)
+            .Concat(proxied
+                .Where(r => r.Match == MatchKind.HostList)
+                .SelectMany(r => r.HostListDomains));
+
+        return domains
+            .Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v)
             .Where(v => !v.Contains('*'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -1048,6 +1059,27 @@ public sealed class SingBoxConfigCompiler
                     node["domain"] = new JsonArray { value };
                 }
 
+                break;
+            }
+
+            case MatchKind.HostList:
+            {
+                // Непрогруженный список означает, что файл не нашёлся.
+                // Правило без доменов совпало бы со всем подряд, поэтому
+                // выбрасываем его целиком — о пропаже уже сказал разворот.
+                if (rule.HostListDomains.Count == 0)
+                    return null;
+
+                var suffixes = new JsonArray();
+
+                foreach (var domain in rule.HostListDomains)
+                {
+                    // Записи в списках Zapret — это зоны: там пишут
+                    // discord.media, подразумевая и russia1234.discord.media.
+                    suffixes.Add(domain.StartsWith("*.", StringComparison.Ordinal) ? domain[2..] : domain);
+                }
+
+                node["domain_suffix"] = suffixes;
                 break;
             }
 

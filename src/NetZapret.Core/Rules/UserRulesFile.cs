@@ -173,6 +173,7 @@ public sealed class UserRulesFile
         MatchKind.Process => "process",
         MatchKind.Domain => "domain",
         MatchKind.IpSet => "ipset",
+        MatchKind.HostList => "hostlist",
         _ => "ip",
     };
 
@@ -208,7 +209,8 @@ public sealed record UserRuleEntry
     {
         MatchKind.Process => "программа",
         MatchKind.Domain => "домен",
-        MatchKind.IpSet => "список",
+        MatchKind.IpSet => "список адресов",
+        MatchKind.HostList => "список доменов",
         _ => "адрес",
     };
 }
