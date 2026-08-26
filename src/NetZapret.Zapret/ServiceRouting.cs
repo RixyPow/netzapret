@@ -110,7 +110,14 @@ public static class ServiceRouting
         {
             Timestamp = DateTimeOffset.Now,
             Protocol = ProtocolKind.Tcp,
-            RemoteAddress = IPAddress.None,
+
+            // Адрес не подставляется намеренно. Мы спрашиваем про домен,
+            // адреса у него сейчас нет, и выдуманный не остаётся без
+            // последствий: IPAddress.None — это 255.255.255.255, и он попадал
+            // в список российских подсетей, отчего все сервисы показывались
+            // как идущие напрямую. Верным оставался только RuTracker, и лишь
+            // потому, что доменные правила проверяются раньше адресных.
+            RemoteAddress = null,
             RemotePort = 443,
             Hostname = host,
         }).Mode;

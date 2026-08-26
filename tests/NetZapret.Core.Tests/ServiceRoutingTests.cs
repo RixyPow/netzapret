@@ -122,6 +122,31 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     [Fact]
+    public void AddressRulesDoNotDecideTheModeOfADomain()
+    {
+        // Регрессия. Показ подставлял выдуманный адрес, а IPAddress.None —
+        // это 255.255.255.255, и он попадал в список российских подсетей.
+        // Из-за этого все сервисы показывались идущими напрямую, хотя шли
+        // через десинк; верным оставался лишь RuTracker, у которого доменное
+        // правило проверяется раньше адресных.
+        File.WriteAllLines(Path.Combine(_root, "lists", "все-адреса.txt"), ["0.0.0.0/0"]);
+
+        var engine = Load("""
+            mode: selective
+            rules:
+              - match: ipset
+                value: "lists/все-адреса.txt"
+                mode: direct
+            default:
+              mode: desync
+            """);
+
+        var parts = ServiceRouting.Describe(Discord, engine, _root, EmptyUserRules());
+
+        Assert.All(parts, p => Assert.Equal(RoutingMode.Desync, p.Mode));
+    }
+
+    [Fact]
     public void WhenEverythingAgreesTheSummaryIsShort()
     {
         var engine = Load("""
@@ -212,6 +237,17 @@ public sealed class ServiceRoutingTests : IDisposable
         var names = ServiceCatalog.All.Select(s => s.Name).ToList();
 
         Assert.Equal(names.Count, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void NoListBelongsToTwoServices()
+    {
+        // Один список в двух местах означает, что человек направит его
+        // в одном разделе, а другой покажет изменение как своё — и оба
+        // будут выглядеть так, будто настройка живёт где-то ещё.
+        var lists = ServiceCatalog.All.SelectMany(s => s.Parts).Select(p => p.List).ToList();
+
+        Assert.Equal(lists.Count, lists.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     private static UserRulesFile EmptyUserRules() =>

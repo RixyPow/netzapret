@@ -169,12 +169,6 @@ public static class ServiceCatalog
 
         new ServiceDefinition
         {
-            Name = "RuTracker",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/rutracker.txt" }],
-        },
-
-        new ServiceDefinition
-        {
             Name = "GitHub",
             Parts = [new ServicePart { Name = "Всё", List = "lists/github.txt" }],
         },
@@ -189,6 +183,92 @@ public static class ServiceCatalog
                 new ServicePart { Name = "Gemini", List = "lists/gemini.txt" },
                 new ServicePart { Name = "DeepSeek", List = "lists/deepseek.txt" },
             ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Игры",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Riot и Valorant",
+                    List = "lists/riot-valorant.txt",
+                    Note = "античиты плохо переносят и десинк, и туннель",
+                },
+                new ServicePart { Name = "Epic Games и Fortnite", List = "lists/epicgames-fortnite.txt" },
+                new ServicePart { Name = "Ubisoft", List = "lists/ubisoft.txt" },
+                new ServicePart { Name = "itch.io", List = "lists/itch.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Google",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Сервисы",
+                    List = "lists/google.txt",
+                    Note = "почта, диск, поиск — отдельно от YouTube",
+                },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Соцсети",
+            Parts =
+            [
+                new ServicePart { Name = "Twitter / X", List = "lists/twitter.txt" },
+                new ServicePart { Name = "LinkedIn", List = "lists/linkedin.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Торренты",
+            Parts =
+            [
+                new ServicePart { Name = "RuTracker", List = "lists/rutracker.txt" },
+                new ServicePart { Name = "Rutor", List = "lists/rutor.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Работа и заметки",
+            Parts =
+            [
+                new ServicePart { Name = "Notion", List = "lists/notion.txt" },
+                new ServicePart { Name = "Obsidian", List = "lists/obsidian.txt" },
+                new ServicePart { Name = "Fandom", List = "lists/fandom.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Платформы и CDN",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Cloudflare",
+                    List = "lists/cloudflare.txt",
+                    Note = "за ним стоит множество сайтов; трогать с осторожностью",
+                },
+                new ServicePart { Name = "CloudFront", List = "lists/cloudfront.txt" },
+                new ServicePart { Name = "Amazon", List = "lists/amazon.txt" },
+                new ServicePart { Name = "Apple", List = "lists/apple.txt" },
+                new ServicePart { Name = "Microsoft Store", List = "lists/microsoft-store.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Speedtest",
+            Parts = [new ServicePart { Name = "Всё", List = "lists/speedtest.txt" }],
         },
     ];
 
