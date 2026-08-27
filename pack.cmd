@@ -18,27 +18,28 @@ set "ROOT=%~dp0"
 set "DIST=%ROOT%dist"
 set "STAGE=%DIST%\NetZapret"
 
-rem dist\ gets wiped below, and a running instance holds its own executable.
-rem Refusing rather than killing it: the thing running is quite possibly the
-rem live setup carrying all of this machine's traffic, and taking it down
-rem without asking to build an archive is not a trade anyone agreed to.
-tasklist /fi "imagename eq netzapret.exe" 2>nul | find /i "netzapret.exe" >nul
-if not errorlevel 1 (
-    echo NetZapret is running - most likely the copy in dist\, which is about
-    echo to be replaced. Stop it from its menu, then run this again.
-    exit /b 1
-)
-
+rem dist\ gets wiped below, and a copy running from there holds its own
+rem executable. Never killing it: the thing running is quite possibly the live
+rem setup carrying all of this machine's traffic, and taking it down without
+rem asking to build an archive is not a trade anyone agreed to.
+rem
+rem The test is whether dist\ can actually be removed, not whether a process
+rem named netzapret.exe exists anywhere. Those are different questions, and
+rem asking the wrong one blocked a release while the running copy lived
+rem somewhere else entirely - with dist\ empty. Windows will not let go of a
+rem running program's own file, so a wipe that succeeds proves nothing is
+rem running from here, and one that fails says exactly what is wrong.
 echo Cleaning %DIST%
-if exist "%DIST%" rd /s /q "%DIST%"
-mkdir "%STAGE%" 2>nul
+if exist "%DIST%" rd /s /q "%DIST%" 2>nul
 
-rem Partially deleted by a failed run, for instance because something was
-rem holding a file. Publishing into that leaves a mixture of old and new.
-if exist "%STAGE%\netzapret.exe" (
-    echo Could not clean %DIST% - something is still holding files there.
+if exist "%DIST%" (
+    echo Could not clean %DIST% - something is holding files there, most
+    echo likely a copy of NetZapret running from dist\NetZapret. Stop it
+    echo from its menu, then run this again.
     exit /b 1
 )
+
+mkdir "%STAGE%" 2>nul
 
 rem Single file so the folder stays readable. A plain self-contained publish
 rem scatters 217 runtime assemblies next to the program, and whoever opens the
