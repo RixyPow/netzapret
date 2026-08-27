@@ -232,7 +232,7 @@ internal static class MenuCommand
                 ToggleAutostart(settings);
                 return settings;
             case "6":
-                EditServices(settings);
+                await EditServicesAsync(settings, cancellationToken);
                 return settings;
             case "7":
                 await ToggleRunAsync(settings, cancellationToken);
@@ -737,7 +737,7 @@ internal static class MenuCommand
     /// Плоский список доменов остаётся ниже отдельным пунктом: домен, добавленный
     /// руками и не относящийся ни к одному сервису, не должен пропасть из виду.
     /// </remarks>
-    private static void EditServices(AppSettings settings)
+    private static async Task EditServicesAsync(AppSettings settings, CancellationToken cancellationToken)
     {
         while (true)
         {
@@ -778,6 +778,7 @@ internal static class MenuCommand
             Console.WriteLine();
             Console.WriteLine("  Номер — открыть сервис и направить его части.");
             Console.WriteLine("  д — свои домены и программы списком.");
+            Console.WriteLine("  п — проверить, что закрыто, и сверить с этой таблицей.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -791,6 +792,23 @@ internal static class MenuCommand
                 || string.Equals(input, "d", StringComparison.OrdinalIgnoreCase))
             {
                 EditRoutes(settings);
+                continue;
+            }
+
+            if (string.Equals(input, "п", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(input, "p", StringComparison.OrdinalIgnoreCase))
+            {
+                ClearScreen();
+
+                await BlockCheckCommand.ExecuteAsync(
+                    settings,
+                    settings.RulesPath,
+                    UserRulesFile.DefaultPath,
+                    zapretRoot,
+                    only: null,
+                    cancellationToken);
+
+                Pause();
                 continue;
             }
 
