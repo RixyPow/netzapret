@@ -284,7 +284,15 @@ public sealed class ServiceRoutingTests : IDisposable
             Assert.All(s.Parts, p =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(p.Name));
-                Assert.StartsWith("lists/", p.List);
+
+                // Либо список Zapret, либо наш собственный. Второе появилось
+                // для того, чего у Zapret нет вовсе: Valheim и Pinterest
+                // не упоминаются в его списках, а Steam там одним куском,
+                // хотя сайт и загрузки ломаются и лечатся по-разному.
+                Assert.True(
+                    p.List.StartsWith("lists/", StringComparison.Ordinal)
+                        || p.List.StartsWith("config/lists/", StringComparison.Ordinal),
+                    $"{s.Name} · {p.Name}: неожиданный путь списка {p.List}");
             });
         });
     }

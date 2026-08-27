@@ -23,7 +23,21 @@ public class BlockCheckTests
     [Fact]
     public void Working_tls_means_open()
     {
-        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok()));
+        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok()));
+    }
+
+    /// <summary>Рукопожатие само по себе больше не считается ответом.</summary>
+    /// <remarks>
+    /// Случай <c>steamcommunity.com</c>, ради которого проба данных и заведена:
+    /// TCP встал, оба рукопожатия прошли, HTTP отвечает — а сайт не открывается,
+    /// потому что поток умирает на четырнадцатой тысяче байт. Прежний
+    /// классификатор называл это «доступен», и пользователь остался один
+    /// на один с молчащим сайтом и бодрым отчётом.
+    /// </remarks>
+    [Fact]
+    public void Handshake_without_data_is_a_stall()
+    {
+        Assert.Equal(BlockKind.Stall, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), No()));
     }
 
     /// <remarks>
@@ -33,14 +47,14 @@ public class BlockCheckTests
     [Fact]
     public void One_working_tls_version_is_enough()
     {
-        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), No(), Ok(), Ok()));
+        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), No(), Ok(), Ok(), Ok()));
     }
 
     /// <remarks>Почерк <c>twitter.com</c>: TCP встал, рукопожатие оборвали.</remarks>
     [Fact]
     public void Reset_during_handshake_is_dpi()
     {
-        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), Rst(), Rst(), Ok()));
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), Rst(), Rst(), Ok(), No()));
     }
 
     /// <remarks>
@@ -50,7 +64,7 @@ public class BlockCheckTests
     [Fact]
     public void Silent_drop_after_tcp_is_dpi()
     {
-        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), No(), No(), Ok()));
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), No(), No(), Ok(), No()));
     }
 
     /// <remarks>
@@ -61,14 +75,14 @@ public class BlockCheckTests
     [Fact]
     public void Dead_443_with_live_80_is_port_block()
     {
-        Assert.Equal(BlockKind.HttpsPort, BlockCheck.Classify(No(), No(), No(), Ok()));
+        Assert.Equal(BlockKind.HttpsPort, BlockCheck.Classify(No(), No(), No(), Ok(), No()));
     }
 
     /// <remarks>Молчание по всем протоколам — <c>rutor.info</c>.</remarks>
     [Fact]
     public void Silence_everywhere_is_full_block()
     {
-        Assert.Equal(BlockKind.Full, BlockCheck.Classify(No(), No(), No(), No()));
+        Assert.Equal(BlockKind.Full, BlockCheck.Classify(No(), No(), No(), No(), No()));
     }
 
     /// <summary>Десинк предлагается только там, где есть во что вмешиваться.</summary>
@@ -79,6 +93,8 @@ public class BlockCheckTests
     [Theory]
     [InlineData(BlockKind.HttpsPort)]
     [InlineData(BlockKind.Full)]
+    [InlineData(BlockKind.Stall)]
+    [InlineData(BlockKind.Sinkhole)]
     public void Blocks_without_handshake_are_cured_by_tunnel_only(BlockKind kind)
     {
         var report = Report(kind);
@@ -117,28 +133,60 @@ public class BlockCheckTests
 
     [Theory]
     [InlineData(BlockKind.TlsDpi)]
+    [InlineData(BlockKind.Stall)]
     [InlineData(BlockKind.HttpsPort)]
     [InlineData(BlockKind.Full)]
     [InlineData(BlockKind.Dns)]
+    [InlineData(BlockKind.Sinkhole)]
     public void Real_blocks_are_actionable(BlockKind kind)
     {
         Assert.True(Report(kind).Actionable);
     }
 
-    /// <summary>У каждого исхода есть, что сказать человеку.</summary>
+    /// <summary>Ответ-заглушка узнаётся по адресу.</summary>
+    /// <remarks>
+    /// Случай <c>image.tmdb.org</c>: сеть доставки отшивает регион, отдавая
+    /// петлю. Стучаться туда и объявлять хост закрытым — значит назвать
+    /// чужой отказ своим.
+    /// </remarks>
     [Theory]
-    [InlineData(BlockKind.None)]
-    [InlineData(BlockKind.TlsDpi)]
-    [InlineData(BlockKind.HttpsPort)]
-    [InlineData(BlockKind.Full)]
-    [InlineData(BlockKind.Dns)]
-    [InlineData(BlockKind.NoAddress)]
+    [InlineData("127.0.0.1", true)]
+    [InlineData("127.5.5.5", true)]
+    [InlineData("0.0.0.0", true)]
+    [InlineData("95.100.176.225", false)]
+    [InlineData("1.1.1.1", false)]
+    public void Stub_addresses_are_recognised(string address, bool expected)
+    {
+        Assert.Equal(expected, BlockCheck.IsStub(System.Net.IPAddress.Parse(address)));
+    }
+
+    /// <summary>У каждого исхода есть, что сказать человеку.</summary>
+    /// <remarks>
+    /// Перечислены все члены перечисления, а не выбранные: добавить вид
+    /// блокировки и забыть его назвать — ровно та ошибка, из-за которой
+    /// в отчёте появился бы пустой вердикт.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(AllKinds))]
     public void Every_kind_is_named(BlockKind kind)
     {
         var report = Report(kind);
 
         Assert.False(string.IsNullOrWhiteSpace(report.Describe()));
         Assert.False(string.IsNullOrWhiteSpace(report.Remedy()));
+    }
+
+    public static TheoryData<BlockKind> AllKinds
+    {
+        get
+        {
+            var data = new TheoryData<BlockKind>();
+
+            foreach (BlockKind kind in Enum.GetValues<BlockKind>())
+                data.Add(kind);
+
+            return data;
+        }
     }
 
     private static TargetReport Report(BlockKind kind) => new()
@@ -148,6 +196,7 @@ public class BlockCheckTests
         Tls12 = Ok(),
         Tls13 = Ok(),
         Http = Ok(),
+        Data = Ok(),
         Kind = kind,
     };
 }

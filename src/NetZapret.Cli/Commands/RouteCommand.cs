@@ -1,5 +1,6 @@
 using System.Net;
 using NetZapret.Core.Rules;
+using NetZapret.Zapret;
 
 namespace NetZapret.Cli.Commands;
 
@@ -130,10 +131,18 @@ internal static class RouteCommand
     {
         var value = target.Trim();
 
+        // Список может быть и адресным, и доменным, а по имени файла они
+        // неразличимы: и lists/ipset-steam.txt, и lists/steam.txt — просто
+        // .txt. Поэтому заглядываем внутрь. Пока не заглядывали, доменный
+        // список записывался как ipset, разворачивался в пустоту и правило
+        // не совпадало никогда — молча, без единой жалобы.
+        if (value.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+            return LooksLikeAddresses(value) ? MatchKind.IpSet : MatchKind.HostList;
+
         // Подсеть уходит в ipset, а не в ip, и это не описка: значение
         // такого правила разворачивает AddressListReader, который принимает
         // и готовый CIDR, и путь к списку. Одна ветка вместо двух.
-        if (value.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) || value.Contains('/'))
+        if (value.Contains('/'))
             return MatchKind.IpSet;
 
         if (value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || value.Contains('\\'))
@@ -143,6 +152,44 @@ internal static class RouteCommand
             return MatchKind.Ip;
 
         return MatchKind.Domain;
+    }
+
+    /// <summary>
+    /// Адресный ли это список.
+    /// </summary>
+    /// <remarks>
+    /// Решает первая содержательная строка. Смешанных списков не бывает:
+    /// winws2 получает их разными ключами — <c>--ipset</c> и <c>--hostlist</c>, —
+    /// и файл, годный для обоих, был бы негоден ни для одного.
+    /// Нечитаемый файл считается адресным: так было раньше, и менять
+    /// поведение для случая, который всё равно кончится жалобой на
+    /// ненайденный список, незачем.
+    /// </remarks>
+    private static bool LooksLikeAddresses(string path)
+    {
+        var full = ZapretPaths.Discover()?.Root is { } root && File.Exists(Path.Combine(root, path))
+            ? Path.Combine(root, path)
+            : path;
+
+        try
+        {
+            foreach (var raw in File.ReadLines(full))
+            {
+                var line = raw.Trim();
+
+                if (line.Length == 0 || line.StartsWith('#'))
+                    continue;
+
+                var head = line.Split('/')[0];
+
+                return IPAddress.TryParse(head, out _);
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return true;
     }
 
     public static RoutingMode? ParseMode(string value) =>

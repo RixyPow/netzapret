@@ -16,6 +16,25 @@ public enum BlockKind
     TlsDpi,
 
     /// <summary>
+    /// Рукопожатие проходит, но поток обрывается на первых килобайтах.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Найдено разбором живого случая: <c>steamcommunity.com</c> перестал
+    /// открываться, при том что проверка называла его доступным. Рукопожатие
+    /// и вправду проходило — десинк своё дело делал, — а дальше приходило
+    /// ровно 14381 байт, три раза из трёх, и поток замирал навсегда.
+    /// </para>
+    /// <para>
+    /// Десинку тут делать нечего: секция пресета помечена
+    /// <c>--payload=tls_client_hello</c>, то есть трогает только рукопожатие,
+    /// а обрыв случается много позже. Оператор пропускает начало и убивает
+    /// поток, опознав его другими средствами. Прячется это только туннелем.
+    /// </para>
+    /// </remarks>
+    Stall,
+
+    /// <summary>
     /// Не встаёт соединение на 443, тогда как 80 отвечает.
     /// </summary>
     /// <remarks>
@@ -37,6 +56,26 @@ public enum BlockKind
     /// запрос. Лечится и то и другое одинаково — сменой резолвера.
     /// </remarks>
     Dns,
+
+    /// <summary>
+    /// Имя разрешается в заглушку: петлю или нулевой адрес.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Найдено на <c>seriesgraph.com</c>, у которого не грузились картинки.
+    /// <c>image.tmdb.org</c> — это CNAME на <c>tmdb-image-prod.b-cdn.net</c>,
+    /// и адресом оттуда приходит <c>127.0.0.1</c>. Причём не от оператора:
+    /// тот же ответ даёт и Cloudflare, и любой другой резолвер — так сеть
+    /// доставки отшивает регион целиком.
+    /// </para>
+    /// <para>
+    /// Маршрутом это не лечится: направлять петлю некуда. Лечится туннелем,
+    /// и по причине, к маршрутизации отношения не имеющей, — проксируемым
+    /// именам выдаётся fakeip, а настоящее разрешение происходит на выходе
+    /// из туннеля, где спрашивают уже не из России.
+    /// </para>
+    /// </remarks>
+    Sinkhole,
 
     /// <summary>
     /// У имени нет адреса вовсе.
@@ -78,6 +117,9 @@ public sealed record TargetReport
     public required ProbeOutcome Tls13 { get; init; }
     public required ProbeOutcome Http { get; init; }
 
+    /// <summary>Идут ли данные после того, как рукопожатие состоялось.</summary>
+    public required ProbeOutcome Data { get; init; }
+
     public required BlockKind Kind { get; init; }
 
     public IReadOnlyList<string> Addresses { get; init; } = Array.Empty<string>();
@@ -86,8 +128,10 @@ public sealed record TargetReport
     {
         BlockKind.None => "доступен",
         BlockKind.TlsDpi => "DPI по TLS",
+        BlockKind.Stall => "обрыв после рукопожатия",
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
+        BlockKind.Sinkhole => "адрес-заглушка",
         BlockKind.Dns => "имя не разрешается",
         _ => "нет адреса у имени",
     };
@@ -112,8 +156,10 @@ public sealed record TargetReport
     {
         BlockKind.None => "ничего не нужно",
         BlockKind.TlsDpi => "десинк",
+        BlockKind.Stall => "только VPN",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
+        BlockKind.Sinkhole => "только VPN",
         BlockKind.Dns => "свой DNS",
         _ => "ничего — у имени нет адреса",
     };
@@ -147,7 +193,36 @@ public sealed record NetworkBaseline
 /// </remarks>
 public static class BlockCheck
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(6);
+    /// <summary>
+    /// Сколько ждать ответа на одну пробу.
+    /// </summary>
+    /// <remarks>
+    /// Было шесть секунд, стало четыре. Проверка идёт по сорока с лишним
+    /// целям, каждая неудача повторяется, и на каждой лишней секунде набегает
+    /// больше минуты общего ожидания. Четырёх достаточно: закрытое молчит
+    /// вовсе, а открытое отвечает за десятые доли.
+    /// </remarks>
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(4);
+
+    /// <summary>
+    /// Сколько ждать очередной порции данных, прежде чем счесть поток замершим.
+    /// </summary>
+    /// <remarks>
+    /// Отсчёт идёт от последнего полученного байта, а не от начала. Медленная
+    /// страница успевает подавать признаки жизни и проверку проходит; убитый
+    /// поток замолкает совсем, и это видно за три секунды.
+    /// </remarks>
+    private static readonly TimeSpan StallWindow = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Сколько данных считать достаточным доказательством, что поток идёт.
+    /// </summary>
+    /// <remarks>
+    /// Больше качать незачем: если четверть мегабайта прошла, дело не в сети.
+    /// Порог заодно ограничивает трафик самой проверки — она ходит по всему
+    /// справочнику, и тянуть страницы целиком было бы расточительно.
+    /// </remarks>
+    private const int EnoughBytes = 256 * 1024;
 
     /// <summary>
     /// Выясняет, что доступно в принципе.
@@ -273,8 +348,29 @@ public static class BlockCheck
                 Tls12 = Failed(null),
                 Tls13 = Failed(null),
                 Http = Failed(null),
+                Data = Failed(null),
                 Kind = honest.Count > 0 ? BlockKind.Dns : BlockKind.NoAddress,
                 Addresses = honest.Take(3).ToList(),
+            };
+        }
+
+        // Заглушка распознаётся до всяких проб: стучаться в 127.0.0.1 и потом
+        // объявлять хост закрытым — значит назвать чужой отказ своим.
+        var real = addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork).ToList();
+
+        if (real.All(IsStub))
+        {
+            return new TargetReport
+            {
+                Host = host,
+                Service = service,
+                Tcp = Failed($"адрес-заглушка {real[0]}"),
+                Tls12 = Failed(null),
+                Tls13 = Failed(null),
+                Http = Failed(null),
+                Data = Failed(null),
+                Kind = BlockKind.Sinkhole,
+                Addresses = real.Select(a => a.ToString()).Take(3).ToList(),
             };
         }
 
@@ -286,6 +382,13 @@ public static class BlockCheck
         var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken) : Failed(null);
         var http = await HttpAsync(host, cancellationToken);
 
+        // Передача проверяется только там, где рукопожатие состоялось: без него
+        // качать нечего, а вопрос «идут ли данные» имеет смысл ровно тогда,
+        // когда соединение с виду установлено.
+        var data = tls12.Ok || tls13.Ok
+            ? await TransferAsync(host, cancellationToken)
+            : Failed(null);
+
         return new TargetReport
         {
             Host = host,
@@ -294,7 +397,8 @@ public static class BlockCheck
             Tls12 = tls12,
             Tls13 = tls13,
             Http = http,
-            Kind = Classify(tcp, tls12, tls13, http),
+            Data = data,
+            Kind = Classify(tcp, tls12, tls13, http, data),
             Addresses = addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork)
                 .Select(a => a.ToString()).Take(3).ToList(),
         };
@@ -308,10 +412,19 @@ public static class BlockCheck
     /// о вмешательстве. Живой TCP при мёртвом TLS — самый ясный след: до хоста
     /// достучались, а разговор оборвали, разобрав имя в рукопожатии.
     /// </remarks>
-    internal static BlockKind Classify(ProbeOutcome tcp, ProbeOutcome tls12, ProbeOutcome tls13, ProbeOutcome http)
+    internal static BlockKind Classify(
+        ProbeOutcome tcp,
+        ProbeOutcome tls12,
+        ProbeOutcome tls13,
+        ProbeOutcome http,
+        ProbeOutcome data)
     {
+        // Состоявшееся рукопожатие больше не считается ответом на вопрос.
+        // Раньше считалось — и проверка называла steamcommunity.com доступным,
+        // пока он не открывался: рукопожатие проходило, а поток умирал
+        // на четырнадцатой тысяче байт.
         if (tls12.Ok || tls13.Ok)
-            return BlockKind.None;
+            return data.Ok ? BlockKind.None : BlockKind.Stall;
 
         if (tcp.Ok && (tls12.Reset || tls13.Reset))
             return BlockKind.TlsDpi;
@@ -327,6 +440,17 @@ public static class BlockCheck
         // себе в одной строке.
         return http.Ok ? BlockKind.HttpsPort : BlockKind.Full;
     }
+
+    /// <summary>
+    /// Адрес, по которому никого нет и быть не может.
+    /// </summary>
+    /// <remarks>
+    /// Петля и нулевой адрес — два способа сказать «сюда не ходи». Первый
+    /// отдаёт BunnyCDN, отшивая регион; второй принято отдавать блокировщикам
+    /// рекламы. Различать их незачем: ни туда, ни туда идти не надо.
+    /// </remarks>
+    internal static bool IsStub(IPAddress address) =>
+        IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any);
 
     private static ProbeOutcome Failed(string? detail) => new()
     {
@@ -413,6 +537,102 @@ public static class BlockCheck
                 Reset = IsReset(ex),
                 Elapsed = stopwatch.Elapsed,
                 Detail = Explain(ex),
+            };
+        }
+    }
+
+    /// <summary>
+    /// Проверяет, идут ли данные после того, как рукопожатие состоялось.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Единственная проба, отвечающая на вопрос «работает ли сайт». Остальные
+    /// отвечают на «устанавливается ли соединение», а это, как выяснилось,
+    /// разные вопросы: <c>steamcommunity.com</c> проходил все прежние проверки
+    /// и при этом не открывался.
+    /// </para>
+    /// <para>
+    /// Замершим поток считается по молчанию, а не по объёму: отсчёт идёт от
+    /// последнего полученного байта. Медленный сайт подаёт признаки жизни
+    /// и проходит, убитый замолкает совсем. Порогом по объёму такое не поймать —
+    /// у страниц он разный, и всякое число было бы взято с потолка.
+    /// </para>
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA5359:Do not disable certificate validation",
+        Justification = "Измеряется проходимость потока, а не доверие. " +
+            "Подлинность проверяется отдельно, в CertificateMatchesAsync.")]
+    private static async Task<ProbeOutcome> TransferAsync(string host, CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        int total = 0;
+
+        try
+        {
+            using var client = new TcpClient(AddressFamily.InterNetwork);
+            using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            connect.CancelAfter(Timeout);
+
+            await client.ConnectAsync(host, 443, connect.Token);
+
+            using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
+            await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = host }, connect.Token);
+
+            var request = System.Text.Encoding.ASCII.GetBytes(
+                $"GET / HTTP/1.1\r\nHost: {host}\r\n" +
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n" +
+                "Accept: text/html\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
+
+            await ssl.WriteAsync(request, connect.Token);
+
+            var buffer = new byte[16 * 1024];
+
+            while (total < EnoughBytes)
+            {
+                using var silence = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                silence.CancelAfter(StallWindow);
+
+                int read;
+
+                try
+                {
+                    read = await ssl.ReadAsync(buffer, silence.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // Тишина при живом соединении — то самое, что ищем.
+                    return new ProbeOutcome
+                    {
+                        Ok = false,
+                        Elapsed = stopwatch.Elapsed,
+                        Detail = $"поток замер на {total} Б, тишина {StallWindow.TotalSeconds:0} с",
+                    };
+                }
+
+                // Конец ответа: сервер сказал всё, что хотел. Для короткой
+                // страницы это штатный и самый частый исход.
+                if (read == 0)
+                    break;
+
+                total += read;
+            }
+
+            return new ProbeOutcome
+            {
+                Ok = true,
+                Elapsed = stopwatch.Elapsed,
+                Detail = $"{total} Б",
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ProbeOutcome
+            {
+                Ok = false,
+                Reset = IsReset(ex),
+                Elapsed = stopwatch.Elapsed,
+                Detail = total > 0 ? $"оборвано на {total} Б: {Explain(ex)}" : Explain(ex),
             };
         }
     }

@@ -183,7 +183,55 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Steam",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/steam.txt" }],
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Сайт и сообщество",
+                    List = "config/lists/steam-web.txt",
+                    Note = "страницы; ломаются отдельно от загрузок и лечатся иначе",
+                },
+                new ServicePart
+                {
+                    Name = "Загрузки и всё прочее",
+                    List = "lists/steam.txt",
+                    Note = "игры идут десятками гигабайт — через туннель не стоит",
+                },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Valheim",
+            Parts = [new ServicePart { Name = "Сайт", List = "config/lists/valheim.txt" }],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Кино и сериалы",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "TMDB: постеры и описания",
+                    List = "config/lists/tmdb.txt",
+                    Note = "на нём держатся трекеры сериалов; без него страницы открываются без картинок",
+                },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Pinterest",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Сайт и картинки",
+                    List = "config/lists/pinterest.txt",
+                    Note = "в списках Zapret его нет, десинк к нему не применяется",
+                },
+            ],
         },
 
         new ServiceDefinition

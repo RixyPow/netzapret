@@ -25,7 +25,31 @@ namespace NetZapret.Cli.Commands;
 /// </remarks>
 internal static class BlockCheckCommand
 {
-    public static Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken) =>
+    /// <summary>Сколько имён брать с одной части сервиса.</summary>
+    private const int PerPart = 2;
+
+    /// <remarks>
+    /// В конце придерживает окно. Проверка идёт минуты и заканчивается тем
+    /// ради чего затевалась — перечнем того, что стоит поменять; закрыть его
+    /// не дав прочитать значит выбросить всю работу. Придерживает только там,
+    /// где окно закроется само: в терминале приглашение и так останется,
+    /// а лишний Enter в сценарии — помеха.
+    /// </remarks>
+    public static async Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
+    {
+        var code = await Run(cmd, defaultConfigPath, cancellationToken);
+
+        if (ConsoleWindow.ClosesWithUs())
+        {
+            Console.WriteLine();
+            Console.Write("Enter — закрыть…");
+            Console.ReadLine();
+        }
+
+        return code;
+    }
+
+    private static Task<int> Run(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken) =>
         ExecuteAsync(
             AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath)),
             cmd.Value("config", defaultConfigPath),
@@ -68,6 +92,8 @@ internal static class BlockCheckCommand
 
         WarnIfEnginesRunning();
 
+        PrintLegend();
+
         Console.WriteLine();
         Console.WriteLine("Проверяю, что умеет сеть…");
 
@@ -79,6 +105,7 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         Console.WriteLine($"Проверяю {targets.Count} {Plural(targets.Count, "цель", "цели", "целей")}…");
         Console.WriteLine();
+        PrintColumnHeader();
 
         var reports = new List<TargetReport>();
         var previous = Console.ForegroundColor;
@@ -95,14 +122,15 @@ internal static class BlockCheckCommand
             Console.WriteLine(
                 $"  {Truncate(host, 30),-30} {report.Tcp.Describe(),-5} " +
                 $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
-                $"{report.Http.Describe(),-5}  {report.Describe()}");
+                $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
             Console.ForegroundColor = previous;
 
             // Причина отказа выводится всегда: вердикт без объяснения нечем
             // проверить, а ошибиться проверка может — и ошибается.
             if (report.Actionable)
             {
-                var why = report.Tcp.Detail ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
+                var why = report.Data.Detail ?? report.Tcp.Detail
+                    ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
 
                 if (why is not null)
                     Console.WriteLine($"      {Truncate(why, 88)}");
@@ -117,9 +145,50 @@ internal static class BlockCheckCommand
             cancellationToken);
 
         PrintSummary(reports, badAddresses);
-        PrintAdvice(reports, engine, settings);
+
+        var suggestions = Suggestions(reports, engine);
+
+        PrintAdvice(suggestions);
+        ApplyIfConfirmed(suggestions, userRulesPath);
 
         return reports.Any(r => r.Actionable) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Объясняет столбцы до того, как они появятся.
+    /// </summary>
+    /// <remarks>
+    /// Без этого таблица читается как набор «ок» и «нет», из которого не
+    /// следует ничего. Смысл проверки в том, что каждый столбец отвечает
+    /// за свой способ вмешательства, и лечатся они разным — об этом и
+    /// сказано во втором столбце пояснения.
+    /// </remarks>
+    private static void PrintLegend()
+    {
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        Console.WriteLine();
+        Console.WriteLine("  Что проверяется                              Что означает отказ");
+        Console.WriteLine("  " + new string('-', 74));
+        Console.WriteLine("  TCP     соединение на 443                     порт или маршрут закрыт → VPN");
+        Console.WriteLine("  TLS1.2  рукопожатие старой версии             DPI разбирает имя сайта → десинк");
+        Console.WriteLine("  TLS1.3  рукопожатие нынешней версии           DPI разбирает имя сайта → десинк");
+        Console.WriteLine("  HTTP    обычный запрос на 80                  отвечает ли хост вообще");
+        Console.WriteLine("  ДАННЫЕ  идёт ли поток после рукопожатия       поток убивают позже → VPN");
+        Console.WriteLine();
+        Console.WriteLine("  Столбец ДАННЫЕ важнее прочих: соединение может встать, а сайт");
+        Console.WriteLine("  не открыться — так ведёт себя обрыв потока после опознания.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    private static void PrintColumnHeader()
+    {
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine($"  {"",-30} {"TCP",-5} {"1.2",-5} {"1.3",-5} {"HTTP",-5} {"ДАННЫЕ",-5}  вердикт");
+        Console.ForegroundColor = previous;
     }
 
     private static void PrintBaseline(NetworkBaseline baseline)
@@ -208,15 +277,31 @@ internal static class BlockCheckCommand
     /// что она закрыта способом, которого нынешнее правило не лечит, — вот
     /// что меняет настройку.
     /// </remarks>
-    private static void PrintAdvice(
+    /// <summary>Что проверка предлагает поменять.</summary>
+    private sealed record Suggestion
+    {
+        public required string Host { get; init; }
+        public required RoutingMode Now { get; init; }
+        public required RoutingMode Should { get; init; }
+        public required string Why { get; init; }
+    }
+
+    /// <summary>
+    /// Сверяет измеренное с настроенным.
+    /// </summary>
+    /// <remarks>
+    /// Ради этого всё и затевалось. Знать, что цель закрыта, полезно; знать,
+    /// что она закрыта способом, которого нынешнее правило не лечит, — вот
+    /// что меняет настройку.
+    /// </remarks>
+    private static IReadOnlyList<Suggestion> Suggestions(
         IReadOnlyList<TargetReport> reports,
-        RuleEngine? engine,
-        AppSettings settings)
+        RuleEngine? engine)
     {
         if (engine is null)
-            return;
+            return [];
 
-        var rows = new List<(string Host, string Now, string Should, string Why)>();
+        var result = new List<Suggestion>();
 
         foreach (var report in reports)
         {
@@ -236,7 +321,7 @@ internal static class BlockCheckCommand
             {
                 BlockKind.None => RoutingMode.Direct,
                 BlockKind.TlsDpi => RoutingMode.Desync,
-                BlockKind.HttpsPort or BlockKind.Full => RoutingMode.Proxy,
+                BlockKind.Stall or BlockKind.HttpsPort or BlockKind.Full or BlockKind.Sinkhole => RoutingMode.Proxy,
                 _ => now,
             };
 
@@ -246,36 +331,95 @@ internal static class BlockCheckCommand
             if (!report.Actionable || now == should)
                 continue;
 
-            rows.Add((report.Host, Describe(now), Describe(should), report.Describe()));
+            result.Add(new Suggestion
+            {
+                Host = report.Host,
+                Now = now,
+                Should = should,
+                Why = report.Describe(),
+            });
         }
 
-        if (rows.Count == 0)
+        return result;
+    }
+
+    private static void PrintAdvice(IReadOnlyList<Suggestion> suggestions)
+    {
+        if (suggestions.Count == 0)
             return;
 
         Console.WriteLine();
         Console.WriteLine("Стоит изменить");
 
-        foreach (var row in rows)
-            Console.WriteLine($"  {Truncate(row.Host, 28),-28} {row.Now,-10} → {row.Should,-10} {row.Why}");
+        foreach (var s in suggestions)
+            Console.WriteLine($"  {Truncate(s.Host, 28),-28} {Describe(s.Now),-10} → {Describe(s.Should),-10} {s.Why}");
+    }
+
+    /// <summary>
+    /// Предлагает записать предложенное и, если согласились, записывает.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Спрашивает, а не делает молча. Проверка видит один момент времени,
+    /// блокировки мигают, и запись без спроса означала бы, что разовая
+    /// сетевая икота меняет настройку насовсем.
+    /// </para>
+    /// <para>
+    /// Пишет доменные правила в пользовательский слой — тот же файл и тот же
+    /// вид, что у пункта «свои домены». Ничего нового в формате не заводится,
+    /// и написанное отсюда можно снять оттуда.
+    /// </para>
+    /// </remarks>
+    private static void ApplyIfConfirmed(IReadOnlyList<Suggestion> suggestions, string userRulesPath)
+    {
+        if (suggestions.Count == 0)
+            return;
 
         Console.WriteLine();
-        Console.WriteLine("  Менять — в пункте меню «Сервисы и маршруты».");
+        Console.Write($"Записать эти {suggestions.Count} {Plural(suggestions.Count, "правило", "правила", "правил")}? [д/н]: ");
 
-        static string Describe(RoutingMode mode) => mode switch
+        var answer = Console.ReadLine();
+
+        // Конец ввода — не согласие. Проверку запускают и из сценариев,
+        // и молча переписать там правила было бы неожиданностью.
+        if (answer is null || !(answer.Trim().StartsWith('д') || answer.Trim().StartsWith('y')))
         {
-            RoutingMode.Proxy => "VPN",
-            RoutingMode.Desync => "десинк",
-            _ => "напрямую",
-        };
+            Console.WriteLine("Ничего не записано. Изменить вручную — пункт меню «Сервисы и маршруты».");
+            return;
+        }
+
+        var file = UserRulesFile.Load(userRulesPath);
+
+        foreach (var s in suggestions)
+            file.Set(MatchKind.Domain, $"*.{s.Host}", s.Should);
+
+        file.Save();
+
+        Message($"Записано в {userRulesPath}. Чтобы применить — перезапустите (пункт 7).", ConsoleColor.Green);
     }
+
+    private static string Describe(RoutingMode mode) => mode switch
+    {
+        RoutingMode.Proxy => "VPN",
+        RoutingMode.Desync => "десинк",
+        _ => "напрямую",
+    };
 
     /// <summary>
     /// Собирает цели из справочника сервисов.
     /// </summary>
     /// <remarks>
-    /// По одному имени с части: проверять все сорок три домена Discord незачем,
-    /// закрывают их одинаково. Берётся первое — оно же показывается в разделе
-    /// сервисов как пример.
+    /// <para>
+    /// Не все домены части: сорок три домена Discord закрывают одинаково,
+    /// и проверять каждый — впустую потраченные минуты. Но и не один: у Steam
+    /// первым в списке идёт <c>steamcommunity.com</c>, а сломан был заодно
+    /// и <c>store.steampowered.com</c>, о котором никто бы не узнал.
+    /// </para>
+    /// <para>
+    /// Берутся первые непроверенные. Прежде бралось строго первое, и если его
+    /// уже занял соседний список, часть выпадала из проверки целиком, ничем
+    /// этого не показав.
+    /// </para>
     /// </remarks>
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(
         string configPath,
@@ -312,14 +456,21 @@ internal static class BlockCheckCommand
                     continue;
 
                 var domains = HostListReader.Read(part.List, zapretRoot, out _);
+                int taken = 0;
 
-                if (domains.Count == 0)
-                    continue;
+                foreach (var domain in domains)
+                {
+                    if (taken == PerPart)
+                        break;
 
-                var host = domains[0].TrimStart('*', '.');
+                    var host = domain.TrimStart('*', '.');
 
-                if (seen.Add(host))
+                    if (!seen.Add(host))
+                        continue;
+
                     targets.Add((host, $"{service.Name} · {part.Name}"));
+                    taken++;
+                }
             }
         }
 

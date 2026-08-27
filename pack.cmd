@@ -64,6 +64,13 @@ mkdir "%STAGE%\config" 2>nul
 copy /y "%ROOT%config\rules.yaml" "%STAGE%\config\" >nul
 copy /y "%ROOT%config\netzapret.example.json" "%STAGE%\config\" >nul
 
+rem Our own domain lists. Rules reference them by path, so leaving them out
+rem gives rules that resolve to nothing - and the service view would show
+rem Steam and Valheim as routed while nothing was routed at all.
+mkdir "%STAGE%\config\lists" 2>nul
+copy /y "%ROOT%config\lists\*.txt" "%STAGE%\config\lists\" >nul
+copy /y "%ROOT%config\lists\README.md" "%STAGE%\config\lists\" >nul
+
 rem A separate README for the archive. The repository one is written for
 rem someone with the sources - it explains building and the module layout,
 rem and tells the reader to run build.cmd, which does not exist here.
