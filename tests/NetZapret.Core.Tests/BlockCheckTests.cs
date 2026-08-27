@@ -79,13 +79,28 @@ public class BlockCheckTests
     [Theory]
     [InlineData(BlockKind.HttpsPort)]
     [InlineData(BlockKind.Full)]
-    [InlineData(BlockKind.Dns)]
     public void Blocks_without_handshake_are_cured_by_tunnel_only(BlockKind kind)
     {
         var report = Report(kind);
 
         Assert.Contains("VPN", report.Remedy());
         Assert.DoesNotContain("десинк", report.Remedy());
+    }
+
+    /// <summary>Отказ резолвера лечится резолвером, а не маршрутом.</summary>
+    /// <remarks>
+    /// Совет должен быть один. Пока здесь стояло «VPN либо свой DNS», раздел
+    /// «Стоит изменить» предлагал сменить маршрут, а итог — сменить резолвер;
+    /// человеку оставалось гадать, что из двух.
+    /// </remarks>
+    [Fact]
+    public void Resolver_failure_is_cured_by_resolver()
+    {
+        var remedy = Report(BlockKind.Dns).Remedy();
+
+        Assert.Contains("DNS", remedy);
+        Assert.DoesNotContain("VPN", remedy);
+        Assert.DoesNotContain("десинк", remedy);
     }
 
     /// <remarks>

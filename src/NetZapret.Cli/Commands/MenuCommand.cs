@@ -32,9 +32,19 @@ internal static class MenuCommand
             Draw(settings);
 
             Console.Write("Выбор: ");
-            var choice = Console.ReadLine()?.Trim();
+            var choice = Console.ReadLine();
 
-            if (choice is null or "0" or "q" or "Q")
+            // Конец ввода — не то же самое, что нажатый ноль. Пока это было
+            // одним и тем же, меню при закрытом stdin спрашивало «что делать
+            // с движками», не получало ответа, возвращалось к себе же —
+            // и так по кругу: сто двадцать килобайт перерисовок за шесть
+            // секунд и полностью занятое ядро. Спрашивать некого, выходим.
+            if (choice is null)
+                return 0;
+
+            choice = choice.Trim();
+
+            if (choice is "0" or "q" or "Q")
             {
                 if (AskOnExit())
                     return 0;
@@ -79,7 +89,15 @@ internal static class MenuCommand
         Console.WriteLine("  0. Вернуться в меню");
         Console.Write("Выбор: ");
 
-        switch (Console.ReadLine()?.Trim())
+        var answer = Console.ReadLine();
+
+        // Ответа не будет — уходим, оставив движки работать. Возврат false
+        // здесь означал бы «вернуться в меню», а меню тут же спросило бы
+        // снова: этот выбор и был вторым звеном зацикливания.
+        if (answer is null)
+            return true;
+
+        switch (answer.Trim())
         {
             case "1":
                 Console.WriteLine();
@@ -191,8 +209,8 @@ internal static class MenuCommand
         // перезапуск. Пункт предлагал мнимое действие и создавал впечатление
         // обязательного шага, который на деле выполняется сам.
         Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить");
-        Console.WriteLine("  8. Обзор состояния");
-        Console.WriteLine("  9. Журнал супервизора");
+        Console.WriteLine("  8. Проверка блокировок ... что закрыто и чем это лечится");
+        Console.WriteLine("  9. Диагностика ........... обзор состояния и журнал");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -238,10 +256,10 @@ internal static class MenuCommand
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
             case "8":
-                RunDoctor(settings);
+                await RunBlockCheckAsync(settings, cancellationToken);
                 return settings;
             case "9":
-                ShowSupervisorLog();
+                DiagnosticsMenu(settings);
                 return settings;
             default:
                 return settings;
@@ -1458,6 +1476,72 @@ internal static class MenuCommand
         Console.WriteLine();
         DoctorCommand.Run(CommandLine.Parse(["doctor", "--config", settings.RulesPath]));
         Pause();
+    }
+
+    /// <summary>
+    /// Проверка блокировок.
+    /// </summary>
+    /// <remarks>
+    /// Вынесена в главное меню, а не спрятана в диагностику: она отвечает на
+    /// вопрос, ради которого программу и открывают, — «почему не работает
+    /// и что мне с этим делать». Остальные два пункта показывают состояние
+    /// самой программы, и это совсем другая забота.
+    /// </remarks>
+    private static async Task RunBlockCheckAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        ClearScreen();
+        Console.WriteLine("Проверка блокировок");
+        Console.WriteLine(new string('=', 62));
+
+        await BlockCheckCommand.ExecuteAsync(
+            settings,
+            settings.RulesPath,
+            UserRulesFile.DefaultPath,
+            ZapretPaths.Discover()?.Root,
+            only: null,
+            cancellationToken);
+
+        Pause();
+    }
+
+    /// <summary>
+    /// Состояние самой программы: что найдено и что она делала.
+    /// </summary>
+    /// <remarks>
+    /// Два пункта под одним, потому что спрашивают их вместе и по одному
+    /// поводу: что-то работает не так, и надо понять, дошло ли дело до
+    /// запуска движков вообще. Держать их в главном меню значило бы занять
+    /// две строки из десяти под то, к чему обращаются раз в месяц.
+    /// </remarks>
+    private static void DiagnosticsMenu(AppSettings settings)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Диагностика");
+            Console.WriteLine(new string('=', 62));
+            Console.WriteLine();
+            Console.WriteLine("  1. Обзор состояния — что найдено и что готово к работе");
+            Console.WriteLine("  2. Журнал супервизора — что происходило при запуске");
+            Console.WriteLine();
+            Console.WriteLine("  0. Назад");
+            Console.WriteLine();
+            Console.Write("Выбор: ");
+
+            switch (Console.ReadLine()?.Trim())
+            {
+                case "1":
+                    RunDoctor(settings);
+                    break;
+
+                case "2":
+                    ShowSupervisorLog();
+                    break;
+
+                default:
+                    return;
+            }
+        }
     }
 
     private static T? Pick<T>(string title, IReadOnlyList<(string Label, T Value)> items, T current)

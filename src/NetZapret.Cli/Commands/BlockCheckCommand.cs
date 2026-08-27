@@ -229,11 +229,14 @@ internal static class BlockCheckCommand
                 Hostname = report.Host,
             }).Mode;
 
+            // Отказ резолвера маршрутом не лечится, и предлагать здесь VPN
+            // значило бы спорить с собственным советом двумя строками выше,
+            // где сказано «свой DNS».
             var should = report.Kind switch
             {
                 BlockKind.None => RoutingMode.Direct,
                 BlockKind.TlsDpi => RoutingMode.Desync,
-                BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns => RoutingMode.Proxy,
+                BlockKind.HttpsPort or BlockKind.Full => RoutingMode.Proxy,
                 _ => now,
             };
 

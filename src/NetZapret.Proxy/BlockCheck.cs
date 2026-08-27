@@ -28,7 +28,14 @@ public enum BlockKind
     /// <summary>Не отвечает ничего, включая обычный HTTP.</summary>
     Full,
 
-    /// <summary>Имя резолвится в подставной адрес.</summary>
+    /// <summary>
+    /// Системный резолвер имя не разрешает, а честный — разрешает.
+    /// </summary>
+    /// <remarks>
+    /// Названо по тому, что измерено. Подменой это звать нельзя: снаружи
+    /// не отличить подставленный ответ от честного, до которого не дошёл
+    /// запрос. Лечится и то и другое одинаково — сменой резолвера.
+    /// </remarks>
     Dns,
 
     /// <summary>
@@ -81,7 +88,7 @@ public sealed record TargetReport
         BlockKind.TlsDpi => "DPI по TLS",
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
-        BlockKind.Dns => "подмена DNS",
+        BlockKind.Dns => "имя не разрешается",
         _ => "нет адреса у имени",
     };
 
@@ -107,7 +114,7 @@ public sealed record TargetReport
         BlockKind.TlsDpi => "десинк",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
-        BlockKind.Dns => "VPN либо свой DNS",
+        BlockKind.Dns => "свой DNS",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -251,15 +258,23 @@ public static class BlockCheck
 
         if (addresses.All(a => a.AddressFamily != AddressFamily.InterNetwork))
         {
+            // Спрашиваем у DoH, прежде чем объявить, что адреса нет. Иначе
+            // два разных случая сливаются в один: у akamai.net записи A нет
+            // ни у кого, и лечить там нечего, а вот имя, которое честный
+            // резолвер разрешает, а системный нет, — это отказ, и решается
+            // он сменой резолвера.
+            var honest = await DohResolveAsync(host, cancellationToken);
+
             return new TargetReport
             {
                 Host = host,
                 Service = service,
-                Tcp = Failed("записи A нет"),
+                Tcp = Failed(honest.Count > 0 ? "системный DNS не разрешает имя" : "записи A нет"),
                 Tls12 = Failed(null),
                 Tls13 = Failed(null),
                 Http = Failed(null),
-                Kind = BlockKind.NoAddress,
+                Kind = honest.Count > 0 ? BlockKind.Dns : BlockKind.NoAddress,
+                Addresses = honest.Take(3).ToList(),
             };
         }
 
@@ -349,6 +364,17 @@ public static class BlockCheck
         }
     }
 
+    /// <remarks>
+    /// Проверка сертификата здесь отключена намеренно, о чём ниже. Анализатор
+    /// об этом знать не может и справедливо ругается на всякий такой колбэк —
+    /// подавлено адресно, чтобы предупреждение осталось живым в остальном коде,
+    /// где оно означало бы настоящую дыру.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA5359:Do not disable certificate validation",
+        Justification = "Измеряется доходимость рукопожатия, а не доверие. " +
+            "Подлинность проверяется отдельно, в CertificateMatchesAsync, и строго.")]
     private static async Task<ProbeOutcome> TlsAsync(
         string host,
         SslProtocols protocol,

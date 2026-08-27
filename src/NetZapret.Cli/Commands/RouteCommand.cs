@@ -130,13 +130,16 @@ internal static class RouteCommand
     {
         var value = target.Trim();
 
+        // Подсеть уходит в ipset, а не в ip, и это не описка: значение
+        // такого правила разворачивает AddressListReader, который принимает
+        // и готовый CIDR, и путь к списку. Одна ветка вместо двух.
         if (value.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) || value.Contains('/'))
             return MatchKind.IpSet;
 
         if (value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || value.Contains('\\'))
             return MatchKind.Process;
 
-        if (IPAddress.TryParse(value, out _) || value.Contains('/'))
+        if (IPAddress.TryParse(value, out _))
             return MatchKind.Ip;
 
         return MatchKind.Domain;

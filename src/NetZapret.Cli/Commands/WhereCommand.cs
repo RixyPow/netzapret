@@ -63,13 +63,34 @@ internal static class WhereCommand
 
         PrintCaveats(connection, decision);
 
-        Console.WriteLine();
-        Console.WriteLine("  Изменить:");
-        Console.WriteLine($"    nz route {target.Trim()} vpn");
-        Console.WriteLine($"    nz route {target.Trim()} десинк");
-        Console.WriteLine($"    nz route {target.Trim()} напрямую");
+        PrintHowToChange(target.Trim(), decision.Mode);
 
         return 0;
+    }
+
+    /// <summary>
+    /// Показывает, чем это можно заменить.
+    /// </summary>
+    /// <remarks>
+    /// Нынешний режим из списка убран: он назван двумя строками выше, и
+    /// предлагать его под заголовком «Изменить» значит предлагать ничего
+    /// не менять. Слова взяты русские — те же, что в ответе, — чтобы
+    /// подсказка и вывод не выглядели про разное.
+    /// </remarks>
+    private static void PrintHowToChange(string target, RoutingMode current)
+    {
+        var options = new (RoutingMode Mode, string Word)[]
+        {
+            (RoutingMode.Proxy, "vpn"),
+            (RoutingMode.Desync, "десинк"),
+            (RoutingMode.Direct, "напрямую"),
+        };
+
+        Console.WriteLine();
+        Console.WriteLine("  Изменить:");
+
+        foreach (var (mode, word) in options.Where(o => o.Mode != current))
+            Console.WriteLine($"    nz route {target} {word}");
     }
 
     /// <summary>
