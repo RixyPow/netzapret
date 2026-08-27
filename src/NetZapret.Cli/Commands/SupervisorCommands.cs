@@ -11,10 +11,17 @@ internal static class SupervisorCommands
 {
     public static async Task<int> StartAsync(CommandLine cmd, CancellationToken cancellationToken)
     {
+        // До холостого прогона: он возвращается раньше, чем читается часть
+        // опций, и те считались бы неучтёнными.
+        cmd.Declare("no-proxy", "proxy-config", "preset", "zapret-root",
+            "verify-traffic", "kill-orphans", "check-interval", "max-restarts");
+
         var statePath = cmd.Value("state", SupervisorState.DefaultPath);
+        var logPath = cmd.Value("log", string.Empty);
 
         // Холостой прогон проверяется до всего остального: он ничего не
         // запускает, поэтому уже работающий супервизор ему не помеха.
+        // Вывод при этом остаётся в консоли — его для того и запрашивают.
         if (cmd.Has("dry-run"))
         {
             Console.WriteLine("Холостой прогон: ничего не запускается.");
@@ -24,8 +31,6 @@ internal static class SupervisorCommands
 
         // Меню запускает супервизор без окна, и писать в консоль ему некуда.
         // Весь вывод уходит в файл, а меню показывает его отдельным пунктом.
-        var logPath = cmd.Value("log", string.Empty);
-
         if (!string.IsNullOrWhiteSpace(logPath))
             RedirectOutputTo(logPath);
 
@@ -154,6 +159,45 @@ internal static class SupervisorCommands
 
         Console.WriteLine();
         Console.WriteLine($"===== запуск {DateTime.Now:dd.MM.yyyy HH:mm:ss}, PID {Environment.ProcessId} =====");
+
+        DetachConsole();
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool FreeConsole();
+
+    /// <summary>
+    /// Отпускает консоль: вывод уже уходит в журнал, окно больше не нужно.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Планировщик запускает консольную программу с окном, и оно висит весь
+    /// сеанс — пустое, потому что писать в него нечего. Настройка задачи
+    /// <c>Hidden</c> не помогает: она прячет задачу в списке планировщика,
+    /// а не окно запущенной программы.
+    /// </para>
+    /// <para>
+    /// Отпускается только когда задан журнал: значит, запуск сделан не человеком
+    /// из консоли, а автозапуском или меню, и смотреть в окно всё равно некому.
+    /// При обычном запуске из терминала консоль остаётся, как и ожидается.
+    /// </para>
+    /// <para>
+    /// Побочное следствие: без консоли не приходят события Ctrl+C. Для такого
+    /// запуска это не потеря — останавливают его командой <c>stop</c> или
+    /// из меню, а нажать Ctrl+C в окне, которого нет, всё равно невозможно.
+    /// </para>
+    /// </remarks>
+    private static void DetachConsole()
+    {
+        try
+        {
+            FreeConsole();
+        }
+        catch (Exception)
+        {
+            // Консоли могло не быть вовсе — например, при запуске из меню,
+            // которое и так создаёт процесс без окна.
+        }
     }
 
     private static bool TryAddSingBox(CommandLine cmd, List<SupervisedService> services)
