@@ -5,4 +5,8 @@
     <ProjectReference Include="..\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="NetZapret.Core.Tests" />
+  </ItemGroup>
+
 </Project>

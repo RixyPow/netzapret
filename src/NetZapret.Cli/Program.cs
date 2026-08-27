@@ -90,7 +90,8 @@ internal static class Program
                 "sub" => await SubCommand.RunAsync(cmd, cts.Token),
                 "config" => await ConfigCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "preset" => PresetCommand.Run(cmd),
-            "dns" => await DnsCommand.RunAsync(cmd, cts.Token),
+                "dns" => await DnsCommand.RunAsync(cmd, cts.Token),
+                "blockcheck" => await BlockCheckCommand.RunAsync(cmd, DefaultConfigPath, cts.Token),
                 "probe" => await ProbeCommand.RunAsync(cmd, cts.Token),
                 "start" => await SupervisorCommands.StartAsync(cmd, cts.Token),
                 "stop" => await SupervisorCommands.StopAsync(cmd, cts.Token),
@@ -243,24 +244,25 @@ internal static class Program
             netzapret — диспетчер маршрутизации трафика
 
             КОМАНДЫ
-              menu      Интерактивное меню: режим, пресет, сервер, запуск
-              watch     Наблюдать за соединениями и показывать применяемые правила
-              rules     Показать разобранный набор правил в порядке вычисления
-              where     Куда пойдёт приложение или сайт: напрямую, десинк или VPN
-              route     Задать свой маршрут для приложения или сайта
-              test      Прогнать синтетическое соединение через правила
-              sub       Показать содержимое подписки: квоту, срок, серверы
-              config    Сгенерировать конфиг sing-box из правил и подписки
-              preset    Показать пресеты Zapret и их покрытие десинком
-              dns       Проверить резолверы и выбрать апстрим
-              probe     Проверить, идёт ли трафик через серверы подписки
-              start     Запустить службы под присмотром супервизора
-              stop      Остановить супервизор и все службы
-              status    Состояние супервизора и служб
-              doctor    Обзор: что найдено и что готово к работе
-              clean     Убрать рабочие файлы и логи из runtime
-              autostart Управление автозапуском: install / remove / status
-              help      Эта справка
+              menu       Интерактивное меню: режим, пресет, сервер, запуск
+              watch      Наблюдать за соединениями и показывать применяемые правила
+              rules      Показать разобранный набор правил в порядке вычисления
+              where      Куда пойдёт приложение или сайт: напрямую, десинк или VPN
+              route      Задать свой маршрут для приложения или сайта
+              test       Прогнать синтетическое соединение через правила
+              sub        Показать содержимое подписки: квоту, срок, серверы
+              config     Сгенерировать конфиг sing-box из правил и подписки
+              preset     Показать пресеты Zapret и их покрытие десинком
+              dns        Проверить резолверы и выбрать апстрим
+              blockcheck Измерить, что закрыто в этой сети и чем это лечится
+              probe      Проверить, идёт ли трафик через серверы подписки
+              start      Запустить службы под присмотром супервизора
+              stop       Остановить супервизор и все службы
+              status     Состояние супервизора и служб
+              doctor     Обзор: что найдено и что готово к работе
+              clean      Убрать рабочие файлы и логи из runtime
+              autostart  Управление автозапуском: install / remove / status
+              help       Эта справка
 
             ОБЩИЕ ОПЦИИ
               --config <путь>      Файл правил (по умолчанию config/rules.yaml)
@@ -304,6 +306,13 @@ internal static class Program
               --zapret-root <путь> Корень установки Zapret (ищется сам)
               --preset <название>  Разобрать конкретный пресет
               --verbose            Показать все секции с рецептами
+
+            blockcheck
+              --service <имя>      Проверить только один сервис
+              --zapret-root <путь> Корень установки Zapret (ищется сам)
+
+              Проверять надо при остановленных движках: с включённым обходом
+              видно сеть уже вылеченной, а не такой, какая она есть.
 
             start / stop / status
               --proxy-config <путь>  Конфиг sing-box (по умолчанию runtime/singbox.json)
