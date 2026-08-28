@@ -818,12 +818,16 @@ internal static class MenuCommand
             {
                 ClearScreen();
 
+                // Быстрая: отсюда её запускают, чтобы свериться с только что
+                // изменённой таблицей, а не разбираться заново. За подробным
+                // разбором есть отдельный пункт меню.
                 await BlockCheckCommand.ExecuteAsync(
                     settings,
                     settings.RulesPath,
                     UserRulesFile.DefaultPath,
                     zapretRoot,
                     only: null,
+                    CheckDepth.Quick,
                     cancellationToken);
 
                 Pause();
@@ -1492,16 +1496,78 @@ internal static class MenuCommand
         ClearScreen();
         Console.WriteLine("Проверка блокировок");
         Console.WriteLine(new string('=', 62));
+        Console.WriteLine();
+        Console.WriteLine("  1. Быстрая — по имени с каждой части, около минуты");
+        Console.WriteLine("  2. Полная — по два имени, дольше, но подробнее");
+        Console.WriteLine("  3. Точечная — один сервис, зато целиком");
+        Console.WriteLine();
+        Console.WriteLine("  0. Назад");
+        Console.WriteLine();
+        Console.Write("Выбор: ");
+
+        var choice = Console.ReadLine()?.Trim();
+
+        var depth = choice switch
+        {
+            "1" => CheckDepth.Quick,
+            "2" => CheckDepth.Full,
+            "3" => CheckDepth.Focused,
+            _ => (CheckDepth?)null,
+        };
+
+        if (depth is null)
+            return;
+
+        string? only = null;
+
+        if (depth == CheckDepth.Focused)
+        {
+            only = PickService();
+
+            if (only is null)
+                return;
+        }
+
+        ClearScreen();
 
         await BlockCheckCommand.ExecuteAsync(
             settings,
             settings.RulesPath,
             UserRulesFile.DefaultPath,
             ZapretPaths.Discover()?.Root,
-            only: null,
+            only,
+            depth.Value,
             cancellationToken);
 
         Pause();
+    }
+
+    /// <summary>
+    /// Спрашивает, какой сервис проверять.
+    /// </summary>
+    /// <remarks>
+    /// Списком, а не вводом названия: имена вроде «Instagram и Facebook»
+    /// с клавиатуры не угадываются, а промах отвечает «такого нет» —
+    /// и человек остаётся гадать, как же он называется.
+    /// </remarks>
+    private static string? PickService()
+    {
+        var services = ServiceCatalog.All;
+
+        Console.WriteLine();
+        Console.WriteLine("Какой сервис");
+        Console.WriteLine();
+
+        for (int i = 0; i < services.Count; i++)
+            Console.WriteLine($"  {i + 1,2}. {services[i].Name}");
+
+        Console.WriteLine();
+        Console.Write("Номер: ");
+
+        return int.TryParse(Console.ReadLine()?.Trim(), out var index)
+            && index >= 1 && index <= services.Count
+                ? services[index - 1].Name
+                : null;
     }
 
     /// <summary>

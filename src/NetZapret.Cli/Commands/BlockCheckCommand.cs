@@ -23,10 +23,40 @@ namespace NetZapret.Cli.Commands;
 /// Подробности показываются только там, где что-то не так.
 /// </para>
 /// </remarks>
+/// <summary>Насколько подробно проверять.</summary>
+internal enum CheckDepth
+{
+    /// <summary>По имени с части, только там, где десинк вообще применяется.</summary>
+    Quick,
+
+    /// <summary>Весь справочник, по два имени с части.</summary>
+    Full,
+
+    /// <summary>Один сервис, но целиком — до четырёх имён с части.</summary>
+    Focused,
+}
+
 internal static class BlockCheckCommand
 {
-    /// <summary>Сколько имён брать с одной части сервиса.</summary>
-    private const int PerPart = 2;
+    /// <summary>
+    /// Сколько проб держать в воздухе одновременно.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ограничение не техническое, а измерительное. Пробы к одному хосту
+    /// по-прежнему идут по очереди: одновременные соединения DPI иногда
+    /// обрывает скопом, и картина смазывается. Параллельно идут разные хосты,
+    /// и вот их можно много — время проверки упирается в ожидание, а не
+    /// в работу.
+    /// </para>
+    /// <para>
+    /// Восемь, а не тридцать: каждая проба открывает до четырёх соединений,
+    /// и тридцать целей разом — это сотня одновременных сокетов с одного
+    /// адреса. Оператору такое похоже на сканирование, а нам не нужно, чтобы
+    /// проверка блокировок сама выглядела поводом для блокировки.
+    /// </para>
+    /// </remarks>
+    private const int Parallelism = 8;
 
     /// <remarks>
     /// В конце придерживает окно. Проверка идёт минуты и заканчивается тем
@@ -49,14 +79,26 @@ internal static class BlockCheckCommand
         return code;
     }
 
-    private static Task<int> Run(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken) =>
-        ExecuteAsync(
+    private static Task<int> Run(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
+    {
+        var only = cmd.Value("service");
+
+        // Названный сервис сам по себе означает точечную проверку: просить
+        // ещё и --depth было бы требованием повторить уже сказанное.
+        var depth = cmd.Has("full") ? CheckDepth.Full
+            : cmd.Has("quick") ? CheckDepth.Quick
+            : only is not null ? CheckDepth.Focused
+            : CheckDepth.Quick;
+
+        return ExecuteAsync(
             AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath)),
             cmd.Value("config", defaultConfigPath),
             cmd.Value("user-rules", UserRulesFile.DefaultPath),
             ZapretPaths.Discover(cmd.Value("zapret-root"))?.Root,
-            cmd.Value("service"),
+            only,
+            depth,
             cancellationToken);
+    }
 
     /// <summary>
     /// Та же проверка, вызываемая из меню.
@@ -73,11 +115,12 @@ internal static class BlockCheckCommand
         string userRulesPath,
         string? zapretRoot,
         string? only,
+        CheckDepth depth,
         CancellationToken cancellationToken)
     {
-        // Цели собираются до замеров: если проверять нечего, шесть секунд
-        // на пробу сети потрачены впустую, а человек об этом узнаёт последним.
-        var targets = CollectTargets(configPath, userRulesPath, zapretRoot, only, out var engine);
+        // Цели собираются до замеров: если проверять нечего, время на пробу
+        // сети потрачено впустую, а человек об этом узнаёт последним.
+        var targets = CollectTargets(configPath, userRulesPath, zapretRoot, only, depth, out var engine);
 
         if (targets.Count == 0)
         {
@@ -97,61 +140,206 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         Console.WriteLine("Проверяю, что умеет сеть…");
 
-        var baseline = await BlockCheck.MeasureBaselineAsync(cancellationToken);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var escape = EscapeWatcher.Watch(stop);
+
+        var baseline = await BlockCheck.MeasureBaselineAsync(stop.Token);
 
         Console.WriteLine();
         PrintBaseline(baseline);
 
         Console.WriteLine();
-        Console.WriteLine($"Проверяю {targets.Count} {Plural(targets.Count, "цель", "цели", "целей")}…");
+        Console.WriteLine(
+            $"{DescribeDepth(depth)}: {targets.Count} {Plural(targets.Count, "цель", "цели", "целей")}. " +
+            (escape.Armed ? "Esc — прервать и показать, что успело набраться." : string.Empty));
         Console.WriteLine();
         PrintColumnHeader();
 
-        var reports = new List<TargetReport>();
-        var previous = Console.ForegroundColor;
+        var reports = await RunProbesAsync(targets, stop.Token);
 
-        foreach (var (host, service) in targets)
+        if (stop.IsCancellationRequested)
+            Message($"Прервано. Успело проверить {reports.Count} из {targets.Count}.", ConsoleColor.Yellow);
+
+        IReadOnlyList<string> badAddresses = [];
+
+        // Прерванную проверку добивать не надо: человек нажал Esc, чтобы
+        // перестать ждать, а не чтобы подождать ещё немного.
+        if (!stop.IsCancellationRequested)
         {
-            if (cancellationToken.IsCancellationRequested)
-                break;
+            Console.WriteLine();
+            Console.WriteLine("Проверяю адреса от системного резолвера…");
 
-            var report = await BlockCheck.CheckAsync(host, service, cancellationToken);
-            reports.Add(report);
-
-            Console.ForegroundColor = report.Actionable ? ConsoleColor.Red : ConsoleColor.DarkGray;
-            Console.WriteLine(
-                $"  {Truncate(host, 30),-30} {report.Tcp.Describe(),-5} " +
-                $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
-                $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
-            Console.ForegroundColor = previous;
-
-            // Причина отказа выводится всегда: вердикт без объяснения нечем
-            // проверить, а ошибиться проверка может — и ошибается.
-            if (report.Actionable)
-            {
-                var why = report.Data.Detail ?? report.Tcp.Detail
-                    ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
-
-                if (why is not null)
-                    Console.WriteLine($"      {Truncate(why, 88)}");
-            }
+            badAddresses = await BlockCheck.FindBadSystemAddressesAsync(
+                targets.Select(t => t.Host).Take(12).ToList(),
+                stop.Token);
         }
 
-        Console.WriteLine();
-        Console.WriteLine("Проверяю адреса от системного резолвера…");
-
-        var badAddresses = await BlockCheck.FindBadSystemAddressesAsync(
-            targets.Select(t => t.Host).Take(12).ToList(),
-            cancellationToken);
+        var pinned = FindPinned(reports);
 
         PrintSummary(reports, badAddresses);
+        PrintPinned(pinned);
 
-        var suggestions = Suggestions(reports, engine);
+        var suggestions = Suggestions(reports, engine)
+            .Where(s => !pinned.ContainsKey(s.Host))
+            .ToList();
 
         PrintAdvice(suggestions);
         ApplyIfConfirmed(suggestions, userRulesPath);
 
         return reports.Any(r => r.Actionable) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Гоняет пробы, не дожидаясь каждой по очереди.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Проверка почти целиком состоит из ожидания: живой хост отвечает за
+    /// доли секунды, мёртвый молчит все четыре, и сорок целей подряд — это
+    /// минуты, проведённые ни за чем. Разные хосты друг другу не мешают,
+    /// поэтому идут разом.
+    /// </para>
+    /// <para>
+    /// Строки печатаются по мере готовности, а не в порядке списка: ждать
+    /// отстающего, чтобы соблюсти очерёдность, значит вернуть ровно то
+    /// ожидание, ради устранения которого всё и затевалось. Порядок
+    /// восстанавливается в итоге, где он и нужен.
+    /// </para>
+    /// </remarks>
+    private static async Task<List<TargetReport>> RunProbesAsync(
+        IReadOnlyList<(string Host, string Service)> targets,
+        CancellationToken cancellationToken)
+    {
+        using var slots = new SemaphoreSlim(Parallelism);
+        var console = new object();
+        var reports = new List<TargetReport>();
+
+        var running = targets.Select(async target =>
+        {
+            await slots.WaitAsync(cancellationToken);
+
+            try
+            {
+                var report = await BlockCheck.CheckAsync(target.Host, target.Service, cancellationToken);
+
+                lock (console)
+                {
+                    reports.Add(report);
+                    PrintRow(report);
+                }
+            }
+            finally
+            {
+                slots.Release();
+            }
+        });
+
+        try
+        {
+            await Task.WhenAll(running);
+        }
+        catch (OperationCanceledException)
+        {
+            // Прерывание — штатный исход, а не сбой. Что успели, то и покажем.
+        }
+
+        return reports;
+    }
+
+    private static void PrintRow(TargetReport report)
+    {
+        var previous = Console.ForegroundColor;
+
+        Console.ForegroundColor = report.Actionable ? ConsoleColor.Red : ConsoleColor.DarkGray;
+        Console.WriteLine(
+            $"  {Truncate(report.Host, 30),-30} {report.Tcp.Describe(),-5} " +
+            $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
+            $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
+        Console.ForegroundColor = previous;
+
+        // Причина отказа выводится всегда: вердикт без объяснения нечем
+        // проверить, а ошибиться проверка может — и ошибается.
+        if (!report.Actionable)
+            return;
+
+        var why = report.Data.Detail ?? report.Tcp.Detail
+            ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
+
+        if (why is not null)
+            Console.WriteLine($"      {Truncate(why, 88)}");
+    }
+
+    private static string DescribeDepth(CheckDepth depth) => depth switch
+    {
+        CheckDepth.Quick => "Быстрая проверка",
+        CheckDepth.Full => "Полная проверка",
+        _ => "Точечная проверка",
+    };
+
+    /// <summary>
+    /// Показывает имена, прибитые в файле hosts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельным разделом, потому что это отменяет всё остальное. Запись
+    /// в hosts перебивает любой наш маршрут: имя разрешается ещё до того,
+    /// как до него доберётся наш резолвер, fakeip не выдаётся, и трафик
+    /// уходит по прибитому адресу мимо туннеля.
+    /// </para>
+    /// <para>
+    /// Найдено на живом случае. ChatGPT «умер» и не открывался; в hosts
+    /// лежало шестьсот семьдесят имён, прибитых к одному адресу, и адрес
+    /// этот давно не отвечал. Ни десинк, ни VPN тут ни при чём, а по
+    /// признакам выглядело как блокировка.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Какие из проверенных имён прибиты в hosts.
+    /// </summary>
+    /// <remarks>
+    /// Совпадение точное. Зоны здесь не годятся: <c>FindPinned</c> ищет
+    /// поддомены, что верно для правила на всю зону, но здесь речь про
+    /// конкретное имя, которое мы только что проверяли, — и приписывать
+    /// ему запись о соседе значило бы врать.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> FindPinned(IReadOnlyList<TargetReport> reports)
+    {
+        var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var hosts = HostsFile.Read();
+
+        if (hosts.Count == 0)
+            return found;
+
+        foreach (var report in reports)
+        {
+            if (hosts.TryGetValue(report.Host, out var addresses) && addresses.Count > 0)
+                found[report.Host] = string.Join(", ", addresses);
+        }
+
+        return found;
+    }
+
+    private static void PrintPinned(IReadOnlyDictionary<string, string> pinned)
+    {
+        if (pinned.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("Прибито в файле hosts — это отменяет любой наш маршрут");
+
+        foreach (var (host, address) in pinned.OrderBy(p => p.Key, StringComparer.Ordinal))
+            Console.WriteLine($"  {Truncate(host, 34),-34} → {address}");
+
+        Console.WriteLine();
+        Console.WriteLine("  Имя разрешается до нашего резолвера, fakeip не выдаётся, и трафик");
+        Console.WriteLine("  идёт по этому адресу мимо туннеля. Совета по ним не будет: пока");
+        Console.WriteLine("  запись на месте, маршрут ничего не решает.");
+        Console.WriteLine($"  Файл: {HostsFile.DefaultPath}");
+
+        Console.ForegroundColor = previous;
     }
 
     /// <summary>
@@ -376,7 +564,9 @@ internal static class BlockCheckCommand
             return;
 
         Console.WriteLine();
-        Console.Write($"Записать эти {suggestions.Count} {Plural(suggestions.Count, "правило", "правила", "правил")}? [д/н]: ");
+        Console.Write(
+            $"Записать {Plural(suggestions.Count, "это", "эти", "эти")} {suggestions.Count} " +
+            $"{Plural(suggestions.Count, "правило", "правила", "правил")}? [д/н]: ");
 
         var answer = Console.ReadLine();
 
@@ -426,8 +616,16 @@ internal static class BlockCheckCommand
         string userRulesPath,
         string? zapretRoot,
         string? only,
+        CheckDepth depth,
         out RuleEngine? engine)
     {
+        int perPart = depth switch
+        {
+            CheckDepth.Quick => 1,
+            CheckDepth.Full => 2,
+            _ => 4,
+        };
+
         engine = null;
 
         try
@@ -460,7 +658,7 @@ internal static class BlockCheckCommand
 
                 foreach (var domain in domains)
                 {
-                    if (taken == PerPart)
+                    if (taken == perPart)
                         break;
 
                     var host = domain.TrimStart('*', '.');

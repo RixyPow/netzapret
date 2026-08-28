@@ -96,6 +96,37 @@ public sealed class HostsFileTests : IDisposable
         Assert.Contains("canva.com", Assert.Single(notes));
     }
 
+    /// <summary>Списочное правило учитывается наравне с доменным.</summary>
+    /// <remarks>
+    /// Пока учитывались только доменные, это молча не работало для всего,
+    /// что назначено через раздел сервисов, — а он пишет именно hostlist.
+    /// Так и вышло с ChatGPT: правило говорило «через VPN», в hosts все его
+    /// имена были прибиты к давно умолкшему адресу, и трафик уходил туда
+    /// мимо туннеля. Со стороны — блокировка, которую ничем не пробить.
+    /// </remarks>
+    [Fact]
+    public void PinnedDomainsOfAHostListRuleAreCollectedToo()
+    {
+        Write("72.56.93.144 chatgpt.com");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: hostlist
+                value: "lists/chatgpt.txt"
+                mode: proxy
+            """);
+
+        // Список обычно загружает разворачиватель правил; здесь он подан
+        // напрямую, чтобы проверка не зависела от установленного Zapret.
+        engine.RuleSet.Rules[0].LoadHostList(["chatgpt.com", "openai.com"]);
+
+        var found = HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out var notes, _path);
+
+        Assert.Equal("72.56.93.144/32", Assert.Single(found));
+        Assert.Contains("chatgpt.com", Assert.Single(notes));
+    }
+
     [Fact]
     public void DesyncDomainsAreLeftAlone()
     {

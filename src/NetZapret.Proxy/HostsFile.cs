@@ -126,10 +126,20 @@ public static class HostsFile
     /// чтобы завести их в туннель принудительно.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Иначе такие домены оставались бы вне туннеля независимо от правил:
     /// fakeip им не выдаётся, а перехват идёт по адресу назначения. Заводим
     /// прибитый адрес — трафик доходит до sing-box, тот по SNI опознаёт домен
     /// и применяет к нему обычное правило.
+    /// </para>
+    /// <para>
+    /// Списочные правила учитываются наравне с доменными. Пока учитывались
+    /// только доменные, это молча не работало для всего, что назначено через
+    /// раздел сервисов, — а он пишет именно <c>hostlist</c>. Так и вышло
+    /// с ChatGPT: правило говорило «через VPN», в hosts все его имена были
+    /// прибиты к одному давно умолкшему адресу, и трафик уходил туда мимо
+    /// туннеля. Со стороны — блокировка, которую ничем не пробить.
+    /// </para>
     /// </remarks>
     /// <param name="notes">Что нашлось — для показа пользователю.</param>
     /// <param name="hostsPath">Путь к файлу; <c>null</c> — системный.</param>
@@ -149,34 +159,57 @@ public static class HostsFile
 
         foreach (var rule in ruleSet.Rules)
         {
-            if (rule.Mode != Core.Rules.RoutingMode.Proxy || rule.Match != Core.Rules.MatchKind.Domain)
+            if (rule.Mode != Core.Rules.RoutingMode.Proxy)
                 continue;
 
-            var domain = rule.Value.StartsWith("*.", StringComparison.Ordinal)
-                ? rule.Value[2..]
-                : rule.Value;
-
-            if (domain.Contains('*'))
-                continue;
-
-            var pinned = FindPinned(hosts, domain);
-
-            if (pinned.Count == 0)
-                continue;
-
-            foreach (var address in pinned)
+            foreach (var domain in DomainsOf(rule))
             {
-                var cidr = ToCidr(address);
+                var pinned = FindPinned(hosts, domain);
 
-                if (!found.Contains(cidr))
-                    found.Add(cidr);
+                if (pinned.Count == 0)
+                    continue;
+
+                foreach (var address in pinned)
+                {
+                    var cidr = ToCidr(address);
+
+                    if (!found.Contains(cidr))
+                        found.Add(cidr);
+                }
+
+                messages.Add(
+                    $"{domain} прибит в hosts к {string.Join(", ", pinned)} — " +
+                    "адрес заведён в туннель, иначе правило не сработало бы");
             }
-
-            messages.Add(
-                $"{domain} прибит в hosts к {string.Join(", ", pinned)} — " +
-                "адрес заведён в туннель, иначе правило не сработало бы");
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Имена, на которые правило распространяется.
+    /// </summary>
+    /// <remarks>
+    /// Списочное правило — это те же домены, только перечисленные в файле;
+    /// список к этому времени уже загружен разворачивателем правил. Имена
+    /// со звёздочкой внутри пропускаются: сопоставлять их с hosts, где
+    /// подстановок не бывает, не с чем.
+    /// </remarks>
+    private static IEnumerable<string> DomainsOf(Core.Rules.RoutingRule rule)
+    {
+        IEnumerable<string> raw = rule.Match switch
+        {
+            Core.Rules.MatchKind.Domain => [rule.Value],
+            Core.Rules.MatchKind.HostList => rule.HostListDomains,
+            _ => [],
+        };
+
+        foreach (var value in raw)
+        {
+            var domain = value.StartsWith("*.", StringComparison.Ordinal) ? value[2..] : value;
+
+            if (!domain.Contains('*'))
+                yield return domain;
+        }
     }
 }
