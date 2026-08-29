@@ -84,6 +84,33 @@ public sealed record AppSettings
     /// <summary>Апстрим DNS; адресом, не именем.</summary>
     public string DnsServer { get; init; } = "8.8.8.8";
 
+    /// <summary>
+    /// Вести журнал супервизора.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию включён, и выключать его стоит с осторожностью: без
+    /// журнала разбор сбоя сводится к догадкам. Выключатель заведён для тех,
+    /// кого смущает рост файла — winws2 пишет строку на соединение.
+    /// </remarks>
+    public bool LogsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Предлагать перезапуск Discord после смены маршрута.
+    /// </summary>
+    /// <remarks>
+    /// Discord запоминает голосовые серверы на сеанс, и до перезапуска ходит
+    /// по-старому. Само собой это не делается никогда: перезапуск посреди
+    /// звонка хуже задержки с применением.
+    /// </remarks>
+    public bool OfferDiscordRestart { get; init; }
+
+    /// <summary>Проверять наличие новой версии при запуске.</summary>
+    /// <remarks>
+    /// Только проверять. Установка — отдельное действие с отдельным согласием:
+    /// подменять работающий обход молча нельзя.
+    /// </remarks>
+    public bool CheckForUpdates { get; init; } = true;
+
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
     private static readonly JsonSerializerOptions Options = new()

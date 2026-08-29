@@ -4,6 +4,7 @@ using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
+using NetZapret.Core.Updates;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
@@ -201,8 +202,8 @@ internal static class MenuCommand
         Console.WriteLine($"  2. Пресет Zapret ......... {settings.DescribePreset()}");
         Console.WriteLine($"  3. VPN ................... {DescribeVpn(settings)}");
         Console.WriteLine($"  4. DNS ................... {DescribeDns(settings)}");
-        Console.WriteLine($"  5. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
-        Console.WriteLine($"  6. Сервисы и маршруты .... {DescribeRoutes()}");
+        Console.WriteLine($"  5. Сервисы и маршруты .... {DescribeRoutes()}");
+        Console.WriteLine($"  6. Файл hosts ............ {DescribeHosts()}");
         Console.WriteLine();
         // Отдельного «собрать конфиг» здесь нет намеренно: он собирается при
         // каждом запуске, а сам по себе ничего не применяет — действует только
@@ -210,7 +211,7 @@ internal static class MenuCommand
         // обязательного шага, который на деле выполняется сам.
         Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить");
         Console.WriteLine("  8. Проверка блокировок ... что закрыто и чем это лечится");
-        Console.WriteLine("  9. Диагностика ........... обзор состояния и журнал");
+        Console.WriteLine("  9. Ещё ................... автозапуск, обновление, диагностика");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -247,10 +248,10 @@ internal static class MenuCommand
                 settings = await DnsMenuAsync(settings, cancellationToken);
                 break;
             case "5":
-                ToggleAutostart(settings);
+                await EditServicesAsync(settings, cancellationToken);
                 return settings;
             case "6":
-                await EditServicesAsync(settings, cancellationToken);
+                await HostsMenuAsync(cancellationToken);
                 return settings;
             case "7":
                 await ToggleRunAsync(settings, cancellationToken);
@@ -259,8 +260,7 @@ internal static class MenuCommand
                 await RunBlockCheckAsync(settings, cancellationToken);
                 return settings;
             case "9":
-                DiagnosticsMenu(settings);
-                return settings;
+                return await MoreMenuAsync(settings, settingsPath, cancellationToken);
             default:
                 return settings;
         }
@@ -1411,7 +1411,12 @@ internal static class MenuCommand
 
     private static string BuildStartArguments(AppSettings settings)
     {
-        var arguments = $"start --log \"{Path.GetFullPath(SupervisorLogPath)}\"";
+        // Без журнала супервизор запускается с окном: вывод должен куда-то
+        // идти, а перенаправление и есть то, что позволяет окно отпустить.
+        // Выключив журнал, человек соглашается и на это.
+        var arguments = settings.LogsEnabled
+            ? $"start --log \"{Path.GetFullPath(SupervisorLogPath)}\""
+            : "start";
 
         // Туннель поднимается только там, где он куда-то ведёт. В режиме
         // «только десинк» sing-box был бы вхолостую поднятым TUN: адаптер
@@ -1588,6 +1593,562 @@ internal static class MenuCommand
             && index >= 1 && index <= services.Count
                 ? services[index - 1].Name
                 : null;
+    }
+
+    private static string DescribeHosts()
+    {
+        var entries = HostsEditor.Parse();
+        int active = entries.Count(e => e.Enabled);
+
+        return active == 0 ? "пусто" : $"{active} {Plural(active, "запись", "записи", "записей")}";
+    }
+
+    /// <summary>
+    /// Редактор файла hosts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Смысл не в том, чтобы повторить блокнот, а в том, чтобы связать файл
+    /// с тем, что мы про него знаем. Прибитое имя отменяет любой наш маршрут,
+    /// и проверка блокировок это уже показывает; здесь такую запись можно
+    /// снять, не уходя под администратора в текстовый редактор.
+    /// </para>
+    /// <para>
+    /// Выключение — комментарий, а не удаление, и перед каждой правкой
+    /// делается копия. Файл общий: часть записей ставит редактор Zapret,
+    /// часть человек руками, и стереть чужое значит сломать настройку,
+    /// которую чинить будут не у нас.
+    /// </para>
+    /// </remarks>
+    private static async Task HostsMenuAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Файл hosts");
+            Console.WriteLine(new string('=', 62));
+
+            var entries = HostsEditor.Parse();
+
+            if (entries.Count == 0)
+            {
+                Message("Записей нет — файл пуст или недоступен.", ConsoleColor.Yellow);
+                Pause();
+                return;
+            }
+
+            // Группируем по адресу: имена прибивают пачками, и список
+            // из шестисот строк нечитаем, а из десяти адресов — вполне.
+            var groups = entries
+                .GroupBy(e => new { e.Address, e.Enabled })
+                .OrderByDescending(g => g.Sum(e => e.Names.Count))
+                .ToList();
+
+            Console.WriteLine();
+            Console.WriteLine($"  {"АДРЕС",-40} {"ИМЁН",-6} СОСТОЯНИЕ");
+            Console.WriteLine("  " + new string('-', 60));
+
+            var previous = Console.ForegroundColor;
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                var group = groups[i];
+                int names = group.Sum(e => e.Names.Count);
+
+                Console.ForegroundColor = group.Key.Enabled ? previous : ConsoleColor.DarkGray;
+                Console.WriteLine(
+                    $"  {i + 1,2}. {Truncate(group.Key.Address, 34),-36} {names,-6} " +
+                    (group.Key.Enabled ? "действует" : "выключено"));
+                Console.ForegroundColor = previous;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  Номер — включить или выключить все имена этого адреса.");
+            Console.WriteLine("  п — проверить, отвечают ли адреса.");
+            Console.WriteLine("  с — показать имена одного адреса.");
+            Console.WriteLine("  Пусто — назад.");
+            Console.WriteLine();
+            Console.Write("> ");
+
+            var input = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
+                return;
+
+            if (Is(input, "п", "p"))
+            {
+                await CheckPinsAsync(entries, cancellationToken);
+                continue;
+            }
+
+            if (Is(input, "с", "s"))
+            {
+                ShowNames(groups.Select(g => (g.Key.Address, g.SelectMany(e => e.Names).ToList())).ToList());
+                continue;
+            }
+
+            if (int.TryParse(input, out var index) && index >= 1 && index <= groups.Count)
+                ToggleGroup(groups[index - 1].ToList(), groups[index - 1].Key.Enabled);
+        }
+    }
+
+    private static bool Is(string input, string ru, string en) =>
+        string.Equals(input, ru, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(input, en, StringComparison.OrdinalIgnoreCase);
+
+    private static void ToggleGroup(IReadOnlyList<HostsEntry> group, bool enabled)
+    {
+        var address = group[0].Address;
+        int names = group.Sum(e => e.Names.Count);
+        var action = enabled ? "Выключить" : "Включить";
+
+        Console.WriteLine();
+        Console.Write($"{action} {names} {Plural(names, "имя", "имени", "имён")} на {address}? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        try
+        {
+            var backup = HostsEditor.SetEnabled(group.Select(e => e.Line).ToList(), !enabled);
+
+            Message($"Готово. Копия прежнего файла: {backup}", ConsoleColor.Green);
+
+            // Без сброса кэша правка не вступит в силу, и человек справедливо
+            // решит, что редактор не работает.
+            Console.WriteLine(HostsEditor.FlushDns()
+                ? "Кэш DNS сброшен."
+                : "Кэш DNS сбросить не вышло — выполните ipconfig /flushdns вручную.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Message(
+                "Нужны права администратора: файл системный. Запустите NetZapret от имени администратора.",
+                ConsoleColor.Yellow);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red);
+        }
+
+        Pause();
+    }
+
+    /// <summary>
+    /// Проверяет, отвечают ли прибитые адреса.
+    /// </summary>
+    /// <remarks>
+    /// Ради этого редактор во многом и заводился. Прибитый мёртвый адрес
+    /// перебивает и наш маршрут, и обычный DNS, а сам молчит — со стороны
+    /// неотличимо от блокировки. Так нашёлся «умерший» ChatGPT: 670 имён
+    /// на один переставший отвечать адрес.
+    /// </remarks>
+    private static async Task CheckPinsAsync(
+        IReadOnlyList<HostsEntry> entries,
+        CancellationToken cancellationToken)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Проверяю адреса…");
+        Console.WriteLine();
+
+        var health = await HostsEditor.CheckAsync(entries, cancellationToken);
+        var previous = Console.ForegroundColor;
+
+        foreach (var pin in health)
+        {
+            Console.ForegroundColor = !pin.Tested ? ConsoleColor.DarkGray
+                : pin.Alive ? ConsoleColor.DarkGray
+                : ConsoleColor.Red;
+
+            var state = !pin.Tested ? $"не проверить — {pin.Skipped}"
+                : pin.Alive ? "отвечает"
+                : "МОЛЧИТ";
+
+            Console.WriteLine($"  {pin.Address,-40} {pin.Names,-6} {state}");
+        }
+
+        Console.ForegroundColor = previous;
+
+        if (SupervisorState.Load(SupervisorState.DefaultPath) is { } state2 && state2.IsSupervisorAlive())
+        {
+            Console.WriteLine();
+            Console.WriteLine("  Движки работают: часть адресов может отвечать через туннель,");
+            Console.WriteLine("  а напрямую молчать. Для чистой картины остановите их.");
+        }
+
+        var dead = health.Where(h => h.Tested && !h.Alive).ToList();
+
+        if (dead.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Молчат {dead.Count} {Plural(dead.Count, "адрес", "адреса", "адресов")}, " +
+                $"на них {dead.Sum(d => d.Names)} {Plural(dead.Sum(d => d.Names), "имя", "имени", "имён")}.");
+            Console.WriteLine("  Такая запись отменяет и наш маршрут, и обычный DNS, а сама никуда");
+            Console.WriteLine("  не ведёт. Выключите её номером в списке.");
+        }
+
+        Pause();
+    }
+
+    private static void ShowNames(IReadOnlyList<(string Address, List<string> Names)> groups)
+    {
+        Console.Write("Номер адреса: ");
+
+        if (!int.TryParse(Console.ReadLine()?.Trim(), out var index)
+            || index < 1 || index > groups.Count)
+        {
+            return;
+        }
+
+        var (address, names) = groups[index - 1];
+
+        Console.WriteLine();
+        Console.WriteLine($"{address} — {names.Count} {Plural(names.Count, "имя", "имени", "имён")}");
+        Console.WriteLine();
+
+        foreach (var chunk in names.Chunk(3))
+            Console.WriteLine("  " + string.Join("   ", chunk.Select(n => n.PadRight(28))));
+
+        Pause();
+    }
+
+    /// <summary>
+    /// Всё, к чему обращаются изредка.
+    /// </summary>
+    /// <remarks>
+    /// Автозапуск, обновление и диагностика вынесены сюда не по важности,
+    /// а по частоте: их трогают раз в месяц, и держать их в главном меню
+    /// значило бы занимать три строки из десяти под редкое.
+    /// </remarks>
+    private static async Task<AppSettings> MoreMenuAsync(
+        AppSettings settings,
+        string settingsPath,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Ещё");
+            Console.WriteLine(new string('=', 62));
+            Console.WriteLine();
+            Console.WriteLine($"  1. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
+            Console.WriteLine($"  2. Обновление ............ у вас {UpdateCheck.Current}");
+            Console.WriteLine($"  3. Журнал ................ {(settings.LogsEnabled ? "ведётся" : "выключен")}");
+            Console.WriteLine();
+            Console.WriteLine("  4. Обзор состояния");
+            Console.WriteLine("  5. Журнал супервизора");
+            Console.WriteLine("  6. Обслуживание .......... сброс, сеть, Defender, папка");
+            Console.WriteLine();
+            Console.WriteLine("  0. Назад");
+            Console.WriteLine();
+            Console.Write("Выбор: ");
+
+            switch (Console.ReadLine()?.Trim())
+            {
+                case "1":
+                    ToggleAutostart(settings);
+                    break;
+
+                case "2":
+                    await UpdateMenuAsync(cancellationToken);
+                    break;
+
+                case "3":
+                    settings = settings with { LogsEnabled = !settings.LogsEnabled };
+                    settings.Save(settingsPath);
+                    Message(
+                        settings.LogsEnabled
+                            ? "Журнал будет вестись со следующего запуска."
+                            : "Журнал выключен. Учтите два следствия: разбор сбоя сведётся "
+                                + "к догадкам, и супервизор будет запускаться с окном — "
+                                + "отпустить консоль он может только перенаправив вывод.",
+                        settings.LogsEnabled ? ConsoleColor.Green : ConsoleColor.Yellow);
+                    Pause();
+                    break;
+
+                case "4":
+                    RunDoctor(settings);
+                    break;
+
+                case "5":
+                    ShowSupervisorLog();
+                    break;
+
+                case "6":
+                    settings = MaintenanceMenu(settings, settingsPath);
+                    break;
+
+                default:
+                    return settings;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Проверка и установка обновления.
+    /// </summary>
+    /// <remarks>
+    /// Проверка и установка разделены намеренно. Первая безобидна, вторая
+    /// подменяет работающий обход, и делать её продолжением первой значило бы
+    /// превратить любопытство в согласие.
+    /// </remarks>
+    private static async Task UpdateMenuAsync(CancellationToken cancellationToken)
+    {
+        ClearScreen();
+        Console.WriteLine("Обновление");
+        Console.WriteLine(new string('=', 62));
+        Console.WriteLine();
+        Console.WriteLine($"  У вас: {UpdateCheck.Current}");
+        Console.WriteLine("  Спрашиваю GitHub…");
+
+        var release = await UpdateCheck.LatestAsync(cancellationToken);
+
+        if (release is null)
+        {
+            Message("Узнать не удалось: нет связи с GitHub или он недоступен.", ConsoleColor.Yellow);
+            Pause();
+            return;
+        }
+
+        if (!UpdateCheck.IsNewer(release.Version, UpdateCheck.Current))
+        {
+            Message($"У вас последняя версия ({UpdateCheck.Current}).", ConsoleColor.Green);
+            Pause();
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  Есть {release.Version}, вышла {release.Published?.ToLocalTime():dd.MM.yyyy}");
+        Console.WriteLine($"  Размер: {release.ArchiveSize / 1024.0 / 1024.0:0.0} МБ");
+
+        if (!string.IsNullOrWhiteSpace(release.Notes))
+        {
+            Console.WriteLine();
+
+            foreach (var line in release.Notes.Split('\n').Take(12))
+                Console.WriteLine($"  {Truncate(line.TrimEnd(), 74)}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Настройки, свои правила и подставленные адреса не перезаписываются.");
+        Console.WriteLine("  После установки программа закроется и запустится заново.");
+        Console.WriteLine();
+
+        if (SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive())
+        {
+            Message(
+                "Движки работают. Обновление их остановит — все соединения оборвутся.",
+                ConsoleColor.Yellow);
+        }
+
+        Console.Write("Скачать и установить? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        await InstallAsync(release, cancellationToken);
+    }
+
+    private static async Task InstallAsync(ReleaseInfo release, CancellationToken cancellationToken)
+    {
+        Console.WriteLine();
+
+        try
+        {
+            var progress = new Progress<double>(fraction =>
+            {
+                // В той же строке: сотня строк прогресса вытеснит из окна
+                // всё, что человек читал секунду назад.
+                Console.Write($"\r  Скачиваю… {fraction * 100:0}%   ");
+            });
+
+            var plan = await UpdateInstaller.StageAsync(release, progress, cancellationToken);
+
+            Console.WriteLine($"\r  Скачано и распаковано: {plan.Files} файлов.   ");
+
+            if (plan.Kept.Count > 0)
+                Console.WriteLine($"  Сохранено как есть: {string.Join(", ", plan.Kept)}");
+
+            var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
+
+            Console.WriteLine();
+            Console.WriteLine("  Готово к установке. Программа сейчас закроется, файлы заменятся");
+            Console.WriteLine("  и она запустится снова.");
+            Console.Write("  Enter — продолжить, иначе отмена: ");
+
+            if (Console.ReadLine() is null)
+                return;
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = script,
+                Arguments = Environment.ProcessId.ToString(),
+                UseShellExecute = true,
+            });
+
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red);
+            Console.WriteLine("Прежняя версия не тронута.");
+            Pause();
+        }
+    }
+
+    /// <summary>Разовые действия, которых иначе пришлось бы искать по инструкциям.</summary>
+    private static AppSettings MaintenanceMenu(AppSettings settings, string settingsPath)
+    {
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Обслуживание");
+            Console.WriteLine(new string('=', 62));
+            Console.WriteLine();
+            Console.WriteLine("  1. Сбросить настройки до заводских");
+            Console.WriteLine("  2. Сброс сети Windows .... winsock и TCP/IP, нужен перезапуск ПК");
+            Console.WriteLine("  3. Папку в исключения Microsoft Defender");
+            Console.WriteLine("  4. Перезапустить Discord . после смены маршрута голоса");
+            Console.WriteLine($"  5. Предлагать перезапуск Discord ... {(settings.OfferDiscordRestart ? "да" : "нет")}");
+            Console.WriteLine();
+            Console.WriteLine("  6. Открыть папку программы");
+            Console.WriteLine("  7. Документация");
+            Console.WriteLine();
+            Console.WriteLine("  0. Назад");
+            Console.WriteLine();
+            Console.Write("Выбор: ");
+
+            switch (Console.ReadLine()?.Trim())
+            {
+                case "1":
+                    ResetSettings();
+                    break;
+
+                case "2":
+                    Confirm(
+                        "Сбросить сетевой стек Windows? Потребуется перезагрузка компьютера.",
+                        Maintenance.ResetNetwork);
+                    break;
+
+                case "3":
+                    Confirm(
+                        "Вывести папку программы из-под проверки Defender? Он удаляет winws2.exe, "
+                            + "опознавая в нём WinDivert. Защита остального компьютера не меняется.",
+                        Maintenance.ExcludeFromDefender);
+                    break;
+
+                case "4":
+                    Report(Maintenance.RestartDiscord());
+                    break;
+
+                case "5":
+                    settings = settings with { OfferDiscordRestart = !settings.OfferDiscordRestart };
+                    settings.Save(settingsPath);
+                    break;
+
+                case "6":
+                    Report(Maintenance.OpenFolder());
+                    break;
+
+                case "7":
+                    Report(Maintenance.OpenDocs());
+                    break;
+
+                default:
+                    return settings;
+            }
+        }
+    }
+
+    private static void ResetSettings()
+    {
+        Console.WriteLine();
+        Console.WriteLine("  Удалятся настройки, свои маршруты и рабочие файлы.");
+        Console.Write("  Оставить ссылку подписки? [д/н]: ");
+
+        var keep = Console.ReadLine()?.Trim();
+
+        if (keep is null)
+            return;
+
+        Console.Write("  Точно сбросить? [д/н]: ");
+
+        var confirm = Console.ReadLine()?.Trim();
+
+        if (confirm is null || !(confirm.StartsWith('д') || confirm.StartsWith('y')))
+            return;
+
+        Report(Maintenance.ResetSettings(keep.StartsWith('д') || keep.StartsWith('y')));
+    }
+
+    private static void Confirm(string question, Func<ActionResult> action)
+    {
+        Console.WriteLine();
+
+        foreach (var line in Wrap(question, 70))
+            Console.WriteLine($"  {line}");
+
+        Console.Write("  Продолжить? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        Report(action());
+    }
+
+    private static void Report(ActionResult result)
+    {
+        Message(result.Message, result.Ok ? ConsoleColor.Green : ConsoleColor.Yellow);
+
+        if (result.NeedsReboot)
+            Console.WriteLine("Изменения вступят в силу после перезагрузки компьютера.");
+
+        Pause();
+    }
+
+    /// <summary>Разбивает длинную строку по словам.</summary>
+    private static IEnumerable<string> Wrap(string text, int width)
+    {
+        var line = new System.Text.StringBuilder();
+
+        foreach (var word in text.Split(' '))
+        {
+            if (line.Length > 0 && line.Length + word.Length + 1 > width)
+            {
+                yield return line.ToString();
+                line.Clear();
+            }
+
+            if (line.Length > 0)
+                line.Append(' ');
+
+            line.Append(word);
+        }
+
+        if (line.Length > 0)
+            yield return line.ToString();
+    }
+
+    /// <summary>Согласует существительное с числом.</summary>
+    private static string Plural(int count, string one, string few, string many)
+    {
+        var tens = count % 100;
+
+        if (tens is >= 11 and <= 14)
+            return many;
+
+        return (count % 10) switch
+        {
+            1 => one,
+            2 or 3 or 4 => few,
+            _ => many,
+        };
     }
 
     /// <summary>
