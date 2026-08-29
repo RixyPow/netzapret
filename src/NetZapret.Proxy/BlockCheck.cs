@@ -78,6 +78,28 @@ public enum BlockKind
     Sinkhole,
 
     /// <summary>
+    /// Всё работает, но сайт отказывает по стране.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отказ не от оператора, а от самого сайта, и потому неотличим от успеха
+    /// всеми прежними мерками: TCP встаёт, рукопожатие проходит, данные идут.
+    /// Идёт при этом страница «нам жаль, но не в вашей стране».
+    /// </para>
+    /// <para>
+    /// Найдено на ChatGPT. Десинк отрабатывал безупречно — рукопожатие
+    /// за семь сотых секунды, — а приходил 403 от Cloudflare с московского
+    /// узла. Проверка называла это «доступен», и по её же меркам была права.
+    /// </para>
+    /// <para>
+    /// Десинку тут делать нечего: он влияет на то, как выглядит соединение
+    /// для DPI, а решение принимает сайт, уже разобрав запрос. Помогает
+    /// только выход в другой стране.
+    /// </para>
+    /// </remarks>
+    GeoBlock,
+
+    /// <summary>
     /// Имя ведёт на другое имя, а у того адреса нет.
     /// </summary>
     /// <remarks>
@@ -115,6 +137,15 @@ public sealed record ProbeOutcome
     /// <summary>Соединение оборвано удалённой стороной — признак DPI.</summary>
     public bool Reset { get; init; }
 
+    /// <summary>
+    /// Ответ получен, но это отказ самого сайта.
+    /// </summary>
+    /// <remarks>
+    /// Отличается от всех прочих неудач тем, что связь исправна. Отказал
+    /// не канал, а собеседник, и лечится это не тем же самым.
+    /// </remarks>
+    public bool Refused { get; init; }
+
     public TimeSpan Elapsed { get; init; }
 
     public string? Detail { get; init; }
@@ -151,6 +182,7 @@ public sealed record TargetReport
         BlockKind.Full => "закрыт полностью",
         BlockKind.Sinkhole => "адрес-заглушка",
         BlockKind.Dns => "имя не разрешается",
+        BlockKind.GeoBlock => "сайт отказывает по стране",
         BlockKind.BrokenCname => "оборванный CNAME",
         _ => "нет адреса у имени",
     };
@@ -180,6 +212,7 @@ public sealed record TargetReport
         BlockKind.Full => "только VPN",
         BlockKind.Sinkhole => "только VPN",
         BlockKind.Dns => "свой DNS",
+        BlockKind.GeoBlock => "только VPN — десинк не поможет",
         BlockKind.BrokenCname => "подставить адрес",
         _ => "ничего — у имени нет адреса",
     };
@@ -467,7 +500,15 @@ public static class BlockCheck
         // пока он не открывался: рукопожатие проходило, а поток умирал
         // на четырнадцатой тысяче байт.
         if (tls12.Ok || tls13.Ok)
-            return data.Ok ? BlockKind.None : BlockKind.Stall;
+        {
+            if (!data.Ok)
+                return BlockKind.Stall;
+
+            // Данные пришли, но это отказ самого сайта. Всё, что мы умеем
+            // мерить, говорит «работает», и по своим меркам оно право —
+            // работает связь, а отказывает сайт.
+            return data.Refused ? BlockKind.GeoBlock : BlockKind.None;
+        }
 
         if (tcp.Ok && (tls12.Reset || tls13.Reset))
             return BlockKind.TlsDpi;
@@ -630,6 +671,7 @@ public static class BlockCheck
             await ssl.WriteAsync(request, connect.Token);
 
             var buffer = new byte[16 * 1024];
+            int? status = null;
 
             while (total < EnoughBytes)
             {
@@ -658,14 +700,21 @@ public static class BlockCheck
                 if (read == 0)
                     break;
 
+                // Код ответа берётся из первой порции: строка состояния
+                // приходит первой, и дочитывать ради неё страницу незачем.
+                status ??= ParseStatus(buffer, read);
+
                 total += read;
             }
 
             return new ProbeOutcome
             {
                 Ok = true,
+                Refused = status is 403 or 451,
                 Elapsed = stopwatch.Elapsed,
-                Detail = $"{total} Б",
+                Detail = status is 403 or 451
+                    ? $"сайт ответил {status} — связь исправна, отказывает он сам"
+                    : $"{total} Б",
             };
         }
         catch (Exception ex)
@@ -678,6 +727,29 @@ public static class BlockCheck
                 Detail = total > 0 ? $"оборвано на {total} Б: {Explain(ex)}" : Explain(ex),
             };
         }
+    }
+
+    /// <summary>
+    /// Код состояния из начала ответа; <c>null</c>, если это не HTTP.
+    /// </summary>
+    /// <remarks>
+    /// Различаются только 403 и 451, и намеренно. Прочие коды говорят о самой
+    /// странице — 404, 500 и им подобные встречаются у исправных сайтов
+    /// на корневом пути сплошь и рядом, и объявлять их блокировкой значило бы
+    /// поднимать ложную тревогу вместо диагноза. А 451 введён именно для
+    /// «недоступно по правовым причинам», и 403 у сетей доставки означает
+    /// то же самое на деле.
+    /// </remarks>
+    private static int? ParseStatus(byte[] buffer, int length)
+    {
+        var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 64));
+
+        if (!head.StartsWith("HTTP/", StringComparison.Ordinal))
+            return null;
+
+        var parts = head.Split(' ');
+
+        return parts.Length >= 2 && int.TryParse(parts[1], out var code) ? code : null;
     }
 
     /// <summary>

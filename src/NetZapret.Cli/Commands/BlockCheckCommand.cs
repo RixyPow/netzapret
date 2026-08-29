@@ -637,8 +637,8 @@ internal static class BlockCheckCommand
                 // Вмешиваться не во что: рукопожатия либо нет вовсе, либо оно
                 // проходит, а убивают позже. Пропускать ступень десинка честно —
                 // она тут заведомо ни при чём.
-                BlockKind.Stall or BlockKind.HttpsPort
-                    or BlockKind.Full or BlockKind.Sinkhole => RoutingMode.Proxy,
+                BlockKind.Stall or BlockKind.HttpsPort or BlockKind.Full
+                    or BlockKind.Sinkhole or BlockKind.GeoBlock => RoutingMode.Proxy,
 
                 // Отказ резолвера и оборванный CNAME маршрутом не лечатся.
                 _ => now,

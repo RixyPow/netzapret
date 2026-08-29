@@ -143,6 +143,24 @@ public class BlockCheckTests
         Assert.True(Report(kind).Actionable);
     }
 
+    /// <summary>Отказ сайта по стране — не то же, что отказ канала.</summary>
+    /// <remarks>
+    /// Случай ChatGPT. Десинк отрабатывал безупречно — рукопожатие за семь
+    /// сотых секунды, — а Cloudflare с московского узла отвечал 403. Всё,
+    /// что мы умеем мерить, говорило «доступен», и по своим меркам было право:
+    /// работала связь, отказывал сайт. Десинк тут бессилен, он влияет на вид
+    /// соединения для DPI, а решение принимает сайт, уже разобрав запрос.
+    /// </remarks>
+    [Fact]
+    public void A_site_refusing_by_country_is_not_available()
+    {
+        var refused = new ProbeOutcome { Ok = true, Refused = true };
+
+        Assert.Equal(BlockKind.GeoBlock, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), refused));
+        Assert.Contains("VPN", Report(BlockKind.GeoBlock).Remedy());
+        Assert.Contains("десинк не поможет", Report(BlockKind.GeoBlock).Remedy());
+    }
+
     /// <summary>Оборванный CNAME лечится подстановкой адреса, а не маршрутом.</summary>
     /// <remarks>
     /// Случай <c>tr.rbxcdn.com</c>: Roblox отдаёт по нему ссылки на превью,
