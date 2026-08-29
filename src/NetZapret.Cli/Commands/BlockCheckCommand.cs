@@ -58,6 +58,9 @@ internal static class BlockCheckCommand
     /// </remarks>
     private const int Parallelism = 8;
 
+    /// <summary>Порт Clash API движка — тот же, что прописывает супервизор.</summary>
+    private const int ClashApiPort = 9090;
+
     /// <remarks>
     /// В конце придерживает окно. Проверка идёт минуты и заканчивается тем
     /// ради чего затевалась — перечнем того, что стоит поменять; закрыть его
@@ -135,6 +138,7 @@ internal static class BlockCheckCommand
 
         bool enginesRunning = WarnIfEnginesRunning();
 
+        await PrintSetupAsync(settings, enginesRunning, cancellationToken);
         PrintLegend();
 
         Console.WriteLine();
@@ -155,7 +159,7 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         PrintColumnHeader();
 
-        var reports = await RunProbesAsync(targets, stop.Token);
+        var reports = await RunProbesAsync(targets, engine, enginesRunning, stop.Token);
 
         if (stop.IsCancellationRequested)
             Message($"Прервано. Успело проверить {reports.Count} из {targets.Count}.", ConsoleColor.Yellow);
@@ -213,6 +217,8 @@ internal static class BlockCheckCommand
     /// </remarks>
     private static async Task<List<TargetReport>> RunProbesAsync(
         IReadOnlyList<(string Host, string Service)> targets,
+        RuleEngine? engine,
+        bool enginesRunning,
         CancellationToken cancellationToken)
     {
         using var slots = new SemaphoreSlim(Parallelism);
@@ -227,10 +233,13 @@ internal static class BlockCheckCommand
             {
                 var report = await BlockCheck.CheckAsync(target.Host, target.Service, cancellationToken);
 
+                bool tunnelled = enginesRunning && engine is not null
+                    && CurrentMode(engine, target.Host) == RoutingMode.Proxy;
+
                 lock (console)
                 {
                     reports.Add(report);
-                    PrintRow(report);
+                    PrintRow(report, tunnelled);
                 }
             }
             finally
@@ -251,13 +260,14 @@ internal static class BlockCheckCommand
         return reports;
     }
 
-    private static void PrintRow(TargetReport report)
+    private static void PrintRow(TargetReport report, bool throughTunnel)
     {
         var previous = Console.ForegroundColor;
 
         Console.ForegroundColor = report.Actionable ? ConsoleColor.Red : ConsoleColor.DarkGray;
         Console.WriteLine(
-            $"  {Truncate(report.Host, 30),-30} {report.Tcp.Describe(),-5} " +
+            $"  {Truncate(report.Host, 27),-27} {(throughTunnel ? "чз" : "  "),-3}" +
+            $"{report.Tcp.Describe(),-5} " +
             $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
             $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
         Console.ForegroundColor = previous;
@@ -348,6 +358,96 @@ internal static class BlockCheckCommand
     }
 
     /// <summary>
+    /// Чем именно снята эта картина: пресет, сервер, режим.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отчёт без этого нечем сравнить с другим отчётом. Проверка снимает
+    /// не свойства сети, а поведение сети под конкретной настройкой, и два
+    /// прогона под разными пресетами дают разные строки — при том что оба
+    /// выглядят одинаково достоверно.
+    /// </para>
+    /// <para>
+    /// Сервер спрашивается у самого движка, а не берётся из настроек:
+    /// в настройках стоит «авто», а работает в этот момент один определённый,
+    /// и назвать надо его.
+    /// </para>
+    /// </remarks>
+    private static async Task PrintSetupAsync(
+        AppSettings settings,
+        bool enginesRunning,
+        CancellationToken cancellationToken)
+    {
+        var previous = Console.ForegroundColor;
+
+        Console.WriteLine();
+        Console.WriteLine($"Снято {DateTime.Now:dd.MM.yyyy HH:mm}");
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        Console.WriteLine($"  Режим:   {settings.DescribeMode()}");
+        Console.WriteLine($"  Пресет:  {(enginesRunning ? settings.DescribePreset() : "не применён — движки остановлены")}");
+
+        var server = enginesRunning
+            ? await CurrentServerAsync(settings, cancellationToken)
+            : null;
+
+        Console.WriteLine($"  Сервер:  {server ?? "не определён"}");
+        Console.WriteLine($"  DNS:     {settings.DnsServer}");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
+    /// Какой сервер подписки работает прямо сейчас.
+    /// </summary>
+    /// <remarks>
+    /// Через Clash API движка. Настройка «авто по задержке» означает, что имени
+    /// сервера в конфиге нет вовсе — выбор делается на ходу, и узнать его можно
+    /// только у того, кто его сделал.
+    /// </remarks>
+    private static async Task<string?> CurrentServerAsync(AppSettings settings, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+
+            var json = await http.GetStringAsync(
+                $"http://127.0.0.1:{ClashApiPort}/proxies/auto",
+                cancellationToken);
+
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+
+            if (!document.RootElement.TryGetProperty("now", out var now))
+                return null;
+
+            var name = now.GetString();
+
+            // Селектор может указывать на группу, а не на сервер. Тогда
+            // спрашиваем ещё раз у неё — иначе в отчёте будет «auto-latency»,
+            // что не ответ на вопрос «через что мы сейчас ходим».
+            if (name is not null && name.StartsWith("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                var inner = await http.GetStringAsync(
+                    $"http://127.0.0.1:{ClashApiPort}/proxies/{Uri.EscapeDataString(name)}",
+                    cancellationToken);
+
+                using var group = System.Text.Json.JsonDocument.Parse(inner);
+
+                if (group.RootElement.TryGetProperty("now", out var chosen))
+                    return chosen.GetString();
+            }
+
+            return name;
+        }
+        catch (Exception)
+        {
+            // Движок мог не поднять API или уже остановиться. Отчёт без имени
+            // сервера хуже, но всё ещё отчёт.
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Объясняет столбцы до того, как они появятся.
     /// </summary>
     /// <remarks>
@@ -372,6 +472,10 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         Console.WriteLine("  Столбец ДАННЫЕ важнее прочих: соединение может встать, а сайт");
         Console.WriteLine("  не открыться — так ведёт себя обрыв потока после опознания.");
+        Console.WriteLine();
+        Console.WriteLine("  Метка «чз» — цель уже идёт через туннель. Её строка описывает");
+        Console.WriteLine("  поведение туннеля, а не сети: TCP там встаёт всегда, потому что");
+        Console.WriteLine("  соединение принимает sing-box, ещё не дозвонившись до хоста.");
 
         Console.ForegroundColor = previous;
     }
@@ -380,7 +484,7 @@ internal static class BlockCheckCommand
     {
         var previous = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  {"",-30} {"TCP",-5} {"1.2",-5} {"1.3",-5} {"HTTP",-5} {"ДАННЫЕ",-5}  вердикт");
+        Console.WriteLine($"  {"",-27} {"",-3}{"TCP",-5} {"1.2",-5} {"1.3",-5} {"HTTP",-5} {"ДАННЫЕ",-5}  вердикт");
         Console.ForegroundColor = previous;
     }
 
