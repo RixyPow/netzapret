@@ -133,7 +133,7 @@ internal static class BlockCheckCommand
             return 2;
         }
 
-        WarnIfEnginesRunning();
+        bool enginesRunning = WarnIfEnginesRunning();
 
         PrintLegend();
 
@@ -150,8 +150,8 @@ internal static class BlockCheckCommand
 
         Console.WriteLine();
         Console.WriteLine(
-            $"{DescribeDepth(depth)}: {targets.Count} {Plural(targets.Count, "цель", "цели", "целей")}. " +
-            (escape.Armed ? "Esc — прервать и показать, что успело набраться." : string.Empty));
+            $"{DescribeDepth(depth)}: {targets.Count} {Plural(targets.Count, "цель", "цели", "целей")}."
+            + (escape.Armed ? " Esc — прервать и показать, что успело набраться." : string.Empty));
         Console.WriteLine();
         PrintColumnHeader();
 
@@ -179,11 +179,16 @@ internal static class BlockCheckCommand
         PrintSummary(reports, badAddresses);
         PrintPinned(pinned);
 
-        var suggestions = Suggestions(reports, engine)
+        // Предложение выводится и после прерывания. Проверенное остаётся
+        // проверенным независимо от того, дошли ли до конца, а человек,
+        // нажавший Esc, чаще всего уже увидел в бегущих строках то,
+        // ради чего проверку и запускал.
+        var suggestions = Suggestions(reports, engine, enginesRunning)
             .Where(s => !pinned.ContainsKey(s.Host))
             .ToList();
 
-        PrintAdvice(suggestions);
+        PrintDeadlocks(Deadlocks(reports, engine).Where(d => !pinned.ContainsKey(d.Host)).ToList());
+        PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
         ApplyIfConfirmed(suggestions, userRulesPath);
 
         return reports.Any(r => r.Actionable) ? 1 : 0;
@@ -457,14 +462,6 @@ internal static class BlockCheckCommand
         }
     }
 
-    /// <summary>
-    /// Сверяет измеренное с настроенным.
-    /// </summary>
-    /// <remarks>
-    /// Ради этого всё и затевалось. Знать, что цель закрыта, полезно; знать,
-    /// что она закрыта способом, которого нынешнее правило не лечит, — вот
-    /// что меняет настройку.
-    /// </remarks>
     /// <summary>Что проверка предлагает поменять.</summary>
     private sealed record Suggestion
     {
@@ -474,17 +471,45 @@ internal static class BlockCheckCommand
         public required string Why { get; init; }
     }
 
+    /// <summary>Случай, которого наша лесенка не покрывает.</summary>
+    private sealed record Deadlock
+    {
+        public required string Host { get; init; }
+        public required RoutingMode Now { get; init; }
+        public required string What { get; init; }
+        public required string Hope { get; init; }
+    }
+
     /// <summary>
-    /// Сверяет измеренное с настроенным.
+    /// Подбирает маршрут лесенкой: напрямую → десинк → VPN.
     /// </summary>
     /// <remarks>
-    /// Ради этого всё и затевалось. Знать, что цель закрыта, полезно; знать,
-    /// что она закрыта способом, которого нынешнее правило не лечит, — вот
-    /// что меняет настройку.
+    /// <para>
+    /// Порядок не произволен: каждая следующая ступень дороже предыдущей.
+    /// Десинк ломается при смене прошивки DPI, туннель добавляет задержку
+    /// и расходует квоту подписки. Поэтому поднимаемся ровно настолько,
+    /// насколько вынуждает измеренное, и ни ступенью выше.
+    /// </para>
+    /// <para>
+    /// Вниз не спускаемся, пока движки работают, — и это главное исправление.
+    /// Прежде «доступен» означало «хватит и напрямую», но при включённом
+    /// обходе сайт доступен как раз благодаря десинку. Совет снять десинк
+    /// с работающего сайта его бы и сломал.
+    /// </para>
+    /// <para>
+    /// Ступени, выше которой у нас ничего нет, не существует: если и туннель
+    /// не помогает, это отдельный исход, о котором надо сказать вслух,
+    /// а не молча промолчать. См. <see cref="Deadlocks"/>.
+    /// </para>
     /// </remarks>
+    /// <param name="enginesRunning">
+    /// Обход был включён во время замера, поэтому «работает» ничего
+    /// не говорит о том, работало ли бы оно без него.
+    /// </param>
     private static IReadOnlyList<Suggestion> Suggestions(
         IReadOnlyList<TargetReport> reports,
-        RuleEngine? engine)
+        RuleEngine? engine,
+        bool enginesRunning)
     {
         if (engine is null)
             return [];
@@ -493,29 +518,28 @@ internal static class BlockCheckCommand
 
         foreach (var report in reports)
         {
-            var now = engine.Evaluate(new Core.Connections.ConnectionEvent
-            {
-                Timestamp = DateTimeOffset.Now,
-                Protocol = Core.Connections.ProtocolKind.Tcp,
-                RemoteAddress = null,
-                RemotePort = 443,
-                Hostname = report.Host,
-            }).Mode;
+            var now = CurrentMode(engine, report.Host);
 
-            // Отказ резолвера маршрутом не лечится, и предлагать здесь VPN
-            // значило бы спорить с собственным советом двумя строками выше,
-            // где сказано «свой DNS».
             var should = report.Kind switch
             {
-                BlockKind.None => RoutingMode.Direct,
+                // Работает — оставляем как есть. Спуститься ниже можно только
+                // зная, что оно работало бы и без нынешней ступени, а этого
+                // мы при включённых движках не знаем.
+                BlockKind.None => enginesRunning ? now : RoutingMode.Direct,
+
+                // Рвут рукопожатие — ровно то, с чем десинк и справляется.
                 BlockKind.TlsDpi => RoutingMode.Desync,
-                BlockKind.Stall or BlockKind.HttpsPort or BlockKind.Full or BlockKind.Sinkhole => RoutingMode.Proxy,
+
+                // Вмешиваться не во что: рукопожатия либо нет вовсе, либо оно
+                // проходит, а убивают позже. Пропускать ступень десинка честно —
+                // она тут заведомо ни при чём.
+                BlockKind.Stall or BlockKind.HttpsPort
+                    or BlockKind.Full or BlockKind.Sinkhole => RoutingMode.Proxy,
+
+                // Отказ резолвера и оборванный CNAME маршрутом не лечатся.
                 _ => now,
             };
 
-            // Доступное напрямую не трогаем: десинк ему не мешает, и советовать
-            // менять то, что работает, значит плодить лишние правки. Имя без
-            // адреса не трогаем тем более — менять там нечего.
             if (!report.Actionable || now == should)
                 continue;
 
@@ -531,13 +555,141 @@ internal static class BlockCheckCommand
         return result;
     }
 
-    private static void PrintAdvice(IReadOnlyList<Suggestion> suggestions)
+    /// <summary>
+    /// Случаи, где лесенка кончилась, а работать не начало.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Схема калибровки требует называть такое вслух, а не молчать: человек
+    /// должен знать, что перепробовано всё, и получить возможность сообщить
+    /// об этом. Молчание здесь читается как «средство не заметило», и человек
+    /// идёт крутить настройки, которые ничего не решают.
+    /// </para>
+    /// <para>
+    /// Две разновидности. Домен уже на верхней ступени и всё равно закрыт —
+    /// значит и туннель не спас. Домен на десинке, а закрыт способом, который
+    /// десинку не поддаётся, — тут ещё есть надежда на другую стратегию
+    /// в пресете, и об этом стоит сказать отдельно.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<Deadlock> Deadlocks(
+        IReadOnlyList<TargetReport> reports,
+        RuleEngine? engine)
+    {
+        if (engine is null)
+            return [];
+
+        var result = new List<Deadlock>();
+
+        foreach (var report in reports)
+        {
+            if (!report.Actionable)
+                continue;
+
+            var now = CurrentMode(engine, report.Host);
+
+            if (report.Kind == BlockKind.BrokenCname)
+            {
+                result.Add(new Deadlock
+                {
+                    Host = report.Host,
+                    Now = now,
+                    What = "имя ведёт в никуда — соединяться не с чем",
+                    Hope = "подставьте адрес в config\\addresses.yaml",
+                });
+
+                continue;
+            }
+
+            // Уже наверху и всё равно закрыт: туннель проверен самим фактом
+            // того, что трафик через него и шёл.
+            if (now == RoutingMode.Proxy)
+            {
+                result.Add(new Deadlock
+                {
+                    Host = report.Host,
+                    Now = now,
+                    What = $"{report.Describe()} даже через VPN",
+                    Hope = "сообщите — возможно, дело в сервере подписки или в самом сайте",
+                });
+
+                continue;
+            }
+
+            // На десинке, но закрыто не тем, что десинк умеет. Ступень выше
+            // ещё не пробовали, и предложение о ней уже выдано отдельно —
+            // здесь только про надежду на другой рецепт.
+            if (now == RoutingMode.Desync && report.Kind == BlockKind.TlsDpi)
+            {
+                result.Add(new Deadlock
+                {
+                    Host = report.Host,
+                    Now = now,
+                    What = "десинк применён, но рукопожатие всё равно рвут",
+                    Hope = "возможна другая стратегия в пресете — сообщите",
+                });
+            }
+        }
+
+        return result;
+    }
+
+    private static RoutingMode CurrentMode(RuleEngine engine, string host) =>
+        engine.Evaluate(new Core.Connections.ConnectionEvent
+        {
+            Timestamp = DateTimeOffset.Now,
+            Protocol = Core.Connections.ProtocolKind.Tcp,
+            RemoteAddress = null,
+            RemotePort = 443,
+            Hostname = host,
+        }).Mode;
+
+    /// <summary>
+    /// Показывает тупики — то, что лесенкой не берётся.
+    /// </summary>
+    private static void PrintDeadlocks(IReadOnlyList<Deadlock> deadlocks)
+    {
+        if (deadlocks.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("Маршрутом не лечится");
+
+        foreach (var d in deadlocks)
+        {
+            Console.WriteLine($"  {Truncate(d.Host, 28),-28} {Describe(d.Now),-10} {d.What}");
+            Console.WriteLine($"  {"",-28} {"",-10} {d.Hope}");
+        }
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <param name="partial">Проверка была прервана и охватила не всё.</param>
+    /// <remarks>
+    /// Помечено экспериментальным, и это не оговорка на всякий случай.
+    /// Вывод делается по одному замеру: блокировки мигают, а пути проверяются
+    /// не все — что через VPN заработает, здесь не проверялось вовсе, только
+    /// то, что напрямую не работает. Совет разумный, но не доказанный,
+    /// и человек вправе знать, чему именно он доверяет.
+    /// </remarks>
+    private static void PrintAdvice(IReadOnlyList<Suggestion> suggestions, bool partial)
     {
         if (suggestions.Count == 0)
             return;
 
+        var previous = Console.ForegroundColor;
+
         Console.WriteLine();
-        Console.WriteLine("Стоит изменить");
+        Console.WriteLine("Стоит изменить" + (partial ? " (по неполной проверке)" : string.Empty));
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine("  Возможность опытная. Вывод сделан по одному замеру, а что заработает");
+        Console.WriteLine("  через VPN — здесь не проверялось. После правки убедитесь сами.");
+        Console.ForegroundColor = previous;
+        Console.WriteLine();
 
         foreach (var s in suggestions)
             Console.WriteLine($"  {Truncate(s.Host, 28),-28} {Describe(s.Now),-10} → {Describe(s.Should),-10} {s.Why}");
@@ -675,19 +827,24 @@ internal static class BlockCheckCommand
         return targets;
     }
 
-    private static void WarnIfEnginesRunning()
+    /// <returns>Работал ли обход во время проверки.</returns>
+    private static bool WarnIfEnginesRunning()
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
         if (state is null || !state.IsSupervisorAlive())
-            return;
+            return false;
 
         var previous = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.Yellow;
         Console.WriteLine();
         Console.WriteLine("Движки работают — проверка покажет сеть уже с обходом, а не без него.");
         Console.WriteLine("Чтобы увидеть, что закрыто на самом деле, остановите их и повторите.");
+        Console.WriteLine("Пока они работают, совета «хватит и напрямую» не будет: доступное");
+        Console.WriteLine("сейчас может быть доступно как раз благодаря обходу.");
         Console.ForegroundColor = previous;
+
+        return true;
     }
 
     private static void Message(string text, ConsoleColor color)

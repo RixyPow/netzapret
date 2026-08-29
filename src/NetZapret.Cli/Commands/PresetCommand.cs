@@ -31,7 +31,7 @@ internal static class PresetCommand
 
         if (path is null)
         {
-            Console.Error.WriteLine($"Пресет '{name}' не найден в {paths.PresetDirectory}.");
+            Console.Error.WriteLine($"Пресет «{name}» не найден в {paths.PresetDirectory}.");
             return 2;
         }
 
@@ -41,7 +41,7 @@ internal static class PresetCommand
 
     private static void ListPresets(PresetReader reader, ZapretPaths paths)
     {
-        var presets = reader.List(paths.PresetDirectory);
+        var presets = reader.Read(paths.PresetFiles);
 
         Console.WriteLine($"Каталог: {paths.PresetDirectory}");
         Console.WriteLine($"Пресетов: {presets.Count}");

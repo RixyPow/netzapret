@@ -38,6 +38,51 @@ public sealed record ZapretPaths
 
     public string PresetDirectory => Path.Combine(Root, "presets", "winws2");
 
+    /// <summary>
+    /// Встроенные пресеты Zapret, которые мы показываем наравне со своими.
+    /// </summary>
+    /// <remarks>
+    /// Поимённо, а не всей папкой. В <c>presets/winws2_builtin</c> лежит
+    /// больше сотни файлов — почти всё это переборные варианты одной и той же
+    /// стратегии, и вывалить их в выбор значило бы утопить в них те два
+    /// десятка, между которыми человек действительно выбирает. Здесь только
+    /// названные: игровой набор, который иначе взять неоткуда.
+    /// </remarks>
+    public static IReadOnlyList<string> BuiltinPresetNames { get; } =
+    [
+        "Default v1 (game filter)",
+        "Default v2 (game filter)",
+        "Default v3 (game filter)",
+        "Default v4 (game filter)",
+        "Default v5 (game filter)",
+    ];
+
+    /// <summary>
+    /// Все файлы пресетов: свои целиком, встроенные — только названные.
+    /// </summary>
+    public IReadOnlyList<string> PresetFiles
+    {
+        get
+        {
+            var files = new List<string>();
+
+            if (Directory.Exists(PresetDirectory))
+                files.AddRange(Directory.EnumerateFiles(PresetDirectory, "*.txt").OrderBy(p => p));
+
+            var builtin = Path.Combine(Root, "presets", "winws2_builtin");
+
+            foreach (var name in BuiltinPresetNames)
+            {
+                var path = Path.Combine(builtin, name + ".txt");
+
+                if (File.Exists(path))
+                    files.Add(path);
+            }
+
+            return files;
+        }
+    }
+
     public string ListDirectory => Path.Combine(Root, "lists");
 
     /// <summary>
@@ -61,10 +106,11 @@ public sealed record ZapretPaths
     /// </remarks>
     public string? FindPreset(string name)
     {
-        if (!Directory.Exists(PresetDirectory))
+        var files = PresetFiles;
+
+        if (files.Count == 0)
             return null;
 
-        var files = Directory.EnumerateFiles(PresetDirectory, "*.txt").ToList();
         var wanted = name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileNameWithoutExtension(name)
             : name;

@@ -295,7 +295,7 @@ internal static class MenuCommand
             return settings;
         }
 
-        var presets = new PresetReader().List(paths.PresetDirectory);
+        var presets = new PresetReader().Read(paths.PresetFiles);
         var items = new List<(string, string?)> { ("Не запускать десинк", null) };
         items.AddRange(presets.Select(p => ($"{p.Name}  ({p.ActiveSections.Count()} секций)", (string?)p.Name)));
 

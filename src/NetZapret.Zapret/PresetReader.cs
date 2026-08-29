@@ -16,15 +16,32 @@ public sealed class PresetReader
     /// Файлы небольшие — десятки килобайт, — поэтому отдельный «быстрый» режим
     /// разбора только шапки усложнил бы код без выигрыша.
     /// </remarks>
-    public IReadOnlyList<ZapretPreset> List(string presetDirectory)
+    public IReadOnlyList<ZapretPreset> List(string presetDirectory) =>
+        Directory.Exists(presetDirectory)
+            ? Read(Directory.EnumerateFiles(presetDirectory, "*.txt").OrderBy(p => p).ToList())
+            : [];
+
+    /// <summary>
+    /// Читает названные файлы пресетов.
+    /// </summary>
+    /// <remarks>
+    /// Списком файлов, а не каталогом: встроенные пресеты Zapret берутся
+    /// поимённо — их там больше сотни, и показывать все значило бы утопить
+    /// в переборных вариантах те, между которыми человек выбирает.
+    /// Повторы отсеиваются по пути, а не по названию: два разных файла
+    /// вправе объявлять одно имя, и решать за человека, который из них
+    /// лишний, мы не беремся.
+    /// </remarks>
+    public IReadOnlyList<ZapretPreset> Read(IReadOnlyList<string> presetFiles)
     {
-        if (!Directory.Exists(presetDirectory))
-            return Array.Empty<ZapretPreset>();
-
         var presets = new List<ZapretPreset>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var path in Directory.EnumerateFiles(presetDirectory, "*.txt").OrderBy(p => p))
+        foreach (var path in presetFiles)
         {
+            if (!seen.Add(Path.GetFullPath(path)))
+                continue;
+
             try
             {
                 presets.Add(Load(path));

@@ -143,6 +143,24 @@ public class BlockCheckTests
         Assert.True(Report(kind).Actionable);
     }
 
+    /// <summary>Оборванный CNAME лечится подстановкой адреса, а не маршрутом.</summary>
+    /// <remarks>
+    /// Случай <c>tr.rbxcdn.com</c>: Roblox отдаёт по нему ссылки на превью,
+    /// а имя — CNAME на <c>trns1.rbxcdn.com</c>, у которого записи A нет
+    /// ни у одного резолвера. Прежде это попадало в «нет адреса — лечить
+    /// нечего», хотя картинки у людей не грузились.
+    /// </remarks>
+    [Fact]
+    public void Broken_cname_needs_an_address_not_a_route()
+    {
+        var remedy = Report(BlockKind.BrokenCname).Remedy();
+
+        Assert.Contains("адрес", remedy);
+        Assert.DoesNotContain("VPN", remedy);
+        Assert.DoesNotContain("десинк", remedy);
+        Assert.True(Report(BlockKind.BrokenCname).Actionable);
+    }
+
     /// <summary>Ответ-заглушка узнаётся по адресу.</summary>
     /// <remarks>
     /// Случай <c>image.tmdb.org</c>: сеть доставки отшивает регион, отдавая

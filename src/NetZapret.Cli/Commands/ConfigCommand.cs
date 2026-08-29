@@ -46,6 +46,18 @@ internal static class ConfigCommand
         foreach (var note in pinnedNotes)
             Console.WriteLine($"Внимание, hosts: {note}");
 
+        var overrides = AddressOverrides.Load(cmd.Value("addresses"));
+
+        foreach (var problem in overrides.Problems)
+            Console.WriteLine($"Внимание, адреса: {problem}");
+
+        if (overrides.Entries.Count > 0)
+        {
+            Console.WriteLine(
+                $"Подставлено адресов: {overrides.Entries.Count} " +
+                $"({string.Join(", ", overrides.Entries.Keys.Take(3))})");
+        }
+
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
         {
@@ -58,6 +70,7 @@ internal static class ConfigCommand
             DesyncAddresses = desyncAddresses,
             CaptureAddresses = capture,
             PinnedProxyAddresses = pinned,
+            AddressOverrides = overrides.Entries,
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);
@@ -115,9 +128,7 @@ internal static class ConfigCommand
 
         var presetPath = presetName is null
             ? null
-            : Directory.EnumerateFiles(paths.PresetDirectory, "*.txt")
-                .FirstOrDefault(p => Path.GetFileNameWithoutExtension(p)
-                    .Contains(presetName, StringComparison.OrdinalIgnoreCase));
+            : paths.FindPreset(presetName);
 
         if (presetPath is null)
         {

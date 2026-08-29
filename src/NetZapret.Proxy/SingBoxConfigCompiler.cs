@@ -91,6 +91,18 @@ public sealed class SingBoxOptions
     public string SelectorTag { get; init; } = "auto";
 
     /// <summary>
+    /// Адреса для имён, у которых своего адреса нет.
+    /// </summary>
+    /// <remarks>
+    /// Отвечает наш собственный резолвер, системный <c>hosts</c> не трогается.
+    /// Разница существенная: hosts требует прав администратора, переживает
+    /// удаление программы и виден всем приложениям, а это — одна строка
+    /// в нашем конфиге, снимаемая вместе с ним.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> AddressOverrides { get; init; } =
+        new Dictionary<string, string>();
+
+    /// <summary>
     /// Адрес для замера задержки. Запрос уходит через сам прокси, поэтому
     /// проверяется не доступность сайта, а работоспособность сервера.
     /// </summary>
@@ -295,6 +307,8 @@ public sealed class SingBoxConfigCompiler
 
     /// <summary>Резолвер для имён самих серверов подписки, всегда в обход туннеля.</summary>
     private const string BootstrapTag = "bootstrap";
+
+    private const string OverrideTag = "pinned";
 
     public string CompileProbeConfig(ProxyServer server, int listenPort, string? logPath, string logLevel = "debug")
     {
@@ -539,6 +553,25 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
+        // Подставленные адреса идут отдельным резолвером типа hosts. Первым
+        // правилом, раньше fakeip: у такого имени настоящего адреса нет,
+        // и отдать вместо него fakeip значило бы завести соединение в туннель,
+        // где его точно так же не с кем установить.
+        if (options.AddressOverrides.Count > 0)
+        {
+            var predefined = new JsonObject();
+
+            foreach (var (host, address) in options.AddressOverrides)
+                predefined[host] = new JsonArray { address };
+
+            servers.Add(new JsonObject
+            {
+                ["tag"] = OverrideTag,
+                ["type"] = "hosts",
+                ["predefined"] = predefined,
+            });
+        }
+
         var dns = new JsonObject
         {
             ["servers"] = servers,
@@ -549,6 +582,20 @@ public sealed class SingBoxConfigCompiler
         // «адрес → домен» точное 1:1, и доменные правила работают без догадок
         // по реальным адресам CDN.
         var rules = new JsonArray();
+
+        if (options.AddressOverrides.Count > 0)
+        {
+            var names = new JsonArray();
+
+            foreach (var host in options.AddressOverrides.Keys)
+                names.Add(host);
+
+            rules.Add(new JsonObject
+            {
+                ["domain"] = names,
+                ["server"] = OverrideTag,
+            });
+        }
 
         if (options.Scope == TunnelScope.ProxyOnly && proxyDomains.Count > 0)
         {

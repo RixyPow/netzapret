@@ -78,6 +78,24 @@ public enum BlockKind
     Sinkhole,
 
     /// <summary>
+    /// Имя ведёт на другое имя, а у того адреса нет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Поломка, а не свойство. <c>tr.rbxcdn.com</c> — CNAME на
+    /// <c>trns1.rbxcdn.com</c>, у которого записи A нет ни у одного резолвера.
+    /// На это имя ссылается сам Roblox, отдавая по нему ссылки на превью:
+    /// картинки не грузятся, и починить это нельзя ничем из обычного набора.
+    /// </para>
+    /// <para>
+    /// Ни десинк, ни туннель тут ни при чём: соединяться попросту не с чем.
+    /// Лечится единственным способом — подставить адрес вручную. Тем и
+    /// отличается от <see cref="NoAddress"/>, где адреса нет и не нужно.
+    /// </para>
+    /// </remarks>
+    BrokenCname,
+
+    /// <summary>
     /// У имени нет адреса вовсе.
     /// </summary>
     /// <remarks>
@@ -133,6 +151,7 @@ public sealed record TargetReport
         BlockKind.Full => "закрыт полностью",
         BlockKind.Sinkhole => "адрес-заглушка",
         BlockKind.Dns => "имя не разрешается",
+        BlockKind.BrokenCname => "оборванный CNAME",
         _ => "нет адреса у имени",
     };
 
@@ -161,6 +180,7 @@ public sealed record TargetReport
         BlockKind.Full => "только VPN",
         BlockKind.Sinkhole => "только VPN",
         BlockKind.Dns => "свой DNS",
+        BlockKind.BrokenCname => "подставить адрес",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -340,17 +360,40 @@ public static class BlockCheck
             // он сменой резолвера.
             var honest = await DohResolveAsync(host, cancellationToken);
 
+            if (honest.Count > 0)
+            {
+                return new TargetReport
+                {
+                    Host = host,
+                    Service = service,
+                    Tcp = Failed("системный DNS не разрешает имя"),
+                    Tls12 = Failed(null),
+                    Tls13 = Failed(null),
+                    Http = Failed(null),
+                    Data = Failed(null),
+                    Kind = BlockKind.Dns,
+                    Addresses = honest.Take(3).ToList(),
+                };
+            }
+
+            // Адреса нет ни у кого — и вот тут решает CNAME. Если имя ведёт
+            // на другое, значит на него ссылаются и ждут ответа, а цепочка
+            // оборвана: это поломка. Если же не ведёт никуда, перед нами
+            // просто маркер зоны вроде akamai.net, и лечить нечего.
+            var alias = await DohCanonicalNameAsync(host, cancellationToken);
+
             return new TargetReport
             {
                 Host = host,
                 Service = service,
-                Tcp = Failed(honest.Count > 0 ? "системный DNS не разрешает имя" : "записи A нет"),
+                Tcp = Failed(alias is null
+                    ? "записи A нет"
+                    : $"ведёт на {alias}, а у того адреса нет"),
                 Tls12 = Failed(null),
                 Tls13 = Failed(null),
                 Http = Failed(null),
                 Data = Failed(null),
-                Kind = honest.Count > 0 ? BlockKind.Dns : BlockKind.NoAddress,
-                Addresses = honest.Take(3).ToList(),
+                Kind = alias is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
             };
         }
 
@@ -839,6 +882,49 @@ public static class BlockCheck
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Имя, на которое ведёт CNAME; <c>null</c>, если не ведёт никуда.
+    /// </summary>
+    /// <remarks>
+    /// Спрашивается только тогда, когда адреса не нашлось, и служит ровно
+    /// одному различию: поломанная цепочка против пустой зоны. Ответ берётся
+    /// у DoH, потому что системный резолвер на имя без адреса часто отвечает
+    /// «нет такого хоста», не показав CNAME вовсе.
+    /// </remarks>
+    private static async Task<string?> DohCanonicalNameAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = Timeout };
+            http.DefaultRequestHeaders.Accept.Add(new("application/dns-json"));
+
+            var json = await http.GetStringAsync(
+                $"https://1.1.1.1/dns-query?name={Uri.EscapeDataString(host)}&type=A",
+                cancellationToken);
+
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+
+            if (!document.RootElement.TryGetProperty("Answer", out var answers))
+                return null;
+
+            foreach (var answer in answers.EnumerateArray())
+            {
+                // Тип 5 — CNAME. Числом, а не именем: в ответе формата
+                // dns-json тип приходит числом.
+                if (answer.TryGetProperty("type", out var type) && type.GetInt32() == 5
+                    && answer.TryGetProperty("data", out var data))
+                {
+                    return data.GetString()?.TrimEnd('.');
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return null;
     }
 
     private static async Task<HashSet<string>> DohResolveAsync(string host, CancellationToken cancellationToken)

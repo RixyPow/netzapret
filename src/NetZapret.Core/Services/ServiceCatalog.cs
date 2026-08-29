@@ -177,7 +177,16 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Roblox",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/roblox.txt" }],
+            Parts =
+            [
+                new ServicePart { Name = "Игра и сайт", List = "lists/roblox.txt" },
+                new ServicePart
+                {
+                    Name = "Превью предметов",
+                    List = "config/lists/roblox-cdn.txt",
+                    Note = "имя оборвано в DNS — лечится подстановкой адреса, а не маршрутом",
+                },
+            ],
         },
 
         new ServiceDefinition

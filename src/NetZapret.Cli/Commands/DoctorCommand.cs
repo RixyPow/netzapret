@@ -132,7 +132,7 @@ internal static class DoctorCommand
 
         try
         {
-            var presets = new PresetReader().List(paths.PresetDirectory);
+            var presets = new PresetReader().Read(paths.PresetFiles);
             checks.Add(presets.Count > 0
                 ? new Check(Level.Ok, $"пресетов: {presets.Count}")
                 : new Check(Level.Warning, "пресеты не найдены"));
