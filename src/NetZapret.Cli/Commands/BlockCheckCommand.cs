@@ -159,7 +159,11 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         PrintColumnHeader();
 
-        var reports = await RunProbesAsync(targets, engine, enginesRunning, stop.Token);
+        // Читается до проб: строка помечается в тот же миг, когда печатается,
+        // а не задним числом в итоге.
+        var pinned = FindPinned(targets.Select(t => t.Host));
+
+        var reports = await RunProbesAsync(targets, engine, enginesRunning, pinned, stop.Token);
 
         if (stop.IsCancellationRequested)
             Message($"Прервано. Успело проверить {reports.Count} из {targets.Count}.", ConsoleColor.Yellow);
@@ -178,9 +182,7 @@ internal static class BlockCheckCommand
                 stop.Token);
         }
 
-        var pinned = FindPinned(reports);
-
-        PrintSummary(reports, badAddresses);
+        PrintSummary(reports, badAddresses, pinned);
         PrintPinned(pinned);
 
         // Предложение выводится и после прерывания. Проверенное остаётся
@@ -219,6 +221,7 @@ internal static class BlockCheckCommand
         IReadOnlyList<(string Host, string Service)> targets,
         RuleEngine? engine,
         bool enginesRunning,
+        IReadOnlyDictionary<string, string> pinned,
         CancellationToken cancellationToken)
     {
         using var slots = new SemaphoreSlim(Parallelism);
@@ -239,7 +242,7 @@ internal static class BlockCheckCommand
                 lock (console)
                 {
                     reports.Add(report);
-                    PrintRow(report, tunnelled);
+                    PrintRow(report, tunnelled, pinned.ContainsKey(target.Host));
                 }
             }
             finally
@@ -260,13 +263,20 @@ internal static class BlockCheckCommand
         return reports;
     }
 
-    private static void PrintRow(TargetReport report, bool throughTunnel)
+    /// <param name="pinned">
+    /// Имя прибито в hosts: строка описывает прибитый адрес, а не сайт.
+    /// </param>
+    private static void PrintRow(TargetReport report, bool throughTunnel, bool pinned)
     {
         var previous = Console.ForegroundColor;
 
-        Console.ForegroundColor = report.Actionable ? ConsoleColor.Red : ConsoleColor.DarkGray;
+        // Метка «чз» — через туннель, «hs» — через прибитый в hosts адрес.
+        // Обе означают одно: измерен посредник, и вердикт относится к нему.
+        var mark = pinned ? "hs" : throughTunnel ? "чз" : "  ";
+
+        Console.ForegroundColor = report.Actionable && !pinned ? ConsoleColor.Red : ConsoleColor.DarkGray;
         Console.WriteLine(
-            $"  {Truncate(report.Host, 27),-27} {(throughTunnel ? "чз" : "  "),-3}" +
+            $"  {Truncate(report.Host, 27),-27} {mark,-3}" +
             $"{report.Tcp.Describe(),-5} " +
             $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
             $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
@@ -317,7 +327,7 @@ internal static class BlockCheckCommand
     /// конкретное имя, которое мы только что проверяли, — и приписывать
     /// ему запись о соседе значило бы врать.
     /// </remarks>
-    private static IReadOnlyDictionary<string, string> FindPinned(IReadOnlyList<TargetReport> reports)
+    private static IReadOnlyDictionary<string, string> FindPinned(IEnumerable<string> names)
     {
         var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var hosts = HostsFile.Read();
@@ -325,10 +335,10 @@ internal static class BlockCheckCommand
         if (hosts.Count == 0)
             return found;
 
-        foreach (var report in reports)
+        foreach (var name in names)
         {
-            if (hosts.TryGetValue(report.Host, out var addresses) && addresses.Count > 0)
-                found[report.Host] = string.Join(", ", addresses);
+            if (hosts.TryGetValue(name, out var addresses) && addresses.Count > 0)
+                found[name] = string.Join(", ", addresses);
         }
 
         return found;
@@ -352,6 +362,9 @@ internal static class BlockCheckCommand
         Console.WriteLine("  Имя разрешается до нашего резолвера, fakeip не выдаётся, и трафик");
         Console.WriteLine("  идёт по этому адресу мимо туннеля. Совета по ним не будет: пока");
         Console.WriteLine("  запись на месте, маршрут ничего не решает.");
+        Console.WriteLine();
+        Console.WriteLine("  Их строки выше описывают прибитый адрес, а не сайт, и в итог");
+        Console.WriteLine("  по видам блокировок не попали. Убрать запись — пункт «Файл hosts».");
         Console.WriteLine($"  Файл: {HostsFile.DefaultPath}");
 
         Console.ForegroundColor = previous;
@@ -476,6 +489,9 @@ internal static class BlockCheckCommand
         Console.WriteLine("  Метка «чз» — цель уже идёт через туннель. Её строка описывает");
         Console.WriteLine("  поведение туннеля, а не сети: TCP там встаёт всегда, потому что");
         Console.WriteLine("  соединение принимает sing-box, ещё не дозвонившись до хоста.");
+        Console.WriteLine("  Метка «hs» — имя прибито в hosts, и строка описывает прибитый");
+        Console.WriteLine("  адрес. Такие в итог по видам блокировок не идут: чужой посредник");
+        Console.WriteLine("  может отказывать за сайт, который сам работает.");
 
         Console.ForegroundColor = previous;
     }
@@ -509,9 +525,22 @@ internal static class BlockCheckCommand
         }
     }
 
-    private static void PrintSummary(IReadOnlyList<TargetReport> reports, IReadOnlyList<string> badAddresses)
+    /// <param name="pinned">
+    /// Имена, прибитые в hosts. Их вердикт относится к прибитому адресу,
+    /// а не к сайту, и в итог по видам блокировок им нельзя.
+    /// </param>
+    /// <remarks>
+    /// Исключение прибитых — не придирка. <c>claude.ai</c> был прибит к чужому
+    /// прокси, тот отвечал 403, и проверка объявила «сайт отказывает по стране»,
+    /// хотя настоящий адрес отвечал 302 и прекрасно работал. Мы измеряли
+    /// не сайт, а посредника, и приписывать его отказ сайту нельзя.
+    /// </remarks>
+    private static void PrintSummary(
+        IReadOnlyList<TargetReport> reports,
+        IReadOnlyList<string> badAddresses,
+        IReadOnlyDictionary<string, string> pinned)
     {
-        var byKind = reports.Where(r => r.Actionable)
+        var byKind = reports.Where(r => r.Actionable && !pinned.ContainsKey(r.Host))
             .GroupBy(r => r.Kind)
             .OrderByDescending(g => g.Count())
             .ToList();

@@ -28,9 +28,18 @@ internal static class MenuCommand
         var settingsPath = cmd.Value("settings", AppSettings.DefaultPath);
         var settings = AppSettings.Load(settingsPath);
 
+        UpdateInstaller.CleanUp();
+
+        // Спрашивается один раз за сеанс и в стороне от главного дела:
+        // выяснение занимает секунды, а держать из-за него меню незачем.
+        var update = settings.CheckForUpdates
+            ? Task.Run(() => UpdateCheck.LatestAsync(cancellationToken), cancellationToken)
+            : Task.FromResult<ReleaseInfo?>(null);
+
         while (!cancellationToken.IsCancellationRequested)
         {
             Draw(settings);
+            ShowUpdateHint(update);
 
             Console.Write("Выбор: ");
             var choice = Console.ReadLine();
@@ -942,7 +951,7 @@ internal static class MenuCommand
                     continue;
                 }
 
-                ChoosePartMode(parts[index - 1]);
+                ChoosePartMode(parts[index - 1], settings);
             }
         }
     }
@@ -950,7 +959,7 @@ internal static class MenuCommand
     /// <summary>
     /// Куда направить часть сервиса.
     /// </summary>
-    private static void ChoosePartMode(ServiceRouting.PartStatus part)
+    private static void ChoosePartMode(ServiceRouting.PartStatus part, AppSettings settings)
     {
         Console.WriteLine();
         Console.WriteLine($"  {part.Part.Name}: сейчас {part.DescribeMode()}");
@@ -993,6 +1002,47 @@ internal static class MenuCommand
 
         file.Save();
         Message("Записано. Применится при следующем запуске.", ConsoleColor.Green);
+
+        OfferDiscordRestart(settings, part.Part.List);
+    }
+
+    /// <summary>
+    /// Предлагает перезапустить Discord, если тронули его маршрут.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Discord запоминает голосовые серверы на сеанс: сменили маршрут голоса,
+    /// а он продолжает ходить по-старому, и со стороны это выглядит так,
+    /// будто настройка не сработала.
+    /// </para>
+    /// <para>
+    /// Предлагается, а не делается: перезапуск посреди звонка хуже задержки
+    /// с применением. И только по прямому согласию в настройках — по
+    /// умолчанию выключено.
+    /// </para>
+    /// </remarks>
+    private static void OfferDiscordRestart(AppSettings settings, string list)
+    {
+        if (!settings.OfferDiscordRestart)
+            return;
+
+        if (!list.Contains("discord", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (System.Diagnostics.Process.GetProcessesByName("Discord").Length == 0)
+            return;
+
+        Console.WriteLine();
+        Console.WriteLine("  Discord держит голосовые серверы на сеанс и новый маршрут");
+        Console.WriteLine("  заметит только после перезапуска.");
+        Console.Write("  Перезапустить сейчас? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        Report(Maintenance.RestartDiscord());
     }
 
     private static void EditRoutes(AppSettings settings)
@@ -1593,6 +1643,30 @@ internal static class MenuCommand
             && index >= 1 && index <= services.Count
                 ? services[index - 1].Name
                 : null;
+    }
+
+    /// <summary>
+    /// Одна строка про вышедшую версию — если она успела выясниться.
+    /// </summary>
+    /// <remarks>
+    /// Не ждём и не мешаем: проверка идёт в стороне, и пока она не кончилась,
+    /// меню о ней молчит. Строка появится при следующей перерисовке, то есть
+    /// после первого же действия, — этого достаточно, а держать человека
+    /// ради необязательного сообщения нельзя.
+    /// </remarks>
+    private static void ShowUpdateHint(Task<ReleaseInfo?> check)
+    {
+        if (!check.IsCompletedSuccessfully || check.Result is not { } release)
+            return;
+
+        if (!UpdateCheck.IsNewer(release.Version, UpdateCheck.Current))
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"  Вышла {release.Version} — обновиться в пункте «Ещё».");
+        Console.WriteLine();
+        Console.ForegroundColor = previous;
     }
 
     private static string DescribeHosts()

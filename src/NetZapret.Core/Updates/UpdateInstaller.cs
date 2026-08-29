@@ -53,6 +53,30 @@ public static class UpdateInstaller
     public static string StagingDirectory => Path.Combine("runtime", "update");
 
     /// <summary>
+    /// Убирает остатки прошлого обновления.
+    /// </summary>
+    /// <remarks>
+    /// Сценарий подмены не может стереть каталог, из которого сам исполняется:
+    /// cmd.exe держит файл открытым, пока читает его построчно. Поэтому остаток
+    /// убирается здесь — при следующем запуске, когда держать его уже некому.
+    /// </remarks>
+    public static void CleanUp()
+    {
+        try
+        {
+            var staging = Path.GetFullPath(StagingDirectory);
+
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, recursive: true);
+        }
+        catch (Exception)
+        {
+            // Не убралось — не беда: следующая попытка начнётся с очистки,
+            // а место под один архив мы переживём.
+        }
+    }
+
+    /// <summary>
     /// Скачивает архив и распаковывает его в отстойник.
     /// </summary>
     /// <param name="progress">Доля скачанного, от нуля до единицы.</param>
@@ -201,8 +225,15 @@ public static class UpdateInstaller
         lines.Add(")");
         lines.Add("");
         lines.Add("echo Done.");
-        lines.Add($"start \"\" \"%TARGET%\\netzapret.exe\"");
-        lines.Add($"rd /s /q \"{Path.GetFullPath(StagingDirectory)}\" 2>nul");
+        lines.Add("start \"\" \"%TARGET%\\netzapret.exe\"");
+        lines.Add("");
+
+        // Удаляется только распакованное. Сам сценарий лежит уровнем выше
+        // и стереть свой каталог не может: cmd.exe держит файл открытым,
+        // пока читает его построчно, — попытка привела бы к молчаливому
+        // отказу и мусору вместо обещанной чистоты. Остаток убирает
+        // программа при следующем запуске, когда никто его уже не держит.
+        lines.Add($"rd /s /q \"{plan.StagedAt}\" 2>nul");
 
         File.WriteAllLines(script, lines, System.Text.Encoding.ASCII);
         return script;

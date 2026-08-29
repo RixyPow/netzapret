@@ -70,16 +70,6 @@ public sealed record PinHealth
 public static class HostsEditor
 {
     /// <summary>
-    /// Метка, которой мы подписываем свои строки.
-    /// </summary>
-    /// <remarks>
-    /// Нужна, чтобы отличать своё от чужого. Без неё «убрать всё, что мы
-    /// добавили» невыполнимо: в файле не остаётся следа, кто автор строки,
-    /// и любая чистка становится чисткой чужого заодно.
-    /// </remarks>
-    public const string Signature = "# netzapret";
-
-    /// <summary>
     /// Разбирает файл построчно, сохраняя и выключенные записи.
     /// </summary>
     /// <remarks>
@@ -187,35 +177,11 @@ public static class HostsEditor
         return backup;
     }
 
-    /// <summary>
-    /// Добавляет свою запись — или правит её, если такая уже есть.
-    /// </summary>
-    /// <remarks>
-    /// Только свои: чужую строку с тем же именем мы не переписываем, а выносим
-    /// отказ наружу. Молча подменить чужой адрес значит сломать чужую настройку
-    /// так, что виноватым окажется не тот.
-    /// </remarks>
-    public static string Add(string name, IPAddress address, string? path = null)
-    {
-        var target = path ?? HostsFile.DefaultPath;
-        var content = File.ReadAllLines(target).ToList();
-        var backup = Backup(target);
-
-        var ours = Parse(target)
-            .FirstOrDefault(e => e.Note is not null
-                && e.Note.Contains("netzapret", StringComparison.OrdinalIgnoreCase)
-                && e.Names.Contains(name, StringComparer.OrdinalIgnoreCase));
-
-        var line = $"{address} {name}  {Signature}";
-
-        if (ours is not null)
-            content[ours.Line] = line;
-        else
-            content.Add(line);
-
-        Write(target, content);
-        return backup;
-    }
+    // Своих записей в hosts мы не заводим — для этого есть
+    // config/addresses.yaml, где адрес подставляет наш резолвер. Разница
+    // существенная: правка hosts требует администратора, переживает удаление
+    // программы и видна всем приложениям сразу. Здесь только чужие записи
+    // и только выключение.
 
     /// <summary>
     /// Проверяет, отвечают ли адреса, к которым прибиты имена.

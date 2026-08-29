@@ -40,6 +40,15 @@ internal static class Maintenance
     /// </remarks>
     public static ActionResult ResetSettings(bool keepSubscription)
     {
+        // При работающих движках в runtime\ лежит состояние супервизора и его
+        // журналы. Стереть их под ним значит потерять след запущенных процессов:
+        // остановить их станет нечем, а следующий запуск упрётся в занятый
+        // драйвер и осиротевший TUN.
+        var state = Supervisor.SupervisorState.Load(Supervisor.SupervisorState.DefaultPath);
+
+        if (state is not null && state.IsSupervisorAlive())
+            return ActionResult.Bad("Сначала остановите движки — иначе потеряется след запущенных процессов.");
+
         try
         {
             string? subscription = null;
@@ -98,13 +107,7 @@ internal static class Maintenance
         if (!IsElevated())
             return ActionResult.Bad("Нужны права администратора.");
 
-        var steps = new[]
-        {
-            ("winsock", "int ip reset"),
-            ("winsock", "winsock reset"),
-        };
-
-        foreach (var (_, arguments) in steps)
+        foreach (var arguments in new[] { "int ip reset", "winsock reset" })
         {
             var code = Run("netsh", arguments);
 
