@@ -65,6 +65,12 @@ mkdir "%STAGE%\config" 2>nul
 copy /y "%ROOT%config\rules.yaml" "%STAGE%\config\" >nul
 copy /y "%ROOT%config\netzapret.example.json" "%STAGE%\config\" >nul
 
+rem Addresses for names that have none of their own - the Roblox thumbnail
+rem host among them. Without this the roblox-cdn list points at a name with no
+rem A record and the previews stay broken, so the fix has to travel with the
+rem list that depends on it.
+copy /y "%ROOT%config\addresses.yaml" "%STAGE%\config\" >nul
+
 rem Our own domain lists. Rules reference them by path, so leaving them out
 rem gives rules that resolve to nothing - and the service view would show
 rem Steam and Valheim as routed while nothing was routed at all.
