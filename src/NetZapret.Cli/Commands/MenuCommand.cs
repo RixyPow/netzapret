@@ -296,8 +296,28 @@ internal static class MenuCommand
         }
 
         var presets = new PresetReader().Read(paths.PresetFiles);
+
+        // Заголовок в файле пресета — не обязательно уникальный: свой
+        // «Universal V5 my.txt» объявляет себя тем же «Universal V5», что
+        // и заводской, и в списке они выглядели двумя одинаковыми строками,
+        // между которыми не выбрать. Различаем именем файла, но только там,
+        // где заголовки и вправду совпали, — иначе в списке станет шумно.
+        var collisions = presets.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var items = new List<(string, string?)> { ("Не запускать десинк", null) };
-        items.AddRange(presets.Select(p => ($"{p.Name}  ({p.ActiveSections.Count()} секций)", (string?)p.Name)));
+
+        items.AddRange(presets.Select(p =>
+        {
+            var file = Path.GetFileNameWithoutExtension(p.FilePath);
+            var label = collisions.Contains(p.Name) ? $"{p.Name} [{file}]" : p.Name;
+
+            // Значение — имя файла: по нему пресет и находится однозначно,
+            // тогда как заголовок теперь заведомо может быть общим.
+            return ($"{label}  ({p.ActiveSections.Count()} секций)", (string?)file);
+        }));
 
         var chosen = PickNullable("Пресет Zapret", items, settings.PresetName);
         return chosen.Cancelled ? settings : settings with { PresetName = chosen.Value };

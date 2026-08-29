@@ -138,6 +138,23 @@ set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal FULL.txt" "Universal LITE.txt" "U
 robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF %PRESET_EXCLUDE% >nul
 if errorlevel 8 exit /b 1
 
+rem The game-filter set lives in Zapret's own preset folder, which was not
+rem copied at all - so those presets could never appear in a built copy no
+rem matter what the program did with them. By name, not the whole folder:
+rem it holds over a hundred files, almost all sweeps of one strategy.
+for %%P in (
+    "Default v1 (game filter).txt"
+    "Default v2 (game filter).txt"
+    "Default v3 (game filter).txt"
+    "Default v4 (game filter).txt"
+    "Default v5 (game filter).txt"
+) do (
+    if exist "%ZAPRET%\presets\winws2_builtin\%%~P" (
+        robocopy "%ZAPRET%\presets\winws2_builtin" "%ENGINES%\zapret\presets\winws2_builtin" "%%~P" /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+        if errorlevel 8 exit /b 1
+    )
+)
+
 rem Licences of what we redistribute, and the one obligation that actually
 rem needs an action from us: Zapret is MIT, and MIT requires the notice to
 rem travel with the copies. The installation ships no licence file at all,

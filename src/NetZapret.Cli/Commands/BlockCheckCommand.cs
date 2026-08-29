@@ -543,6 +543,16 @@ internal static class BlockCheckCommand
             if (!report.Actionable || now == should)
                 continue;
 
+            // Вниз — никогда, пока движки работают. Прежде это правило стояло
+            // только для «доступен», и лесенка спотыкалась о собственный вывод:
+            // image.tmdb.org шёл через VPN, оттуда приходил RST, проверка
+            // называла это «DPI по TLS» и предлагала спуститься на десинк —
+            // одновременно с разделом «маршрутом не лечится» про тот же домен.
+            // Диагноз ставится по нынешнему маршруту, и переносить его
+            // на другую ступень нельзя.
+            if (enginesRunning && Rung(should) < Rung(now))
+                continue;
+
             result.Add(new Suggestion
             {
                 Host = report.Host,
@@ -633,6 +643,22 @@ internal static class BlockCheckCommand
 
         return result;
     }
+
+    /// <summary>
+    /// Ступень лесенки: чем выше, тем дороже обходится.
+    /// </summary>
+    /// <remarks>
+    /// Порядок задаёт цену, а не силу. Десинк ломается при смене прошивки DPI,
+    /// туннель добавляет задержку и расходует квоту подписки, — поэтому
+    /// поднимаемся только вынужденно, а спускаемся лишь тогда, когда есть
+    /// чем доказать, что ступенью ниже тоже работает.
+    /// </remarks>
+    private static int Rung(RoutingMode mode) => mode switch
+    {
+        RoutingMode.Direct => 0,
+        RoutingMode.Desync => 1,
+        _ => 2,
+    };
 
     private static RoutingMode CurrentMode(RuleEngine engine, string host) =>
         engine.Evaluate(new Core.Connections.ConnectionEvent

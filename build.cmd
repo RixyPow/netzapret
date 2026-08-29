@@ -155,9 +155,10 @@ for %%D in (exe lists lua bin windivert.filter) do (
     )
 )
 
-rem Only presets\winws2. winws1 is the previous engine, and winws2_builtin is
-rem never read by us either - the program looks in winws2 alone, so those 107
-rem files were dead weight in the bundle.
+rem winws1 is the previous engine and is not bundled. From winws2_builtin we
+rem take five files by name: the game-filter set, which exists nowhere else.
+rem The rest of that folder - over a hundred sweeps of one strategy - stays
+rem out, as it would bury the twenty someone actually chooses between.
 rem
 rem Superseded and one-off presets are left out. Nine near-identical entries
 rem make the choice harder rather than richer, and the ones dropped are either
@@ -183,7 +184,27 @@ for %%F in (%PRESET_EXCLUDE%) do (
     if exist "%ENGINES%\zapret\presets\winws2\%%~F" del /q "%ENGINES%\zapret\presets\winws2\%%~F"
 )
 
+rem The folder used to be deleted wholesale right here, which is why the
+rem game-filter presets could not reach a built copy however the program
+rem was taught to read them. Now it is emptied and refilled with the five,
+rem so removing one from the list below actually removes it.
 if exist "%ENGINES%\zapret\presets\winws2_builtin" rd /s /q "%ENGINES%\zapret\presets\winws2_builtin"
+
+for %%P in (
+    "Default v1 (game filter).txt"
+    "Default v2 (game filter).txt"
+    "Default v3 (game filter).txt"
+    "Default v4 (game filter).txt"
+    "Default v5 (game filter).txt"
+) do (
+    if exist "%ZAPRET%\presets\winws2_builtin\%%~P" (
+        robocopy "%ZAPRET%\presets\winws2_builtin" "%ENGINES%\zapret\presets\winws2_builtin" "%%~P" /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+        if errorlevel 8 (
+            echo Failed to bundle the game-filter presets
+            exit /b 1
+        )
+    )
+)
 
 :done
 echo.
