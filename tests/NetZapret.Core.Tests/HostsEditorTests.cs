@@ -1,3 +1,4 @@
+using System.Text;
 using NetZapret.Proxy;
 using Xunit;
 
@@ -128,6 +129,30 @@ public class HostsEditorTests : IDisposable
 
         Assert.Contains("# Copyright (c) 1993-2009 Microsoft Corp.", text);
         Assert.Contains("5.6.7.8 second.example   # поставлено Zapret GUI", text);
+    }
+
+    /// <summary>Метка порядка байтов не накапливается.</summary>
+    /// <remarks>
+    /// Наблюдалось на живом файле: восемнадцать меток подряд в первой строке.
+    /// Чтение оставляет метку как обычный символ, запись дописывала свою
+    /// перед ней — и каждая правка добавляла ещё одну.
+    /// </remarks>
+    [Fact]
+    public void ByteOrderMarksDoNotAccumulate()
+    {
+        File.WriteAllText(_path, "﻿# comment\r\n1.2.3.4 example.com\r\n", new UTF8Encoding(true));
+
+        for (int i = 0; i < 3; i++)
+        {
+            var entry = HostsEditor.Parse(_path).Single(e => e.Names.Contains("example.com"));
+            HostsEditor.SetEnabled([entry.Line], enabled: i % 2 == 0, _path);
+        }
+
+        var text = File.ReadAllText(_path);
+        int marks = text.TakeWhile(c => c == '﻿').Count();
+
+        Assert.True(marks <= 1, $"меток порядка байтов накопилось {marks}");
+        Assert.Contains("example.com", text);
     }
 
     /// <summary>Перед правкой остаётся копия.</summary>

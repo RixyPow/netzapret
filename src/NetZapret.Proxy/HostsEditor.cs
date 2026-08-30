@@ -326,8 +326,16 @@ public static class HostsEditor
     /// BOM в hosts ломает разбор первой строки у части программ, а сам файл
     /// исторически ASCII с CRLF. Отступать от этого нам незачем.
     /// </remarks>
-    private static void Write(string path, IReadOnlyList<string> lines) =>
-        File.WriteAllText(path, string.Join("\r\n", lines) + "\r\n", new UTF8Encoding(false));
+    private static void Write(string path, IReadOnlyList<string> lines)
+    {
+        var content = string.Join("\r\n", lines) + "\r\n";
+
+        // Метка порядка байтов срезается, а не сохраняется. File.ReadAllLines
+        // оставляет её в первой строке как обычный символ, и запись возвращала
+        // её на место — перед прежней. В этом файле их накопилось уже
+        // восемнадцать: каждая правка добавляла ещё одну.
+        File.WriteAllText(path, content.TrimStart('﻿'), new UTF8Encoding(false));
+    }
 
     /// <summary>Сбрасывает кэш DNS; без этого правка не вступит в силу.</summary>
     /// <remarks>

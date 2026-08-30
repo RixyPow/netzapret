@@ -2109,6 +2109,7 @@ internal static class MenuCommand
             Console.WriteLine("  Номер — включить или выключить все имена этого адреса.");
             Console.WriteLine("  п — проверить, отвечают ли адреса.");
             Console.WriteLine("  с — показать имена одного адреса.");
+            Console.WriteLine("  к — выключить всё, что покрывает каталог Zapret.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -2130,9 +2131,98 @@ internal static class MenuCommand
                 continue;
             }
 
+            if (Is(input, "к", "k"))
+            {
+                HandOverToCatalog(entries);
+                continue;
+            }
+
             if (int.TryParse(input, out var index) && index >= 1 && index <= groups.Count)
                 ToggleGroup(groups[index - 1].ToList(), groups[index - 1].Key.Enabled);
         }
+    }
+
+    /// <summary>
+    /// Выключает записи hosts, которые каталог умеет обслужить сам.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Середина между «оставить два хозяина у одного файла» и «отдать файл
+    /// нам целиком». Первое путает: hosts отвечает раньше, и включённый
+    /// в каталоге сервис молча не работает. Второе хуже — правки в системном
+    /// файле требуют администратора, переживают удаление программы и видны
+    /// всем приложениям; ровно так и появились шестьсот семьдесят записей
+    /// на давно умолкший адрес, которые пришлось разбирать вручную.
+    /// </para>
+    /// <para>
+    /// Поэтому файл остаётся чужим, а мы лишь снимаем то, что перекрывает
+    /// нас. Выключением, а не удалением: передумать должно быть так же
+    /// просто, как согласиться.
+    /// </para>
+    /// </remarks>
+    private static void HandOverToCatalog(IReadOnlyList<HostsEntry> entries)
+    {
+        var catalog = ZapretCatalog.Discover();
+
+        if (catalog is null)
+        {
+            Message("Каталог не найден — переносить не на что.", ConsoleColor.Yellow);
+            return;
+        }
+
+        var covered = catalog.NamesByService()
+            .SelectMany(pair => pair.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var affected = entries
+            .Where(e => e.Enabled && e.Names.Any(covered.Contains))
+            .ToList();
+
+        if (affected.Count == 0)
+        {
+            Message("Нечего переносить: записей, покрытых каталогом, нет.", ConsoleColor.Green);
+            return;
+        }
+
+        int names = affected.Sum(e => e.Names.Count);
+
+        Console.WriteLine();
+        Console.WriteLine($"  Выключится {affected.Count} {Plural(affected.Count, "строка", "строки", "строк")}, " +
+            $"в них {names} {Plural(names, "имя", "имени", "имён")}.");
+        Console.WriteLine();
+        Console.WriteLine("  Эти имена каталог умеет обслужить через наш резолвер: без прав");
+        Console.WriteLine("  администратора, не трогая системный файл и снимаясь вместе");
+        Console.WriteLine("  с настройками.");
+        Console.WriteLine();
+        Console.WriteLine("  После этого включите нужные сервисы в пункте «DNS → Каталог Zapret»,");
+        Console.WriteLine("  иначе они останутся без адреса вовсе.");
+        Console.WriteLine();
+        Console.Write("  Выключить? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        try
+        {
+            var backup = HostsEditor.SetEnabled(affected.Select(e => e.Line).ToList(), enabled: false);
+
+            Say($"Выключено. Копия прежнего файла: {backup}", ConsoleColor.Green, pause: false);
+            Console.WriteLine(HostsEditor.FlushDns()
+                ? "Кэш DNS сброшен."
+                : "Сбросьте кэш вручную: ipconfig /flushdns");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Say("Нужны права администратора: файл системный.", ConsoleColor.Yellow, pause: false);
+        }
+        catch (Exception ex)
+        {
+            Say($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red, pause: false);
+        }
+
+        Pause();
     }
 
     private static bool Is(string input, string ru, string en) =>
