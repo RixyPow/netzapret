@@ -138,7 +138,7 @@ internal static class BlockCheckCommand
 
         bool enginesRunning = WarnIfEnginesRunning();
 
-        bool domesticExit = await PrintSetupAsync(settings, enginesRunning, cancellationToken);
+        var setup = await PrintSetupAsync(settings, enginesRunning, cancellationToken);
         PrintLegend();
 
         Console.WriteLine();
@@ -191,7 +191,7 @@ internal static class BlockCheckCommand
         }
 
         PrintSummary(reports, badAddresses, pinned);
-        PrintPinned(pinned);
+        PrintPinned(pinned, engine);
 
         // Предложение выводится и после прерывания. Проверенное остаётся
         // проверенным независимо от того, дошли ли до конца, а человек,
@@ -201,7 +201,7 @@ internal static class BlockCheckCommand
             .Where(s => !pinned.ContainsKey(s.Host))
             .ToList();
 
-        PrintDeadlocks(Deadlocks(reports, engine, domesticExit).Where(d => !pinned.ContainsKey(d.Host)).ToList());
+        PrintDeadlocks(Deadlocks(reports, engine, setup).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
         ApplyIfConfirmed(suggestions, userRulesPath);
 
@@ -436,10 +436,64 @@ internal static class BlockCheckCommand
         return null;
     }
 
-    private static void PrintPinned(IReadOnlyDictionary<string, string> pinned)
+    /// <summary>
+    /// Имена, которым мы назначили маршрут, но пин его отменяет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Всегда ошибка настройки, и притом бесшумная: правило написано, в отчёте
+    /// о маршрутах числится, а трафик идёт мимо. Ловится без единого замера —
+    /// достаточно сверить список пинов с правилами.
+    /// </para>
+    /// <para>
+    /// Случай, ради которого заведено. Telegram работал через туннель, потом
+    /// перестал. В hosts на все его имена стоял пин, и трафик шёл по нему
+    /// напрямую — где рукопожатие рвут, — тогда как правило отправляло
+    /// Telegram в туннель. Проверка добросовестно ставила диагноз «DPI по TLS»
+    /// прибитому адресу и ни разу не сказала, что маршрут отменён.
+    /// </para>
+    /// </remarks>
+    private static void PrintPinConflicts(IReadOnlyDictionary<string, string> pinned, RuleEngine? engine)
+    {
+        if (engine is null)
+            return;
+
+        var conflicts = pinned.Keys
+            .Select(host => (Host: host, Mode: CurrentMode(engine, host)))
+            .Where(pair => pair.Mode is RoutingMode.Proxy or RoutingMode.Desync)
+            .OrderBy(pair => pair.Host, StringComparer.Ordinal)
+            .ToList();
+
+        if (conflicts.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+
+        Console.WriteLine();
+        Console.WriteLine("Пин отменяет назначенный маршрут — это всегда ошибка настройки");
+
+        foreach (var (host, mode) in conflicts)
+            Console.WriteLine($"  {Truncate(host, 34),-34} правило «{Describe(mode)}», а идёт по пину напрямую");
+
+        Console.WriteLine();
+        Console.WriteLine("  Пин выигрывает всегда: hosts читается раньше DNS, до нашего резолвера");
+        Console.WriteLine("  дело не доходит. Уберите запись — пункт «Файл hosts», — и маршрут");
+        Console.WriteLine("  заработает. Оставлять оба смысла нет: правило при пине мертво.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <param name="engine">
+    /// Нужен, чтобы отличить безобидный пин от пина поверх маршрута.
+    /// Второе — всегда ошибка настройки, и молчать о ней нельзя.
+    /// </param>
+    private static void PrintPinned(IReadOnlyDictionary<string, string> pinned, RuleEngine? engine)
     {
         if (pinned.Count == 0)
             return;
+
+        PrintPinConflicts(pinned, engine);
 
         var previous = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.Yellow;
@@ -487,7 +541,7 @@ internal static class BlockCheckCommand
     /// и назвать надо его.
     /// </para>
     /// </remarks>
-    private static async Task<bool> PrintSetupAsync(
+    private static async Task<Setup> PrintSetupAsync(
         AppSettings settings,
         bool enginesRunning,
         CancellationToken cancellationToken)
@@ -510,61 +564,190 @@ internal static class BlockCheckCommand
 
         Console.ForegroundColor = previous;
 
-        return enginesRunning && await WarnIfExitIsDomesticAsync(cancellationToken);
+        if (!enginesRunning)
+            return new Setup { Tunnel = TunnelState.Off, Exit = new ExitReading { Tunnelled = false } };
+
+        // Порядок важен: состояние туннеля выясняется до всего прочего.
+        // Мёртвый туннель обесценивает вердикты по проксируемым именам,
+        // и знать об этом надо раньше, чем они напечатаны.
+        var tunnel = await TunnelStateAsync(server, cancellationToken);
+        var exit = await ReadExitAsync(cancellationToken);
+
+        PrintExit(exit);
+        WarnIfTunnelIsDead(tunnel);
+        WarnIfExitIsDomestic(exit);
+
+        return new Setup { Tunnel = tunnel, Exit = exit };
+    }
+
+    /// <summary>Обстановка, в которой снят отчёт.</summary>
+    private sealed record Setup
+    {
+        public required TunnelState Tunnel { get; init; }
+
+        public required ExitReading Exit { get; init; }
     }
 
     /// <summary>
-    /// Предупреждает, если туннель выходит там же, откуда зашёл.
+    /// Проходит ли через туннель хоть что-нибудь.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// «Авто по задержке» выбирает ближайший сервер, а ближайший — свой же.
-    /// Для обхода DPI это разумно, для сервисов, закрывающихся от страны, —
-    /// бессмысленно: туннель через Россию оставляет российский адрес,
-    /// и ChatGPT отвечает тем же отказом, что и без туннеля.
+    /// Спрашивается у самого движка: Clash API умеет прогнать пробный запрос
+    /// через названный выход и вернуть задержку. Это единственный способ
+    /// отделить «сайт закрыт» от «труба не работает», не трогая маршруты.
     /// </para>
     /// <para>
-    /// Спрашивается адрес, а не читается имя сервера: имя ставит поставщик
-    /// подписки, и «США (вход РФ)» ничего не обещает о том, где трафик
-    /// выйдет наружу.
+    /// Заведено после случая, когда пятнадцать серверов подписки разом
+    /// перестали отвечать — ни один порт не принимал соединение, — а проверка
+    /// исправно обвиняла в этом сайты и предлагала менять им маршруты.
     /// </para>
     /// </remarks>
-    /// <returns>Выходит ли туннель в России.</returns>
-    private static async Task<bool> WarnIfExitIsDomesticAsync(CancellationToken cancellationToken)
+    private static async Task<TunnelState> TunnelStateAsync(string? server, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(server))
+            return TunnelState.Unknown;
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+
+            var url = $"http://127.0.0.1:{ClashApiPort}/proxies/{Uri.EscapeDataString(server)}/delay"
+                + "?timeout=5000&url=" + Uri.EscapeDataString("https://www.gstatic.com/generate_204");
+
+            using var response = await http.GetAsync(url, cancellationToken);
+
+            // Движок отвечает 200 с задержкой, когда проба дошла, и 5xx,
+            // когда не дошла. Различать по телу не нужно: сам факт неуспеха
+            // и означает, что через этот выход трафик не идёт.
+            return response.IsSuccessStatusCode ? TunnelState.Alive : TunnelState.Dead;
+        }
+        catch (Exception)
+        {
+            // Движок мог не поднять Clash API. Это незнание, а не приговор:
+            // объявить туннель мёртвым по недоступности его же диагностики
+            // значило бы обвинить исправную трубу.
+            return TunnelState.Unknown;
+        }
+    }
+
+    /// <summary>
+    /// Внешний адрес и то, через что он получен.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прежде здесь стоял простой запрос к службе определения адреса, а ответ
+    /// подписывался «Выход туннеля». Замер показал, что это неверно: имя
+    /// службы разрешается в настоящий адрес, а не в fakeip, — значит правило
+    /// маршрутизации отправляет её напрямую, и полученная страна описывает
+    /// домашнего провайдера. Отчёт уверенно называл выход туннеля российским,
+    /// ни разу через туннель не сходив.
+    /// </para>
+    /// <para>
+    /// Теперь замер сопровождается ответом на вопрос, через что он шёл.
+    /// Утверждение о туннеле делается только когда он и вправду измерен.
+    /// </para>
+    /// </remarks>
+    private static async Task<ExitReading> ReadExitAsync(CancellationToken cancellationToken)
+    {
+        const string probe = "api.ipify.org";
+
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
 
-            // Адрес называется вслух: страна без него — утверждение, которое
-            // нечем проверить, а два отчёта без него не сравнить между собой.
-            var address = (await http.GetStringAsync("https://api.ipify.org", cancellationToken)).Trim();
+            var address = (await http.GetStringAsync($"https://{probe}", cancellationToken)).Trim();
             var country = (await http.GetStringAsync("https://ipinfo.io/country", cancellationToken)).Trim();
 
-            var previous = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"  Выход:   {address} ({country})");
-            Console.ForegroundColor = previous;
-
-            if (!string.Equals(country, "RU", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine();
-            Console.WriteLine("  Выход туннеля — в России. Для сервисов, закрывающихся от страны,");
-            Console.WriteLine("  это не помогает: адрес остаётся российским. «Авто по задержке»");
-            Console.WriteLine("  берёт ближайший сервер, а ближайший — свой же. Выберите");
-            Console.WriteLine("  зарубежный в пункте «VPN».");
-            Console.ForegroundColor = previous;
-
-            return true;
+            return new ExitReading
+            {
+                Address = address,
+                Country = country,
+                Tunnelled = await WentThroughTunnelAsync(probe, cancellationToken),
+            };
         }
         catch (Exception)
         {
-            // Не выяснилось — молчим. Отсутствие предупреждения хуже ложного,
-            // но ложное здесь стоило бы смены рабочего сервера ни за чем.
+            // Не выяснилось — молчим. Отсутствие сведений хуже ложных,
+            // но ложные здесь стоили бы смены рабочего сервера ни за чем.
+            return new ExitReading { Tunnelled = false };
+        }
+    }
+
+    /// <summary>Разрешается ли имя в fakeip — то есть уйдёт ли оно в туннель.</summary>
+    private static async Task<bool> WentThroughTunnelAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var addresses = await System.Net.Dns.GetHostAddressesAsync(host, cancellationToken);
+
+            return addresses.Any(a => TunnelHealth.IsFakeIp(a));
+        }
+        catch (Exception)
+        {
             return false;
         }
+    }
+
+    private static void PrintExit(ExitReading exit)
+    {
+        if (exit.Address is null)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        // Через что шёл замер, называется рядом с адресом. Без этой пометки
+        // строку нельзя прочесть верно, а прочтённая неверно она обвиняет
+        // туннель в том, чего он не делал.
+        Console.WriteLine(exit.Tunnelled
+            ? $"  Выход:   {exit.Address} ({exit.Country}) — через туннель"
+            : $"  Выход:   {exit.Address} ({exit.Country}) — мимо туннеля, это домашний канал");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
+    /// Кричит, если туннель поднят, но ничего не пропускает.
+    /// </summary>
+    /// <remarks>
+    /// Печатается раньше вердиктов и нарочно громко: это не одна из бед,
+    /// а причина, по которой все прочие строки отчёта про проксируемые имена
+    /// ничего не стоят.
+    /// </remarks>
+    private static void WarnIfTunnelIsDead(TunnelState state)
+    {
+        if (state != TunnelState.Dead)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+
+        Console.WriteLine();
+        Console.WriteLine("  Туннель поднят, но не пропускает ничего.");
+        Console.WriteLine();
+        Console.WriteLine("  Всё, что заведено в туннель, ниже будет выглядеть закрытым — и это");
+        Console.WriteLine("  про трубу, а не про сайты. Сперва почините связь с сервером:");
+        Console.WriteLine("  выберите другой в пункте «VPN» или обновите подписку.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    private static void WarnIfExitIsDomestic(ExitReading exit)
+    {
+        if (!exit.TunnelExitsDomestically)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("  Выход туннеля — в России. Для сервисов, закрывающихся от страны,");
+        Console.WriteLine("  это не помогает: адрес остаётся российским. «Авто по задержке»");
+        Console.WriteLine("  берёт ближайший сервер, а ближайший — свой же. Выберите");
+        Console.WriteLine("  зарубежный в пункте «VPN».");
+
+        Console.ForegroundColor = previous;
     }
 
     /// <summary>
@@ -872,14 +1055,15 @@ internal static class BlockCheckCommand
     /// в пресете, и об этом стоит сказать отдельно.
     /// </para>
     /// </remarks>
-    /// <param name="domesticExit">
-    /// Туннель выходит в той же стране, откуда зашёл. Тогда отказ сайта
-    /// ничего не говорит о туннеле: тот и не менял того, на что сайт смотрит.
+    /// <param name="setup">
+    /// Обстановка замера. Из неё берутся два обстоятельства, без которых
+    /// вердикт по проксируемому имени неверен: жив ли туннель вообще
+    /// и выходит ли он там же, откуда зашёл.
     /// </param>
     private static IReadOnlyList<Deadlock> Deadlocks(
         IReadOnlyList<TargetReport> reports,
         RuleEngine? engine,
-        bool domesticExit)
+        Setup setup)
     {
         if (engine is null)
             return [];
@@ -906,28 +1090,11 @@ internal static class BlockCheckCommand
                 continue;
             }
 
-            // Уже наверху и всё равно закрыт. Но «даже через VPN» значит это
-            // только тогда, когда туннель выходит не там же, откуда зашёл:
-            // через отечественный выход адрес остаётся отечественным, и сайт,
-            // закрывающийся от страны, отказывает ровно так же. Пока выход
-            // домашний, приговор туннелю не вынесен — он и не пробовался.
+            // Уже наверху и всё равно закрыт — но приговор туннелю выносится
+            // лишь тогда, когда туннель вообще был опробован.
             if (now == RoutingMode.Proxy)
             {
-                result.Add(domesticExit
-                    ? new Deadlock
-                    {
-                        Host = report.Host,
-                        Now = now,
-                        What = $"{report.Describe()}, но выход туннеля в России",
-                        Hope = "возьмите зарубежный сервер и повторите — это ещё не приговор",
-                    }
-                    : new Deadlock
-                    {
-                        Host = report.Host,
-                        Now = now,
-                        What = $"{report.Describe()} даже через VPN",
-                        Hope = "сообщите — возможно, дело в сервере подписки или в самом сайте",
-                    });
+                result.Add(ProxiedButClosed(report, now, setup));
 
                 continue;
             }
@@ -948,6 +1115,57 @@ internal static class BlockCheckCommand
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Имя заведено в туннель и всё равно закрыто — но чья это вина.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Три разных положения, которые прежде сливались в одно «даже через VPN».
+    /// Мёртвый туннель означает, что измерена труба, а не сайт, и говорить
+    /// о сайте нечего вовсе. Домашний выход означает, что туннель не менял
+    /// того, на что сайт смотрит, — отказ по стране повторится один в один.
+    /// И лишь когда труба жива и выходит за границей, отказ и вправду
+    /// относится к сайту.
+    /// </para>
+    /// <para>
+    /// Различать пришлось после случая, когда все пятнадцать серверов
+    /// подписки перестали отвечать, а отчёт объявил закрытыми полтора
+    /// десятка сайтов и предложил менять им маршруты.
+    /// </para>
+    /// </remarks>
+    private static Deadlock ProxiedButClosed(TargetReport report, RoutingMode now, Setup setup)
+    {
+        if (setup.Tunnel == TunnelState.Dead)
+        {
+            return new Deadlock
+            {
+                Host = report.Host,
+                Now = now,
+                What = "заведён в туннель, а туннель не пропускает ничего",
+                Hope = "это про трубу, а не про сайт — почините связь с сервером и повторите",
+            };
+        }
+
+        if (setup.Exit.TunnelExitsDomestically)
+        {
+            return new Deadlock
+            {
+                Host = report.Host,
+                Now = now,
+                What = $"{report.Describe()}, но выход туннеля в России",
+                Hope = "возьмите зарубежный сервер и повторите — это ещё не приговор",
+            };
+        }
+
+        return new Deadlock
+        {
+            Host = report.Host,
+            Now = now,
+            What = $"{report.Describe()} даже через VPN",
+            Hope = "сообщите — возможно, дело в сервере подписки или в самом сайте",
+        };
     }
 
     /// <summary>
