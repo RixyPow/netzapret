@@ -4,4 +4,13 @@
     <ProjectReference Include="..\NetZapret.Core\NetZapret.Core.csproj" />
   </ItemGroup>
 
+  <!--
+    Каталог сервисов Zapret лежит в SQLite. Читаем его напрямую, а не копируем
+    к себе: там восемьсот доменов и семь наборов адресов, которые обновляются
+    вместе с Zapret, и наша копия устарела бы за недели.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
 </Project>

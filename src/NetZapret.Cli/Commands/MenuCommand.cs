@@ -574,11 +574,14 @@ internal static class MenuCommand
             Console.WriteLine();
             Console.WriteLine($"  Апстрим DNS: {DescribeDns(settings)}");
             Console.WriteLine();
+            Console.WriteLine($"  Адреса из каталога: {DescribeCatalog(settings)}");
+            Console.WriteLine();
             Console.WriteLine("  1. Выбрать резолвер");
             Console.WriteLine("  2. Проверить резолверы");
             Console.WriteLine(settings.DnsThroughTunnel
                 ? "  3. Разрешать имена напрямую"
                 : "  3. Разрешать имена через туннель");
+            Console.WriteLine("  4. Каталог Zapret ....... сервисы, которые закрылись от России сами");
             Console.WriteLine("  0. Назад");
             Console.Write("Выбор: ");
 
@@ -589,6 +592,11 @@ internal static class MenuCommand
 
                 case "2":
                     await CheckResolversAsync(settings, cancellationToken);
+                    break;
+
+                case "4":
+                    settings = CatalogMenu(settings);
+                    settings.Save(AppSettings.DefaultPath);
                     break;
 
                 case "3":
@@ -605,6 +613,161 @@ internal static class MenuCommand
                     return settings;
             }
         }
+    }
+
+    private static string DescribeCatalog(AppSettings settings)
+    {
+        if (settings.AddressServices.Count == 0)
+            return "не используются";
+
+        int n = settings.AddressServices.Count;
+        var набор = settings.AddressProfile is null ? string.Empty : $", набор {settings.AddressProfile}";
+
+        return $"{n} {Plural(n, "сервис", "сервиса", "сервисов")}{набор}";
+    }
+
+    /// <summary>
+    /// Каталог сервисов Zapret: кому выдать адрес чужого прокси.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отвечает на то, что маршрутами не решается вовсе. ChatGPT, Spotify,
+    /// Claude закрываются от России сами — связь до них исправна, отказывает
+    /// сайт, разобрав запрос. Ни десинк, ни туннель тут не при чём; помогает
+    /// только адрес посредника, и такие адреса Zapret собирает в каталоге.
+    /// </para>
+    /// <para>
+    /// Отличие от редактора hosts в Zapret одно, и оно в нашу пользу: те же
+    /// ответы отдаёт наш резолвер. Системный файл не трогается — значит
+    /// не нужен администратор, ничего не переживает удаление программы
+    /// и не действует на приложения, которые мы не ведём.
+    /// </para>
+    /// </remarks>
+    private static AppSettings CatalogMenu(AppSettings settings)
+    {
+        var catalog = ZapretCatalog.Discover();
+
+        if (catalog is null)
+        {
+            Message(
+                "Каталог не найден. Он лежит в " + ZapretCatalog.RelativePath +
+                " внутри установки Zapret и появился не во всех её версиях.",
+                ConsoleColor.Yellow);
+
+            Pause();
+            return settings;
+        }
+
+        var services = catalog.Services();
+
+        if (services.Count == 0)
+        {
+            Message("Каталог пуст или его устройство изменилось.", ConsoleColor.Yellow);
+            Pause();
+            return settings;
+        }
+
+        var chosen = settings.AddressServices.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        while (true)
+        {
+            ClearScreen();
+            Console.WriteLine("Каталог Zapret");
+            Console.WriteLine(new string('=', 62));
+            Console.WriteLine();
+            Console.WriteLine("  Сервисы, которые закрываются от России сами. Связь до них");
+            Console.WriteLine("  исправна — отказывает сайт, и лечится это только адресом");
+            Console.WriteLine("  посредника. Отдаёт его наш резолвер, hosts не трогается.");
+            Console.WriteLine();
+            Console.WriteLine($"  Набор адресов: {settings.AddressProfile ?? "не выбран"}");
+            Console.WriteLine();
+
+            var previous = Console.ForegroundColor;
+
+            for (int i = 0; i < services.Count; i++)
+            {
+                var service = services[i];
+                bool on = chosen.Contains(service.Id);
+
+                Console.ForegroundColor = on ? ConsoleColor.Green : ConsoleColor.DarkGray;
+                Console.WriteLine(
+                    $"  {i + 1,3}. {(on ? "[вкл]" : "[  ]"),-6} {Truncate(service.Name, 44),-44} " +
+                    $"{service.Domains,3} дом.  {(service.Kind == "dns" ? "набор" : "свой адрес")}");
+                Console.ForegroundColor = previous;
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("  Номер — включить или выключить сервис.");
+            Console.WriteLine("  н — выбрать набор адресов (нужен сервисам с пометкой «набор»).");
+            Console.WriteLine("  Пусто — назад.");
+            Console.WriteLine();
+            Console.Write("> ");
+
+            var input = Console.ReadLine()?.Trim();
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return settings with { AddressServices = chosen.ToList() };
+            }
+
+            if (Is(input, "н", "n"))
+            {
+                settings = ChooseProfile(settings, catalog);
+                continue;
+            }
+
+            if (int.TryParse(input, out var index) && index >= 1 && index <= services.Count)
+            {
+                var id = services[index - 1].Id;
+
+                if (!chosen.Remove(id))
+                    chosen.Add(id);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Выбор набора адресов.
+    /// </summary>
+    /// <remarks>
+    /// Наборы — конкурирующие прокси для одних и тех же имён, и «лучшего»
+    /// среди них нет: каждый живёт ровно столько, сколько живёт узел за ним.
+    /// Поэтому выбирает человек, а мы показываем, сколько имён покрыто.
+    /// </remarks>
+    private static AppSettings ChooseProfile(AppSettings settings, ZapretCatalog catalog)
+    {
+        var profiles = catalog.Profiles();
+
+        if (profiles.Count == 0)
+        {
+            Message("Наборов в каталоге нет.", ConsoleColor.Yellow);
+            Pause();
+            return settings;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Набор адресов");
+        Console.WriteLine();
+
+        for (int i = 0; i < profiles.Count; i++)
+        {
+            var active = string.Equals(profiles[i].Id, settings.AddressProfile, StringComparison.OrdinalIgnoreCase)
+                ? "   <- сейчас"
+                : string.Empty;
+
+            Console.WriteLine($"  {i + 1}. {profiles[i].Name,-20} {profiles[i].Answers,4} имён{active}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Если сервис не заработал — попробуйте другой набор:");
+        Console.WriteLine("  за каждым стоит чужой узел, и они отказывают по одному.");
+        Console.WriteLine();
+        Console.Write("Номер: ");
+
+        return int.TryParse(Console.ReadLine()?.Trim(), out var index)
+            && index >= 1 && index <= profiles.Count
+                ? settings with { AddressProfile = profiles[index - 1].Id }
+                : settings;
     }
 
     private static async Task CheckResolversAsync(AppSettings settings, CancellationToken cancellationToken)

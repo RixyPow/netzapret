@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Zapret;
@@ -51,12 +52,34 @@ internal static class ConfigCommand
         foreach (var problem in overrides.Problems)
             Console.WriteLine($"Внимание, адреса: {problem}");
 
-        if (overrides.Entries.Count > 0)
+        // Свой файл поверх каталога: он написан руками под конкретный случай,
+        // и заводской ответ не должен его перебивать.
+        var addresses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var settings = AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath));
+        var catalog = ZapretCatalog.Discover(zapretRoot);
+
+        if (catalog is not null && settings.AddressServices.Count > 0)
         {
-            Console.WriteLine(
-                $"Подставлено адресов: {overrides.Entries.Count} " +
-                $"({string.Join(", ", overrides.Entries.Keys.Take(3))})");
+            var fromCatalog = catalog.Answers(settings.AddressServices, settings.AddressProfile);
+
+            foreach (var (host, address) in fromCatalog)
+                addresses[host] = address;
+
+            if (fromCatalog.Count > 0)
+            {
+                Console.WriteLine(
+                    $"Из каталога Zapret: {fromCatalog.Count} адресов " +
+                    $"для {settings.AddressServices.Count} сервисов" +
+                    (settings.AddressProfile is null ? string.Empty : $", набор {settings.AddressProfile}"));
+            }
         }
+
+        foreach (var (host, address) in overrides.Entries)
+            addresses[host] = address;
+
+        if (addresses.Count > 0)
+            Console.WriteLine($"Подставлено адресов всего: {addresses.Count}");
 
         var compiler = new SingBoxConfigCompiler();
         var options = new SingBoxOptions
@@ -70,7 +93,7 @@ internal static class ConfigCommand
             DesyncAddresses = desyncAddresses,
             CaptureAddresses = capture,
             PinnedProxyAddresses = pinned,
-            AddressOverrides = overrides.Entries,
+            AddressOverrides = addresses,
         };
 
         var result = compiler.Compile(engine.RuleSet, info.Servers, options);
