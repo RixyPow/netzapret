@@ -93,7 +93,6 @@ public class BlockCheckTests
     [Theory]
     [InlineData(BlockKind.HttpsPort)]
     [InlineData(BlockKind.Full)]
-    [InlineData(BlockKind.Stall)]
     [InlineData(BlockKind.Sinkhole)]
     public void Blocks_without_handshake_are_cured_by_tunnel_only(BlockKind kind)
     {
@@ -101,6 +100,26 @@ public class BlockCheckTests
 
         Assert.Contains("VPN", report.Remedy());
         Assert.DoesNotContain("десинк", report.Remedy());
+    }
+
+    /// <summary>Обрыв потока — сначала другой рецепт, и лишь потом туннель.</summary>
+    /// <remarks>
+    /// Сперва здесь стояло «только VPN», и рассуждение казалось верным: секция
+    /// пресета трогает лишь рукопожатие, а обрыв случается много позже.
+    /// Опровергнуто замером — <c>skinsrestorer.net</c> рвался на 13 505 байтах
+    /// из 154 921 и вылечился рецептом на ClientHello.
+    ///
+    /// Объясняется тем, что DPI разбирает соединение на рукопожатии, а убивает
+    /// поток позже: сорвав опознание в начале, отменяешь и то, что должно было
+    /// случиться потом. Совет «только VPN» уводил от рабочего решения.
+    /// </remarks>
+    [Fact]
+    public void A_stall_is_worth_another_desync_recipe_before_the_tunnel()
+    {
+        var remedy = Report(BlockKind.Stall).Remedy();
+
+        Assert.Contains("десинк", remedy);
+        Assert.Contains("VPN", remedy);
     }
 
     /// <summary>Отказ резолвера лечится резолвером, а не маршрутом.</summary>

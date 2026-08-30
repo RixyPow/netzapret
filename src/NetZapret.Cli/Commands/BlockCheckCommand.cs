@@ -138,7 +138,7 @@ internal static class BlockCheckCommand
 
         bool enginesRunning = WarnIfEnginesRunning();
 
-        await PrintSetupAsync(settings, enginesRunning, cancellationToken);
+        bool domesticExit = await PrintSetupAsync(settings, enginesRunning, cancellationToken);
         PrintLegend();
 
         Console.WriteLine();
@@ -163,7 +163,8 @@ internal static class BlockCheckCommand
         // а не задним числом в итоге.
         var pinned = FindPinned(targets.Select(t => t.Host));
 
-        var reports = await RunProbesAsync(targets, engine, enginesRunning, pinned, stop.Token);
+        var reports = await RunProbesAsync(
+            targets, engine, enginesRunning, pinned, LoadPreset(settings, zapretRoot), stop.Token);
 
         // Сторож снимается здесь, а не в конце метода. Он читает клавиши
         // через ReadKey и, оставшись жить, забирал их у следующих вопросов:
@@ -200,7 +201,7 @@ internal static class BlockCheckCommand
             .Where(s => !pinned.ContainsKey(s.Host))
             .ToList();
 
-        PrintDeadlocks(Deadlocks(reports, engine).Where(d => !pinned.ContainsKey(d.Host)).ToList());
+        PrintDeadlocks(Deadlocks(reports, engine, domesticExit).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
         ApplyIfConfirmed(suggestions, userRulesPath);
 
@@ -229,6 +230,7 @@ internal static class BlockCheckCommand
         RuleEngine? engine,
         bool enginesRunning,
         IReadOnlyDictionary<string, string> pinned,
+        (ZapretPreset Preset, string? Root)? preset,
         CancellationToken cancellationToken)
     {
         using var slots = new SemaphoreSlim(Parallelism);
@@ -249,7 +251,7 @@ internal static class BlockCheckCommand
                 lock (console)
                 {
                     reports.Add(report);
-                    PrintRow(report, tunnelled, pinned.ContainsKey(target.Host));
+                    PrintRow(report, tunnelled, pinned.ContainsKey(target.Host), preset);
                 }
             }
             finally
@@ -273,7 +275,14 @@ internal static class BlockCheckCommand
     /// <param name="pinned">
     /// Имя прибито в hosts: строка описывает прибитый адрес, а не сайт.
     /// </param>
-    private static void PrintRow(TargetReport report, bool throughTunnel, bool pinned)
+    /// <param name="preset">
+    /// Действующий пресет; по нему вычисляется, какая секция взяла бы это имя.
+    /// </param>
+    private static void PrintRow(
+        TargetReport report,
+        bool throughTunnel,
+        bool pinned,
+        (ZapretPreset Preset, string? Root)? preset)
     {
         var previous = Console.ForegroundColor;
 
@@ -299,6 +308,44 @@ internal static class BlockCheckCommand
 
         if (why is not null)
             Console.WriteLine($"      {Truncate(why, 88)}");
+
+        // Какая секция пресета взяла бы это имя. Без этого правка пресета —
+        // угадывание: чинят секцию, до которой исполнение не доходит, потому
+        // что раньше сработала другая, по большому списку.
+        if (preset is not { } p)
+            return;
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        Console.WriteLine(PresetMatcher.For(p.Preset, report.Host, p.Root) is { } match
+            ? $"      секция #{match.Ordinal} {Truncate(match.Describe(), 82)}"
+            : "      секция: ни одна доменная не совпала");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
+    /// Читает действующий пресет, чтобы знать, чья секция чем занята.
+    /// </summary>
+    /// <remarks>
+    /// Отсутствие пресета — не ошибка: режим «только VPN» его не запускает,
+    /// да и файл могли удалить. Тогда строк про секции просто не будет.
+    /// </remarks>
+    private static (ZapretPreset Preset, string? Root)? LoadPreset(AppSettings settings, string? zapretRoot)
+    {
+        if (settings.PresetName is null)
+            return null;
+
+        try
+        {
+            var path = ZapretPaths.FindPreset(settings.PresetName);
+
+            return path is null ? null : (new PresetReader().Load(path), zapretRoot);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private static string DescribeDepth(CheckDepth depth) => depth switch
@@ -351,6 +398,44 @@ internal static class BlockCheckCommand
         return found;
     }
 
+    /// <summary>
+    /// Что имя разрешилось бы без пина.
+    /// </summary>
+    /// <remarks>
+    /// Спрашивается у DoH: системный резолвер вернул бы сам пин — он его
+    /// и назначает, — и сравнивать было бы не с чем.
+    /// </remarks>
+    private static string? RealAddress(string host)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+            http.DefaultRequestHeaders.Accept.Add(new("application/dns-json"));
+
+            var json = http.GetStringAsync(
+                $"https://1.1.1.1/dns-query?name={Uri.EscapeDataString(host)}&type=A").Result;
+
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+
+            if (!document.RootElement.TryGetProperty("Answer", out var answers))
+                return null;
+
+            foreach (var answer in answers.EnumerateArray())
+            {
+                if (answer.TryGetProperty("type", out var type) && type.GetInt32() == 1
+                    && answer.TryGetProperty("data", out var data))
+                {
+                    return data.GetString();
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return null;
+    }
+
     private static void PrintPinned(IReadOnlyDictionary<string, string> pinned)
     {
         if (pinned.Count == 0)
@@ -362,8 +447,17 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         Console.WriteLine("Прибито в файле hosts — это отменяет любой наш маршрут");
 
+        // Рядом с пином — настоящий адрес. Без него по отчёту не понять,
+        // устарела запись или нет, а именно это чаще всего и требуется:
+        // протухший пин ведёт в никуда и выглядит блокировкой.
         foreach (var (host, address) in pinned.OrderBy(p => p.Key, StringComparer.Ordinal))
-            Console.WriteLine($"  {Truncate(host, 34),-34} → {address}");
+        {
+            var real = RealAddress(host);
+
+            Console.WriteLine(real is null || address.Contains(real, StringComparison.Ordinal)
+                ? $"  {Truncate(host, 34),-34} → {address}"
+                : $"  {Truncate(host, 34),-34} → {address}   (на деле {real})");
+        }
 
         Console.WriteLine();
         Console.WriteLine("  Имя разрешается до нашего резолвера, fakeip не выдаётся, и трафик");
@@ -393,7 +487,7 @@ internal static class BlockCheckCommand
     /// и назвать надо его.
     /// </para>
     /// </remarks>
-    private static async Task PrintSetupAsync(
+    private static async Task<bool> PrintSetupAsync(
         AppSettings settings,
         bool enginesRunning,
         CancellationToken cancellationToken)
@@ -416,8 +510,7 @@ internal static class BlockCheckCommand
 
         Console.ForegroundColor = previous;
 
-        if (enginesRunning)
-            await WarnIfExitIsDomesticAsync(cancellationToken);
+        return enginesRunning && await WarnIfExitIsDomesticAsync(cancellationToken);
     }
 
     /// <summary>
@@ -436,19 +529,26 @@ internal static class BlockCheckCommand
     /// выйдет наружу.
     /// </para>
     /// </remarks>
-    private static async Task WarnIfExitIsDomesticAsync(CancellationToken cancellationToken)
+    /// <returns>Выходит ли туннель в России.</returns>
+    private static async Task<bool> WarnIfExitIsDomesticAsync(CancellationToken cancellationToken)
     {
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
 
-            var country = (await http.GetStringAsync(
-                "https://ipinfo.io/country", cancellationToken)).Trim();
-
-            if (!string.Equals(country, "RU", StringComparison.OrdinalIgnoreCase))
-                return;
+            // Адрес называется вслух: страна без него — утверждение, которое
+            // нечем проверить, а два отчёта без него не сравнить между собой.
+            var address = (await http.GetStringAsync("https://api.ipify.org", cancellationToken)).Trim();
+            var country = (await http.GetStringAsync("https://ipinfo.io/country", cancellationToken)).Trim();
 
             var previous = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"  Выход:   {address} ({country})");
+            Console.ForegroundColor = previous;
+
+            if (!string.Equals(country, "RU", StringComparison.OrdinalIgnoreCase))
+                return false;
+
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine();
             Console.WriteLine("  Выход туннеля — в России. Для сервисов, закрывающихся от страны,");
@@ -456,11 +556,14 @@ internal static class BlockCheckCommand
             Console.WriteLine("  берёт ближайший сервер, а ближайший — свой же. Выберите");
             Console.WriteLine("  зарубежный в пункте «VPN».");
             Console.ForegroundColor = previous;
+
+            return true;
         }
         catch (Exception)
         {
             // Не выяснилось — молчим. Отсутствие предупреждения хуже ложного,
             // но ложное здесь стоило бы смены рабочего сервера ни за чем.
+            return false;
         }
     }
 
@@ -769,9 +872,14 @@ internal static class BlockCheckCommand
     /// в пресете, и об этом стоит сказать отдельно.
     /// </para>
     /// </remarks>
+    /// <param name="domesticExit">
+    /// Туннель выходит в той же стране, откуда зашёл. Тогда отказ сайта
+    /// ничего не говорит о туннеле: тот и не менял того, на что сайт смотрит.
+    /// </param>
     private static IReadOnlyList<Deadlock> Deadlocks(
         IReadOnlyList<TargetReport> reports,
-        RuleEngine? engine)
+        RuleEngine? engine,
+        bool domesticExit)
     {
         if (engine is null)
             return [];
@@ -798,17 +906,28 @@ internal static class BlockCheckCommand
                 continue;
             }
 
-            // Уже наверху и всё равно закрыт: туннель проверен самим фактом
-            // того, что трафик через него и шёл.
+            // Уже наверху и всё равно закрыт. Но «даже через VPN» значит это
+            // только тогда, когда туннель выходит не там же, откуда зашёл:
+            // через отечественный выход адрес остаётся отечественным, и сайт,
+            // закрывающийся от страны, отказывает ровно так же. Пока выход
+            // домашний, приговор туннелю не вынесен — он и не пробовался.
             if (now == RoutingMode.Proxy)
             {
-                result.Add(new Deadlock
-                {
-                    Host = report.Host,
-                    Now = now,
-                    What = $"{report.Describe()} даже через VPN",
-                    Hope = "сообщите — возможно, дело в сервере подписки или в самом сайте",
-                });
+                result.Add(domesticExit
+                    ? new Deadlock
+                    {
+                        Host = report.Host,
+                        Now = now,
+                        What = $"{report.Describe()}, но выход туннеля в России",
+                        Hope = "возьмите зарубежный сервер и повторите — это ещё не приговор",
+                    }
+                    : new Deadlock
+                    {
+                        Host = report.Host,
+                        Now = now,
+                        What = $"{report.Describe()} даже через VPN",
+                        Hope = "сообщите — возможно, дело в сервере подписки или в самом сайте",
+                    });
 
                 continue;
             }

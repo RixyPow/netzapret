@@ -26,10 +26,17 @@ public enum BlockKind
     /// ровно 14381 байт, три раза из трёх, и поток замирал навсегда.
     /// </para>
     /// <para>
-    /// Десинку тут делать нечего: секция пресета помечена
+    /// Сперва я счёл это неизлечимым десинком: секция пресета помечена
     /// <c>--payload=tls_client_hello</c>, то есть трогает только рукопожатие,
-    /// а обрыв случается много позже. Оператор пропускает начало и убивает
-    /// поток, опознав его другими средствами. Прячется это только туннелем.
+    /// а обрыв случается много позже. Вывод оказался неверен, и опровергнут
+    /// он замером: <c>skinsrestorer.net</c> рвался на 13 505 байтах из 154 921
+    /// и вылечился именно десинком — рецептом на ClientHello.
+    /// </para>
+    /// <para>
+    /// Объясняется тем, что DPI разбирает соединение на рукопожатии,
+    /// а убивает поток позже. Сорвав опознание в начале, отменяешь и то,
+    /// что должно было случиться потом. Поэтому сначала другой рецепт,
+    /// и только если не помог — туннель.
     /// </para>
     /// </remarks>
     Stall,
@@ -207,7 +214,7 @@ public sealed record TargetReport
     {
         BlockKind.None => "ничего не нужно",
         BlockKind.TlsDpi => "десинк",
-        BlockKind.Stall => "только VPN",
+        BlockKind.Stall => "другой рецепт десинка, иначе VPN",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
         BlockKind.Sinkhole => "только VPN",
@@ -672,6 +679,7 @@ public static class BlockCheck
 
             var buffer = new byte[16 * 1024];
             int? status = null;
+            long? promised = null;
 
             while (total < EnoughBytes)
             {
@@ -687,11 +695,16 @@ public static class BlockCheck
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
                     // Тишина при живом соединении — то самое, что ищем.
+                    // Пара «пришло из обещанного» опознаёт класс с одного
+                    // взгляда: обрыв на десятой доле — это убитый поток,
+                    // а на девяти десятых — просто медленная страница.
                     return new ProbeOutcome
                     {
                         Ok = false,
                         Elapsed = stopwatch.Elapsed,
-                        Detail = $"поток замер на {total} Б, тишина {StallWindow.TotalSeconds:0} с",
+                        Detail = promised is { } expected
+                            ? $"поток замер на {total} из {expected} Б, тишина {StallWindow.TotalSeconds:0} с"
+                            : $"поток замер на {total} Б, тишина {StallWindow.TotalSeconds:0} с",
                     };
                 }
 
@@ -700,9 +713,14 @@ public static class BlockCheck
                 if (read == 0)
                     break;
 
-                // Код ответа берётся из первой порции: строка состояния
-                // приходит первой, и дочитывать ради неё страницу незачем.
-                status ??= ParseStatus(buffer, read);
+                // Код ответа и обещанный объём берутся из первой порции:
+                // заголовки приходят первыми, и дочитывать ради них
+                // страницу незачем.
+                if (status is null)
+                {
+                    status = ParseStatus(buffer, read);
+                    promised = ParseContentLength(buffer, read);
+                }
 
                 total += read;
             }
@@ -714,7 +732,7 @@ public static class BlockCheck
                 Elapsed = stopwatch.Elapsed,
                 Detail = status is 403 or 451
                     ? $"сайт ответил {status} — связь исправна, отказывает он сам"
-                    : $"{total} Б",
+                    : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
             };
         }
         catch (Exception ex)
@@ -740,6 +758,35 @@ public static class BlockCheck
     /// «недоступно по правовым причинам», и 403 у сетей доставки означает
     /// то же самое на деле.
     /// </remarks>
+    /// <summary>
+    /// Сколько байт обещано заголовком; <c>null</c>, если не сказано.
+    /// </summary>
+    /// <remarks>
+    /// Заголовка может не быть вовсе — при <c>chunked</c> объём заранее
+    /// неизвестен, и это не повод для тревоги. Пара «пришло из обещанного»
+    /// нужна ровно затем, чтобы отличить убитый поток от медленного, а без
+    /// обещанного остаётся просто «пришло», как и было.
+    /// </remarks>
+    private static long? ParseContentLength(byte[] buffer, int length)
+    {
+        var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 4096));
+
+        foreach (var line in head.Split("\r\n"))
+        {
+            // Пустая строка — конец заголовков; дальше тело, и искать там
+            // нечего.
+            if (line.Length == 0)
+                break;
+
+            if (!line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return long.TryParse(line[15..].Trim(), out var size) ? size : null;
+        }
+
+        return null;
+    }
+
     private static int? ParseStatus(byte[] buffer, int length)
     {
         var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 64));
