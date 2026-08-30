@@ -143,7 +143,7 @@ internal static class ConfigCommand
 
         var presetPath = presetName is null
             ? null
-            : paths.FindPreset(presetName);
+            : ZapretPaths.FindPreset(presetName);
 
         if (presetPath is null)
         {

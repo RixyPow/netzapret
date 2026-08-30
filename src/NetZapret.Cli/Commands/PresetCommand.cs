@@ -27,11 +27,11 @@ internal static class PresetCommand
             return 0;
         }
 
-        var path = paths.FindPreset(name);
+        var path = ZapretPaths.FindPreset(name);
 
         if (path is null)
         {
-            Console.Error.WriteLine($"Пресет «{name}» не найден в {paths.PresetDirectory}.");
+            Console.Error.WriteLine($"Пресет «{name}» не найден в {ZapretPaths.PresetDirectory}.");
             return 2;
         }
 
@@ -41,9 +41,9 @@ internal static class PresetCommand
 
     private static void ListPresets(PresetReader reader, ZapretPaths paths)
     {
-        var presets = reader.Read(paths.PresetFiles);
+        var presets = reader.Read(ZapretPaths.PresetFiles);
 
-        Console.WriteLine($"Каталог: {paths.PresetDirectory}");
+        Console.WriteLine($"Каталог: {ZapretPaths.PresetDirectory}");
         Console.WriteLine($"Пресетов: {presets.Count}");
         Console.WriteLine();
         Console.WriteLine($"  {"НАЗВАНИЕ",-32} {"ВЕРСИЯ",-8} {"СЕКЦИЙ",-8} {"ДЕСИНК",-8} PASS");

@@ -132,7 +132,7 @@ internal static class DoctorCommand
 
         try
         {
-            var presets = new PresetReader().Read(paths.PresetFiles);
+            var presets = new PresetReader().Read(ZapretPaths.PresetFiles);
             checks.Add(presets.Count > 0
                 ? new Check(Level.Ok, $"пресетов: {presets.Count}")
                 : new Check(Level.Warning, "пресеты не найдены"));
@@ -150,7 +150,7 @@ internal static class DoctorCommand
 
         if (chosen is not null)
         {
-            checks.Add(paths.FindPreset(chosen) is not null
+            checks.Add(ZapretPaths.FindPreset(chosen) is not null
                 ? new Check(Level.Ok, $"выбран пресет: {chosen}")
                 : new Check(Level.Problem,
                     $"выбранного пресета '{chosen}' здесь нет — десинк не запустится. " +

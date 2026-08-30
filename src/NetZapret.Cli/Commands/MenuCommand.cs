@@ -306,7 +306,7 @@ internal static class MenuCommand
 
         // Читается заново при каждом заходе: пресет могли положить в папку
         // минуту назад, и требовать ради этого перезапуска незачем.
-        var presets = new PresetReader().Read(paths.PresetFiles);
+        var presets = new PresetReader().Read(ZapretPaths.PresetFiles);
 
         // Заголовок в файле пресета — не обязательно уникальный: свой
         // «Universal V5 my.txt» объявляет себя тем же «Universal V5», что
@@ -330,7 +330,7 @@ internal static class MenuCommand
             return ($"{label}  ({p.ActiveSections.Count()} секций)", (string?)file);
         }));
 
-        var folder = ZapretPaths.WritablePresetDirectory;
+        var folder = ZapretPaths.PresetDirectory;
 
         if (folder is not null)
         {

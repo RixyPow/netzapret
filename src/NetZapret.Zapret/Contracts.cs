@@ -36,111 +36,68 @@ public sealed record ZapretPaths
     /// <summary>Корень установки; относительно него заданы пути списков в пресетах.</summary>
     public required string Root { get; init; }
 
-    public string PresetDirectory => Path.Combine(Root, "presets", "winws2");
-
     /// <summary>
-    /// Встроенные пресеты Zapret, которые мы показываем наравне со своими.
-    /// </summary>
-    /// <remarks>
-    /// Поимённо, а не всей папкой. В <c>presets/winws2_builtin</c> лежит
-    /// больше сотни файлов — почти всё это переборные варианты одной и той же
-    /// стратегии, и вывалить их в выбор значило бы утопить в них те два
-    /// десятка, между которыми человек действительно выбирает. Здесь только
-    /// названные: игровой набор, который иначе взять неоткуда.
-    /// </remarks>
-    public static IReadOnlyList<string> BuiltinPresetNames { get; } =
-    [
-        "Default v1 (game filter)",
-        "Default v2 (game filter)",
-        "Default v3 (game filter)",
-        "Default v4 (game filter)",
-        "Default v5 (game filter)",
-    ];
-
-    /// <summary>
-    /// Все файлы пресетов, отовсюду, где они могут лежать.
+    /// Единственная папка пресетов — наша.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Из всех корней, а не из выбранного. Поставка возит свои шесть пресетов,
-    /// и пока читался только первый подходящий корень, установка человека
-    /// с двумя десятками собственных была не видна вовсе — положенный туда
-    /// пресет не появлялся, сколько программу ни перезапускай.
+    /// Пресеты Zapret не читаются вовсе, и это решение, а не упущение.
+    /// Их там две папки и полторы сотни файлов, из которых почти все —
+    /// переборные варианты одной стратегии; какие показывать, приходилось
+    /// решать за человека, и всякий выбор оказывался спорным. Плюс они
+    /// менялись под нами при каждом обновлении Zapret.
     /// </para>
     /// <para>
-    /// Список собирается заново при каждом обращении: пресеты добавляют
-    /// на ходу, и держать их в памяти значило бы требовать перезапуска там,
-    /// где достаточно вернуться в меню.
+    /// Теперь набор один и виден целиком: что положено сюда, то и предлагается.
+    /// Списки доменов по-прежнему берутся у Zapret — пресет ссылается на них
+    /// относительно рабочего каталога, которым при запуске winws2 остаётся
+    /// корень установки.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<string> PresetFiles
+    public static string PresetDirectory { get; } = FindPresetDirectory();
+
+    /// <summary>
+    /// Ищет папку пресетов рядом с программой, а при отладке — в исходниках.
+    /// </summary>
+    /// <remarks>
+    /// Подъём по каталогам нужен только разработчику: программа запускается
+    /// из <c>bin/Release/net8.0-windows</c>, а пресеты лежат в корне проекта.
+    /// В поставке первая же проверка попадает в цель.
+    /// </remarks>
+    private static string FindPresetDirectory()
     {
-        get
+        var beside = Path.Combine(AppContext.BaseDirectory, "presets");
+
+        if (Directory.Exists(beside))
+            return beside;
+
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
         {
-            var files = new List<string>();
+            var candidate = Path.Combine(directory.FullName, "presets");
 
-            // Свой корень первым, остальные следом. Порядок решает при поиске
-            // по имени: указавший корень явно вправе получить пресет оттуда,
-            // а не одноимённый из соседней установки.
-            var roots = new List<string> { Root };
-            roots.AddRange(Candidates().Where(r => !PathsEqual(r, Root)));
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(directory.FullName, "NetZapret.sln")))
+                return candidate;
 
-            foreach (var root in roots)
-            {
-                var directory = Path.Combine(root, "presets", "winws2");
-
-                if (Directory.Exists(directory))
-                    files.AddRange(Directory.EnumerateFiles(directory, "*.txt").OrderBy(p => p));
-            }
-
-            foreach (var root in roots)
-            {
-                var builtin = Path.Combine(root, "presets", "winws2_builtin");
-
-                foreach (var name in BuiltinPresetNames)
-                {
-                    var path = Path.Combine(builtin, name + ".txt");
-
-                    if (File.Exists(path))
-                        files.Add(path);
-                }
-            }
-
-            return files;
+            directory = directory.Parent;
         }
+
+        return beside;
     }
 
-    private static bool PathsEqual(string a, string b) =>
-        string.Equals(
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(a)),
-            Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)),
-            StringComparison.OrdinalIgnoreCase);
-
     /// <summary>
-    /// Каталоги пресетов, какие нашлись, в порядке предпочтения.
+    /// Файлы пресетов.
     /// </summary>
     /// <remarks>
-    /// Первым идёт тот, что рядом с программой, — там лежит поставляемый
-    /// набор. Дальше установка Zapret, где человек держит свои. Одноимённые
-    /// файлы не сливаются: <c>PresetReader</c> отсеивает повторы по пути,
-    /// а не по названию, и два разных файла остаются двумя пресетами.
+    /// Читается заново при каждом обращении: пресеты кладут на ходу,
+    /// и держать список в памяти значило бы требовать перезапуска там,
+    /// где достаточно вернуться в меню.
     /// </remarks>
-    public static IEnumerable<string> PresetDirectories =>
-        Candidates().Select(root => Path.Combine(root, "presets", "winws2"));
-
-    /// <summary>
-    /// Куда человеку класть свои пресеты.
-    /// </summary>
-    /// <remarks>
-    /// Установка впереди поставки: она переживает обновление программы,
-    /// а каталог рядом с exe при распаковке нового архива перезаписывается —
-    /// положенный туда пресет однажды пропадёт без объяснения.
-    /// </remarks>
-    public static string? WritablePresetDirectory =>
-        PresetDirectories
-            .Where(Directory.Exists)
-            .OrderByDescending(d => !d.StartsWith(AppContext.BaseDirectory, StringComparison.OrdinalIgnoreCase))
-            .FirstOrDefault();
+    public static IReadOnlyList<string> PresetFiles =>
+        Directory.Exists(PresetDirectory)
+            ? Directory.EnumerateFiles(PresetDirectory, "*.txt").OrderBy(p => p).ToList()
+            : [];
 
     public string ListDirectory => Path.Combine(Root, "lists");
 
@@ -164,53 +121,36 @@ public sealed record ZapretPaths
     /// раньше, потому что пробел идёт до точки. Пользователь при этом
     /// получает не тот десинк, о котором просил, и замечает не сразу.
     /// </para>
-    /// <para>
-    /// Ищется по всем известным установкам, но свой корень идёт первым:
-    /// показывать пресеты отовсюду полезно, а вот подсунуть одноимённый
-    /// файл из чужой установки тому, кто корень указал явно, — нет.
-    /// </para>
     /// </remarks>
-    public string? FindPreset(string name)
+    /// <param name="directory">
+    /// Где искать; по умолчанию наша папка пресетов. Задаётся только
+    /// проверками — сопоставление имён стоит проверять, не раскладывая
+    /// файлы в настоящей папке пользователя.
+    /// </param>
+    public static string? FindPreset(string name, string? directory = null)
     {
+        var folder = directory ?? PresetDirectory;
+
+        var files = Directory.Exists(folder)
+            ? Directory.EnumerateFiles(folder, "*.txt").OrderBy(p => p).ToList()
+            : [];
+
         var wanted = name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
             ? Path.GetFileNameWithoutExtension(name)
             : name;
 
-        // Корень за корнем, а не по общему списку. Иначе точное совпадение
-        // из соседней установки побеждает приблизительное из своей — то есть
-        // указавший корень явно получает файл не оттуда, куда показывал.
-        foreach (var group in PresetFiles.GroupBy(RootOf))
-        {
-            if (Match(group, wanted) is { } found)
-                return found;
-        }
+        var exact = files.FirstOrDefault(p => string.Equals(
+            Path.GetFileNameWithoutExtension(p), wanted, StringComparison.OrdinalIgnoreCase));
 
-        return null;
+        if (exact is not null)
+            return exact;
 
-        static string? Match(IEnumerable<string> files, string wanted)
-        {
-            var list = files.ToList();
-
-            var exact = list.FirstOrDefault(p => string.Equals(
-                Path.GetFileNameWithoutExtension(p), wanted, StringComparison.OrdinalIgnoreCase));
-
-            return exact ?? list
-                .Where(p => Path.GetFileNameWithoutExtension(p)
-                    .Contains(wanted, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(p => Path.GetFileNameWithoutExtension(p).Length)
-                .FirstOrDefault();
-        }
+        return files
+            .Where(p => Path.GetFileNameWithoutExtension(p)
+                .Contains(wanted, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(p => Path.GetFileNameWithoutExtension(p).Length)
+            .FirstOrDefault();
     }
-
-    /// <summary>
-    /// Корень установки, которому принадлежит файл пресета.
-    /// </summary>
-    /// <remarks>
-    /// Два шага вверх: пресеты лежат в <c>presets\winws2</c> либо
-    /// <c>presets\winws2_builtin</c>, и оба под самим корнем.
-    /// </remarks>
-    private static string RootOf(string presetPath) =>
-        Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(presetPath))) ?? string.Empty;
 
     /// <summary>
     /// Ищет Zapret: сперва встроенную копию, затем установку в системе.
@@ -219,20 +159,20 @@ public sealed record ZapretPaths
     /// <para>
     /// Встроенная копия впереди намеренно. Она кладётся рядом с программой
     /// при сборке и версионируется вместе с ней, тогда как установка в системе
-    /// живёт своей жизнью: обновилась — и пресет, на который мы ссылаемся,
-    /// может измениться или исчезнуть, а выяснится это при запуске.
+    /// живёт своей жизнью: обновилась — и списки, на которые ссылаются наши
+    /// пресеты, могли измениться или исчезнуть.
     /// </para>
     /// <para>
-    /// Установка при этом остаётся запасным вариантом: собранная из исходников
-    /// копия без шага упаковки движков её не имеет, и без этого отката
-    /// программа у разработчика просто не находила бы десинк.
+    /// Признак установки — папка <c>lists</c>, а не <c>presets</c>. Пресеты
+    /// теперь наши, и по ним Zapret больше не опознать: у собранной копии
+    /// его папки пресетов нет вовсе.
     /// </para>
     /// </remarks>
     public static ZapretPaths? Discover(string? hint = null)
     {
         foreach (var candidate in Candidates(hint))
         {
-            if (Directory.Exists(Path.Combine(candidate, "presets", "winws2")))
+            if (Directory.Exists(Path.Combine(candidate, "lists")))
                 return new ZapretPaths { Root = candidate };
         }
 

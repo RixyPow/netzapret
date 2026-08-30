@@ -129,8 +129,8 @@ rem xray is deliberately left out: it is not wired up yet, and its geoip and
 rem geosite databases alone are 27 MB of dead weight.
 
 set "ZAPRET="
-if exist "C:\Zapret\Dev\presets\winws2" set "ZAPRET=C:\Zapret\Dev"
-if not defined ZAPRET if exist "C:\Zapret\presets\winws2" set "ZAPRET=C:\Zapret"
+if exist "C:\Zapret\Dev\lists" set "ZAPRET=C:\Zapret\Dev"
+if not defined ZAPRET if exist "C:\Zapret\lists" set "ZAPRET=C:\Zapret"
 
 if not defined ZAPRET (
     echo.
@@ -155,56 +155,25 @@ for %%D in (exe lists lua bin windivert.filter) do (
     )
 )
 
-rem winws1 is the previous engine and is not bundled. From winws2_builtin we
-rem take five files by name: the game-filter set, which exists nowhere else.
-rem The rest of that folder - over a hundred sweeps of one strategy - stays
-rem out, as it would bury the twenty someone actually chooses between.
+rem Presets are ours and come from presets\ in the repository. Nothing is taken
+rem from the Zapret installation any more: it keeps two folders and a hundred
+rem and fifty files, mostly sweeps of one strategy, so which of them to show
+rem had to be decided on the user's behalf - and every such choice was
+rem arguable. They also changed underneath us whenever Zapret updated.
 rem
-rem Superseded and one-off presets are left out. Nine near-identical entries
-rem make the choice harder rather than richer, and the ones dropped are either
-rem older than V5 or variants nobody reaches for. This only affects what ships:
-rem the installation keeps all of them, and any can be brought back by copying
-rem the file into the bundle.
-set PRESET_EXCLUDE="Universal.txt" "Universal V2.txt" "Universal V2.1.txt" "Universal V2.1 voice ALT.txt"
-set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal V3.txt" "Universal V3 AUTO.txt" "Universal V4.txt"
-set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal FULL.txt" "Universal LITE.txt" "Universal V5 beta.txt" "Preset.X.txt"
-
-if exist "%ZAPRET%\presets\winws2" (
-    robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF %PRESET_EXCLUDE% >nul
+rem Lists still come from Zapret, above: a preset refers to them relative to
+rem the working directory, which stays the installation root when winws2 runs.
+if exist "%ROOT%presets" (
+    robocopy "%ROOT%presets" "%TARGET%\presets" *.txt /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
     if errorlevel 8 (
         echo Failed to bundle presets
         exit /b 1
     )
 )
 
-rem Stale copies from an earlier build would otherwise survive: robocopy without
-rem /PURGE only adds. Dropping a preset from the list above has to actually drop
-rem it, or the exclusion is decorative.
-for %%F in (%PRESET_EXCLUDE%) do (
-    if exist "%ENGINES%\zapret\presets\winws2\%%~F" del /q "%ENGINES%\zapret\presets\winws2\%%~F"
-)
-
-rem The folder used to be deleted wholesale right here, which is why the
-rem game-filter presets could not reach a built copy however the program
-rem was taught to read them. Now it is emptied and refilled with the five,
-rem so removing one from the list below actually removes it.
-if exist "%ENGINES%\zapret\presets\winws2_builtin" rd /s /q "%ENGINES%\zapret\presets\winws2_builtin"
-
-for %%P in (
-    "Default v1 (game filter).txt"
-    "Default v2 (game filter).txt"
-    "Default v3 (game filter).txt"
-    "Default v4 (game filter).txt"
-    "Default v5 (game filter).txt"
-) do (
-    if exist "%ZAPRET%\presets\winws2_builtin\%%~P" (
-        robocopy "%ZAPRET%\presets\winws2_builtin" "%ENGINES%\zapret\presets\winws2_builtin" "%%~P" /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
-        if errorlevel 8 (
-            echo Failed to bundle the game-filter presets
-            exit /b 1
-        )
-    )
-)
+rem Stale copies from a build made before the move would otherwise be found
+rem first and quietly shadow the new folder.
+if exist "%ENGINES%\zapret\presets" rd /s /q "%ENGINES%\zapret\presets"
 
 :done
 echo.

@@ -114,8 +114,8 @@ robocopy "%SINGBOX_DIR%." "%ENGINES%\sing-box" /E /R:2 /W:1 /NJH /NJS /NP /NDL /
 if errorlevel 8 exit /b 1
 
 set "ZAPRET="
-if exist "C:\Zapret\Dev\presets\winws2" set "ZAPRET=C:\Zapret\Dev"
-if not defined ZAPRET if exist "C:\Zapret\presets\winws2" set "ZAPRET=C:\Zapret"
+if exist "C:\Zapret\Dev\lists" set "ZAPRET=C:\Zapret\Dev"
+if not defined ZAPRET if exist "C:\Zapret\lists" set "ZAPRET=C:\Zapret"
 
 if not defined ZAPRET (
     echo.
@@ -142,11 +142,13 @@ for %%D in (exe lists lua bin windivert.filter) do (
     )
 )
 
-set PRESET_EXCLUDE="Universal.txt" "Universal V2.txt" "Universal V2.1.txt" "Universal V2.1 voice ALT.txt"
-set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal V3.txt" "Universal V3 AUTO.txt" "Universal V4.txt"
-set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal FULL.txt" "Universal LITE.txt" "Universal V5 beta.txt" "Preset.X.txt"
-
-robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF %PRESET_EXCLUDE% >nul
+rem Presets are ours and come from presets\ in the repository. Nothing is taken
+rem from the Zapret installation: it keeps two folders and a hundred and fifty
+rem files, mostly sweeps of one strategy, so which to show had to be decided on
+rem the user's behalf - and they changed underneath us on every Zapret update.
+rem Lists still come from Zapret above, and presets refer to them relative to
+rem the working directory, which stays the installation root when winws2 runs.
+robocopy "%ROOT%presets" "%STAGE%\presets" *.txt /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if errorlevel 8 exit /b 1
 
 rem The service catalogue: seven sets of proxy addresses for services that
@@ -156,23 +158,6 @@ rem the people who cannot fall back on its own hosts editor either.
 if exist "%ZAPRET%\system\hosts_catalog.sqlite3" (
     mkdir "%ENGINES%\zapret\system" 2>nul
     copy /y "%ZAPRET%\system\hosts_catalog.sqlite3" "%ENGINES%\zapret\system\" >nul
-)
-
-rem The game-filter set lives in Zapret's own preset folder, which was not
-rem copied at all - so those presets could never appear in a built copy no
-rem matter what the program did with them. By name, not the whole folder:
-rem it holds over a hundred files, almost all sweeps of one strategy.
-for %%P in (
-    "Default v1 (game filter).txt"
-    "Default v2 (game filter).txt"
-    "Default v3 (game filter).txt"
-    "Default v4 (game filter).txt"
-    "Default v5 (game filter).txt"
-) do (
-    if exist "%ZAPRET%\presets\winws2_builtin\%%~P" (
-        robocopy "%ZAPRET%\presets\winws2_builtin" "%ENGINES%\zapret\presets\winws2_builtin" "%%~P" /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
-        if errorlevel 8 exit /b 1
-    )
 )
 
 rem Licences of what we redistribute, and the one obligation that actually

@@ -200,11 +200,8 @@ public sealed class WinwsCommandLineTests : IDisposable
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "Universal V6 voicefix.txt"), Preset);
         File.WriteAllText(Path.Combine(directory, "Universal V6.txt"), Preset);
-
-        var paths = ZapretPaths.Discover(_root)!;
-
-        Assert.Equal("Universal V6", Path.GetFileNameWithoutExtension(paths.FindPreset("Universal V6")));
-        Assert.Equal("Universal V6 voicefix", Path.GetFileNameWithoutExtension(paths.FindPreset("voicefix")));
+        Assert.Equal("Universal V6", Path.GetFileNameWithoutExtension(ZapretPaths.FindPreset("Universal V6", directory)));
+        Assert.Equal("Universal V6 voicefix", Path.GetFileNameWithoutExtension(ZapretPaths.FindPreset("voicefix", directory)));
     }
 
     [Fact]
@@ -213,10 +210,7 @@ public sealed class WinwsCommandLineTests : IDisposable
         var directory = Path.Combine(_root, "presets", "winws2");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "Universal V6.txt"), Preset);
-
-        var paths = ZapretPaths.Discover(_root)!;
-
-        Assert.NotNull(paths.FindPreset("Universal V6.txt"));
+        Assert.NotNull(ZapretPaths.FindPreset("Universal V6.txt", directory));
     }
 
     [Fact]
@@ -226,20 +220,18 @@ public sealed class WinwsCommandLineTests : IDisposable
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "Universal V6 voicefix.txt"), Preset);
         File.WriteAllText(Path.Combine(directory, "Universal V6 game filter.txt"), Preset);
-
-        var paths = ZapretPaths.Discover(_root)!;
-
         Assert.Equal(
             "Universal V6 voicefix",
-            Path.GetFileNameWithoutExtension(paths.FindPreset("Universal V6")));
+            Path.GetFileNameWithoutExtension(ZapretPaths.FindPreset("Universal V6", directory)));
     }
 
     [Fact]
     public void UnknownPresetYieldsNull()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "presets", "winws2"));
+        var directory = Path.Combine(_root, "presets", "winws2");
+        Directory.CreateDirectory(directory);
 
-        Assert.Null(ZapretPaths.Discover(_root)!.FindPreset("нет такого"));
+        Assert.Null(ZapretPaths.FindPreset("нет такого", directory));
     }
 
     [Fact]

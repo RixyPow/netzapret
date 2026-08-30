@@ -252,7 +252,7 @@ internal static class SupervisorCommands
         }
 
         var presetName = cmd.Value("preset")!;
-        var presetPath = paths.FindPreset(presetName);
+        var presetPath = ZapretPaths.FindPreset(presetName);
 
         if (presetPath is null)
         {
@@ -304,7 +304,7 @@ internal static class SupervisorCommands
         if (paths is null)
             return;
 
-        var presetPath = paths.FindPreset(cmd.Value("preset")!);
+        var presetPath = ZapretPaths.FindPreset(cmd.Value("preset")!);
 
         if (presetPath is null)
             return;
