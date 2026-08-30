@@ -85,14 +85,19 @@ public sealed class ZapretCatalog
     /// </remarks>
     public static ZapretCatalog? Discover(string? zapretRoot = null)
     {
-        var root = zapretRoot ?? ZapretPaths.Discover()?.Root;
+        // Перебираются все известные корни, а не берётся выбранный для
+        // движка. Каталог может лежать не там: встроенная копия возит
+        // winws2 со списками, а каталог появился позже и в старых сборках
+        // его нет — но рядом стоит установка, где он есть.
+        foreach (var root in ZapretPaths.Candidates(zapretRoot))
+        {
+            var path = Path.Combine(root, RelativePath);
 
-        if (root is null)
-            return null;
+            if (File.Exists(path))
+                return new ZapretCatalog(path);
+        }
 
-        var path = Path.Combine(root, RelativePath);
-
-        return File.Exists(path) ? new ZapretCatalog(path) : null;
+        return null;
     }
 
     private SqliteConnection Open()

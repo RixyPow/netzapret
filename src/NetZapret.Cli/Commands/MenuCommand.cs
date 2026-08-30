@@ -663,7 +663,6 @@ internal static class MenuCommand
         if (services.Count == 0)
         {
             Message("Каталог пуст или его устройство изменилось.", ConsoleColor.Yellow);
-            Pause();
             return settings;
         }
 
@@ -741,7 +740,6 @@ internal static class MenuCommand
         if (profiles.Count == 0)
         {
             Message("Наборов в каталоге нет.", ConsoleColor.Yellow);
-            Pause();
             return settings;
         }
 
@@ -1257,18 +1255,18 @@ internal static class MenuCommand
         {
             var backup = HostsEditor.SetEnabled(lines, enabled: false);
 
-            Message($"Готово. Копия прежнего файла: {backup}", ConsoleColor.Green);
+            Say($"Готово. Копия прежнего файла: {backup}", ConsoleColor.Green, pause: false);
             Console.WriteLine(HostsEditor.FlushDns()
                 ? "Кэш DNS сброшен — маршрут заработает сразу."
                 : "Сбросьте кэш вручную: ipconfig /flushdns");
         }
         catch (UnauthorizedAccessException)
         {
-            Message("Нужны права администратора: файл системный.", ConsoleColor.Yellow);
+            Say("Нужны права администратора: файл системный.", ConsoleColor.Yellow, pause: false);
         }
         catch (Exception ex)
         {
-            Message($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red);
+            Say($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red, pause: false);
         }
 
         Pause();
@@ -1438,7 +1436,6 @@ internal static class MenuCommand
 
         file.Save();
         Message($"Удалено записей: {count}. Применится при следующем запуске.", ConsoleColor.Green);
-        Pause();
     }
 
     private static void DeleteRoute(UserRulesFile file, int index)
@@ -1823,7 +1820,6 @@ internal static class MenuCommand
         if (!File.Exists(path))
         {
             Message("Журнала пока нет — супервизор ещё не запускался.", ConsoleColor.Yellow);
-            Pause();
             return;
         }
 
@@ -2032,7 +2028,6 @@ internal static class MenuCommand
             if (entries.Count == 0)
             {
                 Message("Записей нет — файл пуст или недоступен.", ConsoleColor.Yellow);
-                Pause();
                 return;
             }
 
@@ -2307,14 +2302,12 @@ internal static class MenuCommand
         if (release is null)
         {
             Message("Узнать не удалось: нет связи с GitHub или он недоступен.", ConsoleColor.Yellow);
-            Pause();
             return;
         }
 
         if (!UpdateCheck.IsNewer(release.Version, UpdateCheck.Current))
         {
             Message($"У вас последняя версия ({UpdateCheck.Current}).", ConsoleColor.Green);
-            Pause();
             return;
         }
 
@@ -2393,7 +2386,7 @@ internal static class MenuCommand
         }
         catch (Exception ex)
         {
-            Message($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red);
+            Say($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red, pause: false);
             Console.WriteLine("Прежняя версия не тронута.");
             Pause();
         }
@@ -2503,7 +2496,10 @@ internal static class MenuCommand
 
     private static void Report(ActionResult result)
     {
-        Message(result.Message, result.Ok ? ConsoleColor.Green : ConsoleColor.Yellow);
+        // Say, а не Message: второй сам делает паузу, и приписка про
+        // перезагрузку оказалась бы после неё — то есть после того, как
+        // человек уже нажал Enter и ушёл.
+        Say(result.Message, result.Ok ? ConsoleColor.Green : ConsoleColor.Yellow, pause: false);
 
         if (result.NeedsReboot)
             Console.WriteLine("Изменения вступят в силу после перезагрузки компьютера.");
@@ -2638,6 +2634,15 @@ internal static class MenuCommand
             : (true, current);
     }
 
+    /// <summary>
+    /// Сообщение с ожиданием Enter.
+    /// </summary>
+    /// <remarks>
+    /// Пауза внутри — и это надо помнить: <c>Message</c> с последующим
+    /// <c>Pause</c> спрашивает Enter дважды, а вывод после него оказывается
+    /// уже за паузой, то есть человек его не увидит. Там, где после нужно
+    /// ещё что-то напечатать, берётся <see cref="Say"/> с <c>pause: false</c>.
+    /// </remarks>
     private static void Message(string text, ConsoleColor color) => Say(text, color, pause: true);
 
     private static void Say(string text, ConsoleColor color, bool pause)

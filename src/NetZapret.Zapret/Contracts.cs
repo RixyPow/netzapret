@@ -146,23 +146,34 @@ public sealed record ZapretPaths
     /// </remarks>
     public static ZapretPaths? Discover(string? hint = null)
     {
-        var candidates = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(hint))
-            candidates.Add(hint!);
-
-        candidates.AddRange(BundledRoots());
-
-        candidates.Add(@"C:\Zapret\Dev");
-        candidates.Add(@"C:\Zapret");
-
-        foreach (var candidate in candidates)
+        foreach (var candidate in Candidates(hint))
         {
             if (Directory.Exists(Path.Combine(candidate, "presets", "winws2")))
                 return new ZapretPaths { Root = candidate };
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Все места, где может лежать Zapret, в порядке предпочтения.
+    /// </summary>
+    /// <remarks>
+    /// Перечислением, а не одним ответом: части установки может не быть
+    /// во встроенной копии. Каталог сервисов, например, в неё до сих пор
+    /// не клался, и поиск, остановившийся на первом подходящем корне,
+    /// объявлял каталог отсутствующим при живом рядом.
+    /// </remarks>
+    public static IEnumerable<string> Candidates(string? hint = null)
+    {
+        if (!string.IsNullOrWhiteSpace(hint))
+            yield return hint!;
+
+        foreach (var bundled in BundledRoots())
+            yield return bundled;
+
+        yield return @"C:\Zapret\Dev";
+        yield return @"C:\Zapret";
     }
 
     /// <summary>Каталог встроенных движков — <c>engines/</c> рядом с программой.</summary>

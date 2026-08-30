@@ -149,6 +149,15 @@ set PRESET_EXCLUDE=%PRESET_EXCLUDE% "Universal FULL.txt" "Universal LITE.txt" "U
 robocopy "%ZAPRET%\presets\winws2" "%ENGINES%\zapret\presets\winws2" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF %PRESET_EXCLUDE% >nul
 if errorlevel 8 exit /b 1
 
+rem The service catalogue: seven sets of proxy addresses for services that
+rem shut Russia out themselves. Without it that whole section is missing for
+rem anyone who has no separate Zapret installation - and those are exactly
+rem the people who cannot fall back on its own hosts editor either.
+if exist "%ZAPRET%\system\hosts_catalog.sqlite3" (
+    mkdir "%ENGINES%\zapret\system" 2>nul
+    copy /y "%ZAPRET%\system\hosts_catalog.sqlite3" "%ENGINES%\zapret\system\" >nul
+)
+
 rem The game-filter set lives in Zapret's own preset folder, which was not
 rem copied at all - so those presets could never appear in a built copy no
 rem matter what the program did with them. By name, not the whole folder:
