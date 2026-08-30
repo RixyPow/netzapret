@@ -752,6 +752,68 @@ public class SingBoxConfigCompilerTests
         Assert.DoesNotContain("\"tun\"", json);
     }
 
+    /// <summary>Обфускация доходит до конфига движка.</summary>
+    /// <remarks>
+    /// Разобрать её из ссылки мало: пока блок не попадал в исходящий, сервер
+    /// молчал ровно так же. Проверка замкнута на конец цепочки — на то, что
+    /// увидит sing-box.
+    /// </remarks>
+    [Fact]
+    public void ProbeConfigCarriesHysteria2Obfuscation()
+    {
+        var server = Server("lv", ProxyProtocol.Hysteria2, "udp") with
+        {
+            ObfsType = "salamander",
+            ObfsPassword = "hidden",
+        };
+
+        var json = new SingBoxConfigCompiler().CompileProbeConfig(server, 21099, logPath: null);
+
+        var outbound = JsonDocument.Parse(json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == "probe-out");
+
+        var obfs = outbound.GetProperty("obfs");
+
+        Assert.Equal("salamander", obfs.GetProperty("type").GetString());
+        Assert.Equal("hidden", obfs.GetProperty("password").GetString());
+    }
+
+    [Fact]
+    public void ProbeConfigWithoutObfuscationHasNoBlock()
+    {
+        var json = new SingBoxConfigCompiler()
+            .CompileProbeConfig(Server("lv", ProxyProtocol.Hysteria2, "udp"), 21099, logPath: null);
+
+        var outbound = JsonDocument.Parse(json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == "probe-out");
+
+        Assert.False(outbound.TryGetProperty("obfs", out _));
+    }
+
+    /// <summary>Подставленный адрес не должен уносить с собой SNI.</summary>
+    /// <remarks>
+    /// Адрес ставится вместо имени, чтобы обойти перехват DNS работающим
+    /// движком. Но по имени сервер выбирает сертификат: потеряв его,
+    /// мы сменили бы одну поломку на другую.
+    /// </remarks>
+    [Fact]
+    public void PinnedAddressKeepsTheNameForSni()
+    {
+        var server = Server("lv", ProxyProtocol.Hysteria2, "udp");
+
+        var json = new SingBoxConfigCompiler()
+            .CompileProbeConfig(server, 21099, logPath: null, resolvedAddress: "31.76.62.95");
+
+        var outbound = JsonDocument.Parse(json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == "probe-out");
+
+        Assert.Equal("31.76.62.95", outbound.GetProperty("server").GetString());
+        Assert.Equal(server.Host, outbound.GetProperty("tls").GetProperty("server_name").GetString());
+    }
+
     private static string? FindSingBox()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

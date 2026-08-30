@@ -71,6 +71,20 @@ public sealed record ProxyServer
 
     public bool AllowInsecure { get; init; }
 
+    /// <summary>
+    /// Обфускация Hysteria2: <c>salamander</c> либо ничего.
+    /// </summary>
+    /// <remarks>
+    /// Пропустить её нельзя. Сервер, ожидающий обфускацию, не отвечает
+    /// на обычные пакеты вовсе — не ошибкой, а молчанием, — и снаружи это
+    /// неотличимо от мёртвого сервера. Подписка из одиннадцати серверов,
+    /// где обфускация стояла у всех, выглядела полностью нерабочей.
+    /// </remarks>
+    public string? ObfsType { get; init; }
+
+    /// <summary>Пароль обфускации; отдельный от пароля подключения.</summary>
+    public string? ObfsPassword { get; init; }
+
     /// <summary>Остальные параметры ссылки — чтобы ничего не терять при разборе.</summary>
     public IReadOnlyDictionary<string, string> Extra { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

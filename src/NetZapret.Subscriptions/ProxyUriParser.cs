@@ -120,6 +120,12 @@ public static class ProxyUriParser
             Sni = Get(q, "sni") ?? Get(q, "peer"),
             Alpn = SplitAlpn(Get(q, "alpn")),
             AllowInsecure = IsTruthy(Get(q, "insecure")) || IsTruthy(Get(q, "allowInsecure")),
+
+            // Обфускация читается наравне с паролем, а не складывается в Extra.
+            // Сервер, который её ждёт, на обычные пакеты не отвечает ничем —
+            // ни отказом, ни сбросом, — и подписка выглядит мёртвой целиком.
+            ObfsType = Get(q, "obfs"),
+            ObfsPassword = Get(q, "obfs-password") ?? Get(q, "obfsPassword") ?? Get(q, "obfs_password"),
             Extra = q,
         };
     }

@@ -322,7 +322,16 @@ public sealed class SingBoxConfigCompiler
 
     private const string OverrideTag = "pinned";
 
-    public string CompileProbeConfig(ProxyServer server, int listenPort, string? logPath, string logLevel = "debug")
+    /// <param name="resolvedAddress">
+    /// Адрес сервера, выясненный заранее и в обход системного резолвера.
+    /// <c>null</c> — оставить имя, пусть разрешает сам sing-box.
+    /// </param>
+    public string CompileProbeConfig(
+        ProxyServer server,
+        int listenPort,
+        string? logPath,
+        string logLevel = "debug",
+        string? resolvedAddress = null)
     {
         var log = new JsonObject { ["level"] = logLevel, ["timestamp"] = true };
 
@@ -344,7 +353,7 @@ public sealed class SingBoxConfigCompiler
             },
             ["outbounds"] = new JsonArray
             {
-                BuildOutbound(server, "probe-out"),
+                PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress),
                 new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
             },
             ["route"] = new JsonObject
@@ -822,6 +831,40 @@ public sealed class SingBoxConfigCompiler
         || tag.Contains("Россия", StringComparison.OrdinalIgnoreCase)
         || tag.Contains("Russia", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Ставит в исходящий готовый адрес вместо имени сервера.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Разрывает замкнутый круг проверки. Чтобы соединиться с сервером,
+    /// sing-box должен разрешить его имя; разрешает он обычным запросом
+    /// к 8.8.8.8, а при работающем движке этот запрос перехватывает TUN
+    /// и отвечает сам. В логе это выглядело так: <c>lookup failed for
+    /// holaris…sslip.io: context deadline exceeded</c> — при том что сервер
+    /// был жив и отзывался по TCP за семьдесят миллисекунд.
+    /// </para>
+    /// <para>
+    /// Имя при этом обязано остаться в <c>server_name</c>: по нему сервер
+    /// выбирает сертификат, и подстановка адреса без этого ломала бы TLS
+    /// вместо того, чтобы чинить разрешение имён.
+    /// </para>
+    /// </remarks>
+    private static JsonObject PinAddress(JsonObject outbound, ProxyServer server, string? resolvedAddress)
+    {
+        if (string.IsNullOrEmpty(resolvedAddress)
+            || string.Equals(resolvedAddress, server.Host, StringComparison.OrdinalIgnoreCase))
+        {
+            return outbound;
+        }
+
+        outbound["server"] = resolvedAddress;
+
+        if (outbound["tls"] is JsonObject tls && tls["server_name"] is null)
+            tls["server_name"] = string.IsNullOrEmpty(server.Sni) ? server.Host : server.Sni;
+
+        return outbound;
+    }
+
     private static JsonObject BuildOutbound(ProxyServer server, string tag)
     {
         var outbound = new JsonObject
@@ -863,6 +906,19 @@ public sealed class SingBoxConfigCompiler
             case ProxyProtocol.Hysteria2:
                 outbound["type"] = "hysteria2";
                 outbound["password"] = server.Credential;
+
+                // Без этого блока сервер с обфускацией не отвечает вовсе:
+                // он отбрасывает пакеты, не прошедшие её, и делает это молча.
+                if (!string.IsNullOrEmpty(server.ObfsType))
+                {
+                    var obfs = new JsonObject { ["type"] = server.ObfsType };
+
+                    if (!string.IsNullOrEmpty(server.ObfsPassword))
+                        obfs["password"] = server.ObfsPassword;
+
+                    outbound["obfs"] = obfs;
+                }
+
                 break;
 
             default:

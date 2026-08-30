@@ -237,7 +237,19 @@ public sealed class ProxyProbe
         if (File.Exists(logPath))
             File.Delete(logPath);
 
-        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel);
+        // Имя сервера разрешается здесь, а не внутри sing-box. При работающем
+        // движке запрос к резолверу перехватывает TUN, и проверка падала на
+        // разрешении имени, ни разу не дойдя до сервера — притом что сервер
+        // был жив. Неудача не фатальна: тогда имя уходит в конфиг как есть,
+        // и разрешать его будет sing-box, как и прежде.
+        string? address;
+
+        using (var lookup = new HttpClient { Timeout = options.RequestTimeout })
+        {
+            address = await DohResolver.ResolveAsync(server.Host, lookup, cancellationToken);
+        }
+
+        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address);
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
         var stopwatch = Stopwatch.StartNew();

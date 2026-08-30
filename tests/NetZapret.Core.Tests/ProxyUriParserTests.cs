@@ -52,6 +52,49 @@ public class ProxyUriParserTests
         Assert.Equal("NL", server.Tag);
     }
 
+    /// <summary>Обфускация Hysteria2 читается из ссылки.</summary>
+    /// <remarks>
+    /// Пропуск этих двух параметров стоил целой подписки. Сервер, ожидающий
+    /// обфускацию, отбрасывает пакеты без неё молча — ни отказа, ни сброса, —
+    /// и все одиннадцать серверов выглядели мёртвыми: «превышен бюджет
+    /// времени» на каждом. После разбора obfs заработали три из одиннадцати,
+    /// и внешний адрес сменился с домашнего на серверный.
+    /// </remarks>
+    [Fact]
+    public void Hysteria2ObfuscationIsParsed()
+    {
+        var server = Parse(
+            "hysteria2://s3cret@lv.example.com:443/" +
+            "?obfs=salamander&obfs-password=hidden&sni=lv.example.com&insecure=1#LV");
+
+        Assert.Equal("salamander", server.ObfsType);
+        Assert.Equal("hidden", server.ObfsPassword);
+        Assert.Equal("s3cret", server.Credential);
+        Assert.True(server.AllowInsecure);
+    }
+
+    /// <remarks>Написание параметра у поставщиков подписок расходится.</remarks>
+    [Theory]
+    [InlineData("obfs-password")]
+    [InlineData("obfsPassword")]
+    [InlineData("obfs_password")]
+    public void Hysteria2ObfuscationPasswordIsReadUnderEitherSpelling(string key)
+    {
+        var server = Parse($"hysteria2://s3cret@lv.example.com:443/?obfs=salamander&{key}=hidden#LV");
+
+        Assert.Equal("hidden", server.ObfsPassword);
+    }
+
+    /// <remarks>Ссылка без обфускации не должна получать пустой блок.</remarks>
+    [Fact]
+    public void Hysteria2WithoutObfuscationHasNone()
+    {
+        var server = Parse("hysteria2://s3cret@nl.example.com:4443/?sni=nl.example.com#NL");
+
+        Assert.Null(server.ObfsType);
+        Assert.Null(server.ObfsPassword);
+    }
+
     [Fact]
     public void TrojanWithRealityIsParsed()
     {
