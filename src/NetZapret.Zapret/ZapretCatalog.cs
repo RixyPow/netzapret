@@ -187,6 +187,48 @@ public sealed class ZapretCatalog
     }
 
     /// <summary>
+    /// Все имена каталога с указанием, какому сервису они принадлежат.
+    /// </summary>
+    /// <remarks>
+    /// Одним запросом. Спрашивать по сервису — семьдесят три обращения к базе
+    /// на каждую перерисовку списка, то есть на каждое нажатие клавиши;
+    /// заметно это станет не сразу, но станет.
+    /// </remarks>
+    public IReadOnlyDictionary<string, List<string>> NamesByService()
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+
+            command.CommandText = """
+                select service_id, hostname from domains
+                union all
+                select service_id, hostname from hosts_entries
+                """;
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var service = reader.GetString(0);
+
+                if (!result.TryGetValue(service, out var names))
+                    result[service] = names = [];
+
+                names.Add(reader.GetString(1));
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Адреса для названных сервисов.
     /// </summary>
     /// <param name="serviceIds">Что включено человеком.</param>

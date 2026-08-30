@@ -408,6 +408,53 @@ internal static class BlockCheckCommand
         Console.WriteLine($"  DNS:     {settings.DnsServer}");
 
         Console.ForegroundColor = previous;
+
+        if (enginesRunning)
+            await WarnIfExitIsDomesticAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Предупреждает, если туннель выходит там же, откуда зашёл.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// «Авто по задержке» выбирает ближайший сервер, а ближайший — свой же.
+    /// Для обхода DPI это разумно, для сервисов, закрывающихся от страны, —
+    /// бессмысленно: туннель через Россию оставляет российский адрес,
+    /// и ChatGPT отвечает тем же отказом, что и без туннеля.
+    /// </para>
+    /// <para>
+    /// Спрашивается адрес, а не читается имя сервера: имя ставит поставщик
+    /// подписки, и «США (вход РФ)» ничего не обещает о том, где трафик
+    /// выйдет наружу.
+    /// </para>
+    /// </remarks>
+    private static async Task WarnIfExitIsDomesticAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+
+            var country = (await http.GetStringAsync(
+                "https://ipinfo.io/country", cancellationToken)).Trim();
+
+            if (!string.Equals(country, "RU", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var previous = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine();
+            Console.WriteLine("  Выход туннеля — в России. Для сервисов, закрывающихся от страны,");
+            Console.WriteLine("  это не помогает: адрес остаётся российским. «Авто по задержке»");
+            Console.WriteLine("  берёт ближайший сервер, а ближайший — свой же. Выберите");
+            Console.WriteLine("  зарубежный в пункте «VPN».");
+            Console.ForegroundColor = previous;
+        }
+        catch (Exception)
+        {
+            // Не выяснилось — молчим. Отсутствие предупреждения хуже ложного,
+            // но ложное здесь стоило бы смены рабочего сервера ни за чем.
+        }
     }
 
     /// <summary>

@@ -683,15 +683,38 @@ internal static class MenuCommand
 
             var previous = Console.ForegroundColor;
 
+            // Пин в hosts перебивает наш ответ: имя ищется в файле раньше,
+            // чем спросят резолвер. Включённый здесь сервис, чьи имена там
+            // прибиты, не заработает — и молчать об этом нельзя, иначе
+            // человек будет менять наборы, не понимая, почему ничего
+            // не меняется.
+            var pinned = PinnedInCatalog(catalog);
+
             for (int i = 0; i < services.Count; i++)
             {
                 var service = services[i];
                 bool on = chosen.Contains(service.Id);
+                bool clash = on && pinned.Contains(service.Id);
 
-                Console.ForegroundColor = on ? ConsoleColor.Green : ConsoleColor.DarkGray;
+                Console.ForegroundColor = clash ? ConsoleColor.Yellow
+                    : on ? ConsoleColor.Green
+                    : ConsoleColor.DarkGray;
+
                 Console.WriteLine(
-                    $"  {i + 1,3}. {(on ? "[вкл]" : "[  ]"),-6} {Truncate(service.Name, 44),-44} " +
-                    $"{service.Domains,3} дом.  {(service.Kind == "dns" ? "набор" : "свой адрес")}");
+                    $"  {i + 1,3}. {(on ? "[вкл]" : "[  ]"),-6} {Truncate(service.Name, 40),-40} " +
+                    $"{service.Domains,3} дом.  {(service.Kind == "dns" ? "набор" : "свой адрес"),-10}" +
+                    (clash ? "  ПЕРЕБИТ hosts" : string.Empty));
+
+                Console.ForegroundColor = previous;
+            }
+
+            if (chosen.Overlaps(pinned))
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine();
+                Console.WriteLine("  Отмеченные «ПЕРЕБИТ hosts» не заработают: их имена прибиты");
+                Console.WriteLine("  в системном файле, и он отвечает раньше нашего резолвера.");
+                Console.WriteLine("  Снять записи — пункт меню «Файл hosts».");
                 Console.ForegroundColor = previous;
             }
 
@@ -723,6 +746,32 @@ internal static class MenuCommand
                     chosen.Add(id);
             }
         }
+    }
+
+    /// <summary>
+    /// Сервисы каталога, чьи имена прибиты в системном hosts.
+    /// </summary>
+    /// <remarks>
+    /// Достаточно одного совпавшего имени: у сервиса их десятки, и прибитый
+    /// среди них хотя бы один означает, что часть его пойдёт мимо нашего
+    /// ответа. Половина работающего сервиса выглядит как поломка ничуть
+    /// не меньше, чем целиком неработающий.
+    /// </remarks>
+    private static HashSet<string> PinnedInCatalog(ZapretCatalog catalog)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hosts = HostsFile.Read();
+
+        if (hosts.Count == 0)
+            return result;
+
+        foreach (var (service, names) in catalog.NamesByService())
+        {
+            if (names.Any(hosts.ContainsKey))
+                result.Add(service);
+        }
+
+        return result;
     }
 
     /// <summary>
