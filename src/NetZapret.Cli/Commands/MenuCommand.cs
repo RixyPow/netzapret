@@ -966,11 +966,37 @@ internal static class MenuCommand
         Console.WriteLine(part.Part.ByAddress
             ? $"  Список: {part.Part.List} ({part.DomainCount} подсетей, например {part.Example})"
             : $"  Список: {part.Part.List} ({part.DomainCount} доменов, например {part.Example})");
+
+        // Пин в hosts показывается здесь же и до выбора. Он не режим, а его
+        // отмена: имя разрешается раньше нашего резолвера, и до маршрута
+        // дело не доходит вовсе. Строка «сейчас VPN» при живом пине говорит
+        // правду о правиле и неправду о трафике.
+        var pinned = PinnedNamesOf(part);
+
+        if (pinned.Count > 0)
+        {
+            var previous = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine();
+            Console.WriteLine($"  Прибито в hosts: {string.Join(", ", pinned.Take(4).Select(p => $"{p.Key} → {p.Value}"))}");
+
+            if (pinned.Count > 4)
+                Console.WriteLine($"  …и ещё {pinned.Count - 4}");
+
+            Console.WriteLine("  Пока запись жива, режим ниже ни на что не влияет:");
+            Console.WriteLine("  имя разрешается до нашего резолвера и идёт на прибитый адрес.");
+            Console.ForegroundColor = previous;
+        }
+
         Console.WriteLine();
         Console.WriteLine("  1. Напрямую");
         Console.WriteLine("  2. Десинк");
         Console.WriteLine("  3. VPN");
         Console.WriteLine("  4. Убрать свой выбор — вернуть как было");
+
+        if (pinned.Count > 0)
+            Console.WriteLine("  5. Снять пин из hosts — чтобы режим заработал");
+
         Console.WriteLine("  0. Оставить как есть");
         Console.Write("Выбор: ");
 
@@ -996,6 +1022,9 @@ internal static class MenuCommand
             case "4":
                 file.Remove(kind, part.Part.List);
                 break;
+            case "5" when pinned.Count > 0:
+                UnpinNames(pinned.Keys.ToList());
+                return;
             default:
                 return;
         }
@@ -1004,6 +1033,82 @@ internal static class MenuCommand
         Message("Записано. Применится при следующем запуске.", ConsoleColor.Green);
 
         OfferDiscordRestart(settings, part.Part.List);
+    }
+
+    /// <summary>
+    /// Какие имена этой части прибиты в hosts.
+    /// </summary>
+    /// <remarks>
+    /// Сверяется по точному имени. Пин на <c>chatgpt.com</c> не влияет
+    /// на <c>api.openai.com</c>, и приписывать части чужую запись значило бы
+    /// пугать человека тем, чего нет.
+    /// </remarks>
+    private static Dictionary<string, string> PinnedNamesOf(ServiceRouting.PartStatus part)
+    {
+        var found = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (part.Part.ByAddress)
+            return found;
+
+        var hosts = HostsFile.Read();
+
+        if (hosts.Count == 0)
+            return found;
+
+        foreach (var domain in HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _))
+        {
+            var name = domain.TrimStart('*', '.');
+
+            if (hosts.TryGetValue(name, out var addresses) && addresses.Count > 0)
+                found[name] = string.Join(", ", addresses);
+        }
+
+        return found;
+    }
+
+    /// <summary>Выключает записи hosts для названных имён.</summary>
+    /// <remarks>
+    /// Выключает, а не удаляет: запись может понадобиться обратно, и вернуть
+    /// её должно быть так же просто, как снять. Файл при этом копируется —
+    /// он общий, и наша ошибка в нём стоит чужой настройки.
+    /// </remarks>
+    private static void UnpinNames(IReadOnlyList<string> names)
+    {
+        var lines = HostsEditor.Parse()
+            .Where(e => e.Enabled && e.Names.Any(n => names.Contains(n, StringComparer.OrdinalIgnoreCase)))
+            .Select(e => e.Line)
+            .ToList();
+
+        if (lines.Count == 0)
+            return;
+
+        Console.WriteLine();
+        Console.Write($"Выключить {lines.Count} {Plural(lines.Count, "строку", "строки", "строк")} в hosts? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        try
+        {
+            var backup = HostsEditor.SetEnabled(lines, enabled: false);
+
+            Message($"Готово. Копия прежнего файла: {backup}", ConsoleColor.Green);
+            Console.WriteLine(HostsEditor.FlushDns()
+                ? "Кэш DNS сброшен — маршрут заработает сразу."
+                : "Сбросьте кэш вручную: ipconfig /flushdns");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Message("Нужны права администратора: файл системный.", ConsoleColor.Yellow);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не вышло: {ex.GetBaseException().Message}", ConsoleColor.Red);
+        }
+
+        Pause();
     }
 
     /// <summary>
@@ -1084,6 +1189,7 @@ internal static class MenuCommand
             Console.WriteLine("  Введите приложение или сайт — покажу, куда он пойдёт.");
             Console.WriteLine("  Номер из списка — включить или выключить запись.");
             Console.WriteLine("  Минус перед номером (-2) — удалить запись насовсем.");
+            Console.WriteLine("  Два минуса (--) — удалить все записи.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -1092,6 +1198,12 @@ internal static class MenuCommand
 
             if (string.IsNullOrWhiteSpace(input))
                 return;
+
+            if (input == "--")
+            {
+                DeleteAllRoutes(file);
+                continue;
+            }
 
             if (int.TryParse(input, out var index))
             {
@@ -1114,6 +1226,56 @@ internal static class MenuCommand
 
             AskRoute(settings, input);
         }
+    }
+
+    /// <summary>
+    /// Удаляет все свои маршруты разом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Спрашивает дважды и показывает, сколько именно уйдёт. Список копится
+    /// месяцами и помнится плохо: человек, набравший два минуса, скорее всего
+    /// имел в виду «начать заново», но узнать, что именно он этим стирает,
+    /// должен до, а не после.
+    /// </para>
+    /// <para>
+    /// Базовый набор не трогается: удаляется только пользовательский слой,
+    /// и всё вернётся к заводским маршрутам, а не к их отсутствию.
+    /// </para>
+    /// </remarks>
+    private static void DeleteAllRoutes(UserRulesFile file)
+    {
+        if (file.Entries.Count == 0)
+            return;
+
+        int count = file.Entries.Count;
+
+        Console.WriteLine();
+        Console.WriteLine($"  Удалятся все {count} {Plural(count, "запись", "записи", "записей")}:");
+
+        foreach (var entry in file.Entries.Take(5))
+            Console.WriteLine($"    {entry.Value}");
+
+        if (count > 5)
+            Console.WriteLine($"    …и ещё {count - 5}");
+
+        Console.WriteLine();
+        Console.WriteLine("  Заводские маршруты останутся — уйдёт только ваш выбор поверх них.");
+        Console.Write("  Точно удалить всё? [д/н]: ");
+
+        var answer = Console.ReadLine()?.Trim();
+
+        if (answer is null || !(answer.StartsWith('д') || answer.StartsWith('y')))
+            return;
+
+        // С конца: удаление сдвигает номера, и проход с начала пропустил бы
+        // каждую вторую запись.
+        for (int i = file.Entries.Count - 1; i >= 0; i--)
+            file.RemoveAt(i);
+
+        file.Save();
+        Message($"Удалено записей: {count}. Применится при следующем запуске.", ConsoleColor.Green);
+        Pause();
     }
 
     private static void DeleteRoute(UserRulesFile file, int index)

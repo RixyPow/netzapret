@@ -82,6 +82,11 @@ rem A separate README for the archive. The repository one is written for
 rem someone with the sources - it explains building and the module layout,
 rem and tells the reader to run build.cmd, which does not exist here.
 copy /y "%ROOT%docs\README.dist.md" "%STAGE%\README.md" >nul
+
+rem Removal script. Kept out of the repository root deliberately: it stops
+rem engines and strips a Defender exclusion for whatever folder it sits in,
+rem and run from a working copy by mistake it would do all of that there.
+copy /y "%ROOT%dist-template\uninstall.cmd" "%STAGE%\" >nul
 copy /y "%ROOT%LICENSE" "%STAGE%\" >nul
 
 rem No launcher script: the program opens the menu and asks for elevation
