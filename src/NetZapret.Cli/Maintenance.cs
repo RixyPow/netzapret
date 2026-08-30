@@ -118,12 +118,16 @@ internal static class Maintenance
         return ActionResult.Good("Сетевой стек сброшен.", reboot: true);
     }
 
-    /// <summary>Открывает папку программы в проводнике.</summary>
-    public static ActionResult OpenFolder()
+    /// <summary>Открывает папку в проводнике; без указания — папку программы.</summary>
+    public static ActionResult OpenFolder(string? folder = null)
     {
         try
         {
-            var path = Path.GetFullPath(".");
+            var path = Path.GetFullPath(folder ?? ".");
+
+            if (!Directory.Exists(path))
+                return ActionResult.Bad($"Папки нет: {path}");
+
             Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
 
             return ActionResult.Good(path);

@@ -304,6 +304,8 @@ internal static class MenuCommand
             return settings;
         }
 
+        // Читается заново при каждом заходе: пресет могли положить в папку
+        // минуту назад, и требовать ради этого перезапуска незачем.
         var presets = new PresetReader().Read(paths.PresetFiles);
 
         // Заголовок в файле пресета — не обязательно уникальный: свой
@@ -328,7 +330,27 @@ internal static class MenuCommand
             return ($"{label}  ({p.ActiveSections.Count()} секций)", (string?)file);
         }));
 
+        var folder = ZapretPaths.WritablePresetDirectory;
+
+        if (folder is not null)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Папка пресетов: {folder}");
+            Console.WriteLine("  Положенный туда файл появится здесь сразу — достаточно");
+            Console.WriteLine("  выйти в меню и зайти обратно.");
+            Console.WriteLine("  п — открыть папку.");
+        }
+
         var chosen = PickNullable("Пресет Zapret", items, settings.PresetName);
+
+        // Открытие папки — не выбор пресета: возвращаемся к списку, чтобы
+        // человек мог положить файл и тут же его увидеть.
+        if (chosen.Cancelled && folder is not null && chosen.Raw is { } raw && Is(raw, "п", "p"))
+        {
+            Report(Maintenance.OpenFolder(folder));
+            return ChoosePreset(settings);
+        }
+
         return chosen.Cancelled ? settings : settings with { PresetName = chosen.Value };
     }
 
@@ -2779,7 +2801,11 @@ internal static class MenuCommand
             : null;
     }
 
-    private static (bool Cancelled, string? Value) PickNullable(
+    /// <returns>
+    /// <c>Raw</c> — то, что человек набрал, если это не номер. Нужен вызывающему,
+    /// чтобы принять свои команды буквами, не заводя ради них второй список.
+    /// </returns>
+    private static (bool Cancelled, string? Value, string? Raw) PickNullable(
         string title,
         IReadOnlyList<(string Label, string? Value)> items,
         string? current)
@@ -2800,8 +2826,8 @@ internal static class MenuCommand
         var input = Console.ReadLine()?.Trim();
 
         return int.TryParse(input, out var index) && index >= 1 && index <= items.Count
-            ? (false, items[index - 1].Value)
-            : (true, current);
+            ? (false, items[index - 1].Value, null)
+            : (true, current, input);
     }
 
     /// <summary>
