@@ -54,6 +54,31 @@ public sealed class AddressOverrides
     /// починка частного случая, а не условие работы. Испорченный файл называет
     /// себя в <see cref="Problems"/> и на этом успокаивается.
     /// </remarks>
+    /// <summary>
+    /// Все подстановки: из каталога Zapret и из своего файла поверх.
+    /// </summary>
+    /// <param name="fromCatalog">Ответы каталога; свои перебивают их.</param>
+    /// <remarks>
+    /// Собрано в одном месте намеренно. Конфиг собирается из двух мест —
+    /// из меню при запуске и командой <c>config</c>, — и пока каждое
+    /// складывало источники по-своему, меню не передавало подстановки вовсе.
+    /// Настройка при этом выглядела применённой: файл на месте, адрес в нём
+    /// есть, а в конфиг он не попадал.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, string> Merge(
+        IReadOnlyDictionary<string, string> fromCatalog,
+        AddressOverrides own)
+    {
+        var result = new Dictionary<string, string>(fromCatalog, StringComparer.OrdinalIgnoreCase);
+
+        // Свой файл последним: он написан руками под конкретный случай,
+        // и заводской ответ не должен его перебивать.
+        foreach (var (host, address) in own.Entries)
+            result[host] = address;
+
+        return result;
+    }
+
     public static AddressOverrides Load(string? path = null)
     {
         var target = path ?? DefaultPath;

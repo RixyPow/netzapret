@@ -18,6 +18,8 @@ namespace NetZapret.Cli;
 internal sealed class EscapeWatcher : IDisposable
 {
     private readonly CancellationTokenSource _own = new();
+    private Thread? _thread;
+    private bool _disposed;
 
     /// <summary>Работает ли слежение — есть ли вообще у кого спрашивать.</summary>
     public bool Armed { get; private init; }
@@ -68,12 +70,29 @@ internal sealed class EscapeWatcher : IDisposable
         };
 
         thread.Start();
+        watcher._thread = thread;
         return watcher;
     }
 
+    /// <summary>
+    /// Останавливает слежение и дожидается, пока поток отпустит клавиатуру.
+    /// </summary>
+    /// <remarks>
+    /// Ожидание обязательно. Без него поток успевает прочитать ещё одну
+    /// клавишу уже после того, как мы решили, что он остановлен, — и она
+    /// пропадает из ответа на следующий вопрос. Ждём недолго: цикл просыпается
+    /// дважды в секунду, и если не уложился, значит застрял в чтении, а тогда
+    /// ждать дольше бессмысленно — он всё равно фоновый и умрёт с программой.
+    /// </remarks>
     public void Dispose()
     {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+
         _own.Cancel();
+        _thread?.Join(TimeSpan.FromSeconds(1));
         _own.Dispose();
     }
 }

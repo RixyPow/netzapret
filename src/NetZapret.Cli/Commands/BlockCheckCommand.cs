@@ -145,7 +145,7 @@ internal static class BlockCheckCommand
         Console.WriteLine("Проверяю, что умеет сеть…");
 
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var escape = EscapeWatcher.Watch(stop);
+        var escape = EscapeWatcher.Watch(stop);
 
         var baseline = await BlockCheck.MeasureBaselineAsync(stop.Token);
 
@@ -164,6 +164,13 @@ internal static class BlockCheckCommand
         var pinned = FindPinned(targets.Select(t => t.Host));
 
         var reports = await RunProbesAsync(targets, engine, enginesRunning, pinned, stop.Token);
+
+        // Сторож снимается здесь, а не в конце метода. Он читает клавиши
+        // через ReadKey и, оставшись жить, забирал их у следующих вопросов:
+        // человек отвечал на «записать правило?», а ответ доставался сторожу.
+        // Со стороны это выглядело зависанием, которое проходит, если долго
+        // жать на клавиши, — часть нажатий всё-таки доходила.
+        escape.Dispose();
 
         if (stop.IsCancellationRequested)
             Message($"Прервано. Успело проверить {reports.Count} из {targets.Count}.", ConsoleColor.Yellow);

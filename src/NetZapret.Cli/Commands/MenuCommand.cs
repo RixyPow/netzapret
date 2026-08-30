@@ -930,9 +930,14 @@ internal static class MenuCommand
             Console.WriteLine($"  Подписка: {DescribeSubscription(settings)}");
             Console.WriteLine($"  Сервер:   {settings.DescribeServer()}");
             Console.WriteLine();
+            Console.WriteLine($"  Автовыбор: {(settings.ForeignExitsOnly ? "только зарубежные" : "любой, включая отечественные")}");
+            Console.WriteLine();
             Console.WriteLine("  1. Выбрать сервер");
             Console.WriteLine("  2. Проверить серверы");
             Console.WriteLine("  3. Изменить ссылку подписки");
+            Console.WriteLine(settings.ForeignExitsOnly
+                ? "  4. Разрешить автовыбору отечественные серверы"
+                : "  4. Держать автовыбор на зарубежных серверах");
             Console.WriteLine("  0. Назад");
             Console.Write("Выбор: ");
 
@@ -945,6 +950,19 @@ internal static class MenuCommand
                     break;
                 case "3":
                     return AskSubscription(settings);
+
+                case "4":
+                    var toggled = settings with { ForeignExitsOnly = !settings.ForeignExitsOnly };
+
+                    Message(toggled.ForeignExitsOnly
+                        ? "Автовыбор больше не возьмёт отечественный сервер. Выбрать такой "
+                          + "вручную по-прежнему можно."
+                        : "Автовыбор снова может взять отечественный сервер. Он ближе всех, "
+                          + "поэтому и будет выбран чаще прочих — а сервисы, закрывающиеся "
+                          + "от страны, через него не заработают.",
+                        ConsoleColor.Green);
+
+                    return toggled;
                 default:
                     return settings;
             }
@@ -1690,6 +1708,17 @@ internal static class MenuCommand
             foreach (var note in pinnedNotes)
                 Console.WriteLine($"Внимание, hosts: {note}");
 
+            // Подстановки собираются тем же способом, что и в команде config.
+            // Пока каждый путь складывал их по-своему, меню не передавало их
+            // вовсе — и настройка выглядела применённой, ничего не делая.
+            var catalog = ZapretCatalog.Discover();
+
+            var fromCatalog = catalog is not null && settings.AddressServices.Count > 0
+                ? catalog.Answers(settings.AddressServices, settings.AddressProfile)
+                : new Dictionary<string, string>();
+
+            var addresses = AddressOverrides.Merge(fromCatalog, AddressOverrides.Load());
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
@@ -1697,8 +1726,10 @@ internal static class MenuCommand
                 DnsServer = settings.DnsServer,
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
+                ForeignExitsOnly = settings.ForeignExitsOnly,
                 CaptureAddresses = capture,
                 PinnedProxyAddresses = pinned,
+                AddressOverrides = addresses,
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);

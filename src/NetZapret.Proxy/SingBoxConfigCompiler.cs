@@ -91,6 +91,18 @@ public sealed class SingBoxOptions
     public string SelectorTag { get; init; } = "auto";
 
     /// <summary>
+    /// Не пускать отечественные серверы в автоподбор.
+    /// </summary>
+    /// <remarks>
+    /// Автоподбор идёт по задержке, а меньше всего она у ближайшего сервера —
+    /// своего же. Для обхода блокировок оператора он годится, а для сервисов,
+    /// закрывающихся от страны, бесполезен: адрес остаётся отечественным.
+    /// Закрепить конкретный сервер вручную это не мешает — селектор
+    /// по-прежнему знает их все.
+    /// </remarks>
+    public bool ForeignExitsOnly { get; init; }
+
+    /// <summary>
     /// Адреса для имён, у которых своего адреса нет.
     /// </summary>
     /// <remarks>
@@ -731,8 +743,23 @@ public sealed class SingBoxConfigCompiler
         if (servers.Count == 0)
             return outbounds;
 
+        // Домашние выходы можно вывести из автоподбора. Иначе он неизбежно
+        // на них и оседает: выбор идёт по задержке, а ближайший сервер —
+        // свой же. Для обхода блокировки оператора это годится, для сервисов,
+        // закрывающихся от страны, — нет: адрес остаётся отечественным,
+        // и отказ приходит тот же, что и без туннеля.
+        var eligible = options.ForeignExitsOnly
+            ? servers.Where(s => !LooksDomestic(tags[s])).ToList()
+            : servers;
+
+        // Но не до пустоты: подписка может состоять из домашних серверов
+        // целиком, и группа без единого участника не даст конфигу
+        // запуститься вовсе.
+        if (eligible.Count == 0)
+            eligible = servers;
+
         var members = new JsonArray();
-        foreach (var server in servers)
+        foreach (var server in eligible)
             members.Add(tags[server]);
 
         // urltest сам опрашивает серверы и выбирает быстрейший из живых.
@@ -772,6 +799,28 @@ public sealed class SingBoxConfigCompiler
 
         return outbounds;
     }
+
+    /// <summary>
+    /// Похож ли сервер на отечественный по его названию.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По названию, потому что другого источника нет: страну выхода знает
+    /// только сам сервер, а спрашивать её у каждого — это подключение к каждому
+    /// перед сборкой конфига. Названия ставит поставщик подписки, и флаг
+    /// с «Россия» в них встречается у всех, кого доводилось видеть.
+    /// </para>
+    /// <para>
+    /// Способ приблизительный, и это признаётся вслух: «США (вход РФ)» назван
+    /// американским, а выходит, по замерам, в России. Поэтому исключение —
+    /// не гарантия, а отсев очевидного; страну выхода проверка блокировок
+    /// всё равно спрашивает отдельно и говорит, если та не та.
+    /// </para>
+    /// </remarks>
+    internal static bool LooksDomestic(string tag) =>
+        tag.Contains("🇷🇺", StringComparison.Ordinal)
+        || tag.Contains("Россия", StringComparison.OrdinalIgnoreCase)
+        || tag.Contains("Russia", StringComparison.OrdinalIgnoreCase);
 
     private static JsonObject BuildOutbound(ProxyServer server, string tag)
     {

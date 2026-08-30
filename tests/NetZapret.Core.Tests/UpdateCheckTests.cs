@@ -74,3 +74,39 @@ public class UpdateCheckTests
         Assert.Contains("addresses.yaml", names);
     }
 }
+
+/// <summary>
+/// Отсев отечественных выходов из автоподбора.
+/// </summary>
+/// <remarks>
+/// Автоподбор идёт по задержке, а меньше всего она у ближайшего сервера —
+/// своего же. Наблюдалось вживую: селектор раз за разом возвращался
+/// на российский сервер, и ChatGPT отвечал тем же отказом, что и без
+/// туннеля, — адрес-то оставался российским.
+/// </remarks>
+public class ForeignExitTests
+{
+    [Theory]
+    [InlineData("🇷🇺 Hysteria2 | Россия", true)]
+    [InlineData("🇷🇺 Россия", true)]
+    [InlineData("Russia VLESS", true)]
+    [InlineData("🇸🇪 Hysteria2 | Швеция", false)]
+    [InlineData("🇳🇱 Нидерланды", false)]
+    [InlineData("🇭🇰 Trojan | Гонконг", false)]
+    public void DomesticServersAreRecognisedByName(string tag, bool expected)
+    {
+        Assert.Equal(expected, NetZapret.Proxy.SingBoxConfigCompiler.LooksDomestic(tag));
+    }
+
+    /// <summary>Названный американским, а выходящий дома, отсевом не ловится.</summary>
+    /// <remarks>
+    /// Признаётся вслух: «США (вход РФ)» по замерам выходит в России, но зовётся
+    /// американским, и по названию его не отличить. Отсев — не гарантия,
+    /// а отбрасывание очевидного; страну выхода проверка спрашивает отдельно.
+    /// </remarks>
+    [Fact]
+    public void NamingCannotCatchEverything()
+    {
+        Assert.False(NetZapret.Proxy.SingBoxConfigCompiler.LooksDomestic("🇺🇸 Hysteria2 | США (вход РФ)"));
+    }
+}
