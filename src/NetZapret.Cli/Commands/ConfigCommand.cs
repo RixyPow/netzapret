@@ -66,6 +66,11 @@ internal static class ConfigCommand
                 $"для {settings.AddressServices.Count} сервисов" +
                 (settings.AddressProfile is null ? string.Empty : $", набор {settings.AddressProfile}"));
         }
+        else if (CatalogSelection.Explain(
+            settings.AddressServices.Count, settings.AddressProfile, fromCatalog.Count) is { } why)
+        {
+            Console.WriteLine($"Каталог Zapret: {why}");
+        }
 
         var addresses = AddressOverrides.Merge(fromCatalog, overrides);
 

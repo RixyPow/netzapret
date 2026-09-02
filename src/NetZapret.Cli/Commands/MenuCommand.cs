@@ -2061,6 +2061,17 @@ internal static class MenuCommand
                 ? catalog.Answers(settings.AddressServices, settings.AddressProfile)
                 : new Dictionary<string, string>();
 
+            // Выбор, который ничего не дал, называется вслух. Молчание здесь
+            // стоило человеку уверенности, что каталог работает: семь галочек
+            // стояло, набор был не выбран, и подстановок выходило ноль —
+            // сервисы вида dns берут адрес из набора, а без него запрос
+            // к базе не выполняется вовсе.
+            if (CatalogSelection.Explain(
+                settings.AddressServices.Count, settings.AddressProfile, fromCatalog.Count) is { } why)
+            {
+                Console.WriteLine($"Каталог Zapret: {why}");
+            }
+
             var addresses = AddressOverrides.Merge(fromCatalog, AddressOverrides.Load());
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
