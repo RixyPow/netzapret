@@ -387,8 +387,11 @@ public static class HostsEditor
     /// собственноручно урезать запасные пути.
     /// </para>
     /// <para>
-    /// Выключенные строки не трогаются вовсе: человек выключил их намеренно,
-    /// и втянуть их в наш блок — значит либо потерять, либо включить обратно.
+    /// Выключенные строки забираются тоже, но выключенными и остаются.
+    /// Их чаще всего гасит сама программа, когда до адреса не достучаться,
+    /// и включить их заодно со сбором значило бы вернуть в дело ровно то,
+    /// что признано нерабочим. Потерять их нельзя тем более: тогда исчезнет
+    /// и след решения, и возможность его отменить.
     /// </para>
     /// </remarks>
     public static PinResult Absorb(string? path = null)
@@ -401,20 +404,25 @@ public static class HostsEditor
         var lines = File.ReadAllLines(target).ToList();
         var (start, end) = FindBlock(lines);
         var gathered = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var off = new List<string>();
 
         for (int i = 0; i < lines.Count; i++)
         {
             if (start >= 0 && i >= start && i <= end)
                 continue;
 
-            if (Split(lines[i]) is not { } pair)
-                continue;
+            if (Split(lines[i]) is { } pair)
+            {
+                if (!gathered.TryGetValue(pair.Name, out var list))
+                    gathered[pair.Name] = list = [];
 
-            if (!gathered.TryGetValue(pair.Name, out var list))
-                gathered[pair.Name] = list = [];
-
-            if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
-                list.Add(pair.Address);
+                if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
+                    list.Add(pair.Address);
+            }
+            else if (Disabled(lines[i]) is { } gone && !off.Contains(gone, StringComparer.OrdinalIgnoreCase))
+            {
+                off.Add(gone);
+            }
         }
 
         // Строки, ушедшие к нам, убираются с прежних мест — иначе повторы
@@ -424,7 +432,7 @@ public static class HostsEditor
             if (start >= 0 && i >= start && i <= end)
                 continue;
 
-            if (Split(lines[i]) is not null)
+            if (Split(lines[i]) is not null || Disabled(lines[i]) is not null)
                 lines.RemoveAt(i);
         }
 
@@ -433,7 +441,21 @@ public static class HostsEditor
             path,
             note: null,
             absorb: true,
-            prepared: lines);
+            prepared: lines,
+            disabled: off);
+    }
+
+    /// <summary>Запись выключенной строки без решётки; <c>null</c> — не запись.</summary>
+    private static string? Disabled(string line)
+    {
+        var text = line.Trim().TrimStart('﻿');
+
+        if (!text.StartsWith('#'))
+            return null;
+
+        var bare = text.TrimStart('#', ' ', '\t');
+
+        return Split(bare) is null ? null : bare;
     }
 
     private static PinResult PinMany(
@@ -441,7 +463,8 @@ public static class HostsEditor
         string? path,
         string? note,
         bool absorb,
-        List<string>? prepared = null)
+        List<string>? prepared = null,
+        IReadOnlyList<string>? disabled = null)
     {
         var target = path ?? HostsFile.DefaultPath;
         var backup = File.Exists(target) ? Backup(target) : null;
@@ -498,6 +521,24 @@ public static class HostsEditor
         {
             foreach (var address in addresses)
                 block.Add($"{address} {name}");
+        }
+
+        // Выключенные — под своим заголовком и по-прежнему выключенными.
+        // Гасит их обычно сама программа, когда до адреса не достучаться;
+        // включить их заодно со сбором значило бы вернуть в дело то,
+        // что признано нерабочим.
+        var silenced = (disabled ?? [])
+            .Where(line => Split(line) is { } pair && !kept.ContainsKey(pair.Name))
+            .OrderBy(line => line, StringComparer.Ordinal)
+            .ToList();
+
+        if (silenced.Count > 0)
+        {
+            block.Add(string.Empty);
+            block.Add("# Выключено — адрес не отвечал. Вернуть можно в пункте «Файл hosts».");
+
+            foreach (var line in silenced)
+                block.Add("# " + line);
         }
 
         block.Add(BlockEnd);

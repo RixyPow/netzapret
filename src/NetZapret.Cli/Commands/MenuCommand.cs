@@ -1312,42 +1312,68 @@ internal static class MenuCommand
             return;
         }
 
+        var zones = HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _)
+            .Select(d => d.TrimStart('*', '.'))
+            .ToList();
+
+        // Свой каталог спрашивается первым: он для того и заведён, что нужного
+        // имени в чужом обычно нет вовсе.
+        var own = OwnCatalog.Load();
+
+        foreach (var problem in own.Problems)
+            Message($"Каталог NetZapret: {problem}", ConsoleColor.Yellow);
+
+        var mine = own.For(zones);
         var catalog = ZapretCatalog.Discover();
 
-        if (catalog is null)
+        if (catalog is null && mine.Count == 0)
         {
             Message("Каталог адресов не найден — брать адрес неоткуда.", ConsoleColor.Yellow);
             return;
         }
 
-        var zones = HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _)
-            .Select(d => d.TrimStart('*', '.'))
-            .ToList();
-
         // Сервисы каталога, покрывающие хоть одно наше имя. Списки Zapret
         // и каталог ведутся порознь, и совпадение по названию сервиса
         // не гарантировано — сверяем по именам.
-        var services = catalog.NamesByService()
+        var services = catalog?.NamesByService()
             .Where(pair => pair.Value.Any(name => Covers(zones, name)))
             .Select(pair => pair.Key)
-            .ToList();
+            .ToList() ?? [];
 
-        if (services.Count == 0)
+        if (services.Count == 0 && mine.Count == 0)
         {
-            Message("В каталоге нет адресов для имён этой части.", ConsoleColor.Yellow);
+            Message("Ни в одном каталоге нет адресов для имён этой части.", ConsoleColor.Yellow);
             return;
         }
 
-        var profile = ChooseProfile(catalog, services, zones);
+        var profile = ChooseProfile(catalog, services, zones, mine);
 
         if (profile is null)
             return;
 
-        var answers = profile == HonestResolver
-            ? AskHonestResolver(zones, catalog.Answers(services, null).Keys.Where(n => Covers(zones, n)).ToList())
-            : catalog.Answers(services, profile)
+        Dictionary<string, string> answers;
+
+        if (profile == HonestResolver)
+        {
+            var known = catalog?.Answers(services, null).Keys.Where(n => Covers(zones, n)).ToList() ?? [];
+            answers = AskHonestResolver(zones, known);
+        }
+        else if (profile.StartsWith(OwnPrefix, StringComparison.Ordinal))
+        {
+            var entry = mine[int.Parse(profile[OwnPrefix.Length..])];
+
+            answers = entry.Resolve
+                ? AskHonestResolver(entry.Names.Select(n => n.TrimStart('*', '.')).ToList(), [])
+                : entry.Names
+                    .Select(n => n.TrimStart('*', '.'))
+                    .ToDictionary(n => n, _ => entry.Addresses[0], StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            answers = catalog!.Answers(services, profile)
                 .Where(pair => Covers(zones, pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
 
         if (answers.Count == 0)
         {
@@ -1396,24 +1422,38 @@ internal static class MenuCommand
     /// а «покрывает 4 из 4» говорит всё. Лучшего набора среди них нет — каждый
     /// живёт ровно столько, сколько живёт чужой узел за ним.
     /// </remarks>
+    /// <summary>Пометка выбора из нашего каталога; за ней идёт номер записи.</summary>
+    private const string OwnPrefix = "\0own:";
+
     private static string? ChooseProfile(
-        ZapretCatalog catalog,
+        ZapretCatalog? catalog,
         IReadOnlyList<string> services,
-        IReadOnlyList<string> zones)
+        IReadOnlyList<string> zones,
+        IReadOnlyList<OwnCatalogEntry> mine)
     {
-        var profiles = catalog.Profiles();
-
-        if (profiles.Count == 0)
-            return null;
-
+        // Каталог один, и показывается он одним списком. Наборы Zapret входят
+        // в него наравне со своими записями: для человека это один вопрос —
+        // чей адрес поставить, — и делить ответ на два списка по признаку
+        // того, кто эти адреса собрал, значит объяснять ему наше устройство
+        // вместо его задачи.
         Console.WriteLine();
-        Console.WriteLine("  Чей адрес поставить:");
+        Console.WriteLine("  Каталог NetZapret — чей адрес поставить:");
 
         var offered = new List<string>();
 
-        foreach (var profile in profiles)
+        // Свои записи первыми: они заведены под то, чего в наборах Zapret нет,
+        // и подходящая среди них — обычно самая точная из предложенных.
+        for (int i = 0; i < mine.Count; i++)
         {
-            var covered = catalog.Answers(services, profile.Id).Count(pair => Covers(zones, pair.Key));
+            offered.Add(OwnPrefix + i);
+            Console.WriteLine(mine[i].Resolve
+                ? $"  {offered.Count}. {mine[i].Name} — спросить честный резолвер"
+                : $"  {offered.Count}. {mine[i].Name} — {string.Join(", ", mine[i].Addresses)}");
+        }
+
+        foreach (var profile in catalog?.Profiles() ?? [])
+        {
+            var covered = catalog!.Answers(services, profile.Id).Count(pair => Covers(zones, pair.Key));
 
             if (covered == 0)
                 continue;

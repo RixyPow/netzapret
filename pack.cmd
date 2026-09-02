@@ -71,6 +71,11 @@ rem A record and the previews stay broken, so the fix has to travel with the
 rem list that depends on it.
 copy /y "%ROOT%config\addresses.yaml" "%STAGE%\config\" >nul
 
+rem Our own address catalogue - the names that break by answer rather than by
+rem channel, which the Zapret sets do not carry. Hand-edited, so it ships as
+rem readable text beside the rules.
+copy /y "%ROOT%config\catalog.yaml" "%STAGE%\config\" >nul
+
 rem Our own domain lists. Rules reference them by path, so leaving them out
 rem gives rules that resolve to nothing - and the service view would show
 rem Steam and Valheim as routed while nothing was routed at all.
