@@ -1451,15 +1451,33 @@ internal static class MenuCommand
                 : $"  {offered.Count}. {mine[i].Name} — {string.Join(", ", mine[i].Addresses)}");
         }
 
-        foreach (var profile in catalog?.Profiles() ?? [])
+        // Свой адрес — прежде чужого. Честный резолвер отдаёт настоящий адрес
+        // сервиса и не стоит ничего; наборы ниже уводят трафик через чужую
+        // машину, и предлагать это раньше значит советовать дорогое решение
+        // там, где хватает бесплатного.
+        offered.Add(HonestResolver);
+        Console.WriteLine($"  {offered.Count}. Спросить честный резолвер сейчас — настоящий адрес по DoH");
+
+        var sets = (catalog?.Profiles() ?? [])
+            .Select(p => (p.Id, p.Name, Covered: catalog!.Answers(services, p.Id).Count(a => Covers(zones, a.Key))))
+            .Where(p => p.Covered > 0)
+            .ToList();
+
+        if (sets.Count > 0)
         {
-            var covered = catalog!.Answers(services, profile.Id).Count(pair => Covers(zones, pair.Key));
+            // Чем эти адреса являются, сказано вслух. «XBOX DNS» звучит как
+            // название службы имён, а это чужой посредник: через него пойдёт
+            // трафик, он видит, куда вы ходите, и живёт ровно столько, сколько
+            // его содержат. Годится он там, где сайт отказывает по стране, —
+            // честный адрес отказал бы точно так же.
+            Console.WriteLine();
+            Console.WriteLine("  Через чужой прокси — если сайт отказывает по стране:");
 
-            if (covered == 0)
-                continue;
-
-            offered.Add(profile.Id);
-            Console.WriteLine($"  {offered.Count}. {profile.Name} — имён: {covered}");
+            foreach (var (id, name, covered) in sets)
+            {
+                offered.Add(id);
+                Console.WriteLine($"  {offered.Count}. {name} — имён: {covered}");
+            }
         }
 
         if (offered.Count == 0)
@@ -1468,13 +1486,7 @@ internal static class MenuCommand
             return null;
         }
 
-        // Свой вариант — не набор, а способ. Наборы каталога хранят числа,
-        // а числа у сетей доставки живут днями: адрес image.tmdb.org сменился
-        // трижды за четверо суток. Спросить честный резолвер прямо сейчас
-        // надёжнее, чем помнить, что он отвечал в день сборки.
-        offered.Add(HonestResolver);
-        Console.WriteLine($"  {offered.Count}. Спросить честный резолвер сейчас — адрес возьмётся с DoH");
-
+        Console.WriteLine();
         Console.WriteLine("  0. Отмена");
         Console.Write("Выбор: ");
 
