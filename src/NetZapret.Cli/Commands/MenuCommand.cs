@@ -1217,10 +1217,10 @@ internal static class MenuCommand
             ? $"  Список: {part.Part.List} ({part.DomainCount} подсетей, например {part.Example})"
             : $"  Список: {part.Part.List} ({part.DomainCount} доменов, например {part.Example})");
 
-        // Пин в hosts показывается здесь же и до выбора. Он не режим, а его
-        // отмена: имя разрешается раньше нашего резолвера, и до маршрута
-        // дело не доходит вовсе. Строка «сейчас VPN» при живом пине говорит
-        // правду о правиле и неправду о трафике.
+        // Пин показывается до выбора, потому что он и есть один из вариантов.
+        // Спорит он с маршрутом не так, как кажется: адрес берётся из файла,
+        // но имя вынюхивается из рукопожатия, и правило по домену срабатывает
+        // поверх прибитого адреса. Победителем выходит правило.
         var pinned = PinnedNamesOf(part);
 
         if (pinned.Count > 0)
@@ -1233,8 +1233,12 @@ internal static class MenuCommand
             if (pinned.Count > 4)
                 Console.WriteLine($"  …и ещё {pinned.Count - 4}");
 
-            Console.WriteLine("  Пока запись жива, режим ниже ни на что не влияет:");
-            Console.WriteLine("  имя разрешается до нашего резолвера и идёт на прибитый адрес.");
+            if (part.Mode is RoutingMode.Proxy or RoutingMode.Desync)
+            {
+                Console.WriteLine("  Но режим выше отменяет пин: имя узнаётся из рукопожатия,");
+                Console.WriteLine("  и трафик уходит по правилу. Нужен пин — возьмите пункт 4.");
+            }
+
             Console.ForegroundColor = previous;
         }
 
@@ -1242,11 +1246,8 @@ internal static class MenuCommand
         Console.WriteLine("  1. Напрямую");
         Console.WriteLine("  2. Десинк");
         Console.WriteLine("  3. VPN");
-        Console.WriteLine("  4. Убрать свой выбор — вернуть как было");
-
-        if (pinned.Count > 0)
-            Console.WriteLine("  5. Снять пин из hosts — чтобы режим заработал");
-
+        Console.WriteLine("  4. Закрепить пин в hosts");
+        Console.WriteLine("  5. Убрать свой выбор — вернуть как было");
         Console.WriteLine("  0. Оставить как есть");
         Console.Write("Выбор: ");
 
@@ -1270,11 +1271,12 @@ internal static class MenuCommand
                 file.Set(kind, part.Part.List, RoutingMode.Proxy);
                 break;
             case "4":
-                file.Remove(kind, part.Part.List);
-                break;
-            case "5" when pinned.Count > 0:
-                UnpinNames(pinned.Keys.ToList());
+                PinPart(part, file, kind);
                 return;
+            case "5":
+                file.Remove(kind, part.Part.List);
+                UnpinOurs(part);
+                break;
             default:
                 return;
         }
@@ -1286,12 +1288,218 @@ internal static class MenuCommand
     }
 
     /// <summary>
+    /// Закрепляет имена части в hosts и уводит её маршрут «напрямую».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Второе — не довесок, а условие работы первого. Пин задаёт адрес,
+    /// но не дорогу: TUN вынюхивает имя из рукопожатия, и правило по домену
+    /// срабатывает поверх прибитого адреса. Оставить пин при режиме «VPN»
+    /// значит записать в файл строку, которая ни на что не влияет.
+    /// </para>
+    /// <para>
+    /// Так и потерялся ChatGPT: прибитый адрес был жив и отвечал, а правило
+    /// уводило соединение в туннель, который в тот час не работал. Проверка
+    /// объявляла мёртвым адрес, живой прокси числился трупом, и чинили
+    /// не то полдня.
+    /// </para>
+    /// </remarks>
+    private static void PinPart(ServiceRouting.PartStatus part, UserRulesFile file, MatchKind kind)
+    {
+        if (part.Part.ByAddress)
+        {
+            Message("Часть задана подсетями, а hosts понимает только имена.", ConsoleColor.Yellow);
+            return;
+        }
+
+        var catalog = ZapretCatalog.Discover();
+
+        if (catalog is null)
+        {
+            Message("Каталог адресов не найден — брать адрес неоткуда.", ConsoleColor.Yellow);
+            return;
+        }
+
+        var zones = HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _)
+            .Select(d => d.TrimStart('*', '.'))
+            .ToList();
+
+        // Сервисы каталога, покрывающие хоть одно наше имя. Списки Zapret
+        // и каталог ведутся порознь, и совпадение по названию сервиса
+        // не гарантировано — сверяем по именам.
+        var services = catalog.NamesByService()
+            .Where(pair => pair.Value.Any(name => Covers(zones, name)))
+            .Select(pair => pair.Key)
+            .ToList();
+
+        if (services.Count == 0)
+        {
+            Message("В каталоге нет адресов для имён этой части.", ConsoleColor.Yellow);
+            return;
+        }
+
+        var profile = ChooseProfile(catalog, services, zones);
+
+        if (profile is null)
+            return;
+
+        var answers = catalog.Answers(services, profile)
+            .Where(pair => Covers(zones, pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        if (answers.Count == 0)
+        {
+            Message("Этот набор не покрывает ни одного имени части.", ConsoleColor.Yellow);
+            return;
+        }
+
+        try
+        {
+            var result = HostsEditor.Pin(answers, note: $"{part.Part.Name} — набор {profile}");
+
+            file.Set(kind, part.Part.List, RoutingMode.Direct);
+            file.Save();
+
+            HostsEditor.FlushDns();
+
+            Message(
+                $"Прибито имён: {answers.Count}. Маршрут переведён на «напрямую» — " +
+                "иначе пин не работает. Копия файла: " + Path.GetFileName(result.Backup ?? "—"),
+                ConsoleColor.Green);
+
+            if (result.Shadowed.Count > 0)
+            {
+                Message(
+                    $"В файле есть и чужие записи на те же имена ({result.Shadowed.Count}). " +
+                    "Наш блок стоит выше и разбирается первым, но снимете наш — вернутся они.",
+                    ConsoleColor.Yellow);
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Message("Нет прав на запись в hosts — запустите программу от администратора.", ConsoleColor.Red);
+        }
+        catch (IOException ex)
+        {
+            Message($"Не удалось записать hosts: {ex.Message}", ConsoleColor.Red);
+        }
+    }
+
+    /// <summary>
+    /// Каким набором адресов прибивать.
+    /// </summary>
+    /// <remarks>
+    /// Наборы показываются с покрытием именно этой части, а не всего каталога:
+    /// «818 имён» ничего не говорит человеку, выбирающему адрес для ChatGPT,
+    /// а «покрывает 4 из 4» говорит всё. Лучшего набора среди них нет — каждый
+    /// живёт ровно столько, сколько живёт чужой узел за ним.
+    /// </remarks>
+    private static string? ChooseProfile(
+        ZapretCatalog catalog,
+        IReadOnlyList<string> services,
+        IReadOnlyList<string> zones)
+    {
+        var profiles = catalog.Profiles();
+
+        if (profiles.Count == 0)
+            return null;
+
+        Console.WriteLine();
+        Console.WriteLine("  Чей адрес поставить:");
+
+        var offered = new List<string>();
+
+        foreach (var profile in profiles)
+        {
+            var covered = catalog.Answers(services, profile.Id).Count(pair => Covers(zones, pair.Key));
+
+            if (covered == 0)
+                continue;
+
+            offered.Add(profile.Id);
+            Console.WriteLine($"  {offered.Count}. {profile.Name} — имён: {covered}");
+        }
+
+        if (offered.Count == 0)
+        {
+            Message("Ни один набор не покрывает эти имена.", ConsoleColor.Yellow);
+            return null;
+        }
+
+        Console.WriteLine("  0. Отмена");
+        Console.Write("Выбор: ");
+
+        var input = Console.ReadLine()?.Trim();
+
+        return int.TryParse(input, out var index) && index >= 1 && index <= offered.Count
+            ? offered[index - 1]
+            : null;
+    }
+
+    /// <summary>
+    /// Покрывает ли какая-нибудь зона списка это имя.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение по зоне, а не по точному имени, и это существенно. Списки
+    /// Zapret хранят <c>openai.com</c>, каталог — <c>api.openai.com</c>
+    /// и ещё три десятка поддоменов; при точном сравнении не совпало бы
+    /// ни одно имя, и раздел ответил бы «в каталоге нет адресов» на сервисе,
+    /// который каталог покрывает целиком.
+    /// </remarks>
+    private static bool Covers(IReadOnlyList<string> zones, string name)
+    {
+        foreach (var zone in zones)
+        {
+            if (string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Снимает только наши пины для части; чужих не трогает.</summary>
+    private static void UnpinOurs(ServiceRouting.PartStatus part)
+    {
+        if (part.Part.ByAddress)
+            return;
+
+        var ours = HostsEditor.Pins();
+
+        if (ours.Count == 0)
+            return;
+
+        var zones = HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _)
+            .Select(d => d.TrimStart('*', '.'))
+            .ToList();
+
+        var mine = ours.Keys.Where(name => Covers(zones, name)).ToList();
+
+        if (mine.Count == 0)
+            return;
+
+        try
+        {
+            HostsEditor.Unpin(mine);
+            HostsEditor.FlushDns();
+            Message($"Снято пинов: {mine.Count}.", ConsoleColor.Green);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не удалось снять пины: {ex.Message}", ConsoleColor.Red);
+        }
+    }
+
+    /// <summary>
     /// Какие имена этой части прибиты в hosts.
     /// </summary>
     /// <remarks>
-    /// Сверяется по точному имени. Пин на <c>chatgpt.com</c> не влияет
-    /// на <c>api.openai.com</c>, и приписывать части чужую запись значило бы
-    /// пугать человека тем, чего нет.
+    /// Сверяется по зоне, как это делает и сам список. Запись
+    /// <c>openai.com</c> в списке покрывает <c>api.openai.com</c> в файле,
+    /// и при точном сравнении сорок прибитых имён ChatGPT остались бы
+    /// незамеченными — а именно они и решают судьбу сервиса.
     /// </remarks>
     private static Dictionary<string, string> PinnedNamesOf(ServiceRouting.PartStatus part)
     {
@@ -1305,11 +1513,13 @@ internal static class MenuCommand
         if (hosts.Count == 0)
             return found;
 
-        foreach (var domain in HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _))
-        {
-            var name = domain.TrimStart('*', '.');
+        var zones = HostListReader.Read(part.Part.List, ZapretPaths.Discover()?.Root, out _)
+            .Select(d => d.TrimStart('*', '.'))
+            .ToList();
 
-            if (hosts.TryGetValue(name, out var addresses) && addresses.Count > 0)
+        foreach (var (name, addresses) in hosts)
+        {
+            if (addresses.Count > 0 && Covers(zones, name))
                 found[name] = string.Join(", ", addresses);
         }
 
@@ -2158,11 +2368,20 @@ internal static class MenuCommand
                 Console.ForegroundColor = previous;
             }
 
+            var ours = HostsEditor.Pins();
+
+            if (ours.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"  Из них ведём мы: {ours.Count} — они в блоке «netzapret» наверху файла.");
+            }
+
             Console.WriteLine();
             Console.WriteLine("  Номер — включить или выключить все имена этого адреса.");
             Console.WriteLine("  п — проверить, отвечают ли адреса.");
             Console.WriteLine("  с — показать имена одного адреса.");
             Console.WriteLine("  к — выключить всё, что покрывает каталог Zapret.");
+            Console.WriteLine("  о — открыть файл, чтобы дописать своё вручную.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -2190,8 +2409,55 @@ internal static class MenuCommand
                 continue;
             }
 
+            if (Is(input, "о", "o"))
+            {
+                OpenHostsFile();
+                continue;
+            }
+
             if (int.TryParse(input, out var index) && index >= 1 && index <= groups.Count)
                 ToggleGroup(groups[index - 1].ToList(), groups[index - 1].Key.Enabled);
+        }
+    }
+
+    /// <summary>
+    /// Открывает hosts в блокноте для правки руками.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Список с галочками покрывает не всё: свой адрес, которого нет ни в одном
+    /// наборе каталога, вписать больше негде. Отправлять человека искать файл
+    /// в <c>System32\drivers\etc</c> — лишний повод ошибиться папкой.
+    /// </para>
+    /// <para>
+    /// Блокнот запускается отдельно и не ждётся: файл общий, и держать наше
+    /// меню запертым, пока открыто чужое окно, незачем. О сбросе кэша сказано
+    /// сразу — без него правка не вступит в силу до перезагрузки, и это самая
+    /// частая причина «я исправил, а не работает».
+    /// </para>
+    /// </remarks>
+    private static void OpenHostsFile()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "notepad.exe",
+                ArgumentList = { HostsFile.DefaultPath },
+                UseShellExecute = true,
+            });
+
+            Message(
+                "Открыт блокнот. Свои строки пишите вне блока «netzapret» — его мы " +
+                "перезаписываем. После правки нажмите «п» здесь либо выполните " +
+                "ipconfig /flushdns, иначе изменение не вступит в силу.",
+                ConsoleColor.Green);
+        }
+        catch (Exception ex)
+        {
+            Message(
+                $"Не удалось открыть блокнот: {ex.Message}. Файл лежит здесь: {HostsFile.DefaultPath}",
+                ConsoleColor.Red);
         }
     }
 

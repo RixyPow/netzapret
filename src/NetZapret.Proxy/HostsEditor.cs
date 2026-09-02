@@ -50,8 +50,28 @@ public sealed record PinHealth
     public TimeSpan Elapsed { get; init; }
 }
 
+/// <summary>Чем кончилась запись в файл.</summary>
+public sealed record PinResult
+{
+    /// <summary>Куда сложена копия прежнего файла.</summary>
+    public string? Backup { get; init; }
+
+    /// <summary>Сколько имён осталось в нашем блоке.</summary>
+    public required int Pinned { get; init; }
+
+    /// <summary>
+    /// Чужие строки на те же имена.
+    /// </summary>
+    /// <remarks>
+    /// Наш блок стоит выше и разбирается первым, но чужая запись никуда
+    /// не делась. Человек, который снимет наш пин, получит её — и, не зная
+    /// о ней, решит, что снятие не сработало.
+    /// </remarks>
+    public required IReadOnlyList<string> Shadowed { get; init; }
+}
+
 /// <summary>
-/// Правит файл hosts: включает и выключает записи.
+/// Правит файл hosts: включает, выключает и прибивает записи.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -312,6 +332,234 @@ public static class HostsEditor
     /// Рядом с оригиналом и с отметкой времени: восстановление должно быть
     /// очевидным действием без нашего участия — переименовать и всё.
     /// </remarks>
+    /// <summary>Начало блока, который ведём мы.</summary>
+    public const string BlockBegin = "# >>> netzapret begin >>>";
+
+    /// <summary>Конец блока, который ведём мы.</summary>
+    public const string BlockEnd = "# <<< netzapret end <<<";
+
+    /// <summary>
+    /// Прибивает имена к адресам в собственном блоке файла.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Свой блок, и притом в начале файла. Первое — чтобы никогда не тронуть
+    /// чужую строку: файл ведут и Zapret GUI, и руками, и стереть там
+    /// не своё значит сломать то, что чинить будут не у нас. Второе — потому
+    /// что при двух записях на одно имя разбор идёт сверху, и блок, дописанный
+    /// в конец, проиграл бы чужому пину молча.
+    /// </para>
+    /// <para>
+    /// Возвращается не только путь к копии, но и список чужих строк на те же
+    /// имена. Молчать о них нельзя: пока они на месте, имя разрешается дважды,
+    /// и предсказать исход по файлу уже не выйдет.
+    /// </para>
+    /// </remarks>
+    /// <param name="entries">Имя и адрес; имена, что уже в блоке, заменяются.</param>
+    public static PinResult Pin(
+        IReadOnlyDictionary<string, string> entries,
+        string? path = null,
+        string? note = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+        var lines = File.Exists(target) ? File.ReadAllLines(target).ToList() : [];
+        var backup = File.Exists(target) ? Backup(target) : null;
+
+        var (start, end) = FindBlock(lines);
+        var kept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Уже прибитое нами сохраняется: закрепляют по одному сервису,
+        // и переписывать блок целиком значило бы снимать все прежние.
+        if (start >= 0)
+        {
+            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            {
+                if (Split(line) is { } pair)
+                    kept[pair.Name] = pair.Address;
+            }
+
+            lines.RemoveRange(start, end - start + 1);
+        }
+
+        foreach (var (name, address) in entries)
+            kept[name.TrimStart('*', '.')] = address;
+
+        var block = new List<string> { BlockBegin };
+
+        if (!string.IsNullOrWhiteSpace(note))
+            block.Add("# " + note);
+
+        block.Add("# Записи ведёт NetZapret. Правьте их через меню: при следующей");
+        block.Add("# записи всё, что дописано сюда руками, будет потеряно.");
+
+        foreach (var (name, address) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
+            block.Add($"{address} {name}");
+
+        block.Add(BlockEnd);
+        block.Add(string.Empty);
+
+        // В начало, но после шапки из комментариев: она объясняет формат файла,
+        // и вытеснять её вниз незачем.
+        lines.InsertRange(HeaderLength(lines), block);
+
+        Write(target, lines);
+
+        return new PinResult
+        {
+            Backup = backup,
+            Pinned = kept.Count,
+            Shadowed = Foreign(lines, kept.Keys),
+        };
+    }
+
+    /// <summary>Снимает имена из нашего блока; чужих строк не касается.</summary>
+    public static PinResult Unpin(IReadOnlyCollection<string> names, string? path = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+
+        if (!File.Exists(target))
+            return new PinResult { Pinned = 0, Shadowed = [] };
+
+        var lines = File.ReadAllLines(target).ToList();
+        var (start, end) = FindBlock(lines);
+
+        if (start < 0)
+            return new PinResult { Pinned = 0, Shadowed = [] };
+
+        var backup = Backup(target);
+        var drop = new HashSet<string>(names.Select(n => n.TrimStart('*', '.')), StringComparer.OrdinalIgnoreCase);
+        var left = 0;
+
+        for (int i = end - 1; i > start; i--)
+        {
+            if (Split(lines[i]) is not { } pair)
+                continue;
+
+            if (drop.Contains(pair.Name))
+                lines.RemoveAt(i);
+            else
+                left++;
+        }
+
+        // Пустой блок убирается целиком — иначе в файле копятся наши следы
+        // от сервисов, которых давно нет.
+        if (left == 0)
+        {
+            (start, end) = FindBlock(lines);
+
+            if (start >= 0)
+                lines.RemoveRange(start, end - start + 1);
+        }
+
+        Write(target, lines);
+
+        return new PinResult { Backup = backup, Pinned = left, Shadowed = [] };
+    }
+
+    /// <summary>Имена, которые мы прибили; пусто, если блока нет.</summary>
+    public static IReadOnlyDictionary<string, string> Pins(string? path = null)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var target = path ?? HostsFile.DefaultPath;
+
+        if (!File.Exists(target))
+            return result;
+
+        var lines = File.ReadAllLines(target).ToList();
+        var (start, end) = FindBlock(lines);
+
+        if (start < 0)
+            return result;
+
+        foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+        {
+            if (Split(line) is { } pair)
+                result[pair.Name] = pair.Address;
+        }
+
+        return result;
+    }
+
+    /// <summary>Границы нашего блока; <c>(-1, -1)</c> — блока нет.</summary>
+    private static (int Start, int End) FindBlock(IReadOnlyList<string> lines)
+    {
+        int start = -1;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].StartsWith(BlockBegin, StringComparison.Ordinal))
+                start = i;
+            else if (start >= 0 && lines[i].StartsWith(BlockEnd, StringComparison.Ordinal))
+                return (start, i);
+        }
+
+        return (-1, -1);
+    }
+
+    /// <summary>
+    /// Сколько строк занимает шапка файла.
+    /// </summary>
+    /// <remarks>
+    /// Шапка — это комментарии и пустые строки в самом начале. Первая же
+    /// запись её заканчивает: вставлять свой блок после чужого пина значит
+    /// отдать ему первенство, ради которого блок и ставится наверх.
+    /// </remarks>
+    private static int HeaderLength(IReadOnlyList<string> lines)
+    {
+        int i = 0;
+
+        while (i < lines.Count)
+        {
+            var text = lines[i].Trim().TrimStart('﻿');
+
+            if (text.Length != 0 && !text.StartsWith('#'))
+                break;
+
+            i++;
+        }
+
+        return i;
+    }
+
+    /// <summary>Чужие действующие строки на те же имена.</summary>
+    private static IReadOnlyList<string> Foreign(IReadOnlyList<string> lines, IEnumerable<string> names)
+    {
+        var watch = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        var (start, end) = FindBlock(lines);
+        var found = new List<string>();
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (start >= 0 && i >= start && i <= end)
+                continue;
+
+            if (Split(lines[i]) is { } pair && watch.Contains(pair.Name))
+                found.Add($"{pair.Address} {pair.Name}");
+        }
+
+        return found;
+    }
+
+    /// <summary>Адрес и первое имя действующей строки; <c>null</c> — не запись.</summary>
+    private static (string Address, string Name)? Split(string line)
+    {
+        var text = line.Trim().TrimStart('﻿');
+
+        if (text.Length == 0 || text.StartsWith('#'))
+            return null;
+
+        var hash = text.IndexOf('#');
+
+        if (hash >= 0)
+            text = text[..hash];
+
+        var parts = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+        return parts.Length >= 2 && IPAddress.TryParse(parts[0], out _)
+            ? (parts[0], parts[1])
+            : null;
+    }
+
     private static string Backup(string path)
     {
         var backup = $"{path}.netzapret-{DateTime.Now:yyyyMMdd-HHmmss}.bak";
