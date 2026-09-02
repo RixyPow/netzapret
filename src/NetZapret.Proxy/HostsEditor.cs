@@ -361,12 +361,94 @@ public static class HostsEditor
         string? path = null,
         string? note = null)
     {
+        var many = entries.ToDictionary(
+            p => p.Key,
+            p => (IReadOnlyList<string>)[p.Value],
+            StringComparer.OrdinalIgnoreCase);
+
+        return PinMany(many, path, note, absorb: false);
+    }
+
+    /// <summary>
+    /// Забирает записи файла в наш блок, убирая повторы.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Наводит порядок там, где его вести перестали. В живом файле оказалось
+    /// 839 записей на 796 имён — сорок три повтора, — собранных тремя разными
+    /// механизмами: каталогом Zapret, отдельным блоком Telegram и руками.
+    /// Разобрать такое глазами нельзя, а действует из повторов первый,
+    /// и какой именно — по файлу не видно.
+    /// </para>
+    /// <para>
+    /// Все адреса имени сохраняются, а не первый попавшийся: у
+    /// <c>instagram.com</c> их три, включая IPv6, у <c>openai.com</c> четыре,
+    /// и Windows перебирает их по очереди. Оставить один значило бы
+    /// собственноручно урезать запасные пути.
+    /// </para>
+    /// <para>
+    /// Выключенные строки не трогаются вовсе: человек выключил их намеренно,
+    /// и втянуть их в наш блок — значит либо потерять, либо включить обратно.
+    /// </para>
+    /// </remarks>
+    public static PinResult Absorb(string? path = null)
+    {
         var target = path ?? HostsFile.DefaultPath;
-        var lines = File.Exists(target) ? File.ReadAllLines(target).ToList() : [];
+
+        if (!File.Exists(target))
+            return new PinResult { Pinned = 0, Shadowed = [] };
+
+        var lines = File.ReadAllLines(target).ToList();
+        var (start, end) = FindBlock(lines);
+        var gathered = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (start >= 0 && i >= start && i <= end)
+                continue;
+
+            if (Split(lines[i]) is not { } pair)
+                continue;
+
+            if (!gathered.TryGetValue(pair.Name, out var list))
+                gathered[pair.Name] = list = [];
+
+            if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
+                list.Add(pair.Address);
+        }
+
+        // Строки, ушедшие к нам, убираются с прежних мест — иначе повторы
+        // не исчезнут, а удвоятся.
+        for (int i = lines.Count - 1; i >= 0; i--)
+        {
+            if (start >= 0 && i >= start && i <= end)
+                continue;
+
+            if (Split(lines[i]) is not null)
+                lines.RemoveAt(i);
+        }
+
+        return PinMany(
+            gathered.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value, StringComparer.OrdinalIgnoreCase),
+            path,
+            note: null,
+            absorb: true,
+            prepared: lines);
+    }
+
+    private static PinResult PinMany(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
+        string? path,
+        string? note,
+        bool absorb,
+        List<string>? prepared = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
         var backup = File.Exists(target) ? Backup(target) : null;
+        var lines = prepared ?? (File.Exists(target) ? File.ReadAllLines(target).ToList() : []);
 
         var (start, end) = FindBlock(lines);
-        var kept = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
         // Уже прибитое нами сохраняется: закрепляют по одному сервису,
         // и переписывать блок целиком значило бы снимать все прежние.
@@ -374,15 +456,35 @@ public static class HostsEditor
         {
             foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
             {
-                if (Split(line) is { } pair)
-                    kept[pair.Name] = pair.Address;
+                if (Split(line) is not { } pair)
+                    continue;
+
+                if (!kept.TryGetValue(pair.Name, out var list))
+                    kept[pair.Name] = list = [];
+
+                if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
+                    list.Add(pair.Address);
             }
 
             lines.RemoveRange(start, end - start + 1);
         }
 
-        foreach (var (name, address) in entries)
-            kept[name.TrimStart('*', '.')] = address;
+        foreach (var (rawName, addresses) in entries)
+        {
+            var name = rawName.TrimStart('*', '.');
+
+            // Закрепление заменяет прежний адрес имени, а сбор — дополняет:
+            // в первом случае человек выбрал новый набор взамен старого,
+            // во втором мы лишь переносим то, что уже есть.
+            if (!absorb || !kept.TryGetValue(name, out var list))
+                kept[name] = list = [];
+
+            foreach (var address in addresses)
+            {
+                if (!list.Contains(address, StringComparer.OrdinalIgnoreCase))
+                    list.Add(address);
+            }
+        }
 
         var block = new List<string> { BlockBegin };
 
@@ -392,8 +494,11 @@ public static class HostsEditor
         block.Add("# Записи ведёт NetZapret. Правьте их через меню: при следующей");
         block.Add("# записи всё, что дописано сюда руками, будет потеряно.");
 
-        foreach (var (name, address) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
-            block.Add($"{address} {name}");
+        foreach (var (name, addresses) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            foreach (var address in addresses)
+                block.Add($"{address} {name}");
+        }
 
         block.Add(BlockEnd);
         block.Add(string.Empty);

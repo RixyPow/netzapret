@@ -2442,6 +2442,7 @@ internal static class MenuCommand
             Console.WriteLine("  с — показать имена одного адреса.");
             Console.WriteLine("  к — выключить всё, что покрывает каталог Zapret.");
             Console.WriteLine("  о — открыть файл, чтобы дописать своё вручную.");
+            Console.WriteLine("  п р — прибрать: забрать все записи к нам и убрать повторы.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
             Console.Write("> ");
@@ -2475,8 +2476,81 @@ internal static class MenuCommand
                 continue;
             }
 
+            if (Is(input, "пр", "pr"))
+            {
+                TidyHostsFile(entries);
+                continue;
+            }
+
             if (int.TryParse(input, out var index) && index >= 1 && index <= groups.Count)
                 ToggleGroup(groups[index - 1].ToList(), groups[index - 1].Key.Enabled);
+        }
+    }
+
+    /// <summary>
+    /// Забирает все записи файла в наш блок и убирает повторы.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Спрашивает подтверждение и называет число, потому что действие крупное:
+    /// в живом файле оказалось 839 записей на 796 имён, собранных тремя
+    /// механизмами сразу. После сбора файл ведём мы одни — и это же значит,
+    /// что редактор Zapret GUI, запущенный после, снова допишет своё рядом.
+    /// </para>
+    /// <para>
+    /// Отдельно называется, сколько имён каталог не знает. Их сбор тоже
+    /// заберёт, но помнить о них стоит: восстановить их будет неоткуда,
+    /// кроме копии файла, — каталог их не отдаст.
+    /// </para>
+    /// </remarks>
+    private static void TidyHostsFile(IReadOnlyList<HostsEntry> entries)
+    {
+        var active = entries.Where(e => e.Enabled).ToList();
+        var names = active.SelectMany(e => e.Names).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var rows = active.Sum(e => e.Names.Count);
+
+        Console.WriteLine();
+        Console.WriteLine($"  Записей: {rows}, имён: {names.Count}, повторов: {rows - names.Count}.");
+
+        var catalog = ZapretCatalog.Discover();
+
+        if (catalog is not null)
+        {
+            var known = catalog.NamesByService().Values
+                .SelectMany(v => v)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var strangers = names.Count(n => !known.Contains(n));
+
+            if (strangers > 0)
+                Console.WriteLine($"  Из них каталог не знает {strangers} — вернуть их потом будет неоткуда.");
+        }
+
+        Console.WriteLine("  Выключенные строки останутся как есть.");
+        Console.Write("  Забрать всё к нам? (д/н): ");
+
+        var answer = Console.ReadLine()?.Trim() ?? string.Empty;
+
+        if (!Is(answer, "д", "y") && !Is(answer, "да", "yes"))
+            return;
+
+        try
+        {
+            var result = HostsEditor.Absorb();
+            HostsEditor.FlushDns();
+
+            Message(
+                $"Собрано имён: {result.Pinned}. Копия прежнего файла: " +
+                Path.GetFileName(result.Backup ?? "—"),
+                ConsoleColor.Green);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Message("Нет прав на запись в hosts — запустите программу от администратора.", ConsoleColor.Red);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не удалось прибрать файл: {ex.Message}", ConsoleColor.Red);
         }
     }
 

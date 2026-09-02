@@ -233,6 +233,95 @@ public class HostsPinTests : IDisposable
         Assert.Contains(File.ReadAllLines(result.Backup!), l => l.Trim() == "8.8.8.8 example.org");
     }
 
+    /// <summary>Сбор забирает записи к нам и убирает повторы.</summary>
+    /// <remarks>
+    /// В живом файле оказалось 839 записей на 796 имён — сорок три повтора,
+    /// накопленных тремя механизмами сразу. Действует из повторов первый,
+    /// и какой именно, по файлу не видно.
+    /// </remarks>
+    [Fact]
+    public void Absorb_gathers_entries_and_drops_repeats()
+    {
+        Write("# заголовок", "1.1.1.1 a.test", "2.2.2.2 b.test", "1.1.1.1 a.test");
+
+        var result = HostsEditor.Absorb(_path);
+
+        Assert.Equal(2, result.Pinned);
+        Assert.Single(Read(), l => l.Trim() == "1.1.1.1 a.test");
+        Assert.Single(Read(), l => l.Trim() == "2.2.2.2 b.test");
+    }
+
+    /// <summary>Все адреса имени сохраняются, а не первый попавшийся.</summary>
+    /// <remarks>
+    /// У <c>instagram.com</c> их три, включая IPv6, у <c>openai.com</c>
+    /// четыре, и Windows перебирает их по очереди. Оставить один значило бы
+    /// урезать запасные пути своими руками.
+    /// </remarks>
+    [Fact]
+    public void Absorb_keeps_every_address_of_a_name()
+    {
+        Write(
+            "# заголовок",
+            "163.70.151.174 instagram.com",
+            "2a03:2880:f330:25:face:b00c:0:4420 instagram.com",
+            "2a03:2880:f342:22:face:b00c:0:4420 instagram.com");
+
+        HostsEditor.Absorb(_path);
+
+        var pins = Read().Where(l => l.Contains("instagram.com")).ToList();
+
+        Assert.Equal(3, pins.Count);
+        Assert.Contains(pins, l => l.Trim().StartsWith("163.70.151.174"));
+        Assert.Contains(pins, l => l.Trim().StartsWith("2a03:2880:f330"));
+        Assert.Contains(pins, l => l.Trim().StartsWith("2a03:2880:f342"));
+    }
+
+    /// <summary>Выключенные строки сбор не трогает.</summary>
+    /// <remarks>
+    /// Их выключили намеренно. Втянуть такую строку в наш блок — значит либо
+    /// потерять её, либо включить обратно; и то и другое сделает за человека
+    /// выбор, который он уже сделал сам.
+    /// </remarks>
+    [Fact]
+    public void Absorb_leaves_disabled_lines_alone()
+    {
+        Write("# заголовок", "1.1.1.1 a.test", "# 9.9.9.9 off.test");
+
+        HostsEditor.Absorb(_path);
+
+        Assert.Contains(Read(), l => l.Trim() == "# 9.9.9.9 off.test");
+        Assert.DoesNotContain(HostsEditor.Pins(_path).Keys, k => k == "off.test");
+    }
+
+    /// <summary>Собранное не остаётся на прежнем месте.</summary>
+    /// <remarks>Иначе повторы не исчезли бы, а удвоились.</remarks>
+    [Fact]
+    public void Absorb_removes_the_originals()
+    {
+        Write("# заголовок", "1.1.1.1 a.test", "2.2.2.2 b.test");
+
+        HostsEditor.Absorb(_path);
+
+        var lines = Read();
+        var block = Array.FindIndex(lines, l => l.Contains(HostsEditor.BlockEnd));
+
+        Assert.All(lines.Skip(block), l => Assert.Null(l.Trim() == "1.1.1.1 a.test" ? "дубль" : null));
+        Assert.Single(lines, l => l.Trim() == "1.1.1.1 a.test");
+    }
+
+    /// <summary>Уже собранное переживает повторный сбор.</summary>
+    [Fact]
+    public void Absorb_is_repeatable()
+    {
+        Write("# заголовок", "1.1.1.1 a.test");
+
+        HostsEditor.Absorb(_path);
+        var result = HostsEditor.Absorb(_path);
+
+        Assert.Equal(1, result.Pinned);
+        Assert.Single(Read(), l => l.Trim() == "1.1.1.1 a.test");
+    }
+
     /// <summary>Ведущие точки и звёздочки списка в файл не попадают.</summary>
     /// <remarks>
     /// Списки Zapret пишут зоны как <c>*.chatgpt.com</c>, а hosts понимает
