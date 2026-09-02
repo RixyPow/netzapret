@@ -1383,7 +1383,9 @@ internal static class MenuCommand
 
         try
         {
-            var result = HostsEditor.Pin(answers, note: $"{part.Part.Name} — набор {profile}");
+            var result = HostsEditor.Pin(answers, note: $"{part.Part.Name} — набор {DescribeSource(profile, mine)}");
+
+            var shadowing = ClearShadowingRules(file, zones);
 
             file.Set(kind, part.Part.List, RoutingMode.Direct);
             file.Save();
@@ -1394,6 +1396,14 @@ internal static class MenuCommand
                 $"Прибито имён: {answers.Count}. Маршрут переведён на «напрямую» — " +
                 "иначе пин не работает. Копия файла: " + Path.GetFileName(result.Backup ?? "—"),
                 ConsoleColor.Green);
+
+            if (shadowing.Count > 0)
+            {
+                Message(
+                    "Убраны прежние правила, которые перекрывали новое: " +
+                    string.Join(", ", shadowing) + ".",
+                    ConsoleColor.Yellow);
+            }
 
             if (result.Shadowed.Count > 0)
             {
@@ -1424,6 +1434,66 @@ internal static class MenuCommand
     /// </remarks>
     /// <summary>Пометка выбора из нашего каталога; за ней идёт номер записи.</summary>
     private const string OwnPrefix = "\0own:";
+
+    /// <summary>Чем подписать наш блок в hosts.</summary>
+    private static string DescribeSource(string profile, IReadOnlyList<OwnCatalogEntry> mine) =>
+        profile == HonestResolver ? "честный резолвер"
+        : profile.StartsWith(OwnPrefix, StringComparison.Ordinal)
+            ? mine[int.Parse(profile[OwnPrefix.Length..])].Name
+            : $"набор {profile}";
+
+    /// <summary>
+    /// Убирает свои правила, которые перекрыли бы новое «напрямую».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Правила проверяются по порядку, и выигрывает первое совпавшее.
+    /// Закрепление пина дописывает правило на список, а оно оказывается
+    /// в конце — под прежними доменными, которые человек ставил раньше.
+    /// Пин при этом встаёт, а маршрут к нему нет.
+    /// </para>
+    /// <para>
+    /// Так и вышло у пользователя: <c>*.chatgpt.com</c> и <c>*.openai.com</c>
+    /// стояли первыми и вторыми со значением «через VPN», а записанное
+    /// пунктом «Закрепить пин» правило «напрямую» — тринадцатым. Адрес
+    /// из каталога прибивался исправно и тут же уводился в туннель,
+    /// и выглядело это так, будто каталог ломает сервис.
+    /// </para>
+    /// <para>
+    /// Убираются только свои доменные правила и только те, что покрывают
+    /// имена этой части. Поставляемый набор не трогается: он ниже своего
+    /// по старшинству и перекрыть новое правило не может.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<string> ClearShadowingRules(UserRulesFile file, IReadOnlyList<string> zones)
+    {
+        var removed = new List<string>();
+
+        for (int i = file.Entries.Count - 1; i >= 0; i--)
+        {
+            var entry = file.Entries[i];
+
+            if (entry.Match != MatchKind.Domain)
+                continue;
+
+            var zone = entry.Value.TrimStart('*', '.');
+
+            // Совпадение в обе стороны: правило на зону перекрывает имя части,
+            // а правило на имя — покрывается зоной списка. Оба случая мешают.
+            bool touches = zones.Any(z =>
+                string.Equals(z, zone, StringComparison.OrdinalIgnoreCase)
+                || z.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)
+                || zone.EndsWith("." + z, StringComparison.OrdinalIgnoreCase));
+
+            if (!touches)
+                continue;
+
+            removed.Add(entry.Value);
+            file.RemoveAt(i);
+        }
+
+        return removed;
+    }
 
     private static string? ChooseProfile(
         ZapretCatalog? catalog,
