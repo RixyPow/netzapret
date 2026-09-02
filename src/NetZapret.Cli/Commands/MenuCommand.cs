@@ -596,15 +596,27 @@ internal static class MenuCommand
             Console.WriteLine();
             Console.WriteLine($"  Апстрим DNS: {DescribeDns(settings)}");
             Console.WriteLine();
-            Console.WriteLine($"  Адреса из каталога: {DescribeCatalog(settings)}");
-            Console.WriteLine();
             Console.WriteLine("  1. Выбрать резолвер");
             Console.WriteLine("  2. Проверить резолверы");
             Console.WriteLine(settings.DnsThroughTunnel
                 ? "  3. Разрешать имена напрямую"
                 : "  3. Разрешать имена через туннель");
-            Console.WriteLine("  4. Каталог Zapret ....... сервисы, которые закрылись от России сами");
             Console.WriteLine("  0. Назад");
+
+            // Каталог отсюда убран. Он делал то же, что теперь делает пункт
+            // «Закрепить пин в hosts», но через наш резолвер — и делал молча
+            // ничего, если не выбрать набор адресов, чего меню не требовало.
+            // Два пути к одной цели, из которых один тихо не работает, хуже
+            // одного: человек чинит не тем и не знает об этом.
+            if (settings.AddressServices.Count > 0)
+            {
+                Console.WriteLine();
+                Console.WriteLine(
+                    $"  Прежняя настройка «Каталог Zapret» ({settings.AddressServices.Count} сервисов)");
+                Console.WriteLine("  больше не применяется. Её место — «Сервисы и маршруты» →");
+                Console.WriteLine("  нужный сервис → «Закрепить пин в hosts».");
+                Console.WriteLine("  9 — забыть её.");
+            }
             Console.Write("Выбор: ");
 
             switch (Console.ReadLine()?.Trim())
@@ -616,9 +628,10 @@ internal static class MenuCommand
                     await CheckResolversAsync(settings, cancellationToken);
                     break;
 
-                case "4":
-                    settings = CatalogMenu(settings);
+                case "9" when settings.AddressServices.Count > 0:
+                    settings = settings with { AddressServices = [], AddressProfile = null };
                     settings.Save(AppSettings.DefaultPath);
+                    Message("Забыто. Адреса теперь ставятся пином в hosts.", ConsoleColor.Green);
                     break;
 
                 case "3":
@@ -635,208 +648,6 @@ internal static class MenuCommand
                     return settings;
             }
         }
-    }
-
-    private static string DescribeCatalog(AppSettings settings)
-    {
-        if (settings.AddressServices.Count == 0)
-            return "не используются";
-
-        int n = settings.AddressServices.Count;
-        var набор = settings.AddressProfile is null ? string.Empty : $", набор {settings.AddressProfile}";
-
-        return $"{n} {Plural(n, "сервис", "сервиса", "сервисов")}{набор}";
-    }
-
-    /// <summary>
-    /// Каталог сервисов Zapret: кому выдать адрес чужого прокси.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Отвечает на то, что маршрутами не решается вовсе. ChatGPT, Spotify,
-    /// Claude закрываются от России сами — связь до них исправна, отказывает
-    /// сайт, разобрав запрос. Ни десинк, ни туннель тут не при чём; помогает
-    /// только адрес посредника, и такие адреса Zapret собирает в каталоге.
-    /// </para>
-    /// <para>
-    /// Отличие от редактора hosts в Zapret одно, и оно в нашу пользу: те же
-    /// ответы отдаёт наш резолвер. Системный файл не трогается — значит
-    /// не нужен администратор, ничего не переживает удаление программы
-    /// и не действует на приложения, которые мы не ведём.
-    /// </para>
-    /// </remarks>
-    private static AppSettings CatalogMenu(AppSettings settings)
-    {
-        var catalog = ZapretCatalog.Discover();
-
-        if (catalog is null)
-        {
-            Message(
-                "Каталог не найден. Он лежит в " + ZapretCatalog.RelativePath +
-                " внутри установки Zapret и появился не во всех её версиях.",
-                ConsoleColor.Yellow);
-
-            Pause();
-            return settings;
-        }
-
-        var services = catalog.Services();
-
-        if (services.Count == 0)
-        {
-            Message("Каталог пуст или его устройство изменилось.", ConsoleColor.Yellow);
-            return settings;
-        }
-
-        var chosen = settings.AddressServices.ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        while (true)
-        {
-            ClearScreen();
-            Console.WriteLine("Каталог Zapret");
-            Console.WriteLine(new string('=', 62));
-            Console.WriteLine();
-            Console.WriteLine("  Сервисы, которые закрываются от России сами. Связь до них");
-            Console.WriteLine("  исправна — отказывает сайт, и лечится это только адресом");
-            Console.WriteLine("  посредника. Отдаёт его наш резолвер, hosts не трогается.");
-            Console.WriteLine();
-            Console.WriteLine($"  Набор адресов: {settings.AddressProfile ?? "не выбран"}");
-            Console.WriteLine();
-
-            var previous = Console.ForegroundColor;
-
-            // Пин в hosts перебивает наш ответ: имя ищется в файле раньше,
-            // чем спросят резолвер. Включённый здесь сервис, чьи имена там
-            // прибиты, не заработает — и молчать об этом нельзя, иначе
-            // человек будет менять наборы, не понимая, почему ничего
-            // не меняется.
-            var pinned = PinnedInCatalog(catalog);
-
-            for (int i = 0; i < services.Count; i++)
-            {
-                var service = services[i];
-                bool on = chosen.Contains(service.Id);
-                bool clash = on && pinned.Contains(service.Id);
-
-                Console.ForegroundColor = clash ? ConsoleColor.Yellow
-                    : on ? ConsoleColor.Green
-                    : ConsoleColor.DarkGray;
-
-                Console.WriteLine(
-                    $"  {i + 1,3}. {(on ? "[вкл]" : "[  ]"),-6} {Truncate(service.Name, 40),-40} " +
-                    $"{service.Domains,3} дом.  {(service.Kind == "dns" ? "набор" : "свой адрес"),-10}" +
-                    (clash ? "  ПЕРЕБИТ hosts" : string.Empty));
-
-                Console.ForegroundColor = previous;
-            }
-
-            if (chosen.Overlaps(pinned))
-            {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.WriteLine();
-                Console.WriteLine("  Отмеченные «ПЕРЕБИТ hosts» не заработают: их имена прибиты");
-                Console.WriteLine("  в системном файле, и он отвечает раньше нашего резолвера.");
-                Console.WriteLine("  Снять записи — пункт меню «Файл hosts».");
-                Console.ForegroundColor = previous;
-            }
-
-            Console.WriteLine();
-            Console.WriteLine("  Номер — включить или выключить сервис.");
-            Console.WriteLine("  н — выбрать набор адресов (нужен сервисам с пометкой «набор»).");
-            Console.WriteLine("  Пусто — назад.");
-            Console.WriteLine();
-            Console.Write("> ");
-
-            var input = Console.ReadLine()?.Trim();
-
-            if (string.IsNullOrWhiteSpace(input))
-            {
-                return settings with { AddressServices = chosen.ToList() };
-            }
-
-            if (Is(input, "н", "n"))
-            {
-                settings = ChooseProfile(settings, catalog);
-                continue;
-            }
-
-            if (int.TryParse(input, out var index) && index >= 1 && index <= services.Count)
-            {
-                var id = services[index - 1].Id;
-
-                if (!chosen.Remove(id))
-                    chosen.Add(id);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Сервисы каталога, чьи имена прибиты в системном hosts.
-    /// </summary>
-    /// <remarks>
-    /// Достаточно одного совпавшего имени: у сервиса их десятки, и прибитый
-    /// среди них хотя бы один означает, что часть его пойдёт мимо нашего
-    /// ответа. Половина работающего сервиса выглядит как поломка ничуть
-    /// не меньше, чем целиком неработающий.
-    /// </remarks>
-    private static HashSet<string> PinnedInCatalog(ZapretCatalog catalog)
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var hosts = HostsFile.Read();
-
-        if (hosts.Count == 0)
-            return result;
-
-        foreach (var (service, names) in catalog.NamesByService())
-        {
-            if (names.Any(hosts.ContainsKey))
-                result.Add(service);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Выбор набора адресов.
-    /// </summary>
-    /// <remarks>
-    /// Наборы — конкурирующие прокси для одних и тех же имён, и «лучшего»
-    /// среди них нет: каждый живёт ровно столько, сколько живёт узел за ним.
-    /// Поэтому выбирает человек, а мы показываем, сколько имён покрыто.
-    /// </remarks>
-    private static AppSettings ChooseProfile(AppSettings settings, ZapretCatalog catalog)
-    {
-        var profiles = catalog.Profiles();
-
-        if (profiles.Count == 0)
-        {
-            Message("Наборов в каталоге нет.", ConsoleColor.Yellow);
-            return settings;
-        }
-
-        Console.WriteLine();
-        Console.WriteLine("Набор адресов");
-        Console.WriteLine();
-
-        for (int i = 0; i < profiles.Count; i++)
-        {
-            var active = string.Equals(profiles[i].Id, settings.AddressProfile, StringComparison.OrdinalIgnoreCase)
-                ? "   <- сейчас"
-                : string.Empty;
-
-            Console.WriteLine($"  {i + 1}. {profiles[i].Name,-20} {profiles[i].Answers,4} имён{active}");
-        }
-
-        Console.WriteLine();
-        Console.WriteLine("  Если сервис не заработал — попробуйте другой набор:");
-        Console.WriteLine("  за каждым стоит чужой узел, и они отказывают по одному.");
-        Console.WriteLine();
-        Console.Write("Номер: ");
-
-        return int.TryParse(Console.ReadLine()?.Trim(), out var index)
-            && index >= 1 && index <= profiles.Count
-                ? settings with { AddressProfile = profiles[index - 1].Id }
-                : settings;
     }
 
     private static async Task CheckResolversAsync(AppSettings settings, CancellationToken cancellationToken)
@@ -2122,27 +1933,17 @@ internal static class MenuCommand
             foreach (var note in pinnedNotes)
                 Console.WriteLine($"Файл hosts: {note}");
 
-            // Подстановки собираются тем же способом, что и в команде config.
-            // Пока каждый путь складывал их по-своему, меню не передавало их
-            // вовсе — и настройка выглядела применённой, ничего не делая.
-            var catalog = ZapretCatalog.Discover();
-
-            var fromCatalog = catalog is not null && settings.AddressServices.Count > 0
-                ? catalog.Answers(settings.AddressServices, settings.AddressProfile)
-                : new Dictionary<string, string>();
-
-            // Выбор, который ничего не дал, называется вслух. Молчание здесь
-            // стоило человеку уверенности, что каталог работает: семь галочек
-            // стояло, набор был не выбран, и подстановок выходило ноль —
-            // сервисы вида dns берут адрес из набора, а без него запрос
-            // к базе не выполняется вовсе.
-            if (CatalogSelection.Explain(
-                settings.AddressServices.Count, settings.AddressProfile, fromCatalog.Count) is { } why)
+            // Каталог через резолвер больше не применяется — то же самое
+            // делает пин в hosts, и делает на виду. Прежняя настройка
+            // называется вслух, чтобы её исчезновение не было тихим.
+            if (settings.AddressServices.Count > 0)
             {
-                Console.WriteLine($"Каталог Zapret: {why}");
+                Console.WriteLine(
+                    $"Каталог Zapret: прежняя настройка ({settings.AddressServices.Count} сервисов) " +
+                    "не применяется — её место заняло «Закрепить пин в hosts».");
             }
 
-            var addresses = AddressOverrides.Merge(fromCatalog, AddressOverrides.Load());
+            var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
             {

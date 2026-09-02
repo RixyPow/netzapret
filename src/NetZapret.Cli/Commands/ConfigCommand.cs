@@ -55,24 +55,19 @@ internal static class ConfigCommand
         var settings = AppSettings.Load(cmd.Value("settings", AppSettings.DefaultPath));
         var catalog = ZapretCatalog.Discover(zapretRoot);
 
-        var fromCatalog = catalog is not null && settings.AddressServices.Count > 0
-            ? catalog.Answers(settings.AddressServices, settings.AddressProfile)
-            : new Dictionary<string, string>();
-
-        if (fromCatalog.Count > 0)
+        // Каталог через резолвер больше не применяется: то же самое делает
+        // пин в hosts, и делает это на виду. Два пути к одной цели, из которых
+        // один молчит, когда не выбран набор адресов, стоили работающего
+        // сервиса — чинили не тем и не знали об этом.
+        if (settings.AddressServices.Count > 0)
         {
             Console.WriteLine(
-                $"Из каталога Zapret: {fromCatalog.Count} адресов " +
-                $"для {settings.AddressServices.Count} сервисов" +
-                (settings.AddressProfile is null ? string.Empty : $", набор {settings.AddressProfile}"));
-        }
-        else if (CatalogSelection.Explain(
-            settings.AddressServices.Count, settings.AddressProfile, fromCatalog.Count) is { } why)
-        {
-            Console.WriteLine($"Каталог Zapret: {why}");
+                $"Каталог Zapret: прежняя настройка ({settings.AddressServices.Count} сервисов) " +
+                "не применяется. Адрес ставится пином: «Сервисы и маршруты» → сервис → " +
+                "«Закрепить пин в hosts».");
         }
 
-        var addresses = AddressOverrides.Merge(fromCatalog, overrides);
+        var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), overrides);
 
         if (addresses.Count > 0)
             Console.WriteLine($"Подставлено адресов всего: {addresses.Count}");
