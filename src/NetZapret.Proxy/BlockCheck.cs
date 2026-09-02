@@ -688,6 +688,12 @@ public static class BlockCheck
             int? status = null;
             long? promised = null;
 
+            // Длина заголовков считается отдельно: Content-Length обещает
+            // только тело, а total растёт с первого байта ответа. Без поправки
+            // сравнение завышало бы полученное и объявляло страницу дочитанной
+            // раньше времени.
+            int header = 0;
+
             while (total < EnoughBytes)
             {
                 using var silence = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -727,9 +733,22 @@ public static class BlockCheck
                 {
                     status = ParseStatus(buffer, read);
                     promised = ParseContentLength(buffer, read);
+                    header = HeaderLength(buffer, read);
                 }
 
                 total += read;
+
+                // Тело пришло целиком — дальше ждать нечего.
+                //
+                // Прежде выход был только через закрытие соединения или через
+                // четверть мегабайта, и сайт, отдавший всё обещанное, но
+                // соединение не закрывший, попадал в тишину на три секунды
+                // и объявлялся оборванным. Разница между «поток убили» и «ответ
+                // закончился» — в том, дошло ли обещанное; закрытие сокета
+                // сервером к этому отношения не имеет и зависит от его
+                // настроек, а не от нашей связи.
+                if (promised is { } body && header > 0 && total - header >= body)
+                    break;
             }
 
             return new ProbeOutcome
@@ -752,6 +771,28 @@ public static class BlockCheck
                 Detail = total > 0 ? $"оборвано на {total} Б: {Explain(ex)}" : Explain(ex),
             };
         }
+    }
+
+    /// <summary>
+    /// Длина заголовков вместе с пустой строкой; <c>0</c> — конец не найден.
+    /// </summary>
+    /// <remarks>
+    /// Нужна, чтобы отличить полученное тело от полученного ответа целиком.
+    /// Ноль означает «заголовки не поместились в первую порцию» — случай
+    /// редкий, и полагаться на длину тогда нельзя.
+    /// </remarks>
+    internal static int HeaderLength(byte[] buffer, int length)
+    {
+        for (int i = 0; i + 3 < length; i++)
+        {
+            if (buffer[i] == '\r' && buffer[i + 1] == '\n'
+                && buffer[i + 2] == '\r' && buffer[i + 3] == '\n')
+            {
+                return i + 4;
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>

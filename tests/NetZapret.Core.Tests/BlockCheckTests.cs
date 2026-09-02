@@ -215,6 +215,41 @@ public class BlockCheckTests
         Assert.Equal(expected, BlockCheck.IsStub(System.Net.IPAddress.Parse(address)));
     }
 
+    /// <summary>Конец заголовков находится по пустой строке.</summary>
+    /// <remarks>
+    /// Нужно, чтобы отличить «тело пришло целиком» от «поток убили». Пока
+    /// длина заголовков не вычиталась, полученное завышалось на их размер,
+    /// и страница объявлялась дочитанной раньше, чем приходила.
+    /// </remarks>
+    [Fact]
+    public void The_end_of_the_headers_is_found()
+    {
+        var response = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello");
+
+        Assert.Equal(response.Length - 5, BlockCheck.HeaderLength(response, response.Length));
+    }
+
+    /// <remarks>
+    /// Заголовки, не поместившиеся в первую порцию, дают ноль: полагаться
+    /// на длину тела тогда нельзя, и признак завершения не применяется.
+    /// </remarks>
+    [Fact]
+    public void Headers_split_across_reads_give_zero()
+    {
+        var partial = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n");
+
+        Assert.Equal(0, BlockCheck.HeaderLength(partial, partial.Length));
+    }
+
+    /// <remarks>Пустое тело — тоже законченный ответ.</remarks>
+    [Fact]
+    public void A_response_without_a_body_still_ends()
+    {
+        var response = System.Text.Encoding.ASCII.GetBytes("HTTP/1.1 204 No Content\r\n\r\n");
+
+        Assert.Equal(response.Length, BlockCheck.HeaderLength(response, response.Length));
+    }
+
     /// <summary>У каждого исхода есть, что сказать человеку.</summary>
     /// <remarks>
     /// Перечислены все члены перечисления, а не выбранные: добавить вид
