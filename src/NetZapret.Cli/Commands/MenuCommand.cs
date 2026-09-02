@@ -1383,7 +1383,7 @@ internal static class MenuCommand
 
         try
         {
-            var result = HostsEditor.Pin(answers, note: $"{part.Part.Name} — набор {DescribeSource(profile, mine)}");
+            var result = HostsEditor.Pin(answers, note: $"{part.Part.Name} — {DescribeSource(profile, mine)}");
 
             var shadowing = ClearShadowingRules(file, zones);
 
