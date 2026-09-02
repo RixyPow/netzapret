@@ -1343,9 +1343,11 @@ internal static class MenuCommand
         if (profile is null)
             return;
 
-        var answers = catalog.Answers(services, profile)
-            .Where(pair => Covers(zones, pair.Key))
-            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        var answers = profile == HonestResolver
+            ? AskHonestResolver(zones, catalog.Answers(services, null).Keys.Where(n => Covers(zones, n)).ToList())
+            : catalog.Answers(services, profile)
+                .Where(pair => Covers(zones, pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
 
         if (answers.Count == 0)
         {
@@ -1426,6 +1428,13 @@ internal static class MenuCommand
             return null;
         }
 
+        // Свой вариант — не набор, а способ. Наборы каталога хранят числа,
+        // а числа у сетей доставки живут днями: адрес image.tmdb.org сменился
+        // трижды за четверо суток. Спросить честный резолвер прямо сейчас
+        // надёжнее, чем помнить, что он отвечал в день сборки.
+        offered.Add(HonestResolver);
+        Console.WriteLine($"  {offered.Count}. Спросить честный резолвер сейчас — адрес возьмётся с DoH");
+
         Console.WriteLine("  0. Отмена");
         Console.Write("Выбор: ");
 
@@ -1434,6 +1443,57 @@ internal static class MenuCommand
         return int.TryParse(input, out var index) && index >= 1 && index <= offered.Count
             ? offered[index - 1]
             : null;
+    }
+
+    /// <summary>Пометка выбора «спросить резолвер», а не взять из каталога.</summary>
+    private const string HonestResolver = "\0honest";
+
+    /// <summary>
+    /// Берёт адреса у DNS поверх HTTPS вместо каталога.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Лечит тот случай, когда мешает не канал и не страна, а сам ответ
+    /// резолвера. <c>image.tmdb.org</c> — CNAME на сеть доставки, и Google
+    /// отвечает по нему петлёй <c>127.0.0.1</c>, тогда как Cloudflare отдаёт
+    /// живой шард, с которого картинки грузятся. Прибить надо ровно то,
+    /// что сказал честный.
+    /// </para>
+    /// <para>
+    /// Годится не всегда, и это стоит понимать. Там, где сайт отказывает
+    /// по стране, честный адрес — самый настоящий, и 403 придёт с него же:
+    /// ChatGPT так не вылечить, ему нужен чужой прокси из каталога.
+    /// </para>
+    /// </remarks>
+    private static Dictionary<string, string> AskHonestResolver(
+        IReadOnlyList<string> zones,
+        IReadOnlyList<string> names)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Сами зоны тоже спрашиваем: у списка есть имена, которых нет
+        // в каталоге, и именно они чаще всего и ломаются.
+        var asked = names.Concat(zones).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        Console.WriteLine();
+        Console.WriteLine($"  Спрашиваю адреса: {asked.Count}…");
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+
+        foreach (var name in asked)
+        {
+            var address = DohResolver.ResolveAsync(name, http, CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            // Петля — это и есть отказ, который мы чиним; прибивать её значит
+            // записать поломку в системный файл.
+            if (address is null || address.StartsWith("127.", StringComparison.Ordinal) || address == "0.0.0.0")
+                continue;
+
+            result[name] = address;
+        }
+
+        return result;
     }
 
     /// <summary>
