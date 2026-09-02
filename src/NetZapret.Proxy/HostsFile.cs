@@ -162,28 +162,36 @@ public static class HostsFile
         // построчный вывод повторял его столько раз, сколько правил совпало.
         var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var rule in ruleSet.Rules)
+        // Правила разбираются по порядку, и решает первое совпавшее — так же,
+        // как их вычисляет движок. Прежде здесь перебирались все правила
+        // с mode: proxy подряд, без вопроса, какое из них выигрывает.
+        //
+        // Стоило это работающего сервиса. Поставляемое «*.chatgpt.com → VPN»
+        // перекрыто пользовательским «напрямую», то есть не действует, — а
+        // сборщик всё равно находил по нему прибитый адрес и заводил его
+        // в туннель. Пин при этом был жив: с остановленной программой сайт
+        // открывался, с запущенной умирал сразу.
+        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+
+        foreach (var (name, addresses) in hosts)
         {
-            if (rule.Mode != Core.Rules.RoutingMode.Proxy)
+            if (addresses.Count == 0)
                 continue;
 
-            foreach (var domain in DomainsOf(rule))
+            var mode = FirstMatch(order, name);
+
+            if (mode != Core.Rules.RoutingMode.Proxy)
+                continue;
+
+            foreach (var address in addresses)
             {
-                var pinned = FindPinned(hosts, domain);
+                var cidr = ToCidr(address);
 
-                if (pinned.Count == 0)
-                    continue;
-
-                foreach (var address in pinned)
-                {
-                    var cidr = ToCidr(address);
-
-                    if (!found.Contains(cidr))
-                        found.Add(cidr);
-                }
-
-                names.Add(domain);
+                if (!found.Contains(cidr))
+                    found.Add(cidr);
             }
+
+            names.Add(name);
         }
 
         if (names.Count == 0)
@@ -201,6 +209,36 @@ public static class HostsFile
             "иначе правила для них не сработали бы");
 
         return found;
+    }
+
+    /// <summary>
+    /// Режим первого правила, покрывающего имя; <c>null</c> — ни одного.
+    /// </summary>
+    /// <remarks>
+    /// Повторяет порядок вычисления движка: правила проверяются сверху вниз,
+    /// решает первое совпавшее, остальные не смотрятся вовсе. Сравнение
+    /// по зоне — запись <c>openai.com</c> покрывает <c>api.openai.com</c>,
+    /// как и в самих списках.
+    /// </remarks>
+    private static Core.Rules.RoutingMode? FirstMatch(
+        IReadOnlyList<(Core.Rules.RoutingMode Mode, List<string> Domains)> order,
+        string name)
+    {
+        foreach (var (mode, domains) in order)
+        {
+            foreach (var domain in domains)
+            {
+                var zone = domain.TrimStart('*', '.');
+
+                if (string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase))
+                {
+                    return mode;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Несколько имён для примера и хвост числом.</summary>

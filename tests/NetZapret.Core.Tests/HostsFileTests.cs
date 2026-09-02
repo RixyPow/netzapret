@@ -127,6 +127,67 @@ public sealed class HostsFileTests : IDisposable
         Assert.Contains("chatgpt.com", Assert.Single(notes));
     }
 
+    /// <summary>Перекрытое правило в туннель никого не заводит.</summary>
+    /// <remarks>
+    /// <para>
+    /// Правила разбираются по порядку, и решает первое совпавшее. Прежде
+    /// здесь перебирались все правила с <c>mode: proxy</c> подряд, без вопроса,
+    /// какое из них выигрывает, — и перекрытое, недействующее правило всё
+    /// равно уводило прибитый адрес в туннель.
+    /// </para>
+    /// <para>
+    /// Стоило это работающего сервиса. У ChatGPT пин на живой прокси был снизу
+    /// перекрыт пользовательским «напрямую», а сверху оставалось поставляемое
+    /// «через VPN». С остановленной программой сайт открывался, с запущенной
+    /// умирал сразу: адрес заводился в туннель по правилу, которого движок
+    /// даже не смотрит.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AShadowedProxyRuleDoesNotCapture()
+    {
+        Write("87.228.47.204 chatgpt.com");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "chatgpt.com"
+                mode: direct
+              - match: domain
+                value: "*.chatgpt.com"
+                mode: proxy
+            """);
+
+        var found = HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out var notes, _path);
+
+        Assert.Empty(found);
+        Assert.Empty(notes);
+    }
+
+    /// <summary>А действующее — заводит.</summary>
+    /// <remarks>Тот же файл и те же правила, переставленные местами.</remarks>
+    [Fact]
+    public void TheWinningProxyRuleStillCaptures()
+    {
+        Write("87.228.47.204 chatgpt.com");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.chatgpt.com"
+                mode: proxy
+              - match: domain
+                value: "chatgpt.com"
+                mode: direct
+            """);
+
+        var found = HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out _, _path);
+
+        Assert.Equal("87.228.47.204/32", Assert.Single(found));
+    }
+
     [Fact]
     public void DesyncDomainsAreLeftAlone()
     {
