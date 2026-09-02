@@ -45,7 +45,7 @@ internal static class ConfigCommand
         var pinned = HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out var pinnedNotes);
 
         foreach (var note in pinnedNotes)
-            Console.WriteLine($"Внимание, hosts: {note}");
+            Console.WriteLine($"Файл hosts: {note}");
 
         var overrides = AddressOverrides.Load(cmd.Value("addresses"));
 

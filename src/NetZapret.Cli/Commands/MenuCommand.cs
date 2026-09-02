@@ -1998,7 +1998,7 @@ internal static class MenuCommand
             var pinned = HostsFile.CollectPinnedProxyAddresses(ruleSet, out var pinnedNotes);
 
             foreach (var note in pinnedNotes)
-                Console.WriteLine($"Внимание, hosts: {note}");
+                Console.WriteLine($"Файл hosts: {note}");
 
             // Подстановки собираются тем же способом, что и в команде config.
             // Пока каждый путь складывал их по-своему, меню не передавало их

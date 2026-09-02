@@ -157,6 +157,11 @@ public static class HostsFile
         if (hosts.Count == 0)
             return found;
 
+        // Имена собираются в набор, а не печатаются на месте. Одно имя обычно
+        // покрыто несколькими правилами сразу — своим и поставляемым, — и
+        // построчный вывод повторял его столько раз, сколько правил совпало.
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var rule in ruleSet.Rules)
         {
             if (rule.Mode != Core.Rules.RoutingMode.Proxy)
@@ -177,13 +182,35 @@ public static class HostsFile
                         found.Add(cidr);
                 }
 
-                messages.Add(
-                    $"{domain} прибит в hosts к {string.Join(", ", pinned)} — " +
-                    "адрес заведён в туннель, иначе правило не сработало бы");
+                names.Add(domain);
             }
         }
 
+        if (names.Count == 0)
+            return found;
+
+        // Одной строкой, и это осознанный выбор. Прежде здесь печаталось
+        // по строке на имя — шестнадцать подряд при каждом запуске, все
+        // одинаковой формы и с повторами. Такой список не читают: он выглядит
+        // чередой предупреждений о неисправности, тогда как описывает
+        // проделанную работу, и приучает пропускать всё, что начинается
+        // со слова «внимание».
+        messages.Add(
+            $"прибитых имён с правилом «через VPN»: {names.Count} " +
+            $"({Sample(names)}) — их адреса заведены в туннель, " +
+            "иначе правила для них не сработали бы");
+
         return found;
+    }
+
+    /// <summary>Несколько имён для примера и хвост числом.</summary>
+    private static string Sample(IReadOnlyCollection<string> names)
+    {
+        const int show = 3;
+
+        return names.Count <= show
+            ? string.Join(", ", names)
+            : string.Join(", ", names.Take(show)) + $" и ещё {names.Count - show}";
     }
 
     /// <summary>
