@@ -1423,21 +1423,37 @@ internal static class MenuCommand
         var asked = names.Concat(zones).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
         Console.WriteLine();
-        Console.WriteLine($"  Спрашиваю адреса: {asked.Count}…");
+        Console.WriteLine($"  Спрашиваю адреса и проверяю каждый: имён {asked.Count}…");
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
 
         foreach (var name in asked)
         {
-            var address = DohResolver.ResolveAsync(name, http, CancellationToken.None)
+            var candidates = DohResolver.CandidatesAsync(name, http, CancellationToken.None)
                 .GetAwaiter().GetResult();
 
-            // Петля — это и есть отказ, который мы чиним; прибивать её значит
-            // записать поломку в системный файл.
-            if (address is null || address.StartsWith("127.", StringComparison.Ordinal) || address == "0.0.0.0")
+            if (candidates.Count == 0)
                 continue;
 
-            result[name] = address;
+            // Проверяется каждый, а не берётся первый. У сети доставки шардов
+            // десятки, отвечают не все, и какой достанется — зависит от того,
+            // кого спросили: у image.tmdb.org один резолвер отдавал петлю,
+            // другой — шард, отдающий постер. Прежде в файл попадал первый
+            // непустой ответ, и однажды им оказался адрес, который молчит.
+            var working = candidates.FirstOrDefault(
+                a => DohResolver.ServesAsync(a, name, CancellationToken.None).GetAwaiter().GetResult());
+
+            if (working is null)
+            {
+                Console.WriteLine($"    {Truncate(name, 30),-30} ни один из {candidates.Count} не отвечает");
+                continue;
+            }
+
+            Console.WriteLine(candidates.Count > 1
+                ? $"    {Truncate(name, 30),-30} {working} (из {candidates.Count} проверенных)"
+                : $"    {Truncate(name, 30),-30} {working}");
+
+            result[name] = working;
         }
 
         return result;
@@ -1486,6 +1502,32 @@ internal static class MenuCommand
 
         if (mine.Count == 0)
             return;
+
+        // Перед снятием проверяем, работает ли прибитое. Пин ставят не от
+        // хорошей жизни, и снять рабочий по невнимательности — значит сломать
+        // то, что человек чинил; а держать нерабочий незачем вовсе.
+        var pins = HostsEditor.Pins();
+        var alive = mine
+            .Where(name => pins.TryGetValue(name, out var address)
+                && DohResolver.ServesAsync(address, name, CancellationToken.None).GetAwaiter().GetResult())
+            .ToList();
+
+        if (alive.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  Из них отвечают и работают: {alive.Count}.");
+            Console.WriteLine("  Снятие вернёт эти имена обычному резолверу — тому самому,");
+            Console.WriteLine("  из-за которого пин и понадобился.");
+            Console.Write("  Всё равно снять? (д/н): ");
+
+            var answer = Console.ReadLine()?.Trim() ?? string.Empty;
+
+            if (!Is(answer, "д", "y") && !Is(answer, "да", "yes"))
+            {
+                Message("Оставлено как есть.", ConsoleColor.Green);
+                return;
+            }
+        }
 
         try
         {

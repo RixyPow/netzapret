@@ -88,6 +88,132 @@ public static class DohResolver
         return null;
     }
 
+    /// <summary>
+    /// Все адреса имени, какие удалось собрать у разных резолверов.
+    /// </summary>
+    /// <remarks>
+    /// Перебор нужен потому, что «честный ответ» — не одно число. Сеть
+    /// доставки держит десятки шардов, часть их отвечает, часть нет, и какой
+    /// достанется — зависит от того, кого спросили. Ровно так нашёлся рабочий
+    /// адрес для <c>image.tmdb.org</c>: один резолвер отдал петлю, другой —
+    /// шард, который вернул постер с кодом 200.
+    /// </remarks>
+    public static async Task<IReadOnlyList<string>> CandidatesAsync(
+        string host,
+        HttpClient http,
+        CancellationToken cancellationToken)
+    {
+        if (IPAddress.TryParse(host, out var literal))
+            return [literal.ToString()];
+
+        var found = new List<string>();
+
+        foreach (var endpoint in Endpoints)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"{endpoint}?name={Uri.EscapeDataString(host)}&type=A");
+
+                request.Headers.Accept.Add(new("application/dns-json"));
+
+                using var response = await http.SendAsync(request, cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                    continue;
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+
+                foreach (var address in AllAddresses(json))
+                {
+                    if (!IsStub(address) && !found.Contains(address, StringComparer.Ordinal))
+                        found.Add(address);
+                }
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Все записи A из ответа.</summary>
+    internal static IEnumerable<string> AllAddresses(string json)
+    {
+        JsonDocument document;
+
+        try { document = JsonDocument.Parse(json); }
+        catch (JsonException) { yield break; }
+
+        using (document)
+        {
+            if (!document.RootElement.TryGetProperty("Answer", out var answers)
+                || answers.ValueKind != JsonValueKind.Array)
+            {
+                yield break;
+            }
+
+            foreach (var answer in answers.EnumerateArray())
+            {
+                if (answer.TryGetProperty("type", out var type)
+                    && type.ValueKind == JsonValueKind.Number
+                    && type.GetInt32() == 1
+                    && answer.TryGetProperty("data", out var data)
+                    && IPAddress.TryParse(data.GetString(), out var address))
+                {
+                    yield return address.ToString();
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Отвечает ли адрес за это имя на самом деле.
+    /// </summary>
+    /// <remarks>
+    /// Порт мало что доказывает: у сетей доставки он открыт и у шардов,
+    /// которые ничего не отдают. Проверяется рукопожатие с нужным именем
+    /// и ответ на запрос — только это отличает рабочий адрес от живого.
+    /// </remarks>
+    public static async Task<bool> ServesAsync(
+        string address,
+        string host,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            budget.CancelAfter(TimeSpan.FromSeconds(6));
+
+            await client.ConnectAsync(address, 443, budget.Token);
+
+            using var ssl = new System.Net.Security.SslStream(
+                client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
+
+            await ssl.AuthenticateAsClientAsync(
+                new System.Net.Security.SslClientAuthenticationOptions { TargetHost = host },
+                budget.Token);
+
+            var request = System.Text.Encoding.ASCII.GetBytes(
+                $"HEAD / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+
+            await ssl.WriteAsync(request, budget.Token);
+
+            var buffer = new byte[128];
+            int read = await ssl.ReadAsync(buffer, budget.Token);
+
+            return read > 0
+                && System.Text.Encoding.ASCII.GetString(buffer, 0, read).StartsWith("HTTP/", StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Первая запись A из ответа; тип 1 по RFC 1035.</summary>
     internal static string? FirstAddress(string json)
     {
