@@ -210,17 +210,19 @@ internal static class MenuCommand
         Console.WriteLine($"  1. Режим работы .......... {settings.DescribeMode()}");
         Console.WriteLine($"  2. Пресет Zapret ......... {settings.DescribePreset()}");
         Console.WriteLine($"  3. VPN ................... {DescribeVpn(settings)}");
-        Console.WriteLine($"  4. DNS ................... {DescribeDns(settings)}");
+        // DNS и файл hosts сведены в один пункт. Оба про одно — каким адресом
+        // окажется имя, — и порознь путали: пин ставится в «Сервисах»,
+        // а смотрится был в отдельном пункте через две строки.
+        Console.WriteLine($"  4. Имена и адреса ........ {DescribeDns(settings)}, hosts: {DescribeHosts()}");
         Console.WriteLine($"  5. Сервисы и маршруты .... {DescribeRoutes()}");
-        Console.WriteLine($"  6. Файл hosts ............ {DescribeHosts()}");
         Console.WriteLine();
         // Отдельного «собрать конфиг» здесь нет намеренно: он собирается при
         // каждом запуске, а сам по себе ничего не применяет — действует только
         // перезапуск. Пункт предлагал мнимое действие и создавал впечатление
         // обязательного шага, который на деле выполняется сам.
-        Console.WriteLine(running ? "  7. Остановить" : "  7. Запустить");
-        Console.WriteLine("  8. Проверка блокировок ... что закрыто и чем это лечится");
-        Console.WriteLine("  9. Ещё ................... автозапуск, обновление, диагностика");
+        Console.WriteLine(running ? "  6. Остановить" : "  6. Запустить");
+        Console.WriteLine("  7. Проверка блокировок ... что закрыто и чем это лечится");
+        Console.WriteLine("  8. Ещё ................... автозапуск, обновление, диагностика");
         Console.WriteLine();
         Console.WriteLine("  0. Выход");
         Console.WriteLine();
@@ -260,15 +262,12 @@ internal static class MenuCommand
                 await EditServicesAsync(settings, cancellationToken);
                 return settings;
             case "6":
-                await HostsMenuAsync(cancellationToken);
-                return settings;
-            case "7":
                 await ToggleRunAsync(settings, cancellationToken);
                 return settings;
-            case "8":
+            case "7":
                 await RunBlockCheckAsync(settings, cancellationToken);
                 return settings;
-            case "9":
+            case "8":
                 return await MoreMenuAsync(settings, settingsPath, cancellationToken);
             default:
                 return settings;
@@ -601,6 +600,7 @@ internal static class MenuCommand
             Console.WriteLine(settings.DnsThroughTunnel
                 ? "  3. Разрешать имена напрямую"
                 : "  3. Разрешать имена через туннель");
+            Console.WriteLine($"  4. Файл hosts ............ {DescribeHosts()}");
             Console.WriteLine("  0. Назад");
 
             // Каталог отсюда убран. Он делал то же, что теперь делает пункт
@@ -626,6 +626,10 @@ internal static class MenuCommand
 
                 case "2":
                     await CheckResolversAsync(settings, cancellationToken);
+                    break;
+
+                case "4":
+                    await HostsMenuAsync(cancellationToken);
                     break;
 
                 case "9" when settings.AddressServices.Count > 0:
