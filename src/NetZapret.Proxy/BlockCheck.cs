@@ -16,6 +16,26 @@ public enum BlockKind
     TlsDpi,
 
     /// <summary>
+    /// Имя заведено в туннель, и туннель до него не дотянулся.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отличается от <see cref="TlsDpi"/> тем, кого мы измерили. Внутрь
+    /// туннеля DPI не заглядывает — он видит шифрованный поток к серверу
+    /// подписки и не знает, какое имя внутри. Значит рукопожатие оборвал
+    /// не он, а сам туннель: сервер не дотянулся до хоста, отказал по своим
+    /// причинам либо вышел там, где хост закрыт.
+    /// </para>
+    /// <para>
+    /// Прежде такие цели получали «DPI по TLS», и в отчёте выходило шесть
+    /// таких строк из девяти. Совет к ним прилагался про десинк — то есть
+    /// про вмешательство в рукопожатие, которого DPI и не видел. Лечится
+    /// это другим: сменой сервера, а не рецепта.
+    /// </para>
+    /// </remarks>
+    TunnelFailed,
+
+    /// <summary>
     /// Рукопожатие проходит, но поток обрывается на первых килобайтах.
     /// </summary>
     /// <remarks>
@@ -191,6 +211,7 @@ public sealed record TargetReport
     {
         BlockKind.None => "доступен",
         BlockKind.TlsDpi => "DPI по TLS",
+        BlockKind.TunnelFailed => "туннель не доставил",
         BlockKind.Stall => "обрыв после рукопожатия",
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
@@ -221,6 +242,7 @@ public sealed record TargetReport
     {
         BlockKind.None => "ничего не нужно",
         BlockKind.TlsDpi => "десинк",
+        BlockKind.TunnelFailed => "другой сервер подписки — десинк тут ни при чём",
         BlockKind.Stall => "другой рецепт десинка, иначе VPN",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
@@ -354,19 +376,23 @@ public static class BlockCheck
     /// имя резолвится. Средству, по которому правят пресет, такое
     /// непозволительно.
     /// </remarks>
+    /// <param name="throughTunnel">
+    /// Имя заведено в туннель — тогда вердикты про DPI к нему неприменимы.
+    /// </param>
     public static async Task<TargetReport> CheckAsync(
         string host,
         string? service,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool throughTunnel = false)
     {
-        var first = await ProbeAsync(host, service, cancellationToken);
+        var first = await ProbeAsync(host, service, cancellationToken, throughTunnel);
 
         if (first.Kind == BlockKind.None)
             return first;
 
         // Второй заход только для неудач: подтверждать успех незачем,
         // а вот обвинять с одного раза нельзя.
-        var second = await ProbeAsync(host, service, cancellationToken);
+        var second = await ProbeAsync(host, service, cancellationToken, throughTunnel);
 
         return second.Kind == BlockKind.None ? second : Worse(first, second);
     }
@@ -385,7 +411,8 @@ public static class BlockCheck
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool throughTunnel)
     {
         IPAddress[] addresses;
 
@@ -488,7 +515,7 @@ public static class BlockCheck
             Tls13 = tls13,
             Http = http,
             Data = data,
-            Kind = Classify(tcp, tls12, tls13, http, data),
+            Kind = Classify(tcp, tls12, tls13, http, data, throughTunnel),
             Addresses = addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork)
                 .Select(a => a.ToString()).Take(3).ToList(),
         };
@@ -502,7 +529,29 @@ public static class BlockCheck
     /// о вмешательстве. Живой TCP при мёртвом TLS — самый ясный след: до хоста
     /// достучались, а разговор оборвали, разобрав имя в рукопожатии.
     /// </remarks>
+    /// <param name="throughTunnel">
+    /// Имя заведено в туннель. Тогда вердикты про DPI неприменимы: внутрь
+    /// туннеля он не заглядывает, и оборвать рукопожатие по имени не может.
+    /// </param>
     internal static BlockKind Classify(
+        ProbeOutcome tcp,
+        ProbeOutcome tls12,
+        ProbeOutcome tls13,
+        ProbeOutcome http,
+        ProbeOutcome data,
+        bool throughTunnel = false)
+    {
+        var kind = Decide(tcp, tls12, tls13, http, data);
+
+        // Переименование, а не другой разбор: измерения те же, а вот кто
+        // за ними стоит — другой. Виды, говорящие о вмешательстве в наше
+        // рукопожатие, через туннель означают лишь, что туннель не довёз.
+        return throughTunnel && kind is BlockKind.TlsDpi or BlockKind.Stall or BlockKind.Full or BlockKind.HttpsPort
+            ? BlockKind.TunnelFailed
+            : kind;
+    }
+
+    private static BlockKind Decide(
         ProbeOutcome tcp,
         ProbeOutcome tls12,
         ProbeOutcome tls13,

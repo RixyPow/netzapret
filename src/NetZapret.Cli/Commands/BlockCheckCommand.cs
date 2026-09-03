@@ -243,10 +243,14 @@ internal static class BlockCheckCommand
 
             try
             {
-                var report = await BlockCheck.CheckAsync(target.Host, target.Service, cancellationToken);
-
+                // Выясняется до пробы, а не после: от этого зависит не пометка
+                // в строке, а сам вердикт. Внутрь туннеля DPI не заглядывает,
+                // и обрыв там — про туннель, а не про сеть.
                 bool tunnelled = enginesRunning && engine is not null
                     && CurrentMode(engine, target.Host) == RoutingMode.Proxy;
+
+                var report = await BlockCheck.CheckAsync(
+                    target.Host, target.Service, cancellationToken, tunnelled);
 
                 lock (console)
                 {
@@ -480,8 +484,11 @@ internal static class BlockCheckCommand
         Console.WriteLine();
         Console.WriteLine("Пин отменяет назначенный маршрут — это всегда ошибка настройки");
 
+        // Строка говорит то же, что и пояснение под ней. Прежде она утверждала
+        // обратное — «идёт по пину напрямую», — и раздел противоречил сам себе
+        // в двух соседних абзацах.
         foreach (var (host, mode) in conflicts)
-            Console.WriteLine($"  {Truncate(host, 34),-34} правило «{Describe(mode)}», а идёт по пину напрямую");
+            Console.WriteLine($"  {Truncate(host, 34),-34} победит правило «{Describe(mode)}», пин не сработает");
 
         Console.WriteLine();
         Console.WriteLine("  Пин задаёт адрес, правило — дорогу, и они спорят. Соединение уйдёт");
@@ -1164,6 +1171,20 @@ internal static class BlockCheckCommand
                 Now = now,
                 What = $"{report.Describe()}, но выход туннеля в России",
                 Hope = "возьмите зарубежный сервер и повторите — это ещё не приговор",
+            };
+        }
+
+        // «Туннель не доставил» уже сказано в самом вердикте, и добавлять
+        // к нему «даже через VPN» значит повторять то же дважды и звучать
+        // приговором там, где чаще всего хватает другого сервера.
+        if (report.Kind == BlockKind.TunnelFailed)
+        {
+            return new Deadlock
+            {
+                Host = report.Host,
+                Now = now,
+                What = "туннель до него не дотянулся",
+                Hope = "смените сервер подписки и повторите; десинку тут делать нечего",
             };
         }
 

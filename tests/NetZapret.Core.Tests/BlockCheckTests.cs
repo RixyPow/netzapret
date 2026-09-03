@@ -215,6 +215,79 @@ public class BlockCheckTests
         Assert.Equal(expected, BlockCheck.IsStub(System.Net.IPAddress.Parse(address)));
     }
 
+    /// <summary>Внутри туннеля DPI не при чём.</summary>
+    /// <remarks>
+    /// <para>
+    /// DPI видит шифрованный поток к серверу подписки и не знает, какое имя
+    /// внутри. Значит рукопожатие оборвал не он, а туннель: не дотянулся,
+    /// отказал по своим причинам либо вышел там, где хост закрыт.
+    /// </para>
+    /// <para>
+    /// В живом отчёте таких строк оказалось шесть из девяти. Всем им
+    /// предлагался десинк — вмешательство в рукопожатие, которого DPI
+    /// не видел.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(BlockKind.TlsDpi)]
+    [InlineData(BlockKind.Stall)]
+    [InlineData(BlockKind.Full)]
+    [InlineData(BlockKind.HttpsPort)]
+    public void Failures_inside_the_tunnel_are_not_blamed_on_dpi(BlockKind direct)
+    {
+        var (tcp, tls12, tls13, http, data) = Outcomes(direct);
+
+        Assert.Equal(direct, BlockCheck.Classify(tcp, tls12, tls13, http, data));
+        Assert.Equal(
+            BlockKind.TunnelFailed,
+            BlockCheck.Classify(tcp, tls12, tls13, http, data, throughTunnel: true));
+    }
+
+    /// <summary>Отказ сайта туннель не переименовывает.</summary>
+    /// <remarks>
+    /// 403 приходит от самого сайта и через туннель означает ровно то же:
+    /// он отказал. Списать это на трубу значило бы потерять единственный
+    /// вердикт, который честно указывает на страну.
+    /// </remarks>
+    [Fact]
+    public void A_refusal_by_the_site_survives_the_tunnel()
+    {
+        var refused = new ProbeOutcome { Ok = true, Refused = true };
+
+        Assert.Equal(
+            BlockKind.GeoBlock,
+            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), refused, throughTunnel: true));
+    }
+
+    [Fact]
+    public void A_working_target_stays_working_through_the_tunnel()
+    {
+        Assert.Equal(
+            BlockKind.None,
+            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok(), throughTunnel: true));
+    }
+
+    /// <summary>Совет по нему — про сервер, а не про рецепт.</summary>
+    [Fact]
+    public void A_tunnel_failure_points_at_the_server()
+    {
+        var remedy = Report(BlockKind.TunnelFailed).Remedy();
+
+        Assert.Contains("сервер", remedy);
+        Assert.DoesNotContain("DPI", Report(BlockKind.TunnelFailed).Describe());
+        Assert.True(Report(BlockKind.TunnelFailed).Actionable);
+    }
+
+    /// <summary>Наборы исходов, дающие каждый вид без туннеля.</summary>
+    private static (ProbeOutcome, ProbeOutcome, ProbeOutcome, ProbeOutcome, ProbeOutcome) Outcomes(BlockKind kind) =>
+        kind switch
+        {
+            BlockKind.TlsDpi => (Ok(), Rst(), Rst(), Ok(), No()),
+            BlockKind.Stall => (Ok(), Ok(), Ok(), Ok(), No()),
+            BlockKind.HttpsPort => (No(), No(), No(), Ok(), No()),
+            _ => (No(), No(), No(), No(), No()),
+        };
+
     /// <summary>Конец заголовков находится по пустой строке.</summary>
     /// <remarks>
     /// Нужно, чтобы отличить «тело пришло целиком» от «поток убили». Пока
