@@ -198,8 +198,12 @@ internal static class BlockCheckCommand
         // проверенным независимо от того, дошли ли до конца, а человек,
         // нажавший Esc, чаще всего уже увидел в бегущих строках то,
         // ради чего проверку и запускал.
+        // Мнимые отказы советов не получают. Сказать «может быть неправдой»
+        // и тут же предложить починку — значит переложить выбор на человека,
+        // ничего ему не дав: у него ровно те же сведения, что и у нас.
         var suggestions = Suggestions(reports, engine, enginesRunning)
             .Where(s => !pinned.ContainsKey(s.Host))
+            .Where(s => !FalseAlarmProne.ContainsKey(s.Host))
             .ToList();
 
         PrintDeadlocks(Deadlocks(reports, engine, setup).Where(d => !pinned.ContainsKey(d.Host)).ToList());
@@ -1435,6 +1439,21 @@ internal static class BlockCheckCommand
         "rutor.is",
         "rutracker.cr",     // ещё одно зеркало rutracker.org
         "notion.so",        // сам Notion открывается, это запасной домен
+
+        // Голые зоны сетей доставки. Записи A у них нет и не было: работают
+        // только поддомены, а сама зона существует ради правил десинка,
+        // которые сопоставляются по суффиксу. Проверять там нечего, и десять
+        // строк «нет адреса у имени» в каждом отчёте — чистый шум.
+        "cdninstagram.com",
+        "akamai.net",
+        "akamaiedge.net",
+        "tiktokcdn.com",
+        "soundcloud.cloud",
+        "licdn.com",
+        "nocookie.net",
+        "cloudfront.net",
+        "ooklaserver.net",
+        "rgpub.io",
     };
 
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(
