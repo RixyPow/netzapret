@@ -22,11 +22,18 @@ namespace NetZapret.Proxy;
 public static class DohResolver
 {
     /// <summary>Резолверы по адресу; спрашиваются по очереди.</summary>
+    /// <remarks>
+    /// Порядок не случаен. Обращение по имени идёт первым, хотя выглядит
+    /// хуже: имя надо сперва разрешить. Зато адрес <c>1.1.1.1</c> при
+    /// работающих движках перехватываем мы сами — DoH к системным резолверам
+    /// закрыт внутри туннеля, — и запрос уходит к тому, кто отвечает петлёй.
+    /// Именно так в файл однажды попал адрес, который молчит.
+    /// </remarks>
     private static readonly string[] Endpoints =
     [
-        "https://1.1.1.1/dns-query",
         "https://cloudflare-dns.com/dns-query",
         "https://dns.quad9.net:5053/dns-query",
+        "https://1.1.1.1/dns-query",
         "https://8.8.8.8/resolve",
     ];
 

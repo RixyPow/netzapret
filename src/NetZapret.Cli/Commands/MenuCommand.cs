@@ -2434,6 +2434,7 @@ internal static class MenuCommand
             // записи, чтобы их обслуживал каталог через наш резолвер, а этот
             // путь снят. Гасить их теперь просто некому взамен.
             Console.WriteLine("  о — открыть файл, чтобы дописать своё вручную.");
+            Console.WriteLine("  з — заменить протухшие наши пины проверенными адресами.");
             Console.WriteLine("  п р — прибрать: забрать все записи к нам и убрать повторы.");
             Console.WriteLine("  Пусто — назад.");
             Console.WriteLine();
@@ -2459,6 +2460,12 @@ internal static class MenuCommand
             if (Is(input, "о", "o"))
             {
                 OpenHostsFile();
+                continue;
+            }
+
+            if (Is(input, "з", "z"))
+            {
+                RefreshStalePins();
                 continue;
             }
 
@@ -2537,6 +2544,120 @@ internal static class MenuCommand
         catch (Exception ex)
         {
             Message($"Не удалось прибрать файл: {ex.Message}", ConsoleColor.Red);
+        }
+    }
+
+    /// <summary>
+    /// Проверяет наши пины и заменяет умолкшие рабочими адресами.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пин стареет молча, и это его главная беда. Адрес сети доставки живёт
+    /// днями, чужой прокси — пока его содержат; когда узел умолкает,
+    /// прибитое к нему имя перестаёт открываться, а в файле по-прежнему
+    /// стоит уверенная строка. Со стороны это выглядит новой блокировкой,
+    /// и чинить её начинают не с того конца — так было с LinkedIn, TikTok
+    /// и TMDB, каждый раз заново.
+    /// </para>
+    /// <para>
+    /// Проверяется не порт, а работа: рукопожатие с нужным именем и ответ
+    /// на запрос. Замена берётся тем же перебором, что и при закреплении, —
+    /// все адреса от нескольких резолверов, и первый, который вправду
+    /// отвечает.
+    /// </para>
+    /// <para>
+    /// Чужие записи не трогаются: их ставили не мы, и подменять чужой адрес
+    /// своим — то же самое, что стереть чужую строку.
+    /// </para>
+    /// </remarks>
+    private static void RefreshStalePins()
+    {
+        var pins = HostsEditor.Pins();
+
+        if (pins.Count == 0)
+        {
+            Message("Своих пинов нет — проверять нечего.", ConsoleColor.Yellow);
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  Проверяю свои пины: {pins.Count}…");
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+
+        var replacements = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var hopeless = new List<string>();
+        int alive = 0;
+
+        foreach (var (name, address) in pins.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            if (DohResolver.ServesAsync(address, name, CancellationToken.None).GetAwaiter().GetResult())
+            {
+                alive++;
+                continue;
+            }
+
+            var candidates = DohResolver.CandidatesAsync(name, http, CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            var working = candidates.FirstOrDefault(
+                a => !string.Equals(a, address, StringComparison.Ordinal)
+                    && DohResolver.ServesAsync(a, name, CancellationToken.None).GetAwaiter().GetResult());
+
+            if (working is null)
+            {
+                hopeless.Add(name);
+                Console.WriteLine($"    {Truncate(name, 30),-30} {address} молчит, замены не нашлось");
+                continue;
+            }
+
+            replacements[name] = working;
+            Console.WriteLine($"    {Truncate(name, 30),-30} {address} → {working}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  Отвечают: {alive}. Устарело: {replacements.Count + hopeless.Count}.");
+
+        if (replacements.Count == 0)
+        {
+            if (hopeless.Count > 0)
+            {
+                Message(
+                    "Замены не нашлось ни одной. Такие имена лечатся не адресом — " +
+                    "туннелем или другим набором каталога.",
+                    ConsoleColor.Yellow);
+            }
+            else
+            {
+                Message("Все пины на месте.", ConsoleColor.Green);
+            }
+
+            return;
+        }
+
+        Console.Write($"  Заменить {replacements.Count}? (д/н): ");
+
+        var answer = Console.ReadLine()?.Trim() ?? string.Empty;
+
+        if (!Is(answer, "д", "y") && !Is(answer, "да", "yes"))
+            return;
+
+        try
+        {
+            var result = HostsEditor.Pin(replacements, note: "обновлено проверкой адресов");
+            HostsEditor.FlushDns();
+
+            Message(
+                $"Заменено: {replacements.Count}. Копия файла: {Path.GetFileName(result.Backup ?? "—")}",
+                ConsoleColor.Green);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Message("Нет прав на запись в hosts — запустите программу от администратора.", ConsoleColor.Red);
+        }
+        catch (Exception ex)
+        {
+            Message($"Не удалось записать: {ex.Message}", ConsoleColor.Red);
         }
     }
 
