@@ -1377,6 +1377,8 @@ internal static class BlockCheckCommand
             ["whatsapp.net"] = "приложение ходит по своим адресам и порту 5222",
             ["updates.discord.com"] = "обновления идут своим каналом, не через 443",
             ["disboard.org"] = "открывается через сам Discord, а не по этому имени",
+            ["itch.io"] = "сайт и клиент ходят разными путями; проверено — работает",
+            ["tiktok.com"] = "приложение ходит по своим адресам, не по этому имени",
         };
 
     /// <summary>Говорит, что часть отказов ниже может быть мнимой.</summary>
@@ -1431,6 +1433,8 @@ internal static class BlockCheckCommand
         "itch.zone",        // раздача файлов itch.io
         "rutor.info",       // зеркала одного трекера
         "rutor.is",
+        "rutracker.cr",     // ещё одно зеркало rutracker.org
+        "notion.so",        // сам Notion открывается, это запасной домен
     };
 
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(

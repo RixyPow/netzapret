@@ -1343,8 +1343,15 @@ internal static class MenuCommand
         // сервиса и не стоит ничего; наборы ниже уводят трафик через чужую
         // машину, и предлагать это раньше значит советовать дорогое решение
         // там, где хватает бесплатного.
-        offered.Add(HonestResolver);
-        Console.WriteLine($"  {offered.Count}. Спросить честный резолвер сейчас — настоящий адрес по DoH");
+        //
+        // Но не дважды: запись каталога с resolve: honest делает ровно то же
+        // самое, и два пункта, отличающиеся только формулировкой, заставляли
+        // выбирать между одинаковым.
+        if (!mine.Any(m => m.Resolve))
+        {
+            offered.Add(HonestResolver);
+            Console.WriteLine($"  {offered.Count}. Спросить честный резолвер сейчас — настоящий адрес по DoH");
+        }
 
         var sets = (catalog?.Profiles() ?? [])
             .Select(p => (p.Id, p.Name, Covered: catalog!.Answers(services, p.Id).Count(a => Covers(zones, a.Key))))

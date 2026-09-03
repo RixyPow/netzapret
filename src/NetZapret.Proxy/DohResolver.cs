@@ -25,8 +25,18 @@ public static class DohResolver
     private static readonly string[] Endpoints =
     [
         "https://1.1.1.1/dns-query",
+        "https://cloudflare-dns.com/dns-query",
+        "https://dns.quad9.net:5053/dns-query",
         "https://8.8.8.8/resolve",
     ];
+
+    /// <summary>Ответ-заглушка: петля или нулевой адрес.</summary>
+    /// <remarks>
+    /// Такой ответ — это и есть та неисправность, ради которой сюда пришли,
+    /// и принимать его за адрес нельзя.
+    /// </remarks>
+    private static bool IsStub(string address) =>
+        address.StartsWith("127.", StringComparison.Ordinal) || address == "0.0.0.0";
 
     /// <summary>
     /// Первый адрес IPv4 для имени; <c>null</c> — не выяснилось.
@@ -60,7 +70,13 @@ public static class DohResolver
 
                 var json = await response.Content.ReadAsStringAsync(cancellationToken);
 
-                if (FirstAddress(json) is { } address)
+                // Заглушка — не ответ, а та самая неисправность. Прежде первый
+                // же успех принимался за истину, и когда движок закрывал DoH
+                // к 1.1.1.1, опрос доходил до Google — того самого резолвера,
+                // который отдаёт по image.tmdb.org петлю. Проверка честно
+                // отбрасывала её и сообщала «набор не покрывает ни одного
+                // имени», хотя честный ответ существовал этажом выше.
+                if (FirstAddress(json) is { } address && !IsStub(address))
                     return address;
             }
             catch (Exception) when (!cancellationToken.IsCancellationRequested)
