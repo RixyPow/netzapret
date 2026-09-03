@@ -2724,12 +2724,21 @@ internal static class MenuCommand
             Console.WriteLine(new string('=', 62));
             Console.WriteLine();
             Console.WriteLine($"  1. Автозапуск ............ {(AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? "включён" : "выключен")}");
-            Console.WriteLine($"  2. Обновление ............ у вас {UpdateCheck.Current}");
+            // Состояние названо рядом с пунктом. Настройка действует — она
+            // гасит проверку при запуске, — а переключить её было нечем:
+            // обратная сторона той же беды, что и мёртвый пункт меню.
+            Console.WriteLine(
+                $"  2. Обновление ............ у вас {UpdateCheck.Current}, " +
+                (settings.CheckForUpdates ? "проверяется при запуске" : "проверка при запуске выключена"));
             Console.WriteLine($"  3. Журнал ................ {(settings.LogsEnabled ? "ведётся" : "выключен")}");
             Console.WriteLine();
             Console.WriteLine("  4. Обзор состояния");
             Console.WriteLine("  5. Журнал супервизора");
             Console.WriteLine("  6. Обслуживание .......... сброс, сеть, Defender, папка");
+            Console.WriteLine();
+            Console.WriteLine(settings.CheckForUpdates
+                ? "  7. Не проверять обновления при запуске"
+                : "  7. Проверять обновления при запуске");
             Console.WriteLine();
             Console.WriteLine("  0. Назад");
             Console.WriteLine();
@@ -2768,6 +2777,18 @@ internal static class MenuCommand
 
                 case "6":
                     settings = MaintenanceMenu(settings, settingsPath);
+                    break;
+
+                case "7":
+                    settings = settings with { CheckForUpdates = !settings.CheckForUpdates };
+                    settings.Save(settingsPath);
+                    Message(
+                        settings.CheckForUpdates
+                            ? "Буду проверять обновления при запуске."
+                            : "Проверять не буду. Правки, чинящие сервисы, дойдут до вас "
+                                + "только если сами зайдёте сюда за ними.",
+                        settings.CheckForUpdates ? ConsoleColor.Green : ConsoleColor.Yellow);
+                    Pause();
                     break;
 
                 default:
