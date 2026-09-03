@@ -191,6 +191,7 @@ internal static class BlockCheckCommand
         }
 
         PrintSummary(reports, badAddresses, pinned);
+        PrintKnownFalseAlarms(reports);
         PrintPinned(pinned, engine);
 
         // Предложение выводится и после прерывания. Проверенное остаётся
@@ -1351,6 +1352,87 @@ internal static class BlockCheckCommand
     /// этого не показав.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Сервисы, чей отказ в отчёте чаще всего мнимый.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Есть сервисы, где наша проба и настоящее приложение ходят разными
+    /// путями, и расходятся они закономерно. Проверка стучится по имени
+    /// на 443; WhatsApp работает по своим адресам и порту 5222, Discord —
+    /// голосом по UDP и обновлениями по своему каналу. Отказ на 443 у них
+    /// не значит, что сервис не работает.
+    /// </para>
+    /// <para>
+    /// Замалчивать такие строки нельзя — они бывают и настоящими. Но и
+    /// молчать о том, что они особенные, значит раз за разом посылать
+    /// человека чинить работающее: у этого пользователя Discord и WhatsApp
+    /// исправны, а в отчёте числились сломанными три прогона подряд.
+    /// </para>
+    /// </remarks>
+    private static readonly Dictionary<string, string> FalseAlarmProne =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["whatsapp.com"] = "приложение ходит по своим адресам и порту 5222",
+            ["whatsapp.net"] = "приложение ходит по своим адресам и порту 5222",
+            ["updates.discord.com"] = "обновления идут своим каналом, не через 443",
+            ["disboard.org"] = "открывается через сам Discord, а не по этому имени",
+        };
+
+    /// <summary>Говорит, что часть отказов ниже может быть мнимой.</summary>
+    private static void PrintKnownFalseAlarms(IReadOnlyList<TargetReport> reports)
+    {
+        var hits = reports
+            .Where(r => r.Actionable && FalseAlarmProne.ContainsKey(r.Host))
+            .OrderBy(r => r.Host, StringComparer.Ordinal)
+            .ToList();
+
+        if (hits.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        Console.WriteLine();
+        Console.WriteLine("  Здесь отказ может быть мнимым — проверьте сами, прежде чем чинить:");
+
+        foreach (var report in hits)
+            Console.WriteLine($"    {Truncate(report.Host, 26),-26} {FalseAlarmProne[report.Host]}");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
+    /// Имена, которые проверять незачем: зеркала и запасные домены.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Списки Zapret ведутся для десинка, и в них соседствуют основной домен
+    /// и его зеркала — <c>twitter.com</c> рядом с <c>x.com</c>,
+    /// <c>rutracker.net</c> рядом с <c>rutracker.org</c>. Для правила это
+    /// правильно: закрыть надо оба. Для отчёта — нет: человек читает
+    /// «twitter.com закрыт» и идёт чинить то, чем не пользуется, тогда как
+    /// сам сервис открывается по другому имени и в той же таблице помечен
+    /// доступным.
+    /// </para>
+    /// <para>
+    /// Собрано по разбору живых отчётов: из десяти строк «маршрутом
+    /// не лечится» шесть были про домены, которых у пользователя нет
+    /// в обиходе. Проверка от этого не становится слепой — правило
+    /// на зеркало продолжает действовать, просто в отчёт оно не идёт.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> Mirrors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "twitter.com",      // работает как x.com
+        "rutracker.net",    // зеркало rutracker.org
+        "notion.site",      // раздача страниц, сам notion.so отдельно
+        "riotgames.es",     // испанское зеркало riotgames.com
+        "itch.zone",        // раздача файлов itch.io
+        "rutor.info",       // зеркала одного трекера
+        "rutor.is",
+    };
+
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(
         string configPath,
         string userRulesPath,
@@ -1402,6 +1484,9 @@ internal static class BlockCheckCommand
                         break;
 
                     var host = domain.TrimStart('*', '.');
+
+                    if (Mirrors.Contains(host))
+                        continue;
 
                     if (!seen.Add(host))
                         continue;
