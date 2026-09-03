@@ -1048,10 +1048,13 @@ internal static class MenuCommand
             if (pinned.Count > 4)
                 Console.WriteLine($"  …и ещё {pinned.Count - 4}");
 
-            if (part.Mode is RoutingMode.Proxy or RoutingMode.Desync)
+            // Спорит с пином только «через VPN»: там прибитый адрес уводится
+            // в туннель. Десинк адреса не меняет — он калечит пакеты по пути
+            // к нему же, — и вместе с пином работает как ни в чём не бывало.
+            if (part.Mode is RoutingMode.Proxy)
             {
-                Console.WriteLine("  Но режим выше отменяет пин: имя узнаётся из рукопожатия,");
-                Console.WriteLine("  и трафик уходит по правилу. Нужен пин — возьмите пункт 4.");
+                Console.WriteLine("  Но режим «VPN» уводит прибитый адрес в туннель, и пин теряет смысл.");
+                Console.WriteLine("  Нужен адрес из файла — возьмите пункт 4, он поставит «напрямую».");
             }
 
             Console.ForegroundColor = previous;

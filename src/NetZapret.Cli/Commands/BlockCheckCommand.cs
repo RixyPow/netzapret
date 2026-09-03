@@ -469,9 +469,15 @@ internal static class BlockCheckCommand
         if (engine is null)
             return;
 
+        // Только «через VPN». Десинк адреса назначения не меняет — он калечит
+        // пакеты по дороге, — и с пином не спорит вовсе: адрес берётся из
+        // файла, десинк применяется к нему же. Пока сюда попадал и десинк,
+        // раздел объявлял ошибкой настройки одиннадцать строк, из которых
+        // девять работали. Опровергнуто наблюдением: у прибитого
+        // tr.rbxcdn.com правило «десинк», и превью грузятся.
         var conflicts = pinned.Keys
             .Select(host => (Host: host, Mode: CurrentMode(engine, host)))
-            .Where(pair => pair.Mode is RoutingMode.Proxy or RoutingMode.Desync)
+            .Where(pair => pair.Mode is RoutingMode.Proxy)
             .OrderBy(pair => pair.Host, StringComparer.Ordinal)
             .ToList();
 
@@ -491,10 +497,13 @@ internal static class BlockCheckCommand
             Console.WriteLine($"  {Truncate(host, 34),-34} победит правило «{Describe(mode)}», пин не сработает");
 
         Console.WriteLine();
-        Console.WriteLine("  Пин задаёт адрес, правило — дорогу, и они спорят. Соединение уйдёт");
-        Console.WriteLine("  по правилу: имя вынюхивается из рукопожатия, и пин остаётся ни при чём.");
-        Console.WriteLine("  Нужен туннель — снимите пин. Нужен адрес из файла — поставьте");
-        Console.WriteLine("  «напрямую» в пункте «Сервисы и маршруты».");
+        Console.WriteLine("  Прибитый адрес уводится в туннель, и пин теряет смысл: имя узнаётся");
+        Console.WriteLine("  из рукопожатия, правило по домену срабатывает, и соединение уходит");
+        Console.WriteLine("  не туда, куда указывает файл. Нужен туннель — снимите пин; нужен");
+        Console.WriteLine("  адрес из файла — поставьте «напрямую» в пункте «Сервисы и маршруты».");
+        Console.WriteLine();
+        Console.WriteLine("  С «десинком» пин не спорит: тот адреса не меняет, а только");
+        Console.WriteLine("  вмешивается в пакеты по дороге к нему.");
 
         Console.ForegroundColor = previous;
     }
