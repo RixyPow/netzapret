@@ -72,6 +72,25 @@ public class UpdateCheckTests
         Assert.Contains("netzapret.json", names);
         Assert.Contains("rules.user.yaml", names);
         Assert.Contains("addresses.yaml", names);
+
+        // Каталог адресов забыли при его появлении, и обновление стёрло бы
+        // ровно тот файл, в который мы сами зовём дописывать найденные
+        // рабочие адреса. Здесь он назван поимённо по той же причине,
+        // что и остальные: список должен меняться осознанно.
+        Assert.Contains("catalog.yaml", names);
+    }
+
+    /// <summary>Каждый сохраняемый файл лежит в config.</summary>
+    /// <remarks>
+    /// Обновление заменяет всё, кроме перечисленного, и путь вне config
+    /// означал бы, что мы обходим стороной часть самой программы.
+    /// </remarks>
+    [Fact]
+    public void PreservedFilesAllLiveInConfig()
+    {
+        Assert.All(
+            UpdateInstaller.Preserved,
+            path => Assert.Equal("config", Path.GetDirectoryName(path)));
     }
 }
 
