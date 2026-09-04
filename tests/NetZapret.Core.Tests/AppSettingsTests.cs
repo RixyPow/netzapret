@@ -9,6 +9,46 @@ namespace NetZapret.Core.Tests;
 
 public sealed class AppSettingsTests : IDisposable
 {
+    /// <summary>В режимах «всё через VPN» десинк не поднимается.</summary>
+    /// <remarks>
+    /// <para>
+    /// Обходить там нечего: трафик идёт в туннель, где DPI видит шифрованный
+    /// поток к серверу подписки и имени внутри не знает. А вред есть — захват
+    /// winws2 идёт по портам, соединение к адресу fakeip тоже TCP на 443,
+    /// и поток режется по дороге к нашему же sing-box.
+    /// </para>
+    /// <para>
+    /// Замерено на двух прогонах подряд: при переходе с «только десинк»
+    /// на «всё через VPN» сломались sndcdn.com и i.ytimg.com — оба
+    /// с секциями в пресете, оба до того работавшие.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(OperatingMode.ProxyAll)]
+    [InlineData(OperatingMode.ProxyStrict)]
+    public void DesyncIsNotRaisedWhenEverythingGoesThroughTheTunnel(OperatingMode mode)
+    {
+        var settings = new AppSettings { Mode = mode, PresetName = "Universal V7" };
+
+        Assert.False(settings.NeedsDesync);
+        Assert.True(settings.NeedsProxy);
+    }
+
+    [Theory]
+    [InlineData(OperatingMode.Selective)]
+    [InlineData(OperatingMode.DesyncOnly)]
+    public void DesyncIsRaisedWhereTrafficStillGoesDirect(OperatingMode mode)
+    {
+        Assert.True(new AppSettings { Mode = mode, PresetName = "Universal V7" }.NeedsDesync);
+    }
+
+    /// <remarks>Без пресета поднимать нечего ни в одном режиме.</remarks>
+    [Fact]
+    public void WithoutAPresetDesyncIsNeverRaised()
+    {
+        Assert.False(new AppSettings { Mode = OperatingMode.Selective, PresetName = null }.NeedsDesync);
+    }
+
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"netzapret-settings-{Guid.NewGuid():N}.json");
 
     public void Dispose()
