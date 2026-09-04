@@ -1,12 +1,15 @@
 # Twitch.
 #
+# twitch.com опущен в самый низ: он перенаправляет на twitch.tv, а стоя
+# вторым, попадал в проверку и давал строку про перенаправитель вместо
+# строки про то, чем сервис живёт. Вторым теперь раздача видео.
+#
 # scorecardresearch.com и twitchadvertising.tv не перенесены: это чужая
 # аналитика и реклама. Они не заблокированы, а маршрут для них означал бы,
 # что мы платим трафиком подписки за счётчики.
 #
 # twitch-ext.rootonline.de — сторонний хост расширений, тоже не наш.
 twitch.tv
-twitch.com
 twitchcdn.net
 ttvnw.net
 jtvnw.net
@@ -14,3 +17,4 @@ twitchsvc.net
 live-video.net
 ext-twitch.tv
 twitchcon.com
+twitch.com

@@ -1729,7 +1729,11 @@ internal static class BlockCheckCommand
     /// </remarks>
     private static readonly HashSet<string> NotWorthChecking = new(StringComparer.OrdinalIgnoreCase)
     {
-        "twitter.com",      // всё работает через x.com, он проверяется первым
+        // Единственное оставшееся зеркало. Остальные — twitter.com, twitch.com,
+        // ubi.com, claude.com, telegram.me — из списков либо убраны, либо
+        // опущены ниже проверяемых, так что глушить их больше нечего.
+        // Это зеркало живёт в riot-valorant.txt, где договорено не трогать
+        // ничего: цена ошибки там выше обычной.
         "riotgames.es",     // испанское зеркало riotgames.com
 
         // Голые зоны сетей доставки. Записи A у них нет и не было: работают
@@ -1818,8 +1822,17 @@ internal static class BlockCheckCommand
 
                     var host = domain.TrimStart('*', '.');
 
+                    // Пропущенное имя расходует свой слот. Прежде не расходовало,
+                    // и пропуск втягивал в проверку имя глубже по списку — часто
+                    // такое же бесполезное: у GitHub вместо githubusercontent.com
+                    // проверялся githubassets.com, у Steam вместо steamstatic.com —
+                    // steamcontent.com, и оба дали «нет адреса у имени». Замалчивая
+                    // одну пустую строку, набирали другую.
                     if (NotWorthChecking.Contains(host))
+                    {
+                        taken++;
                         continue;
+                    }
 
                     if (!seen.Add(host))
                         continue;

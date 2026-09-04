@@ -2,12 +2,15 @@
 #
 # Само приложение сюда не относится: оно ходит по адресам, не спрашивая
 # DNS, и ловится только списком подсетей — ipset-telegram.txt.
+#
+# telegram.me и telegram.dog опущены — это алиасы t.me, и в отчёте они
+# повторяли бы строку про него.
 telegram.org
 t.me
-telegram.me
-telegram.dog
 telesco.pe
 telegramusercontent.com
 telegram-cdn.org
 tdesktop.com
 telegram.tips
+telegram.me
+telegram.dog
