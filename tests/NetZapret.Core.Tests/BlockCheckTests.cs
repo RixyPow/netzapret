@@ -352,6 +352,63 @@ public class BlockCheckTests
         }
     }
 
+    /// <summary>
+    /// Вердикты, которые могла подделать теснота, — и те, что не могла.
+    /// </summary>
+    /// <remarks>
+    /// Различие измерено: <c>whatsapp.net</c> в прогоне на семьдесят одну цель
+    /// выходил «закрыт полностью», а он же в прогоне на четыре — «доступен».
+    /// Сюда попадает всё, что ставится по неполученному ответу; заглушка в DNS
+    /// и отказ по стране получены по ответу, который пришёл.
+    /// </remarks>
+    [Theory]
+    [InlineData(BlockKind.Full, true)]
+    [InlineData(BlockKind.HttpsPort, true)]
+    [InlineData(BlockKind.TlsDpi, true)]
+    [InlineData(BlockKind.Stall, true)]
+    [InlineData(BlockKind.TunnelFailed, true)]
+    [InlineData(BlockKind.Sinkhole, false)]
+    [InlineData(BlockKind.GeoBlock, false)]
+    [InlineData(BlockKind.BrokenCname, false)]
+    [InlineData(BlockKind.Dns, false)]
+    [InlineData(BlockKind.NoAddress, false)]
+    [InlineData(BlockKind.None, false)]
+    public void Only_verdicts_made_of_silence_are_reprobed(BlockKind kind, bool expected)
+    {
+        Assert.Equal(expected, Report(kind).MayBeCrowding);
+    }
+
+    [Fact]
+    public void A_quiet_retry_that_works_wins()
+    {
+        var settled = BlockCheck.Reconcile(Report(BlockKind.Full), Report(BlockKind.None));
+
+        Assert.Equal(BlockKind.None, settled.Kind);
+    }
+
+    /// <summary>Приговор от перепроверки не повышается.</summary>
+    /// <remarks>
+    /// Неудача второго захода — это неудача второго захода, а не доказательство
+    /// блокировки. Принимать её значило бы судить по слабейшему из двух замеров,
+    /// то есть ровно по тому, из-за чего проход и заведён.
+    /// </remarks>
+    [Fact]
+    public void A_quiet_retry_that_fails_worse_is_ignored()
+    {
+        var settled = BlockCheck.Reconcile(Report(BlockKind.TlsDpi), Report(BlockKind.Full));
+
+        Assert.Equal(BlockKind.TlsDpi, settled.Kind);
+    }
+
+    /// <summary>А вот «закрыт полностью» уступает всему, что говорит о меньшем.</summary>
+    [Fact]
+    public void Anything_beats_a_total_block_on_the_second_look()
+    {
+        var settled = BlockCheck.Reconcile(Report(BlockKind.Full), Report(BlockKind.TlsDpi));
+
+        Assert.Equal(BlockKind.TlsDpi, settled.Kind);
+    }
+
     private static TargetReport Report(BlockKind kind) => new()
     {
         Host = "example.org",

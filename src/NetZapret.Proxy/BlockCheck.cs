@@ -216,7 +216,12 @@ public sealed record TargetReport
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
         BlockKind.Sinkhole => "адрес-заглушка",
-        BlockKind.Dns => "имя не разрешается",
+
+        // Одним словом про два случая: имя не разрешилось вовсе либо
+        // разрешилось в адрес, который молчит. Разные они только в подробности
+        // под строкой; лечатся оба сменой резолвера, и делить их на два
+        // вердикта значило бы предлагать одно и то же дважды.
+        BlockKind.Dns => "резолвер даёт нерабочий адрес",
         BlockKind.GeoBlock => "сайт отказывает по стране",
         BlockKind.BrokenCname => "оборванный CNAME",
         _ => "нет адреса у имени",
@@ -228,6 +233,27 @@ public sealed record TargetReport
     /// нечего, и в перечне закрытого оно только сбивает.
     /// </remarks>
     public bool Actionable => Kind is not (BlockKind.None or BlockKind.NoAddress);
+
+    /// <summary>
+    /// Мог ли этот вердикт возникнуть от тесноты, а не от блокировки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Различие измеримое, и оно измерено: <c>whatsapp.net</c> в прогоне
+    /// на семьдесят одну цель выходил «закрыт полностью», а он же в прогоне
+    /// на четыре — «доступен». Сеть та же, имя то же, разница только
+    /// в том, сколько проб шло рядом.
+    /// </para>
+    /// <para>
+    /// Сюда попадают вердикты, которые ставятся по неполученному ответу:
+    /// не встало соединение, не прошло рукопожатие, замер поток. Все они
+    /// неотличимы от «нам не хватило полосы». А вот заглушка в DNS,
+    /// оборванный CNAME и отказ по стране получены по ответу, который пришёл,
+    /// — теснота такого не подделает, и перепроверять их незачем.
+    /// </para>
+    /// </remarks>
+    public bool MayBeCrowding => Kind is BlockKind.Full or BlockKind.HttpsPort
+        or BlockKind.TlsDpi or BlockKind.Stall or BlockKind.TunnelFailed;
 
     /// <summary>
     /// Чем лечится.
@@ -408,6 +434,34 @@ public static class BlockCheck
     private static TargetReport Worse(TargetReport a, TargetReport b) =>
         a.Kind == BlockKind.Full && b.Kind != BlockKind.Full ? b : a;
 
+    /// <summary>
+    /// Одна проба без повтора — для перепроверки в тишине.
+    /// </summary>
+    /// <remarks>
+    /// Повтор внутри <see cref="CheckAsync"/> здесь был бы лишним: тот, кто
+    /// зовёт этот метод, сам и есть повтор. Двойная проба удвоила бы ожидание
+    /// ровно там, где его и так больше всего — на именах, которые молчат.
+    /// </remarks>
+    public static Task<TargetReport> ProbeOnceAsync(
+        string host,
+        string? service,
+        CancellationToken cancellationToken,
+        bool throughTunnel = false) =>
+        ProbeAsync(host, service, cancellationToken, throughTunnel);
+
+    /// <summary>
+    /// Сводит вердикт из общего прогона с вердиктом из одиночного.
+    /// </summary>
+    /// <remarks>
+    /// Одиночному верим больше, но только когда он говорит о лучшем.
+    /// Ухудшение при повторе — это разовая неудача второй пробы, и повышать
+    /// по ней приговор значило бы обвинять по слабейшему из двух замеров.
+    /// </remarks>
+    public static TargetReport Reconcile(TargetReport crowded, TargetReport alone) =>
+        alone.Kind == BlockKind.None || (crowded.Kind == BlockKind.Full && alone.Kind != BlockKind.Full)
+            ? alone
+            : crowded;
+
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
@@ -491,20 +545,52 @@ public static class BlockCheck
             };
         }
 
-        var tcp = await TcpAsync(host, 443, AddressFamily.InterNetwork, cancellationToken);
+        var tcp = await TcpAsync(host, 443, AddressFamily.InterNetwork, cancellationToken, real);
 
         // Пробы идут последовательно, а не разом: одновременные соединения
         // к одному хосту DPI иногда обрывает скопом, и картина смазывается.
-        var tls12 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken) : Failed(null);
-        var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken) : Failed(null);
-        var http = await HttpAsync(host, cancellationToken);
+        var tls12 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, real) : Failed(null);
+        var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, real) : Failed(null);
+        var http = await HttpAsync(host, cancellationToken, real);
 
         // Передача проверяется только там, где рукопожатие состоялось: без него
         // качать нечего, а вопрос «идут ли данные» имеет смысл ровно тогда,
         // когда соединение с виду установлено.
         var data = tls12.Ok || tls13.Ok
-            ? await TransferAsync(host, cancellationToken)
+            ? await TransferAsync(host, cancellationToken, real)
             : Failed(null);
+
+        var kind = Classify(tcp, tls12, tls13, http, data, throughTunnel);
+        var shown = real.Select(a => a.ToString()).Take(3).ToList();
+
+        // «Не ответило ничего» бывает двух видов, и лечатся они разным.
+        // Закрыт может быть маршрут до хоста — тогда нужен туннель. А может
+        // не отвечать ровно тот адрес, который выдал резолвер, тогда как
+        // соседний живёт: у этого пользователя все три имени WhatsApp
+        // системный DNS разрешал в 157.240.205.60, куда соединение не встаёт,
+        // а 1.1.1.1 давал 57.144.249.32, который отвечает за десятые доли.
+        // Первое лечится VPN, второе — сменой резолвера, и путать их дорого.
+        if (kind == BlockKind.Full && !throughTunnel)
+        {
+            var honest = await DohResolveAsync(host, cancellationToken);
+            var other = honest.FirstOrDefault(a => !shown.Contains(a, StringComparer.Ordinal));
+
+            if (other is not null && await AnswersAsync(other, cancellationToken))
+            {
+                return new TargetReport
+                {
+                    Host = host,
+                    Service = service,
+                    Tcp = Failed($"{real[0]} молчит, а {other} от честного резолвера отвечает"),
+                    Tls12 = tls12,
+                    Tls13 = tls13,
+                    Http = http,
+                    Data = data,
+                    Kind = BlockKind.Dns,
+                    Addresses = honest.Take(3).ToList(),
+                };
+            }
+        }
 
         return new TargetReport
         {
@@ -515,10 +601,32 @@ public static class BlockCheck
             Tls13 = tls13,
             Http = http,
             Data = data,
-            Kind = Classify(tcp, tls12, tls13, http, data, throughTunnel),
-            Addresses = addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-                .Select(a => a.ToString()).Take(3).ToList(),
+            Kind = kind,
+            Addresses = shown,
         };
+    }
+
+    /// <summary>Встаёт ли соединение на 443 к конкретному адресу.</summary>
+    /// <remarks>
+    /// По адресу, а не по имени: весь вопрос в том, что имя разрешается
+    /// не туда, и спрашивать снова через тот же резолвер бессмысленно.
+    /// </remarks>
+    private static async Task<bool> AnswersAsync(string address, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new TcpClient(AddressFamily.InterNetwork);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(Timeout);
+
+            await client.ConnectAsync(IPAddress.Parse(address), 443, timeout.Token);
+
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -609,7 +717,8 @@ public static class BlockCheck
         string host,
         int port,
         AddressFamily family,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<IPAddress>? dialled = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -630,7 +739,7 @@ public static class BlockCheck
                 Ok = false,
                 Reset = IsReset(ex),
                 Elapsed = stopwatch.Elapsed,
-                Detail = Explain(ex),
+                Detail = Explain(ex, dialled, port),
             };
         }
     }
@@ -649,7 +758,8 @@ public static class BlockCheck
     private static async Task<ProbeOutcome> TlsAsync(
         string host,
         SslProtocols protocol,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<IPAddress>? dialled = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -683,7 +793,7 @@ public static class BlockCheck
                 Ok = false,
                 Reset = IsReset(ex),
                 Elapsed = stopwatch.Elapsed,
-                Detail = Explain(ex),
+                Detail = Explain(ex, dialled, 443),
             };
         }
     }
@@ -710,7 +820,10 @@ public static class BlockCheck
         "CA5359:Do not disable certificate validation",
         Justification = "Измеряется проходимость потока, а не доверие. " +
             "Подлинность проверяется отдельно, в CertificateMatchesAsync.")]
-    private static async Task<ProbeOutcome> TransferAsync(string host, CancellationToken cancellationToken)
+    private static async Task<ProbeOutcome> TransferAsync(
+        string host,
+        CancellationToken cancellationToken,
+        IReadOnlyList<IPAddress>? dialled = null)
     {
         var stopwatch = Stopwatch.StartNew();
         int total = 0;
@@ -817,7 +930,9 @@ public static class BlockCheck
                 Ok = false,
                 Reset = IsReset(ex),
                 Elapsed = stopwatch.Elapsed,
-                Detail = total > 0 ? $"оборвано на {total} Б: {Explain(ex)}" : Explain(ex),
+                Detail = total > 0
+                    ? $"оборвано на {total} Б: {Explain(ex, dialled, 443)}"
+                    : Explain(ex, dialled, 443),
             };
         }
     }
@@ -904,7 +1019,10 @@ public static class BlockCheck
     /// если по 80 порту хост отвечает, значит он достижим, и дело именно
     /// в рукопожатии.
     /// </remarks>
-    private static async Task<ProbeOutcome> HttpAsync(string host, CancellationToken cancellationToken)
+    private static async Task<ProbeOutcome> HttpAsync(
+        string host,
+        CancellationToken cancellationToken,
+        IReadOnlyList<IPAddress>? dialled = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -944,7 +1062,7 @@ public static class BlockCheck
                 Ok = false,
                 Reset = IsReset(ex),
                 Elapsed = stopwatch.Elapsed,
-                Detail = Explain(ex),
+                Detail = Explain(ex, dialled, 80),
             };
         }
     }
@@ -953,20 +1071,79 @@ public static class BlockCheck
     /// Переводит отказ на язык, на котором о нём можно думать.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Истёкший у нас таймаут приходит как «операция отменена», и в отчёте это
     /// выглядело сообщением от сети — будто хост так ответил. На деле ответа
     /// не было вовсе, и читающий вправе знать, что ждали мы, а не нам отказали.
+    /// </para>
+    /// <para>
+    /// Отказ сокета называется своим именем и кодом. Прежде он приходил
+    /// в отчёт системным текстом Windows — «Попытка установить соединение была
+    /// безуспешной…», — где не различить отвергнутое соединение от
+    /// недостижимой сети, а это разные поломки с разными виновниками.
+    /// </para>
+    /// <para>
+    /// И то и другое сопровождается адресом, к которому шли. Без него строка
+    /// говорит о хосте, а отвечал за неё, случалось, прибитый в hosts адрес
+    /// или fakeip нашего же туннеля, — и человек чинил сайт, тогда как чинить
+    /// надо было запись в файле.
+    /// </para>
     /// </remarks>
-    private static string Explain(Exception ex)
+    private static string Explain(Exception ex, IReadOnlyList<IPAddress>? dialled = null, int port = 0)
     {
+        var where = At(dialled, port);
+
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is SocketException socket)
+                return $"{Name(socket.SocketErrorCode)} ({socket.ErrorCode}){where}";
+        }
+
         for (var e = ex; e is not null; e = e.InnerException)
         {
             if (e is OperationCanceledException)
-                return $"нет ответа за {Timeout.TotalSeconds:0} с";
+                return $"нет ответа за {Timeout.TotalSeconds:0} с{where}";
         }
 
-        return ex.GetBaseException().Message;
+        return ex.GetBaseException().Message + where;
     }
+
+    /// <summary>Куда стучались — адрес и порт, а не только имя.</summary>
+    private static string At(IReadOnlyList<IPAddress>? dialled, int port)
+    {
+        if (dialled is null || dialled.Count == 0)
+            return string.Empty;
+
+        var first = $", {dialled[0]}:{port}";
+
+        // Соединение пробует все адреса подряд, поэтому назвать один и умолчать
+        // об остальных значило бы приписать отказ ему одному.
+        return dialled.Count == 1 ? first : $"{first} — всего адресов {dialled.Count}";
+    }
+
+    /// <summary>
+    /// Как называется отказ сокета.
+    /// </summary>
+    /// <remarks>
+    /// Имя из перечисления оставлено в скобках намеренно: по нему ищется
+    /// объяснение, а перевод нужен, чтобы понять, не ища.
+    /// </remarks>
+    private static string Name(SocketError error) => error switch
+    {
+        SocketError.ConnectionRefused => "соединение отвергнуто, ConnectionRefused",
+        SocketError.ConnectionReset => "соединение сброшено, ConnectionReset",
+        SocketError.ConnectionAborted => "соединение прервано, ConnectionAborted",
+        SocketError.TimedOut => "истекло время у системы, TimedOut",
+        SocketError.HostUnreachable => "хост недостижим, HostUnreachable",
+        SocketError.NetworkUnreachable => "сеть недостижима, NetworkUnreachable",
+        SocketError.HostNotFound => "имя не разрешается, HostNotFound",
+        SocketError.TryAgain => "имя не разрешилось с первого раза, TryAgain",
+        SocketError.NoData => "у имени нет записи нужного типа, NoData",
+        SocketError.AddressNotAvailable => "адрес недоступен, AddressNotAvailable",
+        SocketError.NetworkDown => "сеть выключена, NetworkDown",
+        SocketError.AccessDenied => "доступ запрещён, AccessDenied",
+        _ => $"отказ сокета {error}",
+    };
 
     /// <summary>
     /// Оборвано ли соединение удалённой стороной.
