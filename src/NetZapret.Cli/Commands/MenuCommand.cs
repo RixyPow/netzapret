@@ -1195,7 +1195,19 @@ internal static class MenuCommand
 
         if (answers.Count == 0)
         {
-            Message("Этот набор не покрывает ни одного имени части.", ConsoleColor.Yellow);
+            // Молчание всех адресов — тоже ответ, и стоит его назвать. Так
+            // ведёт себя сервис, закрытый по адресу: честное имя разрешается,
+            // а до самого адреса из России не достучаться. Пин тут бессилен
+            // по существу — он задаёт адрес, а не дорогу к нему. Ровно этот
+            // случай у WhatsApp, и лечит его туннель.
+            Message(
+                profile == HonestResolver || profile.StartsWith(OwnPrefix, StringComparison.Ordinal)
+                    ? "Ни один адрес не ответил. Похоже, сервис закрыт по самому адресу, " +
+                      "а не по имени: пин тут не поможет — нужен туннель либо набор " +
+                      "с чужим прокси."
+                    : "Этот набор не покрывает ни одного имени части.",
+                ConsoleColor.Yellow);
+
             return;
         }
 
@@ -1422,39 +1434,77 @@ internal static class MenuCommand
         // в каталоге, и именно они чаще всего и ломаются.
         var asked = names.Concat(zones).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
+        using var stop = new CancellationTokenSource();
+        var escape = EscapeWatcher.Watch(stop);
+
         Console.WriteLine();
-        Console.WriteLine($"  Спрашиваю адреса и проверяю каждый: имён {asked.Count}…");
+        Console.WriteLine(
+            $"  Спрашиваю адреса и проверяю каждый: имён {asked.Count}…"
+            + (escape.Armed ? " Esc — прервать." : string.Empty));
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
 
-        foreach (var name in asked)
+        // Имена идут разом, и внутри имени адреса тоже. Последовательный
+        // перебор стоил минут: четыре резолвера по таймауту, затем каждый
+        // найденный адрес по таймауту, и всё это на десяток имён. Пробы
+        // независимы, ждать их по очереди незачем.
+        using var slots = new SemaphoreSlim(6);
+        var console = new object();
+
+        var work = asked.Select(async name =>
         {
-            var candidates = DohResolver.CandidatesAsync(name, http, CancellationToken.None)
-                .GetAwaiter().GetResult();
+            await slots.WaitAsync(stop.Token);
 
-            if (candidates.Count == 0)
-                continue;
-
-            // Проверяется каждый, а не берётся первый. У сети доставки шардов
-            // десятки, отвечают не все, и какой достанется — зависит от того,
-            // кого спросили: у image.tmdb.org один резолвер отдавал петлю,
-            // другой — шард, отдающий постер. Прежде в файл попадал первый
-            // непустой ответ, и однажды им оказался адрес, который молчит.
-            var working = candidates.FirstOrDefault(
-                a => DohResolver.ServesAsync(a, name, CancellationToken.None).GetAwaiter().GetResult());
-
-            if (working is null)
+            try
             {
-                Console.WriteLine($"    {Truncate(name, 30),-30} ни один из {candidates.Count} не отвечает");
-                continue;
+                var candidates = await DohResolver.CandidatesAsync(name, http, stop.Token);
+
+                if (candidates.Count == 0)
+                    return;
+
+                // Проверяется каждый, а не берётся первый. У сети доставки
+                // шардов десятки, отвечают не все, и какой достанется —
+                // зависит от того, кого спросили: у image.tmdb.org один
+                // резолвер отдавал петлю, другой — шард, отдающий постер.
+                var checks = candidates
+                    .Select(async a => (Address: a, Works: await DohResolver.ServesAsync(a, name, stop.Token)))
+                    .ToList();
+
+                var outcomes = await Task.WhenAll(checks);
+                var working = outcomes.FirstOrDefault(o => o.Works).Address;
+
+                lock (console)
+                {
+                    if (working is null)
+                    {
+                        Console.WriteLine($"    {Truncate(name, 30),-30} ни один из {candidates.Count} не отвечает");
+                        return;
+                    }
+
+                    Console.WriteLine(candidates.Count > 1
+                        ? $"    {Truncate(name, 30),-30} {working} (из {candidates.Count} проверенных)"
+                        : $"    {Truncate(name, 30),-30} {working}");
+
+                    result[name] = working;
+                }
             }
+            catch (OperationCanceledException)
+            {
+            }
+            finally
+            {
+                slots.Release();
+            }
+        });
 
-            Console.WriteLine(candidates.Count > 1
-                ? $"    {Truncate(name, 30),-30} {working} (из {candidates.Count} проверенных)"
-                : $"    {Truncate(name, 30),-30} {working}");
+        Task.WhenAll(work).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing).GetAwaiter().GetResult();
 
-            result[name] = working;
-        }
+        // Сторож снимается сразу: он читает клавиши и, оставшись жить,
+        // забирает их у следующего вопроса.
+        escape.Dispose();
+
+        if (stop.IsCancellationRequested)
+            Console.WriteLine("  Прервано — прибито будет только то, что успело проверитьcя.");
 
         return result;
     }
