@@ -1,0 +1,11 @@
+# Cloudflare.
+#
+# За ним стоит множество чужих сайтов — правило на эту зону задевает их все.
+# Трогать с осторожностью.
+#
+# cloudflareportal.com, cloudflareok.com и cloudflarecp.com не перенесены:
+# припаркованы, содержимого нет.
+cloudflare.com
+cloudflare-ech.com
+cloudflareinsights.com
+cloudflareclient.com

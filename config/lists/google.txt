@@ -1,0 +1,15 @@
+# Google: почта, диск, поиск, вход в аккаунт.
+#
+# Отдельно от YouTube — тот ломается и лечится сам по себе.
+#
+# doubleclick.net, google-analytics.com и googletagmanager.com не перенесены:
+# реклама и счётчики. Они не заблокированы, а маршрут для них тратил бы
+# трафик подписки на слежку за собой же.
+google.com
+accounts.google.com
+gstatic.com
+googleapis.com
+googleusercontent.com
+ggpht.com
+recaptcha.net
+withgoogle.com

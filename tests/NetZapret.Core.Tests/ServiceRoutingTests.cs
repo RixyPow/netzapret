@@ -20,7 +20,7 @@ public sealed class ServiceRoutingTests : IDisposable
 
     public ServiceRoutingTests()
     {
-        Directory.CreateDirectory(Path.Combine(_root, "lists"));
+        Directory.CreateDirectory(Path.Combine(_root, "config", "lists"));
 
         Write("discord-media.txt", "discord.media");
         Write("discord.txt", "discord.com", "discord.gg", "discordapp.com");
@@ -33,15 +33,15 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     private void Write(string name, params string[] lines) =>
-        File.WriteAllLines(Path.Combine(_root, "lists", name), lines);
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", name), lines);
 
     private static ServiceDefinition Discord => new()
     {
         Name = "Discord",
         Parts =
         [
-            new ServicePart { Name = "Голос", List = "lists/discord-media.txt" },
-            new ServicePart { Name = "Текст", List = "lists/discord.txt" },
+            new ServicePart { Name = "Голос", List = "config/lists/discord-media.txt" },
+            new ServicePart { Name = "Текст", List = "config/lists/discord.txt" },
         ],
     };
 
@@ -68,7 +68,7 @@ public sealed class ServiceRoutingTests : IDisposable
             mode: selective
             rules:
               - match: hostlist
-                value: "lists/discord.txt"
+                value: "config/lists/discord.txt"
                 mode: proxy
             default:
               mode: desync
@@ -89,7 +89,7 @@ public sealed class ServiceRoutingTests : IDisposable
             mode: selective
             rules:
               - match: hostlist
-                value: "lists/discord-media.txt"
+                value: "config/lists/discord-media.txt"
                 mode: proxy
             default:
               mode: desync
@@ -107,7 +107,7 @@ public sealed class ServiceRoutingTests : IDisposable
             mode: selective
             rules:
               - match: hostlist
-                value: "lists/discord-media.txt"
+                value: "config/lists/discord-media.txt"
                 mode: proxy
             default:
               mode: desync
@@ -129,13 +129,13 @@ public sealed class ServiceRoutingTests : IDisposable
         // Из-за этого все сервисы показывались идущими напрямую, хотя шли
         // через десинк; верным оставался лишь RuTracker, у которого доменное
         // правило проверяется раньше адресных.
-        File.WriteAllLines(Path.Combine(_root, "lists", "все-адреса.txt"), ["0.0.0.0/0"]);
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", "все-адреса.txt"), ["0.0.0.0/0"]);
 
         var engine = Load("""
             mode: selective
             rules:
               - match: ipset
-                value: "lists/все-адреса.txt"
+                value: "config/lists/все-адреса.txt"
                 mode: direct
             default:
               mode: desync
@@ -153,14 +153,14 @@ public sealed class ServiceRoutingTests : IDisposable
         // по адресам мимо DNS. Спросив про домен, мы получали ответ про другой
         // трафик — и приложение показывалось идущим через десинк, хотя шло
         // через VPN.
-        File.WriteAllLines(Path.Combine(_root, "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
         Write("telegram.txt", "telegram.org");
 
         var engine = Load("""
             mode: selective
             rules:
               - match: ipset
-                value: "lists/ipset-telegram.txt"
+                value: "config/lists/ipset-telegram.txt"
                 mode: proxy
             default:
               mode: desync
@@ -171,8 +171,8 @@ public sealed class ServiceRoutingTests : IDisposable
             Name = "Telegram",
             Parts =
             [
-                new ServicePart { Name = "Приложение", List = "lists/ipset-telegram.txt", ByAddress = true },
-                new ServicePart { Name = "Сайт", List = "lists/telegram.txt" },
+                new ServicePart { Name = "Приложение", List = "config/lists/ipset-telegram.txt", ByAddress = true },
+                new ServicePart { Name = "Сайт", List = "config/lists/telegram.txt" },
             ],
         };
 
@@ -187,17 +187,17 @@ public sealed class ServiceRoutingTests : IDisposable
     {
         // Правило пишется того же вида, каким часть задана; пометка «ваш выбор»
         // должна узнавать именно его, а не искать доменное.
-        File.WriteAllLines(Path.Combine(_root, "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", "ipset-telegram.txt"), ["91.108.56.0/22"]);
 
         var users = Path.Combine(_root, "rules.user.yaml");
         var file = UserRulesFile.Load(users);
-        file.Set(MatchKind.IpSet, "lists/ipset-telegram.txt", RoutingMode.Proxy);
+        file.Set(MatchKind.IpSet, "config/lists/ipset-telegram.txt", RoutingMode.Proxy);
         file.Save();
 
         var service = new ServiceDefinition
         {
             Name = "Telegram",
-            Parts = [new ServicePart { Name = "Приложение", List = "lists/ipset-telegram.txt", ByAddress = true }],
+            Parts = [new ServicePart { Name = "Приложение", List = "config/lists/ipset-telegram.txt", ByAddress = true }],
         };
 
         var parts = ServiceRouting.Describe(service, Load("mode: selective"), _root, UserRulesFile.Load(users));
@@ -244,7 +244,7 @@ public sealed class ServiceRoutingTests : IDisposable
         var service = new ServiceDefinition
         {
             Name = "Нет такого",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/нет-файла.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/нет-файла.txt" }],
         };
 
         var parts = ServiceRouting.Describe(service, Load("mode: selective"), _root, EmptyUserRules());
@@ -262,7 +262,7 @@ public sealed class ServiceRoutingTests : IDisposable
             mode: selective
             rules:
               - match: hostlist
-                value: "lists/нет-файла.txt"
+                value: "config/lists/нет-файла.txt"
                 mode: proxy
             default:
               mode: desync
@@ -285,14 +285,11 @@ public sealed class ServiceRoutingTests : IDisposable
             {
                 Assert.False(string.IsNullOrWhiteSpace(p.Name));
 
-                // Либо список Zapret, либо наш собственный. Второе появилось
-                // для того, чего у Zapret нет вовсе: Valheim и Pinterest
-                // не упоминаются в его списках, а Steam там одним куском,
-                // хотя сайт и загрузки ломаются и лечатся по-разному.
-                Assert.True(
-                    p.List.StartsWith("lists/", StringComparison.Ordinal)
-                        || p.List.StartsWith("config/lists/", StringComparison.Ordinal),
-                    $"{s.Name} · {p.Name}: неожиданный путь списка {p.List}");
+                // Только наши файлы, без исключений. Раньше здесь допускался
+                // и путь lists/... — список установки Zapret, — и это выходило
+                // боком: без установки правило молча не совпадало ни с чем,
+                // а состав задавал не тот, кто отвечает за последствия.
+                Assert.StartsWith("config/lists/", p.List, StringComparison.Ordinal);
             });
         });
     }

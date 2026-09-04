@@ -1,0 +1,16 @@
+# Riot и Valorant.
+#
+# Перенесено как есть, включая riotgames.es. Здесь всё работает, и трогать
+# состав незачем: античиты плохо переносят и десинк, и туннель, так что
+# цена ошибки в этом списке выше обычной.
+riotgames.com
+valorant.com
+playvalorant.com
+riotcdn.net
+riotcdn.com
+riotgames.es
+rgpub.io
+rdatasrv.net
+pvp.net
+RiotClientServices.com
+LeagueofLegends.com

@@ -1,0 +1,7 @@
+# Epic Games и Fortnite.
+#
+# akamaized.net не перенесён: зона чужой сети доставки, за ней стоит
+# не только Epic. Причина та же, что у akamai.net в roblox.txt.
+epicgames.com
+fortnite.com
+unrealengine.com

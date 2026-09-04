@@ -1,0 +1,8 @@
+# Speedtest.
+#
+# ziffstatic.com и appleid.cdn-apple.com не перенесены: первый — реклама
+# издателя, второй вообще про вход в Apple ID и попал в список Zapret,
+# похоже, по ошибке.
+speedtest.net
+ooklaserver.net
+cdnst.net

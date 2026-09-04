@@ -1,0 +1,5 @@
+# Amazon и AWS.
+amazon.com
+amazonaws.com
+awsstatic.com
+awsapps.com

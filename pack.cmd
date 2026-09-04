@@ -76,9 +76,12 @@ rem channel, which the Zapret sets do not carry. Hand-edited, so it ships as
 rem readable text beside the rules.
 copy /y "%ROOT%config\catalog.yaml" "%STAGE%\config\" >nul
 
-rem Our own domain lists. Rules reference them by path, so leaving them out
-rem gives rules that resolve to nothing - and the service view would show
-rem Steam and Valheim as routed while nothing was routed at all.
+rem Our domain and address lists - all of them now, not just the handful
+rem Zapret has no entry for. Rules reference them by path, so leaving them out
+rem gives rules that resolve to nothing: an absent list loads as empty, matches
+rem nothing, and the route silently falls through to the default. For the
+rem "Russian networks go direct" rule that means the whole domestic traffic
+rem in the tunnel, which is why ipset-ru.txt travels here too.
 mkdir "%STAGE%\config\lists" 2>nul
 copy /y "%ROOT%config\lists\*.txt" "%STAGE%\config\lists\" >nul
 copy /y "%ROOT%config\lists\README.md" "%STAGE%\config\lists\" >nul

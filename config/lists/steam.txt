@@ -1,0 +1,23 @@
+# Steam: загрузки и всё прочее.
+#
+# akamaihd.net из списка Zapret не перенесён — по той же причине, что и
+# akamai.net у Roblox: это зона чужой сети доставки, а не Steam. Загрузки
+# идут с steamcontent.com, и он здесь.
+#
+# Через туннель эту часть вести не стоит в любом случае: игры идут
+# десятками гигабайт и съедят квоту подписки за вечер, а работают и без него.
+steampowered.com
+steamcommunity.com
+steamstatic.com
+steamcontent.com
+steamusercontent.com
+steamgames.com
+steam-chat.com
+steam-api.com
+steamserver.net
+s.team
+steam.tv
+steamdeck.com
+playartifact.com
+underlords.com
+valvesoftware.com

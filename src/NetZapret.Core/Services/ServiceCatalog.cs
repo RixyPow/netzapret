@@ -9,17 +9,26 @@ public sealed record ServicePart
     public required string Name { get; init; }
 
     /// <summary>
-    /// Список Zapret, задающий состав части.
+    /// Наш список, задающий состав части.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Ссылка на файл, а не выписанные домены или подсети. Списки ведёт проект
-    /// Zapret и обновляет вместе с собой; выписанная копия устареет молча, и мы
-    /// узнаем об этом, когда у кого-нибудь перестанет работать голос.
+    /// Ссылка на файл, а не выписанные домены или подсети: список можно
+    /// поправить, не пересобирая программу.
     /// </para>
     /// <para>
-    /// Доменный (<c>lists/discord-media.txt</c>) либо адресный
-    /// (<c>lists/ipset-telegram.txt</c>) — см. <see cref="ByAddress"/>.
+    /// Все пути ведут в <c>config/lists/</c> — то есть в наши файлы, которые
+    /// едут в архиве и обновляются вместе с программой. Прежде они вели
+    /// в <c>lists/</c> установки Zapret, и это выходило боком дважды. Во-первых,
+    /// правило молча переставало действовать, если установки нет: непрогруженный
+    /// список не совпадает ни с чем, а в меню часть по-прежнему числилась
+    /// направленной. Во-вторых, состав задавал не тот, кто отвечает за
+    /// последствия: в <c>discord.txt</c> лежало два десятка чужих сайтов
+    /// о Discord, в <c>roblox.txt</c> — зоны Akamai и Amazon целиком.
+    /// </para>
+    /// <para>
+    /// Доменный (<c>config/lists/discord-media.txt</c>) либо адресный
+    /// (<c>config/lists/ipset-telegram.txt</c>) — см. <see cref="ByAddress"/>.
     /// </para>
     /// </remarks>
     public required string List { get; init; }
@@ -55,15 +64,28 @@ public sealed record ServiceDefinition
 /// </summary>
 /// <remarks>
 /// <para>
-/// Составлен по разбору пресета Universal V6: там части уже разделены —
-/// отдельные секции для <c>discord-media.txt</c> (голос), <c>discord.txt</c>
-/// (всё прочее), <c>googlevideo.txt</c> (видеопоток) и <c>youtube.txt</c>
-/// (интерфейс). Мы не придумываем состав, а называем то, что там уже есть.
+/// Разбиение на части взято из пресета Universal V6: там отдельные секции
+/// для голоса, переписки, видеопотока и интерфейса. Ценность появляется
+/// там, где части расходятся: у Discord голос ломается иначе, чем текст,
+/// и лечится иначе. Сервис без такого разделения смысла не добавляет —
+/// его и одной строкой можно направить.
 /// </para>
 /// <para>
-/// Ценность появляется там, где части расходятся: у Discord голос ломается
-/// иначе, чем текст, и лечится иначе. Сервис без такого разделения смысла
-/// не добавляет — его и одной строкой можно направить.
+/// А вот состав частей теперь наш. Списки лежат в <c>config/lists/</c>
+/// и ведутся вместе с программой; за основу взяты списки Zapret, из которых
+/// убраны три группы записей. Чужие сайты о сервисе (disboard.org, top.gg,
+/// mee6.xyz у Discord) — они ломаются сами по себе, а в отчёте выглядели
+/// поломкой сервиса. Целые сети доставки (akamai.net, amazonaws.com
+/// у Roblox, akamaihd.net у Steam) — правило на такую зону уводит в туннель
+/// половину интернета. И зеркала: тридцать восемь страновых зон Microsoft,
+/// тринадцать доменов RuTracker, два десятка адресов Roblox.
+/// </para>
+/// <para>
+/// Заодно починены две молчаливые ошибки. У Discord второй прокси картинок
+/// записан как <c>mages-ext-2.discordapp.net</c> — без первой буквы, — и не
+/// совпадал ни с чем. У X и GitHub картинки и raw-файлы лежат на
+/// <c>twimg.com</c> и <c>githubusercontent.com</c>, которые в Zapret вынесены
+/// отдельными файлами, и на них не ссылалась ни одна часть.
 /// </para>
 /// </remarks>
 public static class ServiceCatalog
@@ -78,29 +100,29 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Голос",
-                    List = "lists/discord-media.txt",
+                    List = "config/lists/discord-media.txt",
                     Note = "голосовые серверы; ломается отдельно от переписки",
                 },
                 new ServicePart
                 {
                     Name = "Текст и вход",
-                    List = "lists/discord.txt",
+                    List = "config/lists/discord.txt",
                     Note = "переписка, шлюз, приглашения",
                 },
                 new ServicePart
                 {
                     Name = "Картинки и вложения",
-                    List = "lists/discord-images.txt",
+                    List = "config/lists/discord-images.txt",
                 },
                 new ServicePart
                 {
                     Name = "Обновления",
-                    List = "lists/discord-updates.txt",
+                    List = "config/lists/discord-updates.txt",
                 },
                 new ServicePart
                 {
                     Name = "Запасной путь по адресам",
-                    List = "lists/ipset-discord.txt",
+                    List = "config/lists/ipset-discord.txt",
                     ByAddress = true,
                     Note = "3,4 млн адресов, среди них куски Google Cloud и Amazon — включать в крайнем случае",
                 },
@@ -115,24 +137,24 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Видеопоток",
-                    List = "lists/googlevideo.txt",
+                    List = "config/lists/googlevideo.txt",
                     Note = "сам просмотр; отдельно от страницы",
                 },
                 new ServicePart
                 {
                     Name = "Интерфейс",
-                    List = "lists/youtube.txt",
+                    List = "config/lists/youtube.txt",
                     Note = "страница, поиск, комментарии",
                 },
                 new ServicePart
                 {
                     Name = "Превью",
-                    List = "lists/i-ytimg.txt",
+                    List = "config/lists/i-ytimg.txt",
                 },
                 new ServicePart
                 {
                     Name = "QUIC по адресам",
-                    List = "lists/ipset-youtube.txt",
+                    List = "config/lists/ipset-youtube.txt",
                     ByAddress = true,
                 },
             ],
@@ -146,14 +168,14 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Приложение",
-                    List = "lists/ipset-telegram.txt",
+                    List = "config/lists/ipset-telegram.txt",
                     ByAddress = true,
                     Note = "клиент ходит по адресам, не спрашивая DNS — поэтому подсети, а не домены",
                 },
                 new ServicePart
                 {
                     Name = "Сайт и веб-версия",
-                    List = "lists/telegram.txt",
+                    List = "config/lists/telegram.txt",
                 },
             ],
         },
@@ -163,15 +185,15 @@ public static class ServiceCatalog
             Name = "Instagram и Facebook",
             Parts =
             [
-                new ServicePart { Name = "Instagram", List = "lists/instagram.txt" },
-                new ServicePart { Name = "Facebook", List = "lists/facebook.txt" },
+                new ServicePart { Name = "Instagram", List = "config/lists/instagram.txt" },
+                new ServicePart { Name = "Facebook", List = "config/lists/facebook.txt" },
             ],
         },
 
         new ServiceDefinition
         {
             Name = "Twitch",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/twitch.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" }],
         },
 
         new ServiceDefinition
@@ -179,7 +201,7 @@ public static class ServiceCatalog
             Name = "Roblox",
             Parts =
             [
-                new ServicePart { Name = "Игра и сайт", List = "lists/roblox.txt" },
+                new ServicePart { Name = "Игра и сайт", List = "config/lists/roblox.txt" },
                 new ServicePart
                 {
                     Name = "Превью предметов",
@@ -210,7 +232,7 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Загрузки и всё прочее",
-                    List = "lists/steam.txt",
+                    List = "config/lists/steam.txt",
                     Note = "игры идут десятками гигабайт — через туннель не стоит",
                 },
             ],
@@ -253,25 +275,25 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "TikTok",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/tiktok.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/tiktok.txt" }],
         },
 
         new ServiceDefinition
         {
             Name = "SoundCloud",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/soundcloud.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/soundcloud.txt" }],
         },
 
         new ServiceDefinition
         {
             Name = "WhatsApp",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/whatsapp.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/whatsapp.txt" }],
         },
 
         new ServiceDefinition
         {
             Name = "GitHub",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/github.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/github.txt" }],
         },
 
         new ServiceDefinition
@@ -279,10 +301,10 @@ public static class ServiceCatalog
             Name = "Нейросети",
             Parts =
             [
-                new ServicePart { Name = "ChatGPT", List = "lists/chatgpt.txt" },
-                new ServicePart { Name = "Claude", List = "lists/claude.txt" },
-                new ServicePart { Name = "Gemini", List = "lists/gemini.txt" },
-                new ServicePart { Name = "DeepSeek", List = "lists/deepseek.txt" },
+                new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
+                new ServicePart { Name = "Claude", List = "config/lists/claude.txt" },
+                new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
+                new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
             ],
         },
 
@@ -294,12 +316,12 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Riot и Valorant",
-                    List = "lists/riot-valorant.txt",
+                    List = "config/lists/riot-valorant.txt",
                     Note = "античиты плохо переносят и десинк, и туннель",
                 },
-                new ServicePart { Name = "Epic Games и Fortnite", List = "lists/epicgames-fortnite.txt" },
-                new ServicePart { Name = "Ubisoft", List = "lists/ubisoft.txt" },
-                new ServicePart { Name = "itch.io", List = "lists/itch.txt" },
+                new ServicePart { Name = "Epic Games и Fortnite", List = "config/lists/epicgames-fortnite.txt" },
+                new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
+                new ServicePart { Name = "itch.io", List = "config/lists/itch.txt" },
             ],
         },
 
@@ -311,7 +333,7 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Сервисы",
-                    List = "lists/google.txt",
+                    List = "config/lists/google.txt",
                     Note = "почта, диск, поиск — отдельно от YouTube",
                 },
             ],
@@ -322,14 +344,14 @@ public static class ServiceCatalog
             Name = "Соцсети",
             Parts =
             [
-                new ServicePart { Name = "Twitter / X", List = "lists/twitter.txt" },
+                new ServicePart { Name = "Twitter / X", List = "config/lists/twitter.txt" },
                 new ServicePart
                 {
                     Name = "Twitter / X по адресам",
-                    List = "lists/ipset-twitter.txt",
+                    List = "config/lists/ipset-twitter.txt",
                     ByAddress = true,
                 },
-                new ServicePart { Name = "LinkedIn", List = "lists/linkedin.txt" },
+                new ServicePart { Name = "LinkedIn", List = "config/lists/linkedin.txt" },
             ],
         },
 
@@ -338,8 +360,8 @@ public static class ServiceCatalog
             Name = "Торренты",
             Parts =
             [
-                new ServicePart { Name = "RuTracker", List = "lists/rutracker.txt" },
-                new ServicePart { Name = "Rutor", List = "lists/rutor.txt" },
+                new ServicePart { Name = "RuTracker", List = "config/lists/rutracker.txt" },
+                new ServicePart { Name = "Rutor", List = "config/lists/rutor.txt" },
             ],
         },
 
@@ -348,9 +370,9 @@ public static class ServiceCatalog
             Name = "Работа и заметки",
             Parts =
             [
-                new ServicePart { Name = "Notion", List = "lists/notion.txt" },
-                new ServicePart { Name = "Obsidian", List = "lists/obsidian.txt" },
-                new ServicePart { Name = "Fandom", List = "lists/fandom.txt" },
+                new ServicePart { Name = "Notion", List = "config/lists/notion.txt" },
+                new ServicePart { Name = "Obsidian", List = "config/lists/obsidian.txt" },
+                new ServicePart { Name = "Fandom", List = "config/lists/fandom.txt" },
             ],
         },
 
@@ -362,20 +384,20 @@ public static class ServiceCatalog
                 new ServicePart
                 {
                     Name = "Cloudflare",
-                    List = "lists/cloudflare.txt",
+                    List = "config/lists/cloudflare.txt",
                     Note = "за ним стоит множество сайтов; трогать с осторожностью",
                 },
-                new ServicePart { Name = "CloudFront", List = "lists/cloudfront.txt" },
-                new ServicePart { Name = "Amazon", List = "lists/amazon.txt" },
-                new ServicePart { Name = "Apple", List = "lists/apple.txt" },
-                new ServicePart { Name = "Microsoft Store", List = "lists/microsoft-store.txt" },
+                new ServicePart { Name = "CloudFront", List = "config/lists/cloudfront.txt" },
+                new ServicePart { Name = "Amazon", List = "config/lists/amazon.txt" },
+                new ServicePart { Name = "Apple", List = "config/lists/apple.txt" },
+                new ServicePart { Name = "Microsoft Store", List = "config/lists/microsoft-store.txt" },
             ],
         },
 
         new ServiceDefinition
         {
             Name = "Speedtest",
-            Parts = [new ServicePart { Name = "Всё", List = "lists/speedtest.txt" }],
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/speedtest.txt" }],
         },
     ];
 

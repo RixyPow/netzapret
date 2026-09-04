@@ -1,0 +1,15 @@
+# SoundCloud.
+#
+# Из двадцати одной записи Zapret убраны четыре сервера имён AWS
+# (ns-56.awsdns-07.com и соседи) и cdn.cookielaw.org — баннер о печеньках.
+# Ни то, ни другое не SoundCloud; серверы имён вдобавок отвечают по UDP 53,
+# а проверка ходит по 443 и объявляла их закрытыми все три раза.
+#
+# Убраны и страновые заглушки soundcloud.de, .fr, .co.uk и прочие: они
+# ведут на тот же сайт.
+soundcloud.com
+sndcdn.com
+soundcloudstatus.com
+soundcloudforartists.com
+soundclouddesign.com
+soundcloudpress.com

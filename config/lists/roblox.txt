@@ -1,0 +1,28 @@
+# Roblox: игра и сайт.
+#
+# Из восьмидесяти одной записи Zapret перенесена дюжина. Убраны три группы,
+# и каждая опасна по-своему.
+#
+# Первая — целые сети доставки: akamai.net, akamaiedge.net,
+# akamaitechnologies.com, amazonaws.com, llnwi.net. За ними стоит половина
+# интернета, и правило на такую зону уводит в туннель что угодно, от чужих
+# сайтов до наших же обновлений. Roblox раздаёт с Akamai, но имя в
+# рукопожатии там своё — rbxcdn.com, — и правило по нему срабатывает без
+# всякой Akamai.
+#
+# Вторая — опечатки: goblocks.com, gooblox.com, roadblocks.com, ro-blox.com
+# и ещё пять. Их держат, чтобы ловить набравших имя мимо; Roblox по ним
+# не работает, и проверять там нечего.
+#
+# Третья — два десятка страновых зеркал roblox.ca, roblox.de, roblox.jp.
+# Они ведут на тот же сайт, а в отчёте дают два десятка строк ни о чём.
+roblox.com
+rbxcdn.com
+rblx.com
+rbx.com
+rblx.co
+rbxinfra.net
+robloxapp.com
+roblox.net
+arkoselabs.com
+arkoselabs.co

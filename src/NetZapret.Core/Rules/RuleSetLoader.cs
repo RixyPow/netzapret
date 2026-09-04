@@ -181,10 +181,14 @@ public static class RuleSetLoader
             if (string.IsNullOrWhiteSpace(raw.Value))
                 throw new RuleConfigurationException($"Правило #{i}: не задано поле 'value'.");
 
+            var match = ParseMatchKind(raw.Match, i);
+
             rules.Add(new RoutingRule
             {
-                Match = ParseMatchKind(raw.Match, i),
-                Value = raw.Value.Trim(),
+                Match = match,
+                Value = match is MatchKind.HostList or MatchKind.IpSet
+                    ? Relocate(raw.Value.Trim())
+                    : raw.Value.Trim(),
                 Mode = ParseMode(raw.Mode, $"правило #{i}"),
                 Server = string.IsNullOrWhiteSpace(raw.Server) ? null : raw.Server.Trim(),
                 Enabled = raw.Enabled ?? true,
@@ -208,13 +212,60 @@ public static class RuleSetLoader
 
         var defaultServer = string.IsNullOrWhiteSpace(dto.Default?.Server) ? null : dto.Default!.Server!.Trim();
 
-        return new ParsedFile(
-            rules,
-            defaultMode,
-            defaultServer,
-            operating,
-            dto.Capture ?? (IReadOnlyList<string>)Array.Empty<string>());
+        var capture = (dto.Capture ?? [])
+            .Select(entry => Relocate(entry.Trim()))
+            .ToList();
+
+        return new ParsedFile(rules, defaultMode, defaultServer, operating, capture);
     }
+
+    /// <summary>
+    /// Куда переехали списки, которые мы теперь ведём сами.
+    /// </summary>
+    /// <remarks>
+    /// Строится из <see cref="Services.ServiceCatalog"/>, а не выписывается
+    /// рядом: список переехавших должен совпадать с тем, что каталог
+    /// действительно объявляет своим, иначе две таблицы разойдутся при первом
+    /// же добавлении сервиса — и разойдутся молча.
+    /// </remarks>
+    private static readonly Dictionary<string, string> Moved =
+        Services.ServiceCatalog.All
+            .SelectMany(service => service.Parts)
+            .Select(part => part.List)
+
+            // Российские сети сервисом не выражаются — их незачем «направлять»,
+            // они и так идут напрямую, — а переехать должны наравне с прочими:
+            // правило на пропавший файл увело бы весь российский трафик
+            // в туннель, и это самая дорогая из здешних молчаливых поломок.
+            .Append("config/lists/ipset-ru.txt")
+            .Where(path => path.StartsWith("config/lists/", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                path => "lists/" + Path.GetFileName(path),
+                path => path,
+                StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Переписывает ссылку на список Zapret в нашу, если такой список у нас есть.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Нужно ради уже написанных правил. Файл <c>rules.user.yaml</c> переживает
+    /// обновление намеренно — в нём работа человека, — и записи вида
+    /// <c>lists/whatsapp.txt</c> остались бы в нём навсегда. Работать они
+    /// продолжали бы (списки Zapret едут в архиве), но каталог сравнивает
+    /// значение правила со своим путём, и в меню часть числилась бы
+    /// ненаправленной при живом правиле.
+    /// </para>
+    /// <para>
+    /// Переписывается только то, что у нас действительно есть. Ссылку на чужой
+    /// список, которого мы не ведём — <c>lists/refilter-domains_all.txt</c>,
+    /// скажем, — трогать нельзя: она указывает ровно туда, куда написана,
+    /// и подмена превратила бы её в ссылку в никуда.
+    /// </para>
+    /// </remarks>
+    private static string Relocate(string value) =>
+        Moved.TryGetValue(value.Replace('\\', '/'), out var ours) ? ours : value;
 
     private static OperatingMode ParseOperatingMode(string? value) =>
         (value ?? string.Empty).Trim().ToLowerInvariant() switch

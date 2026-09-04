@@ -1,0 +1,27 @@
+# YouTube: страница, поиск, комментарии.
+#
+# accounts.google.com и play.google.com из списка Zapret не перенесены.
+# Это вход в аккаунт Google и магазин приложений: они нужны не только
+# YouTube, и увести их маршрутом ради него значит поменять поведение
+# почты, диска и всего остального. Вход живёт в google.txt.
+#
+# googleadservices.com убран как рекламный: он не заблокирован, а трафик
+# подписки тратит.
+youtube.com
+youtu.be
+ytimg.com
+ggpht.com
+yt.be
+youtubekids.com
+youtube-nocookie.com
+youtube.googleapis.com
+youtubei.googleapis.com
+youtubeembeddedplayer.googleapis.com
+jnn-pa.googleapis.com
+gvt1.com
+lh3.googleusercontent.com
+yt3.googleusercontent.com
+youtube-ui.l.google.com
+yt-video-upload.l.google.com
+wide-youtube.l.google.com
+ytimg.l.google.com

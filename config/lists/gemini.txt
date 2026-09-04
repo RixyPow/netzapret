@@ -1,0 +1,6 @@
+# Gemini.
+#
+# gemini.google.com добавлен: в списке Zapret значился только ai.google.dev,
+# то есть документация для разработчиков, а не сам чат.
+gemini.google.com
+ai.google.dev

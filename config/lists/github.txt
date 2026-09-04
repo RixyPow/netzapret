@@ -1,0 +1,16 @@
+# GitHub.
+#
+# githubusercontent.com добавлен: в списке Zapret он лежит отдельным файлом,
+# на который ни одна часть каталога не ссылалась. На нём raw-файлы и
+# аватары — без него страница открывается, а содержимое нет.
+#
+# scoop.sh убран: это сторонний менеджер пакетов, который берёт манифесты
+# с GitHub, а не сам GitHub.
+github.com
+githubusercontent.com
+githubassets.com
+github.io
+ghcr.io
+githubstatus.com
+githubcopilot.com
+githubapp.com

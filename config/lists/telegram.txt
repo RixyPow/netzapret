@@ -1,0 +1,13 @@
+# Telegram: сайт и веб-версия.
+#
+# Само приложение сюда не относится: оно ходит по адресам, не спрашивая
+# DNS, и ловится только списком подсетей — ipset-telegram.txt.
+telegram.org
+t.me
+telegram.me
+telegram.dog
+telesco.pe
+telegramusercontent.com
+telegram-cdn.org
+tdesktop.com
+telegram.tips

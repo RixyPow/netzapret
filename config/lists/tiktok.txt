@@ -1,0 +1,24 @@
+# TikTok.
+#
+# www.tiktok.com, mon.tiktokv.com и log.tiktokv.com не перенесены: первый
+# покрыт зоной tiktok.com, два других — телеметрия внутри tiktokv.com.
+# Отдельными строками они только удлиняли отчёт.
+tiktok.com
+tiktokcdn.com
+tiktokv.com
+ttwstatic.com
+tiktokcdn-us.com
+tiktokw.us
+p16-tiktokcdn-com.akamaized.net
+v16-tiktokcdn-com.akamaized.net
+ibytedtos.com
+ibyteimg.com
+muscdn.com
+musical.ly
+byteoversea.com
+bytedance.com
+bytedance.net
+bytedanceapi.com
+bytecdn.cn
+byted.org
+isnssdk.com
