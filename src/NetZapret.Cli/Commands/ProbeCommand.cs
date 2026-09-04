@@ -72,10 +72,52 @@ internal static class ProbeCommand
         var working = results.Where(r => r.Success).ToList();
         var failed = results.Where(r => !r.Success).ToList();
 
+        Remember(results);
         PrintSummary(working, failed, directIp);
 
         // Код возврата пригодится супервизору и скриптам: 0 — есть рабочий сервер.
         return working.Count > 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Кладёт итог в тот же кэш, которым пользуется выбор сервера.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Проверок было две, и помнила программа только одну. Человек прогонял
+    /// семнадцать серверов, узнавал, что работают четыре, заходил выбирать —
+    /// и список встречал его прежними цифрами либо предлагал проверить
+    /// заново. Замер тот же, память разная.
+    /// </para>
+    /// <para>
+    /// Пишем даже неудачи: «этот не работает» — такое же знание, как и отклик,
+    /// и добыто оно теми же четырнадцатью секундами ожидания.
+    /// </para>
+    /// </remarks>
+    private static void Remember(IReadOnlyList<ProbeResult> results)
+    {
+        try
+        {
+            var cache = ServerHealthCache.Load();
+
+            foreach (var result in results)
+            {
+                cache.Set(new ServerHealth
+                {
+                    Tag = result.ServerTag,
+                    Success = result.Success,
+                    LatencyMs = result.Latency?.TotalMilliseconds,
+                    CheckedAt = DateTimeOffset.Now,
+                });
+            }
+
+            cache.Save();
+        }
+        catch (Exception)
+        {
+            // Кэш — удобство, а не условие работы: не записался, значит
+            // выбор сервера просто спросит заново.
+        }
     }
 
     private static IReadOnlyList<ProxyServer> SelectServers(IReadOnlyList<ProxyServer> servers, CommandLine cmd)
