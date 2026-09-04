@@ -43,12 +43,29 @@ public static class RuleSetLoader
     /// человека в нём затирались бы. Разделение позволяет обновлять первый,
     /// не трогая второй.
     /// </remarks>
-    public static RuleEngine LoadLayered(string basePath, string? userPath)
+    /// <param name="mode">
+    /// Режим из настроек. Перекрывает записанный в файле.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// Параметр появился поздно и по нужде. Комментарий ниже с самого начала
+    /// утверждал, что «общие настройки живут в меню», — но передать их сюда
+    /// было нечем, и режим всегда брался из <c>rules.yaml</c>, где стоит
+    /// <c>selective</c>. Человек переключал «всё через VPN», а правила
+    /// вычислялись по-прежнему.
+    /// </para>
+    /// <para>
+    /// Умолчание пересчитывается вместе с режимом. Иначе «всё через VPN»
+    /// оставляло бы десинк тем, что не покрыто правилами, — то есть
+    /// большинству.
+    /// </para>
+    /// </remarks>
+    public static RuleEngine LoadLayered(string basePath, string? userPath, OperatingMode? mode = null)
     {
         var baseEngine = LoadFromFile(basePath);
 
         if (userPath is null || !File.Exists(userPath))
-            return baseEngine;
+            return mode is null ? baseEngine : WithMode(baseEngine, mode.Value);
 
         var userEngine = LoadFromFile(userPath);
 
@@ -57,18 +74,37 @@ public static class RuleSetLoader
 
         var merged = userEngine.RuleSet.Rules.Concat(baseEngine.RuleSet.Rules).ToList();
 
+        var operating = mode ?? baseEngine.RuleSet.Operating;
+
         // Режим и умолчание берутся из базового: пользовательский файл описывает
         // только отдельные маршруты, общие настройки живут в меню.
         return RuleEngine.Build(
             merged,
-            baseEngine.RuleSet.DefaultMode,
+            mode is null ? baseEngine.RuleSet.DefaultMode : DefaultFor(operating),
             baseEngine.RuleSet.DefaultServer,
-            baseEngine.RuleSet.Operating)
+            operating)
             .WithCapture(baseEngine.RuleSet.CaptureEntries
                 .Concat(userEngine.RuleSet.CaptureEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList());
     }
+
+    /// <summary>Пересобирает движок под другой режим.</summary>
+    private static RuleEngine WithMode(RuleEngine engine, OperatingMode mode) =>
+        RuleEngine.Build(
+            engine.RuleSet.Rules.ToList(),
+            DefaultFor(mode),
+            engine.RuleSet.DefaultServer,
+            mode)
+            .WithCapture(engine.RuleSet.CaptureEntries.ToList());
+
+    /// <summary>Куда идёт то, что не покрыто ни одним правилом.</summary>
+    private static RoutingMode DefaultFor(OperatingMode mode) => mode switch
+    {
+        OperatingMode.ProxyAll or OperatingMode.ProxyStrict => RoutingMode.Proxy,
+        OperatingMode.Selective or OperatingMode.DesyncOnly => RoutingMode.Desync,
+        _ => RoutingMode.Direct,
+    };
 
     /// <summary>
     /// Разбирает правила из файла, не отбрасывая выключенные.

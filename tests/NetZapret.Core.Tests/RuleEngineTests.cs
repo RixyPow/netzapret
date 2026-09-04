@@ -197,8 +197,15 @@ public class RuleEngineTests
         Assert.Null(decision.Rule);
     }
 
+    /// <summary>«Кроме РФ» чтит исключения — в них весь его смысл.</summary>
+    /// <remarks>
+    /// Прежде этот режим правила не вычислял вовсе и отправлял в туннель
+    /// всё подряд, включая российские сервисы, ради которых назван «кроме
+    /// РФ». Так вёл себя он, а «без исключений» — наоборот, правила читал.
+    /// Названия и поведение стояли наоборот.
+    /// </remarks>
     [Fact]
-    public void ProxyAllModeSendsEverythingToTheTunnel()
+    public void ProxyAllKeepsTheExceptionsItIsNamedFor()
     {
         var engine = RuleSetLoader.Load("""
             mode: proxy
@@ -208,8 +215,47 @@ public class RuleEngineTests
                 mode: direct
             """);
 
-        // Даже правило с direct не спасает: режим proxy правила не вычисляет.
-        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(Connection(process: "somegame.exe", remoteIp: "203.0.113.7")).Mode);
+        Assert.Equal(
+            RoutingMode.Direct,
+            engine.Evaluate(Connection(process: "somegame.exe", remoteIp: "203.0.113.7")).Mode);
+    }
+
+    /// <summary>Десинк в этом режиме уступает туннелю.</summary>
+    /// <remarks>
+    /// Правило, написанное ради обхода, здесь означает лишь «сервис закрыт»,
+    /// а чем открывать — решает режим. Пока десинк переживал переключение,
+    /// «всё через VPN» вело себя как «выборочно»: в туннель уходило два
+    /// имени из семидесяти одного.
+    /// </remarks>
+    [Fact]
+    public void ProxyAllTurnsDesyncRulesIntoTunnel()
+    {
+        var engine = RuleSetLoader.Load("""
+            mode: proxy
+            rules:
+              - match: domain
+                value: "youtube.com"
+                mode: desync
+            """);
+
+        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(Connection(hostname: "youtube.com")).Mode);
+    }
+
+    /// <summary>А «без исключений» не чтит ничего.</summary>
+    [Fact]
+    public void ProxyStrictIgnoresEveryRule()
+    {
+        var engine = RuleSetLoader.Load("""
+            mode: proxy_strict
+            rules:
+              - match: process
+                value: "somegame.exe"
+                mode: direct
+            """);
+
+        Assert.Equal(
+            RoutingMode.Proxy,
+            engine.Evaluate(Connection(process: "somegame.exe", remoteIp: "203.0.113.7")).Mode);
     }
 
     [Fact]

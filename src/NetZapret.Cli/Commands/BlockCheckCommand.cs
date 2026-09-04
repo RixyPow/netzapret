@@ -123,7 +123,7 @@ internal static class BlockCheckCommand
     {
         // Цели собираются до замеров: если проверять нечего, время на пробу
         // сети потрачено впустую, а человек об этом узнаёт последним.
-        var targets = CollectTargets(configPath, userRulesPath, zapretRoot, only, depth, out var engine);
+        var targets = CollectTargets(configPath, userRulesPath, zapretRoot, only, depth, settings.Mode, out var engine);
 
         if (targets.Count == 0)
         {
@@ -1478,6 +1478,12 @@ internal static class BlockCheckCommand
         string? zapretRoot,
         string? only,
         CheckDepth depth,
+
+        // Режим передаётся снаружи, иначе проверка судит о чужой настройке:
+        // правила читаются из rules.yaml, где стоит selective, и отчёт
+        // в режиме «всё через VPN» писал «десинк» ровно тем именам,
+        // которые в этот момент уходили в туннель.
+        OperatingMode mode,
         out RuleEngine? engine)
     {
         int perPart = depth switch
@@ -1491,7 +1497,7 @@ internal static class BlockCheckCommand
 
         try
         {
-            engine = RuleSetLoader.LoadLayered(configPath, userRulesPath);
+            engine = RuleSetLoader.LoadLayered(configPath, userRulesPath, mode);
             RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
         }
         catch (Exception ex)

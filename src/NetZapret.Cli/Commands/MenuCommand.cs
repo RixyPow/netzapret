@@ -904,7 +904,7 @@ internal static class MenuCommand
 
             try
             {
-                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
                 RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
             }
             catch (Exception ex)
@@ -990,7 +990,7 @@ internal static class MenuCommand
 
             try
             {
-                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+                engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
                 RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
             }
             catch (Exception ex)
@@ -1901,7 +1901,7 @@ internal static class MenuCommand
 
         try
         {
-            engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+            engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
             RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
         }
         catch (RuleConfigurationException ex)
@@ -2057,7 +2057,7 @@ internal static class MenuCommand
 
         try
         {
-            var engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath);
+            var engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
 
             // Режим из настроек перекрывает файл правил: меню не должно
             // переписывать базовый YAML, который ведётся руками.

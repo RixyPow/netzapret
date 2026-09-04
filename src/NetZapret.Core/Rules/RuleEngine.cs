@@ -99,13 +99,19 @@ public sealed class RuleEngine
                     Reason = "режим off — правила не вычисляются",
                 };
 
-            case OperatingMode.ProxyAll:
+            // «Без исключений» — единственный режим, где правила не смотрятся
+            // вовсе. Прежде так вёл себя ProxyAll, то есть «кроме РФ»: он
+            // отправлял в туннель и российские сервисы, ради исключения
+            // которых и заведён. А ProxyStrict, чьё назначение как раз
+            // не знать исключений, правила читал. Названия и поведение
+            // стояли наоборот.
+            case OperatingMode.ProxyStrict:
                 return new RuleDecision
                 {
                     Mode = RoutingMode.Proxy,
                     Rule = null,
                     Server = _ruleSet.DefaultServer,
-                    Reason = "режим proxy — весь трафик в туннель",
+                    Reason = "режим «всё через VPN без исключений» — правила не смотрятся",
                 };
         }
 
@@ -122,11 +128,20 @@ public sealed class RuleEngine
             if (!rule.Matches(connection, out var reason))
                 continue;
 
+            // В «кроме РФ» десинк уступает туннелю. Правило, написанное ради
+            // обхода, в этом режиме означает лишь «этот сервис закрыт», а как
+            // его открывать, решает режим: туннель справляется со всем, с чем
+            // справляется десинк, и ещё с отказом по стране. Исключения —
+            // правила «напрямую», ради которых режим и назван «кроме РФ».
+            var mode = _ruleSet.Operating == OperatingMode.ProxyAll && rule.Mode == RoutingMode.Desync
+                ? RoutingMode.Proxy
+                : rule.Mode;
+
             return new RuleDecision
             {
-                Mode = rule.Mode,
+                Mode = mode,
                 Rule = rule,
-                Server = rule.Mode == RoutingMode.Proxy ? rule.Server ?? _ruleSet.DefaultServer : null,
+                Server = mode == RoutingMode.Proxy ? rule.Server ?? _ruleSet.DefaultServer : null,
                 Reason = reason,
                 HadUnevaluableDomainRules = sawUnevaluableDomain,
             };
