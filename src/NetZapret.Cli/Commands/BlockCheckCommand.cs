@@ -50,13 +50,36 @@ internal static class BlockCheckCommand
     /// в работу.
     /// </para>
     /// <para>
-    /// Восемь, а не тридцать: каждая проба открывает до четырёх соединений,
-    /// и тридцать целей разом — это сотня одновременных сокетов с одного
-    /// адреса. Оператору такое похоже на сканирование, а нам не нужно, чтобы
-    /// проверка блокировок сама выглядела поводом для блокировки.
+    /// Не тридцать: каждая проба открывает до четырёх соединений, и тридцать
+    /// целей разом — это сотня одновременных сокетов с одного адреса.
+    /// Оператору такое похоже на сканирование, а нам не нужно, чтобы проверка
+    /// блокировок сама выглядела поводом для блокировки.
+    /// </para>
+    /// <para>
+    /// Было восемь, стало четыре. Восьми хватало, чтобы проверка мешала себе
+    /// самой: <c>whatsapp.net</c> в прогоне на семьдесят одну цель выходил
+    /// «закрыт полностью», а он же в прогоне на четыре — «доступен».
+    /// Последняя проба каждой цели тянет до четверти мегабайта, и восемь
+    /// таких закачек разом съедают полосу, в которой соседи ждут ответа
+    /// свои четыре секунды.
+    /// </para>
+    /// <para>
+    /// Одной цифрой это не лечится — сеть у всех разная, — поэтому вторая
+    /// половина починки в <see cref="ReprobeAloneAsync"/>: отказы, которые
+    /// могла подделать теснота, переспрашиваются поодиночке.
     /// </para>
     /// </remarks>
-    private const int Parallelism = 8;
+    private const int Parallelism = 4;
+
+    /// <summary>
+    /// Сколько всего ждать перепроверку, прежде чем оставить как есть.
+    /// </summary>
+    /// <remarks>
+    /// Ограничение по времени, а не по числу целей: одна цель стоит от долей
+    /// секунды до восьми, и «первые двенадцать» означало бы от секунды до
+    /// полутора минут — то есть ничего определённого для того, кто ждёт.
+    /// </remarks>
+    private static readonly TimeSpan ReprobeBudget = TimeSpan.FromSeconds(120);
 
     /// <summary>Порт Clash API движка — тот же, что прописывает супервизор.</summary>
     private const int ClashApiPort = 9090;
@@ -123,7 +146,9 @@ internal static class BlockCheckCommand
     {
         // Цели собираются до замеров: если проверять нечего, время на пробу
         // сети потрачено впустую, а человек об этом узнаёт последним.
-        var targets = CollectTargets(configPath, userRulesPath, zapretRoot, only, depth, settings.Mode, out var engine);
+        var targets = CollectTargets(
+            configPath, userRulesPath, zapretRoot, only, depth, settings.Mode,
+            out var engine, out var listProblems);
 
         if (targets.Count == 0)
         {
@@ -185,6 +210,21 @@ internal static class BlockCheckCommand
         if (stop.IsCancellationRequested)
             Message($"Прервано. Успело проверить {reports.Count} из {targets.Count}.", ConsoleColor.Yellow);
 
+        IReadOnlyList<(string Host, string Was, string Now)> reprobed = [];
+
+        // Перепроверка идёт до всего остального, что читает вердикты: советы,
+        // тупики и итог должны строиться по исправленным строкам, а не по тем,
+        // которые мы сами же и признали недостоверными.
+        if (!stop.IsCancellationRequested)
+        {
+            reprobed = await ReprobeAloneAsync(
+                reports,
+                engine,
+                enginesRunning && settings.NeedsProxy,
+                pinned,
+                cancellationToken);
+        }
+
         IReadOnlyList<string> badAddresses = [];
 
         // Прерванную проверку добивать не надо: человек нажал Esc, чтобы
@@ -200,6 +240,7 @@ internal static class BlockCheckCommand
         }
 
         PrintSummary(reports, badAddresses, pinned);
+        PrintReprobed(reprobed);
         PrintKnownFalseAlarms(reports);
         PrintPinned(pinned, engine);
 
@@ -214,6 +255,11 @@ internal static class BlockCheckCommand
             .Where(s => !pinned.ContainsKey(s.Host))
             .Where(s => !FalseAlarmProne.ContainsKey(s.Host))
             .ToList();
+
+        PrintBrokenLists(listProblems);
+
+        if (engine is not null)
+            PrintRuleConflicts(RouteConflicts.Find(engine.RuleSet));
 
         PrintDeadlocks(Deadlocks(reports, engine, setup).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
@@ -295,6 +341,205 @@ internal static class BlockCheckCommand
         }
 
         return reports;
+    }
+
+    /// <summary>
+    /// Переспрашивает отказы поодиночке, в тишине.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Смысл прохода — снять с проверки её собственный след. Вердикты вроде
+    /// «закрыт полностью» ставятся по неполученному ответу, а не полученному,
+    /// и потому неотличимы от «нам не хватило полосы». Пока пробы шли скопом,
+    /// отличить было нечем; здесь они идут по одной, и ничто, кроме сети,
+    /// им не мешает.
+    /// </para>
+    /// <para>
+    /// Переспрашивается только то, что теснота могла подделать: см.
+    /// <see cref="TargetReport.MayBeCrowding"/>. Заглушку в DNS и отказ
+    /// по стране повторять незачем — их получили по ответу, который пришёл.
+    /// </para>
+    /// <para>
+    /// Приговор повышаться не может. Одиночная проба принимается, только если
+    /// говорит о лучшем: неудача второго захода — это неудача второго захода,
+    /// а не доказательство блокировки.
+    /// </para>
+    /// </remarks>
+    /// <returns>Что изменилось: имя, прежний вердикт, новый.</returns>
+    private static async Task<List<(string Host, string Was, string Now)>> ReprobeAloneAsync(
+        List<TargetReport> reports,
+        RuleEngine? engine,
+        bool tunnelInUse,
+        IReadOnlyDictionary<string, string> pinned,
+        CancellationToken cancellationToken)
+    {
+        var changed = new List<(string, string, string)>();
+
+        var suspect = reports
+            .Where(r => r.MayBeCrowding && !pinned.ContainsKey(r.Host))
+
+            // Сначала «закрыт полностью»: этот вердикт теснота подделывает
+            // охотнее прочих — ему довольно, чтобы не встало одно соединение.
+            .OrderBy(r => r.Kind == BlockKind.Full ? 0 : 1)
+            .ToList();
+
+        if (suspect.Count == 0)
+            return changed;
+
+        Console.WriteLine();
+        Console.WriteLine($"Переспрашиваю поодиночке: {suspect.Count} " +
+            $"{Plural(suspect.Count, "отказ", "отказа", "отказов")}. Esc — пропустить.");
+
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var escape = EscapeWatcher.Watch(stop);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        int done = 0;
+
+        foreach (var report in suspect)
+        {
+            if (stop.IsCancellationRequested || clock.Elapsed > ReprobeBudget)
+                break;
+
+            bool tunnelled = tunnelInUse && engine is not null
+                && CurrentMode(engine, report.Host) == RoutingMode.Proxy;
+
+            TargetReport alone;
+
+            try
+            {
+                alone = await BlockCheck.ProbeOnceAsync(
+                    report.Host, report.Service, stop.Token, tunnelled);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            done++;
+
+            var settled = BlockCheck.Reconcile(report, alone);
+
+            if (settled.Kind == report.Kind)
+                continue;
+
+            changed.Add((report.Host, report.Describe(), settled.Kind == BlockKind.None
+                ? "доступен"
+                : settled.Describe()));
+
+            reports[reports.IndexOf(report)] = settled;
+        }
+
+        if (done < suspect.Count)
+        {
+            Message(
+                $"Переспросил {done} из {suspect.Count} — " +
+                (stop.IsCancellationRequested ? "прервано." : "время вышло.") +
+                " Остальные оставлены как есть.",
+                ConsoleColor.DarkGray);
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Показывает правила, спорящие об одном имени.
+    /// </summary>
+    /// <remarks>
+    /// Раздел про настройку, а не про сеть, и оттого печатается даже тогда,
+    /// когда всё открывается: правило, до которого не доходит очередь, — это
+    /// поломка, которая ждёт своего часа. Заметить её иначе нечем, а стоит она
+    /// дорого: у этого пользователя четыре заводских правила на ChatGPT
+    /// не действовали месяцами, перекрытые одной строкой из своего слоя.
+    /// </remarks>
+    private static void PrintRuleConflicts(IReadOnlyList<RouteConflict> conflicts)
+    {
+        if (conflicts.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("Правила спорят об одних и тех же именах");
+
+        foreach (var conflict in conflicts)
+        {
+            var scope = conflict.Entirely
+                ? "целиком"
+                : $"{conflict.Names} {Plural(conflict.Names, "имя", "имени", "имён")}";
+
+            Console.WriteLine(
+                $"  {Truncate(Describe(conflict.Loser), 44),-44} перекрыто {scope}");
+            Console.WriteLine(
+                $"    побеждает {Truncate(Describe(conflict.Winner), 42),-42} например {conflict.Example}");
+        }
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine();
+        Console.WriteLine("  Побеждает то правило, до которого очередь доходит раньше: сперва");
+        Console.WriteLine("  ваш слой, внутри слоя — порядок в файле. Перекрытое не применяется");
+        Console.WriteLine("  вовсе, хотя в файле есть и в меню значится.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>Как назвать правило в одну строку.</summary>
+    private static string Describe(RoutingRule rule)
+    {
+        var layer = rule.Source == RuleSource.User ? "ваше" : "базовое";
+
+        return $"{layer} {rule.Value} → {Describe(rule.Mode)}";
+    }
+
+    /// <summary>
+    /// Показывает правила, ссылающиеся на списки, которых нет.
+    /// </summary>
+    /// <remarks>
+    /// Ненайденный список — не предупреждение, а мёртвое правило: пустой набор
+    /// доменов не совпадает ни с чем, и маршрут молча достаётся умолчанию.
+    /// Для правила «российские сети напрямую» это означает весь российский
+    /// трафик в туннеле.
+    /// </remarks>
+    private static void PrintBrokenLists(IReadOnlyList<string> problems)
+    {
+        if (problems.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+
+        Console.WriteLine();
+        Console.WriteLine("Правила ссылаются на списки, которых нет — они не действуют");
+
+        foreach (var problem in problems)
+            Console.WriteLine($"  {Truncate(problem, 88)}");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>Показывает, что изменилось после перепроверки в тишине.</summary>
+    private static void PrintReprobed(IReadOnlyList<(string Host, string Was, string Now)> changed)
+    {
+        if (changed.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("В тишине ответили иначе — верны эти строки, а не те, что выше");
+
+        foreach (var (host, was, now) in changed)
+            Console.WriteLine($"  {Truncate(host, 28),-28} было «{was}», стало «{now}»");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine();
+        Console.WriteLine("  Разница не в сети, а в том, сколько проб шло рядом: вердикт");
+        Console.WriteLine("  «закрыт» ставится по неполученному ответу, а его не получить");
+        Console.WriteLine("  и просто оттого, что полосу занял сосед по проверке.");
+
+        Console.ForegroundColor = previous;
     }
 
     /// <param name="pinned">
@@ -953,14 +1198,24 @@ internal static class BlockCheckCommand
         // но снаружи не отличить подставленный адрес от честного, до которого
         // закрыт маршрут, — а вот разница между двумя резолверами измерена,
         // и чинится она сменой резолвера.
-        if (badAddresses.Count == 0)
+        // Имена, которым тот же диагноз уже поставлен вердиктом, здесь
+        // не повторяются. Прежде повторялись, и итог выглядел так, будто это
+        // две разные беды: «резолвер даёт нерабочий адрес: 3» и следом
+        // «системный резолвер даёт нерабочий адрес: whatsapp.net».
+        var alreadySaid = reports.Where(r => r.Kind == BlockKind.Dns)
+            .Select(r => r.Host)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var extra = badAddresses.Where(host => !alreadySaid.Contains(host)).ToList();
+
+        if (extra.Count == 0 && alreadySaid.Count == 0)
         {
             Console.WriteLine("  системный резолвер: адреса рабочие");
         }
-        else
+        else if (extra.Count > 0)
         {
             Console.WriteLine(
-                $"  системный резолвер даёт нерабочий адрес: {string.Join(", ", badAddresses)}");
+                $"  системный резолвер даёт нерабочий адрес: {string.Join(", ", extra)}");
             Console.WriteLine("    у DoH адрес рабочий — поможет пункт меню «DNS»");
         }
 
@@ -1120,6 +1375,13 @@ internal static class BlockCheckCommand
             if (!report.Actionable)
                 continue;
 
+            // Отказ резолвера не тупик маршрута: маршрут тут ни при чём, а что
+            // делать — сказано отдельным разделом про резолвер. Попадая сюда,
+            // такая строка получала совет «смените сервер подписки» рядом
+            // с советом «смените DNS», и оба звучали одинаково уверенно.
+            if (report.Kind == BlockKind.Dns)
+                continue;
+
             var now = CurrentMode(engine, report.Host);
 
             if (report.Kind == BlockKind.BrokenCname)
@@ -1182,6 +1444,22 @@ internal static class BlockCheckCommand
     /// </remarks>
     private static Deadlock ProxiedButClosed(TargetReport report, RoutingMode now, Setup setup)
     {
+        // Движки стоят — значит трафик шёл мимо туннеля, каким бы ни было
+        // правило. Сказать здесь «даже через VPN» значило бы приписать
+        // туннелю неудачу замера, в котором его не было; шапка отчёта тремя
+        // строками выше честно пишет «движки остановлены», и раздел
+        // противоречил ей в каждом прогоне с выключенным обходом.
+        if (setup.Tunnel == TunnelState.Off)
+        {
+            return new Deadlock
+            {
+                Host = report.Host,
+                Now = now,
+                What = $"{report.Describe()} — но замер снят без туннеля, движки стояли",
+                Hope = "запустите обход и повторите: правило ведёт его в VPN, а VPN не работал",
+            };
+        }
+
         if (setup.Tunnel == TunnelState.Dead)
         {
             return new Deadlock
@@ -1396,7 +1674,6 @@ internal static class BlockCheckCommand
             ["whatsapp.com"] = "приложение ходит по своим адресам и порту 5222",
             ["whatsapp.net"] = "приложение ходит по своим адресам и порту 5222",
             ["updates.discord.com"] = "обновления идут своим каналом, не через 443",
-            ["disboard.org"] = "открывается через сам Discord, а не по этому имени",
             ["itch.io"] = "сайт и клиент ходят разными путями; проверено — работает",
             ["tiktok.com"] = "приложение ходит по своим адресам, не по этому имени",
         };
@@ -1425,51 +1702,56 @@ internal static class BlockCheckCommand
     }
 
     /// <summary>
-    /// Имена, которые проверять незачем: зеркала и запасные домены.
+    /// Имена, которые в отчёт не идут.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Списки Zapret ведутся для десинка, и в них соседствуют основной домен
-    /// и его зеркала — <c>twitter.com</c> рядом с <c>x.com</c>,
-    /// <c>rutracker.net</c> рядом с <c>rutracker.org</c>. Для правила это
-    /// правильно: закрыть надо оба. Для отчёта — нет: человек читает
-    /// «twitter.com закрыт» и идёт чинить то, чем не пользуется, тогда как
-    /// сам сервис открывается по другому имени и в той же таблице помечен
-    /// доступным.
+    /// Набор сильно короче прежнего, и это следствие переезда списков.
+    /// Раньше сюда попадали зеркала — <c>rutracker.net</c>, <c>rutor.is</c>,
+    /// <c>notion.site</c> и ещё пяток, — потому что списки Zapret ведутся
+    /// для десинка и перечисляют все имена сервиса подряд. Правилу так
+    /// и надо: закрыть следует оба. Отчёту — нет: человек читал
+    /// «rutracker.net закрыт» и шёл чинить то, чем не пользуется, тогда как
+    /// сам трекер строкой выше числился доступным.
     /// </para>
     /// <para>
-    /// Собрано по разбору живых отчётов: из десяти строк «маршрутом
-    /// не лечится» шесть были про домены, которых у пользователя нет
-    /// в обиходе. Проверка от этого не становится слепой — правило
-    /// на зеркало продолжает действовать, просто в отчёт оно не идёт.
+    /// Теперь зеркал нет в самих списках, и глушить в отчёте нечего.
+    /// Осталось два имени: <c>twitter.com</c> оставлен в списке ради старых
+    /// ссылок, а работает всё через <c>x.com</c>; <c>riotgames.es</c> — там,
+    /// где договорено ничего не трогать.
+    /// </para>
+    /// <para>
+    /// Отсюда убран <c>itch.zone</c>. Я записал его в зеркала по созвучию
+    /// имени, а это раздача файлов и картинок самого itch.io — запись A
+    /// у неё есть (209.95.39.134, замер 2026-09-04). Выбросив её из проверки,
+    /// я сделал отчёт про itch.io наполовину слепым.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> Mirrors = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> NotWorthChecking = new(StringComparer.OrdinalIgnoreCase)
     {
-        "twitter.com",      // работает как x.com
-        "rutracker.net",    // зеркало rutracker.org
-        "notion.site",      // раздача страниц, сам notion.so отдельно
+        "twitter.com",      // всё работает через x.com, он проверяется первым
         "riotgames.es",     // испанское зеркало riotgames.com
-        "itch.zone",        // раздача файлов itch.io
-        "rutor.info",       // зеркала одного трекера
-        "rutor.is",
-        "rutracker.cr",     // ещё одно зеркало rutracker.org
-        "notion.so",        // сам Notion открывается, это запасной домен
 
         // Голые зоны сетей доставки. Записи A у них нет и не было: работают
-        // только поддомены, а сама зона существует ради правил десинка,
-        // которые сопоставляются по суффиксу. Проверять там нечего, и десять
-        // строк «нет адреса у имени» в каждом отчёте — чистый шум.
+        // только поддомены, а сама зона существует ради сопоставления
+        // по суффиксу. Проверять там нечего, и строки «нет адреса у имени»
+        // в каждом отчёте — чистый шум. Список измерен, а не составлен
+        // на глаз: 1.1.1.1, 2026-09-04, каждое имя опрошено на запись A.
         "cdninstagram.com",
-        "akamai.net",
-        "akamaiedge.net",
         "tiktokcdn.com",
-        "soundcloud.cloud",
         "licdn.com",
         "nocookie.net",
         "cloudfront.net",
         "ooklaserver.net",
+        "cdnst.net",
         "rgpub.io",
+        "ytimg.com",
+        "ggpht.com",
+        "twimg.com",
+        "discordapp.net",
+        "rbxcdn.com",
+        "steamstatic.com",
+        "githubusercontent.com",
     };
 
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(
@@ -1484,8 +1766,14 @@ internal static class BlockCheckCommand
         // в режиме «всё через VPN» писал «десинк» ровно тем именам,
         // которые в этот момент уходили в туннель.
         OperatingMode mode,
-        out RuleEngine? engine)
+        out RuleEngine? engine,
+
+        // Списки, которых нет. Прежде они молча пропадали: Expand возвращает
+        // список бед, а вызов их не читал — и правило на ненайденный файл
+        // не совпадало ни с чем, оставаясь на вид живым.
+        out IReadOnlyList<string> listProblems)
     {
+        listProblems = [];
         int perPart = depth switch
         {
             CheckDepth.Quick => 1,
@@ -1498,7 +1786,7 @@ internal static class BlockCheckCommand
         try
         {
             engine = RuleSetLoader.LoadLayered(configPath, userRulesPath, mode);
-            RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
+            listProblems = RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
         }
         catch (Exception ex)
         {
@@ -1530,7 +1818,7 @@ internal static class BlockCheckCommand
 
                     var host = domain.TrimStart('*', '.');
 
-                    if (Mirrors.Contains(host))
+                    if (NotWorthChecking.Contains(host))
                         continue;
 
                     if (!seen.Add(host))
