@@ -247,7 +247,20 @@ internal static class MenuCommand
         switch (choice)
         {
             case "1":
+                var before = settings.Mode;
                 settings = ChooseMode(settings);
+
+                // Режим меняет состав движков, поэтому применяется он только
+                // перезапуском. Прежде программа останавливалась и ждала,
+                // когда человек сам нажмёт «Запустить»: он менял настройку,
+                // видел «остановлено» и решал, что что-то сломал.
+                if (settings.Mode != before)
+                {
+                    settings.Save(settingsPath);
+                    await RestartAfterModeChangeAsync(settings, cancellationToken);
+                    return settings;
+                }
+
                 break;
             case "2":
                 settings = ChoosePreset(settings);
@@ -275,6 +288,34 @@ internal static class MenuCommand
 
         settings.Save(settingsPath);
         return settings;
+    }
+
+    /// <summary>
+    /// Поднимает движки заново после смены режима.
+    /// </summary>
+    /// <remarks>
+    /// Только если они работали. Смена режима у остановленной программы —
+    /// это подготовка к запуску, и запускать её за человека значит решить
+    /// за него больше, чем он просил.
+    /// </remarks>
+    private static async Task RestartAfterModeChangeAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (state is null || !state.IsSupervisorAlive())
+        {
+            Message($"Режим: {settings.DescribeMode()}. Применится при запуске.", ConsoleColor.Green);
+            Pause();
+            return;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Перезапускаю движки — режим меняет их состав…");
+
+        await ToggleRunAsync(settings, cancellationToken);   // остановить
+        await ToggleRunAsync(settings, cancellationToken);   // и поднять заново
     }
 
     private static AppSettings ChooseMode(AppSettings settings)

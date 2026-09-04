@@ -164,7 +164,16 @@ internal static class BlockCheckCommand
         var pinned = FindPinned(targets.Select(t => t.Host));
 
         var reports = await RunProbesAsync(
-            targets, engine, enginesRunning, pinned, LoadPreset(settings, zapretRoot), stop.Token);
+            targets,
+            engine,
+
+            // Не просто «движки работают», а «туннель в этом режиме есть».
+            // В «только десинк» sing-box не поднимается вовсе, а правила
+            // на именах остаются — и без этой оговорки отчёт помечал их «чз».
+            enginesRunning && settings.NeedsProxy,
+            pinned,
+            LoadPreset(settings, zapretRoot),
+            stop.Token);
 
         // Сторож снимается здесь, а не в конце метода. Он читает клавиши
         // через ReadKey и, оставшись жить, забирал их у следующих вопросов:
@@ -233,7 +242,7 @@ internal static class BlockCheckCommand
     private static async Task<List<TargetReport>> RunProbesAsync(
         IReadOnlyList<(string Host, string Service)> targets,
         RuleEngine? engine,
-        bool enginesRunning,
+        bool tunnelInUse,
         IReadOnlyDictionary<string, string> pinned,
         (ZapretPreset Preset, string? Root)? preset,
         CancellationToken cancellationToken)
@@ -251,7 +260,14 @@ internal static class BlockCheckCommand
                 // Выясняется до пробы, а не после: от этого зависит не пометка
                 // в строке, а сам вердикт. Внутрь туннеля DPI не заглядывает,
                 // и обрыв там — про туннель, а не про сеть.
-                bool tunnelled = enginesRunning && engine is not null
+                //
+                // Режим спрашивается наравне с правилом, и это существенно.
+                // В «только десинк» туннеля нет вовсе, а правила на именах
+                // остаются прежними — и отчёт помечал их «чз», объявляя
+                // «туннель не доставил» там, где туннеля не поднимали.
+                // Telegram в таком отчёте выглядел бедой трубы, хотя упирался
+                // в прибитый адрес, который рвёт DPI.
+                bool tunnelled = tunnelInUse && engine is not null
                     && CurrentMode(engine, target.Host) == RoutingMode.Proxy;
 
                 var report = await BlockCheck.CheckAsync(
