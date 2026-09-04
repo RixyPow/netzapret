@@ -210,35 +210,9 @@ public sealed record AppSettings
         or OperatingMode.ProxyAll
         or OperatingMode.ProxyStrict;
 
-    /// <summary>
-    /// Нужен ли в этом режиме десинк.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// В режимах «всё через VPN» — нет, и это не экономия, а исправление.
-    /// Весь трафик там идёт в туннель, где обходить нечего: DPI видит
-    /// шифрованный поток к серверу подписки и имени внутри не знает.
-    /// Российские сервисы уходят напрямую и в обходе не нуждаются тем более.
-    /// </para>
-    /// <para>
-    /// Хуже того, десинк там вредит. Захват winws2 идёт по портам, а не по
-    /// адресам, и соединение приложения к адресу fakeip — такой же исходящий
-    /// TCP на 443. Имя читается из рукопожатия, секция находится, поток
-    /// режется — но на другом конце не сайт, а наш собственный sing-box,
-    /// и до него доходит мусор.
-    /// </para>
-    /// <para>
-    /// Замерено на двух прогонах подряд: при переходе с «только десинк»
-    /// на «всё через VPN» сломались <c>sndcdn.com</c> и <c>i.ytimg.com</c> —
-    /// оба с секциями в пресете, оба до того работавшие. То, что секций
-    /// не имеет, не пострадало.
-    /// </para>
-    /// </remarks>
+    /// <summary>Нужен ли в этом режиме десинк.</summary>
     [JsonIgnore]
-    public bool NeedsDesync => Mode is not OperatingMode.Off
-        and not OperatingMode.ProxyAll
-        and not OperatingMode.ProxyStrict
-        && PresetName is not null;
+    public bool NeedsDesync => Mode is not OperatingMode.Off && PresetName is not null;
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 
