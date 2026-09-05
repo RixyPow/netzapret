@@ -1,0 +1,87 @@
+name: Сервис не работает
+description: Сайт или приложение не открывается, хотя обход включён
+labels: ["не работает"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Сразу просьба: **не вставляйте ссылку на подписку** и содержимое
+        `config\netzapret.json`. Ссылка равнозначна паролю. Если она попала
+        в вывод — замените на `<скрыто>`.
+
+  - type: input
+    id: service
+    attributes:
+      label: Что не работает
+      description: Имя сайта или название приложения. Одно на issue.
+      placeholder: itch.io
+    validations:
+      required: true
+
+  - type: textarea
+    id: blockcheck
+    attributes:
+      label: Вывод проверки блокировок
+      description: |
+        Меню → «Проверить блокировки», либо в командной строке:
+        `netzapret blockcheck --service <название>`
+
+        Нужны строки про этот сервис вместе с причиной отказа под ними —
+        в ней адрес и код ошибки, а по ним и видно, кто отказал.
+        Разделы «Правила спорят», «Прибито в файле hosts» и «Маршрутом
+        не лечится» вставьте тоже, если они есть: половина находок была там.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Режим
+      options:
+        - Выборочно
+        - Только десинк
+        - Всё через VPN, кроме РФ
+        - Всё через VPN без исключений
+        - Выключено
+    validations:
+      required: true
+
+  - type: input
+    id: preset
+    attributes:
+      label: Пресет
+      placeholder: Universal V7
+    validations:
+      required: true
+
+  - type: input
+    id: isp
+    attributes:
+      label: Оператор и город
+      description: |
+        DPI у операторов разный, и рецепт, работающий на одном, на другом
+        не работает вовсе. Без этого сравнить отчёты не с чем.
+      placeholder: Ростелеком, Казань
+    validations:
+      required: true
+
+  - type: textarea
+    id: reality
+    attributes:
+      label: А что на самом деле
+      description: |
+        Проверка ошибается, и мы об этом знаем: у WhatsApp и обновлений
+        Discord она врёт закономерно. Если сервис у вас работает, а отчёт
+        пишет обратное — напишите это прямо, такие случаи ценнее всего.
+      placeholder: |
+        В браузере открывается. В отчёте — «закрыт полностью».
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия NetZapret
+      description: Видна в шапке меню.
+      placeholder: 0.4.8
+    validations:
+      required: true

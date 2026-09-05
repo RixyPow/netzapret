@@ -1,0 +1,14 @@
+# Пустой issue закрыт намеренно. Оба шаблона спрашивают ровно то, без чего
+# разбор не начинается: вывод проверки, режим, пресет, оператор. Свободный
+# текст неизменно приходил без них, и первым ответом всегда было «пришлите
+# ещё вот это».
+blank_issues_enabled: false
+
+contact_links:
+  - name: Уязвимость в безопасности
+    url: https://github.com/RixyPow/netzapret/security/advisories/new
+    about: Приватно, не публичным issue. Условия — в SECURITY.md.
+
+  - name: Вопрос или предложение
+    url: https://github.com/RixyPow/netzapret/discussions
+    about: Обсуждения — для того, что не является поломкой.

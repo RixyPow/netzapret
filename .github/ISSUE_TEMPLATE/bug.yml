@@ -1,0 +1,55 @@
+name: Ошибка в программе
+description: Программа падает, не запускается, ведёт себя не так, как написано
+labels: ["ошибка"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Для «сайт не открывается» есть отдельный шаблон — там спрашивается
+        то, что нужно именно для такого разбора.
+
+        **Не вставляйте ссылку на подписку** и `config\netzapret.json`.
+        Ссылка равнозначна паролю.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло
+      description: Что вы сделали, что ожидали увидеть и что увидели.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      placeholder: |
+        1. Меню → «Имена и адреса»
+        2. Выбрать «Закрепить пин»
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Сообщение об ошибке
+      description: |
+        Если программа что-то напечатала — целиком, включая стек вызовов.
+        Журналы лежат в `logs\` рядом с программой.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Версия NetZapret
+      placeholder: 0.4.8
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Версия Windows
+      description: "`winver` покажет."
+      placeholder: Windows 11 24H2
