@@ -443,6 +443,49 @@ internal static class BlockCheckCommand
     }
 
     /// <summary>
+    /// Говорит, что файл hosts переписал защитник.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kaspersky считает изменённый hosts признаком заражения и возвращает
+    /// файл к своему умолчанию. Прибитое исчезает целиком — и наш блок,
+    /// и чужие записи, — а взамен остаётся записка в комментарии. Только
+    /// по ней это и отличить от «человек ничего не прибивал».
+    /// </para>
+    /// <para>
+    /// Печатается громко и в самом заметном месте, потому что отменяет
+    /// целый способ настройки: пин на такой машине не живёт, и предлагать
+    /// его — значит посылать человека делать работу, которую сотрут.
+    /// </para>
+    /// </remarks>
+    private static void PrintHostsWasReplaced()
+    {
+        if (HostsEditor.WhoReplaced() is not { } who)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+
+        Console.WriteLine();
+        Console.WriteLine($"Файл hosts переписан: {who} вернул его к своему умолчанию");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine();
+        Console.WriteLine("  Изменённый hosts он считает признаком заражения. Стёрто всё, что");
+        Console.WriteLine("  там было: и наши пины, и чужие записи, — поэтому раздел о прибитых");
+        Console.WriteLine("  именах ниже пуст не потому, что вы их не ставили.");
+        Console.WriteLine();
+        Console.WriteLine("  Пин на этой машине не живёт, и ставить его заново смысла нет.");
+        Console.WriteLine("  Либо добавьте файл hosts в доверенные в настройках защитника,");
+        Console.WriteLine("  либо направляйте эти имена маршрутом — «Сервисы и маршруты».");
+        Console.WriteLine();
+        Console.WriteLine("  И стоит проверить остальное: тот же защитник ставит свой фильтр");
+        Console.WriteLine("  в сетевой стек рядом с нашим и может тихо править пакеты десинка.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
     /// Показывает правила, спорящие об одном имени.
     /// </summary>
     /// <remarks>
@@ -780,6 +823,12 @@ internal static class BlockCheckCommand
     /// </param>
     private static void PrintPinned(IReadOnlyDictionary<string, string> pinned, RuleEngine? engine)
     {
+        // Проверяется раньше, чем «прибитых нет»: пустой список бывает двух
+        // видов, и они противоположны. Либо человек ничего не прибивал, либо
+        // прибитое стёрли — и молчание во втором случае означает, что средство
+        // отрицает работу, которую человек только что проделал.
+        PrintHostsWasReplaced();
+
         if (pinned.Count == 0)
             return;
 

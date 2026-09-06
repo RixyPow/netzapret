@@ -602,6 +602,104 @@ public static class HostsEditor
         return new PinResult { Backup = backup, Pinned = left, Shadowed = [] };
     }
 
+    /// <summary>
+    /// Следы того, что файл hosts переписал за нас кто-то ещё.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Найдено на живой машине: Kaspersky считает изменённый hosts признаком
+    /// заражения и заменяет файл своим — от него остаются четыре строки,
+    /// <c>localhost</c> и объяснение в комментарии. Всё прибитое исчезает
+    /// молча, вместе с нашим блоком и с чужими записями.
+    /// </para>
+    /// <para>
+    /// Для программы это худший из возможных исходов: <see cref="Pins"/>
+    /// честно возвращает пустоту, отчёт пишет «прибитых имён нет», и человек
+    /// видит средство, которое отрицает работу, только что им проделанную.
+    /// Сказать «файл переписали» можно лишь по оставленной записке, поэтому
+    /// её и ищем.
+    /// </para>
+    /// </remarks>
+    /// <returns>Кто переписал; <c>null</c> — следов нет.</returns>
+    public static string? WhoReplaced(string? path = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+
+        if (!File.Exists(target))
+            return null;
+
+        string[] lines;
+
+        try
+        {
+            lines = File.ReadAllLines(target);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        foreach (var raw in lines.Take(20))
+        {
+            var line = raw.Trim();
+
+            if (!line.StartsWith('#'))
+                continue;
+
+            // Совпадение по обоим признакам сразу: одно упоминание Касперского
+            // ничего не значит — мало ли что человек записал в комментарий, —
+            // а вот вместе с «заменён на версию по умолчанию» это его записка.
+            bool replaced = line.Contains("replaced", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("заменён", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("заменен", StringComparison.OrdinalIgnoreCase);
+
+            if (!replaced)
+                continue;
+
+            if (line.Contains("Kaspersky", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("Касперск", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Kaspersky";
+            }
+
+            // Иные защитники поступают так же и оставляют такую же записку.
+            // Имени не знаем, но сам факт замены сказать обязаны.
+            if (line.Contains("default version", StringComparison.OrdinalIgnoreCase)
+                || line.Contains("версией по умолчанию", StringComparison.OrdinalIgnoreCase))
+            {
+                return "антивирус";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Проверяет, что записанный блок и вправду лежит в файле.
+    /// </summary>
+    /// <remarks>
+    /// Не паранойя, а измеренный случай. Запись в hosts удаётся, ошибки нет,
+    /// а через мгновение защитник возвращает файл к своему умолчанию — и мы
+    /// сообщаем об успехе того, чего больше не существует. Перечитываем
+    /// и смотрим своими глазами.
+    /// </remarks>
+    public static bool BlockSurvived(string? path = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+
+        if (!File.Exists(target))
+            return false;
+
+        try
+        {
+            return FindBlock(File.ReadAllLines(target)).Start >= 0;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Имена, которые мы прибили; пусто, если блока нет.</summary>
     public static IReadOnlyDictionary<string, string> Pins(string? path = null)
     {
