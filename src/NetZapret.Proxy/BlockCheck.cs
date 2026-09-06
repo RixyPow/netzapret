@@ -545,19 +545,24 @@ public static class BlockCheck
             };
         }
 
-        var tcp = await TcpAsync(host, 443, AddressFamily.InterNetwork, cancellationToken, real);
+        var (answered, tcp) = await ConnectAnyAsync(
+            host, 443, AddressFamily.InterNetwork, real, cancellationToken);
 
         // Пробы идут последовательно, а не разом: одновременные соединения
         // к одному хосту DPI иногда обрывает скопом, и картина смазывается.
-        var tls12 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, real) : Failed(null);
-        var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, real) : Failed(null);
-        var http = await HttpAsync(host, cancellationToken, real);
+        //
+        // Все — на тот адрес, который ответил на TCP. Иначе каждая заново
+        // тянет жребий среди адресов имени, и закрытый среди них сделает
+        // из «маршрут до одного адреса закрыт» вывод «рукопожатие рвут».
+        var tls12 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, real, answered) : Failed(null);
+        var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, real, answered) : Failed(null);
+        var http = await HttpAsync(host, cancellationToken, real, answered);
 
         // Передача проверяется только там, где рукопожатие состоялось: без него
         // качать нечего, а вопрос «идут ли данные» имеет смысл ровно тогда,
         // когда соединение с виду установлено.
         var data = tls12.Ok || tls13.Ok
-            ? await TransferAsync(host, cancellationToken, real)
+            ? await TransferAsync(host, cancellationToken, real, answered)
             : Failed(null);
 
         var kind = Classify(tcp, tls12, tls13, http, data, throughTunnel);
@@ -573,7 +578,14 @@ public static class BlockCheck
         if (kind == BlockKind.Full && !throughTunnel)
         {
             var honest = await DohResolveAsync(host, cancellationToken);
-            var other = honest.FirstOrDefault(a => !shown.Contains(a, StringComparer.Ordinal));
+
+            // Сравнивается весь набор системного резолвера, а не первые три
+            // из него. Обрезанный список давал ложное «резолвер виноват» там,
+            // где резолверы отвечают одинаково: у updates.discord.com пять
+            // адресов, и четвёртый честного набора неизбежно «отсутствовал»
+            // в показанной тройке.
+            var mine = real.Select(a => a.ToString()).ToHashSet(StringComparer.Ordinal);
+            var other = honest.FirstOrDefault(a => !mine.Contains(a));
 
             if (other is not null && await AnswersAsync(other, cancellationToken))
             {
@@ -713,36 +725,116 @@ public static class BlockCheck
         Detail = detail,
     };
 
+    /// <summary>
+    /// Обходит адреса имени по одному, каждому давая свой срок.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Найдено на <c>updates.discord.com</c>. У него пять адресов, из которых
+    /// закрыт один — <c>162.159.136.232</c>, — а четыре отвечают. Замер
+    /// 2026-09-06: и Google, и Cloudflare, и Яндекс возвращают все пять,
+    /// различаясь лишь порядком.
+    /// </para>
+    /// <para>
+    /// Прежде мы звали <c>ConnectAsync(host, port)</c> с одним сроком на всю
+    /// попытку. Он перебирает адреса сам, но закрытый адрес молчит, съедая
+    /// весь бюджет целиком, — и до остальных дело не доходило никогда.
+    /// Имя объявлялось закрытым, тогда как настоящий клиент открывает его
+    /// со второй попытки и даже не замечает.
+    /// </para>
+    /// <para>
+    /// Свой срок каждому — это и есть поведение клиента. Хост достижим, если
+    /// отвечает хоть один его адрес; обратное утверждение требует опросить
+    /// все, а не первый попавшийся.
+    /// </para>
+    /// </remarks>
+    /// <returns>Адрес, который ответил, и исход пробы.</returns>
+    private static async Task<(IPAddress? Answered, ProbeOutcome Outcome)> ConnectAnyAsync(
+        string host,
+        int port,
+        AddressFamily family,
+        IReadOnlyList<IPAddress>? dialled,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var targets = dialled?.Where(a => a.AddressFamily == family).ToList() ?? [];
+
+        // Адресов не дали — спрашиваем именем, как раньше. Так работает
+        // измерение сети, где имени соответствует известно что.
+        if (targets.Count == 0)
+        {
+            try
+            {
+                using var client = new TcpClient(family);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(Timeout);
+
+                await client.ConnectAsync(host, port, timeout.Token);
+
+                return (null, new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed });
+            }
+            catch (Exception ex)
+            {
+                return (null, new ProbeOutcome
+                {
+                    Ok = false,
+                    Reset = IsReset(ex),
+                    Elapsed = stopwatch.Elapsed,
+                    Detail = Explain(ex, dialled, port),
+                });
+            }
+        }
+
+        Exception? last = null;
+        var silent = new List<IPAddress>();
+
+        foreach (var address in targets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                using var client = new TcpClient(family);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(Timeout);
+
+                await client.ConnectAsync(address, port, timeout.Token);
+
+                return (address, new ProbeOutcome
+                {
+                    Ok = true,
+                    Elapsed = stopwatch.Elapsed,
+
+                    // Молчавшие называются и при успехе: часть адресов имени
+                    // закрыта, и это стоит знать, даже когда обошлось.
+                    Detail = silent.Count == 0
+                        ? null
+                        : $"{address}:{port} ответил; молчали {string.Join(", ", silent)}",
+                });
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+                silent.Add(address);
+            }
+        }
+
+        return (null, new ProbeOutcome
+        {
+            Ok = false,
+            Reset = last is not null && IsReset(last),
+            Elapsed = stopwatch.Elapsed,
+            Detail = last is null ? null : Explain(last, targets, port),
+        });
+    }
+
     private static async Task<ProbeOutcome> TcpAsync(
         string host,
         int port,
         AddressFamily family,
         CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null)
-    {
-        var stopwatch = Stopwatch.StartNew();
-
-        try
-        {
-            using var client = new TcpClient(family);
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(Timeout);
-
-            await client.ConnectAsync(host, port, timeout.Token);
-
-            return new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed };
-        }
-        catch (Exception ex)
-        {
-            return new ProbeOutcome
-            {
-                Ok = false,
-                Reset = IsReset(ex),
-                Elapsed = stopwatch.Elapsed,
-                Detail = Explain(ex, dialled, port),
-            };
-        }
-    }
+        IReadOnlyList<IPAddress>? dialled = null) =>
+        (await ConnectAnyAsync(host, port, family, dialled, cancellationToken)).Outcome;
 
     /// <remarks>
     /// Проверка сертификата здесь отключена намеренно, о чём ниже. Анализатор
@@ -755,11 +847,18 @@ public static class BlockCheck
         "CA5359:Do not disable certificate validation",
         Justification = "Измеряется доходимость рукопожатия, а не доверие. " +
             "Подлинность проверяется отдельно, в CertificateMatchesAsync, и строго.")]
+    /// <param name="via">
+    /// Адрес, который только что ответил на TCP. Соединяемся с ним, а имя
+    /// в рукопожатии остаётся настоящим: иначе проба заново упирается
+    /// в закрытый адрес того же имени и врёт про рукопожатие то, что на деле
+    /// про маршрут.
+    /// </param>
     private static async Task<ProbeOutcome> TlsAsync(
         string host,
         SslProtocols protocol,
         CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null)
+        IReadOnlyList<IPAddress>? dialled = null,
+        IPAddress? via = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -769,7 +868,10 @@ public static class BlockCheck
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(Timeout);
 
-            await client.ConnectAsync(host, 443, timeout.Token);
+            if (via is null)
+                await client.ConnectAsync(host, 443, timeout.Token);
+            else
+                await client.ConnectAsync(via, 443, timeout.Token);
 
             // Сертификат не проверяется: нас занимает, доходит ли рукопожатие,
             // а не доверяем ли мы стороне. Подмена — отдельная проверка,
@@ -823,7 +925,8 @@ public static class BlockCheck
     private static async Task<ProbeOutcome> TransferAsync(
         string host,
         CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null)
+        IReadOnlyList<IPAddress>? dialled = null,
+        IPAddress? via = null)
     {
         var stopwatch = Stopwatch.StartNew();
         int total = 0;
@@ -834,7 +937,10 @@ public static class BlockCheck
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             connect.CancelAfter(Timeout);
 
-            await client.ConnectAsync(host, 443, connect.Token);
+            if (via is null)
+                await client.ConnectAsync(host, 443, connect.Token);
+            else
+                await client.ConnectAsync(via, 443, connect.Token);
 
             using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
             await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = host }, connect.Token);
@@ -1022,7 +1128,8 @@ public static class BlockCheck
     private static async Task<ProbeOutcome> HttpAsync(
         string host,
         CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null)
+        IReadOnlyList<IPAddress>? dialled = null,
+        IPAddress? via = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -1032,7 +1139,10 @@ public static class BlockCheck
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(Timeout);
 
-            await client.ConnectAsync(host, 80, timeout.Token);
+            if (via is null)
+                await client.ConnectAsync(host, 80, timeout.Token);
+            else
+                await client.ConnectAsync(via, 80, timeout.Token);
 
             var request = System.Text.Encoding.ASCII.GetBytes(
                 $"HEAD / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\nUser-Agent: NetZapret\r\n\r\n");
