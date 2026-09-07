@@ -93,7 +93,27 @@ internal static class BlockCheckCommand
     /// </remarks>
     public static async Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
     {
+        // Запись начинается до шапки и кончается после советов: в файл должен
+        // попасть весь отчёт, а не его середина. Обстановка замера — режим,
+        // пресет, сервер, выход — половина ценности отчёта, и без неё
+        // присланный кусок нечем толковать.
+        var outPath = cmd.Value("out");
+        string? problem = null;
+
+        using var transcript = outPath is null ? null : TranscriptWriter.Start(outPath, out problem);
+
+        if (outPath is not null && transcript is null)
+            Message($"Записать отчёт не вышло, показываю только на экран: {problem}", ConsoleColor.Yellow);
+
         var code = await Run(cmd, defaultConfigPath, cancellationToken);
+
+        if (transcript is not null)
+        {
+            // Сообщение печатается до Dispose, чтобы попасть и в файл: там
+            // оно называет сам файл, и это удобно — путь виден в присланном
+            // тексте, если человек забудет, откуда он его взял.
+            Message($"Отчёт записан: {Path.GetFullPath(outPath!)}", ConsoleColor.Green);
+        }
 
         if (ConsoleWindow.ClosesWithUs())
         {
@@ -261,7 +281,13 @@ internal static class BlockCheckCommand
         if (engine is not null)
             PrintRuleConflicts(RouteConflicts.Find(engine.RuleSet));
 
-        PrintDeadlocks(Deadlocks(reports, engine, setup).Where(d => !pinned.ContainsKey(d.Host)).ToList());
+        // Идёт до тупиков намеренно: раздел «маршрутом не лечится» советует
+        // сменить сервер подписки, и советовать это, не проверив сервер,
+        // мы больше не хотим.
+        var reach = await ReachThroughTunnelAsync(settings, reports, stop.Token);
+        PrintTunnelReach(reach);
+
+        PrintDeadlocks(Deadlocks(reports, engine, setup, reach).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
         ApplyIfConfirmed(suggestions, userRulesPath);
 
@@ -440,6 +466,144 @@ internal static class BlockCheckCommand
         }
 
         return changed;
+    }
+
+    /// <summary>
+    /// Проверяет через сам туннель то, что он якобы не доставил.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Вердикт «туннель не доставил» ставится по неудаче соединения с адресом
+    /// fakeip, а это не то же самое, что «сервер не дотянулся»: между нами
+    /// и туннелем стоит winws2, и рецепт десинка правит ровно тот пакет,
+    /// который мы отправляем внутрь. Совет «смените сервер подписки» до сих
+    /// пор давался, не проверив сервер.
+    /// </para>
+    /// <para>
+    /// Проверка идёт мимо TUN — через локальный вход sing-box, как при
+    /// проверке серверов. Прав администратора не нужно.
+    /// </para>
+    /// </remarks>
+    private static async Task<IReadOnlyList<TunnelReading>> ReachThroughTunnelAsync(
+        AppSettings settings,
+        IReadOnlyList<TargetReport> reports,
+        CancellationToken cancellationToken)
+    {
+        var hosts = reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        if (hosts.Count == 0 || string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+            return [];
+
+        var singBox = FindSingBox();
+
+        if (singBox is null)
+            return [];
+
+        Console.WriteLine();
+        Console.WriteLine($"Проверяю через сам туннель: {hosts.Count} " +
+            $"{Plural(hosts.Count, "имя", "имени", "имён")}…");
+
+        try
+        {
+            using var client = new NetZapret.Subscriptions.SubscriptionClient();
+            var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
+
+            var server = info.Servers.FirstOrDefault(s =>
+                    s.IsSupportedBySingBox && s.Tag == settings.PreferredServer)
+                ?? info.Servers.FirstOrDefault(s => s.IsSupportedBySingBox);
+
+            if (server is null)
+                return [];
+
+            return await TunnelReach.CheckAsync(
+                singBox,
+                server,
+                hosts,
+                Path.Combine("runtime", "reach"),
+
+                // Порт заведомо не тот, на котором работает боевой инбаунд:
+                // столкнуться с собственным движком значило бы проверить
+                // не то и объявить об этом уверенно.
+                listenPort: 24081,
+                cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Подписка могла не ответить, сервер — не подняться. Это незнание,
+            // и раздела просто не будет: пустая проверка лучше выдуманной.
+            return [];
+        }
+    }
+
+    /// <summary>Где лежит движок; <c>null</c> — не нашли.</summary>
+    private static string? FindSingBox()
+    {
+        var beside = Path.Combine(AppContext.BaseDirectory, "engines", "sing-box", "sing-box.exe");
+
+        if (File.Exists(beside))
+            return beside;
+
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Directory.GetFiles(directory.FullName, "sing-box.exe", SearchOption.AllDirectories)
+                .FirstOrDefault();
+
+            if (candidate is not null)
+                return candidate;
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+    /// <summary>Показывает, кто на самом деле виноват в недоставке.</summary>
+    private static void PrintTunnelReach(IReadOnlyList<TunnelReading> readings)
+    {
+        if (readings.Count == 0)
+            return;
+
+        var reached = readings.Where(r => r.Reached).ToList();
+        var lost = readings.Where(r => !r.Reached).ToList();
+
+        var previous = Console.ForegroundColor;
+
+        if (reached.Count > 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine();
+            Console.WriteLine("Через туннель они доходят — значит виноват не сервер");
+
+            foreach (var r in reached)
+                Console.WriteLine($"  {Truncate(r.Host, 30),-30} ответ {r.Status}, {r.Elapsed.TotalSeconds:0.0} с");
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine();
+            Console.WriteLine("  Здесь соединение шло на 127.0.0.1 и наружу — к серверу подписки,");
+            Console.WriteLine("  чьего имени нет ни в одном доменном списке. Через TUN всё иначе:");
+            Console.WriteLine("  имя в рукопожатии настоящее, список совпадает, и winws2 правит");
+            Console.WriteLine("  наш же пакет по дороге в туннель. Менять сервер незачем —");
+            Console.WriteLine("  выведите эти имена из-под десинка.");
+        }
+
+        if (lost.Count > 0)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine();
+            Console.WriteLine("И через туннель не доходят — вот тут дело в сервере или в сайте");
+
+            foreach (var r in lost)
+                Console.WriteLine($"  {Truncate(r.Host, 30),-30} {Truncate(r.Detail ?? "—", 44)}");
+        }
+
+        Console.ForegroundColor = previous;
     }
 
     /// <summary>
@@ -1409,13 +1573,24 @@ internal static class BlockCheckCommand
     /// вердикт по проксируемому имени неверен: жив ли туннель вообще
     /// и выходит ли он там же, откуда зашёл.
     /// </param>
+    /// <param name="reach">
+    /// Что удалось достать через сам туннель. Имя из этого списка тупиком
+    /// не является: сервер его довозит, и совет сменить сервер был бы прямо
+    /// опровергнут замером, напечатанным двумя разделами выше.
+    /// </param>
     private static IReadOnlyList<Deadlock> Deadlocks(
         IReadOnlyList<TargetReport> reports,
         RuleEngine? engine,
-        Setup setup)
+        Setup setup,
+        IReadOnlyList<TunnelReading> reach)
     {
         if (engine is null)
             return [];
+
+        var delivered = reach
+            .Where(r => r.Reached)
+            .Select(r => r.Host)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var result = new List<Deadlock>();
 
@@ -1441,6 +1616,22 @@ internal static class BlockCheckCommand
                     Now = now,
                     What = "имя ведёт в никуда — соединяться не с чем",
                     Hope = "подставьте адрес в config\\addresses.yaml",
+                });
+
+                continue;
+            }
+
+            // Сервер его довозит — мы это только что измерили. Тупика нет,
+            // и звать его тупиком значило бы спорить с собственным замером
+            // в пределах одного отчёта.
+            if (delivered.Contains(report.Host))
+            {
+                result.Add(new Deadlock
+                {
+                    Host = report.Host,
+                    Now = RoutingMode.Proxy,
+                    What = "через сам туннель доходит, а через TUN — нет",
+                    Hope = "дело на нашей стороне трубы, а не за ней; сервер менять незачем",
                 });
 
                 continue;

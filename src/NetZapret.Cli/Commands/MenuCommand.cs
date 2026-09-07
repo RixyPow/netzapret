@@ -1147,6 +1147,63 @@ internal static class MenuCommand
     }
 
     /// <summary>
+    /// Говорит про защитника до запуска, а не после часа догадок.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Печатается один раз при запуске и коротко: это не приговор, а место,
+    /// куда смотреть. Мы не знаем, включена ли у него проверка соединений
+    /// и не увёз ли он WinDivert в карантин, — но знаем, что все три беды
+    /// приходят молча, и человек ищет их последними.
+    /// </para>
+    /// <para>
+    /// Случай, из которого это выросло: у пользователя Kaspersky вернул файл
+    /// hosts к своему умолчанию, стерев все пины. Заметить удалось только
+    /// потому, что он оставил записку в комментарии; всё прочее защитник
+    /// делает без следов.
+    /// </para>
+    /// </remarks>
+    private static void WarnAboutSecuritySoftware(AppSettings settings)
+    {
+        var found = SecuritySoftware.Running();
+
+        if (found.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine($"Работает {string.Join(", ", found.Select(p => p.Name))} — обходу это мешает трояко.");
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+
+        if (settings.NeedsDesync)
+        {
+            Console.WriteLine("  Его сетевой фильтр встаёт на тот же слой, что и наш, и может");
+            Console.WriteLine("  править пакеты десинка раньше, чем они уйдут в сеть.");
+            Console.WriteLine("  Проверка защищённых соединений переустанавливает TLS своим");
+            Console.WriteLine("  клиентом — тогда рецепт правит уже не то рукопожатие.");
+            Console.WriteLine("  WinDivert он помечает как RiskTool и может увезти в карантин;");
+            Console.WriteLine("  тогда winws2 работает без драйвера и не делает ничего.");
+        }
+
+        if (found.Any(p => p.GuardsHosts))
+        {
+            Console.WriteLine("  Изменённый файл hosts он считает признаком заражения и возвращает");
+            Console.WriteLine("  к своему умолчанию — вместе со всеми пинами, молча.");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Ничего из этого мы отсюда не видим и не утверждаем. Если обход");
+        Console.WriteLine("  не помогает без внятной причины — отключите защиту на десять минут");
+        Console.WriteLine("  и повторите проверку блокировок: разница назовёт виновника.");
+        Console.WriteLine($"  Опознано по процессу {string.Join(", ", found.Select(p => p.Process))}.");
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
     /// Закрепляет имена части в hosts и уводит её маршрут «напрямую».
     /// </summary>
     /// <remarks>
@@ -2176,6 +2233,8 @@ internal static class MenuCommand
                 ConsoleColor.Yellow);
             return;
         }
+
+        WarnAboutSecuritySoftware(settings);
 
         if (settings.NeedsProxy && !await BuildConfigAsync(settings, cancellationToken, pause: false))
         {
