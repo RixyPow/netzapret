@@ -93,27 +93,7 @@ internal static class BlockCheckCommand
     /// </remarks>
     public static async Task<int> RunAsync(CommandLine cmd, string defaultConfigPath, CancellationToken cancellationToken)
     {
-        // Запись начинается до шапки и кончается после советов: в файл должен
-        // попасть весь отчёт, а не его середина. Обстановка замера — режим,
-        // пресет, сервер, выход — половина ценности отчёта, и без неё
-        // присланный кусок нечем толковать.
-        var outPath = cmd.Value("out");
-        string? problem = null;
-
-        using var transcript = outPath is null ? null : TranscriptWriter.Start(outPath, out problem);
-
-        if (outPath is not null && transcript is null)
-            Message($"Записать отчёт не вышло, показываю только на экран: {problem}", ConsoleColor.Yellow);
-
         var code = await Run(cmd, defaultConfigPath, cancellationToken);
-
-        if (transcript is not null)
-        {
-            // Сообщение печатается до Dispose, чтобы попасть и в файл: там
-            // оно называет сам файл, и это удобно — путь виден в присланном
-            // тексте, если человек забудет, откуда он его взял.
-            Message($"Отчёт записан: {Path.GetFullPath(outPath!)}", ConsoleColor.Green);
-        }
 
         if (ConsoleWindow.ClosesWithUs())
         {
@@ -143,6 +123,7 @@ internal static class BlockCheckCommand
             ZapretPaths.Discover(cmd.Value("zapret-root"))?.Root,
             only,
             depth,
+            cmd.Value("out"),
             cancellationToken);
     }
 
@@ -155,6 +136,10 @@ internal static class BlockCheckCommand
     /// оттуда же — иначе человеку предлагается выйти из меню, вспомнить имя
     /// команды и вернуться.
     /// </remarks>
+    /// <param name="reportPath">
+    /// Куда записать отчёт. <c>null</c> — в <c>reports\</c> под именем со
+    /// временем замера.
+    /// </param>
     internal static async Task<int> ExecuteAsync(
         AppSettings settings,
         string configPath,
@@ -162,8 +147,24 @@ internal static class BlockCheckCommand
         string? zapretRoot,
         string? only,
         CheckDepth depth,
+        string? reportPath,
         CancellationToken cancellationToken)
     {
+        // Запись идёт всегда, а не по просьбе. Отчёт затем и нужен, чтобы его
+        // показать, — а до сих пор его переносили выделением мышью из окна,
+        // теряя половину при прокрутке. Ключ --out был, но из меню проверку
+        // зовут напрямую, мимо разбора командной строки, и человек, который
+        // работает из меню, о файле не узнавал никогда.
+        //
+        // Обёртка стоит здесь, а не в RunAsync, именно поэтому: тут сходятся
+        // оба пути — и команда, и меню.
+        using var transcript = TranscriptWriter.Start(reportPath ?? DefaultReportPath(), out var problem);
+
+        if (transcript is null)
+            Message($"Записать отчёт не вышло, показываю только на экран: {problem}", ConsoleColor.Yellow);
+        else
+            KeepRecentReports();
+
         // Цели собираются до замеров: если проверять нечего, время на пробу
         // сети потрачено впустую, а человек об этом узнаёт последним.
         var targets = CollectTargets(
@@ -289,9 +290,62 @@ internal static class BlockCheckCommand
 
         PrintDeadlocks(Deadlocks(reports, engine, setup, reach).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
+
+        // Путь к файлу называется до вопросов о применении правил: те ждут
+        // ответа, и человек, ушедший читать отчёт, вернулся бы к висящему
+        // приглашению, не поняв, чего от него хотят.
+        if (transcript is not null)
+            Message($"Отчёт целиком записан: {Path.GetFullPath(reportPath ?? DefaultReportPath())}", ConsoleColor.DarkGray);
+
         ApplyIfConfirmed(suggestions, userRulesPath);
 
         return reports.Any(r => r.Actionable) ? 1 : 0;
+    }
+
+    /// <summary>Куда класть отчёт, если не сказано иного.</summary>
+    /// <remarks>
+    /// Рядом с программой, в отдельной папке и со временем в имени. Одно имя
+    /// на все прогоны затирало бы предыдущий, а сравнить «было — стало» —
+    /// это половина разбора: сайт ломается между двумя проверками, а не во
+    /// время одной.
+    /// </remarks>
+    private static string DefaultReportPath() =>
+        Path.Combine("reports", $"blockcheck-{Started:yyyy-MM-dd-HHmm}.txt");
+
+    /// <summary>Время запуска — одно на весь прогон, чтобы имя файла не поехало.</summary>
+    private static readonly DateTime Started = DateTime.Now;
+
+    /// <summary>Сколько отчётов держать.</summary>
+    private const int KeepReports = 20;
+
+    /// <summary>
+    /// Убирает старые отчёты, оставляя последние.
+    /// </summary>
+    /// <remarks>
+    /// Папка, растущая без предела, однажды станет поводом её вычистить целиком
+    /// — вместе с тем отчётом, ради которого всё и затевалось. Двадцати хватает
+    /// на историю в несколько недель при ежедневной проверке.
+    /// </remarks>
+    private static void KeepRecentReports()
+    {
+        try
+        {
+            var directory = new DirectoryInfo("reports");
+
+            if (!directory.Exists)
+                return;
+
+            foreach (var file in directory.GetFiles("blockcheck-*.txt")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Skip(KeepReports))
+            {
+                file.Delete();
+            }
+        }
+        catch (Exception)
+        {
+            // Уборка не стоит того, чтобы из-за неё не состоялась проверка.
+        }
     }
 
     /// <summary>

@@ -963,6 +963,7 @@ internal static class MenuCommand
                     zapretRoot,
                     only: null,
                     CheckDepth.Quick,
+                    reportPath: null,
                     cancellationToken);
 
                 Pause();
@@ -2463,6 +2464,7 @@ internal static class MenuCommand
             ZapretPaths.Discover()?.Root,
             only,
             depth.Value,
+            reportPath: null,
             cancellationToken);
 
         Pause();
