@@ -204,6 +204,16 @@ if exist "%STAGE%\runtime" (
     exit /b 1
 )
 
+rem Same reasoning, different contents. A block-check report is a snapshot of
+rem one person's network: which sites they check, which ISP, what is pinned in
+rem their hosts. Shipping one to everybody is a leak, not clutter.
+if exist "%STAGE%\reports" (
+    echo.
+    echo Refusing to archive: reports\ holds block-check output describing
+    echo this machine's network. Remove it and pack again.
+    exit /b 1
+)
+
 echo Archiving
 powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%' -DestinationPath '%DIST%\NetZapret.zip' -Force"
 if %errorlevel% neq 0 (
