@@ -90,21 +90,20 @@ rem
 rem The SDK version is printed with them, because it changes the IL: the same
 rem sources under a different SDK give a different file, and without knowing
 rem which one built this, a mismatch says nothing.
+rem The wording lives in docs\release-notes.footer.md, not here. This file is
+rem read by cmd.exe in the OEM code page, and Cyrillic written into it breaks
+rem apart into bogus commands - which is exactly what happened when the text
+rem was inlined, and it took the release down with it. The template is UTF-8
+rem and holds every Russian word; the line below only substitutes numbers.
 set "NOTES=%ROOT%dist\notes.md"
 copy /y "%ROOT%docs\release-notes.md" "%NOTES%" >nul
 
-powershell -NoProfile -Command ^
-  "$zip = (Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash;" ^
-  "$exe = (Get-FileHash '%ROOT%dist\NetZapret\netzapret.exe' -Algorithm SHA256).Hash;" ^
-  "$sdk = (& 'C:\Program Files\dotnet\dotnet.exe' --version);" ^
-  "$t = \"`n`n## Чем это собрано и как сверить`n`n\" +" ^
-  "\"``````\nNetZapret.zip   $zip`nnetzapret.exe   $exe`n``````\n`n\" +" ^
-  "\"Пакет SDK .NET $sdk, сборка Release, win-x64, self-contained, один файл.`n`n\" +" ^
-  "\"Проверить у себя:`n`n``````\nGet-FileHash NetZapret.zip -Algorithm SHA256`n``````\n`n\" +" ^
-  "\"Собрать самому и сравнить netzapret.exe:`n`n``````\ngit checkout v%VERSION%`npack.cmd`n``````\n`n\" +" ^
-  "\"Совпасть должен именно netzapret.exe. Архив — нет: в нём лежат winws2 и\n\" +" ^
-  "\"sing-box, которые собраны не нами, и их версии у вас могут быть другими.\";" ^
-  "Add-Content -Path '%NOTES%' -Value $t -Encoding utf8"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=[IO.File]::ReadAllText('%ROOT%docs\release-notes.footer.md',[Text.Encoding]::UTF8); $f=$f.Replace('{ZIP}',(Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash).Replace('{EXE}',(Get-FileHash '%ROOT%dist\NetZapret\netzapret.exe' -Algorithm SHA256).Hash).Replace('{SDK}',(& 'C:\Program Files\dotnet\dotnet.exe' --version)).Replace('{VERSION}','%VERSION%'); [IO.File]::AppendAllText('%NOTES%',$f,(New-Object Text.UTF8Encoding($false)))"
+
+if not exist "%NOTES%" (
+    echo Could not prepare the notes.
+    exit /b 1
+)
 
 rem From %ROOT%: gh works out which repository to publish to from the current
 rem directory, and this script is normally started by its full path from
