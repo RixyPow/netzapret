@@ -82,6 +82,30 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem Checksums go into the notes. Telling people to build it themselves and
+rem compare is empty advice while there is nothing to compare against: the
+rem archive is unsigned, SmartScreen calls it suspicious, and the only honest
+rem answer we can give is a number they can check.
+rem
+rem The SDK version is printed with them, because it changes the IL: the same
+rem sources under a different SDK give a different file, and without knowing
+rem which one built this, a mismatch says nothing.
+set "NOTES=%ROOT%dist\notes.md"
+copy /y "%ROOT%docs\release-notes.md" "%NOTES%" >nul
+
+powershell -NoProfile -Command ^
+  "$zip = (Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash;" ^
+  "$exe = (Get-FileHash '%ROOT%dist\NetZapret\netzapret.exe' -Algorithm SHA256).Hash;" ^
+  "$sdk = (& 'C:\Program Files\dotnet\dotnet.exe' --version);" ^
+  "$t = \"`n`n## Чем это собрано и как сверить`n`n\" +" ^
+  "\"``````\nNetZapret.zip   $zip`nnetzapret.exe   $exe`n``````\n`n\" +" ^
+  "\"Пакет SDK .NET $sdk, сборка Release, win-x64, self-contained, один файл.`n`n\" +" ^
+  "\"Проверить у себя:`n`n``````\nGet-FileHash NetZapret.zip -Algorithm SHA256`n``````\n`n\" +" ^
+  "\"Собрать самому и сравнить netzapret.exe:`n`n``````\ngit checkout v%VERSION%`npack.cmd`n``````\n`n\" +" ^
+  "\"Совпасть должен именно netzapret.exe. Архив — нет: в нём лежат winws2 и\n\" +" ^
+  "\"sing-box, которые собраны не нами, и их версии у вас могут быть другими.\";" ^
+  "Add-Content -Path '%NOTES%' -Value $t -Encoding utf8"
+
 rem From %ROOT%: gh works out which repository to publish to from the current
 rem directory, and this script is normally started by its full path from
 rem wherever the shell happened to be. Called from outside a working copy it
@@ -91,7 +115,7 @@ pushd "%ROOT%"
 
 "%GH%" release create "v%VERSION%" "%ROOT%dist\NetZapret.zip" ^
     --title "NetZapret %VERSION%" ^
-    --notes-file "%ROOT%docs\release-notes.md"
+    --notes-file "%NOTES%"
 
 set "PUBLISHED=%errorlevel%"
 popd

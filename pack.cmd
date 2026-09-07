@@ -45,10 +45,19 @@ rem Single file so the folder stays readable. A plain self-contained publish
 rem scatters 217 runtime assemblies next to the program, and whoever opens the
 rem folder has to work out which of them to launch. One executable, a config
 rem directory and the engines is a folder that explains itself.
+rem DebugType=none for the shipped build. The PE debug directory otherwise
+rem names the pdb by its full path, and that path is the build machine's -
+rem C:\Users\<name>\Projects\netzapret\... travelled to everyone who
+rem downloaded. It also made the file impossible to reproduce elsewhere: a
+rem different folder, a different binary, from identical sources.
+rem
+rem Nothing is lost. The pdb is deleted below anyway, so line numbers in stack
+rem traces were never available to anyone downloading this.
 echo Publishing self-contained...
 "C:\Program Files\dotnet\dotnet.exe" publish "%ROOT%src\NetZapret.Cli\NetZapret.Cli.csproj" ^
     -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true ^
-    -p:IncludeNativeLibrariesForSelfExtract=true -o "%STAGE%" --nologo -v quiet
+    -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false ^
+    -o "%STAGE%" --nologo -v quiet
 if %errorlevel% neq 0 (
     echo Publish failed.
     exit /b 1
