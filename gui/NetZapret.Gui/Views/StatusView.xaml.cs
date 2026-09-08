@@ -212,7 +212,7 @@ public partial class StatusView : UserControl
     /// вхолостую поднятым TUN — адаптер есть, маршруты стоят, трафика нет,
     /// и первая же неисправность ищется вдвое дольше.
     /// </remarks>
-    private static string BuildStartArguments()
+    internal static string BuildStartArguments()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 

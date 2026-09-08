@@ -54,6 +54,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>

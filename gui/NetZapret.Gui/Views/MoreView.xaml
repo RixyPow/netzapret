@@ -1,0 +1,222 @@
+<UserControl x:Class="NetZapret.Gui.Views.MoreView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource Backdrop}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="980" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+
+                <TextBlock Text="Ещё" Style="{StaticResource Title}" />
+                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="Режим, подписка, автозапуск, обновление и папки программы." />
+
+                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
+
+                <!--
+                    Режим — самая крупная ручка во всей программе: он задаёт
+                    рамку, внутри которой вообще имеют смысл маршруты. До сих
+                    пор его можно было менять только из меню консоли.
+                -->
+                <TextBlock Text="Режим работы" FontWeight="SemiBold" FontSize="15" Margin="4,20,0,10" />
+
+                <ItemsControl x:Name="Modes">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
+                                    Tag="{Binding Key}" Click="OnMode">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
+                                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" Text="сейчас" Style="{StaticResource Mono}"
+                                               Foreground="{StaticResource Accent}" VerticalAlignment="Center"
+                                               Visibility="{Binding MarkShown}" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!--
+                    Ссылка подписки равносильна паролю: по ней выдаются
+                    серверы. Поэтому поле скрытое, показать её обратно нельзя,
+                    и в журнал она не попадает ни строкой.
+                -->
+                <TextBlock Text="Подписка" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Состояние" Style="{StaticResource Caption}" />
+                                <TextBlock x:Name="SubValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="SubClear" Style="{StaticResource Ghost}"
+                                    Content="Убрать" Click="OnClearSubscription" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <PasswordBox Grid.Column="0" x:Name="SubBox" Margin="0,0,8,0" />
+
+                            <Button Grid.Column="1" Style="{StaticResource Primary}"
+                                    Content="Сохранить" Click="OnSaveSubscription" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,9,0,0" TextWrapping="Wrap"
+                                   Text="Поле скрытое намеренно: по этой ссылке выдаются серверы, и увидеть её здесь не сможет ни тот, кто заглянет через плечо, ни снимок экрана. Обратно она не показывается — только заменяется или убирается." />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Задача планировщика" Style="{StaticResource Caption}" />
+                                <TextBlock x:Name="AutostartValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="AutostartButton" Style="{StaticResource Ghost}"
+                                    Click="OnAutostart" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                   Text="Планировщик, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается тот же netzapret.exe с теми же ключами, что и кнопка «Запустить» в разделе «Состояние»." />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Установлено" Style="{StaticResource Caption}" />
+                                <TextBlock x:Name="VersionValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                <TextBlock x:Name="UpdateValue" Style="{StaticResource Caption}"
+                                           Margin="0,6,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="UpdateButton" Style="{StaticResource Ghost}"
+                                    Content="Проверить" Click="OnCheckUpdate" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                   Text="Только проверка. Установка — отдельное действие: подменять работающий обход молча нельзя, а обновление трогает движки, которые в этот момент несут весь трафик машины." />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Антивирус" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Папка программы в исключениях Defender" Style="{StaticResource Caption}" />
+                                <TextBlock x:Name="DefenderValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="DefenderButton" Style="{StaticResource Ghost}"
+                                    Content="Добавить" Click="OnExclude" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                   Text="Исключается одна папка, а не отключается защита. Defender опознаёт в winws2.exe библиотеку WinDivert и удаляет файл — наблюдалось вживую. Снимать защиту со всей системы ради этого не нужно и нельзя: программа, глушащая антивирус, сама выглядит как вредонос." />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Прочее" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <ItemsControl x:Name="Flags">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Choice}" Tag="{Binding Key}" Click="OnFlag">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
+                                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding State}" Style="{StaticResource Mono}"
+                                               Foreground="{Binding Color}" VerticalAlignment="Center"
+                                               MinWidth="72" TextAlignment="Right" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="Папки" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <WrapPanel>
+                            <Button Style="{StaticResource Ghost}" Content="Программа" Tag="."
+                                    Click="OnOpen" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Настройки" Tag="config"
+                                    Click="OnOpen" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Отчёты" Tag="reports"
+                                    Click="OnOpen" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Журналы" Tag="runtime"
+                                    Click="OnOpen" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Пресеты" Tag="presets"
+                                    Click="OnOpen" Margin="0,0,8,8" />
+                        </WrapPanel>
+
+                        <TextBlock x:Name="RootValue" Style="{StaticResource Mono}"
+                                   Foreground="{StaticResource Muted}" Margin="0,4,0,0"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
