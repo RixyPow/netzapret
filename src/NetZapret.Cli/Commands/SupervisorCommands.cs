@@ -97,6 +97,13 @@ internal static class SupervisorCommands
                 }
             }
 
+            // Смерти процесса мало: адаптер TUN Windows сносит уже после неё,
+            // и запуск, начатый сразу, натыкается на ещё существующий
+            // netzapret0 — sing-box падает с «configure tun interface: Cannot
+            // create a file when that file already exists» и не поднимается
+            // ни разу из трёх попыток. Наблюдалось 2026-09-09.
+            await WaitForTunToGoAsync(cancellationToken);
+
             Console.WriteLine();
         }
 
@@ -324,6 +331,47 @@ internal static class SupervisorCommands
     /// <summary>
     /// Останавливает движки, оставшиеся без супервизора.
     /// </summary>
+    /// <summary>Имя туннельного адаптера — то же, что просит конфиг.</summary>
+    private const string TunName = "netzapret0";
+
+    /// <summary>
+    /// Ждёт, пока Windows уберёт туннельный адаптер убитого движка.
+    /// </summary>
+    /// <remarks>
+    /// Проверкой, а не отмеренной паузой: адаптер исчезает то за полсекунды,
+    /// то за пять, и подобранное число оказалось бы либо лишним ожиданием
+    /// при каждом запуске, либо тем же отказом изредка. Потолок нужен, чтобы
+    /// зависший адаптер не превращал запуск в бесконечное ожидание: не ушёл
+    /// за десять секунд — пробуем как есть, sing-box скажет об этом сам.
+    /// </remarks>
+    private static async Task WaitForTunToGoAsync(CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            if (!TunExists())
+                return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        Console.WriteLine($"  адаптер {TunName} всё ещё на месте — пробуем запуститься так");
+    }
+
+    private static bool TunExists()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface
+                .GetAllNetworkInterfaces()
+                .Any(a => a.Name.Equals(TunName, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception)
+        {
+            // Не смогли посмотреть — не повод не запускаться.
+            return false;
+        }
+    }
+
     private static int StopOrphans()
     {
         var names = new[] { "sing-box", "winws2", "winws" };
