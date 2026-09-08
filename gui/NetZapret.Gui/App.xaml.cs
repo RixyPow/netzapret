@@ -41,9 +41,21 @@ public partial class App : Application
         e.Handled = true;
     }
 
+    /// <summary>О чём уже сказали.</summary>
+    /// <remarks>
+    /// Сбой при отрисовке повторяется на каждом кадре, и без этого набора
+    /// окно с сообщением открывалось поверх предыдущего снова и снова:
+    /// первый же отказ шрифта дал два окна подряд, и закрыть их получалось
+    /// не сразу. Один и тот же сбой стоит показать один раз.
+    /// </remarks>
+    private static readonly HashSet<string> Told = [];
+
     private static void Show(Exception? error, bool fatal)
     {
         if (error is null)
+            return;
+
+        if (!Told.Add(error.GetType().Name + ": " + error.Message))
             return;
 
         var text = fatal

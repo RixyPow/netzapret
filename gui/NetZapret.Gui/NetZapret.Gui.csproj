@@ -29,6 +29,18 @@
       открылось бы и не смогло сделать ровно то, ради чего открывалось.
     -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!--
+      Отменяет InvariantGlobalization из корневого Directory.Build.props —
+      именно здесь, а не там: консоли он не мешает и правится не ради нас.
+
+      WPF без данных о языках падает при разборе шрифта, и падает не сразу,
+      а на первом же тексте, которому нужна типографика посложнее латиницы:
+      «MS.Internal.FontCache.MajorLanguages threw an exception». У нас это
+      имена серверов подписки — они с эмодзи-флагами. Раздел «Состояние»
+      их не рисовал и потому работал, а «Серверы» роняли окно.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
   </PropertyGroup>
 
   <!--
