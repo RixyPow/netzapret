@@ -60,8 +60,37 @@
             </DockPanel>
         </Border>
 
-        <ContentControl x:Name="Section" Grid.Column="1">
-            <views:StatusView />
-        </ContentControl>
+        <Grid Grid.Column="1">
+            <ContentControl x:Name="Section">
+                <views:StatusView />
+            </ContentControl>
+
+            <!--
+                Предложение перезапустить движки. Внизу справа и само уходит:
+                почти всё, что меняется в окне, применяется перезапуском,
+                и говорить об этом строкой в глубине раздела значит не сказать
+                вовсе. Но и держать перед глазами нельзя — правок за один
+                заход бывает десяток.
+            -->
+            <Border x:Name="Toast" Visibility="Collapsed"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="0,0,28,24" MaxWidth="460"
+                    Background="{StaticResource Surface}"
+                    BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                    CornerRadius="10" Padding="18,15">
+                <StackPanel>
+                    <TextBlock x:Name="ToastTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ToastBody" Style="{StaticResource Caption}"
+                               Margin="0,6,0,0" TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Style="{StaticResource Ghost}" Content="Позже"
+                                Padding="16,7" Margin="0,0,8,0" Click="OnToastLater" />
+                        <Button x:Name="ToastAct" Style="{StaticResource Primary}"
+                                Content="Перезапустить" Padding="18,8" Click="OnToastRestart" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

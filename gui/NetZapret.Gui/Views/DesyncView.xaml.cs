@@ -546,6 +546,8 @@ public partial class DesyncView : UserControl
             Status.Text = name is null
                 ? "Десинк выключен. Применится при следующем запуске движков."
                 : $"Выбран «{name}». Применится при следующем запуске движков.";
+
+            this.Offer(name is null ? "Десинк выключен" : $"Выбран пресет «{name}»");
         }
         catch (Exception ex)
         {

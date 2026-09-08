@@ -235,6 +235,7 @@ public partial class DnsView : UserControl
             }
 
             Status.Text = $"Апстрим: {address}. Применится при следующем запуске движков.";
+            this.Offer($"Резолвер сменён на {address}");
         }
         catch (Exception ex)
         {
@@ -256,6 +257,10 @@ public partial class DnsView : UserControl
             Status.Text = next.DnsThroughTunnel
                 ? "Имена будут разрешаться внутри туннеля. Применится при следующем запуске движков."
                 : "Имена будут разрешаться напрямую. Применится при следующем запуске движков.";
+
+            this.Offer(next.DnsThroughTunnel
+                ? "DNS переведён внутрь туннеля"
+                : "DNS переведён на прямой путь");
         }
         catch (Exception ex)
         {

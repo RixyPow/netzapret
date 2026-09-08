@@ -265,6 +265,7 @@ public partial class MoreView : UserControl
             ShowVersion(settings);
 
             Status.Text = "Записано. Применится при следующем запуске движков.";
+            this.Offer("Настройка изменена");
         }
         catch (Exception ex)
         {

@@ -374,8 +374,11 @@ public partial class RoutesView : UserControl
         var window = new PinWindow(service, part) { Owner = Window.GetWindow(this) };
         window.ShowDialog();
 
-        if (window.Changed)
-            Reload();
+        if (!window.Changed)
+            return;
+
+        Reload();
+        this.Offer($"«{part.Name}»: маршрут или пин изменены");
     }
 
     private void Unpin(ServicePart part)
@@ -398,6 +401,8 @@ public partial class RoutesView : UserControl
 
             Status.Text = $"Снято имён: {ours.Count}. Осталось прибитых: {result.Pinned}. "
                 + "Маршрут не трогали — он остался таким, каким был.";
+
+            this.Offer($"Пин снят: {part.Name}");
         }
         catch (Exception ex)
         {
@@ -570,6 +575,7 @@ public partial class RoutesView : UserControl
 
             ShowOwn();
             Status.Text = $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков.";
+            this.Offer($"Добавлен маршрут: {raw}");
         }
         catch (Exception ex)
         {
@@ -590,6 +596,7 @@ public partial class RoutesView : UserControl
 
             ShowOwn();
             Status.Text = $"Убрано: {value}. Применится при следующем запуске движков.";
+            this.Offer($"Убран маршрут: {value}");
         }
         catch (Exception ex)
         {
@@ -629,6 +636,7 @@ public partial class RoutesView : UserControl
             file.Save();
 
             Status.Text = $"Записано: {parts[1]} → {Describe(mode)}. Применится при следующем запуске движков.";
+            this.Offer("Маршрут изменён");
         }
         catch (Exception ex)
         {

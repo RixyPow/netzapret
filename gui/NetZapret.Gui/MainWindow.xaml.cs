@@ -1,9 +1,13 @@
+using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using NetZapret.Gui.Views;
+using NetZapret.Supervisor;
 
 namespace NetZapret.Gui;
 
@@ -20,6 +24,8 @@ public partial class MainWindow : Window
             DarkenTitleBar();
             AllowDropFromExplorer();
         };
+
+        _toastTimer.Tick += (_, _) => HideToast();
     }
 
     private const int WmCopyGlobalData = 0x0049;
@@ -101,6 +107,107 @@ public partial class MainWindow : Window
             "more" => new MoreView(),
             _ => new StatusView(),
         };
+    }
+
+    /// <summary>Сколько уведомление висит, прежде чем уйти само.</summary>
+    private static readonly TimeSpan ToastLife = TimeSpan.FromSeconds(14);
+
+    private readonly DispatcherTimer _toastTimer = new();
+
+    /// <summary>
+    /// Предлагает перезапустить движки — если им есть что перезапускать.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Почти всё, что меняется в окне, вступает в силу перезапуском: маршрут,
+    /// пресет, резолвер, сервер. Сказать об этом строкой в глубине раздела
+    /// значит не сказать вовсе — её прочитают после того, как решат, что
+    /// программа не работает.
+    /// </para>
+    /// <para>
+    /// При остановленных движках уведомление не показывается: перезапускать
+    /// нечего, и предложение сделать это было бы предложением без смысла.
+    /// </para>
+    /// <para>
+    /// Само не перезапускает никогда. Движки несут весь трафик машины, и решать
+    /// за человека, когда его оборвать, программа не вправе.
+    /// </para>
+    /// </remarks>
+    public void OfferRestart(string what)
+    {
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (state is null || !state.IsSupervisorAlive())
+            return;
+
+        ToastTitle.Text = what;
+        ToastBody.Text = "Движки работают со старой настройкой. Перезапуск оборвёт соединения "
+            + "на пару секунд — всё, что качается, придётся начать заново.";
+
+        ToastAct.IsEnabled = true;
+        Toast.Visibility = Visibility.Visible;
+
+        _toastTimer.Stop();
+        _toastTimer.Interval = ToastLife;
+        _toastTimer.Start();
+    }
+
+    private void OnToastLater(object sender, RoutedEventArgs e) => HideToast();
+
+    private void HideToast()
+    {
+        _toastTimer.Stop();
+        Toast.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Останавливает движки и поднимает их заново.
+    /// </summary>
+    /// <remarks>
+    /// Пауза между остановкой и запуском не для красоты: супервизор
+    /// освобождает TUN и снимает фильтр не мгновенно, и запуск, начатый
+    /// сразу, наткнулся бы на ещё живой адаптер.
+    /// </remarks>
+    private void OnToastRestart(object sender, RoutedEventArgs e)
+    {
+        ToastAct.IsEnabled = false;
+        ToastTitle.Text = "Перезапускаю движки…";
+        _toastTimer.Stop();
+
+        Run("stop");
+
+        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
+        {
+            Run(StatusView.BuildStartArguments());
+            HideToast();
+        }));
+    }
+
+    private void Run(string arguments)
+    {
+        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
+
+        if (!File.Exists(exe))
+        {
+            ToastBody.Text = $"Не найдена консольная программа: {exe}.";
+            return;
+        }
+
+        try
+        {
+            using var started = Process.Start(new ProcessStartInfo
+            {
+                FileName = exe,
+                Arguments = arguments,
+                WorkingDirectory = Directory.GetCurrentDirectory(),
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            ToastBody.Text = "Не удалось: " + ex.GetBaseException().Message;
+        }
     }
 
     private static string Version() =>

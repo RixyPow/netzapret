@@ -271,6 +271,8 @@ public partial class StatusView : UserControl
 
             ShowModes(settings);
             Update();
+
+            this.Offer($"Режим: {settings.DescribeMode()}");
         }
         catch (Exception ex)
         {
