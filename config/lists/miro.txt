@@ -1,0 +1,5 @@
+# Miro.
+#
+# realtimeboard.com — прежнее имя, живо до сих пор.
+miro.com
+realtimeboard.com

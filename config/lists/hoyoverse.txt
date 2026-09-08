@@ -1,0 +1,7 @@
+# HoYoverse: Genshin Impact, Honkai, Zenless.
+#
+# mihoyo.com — прежнее имя, на нём до сих пор живут игровые серверы;
+# hoyolab.com — сообщество и ежедневные награды.
+hoyoverse.com
+mihoyo.com
+hoyolab.com

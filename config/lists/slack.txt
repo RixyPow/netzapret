@@ -1,0 +1,9 @@
+# Slack.
+#
+# slack-edge.com — файлы и оформление, slack-msgs.com — доставка сообщений.
+# Переписка ломается отдельно от вложений.
+slack.com
+slack-edge.com
+slack-msgs.com
+slack-imgs.com
+slackb.com

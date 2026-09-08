@@ -1,0 +1,8 @@
+# Proton: почта, диск, VPN.
+#
+# protonmail.com и protonmail.ch — прежние имена, по ним до сих пор ходят
+# почтовые клиенты, настроенные годы назад.
+proton.me
+protonmail.com
+protonmail.ch
+protonvpn.com

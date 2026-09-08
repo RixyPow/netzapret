@@ -1,0 +1,6 @@
+# Signal.
+#
+# whispersystems.org — прежнее имя проекта, по нему до сих пор ходят
+# серверы доставки сообщений.
+signal.org
+whispersystems.org

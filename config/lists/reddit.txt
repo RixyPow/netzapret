@@ -1,0 +1,8 @@
+# Reddit.
+#
+# redd.it — картинки и вложения, redditstatic.com — оформление. Без них
+# страница открывается голой, и выглядит это поломкой самого Reddit.
+reddit.com
+redd.it
+redditstatic.com
+redditmedia.com

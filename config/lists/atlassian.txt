@@ -1,0 +1,7 @@
+# Atlassian: Jira, Confluence, Trello.
+#
+# atlassian.net — на нём живут облачные экземпляры Jira и Confluence,
+# то есть рабочие доски компаний, а не сайт производителя.
+atlassian.com
+atlassian.net
+trello.com

@@ -1,0 +1,3 @@
+# Vimeo.
+vimeo.com
+vimeocdn.com

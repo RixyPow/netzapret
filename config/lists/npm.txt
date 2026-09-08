@@ -1,0 +1,6 @@
+# npm.
+#
+# registry.npmjs.org — то, куда ходит сама установка пакетов; без него
+# npm install не работает, хотя сайт открывается.
+npmjs.com
+npmjs.org

@@ -1,0 +1,6 @@
+# Docker Hub.
+#
+# docker.io — реестр образов, docker.com — сайт. Скачивание ломается
+# отдельно от чтения документации.
+docker.com
+docker.io

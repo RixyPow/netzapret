@@ -1,0 +1,5 @@
+# Crunchyroll.
+#
+# vrv.co оставлен: часть плееров до сих пор ходит за потоком туда.
+crunchyroll.com
+vrv.co

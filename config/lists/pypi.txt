@@ -1,0 +1,7 @@
+# PyPI и python.org.
+#
+# pythonhosted.org — раздача самих пакетов, отдельная от каталога:
+# pip находит версию и обрывается на скачивании.
+pypi.org
+pythonhosted.org
+python.org

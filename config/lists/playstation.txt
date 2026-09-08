@@ -1,0 +1,7 @@
+# PlayStation Network.
+#
+# playstation.net — сама сеть, playstation.com — магазин и сайт. Консоль
+# ходит на первый, браузер на второй.
+playstation.com
+playstation.net
+sonyentertainmentnetwork.com

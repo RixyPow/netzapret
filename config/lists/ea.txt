@@ -1,0 +1,5 @@
+# EA и Origin.
+#
+# origin.com жив: клиент EA App до сих пор ходит на него за учётной записью.
+ea.com
+origin.com

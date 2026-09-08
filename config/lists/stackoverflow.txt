@@ -1,0 +1,6 @@
+# Stack Overflow и сеть Stack Exchange.
+#
+# sstatic.net — оформление и картинки всей сети.
+stackoverflow.com
+stackexchange.com
+sstatic.net

@@ -1,0 +1,9 @@
+# Netflix.
+#
+# nflxvideo.net — сам поток, остальное интерфейс и картинки. Разделены они
+# у Netflix жёстко: каталог листается, а фильм не запускается.
+netflix.com
+nflxvideo.net
+nflximg.net
+nflxext.com
+nflxso.net

@@ -1,0 +1,7 @@
+# Xbox Live.
+#
+# Магазин Microsoft вынесен отдельной частью: у него своя зона и свои
+# поломки, а обновления игр идут через неё.
+xbox.com
+xboxlive.com
+xboxservices.com

@@ -81,6 +81,15 @@ public sealed record ServiceDefinition
 /// тринадцать доменов RuTracker, два десятка адресов Roblox.
 /// </para>
 /// <para>
+/// Часть списков не из Zapret вовсе, а написана с нуля: Spotify, Netflix,
+/// Reddit, Signal, Viber, Proton, Figma, Slack, Battle.net, PlayStation
+/// и прочие, которых там нет. Правило у них то же: сначала имя, по которому
+/// сервис узнают, затем его собственные зоны — раздача файлов, вход, поток, —
+/// и ни одной чужой сети доставки. Поэтому у Figma нет хранилища: оно лежит
+/// в S3 под именем Amazon, и правило на эту зону увело бы в туннель половину
+/// интернета.
+/// </para>
+/// <para>
 /// Заодно починены две молчаливые ошибки. У Discord второй прокси картинок
 /// записан как <c>mages-ext-2.discordapp.net</c> — без первой буквы, — и не
 /// совпадал ни с чем. У X и GitHub картинки и raw-файлы лежат на
@@ -255,6 +264,38 @@ public static class ServiceCatalog
                     List = "config/lists/tmdb.txt",
                     Note = "на нём держатся трекеры сериалов; без него страницы открываются без картинок",
                 },
+                new ServicePart
+                {
+                    Name = "Netflix",
+                    List = "config/lists/netflix.txt",
+                    Note = "поток отделён от интерфейса: каталог листается, а фильм не запускается",
+                },
+                new ServicePart { Name = "Vimeo", List = "config/lists/vimeo.txt" },
+                new ServicePart { Name = "Crunchyroll", List = "config/lists/crunchyroll.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Музыка",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Spotify",
+                    List = "config/lists/spotify.txt",
+                    Note = "раздача музыки отдельно от сайта: страница открывается, а трек не играет",
+                },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Мессенджеры",
+            Parts =
+            [
+                new ServicePart { Name = "Signal", List = "config/lists/signal.txt" },
+                new ServicePart { Name = "Viber", List = "config/lists/viber.txt" },
             ],
         },
 
@@ -305,6 +346,15 @@ public static class ServiceCatalog
                 new ServicePart { Name = "Claude", List = "config/lists/claude.txt" },
                 new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
                 new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
+                new ServicePart { Name = "Perplexity", List = "config/lists/perplexity.txt" },
+                new ServicePart { Name = "Grok", List = "config/lists/grok.txt" },
+                new ServicePart { Name = "Mistral", List = "config/lists/mistral.txt" },
+                new ServicePart
+                {
+                    Name = "Hugging Face",
+                    List = "config/lists/huggingface.txt",
+                    Note = "туда же ходят библиотеки при загрузке моделей",
+                },
             ],
         },
 
@@ -322,6 +372,25 @@ public static class ServiceCatalog
                 new ServicePart { Name = "Epic Games и Fortnite", List = "config/lists/epicgames-fortnite.txt" },
                 new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
                 new ServicePart { Name = "itch.io", List = "config/lists/itch.txt" },
+                new ServicePart
+                {
+                    Name = "Battle.net и Blizzard",
+                    List = "config/lists/battlenet.txt",
+                    Note = "античиты плохо переносят и десинк, и туннель — как у Riot",
+                },
+                new ServicePart { Name = "PlayStation Network", List = "config/lists/playstation.txt" },
+                new ServicePart { Name = "Xbox Live", List = "config/lists/xbox.txt" },
+                new ServicePart { Name = "Nintendo", List = "config/lists/nintendo.txt" },
+                new ServicePart { Name = "EA и Origin", List = "config/lists/ea.txt" },
+                new ServicePart { Name = "GOG", List = "config/lists/gog.txt" },
+                new ServicePart { Name = "Rockstar", List = "config/lists/rockstar.txt" },
+                new ServicePart
+                {
+                    Name = "Minecraft",
+                    List = "config/lists/minecraft.txt",
+                    Note = "без mojang.com игра запускается только в оффлайне — похоже на слетевшую учётку",
+                },
+                new ServicePart { Name = "HoYoverse: Genshin и Honkai", List = "config/lists/hoyoverse.txt" },
             ],
         },
 
@@ -352,6 +421,13 @@ public static class ServiceCatalog
                     ByAddress = true,
                 },
                 new ServicePart { Name = "LinkedIn", List = "config/lists/linkedin.txt" },
+                new ServicePart
+                {
+                    Name = "Reddit",
+                    List = "config/lists/reddit.txt",
+                    Note = "без redd.it страница открывается голой, и это выглядит поломкой самого Reddit",
+                },
+                new ServicePart { Name = "Bluesky", List = "config/lists/bluesky.txt" },
             ],
         },
 
@@ -373,6 +449,67 @@ public static class ServiceCatalog
                 new ServicePart { Name = "Notion", List = "config/lists/notion.txt" },
                 new ServicePart { Name = "Obsidian", List = "config/lists/obsidian.txt" },
                 new ServicePart { Name = "Fandom", List = "config/lists/fandom.txt" },
+                new ServicePart { Name = "Figma", List = "config/lists/figma.txt" },
+                new ServicePart { Name = "Miro", List = "config/lists/miro.txt" },
+                new ServicePart
+                {
+                    Name = "Slack",
+                    List = "config/lists/slack.txt",
+                    Note = "переписка ломается отдельно от вложений",
+                },
+                new ServicePart { Name = "Zoom", List = "config/lists/zoom.txt" },
+                new ServicePart
+                {
+                    Name = "Atlassian: Jira, Confluence, Trello",
+                    List = "config/lists/atlassian.txt",
+                    Note = "на atlassian.net живут рабочие доски компаний, а не сайт производителя",
+                },
+                new ServicePart
+                {
+                    Name = "Dropbox",
+                    List = "config/lists/dropbox.txt",
+                    Note = "выдача файлов отдельно от интерфейса: папка открывается, файл не скачивается",
+                },
+                new ServicePart { Name = "Proton: почта и диск", List = "config/lists/proton.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Разработка",
+            Parts =
+            [
+                new ServicePart { Name = "Stack Overflow", List = "config/lists/stackoverflow.txt" },
+                new ServicePart
+                {
+                    Name = "npm",
+                    List = "config/lists/npm.txt",
+                    Note = "туда ходит сама установка пакетов, а не только сайт",
+                },
+                new ServicePart
+                {
+                    Name = "PyPI и python.org",
+                    List = "config/lists/pypi.txt",
+                    Note = "pythonhosted.org раздаёт сами пакеты: pip находит версию и обрывается на скачивании",
+                },
+                new ServicePart { Name = "Docker Hub", List = "config/lists/docker.txt" },
+                new ServicePart { Name = "JetBrains", List = "config/lists/jetbrains.txt" },
+            ],
+        },
+
+        new ServiceDefinition
+        {
+            Name = "Знание и архивы",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Википедия",
+                    List = "config/lists/wikipedia.txt",
+                    Note = "без wikimedia.org статьи открываются без иллюстраций",
+                },
+                new ServicePart { Name = "Интернет-архив", List = "config/lists/archive.txt" },
+                new ServicePart { Name = "Medium", List = "config/lists/medium.txt" },
             ],
         },
 
