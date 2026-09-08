@@ -135,6 +135,10 @@ public partial class RoutesView : UserControl
 
         return new PartRow
         {
+            // Уже загруженный значок ставится сразу. Раздел пересоздаётся при
+            // каждом заходе, и без этого он начинал бы с букв, а значки
+            // проступали бы заново — при живом кэше в памяти.
+            Icon = host.Contains('.') ? SiteIcons.Cached(host) : null,
             Key = kind + "|" + part.Part.List,
             Title = part.Part.Name,
             Detail = detail,
@@ -173,7 +177,9 @@ public partial class RoutesView : UserControl
 
                 var host = Host(part);
 
-                if (host is null)
+                // Про что уже спрашивали, того не спрашиваем: значок либо
+                // проставлен при сборке строки, либо его нет вовсе.
+                if (host is null || SiteIcons.Known(host))
                     continue;
 
                 var icon = await SiteIcons.ForAsync(host, token);

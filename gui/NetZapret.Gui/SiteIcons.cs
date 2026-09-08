@@ -32,6 +32,28 @@ public static class SiteIcons
     private static string Folder => Path.Combine("runtime", "icons");
 
     /// <summary>
+    /// Уже загруженный значок, без единого обращения куда бы то ни было.
+    /// </summary>
+    /// <remarks>
+    /// Раздел с маршрутами пересоздаётся при каждом заходе, и без этого он
+    /// каждый раз начинал бы с букв, а значки проступали бы по одному
+    /// заново — при живом кэше и на диске, и в памяти. Мигание на ровном
+    /// месте: данные есть, а показываются так, будто их нет.
+    /// </remarks>
+    public static BitmapImage? Cached(string host)
+    {
+        lock (Loaded)
+            return Loaded.GetValueOrDefault(host);
+    }
+
+    /// <summary>Спрашивали ли уже про это имя.</summary>
+    public static bool Known(string host)
+    {
+        lock (Loaded)
+            return Loaded.ContainsKey(host);
+    }
+
+    /// <summary>
     /// Значок сайта; <c>null</c> — нет, и просить больше не будем.
     /// </summary>
     /// <remarks>
