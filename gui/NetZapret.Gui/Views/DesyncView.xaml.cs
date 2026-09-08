@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
@@ -16,8 +17,22 @@ public sealed record PresetRow(string Name, string Version, string Fake)
 
     public bool Chosen { get; set; }
 
+    /// <summary>Над строкой держат перетаскиваемую — подсвечиваем место высадки.</summary>
+    public bool Over { get; set; }
+
+    /// <summary>
+    /// Наш пресет, а не доставшийся от Zapret.
+    /// </summary>
+    /// <remarks>
+    /// По имени, а не по списку внутри программы: список пришлось бы править
+    /// при каждом новом пресете, и забытая строка молча переселила бы наш
+    /// пресет к чужим. Universal ведём мы — это и есть признак.
+    /// </remarks>
+    public bool Official =>
+        Name.StartsWith("Universal", StringComparison.OrdinalIgnoreCase);
+
     public Brush Edge =>
-        (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
+        (Brush)Application.Current.FindResource(Over ? "Warn" : Chosen ? "Accent" : "Border");
 
     public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
 
@@ -46,6 +61,9 @@ public partial class DesyncView : UserControl
 {
     private CancellationTokenSource? _counting;
 
+    /// <summary>Показанные строки в нынешнем порядке.</summary>
+    private IReadOnlyList<PresetRow> _rows = [];
+
     public DesyncView()
     {
         InitializeComponent();
@@ -68,18 +86,26 @@ public partial class DesyncView : UserControl
             if (files.Count == 0)
             {
                 Status.Text = $"В папке {ZapretPaths.PresetDirectory} нет ни одного пресета.";
-                Presets.ItemsSource = null;
+
+                _rows = [];
+                Redraw();
 
                 return;
             }
 
-            var rows = new PresetReader()
-                .Read(files)
-                .Select(preset => Row(preset, settings.PresetName))
-                .ToList();
+            var rows = PresetOrder.Apply(
+                new PresetReader()
+                    .Read(files)
+                    .Select(preset => Row(preset, settings.PresetName))
+                    .ToList(),
+                row => row.Name);
 
-            Presets.ItemsSource = rows;
-            Status.Text = $"Пресетов: {rows.Count}. Выбор применяется при следующем запуске движков.";
+            _rows = rows;
+            Redraw();
+
+            Status.Text = $"Пресетов: {rows.Count}, из них наших {rows.Count(r => r.Official)}. "
+                + "Выбор применяется при следующем запуске движков; порядок внутри списка "
+                + "меняется перетаскиванием за ручку слева.";
 
             StartCounting(rows);
         }
@@ -179,12 +205,32 @@ public partial class DesyncView : UserControl
         }, token);
     }
 
+    /// <summary>
+    /// Раскладывает строки по двум спискам.
+    /// </summary>
+    /// <remarks>
+    /// Пустая половина скрывается вместе с заголовком: подпись «Пресеты
+    /// сообщества» над пустотой обещает то, чего нет.
+    /// </remarks>
     private void Redraw()
     {
-        var shown = Presets.ItemsSource;
+        var ours = _rows.Where(row => row.Official).ToList();
+        var theirs = _rows.Where(row => !row.Official).ToList();
 
-        Presets.ItemsSource = null;
-        Presets.ItemsSource = shown;
+        Own.ItemsSource = null;
+        Own.ItemsSource = ours;
+
+        Others.ItemsSource = null;
+        Others.ItemsSource = theirs;
+
+        Show(OwnHeader, OwnNote, ours.Count > 0);
+        Show(OthersHeader, OthersNote, theirs.Count > 0);
+    }
+
+    private static void Show(UIElement header, UIElement note, bool visible)
+    {
+        header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        note.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ShowChosen(AppSettings settings)
@@ -226,6 +272,110 @@ public partial class DesyncView : UserControl
               + "winws2.exe и списки доменов лежат в ней."
             : $"Каталог найден ({paths.Root}), а winws2.exe в нём нет — ожидался в подпапке exe. "
               + "Возможно, антивирус увёз его в карантин: WinDivert рядом с ним помечается как RiskTool.";
+    }
+
+    /// <summary>
+    /// Начинает перенос строки.
+    /// </summary>
+    /// <remarks>
+    /// От ручки, а не от всей строки: строка нажатием выбирает пресет,
+    /// и совмещать в одном месте выбор и перенос значит промахиваться
+    /// то одним, то другим.
+    /// </remarks>
+    private void OnHandleDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PresetRow row })
+            return;
+
+        // Событие съедается, иначе нажатие дойдёт до кнопки и выберет пресет,
+        // который человек всего лишь собирался переставить.
+        e.Handled = true;
+
+        DragDrop.DoDragDrop((DependencyObject)sender, row, DragDropEffects.Move);
+    }
+
+    private void OnRowDragOver(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PresetRow row }
+            || e.Data.GetData(typeof(PresetRow)) is not PresetRow moving)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        // Через границу списков не переставляем: место строки задаётся именем
+        // пресета, и «перенесённая» вернулась бы к своим на первом же заходе.
+        bool same = row.Official == moving.Official;
+
+        e.Effects = same ? DragDropEffects.Move : DragDropEffects.None;
+
+        bool over = same && !ReferenceEquals(row, moving);
+
+        if (row.Over == over)
+            return;
+
+        row.Over = over;
+        Redraw();
+    }
+
+    private void OnRowDragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PresetRow row } || !row.Over)
+            return;
+
+        row.Over = false;
+        Redraw();
+    }
+
+    /// <summary>
+    /// Ставит перенесённую строку на место той, на которую её уронили.
+    /// </summary>
+    /// <remarks>
+    /// Порядок сохраняется сразу: перетаскивание — жест без кнопки
+    /// «применить», и разложенный список, вернувшийся при следующем заходе
+    /// к прежнему виду, выглядел бы поломкой.
+    /// </remarks>
+    private void OnRowDrop(object sender, DragEventArgs e)
+    {
+        foreach (var each in _rows)
+            each.Over = false;
+
+        if (sender is not FrameworkElement { DataContext: PresetRow target }
+            || e.Data.GetData(typeof(PresetRow)) is not PresetRow moving
+            || ReferenceEquals(target, moving)
+            || target.Official != moving.Official)
+        {
+            Redraw();
+            return;
+        }
+
+        e.Handled = true;
+
+        var rows = _rows.ToList();
+        int from = rows.IndexOf(moving);
+        int to = rows.IndexOf(target);
+
+        if (from < 0 || to < 0)
+            return;
+
+        rows.RemoveAt(from);
+        rows.Insert(to, moving);
+
+        _rows = rows;
+        Redraw();
+
+        try
+        {
+            PresetOrder.Save(rows.Select(row => row.Name));
+
+            int place = rows.Where(row => row.Official == moving.Official).ToList().IndexOf(moving) + 1;
+            Status.Text = $"Порядок сохранён: «{moving.Name}» теперь {place}-й в своём списке.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Порядок не записался: " + ex.GetBaseException().Message;
+        }
     }
 
     private void OnOpenFolder(object sender, RoutedEventArgs e)
@@ -372,9 +522,8 @@ public partial class DesyncView : UserControl
 
             ShowChosen(settings);
 
-            if (Presets.ItemsSource is IEnumerable<PresetRow> rows)
             {
-                foreach (var row in rows)
+                foreach (var row in _rows)
                     row.Chosen = string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase);
 
                 Redraw();

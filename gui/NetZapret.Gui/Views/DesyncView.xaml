@@ -4,6 +4,70 @@
              Background="{StaticResource Backdrop}"
              AllowDrop="True" Drop="OnDrop" DragOver="OnDragOver" DragLeave="OnDragLeave">
 
+    <!--
+        Строка пресета одна на оба списка. Списка два — наши и чужие, —
+        а вид у строки один, и держать две копии разметки значило бы чинить
+        каждую правку дважды.
+    -->
+    <UserControl.Resources>
+        <DataTemplate x:Key="PresetItem">
+            <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
+                    Tag="{Binding Name}" Click="OnChoose"
+                    AllowDrop="True" DragOver="OnRowDragOver"
+                    DragLeave="OnRowDragLeave" Drop="OnRowDrop">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!--
+                        Ручка перетаскивания. Тащить только за неё, а не за всю
+                        строку: строка выбирает пресет нажатием, и совмещать
+                        в одном месте выбор и перенос значит промахиваться
+                        то одним, то другим.
+                    -->
+                    <TextBlock Grid.Column="0" Text="≡" FontSize="15"
+                               Foreground="{StaticResource Muted}"
+                               VerticalAlignment="Center" Margin="0,0,14,0"
+                               Padding="6,4" Cursor="SizeAll"
+                               ToolTip="Тащить, чтобы переставить"
+                               PreviewMouseLeftButtonDown="OnHandleDown"
+                               Background="Transparent" />
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,14,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
+                                       TextTrimming="CharacterEllipsis" />
+
+                            <Border Background="{StaticResource Raised}" CornerRadius="5"
+                                    Padding="7,2" Margin="10,0,0,0"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding VersionShown}">
+                                <TextBlock Text="{Binding Version}" Style="{StaticResource Mono}"
+                                           Foreground="{StaticResource Muted}" FontSize="11" />
+                            </Border>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+
+                        <TextBlock Text="{Binding Fake}" Style="{StaticResource Caption}"
+                                   Foreground="{StaticResource Warn}"
+                                   Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding FakeShown}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" Text="выбран" Style="{StaticResource Mono}"
+                               Foreground="{StaticResource Accent}"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding MarkShown}" />
+                </Grid>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -66,51 +130,30 @@
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
-                <ItemsControl x:Name="Presets" Margin="0,12,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
-                                    Tag="{Binding Name}" Click="OnChoose">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                <!--
+                    Наши и чужие врозь. Universal ведём мы: они собраны
+                    по нашим замерам и правятся вместе с программой. Всё
+                    остальное досталось от Zapret и живёт своей жизнью —
+                    смешивать их в одном списке значит отвечать за то,
+                    чего мы не писали.
+                -->
+                <TextBlock x:Name="OwnHeader" Text="Пресеты NetZapret"
+                           FontWeight="SemiBold" FontSize="15" Margin="4,20,0,4" />
+                <TextBlock x:Name="OwnNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
+                           TextWrapping="Wrap"
+                           Text="Ведём мы: собраны по замерам и правятся вместе с программой." />
 
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,14,0">
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
-                                                       TextTrimming="CharacterEllipsis" />
+                <ItemsControl x:Name="Own" ItemTemplate="{StaticResource PresetItem}" />
 
-                                            <Border Background="{StaticResource Raised}" CornerRadius="5"
-                                                    Padding="7,2" Margin="10,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Visibility="{Binding VersionShown}">
-                                                <TextBlock Text="{Binding Version}" Style="{StaticResource Mono}"
-                                                           Foreground="{StaticResource Muted}" FontSize="11" />
-                                            </Border>
-                                        </StackPanel>
+                <TextBlock x:Name="OthersHeader" Text="Пресеты сообщества"
+                           FontWeight="SemiBold" FontSize="15" Margin="4,20,0,4" />
+                <TextBlock x:Name="OthersNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
+                           TextWrapping="Wrap"
+                           Text="Достались от Zapret или положены вами. Работают, но за их состав мы не отвечаем." />
 
-                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+                <ItemsControl x:Name="Others" ItemTemplate="{StaticResource PresetItem}" />
 
-                                        <TextBlock Text="{Binding Fake}" Style="{StaticResource Caption}"
-                                                   Foreground="{StaticResource Warn}"
-                                                   Margin="0,4,0,0" TextWrapping="Wrap"
-                                                   Visibility="{Binding FakeShown}" />
-                                    </StackPanel>
-
-                                    <TextBlock Grid.Column="1" Text="выбран" Style="{StaticResource Mono}"
-                                               Foreground="{StaticResource Accent}"
-                                               VerticalAlignment="Center"
-                                               Visibility="{Binding MarkShown}" />
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap"
                            Text="Пресеты лежат в папке presets рядом с программой и едут в архиве вместе с ней. Свой можно перетащить прямо сюда — файл скопируется в папку и появится в списке." />
 
             </StackPanel>
