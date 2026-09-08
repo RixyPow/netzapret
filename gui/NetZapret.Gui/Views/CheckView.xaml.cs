@@ -55,16 +55,42 @@ public partial class CheckView : UserControl
     /// </remarks>
     private const int Parallelism = 4;
 
-    private readonly ObservableCollection<CheckRow> _rows = [];
-    private CancellationTokenSource? _work;
+    /// <summary>
+    /// Строки и ход проверки живут дольше самого раздела.
+    /// </summary>
+    /// <remarks>
+    /// Раздел пересоздаётся при каждом переходе по меню — иначе он показывал бы
+    /// снимок прошлого захода. Но проверка идёт минуты, и обрывать её оттого,
+    /// что человек заглянул в журнал, значит выбросить всю работу и заставить
+    /// начать заново. Поэтому набранное и признак «идёт» общие, а раздел
+    /// к ним подключается.
+    /// </remarks>
+    private static readonly ObservableCollection<CheckRow> Collected = [];
+
+    private static CancellationTokenSource? _work;
+    private static bool _running;
+    private static IReadOnlyList<SectionRow> _sections = [];
+    private static string _status = "Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа.";
 
     public CheckView()
     {
         InitializeComponent();
 
-        Rows.ItemsSource = _rows;
-        Loaded += (_, _) => ShowSetup();
-        Unloaded += (_, _) => _work?.Cancel();
+        Rows.ItemsSource = Collected;
+
+        Loaded += (_, _) =>
+        {
+            ShowSetup();
+
+            // Возвращаемся к тому, что успело набраться, и к своему состоянию
+            // кнопок: уйти и вернуться не должно выглядеть как «ничего не было».
+            Status.Text = _status;
+            Sections.ItemsSource = _sections;
+            Header.Visibility = Collected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            RunButton.IsEnabled = !_running;
+            StopButton.IsEnabled = _running;
+        };
     }
 
     /// <summary>
@@ -96,12 +122,14 @@ public partial class CheckView : UserControl
     {
         bool running = ShowSetup();
 
-        _rows.Clear();
+        Collected.Clear();
+        _sections = [];
         Sections.ItemsSource = null;
         Header.Visibility = Visibility.Visible;
 
         _work?.Cancel();
         _work = new CancellationTokenSource();
+        _running = true;
 
         RunButton.IsEnabled = false;
         StopButton.IsEnabled = true;
@@ -127,7 +155,7 @@ public partial class CheckView : UserControl
             }
 
             var targets = Targets(zapretRoot);
-            Status.Text = $"Проверяю {targets.Count} — по каждому четыре пробы.";
+            Say($"Проверяю {targets.Count} — по каждому четыре пробы.");
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
 
@@ -135,17 +163,24 @@ public partial class CheckView : UserControl
         }
         catch (OperationCanceledException)
         {
-            Status.Text = $"Прервано. Успело проверить {_rows.Count}.";
+            Say($"Прервано. Успело проверить {Collected.Count}.");
         }
         catch (Exception ex)
         {
-            Status.Text = "Проверка сорвалась: " + ex.GetBaseException().Message;
+            Say("Проверка сорвалась: " + ex.GetBaseException().Message);
         }
         finally
         {
             RunButton.IsEnabled = true;
             StopButton.IsEnabled = false;
         }
+    }
+
+    /// <summary>Говорит и запоминает: раздел пересоздаётся, а сказанное должно пережить уход.</summary>
+    private void Say(string text)
+    {
+        _status = text;
+        Status.Text = text;
     }
 
     private void OnStop(object sender, RoutedEventArgs e) => _work?.Cancel();
@@ -196,8 +231,8 @@ public partial class CheckView : UserControl
 
                 Dispatcher.Invoke(() =>
                 {
-                    _rows.Add(Row(report, tunnelled));
-                    Status.Text = $"Проверено {_rows.Count} из {targets.Count}…";
+                    Collected.Add(Row(report, tunnelled));
+                    Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
             }
             finally
@@ -266,7 +301,7 @@ public partial class CheckView : UserControl
     {
         var sections = new List<SectionRow>();
 
-        var byKind = _rows
+        var byKind = Collected
             .Where(r => r.Verdict != "доступен" && r.Verdict != "нет адреса у имени")
             .GroupBy(r => r.Verdict)
             .OrderByDescending(g => g.Count())
@@ -306,8 +341,9 @@ public partial class CheckView : UserControl
                 (Brush)FindResource("Danger")));
         }
 
+        _sections = sections;
         Sections.ItemsSource = sections;
-        Status.Text = $"Готово: проверено {_rows.Count}.";
+        Say($"Готово: проверено {Collected.Count}.");
     }
 
     private static string Describe(RoutingMode mode) => mode switch
