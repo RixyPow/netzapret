@@ -28,8 +28,64 @@ public sealed class PartRow
     public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 }
 
-/// <summary>Сервис со своими частями.</summary>
-public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts);
+/// <summary>
+/// Сервис со своими частями — папка.
+/// </summary>
+/// <remarks>
+/// Свёрнутая по умолчанию: частей под сорок, и одной стеной их не окинуть
+/// взглядом. Но заголовок говорит и в свёрнутом виде — сколько частей и куда
+/// они идут, — иначе сворачивание прячет ровно то, ради чего раздел открывают.
+/// </remarks>
+public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
+{
+    public bool Open { get; set; }
+
+    public Visibility PartsShown => Open ? Visibility.Visible : Visibility.Collapsed;
+
+    public string Chevron => Open ? "▼" : "►";
+
+    public string Count => Parts.Count + " " + Ending(Parts.Count);
+
+    /// <summary>Куда идут части: одним словом, если все одинаково.</summary>
+    public string Summary
+    {
+        get
+        {
+            var modes = Parts
+                .GroupBy(p => p.Mode)
+                .OrderByDescending(g => g.Count())
+                .ToList();
+
+            return modes.Count switch
+            {
+                0 => string.Empty,
+                1 => "всё " + modes[0].Key,
+                _ => string.Join(" · ", modes.Select(g => $"{g.Count()} {g.Key}")),
+            };
+        }
+    }
+
+    /// <summary>Цвет итога; при расхождении — приглушённый, чтобы не выдавать одну часть за весь сервис.</summary>
+    public Brush Color =>
+        Parts.Select(p => p.Mode).Distinct().Count() == 1 && Parts.Count > 0
+            ? Parts[0].Color
+            : (Brush)Application.Current.FindResource("Muted");
+
+    private static string Ending(int count)
+    {
+        int tail = count % 100;
+
+        if (tail is >= 11 and <= 14)
+            return "частей";
+
+        return (count % 10) switch
+        {
+            1 => "часть",
+            2 or 3 or 4 => "части",
+            _ => "частей",
+        };
+    }
+}
 
 /// <summary>Своё доменное правило.</summary>
 public sealed record OwnRow(string Value, string Mode, Brush Color);
@@ -192,21 +248,10 @@ public partial class RoutesView : UserControl
                 if (icon is null || token.IsCancellationRequested)
                     continue;
 
-                // Перерисовываем весь список: строки — простые объекты
-                // без уведомлений, и городить их ради значка не стоит.
-                //
-                // Но перерисовываем то, что показано сейчас, а не всё подряд:
-                // прежде значок, приехавший через секунду после набора,
-                // сбрасывал поиск и возвращал полный список — человек печатал,
-                // и написанное у него отбирали.
                 Dispatcher.Invoke(() =>
                 {
                     part.Icon = icon;
-
-                    var shown = Services.ItemsSource;
-
-                    Services.ItemsSource = null;
-                    Services.ItemsSource = shown;
+                    Redraw();
                 });
             }
         }, token);
@@ -230,6 +275,59 @@ public partial class RoutesView : UserControl
     /// <summary>Всё, что собрано; поиск отбирает из этого, не перечитывая правила.</summary>
     private IReadOnlyList<ServiceRow> _all = [];
 
+    /// <summary>
+    /// Перерисовывает показанное.
+    /// </summary>
+    /// <remarks>
+    /// Строки — простые объекты без уведомлений: городить их ради значка
+    /// и треугольника не стоит. Перерисовывается именно показанное, а не всё
+    /// собранное: при поиске в списке лежит отобранное, и подмена его полным
+    /// набором отбирала бы у человека то, что он только что набрал.
+    /// </remarks>
+    private void Redraw()
+    {
+        var shown = Services.ItemsSource;
+
+        Services.ItemsSource = null;
+        Services.ItemsSource = shown;
+    }
+
+    /// <summary>Открывает или закрывает папку.</summary>
+    /// <remarks>
+    /// Состояние проставляется и отобранной строке, и той, что лежит
+    /// в собранном: при поиске это разные объекты, и без второй половины
+    /// раскрытая папка захлопывалась бы, стоило очистить строку поиска.
+    /// </remarks>
+    private void OnFolder(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: ServiceRow row })
+            return;
+
+        row.Open = !row.Open;
+
+        foreach (var same in _all.Where(s => s.Name == row.Name))
+            same.Open = row.Open;
+
+        Redraw();
+    }
+
+    private void OnExpandAll(object sender, RoutedEventArgs e)
+    {
+        bool open = ExpandButton.Content as string == "Раскрыть всё";
+
+        foreach (var service in _all)
+            service.Open = open;
+
+        if (Services.ItemsSource is IEnumerable<ServiceRow> shown)
+        {
+            foreach (var service in shown)
+                service.Open = open;
+        }
+
+        ExpandButton.Content = open ? "Свернуть всё" : "Раскрыть всё";
+        Redraw();
+    }
+
     private void OnSearch(object sender, TextChangedEventArgs e)
     {
         var needle = Search.Text.Trim();
@@ -243,10 +341,14 @@ public partial class RoutesView : UserControl
         // Ищем и по названию сервиса, и по имени части, и по домену из примера:
         // человек помнит «где у меня ютуб» одним из трёх, и заставлять его
         // угадывать нужное — значит сделать поиск бесполезным.
+        //
+        // Найденное раскрывается само: искали часть, а не папку, и заставлять
+        // открывать её вручную значит отдать половину найденного обратно.
         var found = _all
             .Select(s => s with
             {
                 Parts = s.Parts.Where(p => Matches(s.Name, p, needle)).ToList(),
+                Open = true,
             })
             .Where(s => s.Parts.Count > 0)
             .ToList();

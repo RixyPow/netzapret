@@ -223,6 +223,36 @@
     </Style>
 
     <!--
+        Заголовок папки. Нажимается строка целиком, а не значок: попасть
+        в строку легче, чем в треугольник в её начале, а другого действия
+        у заголовка нет — промахнуться не во что.
+    -->
+    <Style x:Key="Folder" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Shape"
+                            Background="{StaticResource Surface}"
+                            BorderBrush="{StaticResource Border}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="14,11">
+                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Shape" Property="BorderBrush" Value="{StaticResource Muted}" />
+                            <Setter TargetName="Shape" Property="Background" Value="{StaticResource Raised}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         Пункт бокового меню. Выбранный помечается полосой слева, а не заливкой:
         заливка на тёмном спорит с карточками справа и читается как ещё одна
         поверхность, а не как выбор.
