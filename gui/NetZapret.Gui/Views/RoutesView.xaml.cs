@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
+using NetZapret.Proxy;
 using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
@@ -39,6 +40,14 @@ public sealed class PartRow
 public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 {
     public bool Open { get; set; }
+
+    /// <summary>Есть ли у сервиса наши прибитые имена.</summary>
+    public bool HasPin { get; set; }
+
+    public string PinLabel => HasPin ? "снять пин" : "пин";
+
+    public Brush PinColor =>
+        (Brush)Application.Current.FindResource(HasPin ? "Accent" : "Text");
 
     public Visibility PartsShown => Open ? Visibility.Visible : Visibility.Collapsed;
 
@@ -145,7 +154,7 @@ public partial class RoutesView : UserControl
                     .ToList();
 
                 if (parts.Count > 0)
-                    services.Add(new ServiceRow(service.Name, parts));
+                    services.Add(new ServiceRow(service.Name, parts) { HasPin = Pinned(service, zapretRoot) });
             }
 
             _all = services;
@@ -272,6 +281,110 @@ public partial class RoutesView : UserControl
 
     private void OnReload(object sender, RoutedEventArgs e) => Reload();
 
+    /// <summary>
+    /// Прибито ли в hosts хоть одно имя этого сервиса.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение по зоне: списки хранят <c>openai.com</c>, а прибивается
+    /// <c>api.openai.com</c>. При точном сравнении кнопка врала бы «пина нет»
+    /// над живым пином.
+    /// </remarks>
+    private static bool Pinned(ServiceDefinition service, string? zapretRoot)
+    {
+        try
+        {
+            var pins = HostsEditor.Pins().Keys.ToList();
+
+            if (pins.Count == 0)
+                return false;
+
+            var zones = service.Parts
+                .Where(part => !part.ByAddress)
+                .SelectMany(part => HostListReader.Read(part.List, zapretRoot, out _))
+                .Select(d => d.TrimStart('*', '.'))
+                .ToList();
+
+            return pins.Any(name => zones.Any(zone =>
+                string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception)
+        {
+            // Нечитаемый hosts не повод не показать раздел.
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Пин сервиса: первым нажатием открывает окно, повторным снимает.
+    /// </summary>
+    /// <remarks>
+    /// Снятие без вопроса, а закрепление через окно — потому что цена разная.
+    /// Закрепить значит выбрать чей адрес и переписать системный файл; снять
+    /// значит вернуть как было, и переспрашивать об этом незачем.
+    /// </remarks>
+    private void OnPin(object sender, RoutedEventArgs e)
+    {
+        // Кнопка лежит внутри кнопки-папки, и нажатие иначе дойдёт до неё:
+        // пин ставился бы, а папка при этом захлопывалась.
+        e.Handled = true;
+
+        if (sender is not Button { Tag: string name }
+            || ServiceCatalog.Find(name) is not { } service)
+        {
+            return;
+        }
+
+        var row = _all.FirstOrDefault(s => s.Name == name);
+
+        if (row is { HasPin: true })
+        {
+            Unpin(service);
+            return;
+        }
+
+        var window = new PinWindow(service) { Owner = Window.GetWindow(this) };
+        window.ShowDialog();
+
+        if (window.Changed)
+            Reload();
+    }
+
+    private void Unpin(ServiceDefinition service)
+    {
+        try
+        {
+            var zapretRoot = ZapretPaths.Discover()?.Root;
+
+            var zones = service.Parts
+                .Where(part => !part.ByAddress)
+                .SelectMany(part => HostListReader.Read(part.List, zapretRoot, out _))
+                .Select(d => d.TrimStart('*', '.'))
+                .ToList();
+
+            var ours = HostsEditor.Pins().Keys
+                .Where(pin => zones.Any(zone =>
+                    string.Equals(zone, pin, StringComparison.OrdinalIgnoreCase)
+                    || pin.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            if (ours.Count == 0)
+                return;
+
+            var result = HostsEditor.Unpin(ours);
+            HostsEditor.FlushDns();
+
+            Reload();
+
+            Status.Text = $"Снято имён: {ours.Count}. Осталось прибитых: {result.Pinned}. "
+                + "Маршрут не трогали — он остался таким, каким был.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось снять пин: " + ex.GetBaseException().Message;
+        }
+    }
+
     /// <summary>Всё, что собрано; поиск отбирает из этого, не перечитывая правила.</summary>
     private IReadOnlyList<ServiceRow> _all = [];
 
@@ -331,6 +444,8 @@ public partial class RoutesView : UserControl
     private void OnSearch(object sender, TextChangedEventArgs e)
     {
         var needle = Search.Text.Trim();
+
+        SearchHint.Visibility = needle.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (needle.Length == 0)
         {

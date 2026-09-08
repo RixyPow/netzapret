@@ -1,0 +1,116 @@
+<Window x:Class="NetZapret.Gui.Views.PinWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Пин в hosts"
+        Height="620" Width="720"
+        MinHeight="420" MinWidth="560"
+        Background="{StaticResource Backdrop}"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+    <Grid Margin="26,22,26,22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock x:Name="ServiceName" Style="{StaticResource Title}" TextWrapping="Wrap" />
+            <TextBlock x:Name="ServiceState" Style="{StaticResource Caption}"
+                       Margin="0,6,0,0" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <TextBlock x:Name="Status" Grid.Row="1" Style="{StaticResource Caption}"
+                   Margin="0,16,0,0" TextWrapping="Wrap" />
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,14,0,0">
+            <StackPanel>
+
+                <!-- Шаг первый: что вообще сделать с сервисом. -->
+                <StackPanel x:Name="Actions">
+                    <TextBlock Text="Куда направить" FontWeight="SemiBold" Margin="2,0,0,10" />
+
+                    <Button Style="{StaticResource Choice}" Tag="direct" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock Text="Напрямую" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Без вмешательства. Так же нужно для пина: прибитый адрес задаёт куда идти, а не как, и правило поверх него уведёт соединение мимо." />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource Choice}" Tag="desync" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock Text="Десинк" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Пакеты правятся на лету, трафик идёт напрямую." />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource Choice}" Tag="proxy" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock Text="Через VPN" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="В туннель. Лечит и то, что закрыто по самому адресу." />
+                        </StackPanel>
+                    </Button>
+
+                    <TextBlock Text="Пин в hosts" FontWeight="SemiBold" Margin="2,16,0,10" />
+
+                    <Button x:Name="PinButton" Style="{StaticResource Choice}" Click="OnPin">
+                        <StackPanel>
+                            <TextBlock Text="Закрепить адрес в hosts" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Для случая, когда имя не разрешается или резолвер отвечает заглушкой. Правит системный файл: нужны права администратора, и запись переживёт удаление программы." />
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="UnpinButton" Style="{StaticResource Choice}" Click="OnUnpin"
+                            Visibility="Collapsed">
+                        <StackPanel>
+                            <TextBlock Text="Снять пин" FontWeight="SemiBold" Foreground="{StaticResource Warn}" />
+                            <TextBlock x:Name="UnpinDetail" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button Style="{StaticResource Choice}" Tag="reset" Click="OnMode" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Убрать свой выбор" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Вернуть как было: правило из поставки снова начнёт действовать." />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Шаг второй: чей адрес прибивать. -->
+                <StackPanel x:Name="Sources" Visibility="Collapsed">
+                    <TextBlock Text="Чей адрес поставить" FontWeight="SemiBold" Margin="2,0,0,10" />
+
+                    <ItemsControl x:Name="SourceList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource Choice}" Tag="{Binding Id}" Click="OnSource">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
+                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="BackButton" Style="{StaticResource Ghost}" Content="Назад"
+                    Click="OnBack" Margin="0,0,8,0" Visibility="Collapsed" />
+            <Button Style="{StaticResource Ghost}" Content="Закрыть" Click="OnClose" />
+        </StackPanel>
+    </Grid>
+</Window>

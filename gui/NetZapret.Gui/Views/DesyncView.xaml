@@ -37,18 +37,25 @@
                                Background="Transparent" />
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,14,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
+                        <!-- Сетка, а не стопка: в стопке обрезание не срабатывает. -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                       FontWeight="SemiBold" FontSize="14"
                                        TextTrimming="CharacterEllipsis" />
 
-                            <Border Background="{StaticResource Raised}" CornerRadius="5"
+                            <Border Grid.Column="1" Background="{StaticResource Raised}" CornerRadius="5"
                                     Padding="7,2" Margin="10,0,0,0"
                                     VerticalAlignment="Center"
                                     Visibility="{Binding VersionShown}">
                                 <TextBlock Text="{Binding Version}" Style="{StaticResource Mono}"
                                            Foreground="{StaticResource Muted}" FontSize="11" />
                             </Border>
-                        </StackPanel>
+                        </Grid>
 
                         <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
                                    Margin="0,5,0,0" TextWrapping="Wrap" />

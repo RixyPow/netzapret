@@ -18,10 +18,16 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!--
+                        Заголовок переносится, а не обрезается. Обрезанный
+                        превращался в «Проверка блс»: строка, которая выглядит
+                        не тесной вёрсткой, а опечаткой.
+                    -->
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Проверка блокировок" Style="{StaticResource Title}" />
+                        <TextBlock Text="Проверка блокировок" Style="{StaticResource Title}"
+                                   TextWrapping="Wrap" />
                         <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Text="Что закрыто в этой сети и чем это лечится." />
                     </StackPanel>
 
@@ -33,7 +39,7 @@
                             Когда чинят Discord, ответ нужен про Discord,
                             а не про сорок имён, из которых он одно.
                         -->
-                        <ComboBox x:Name="Scope" Width="186" Margin="0,0,8,0"
+                        <ComboBox x:Name="Scope" Width="164" Margin="0,0,8,0"
                                   SelectionChanged="OnScope" />
 
                         <Button x:Name="StopButton" Style="{StaticResource Ghost}"
@@ -63,7 +69,7 @@
                 <!-- Шапка таблицы. Повторяет консольную, чтобы отчёты читались одинаково. -->
                 <Grid x:Name="Header" Margin="18,18,18,6" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" MinWidth="120" />
                         <ColumnDefinition Width="52" />
                         <ColumnDefinition Width="52" />
                         <ColumnDefinition Width="52" />
@@ -88,7 +94,7 @@
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" MinWidth="120" />
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="52" />
@@ -97,16 +103,32 @@
                                             <ColumnDefinition Width="196" />
                                         </Grid.ColumnDefinitions>
 
-                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
-                                            <TextBlock Text="{Binding Host}" TextTrimming="CharacterEllipsis"
+                                        <!--
+                                            Сетка, а не стопка. Горизонтальная
+                                            стопка меряет содержимое бесконечной
+                                            шириной, и TextTrimming в ней
+                                            не срабатывает никогда: длинные имена
+                                            вроде steamcommunity.com вылезали
+                                            прямо на колонку TCP.
+                                        -->
+                                        <Grid Grid.Column="0" Margin="0,0,10,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0" Text="{Binding Host}"
+                                                       TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center" />
-                                            <Border Background="{StaticResource Raised}" CornerRadius="4"
-                                                    Padding="5,1" Margin="8,0,0,0" VerticalAlignment="Center"
+
+                                            <Border Grid.Column="1" Background="{StaticResource Raised}"
+                                                    CornerRadius="4" Padding="5,1" Margin="8,0,0,0"
+                                                    VerticalAlignment="Center"
                                                     Visibility="{Binding MarkShown}">
                                                 <TextBlock Text="{Binding Mark}" FontSize="10"
                                                            Foreground="{StaticResource Muted}" />
                                             </Border>
-                                        </StackPanel>
+                                        </Grid>
 
                                         <TextBlock Grid.Column="1" Text="{Binding Tcp}" Style="{StaticResource Mono}" />
                                         <TextBlock Grid.Column="2" Text="{Binding Tls12}" Style="{StaticResource Mono}" />

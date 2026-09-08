@@ -19,9 +19,9 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Маршруты" Style="{StaticResource Title}" />
+                        <TextBlock Text="Маршруты" Style="{StaticResource Title}" TextWrapping="Wrap" />
                         <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="Wrap"
                                    Text="Куда идёт каждый сервис: напрямую, через десинк или через туннель." />
                     </StackPanel>
 
@@ -98,8 +98,19 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Поиск: частей под сорок, и глазами их не перебрать. -->
-                <TextBox x:Name="Search" Margin="0,18,0,0" TextChanged="OnSearch" />
+                <!--
+                    Поиск: частей под семьдесят, и глазами их не перебрать.
+                    С подсказкой внутри: пустое поле без неё читается как
+                    пустая карточка, поставленная по ошибке.
+                -->
+                <Grid Margin="0,18,0,0">
+                    <TextBox x:Name="Search" TextChanged="OnSearch" />
+
+                    <TextBlock x:Name="SearchHint" IsHitTestVisible="False"
+                               Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="13,0,0,0"
+                               Text="Поиск по сервису, части или домену" />
+                </Grid>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
 
@@ -122,6 +133,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0" Text="{Binding Chevron}"
@@ -141,6 +153,20 @@
                                                    Style="{StaticResource Mono}"
                                                    Foreground="{Binding Color}"
                                                    VerticalAlignment="Center" />
+
+                                        <!--
+                                            Пин. Прибивает адрес в hosts,
+                                            повторным нажатием снимает.
+                                            Место здесь, а не в отдельном
+                                            разделе: чинят конкретный сервис,
+                                            и лекарство должно лежать там же,
+                                            где болезнь видно.
+                                        -->
+                                        <Button Grid.Column="4" Style="{StaticResource Ghost}"
+                                                Content="{Binding PinLabel}" Padding="12,6"
+                                                Margin="14,0,0,0" MinWidth="92"
+                                                Foreground="{Binding PinColor}"
+                                                Tag="{Binding Name}" Click="OnPin" />
                                     </Grid>
                                 </Button>
 

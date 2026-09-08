@@ -528,6 +528,10 @@ public partial class VpnView : UserControl
 
     private void OnActivate(object sender, RoutedEventArgs e)
     {
+        // Кнопка внутри кнопки-папки: без этого нажатие дойдёт до неё,
+        // и папка захлопнется на ровном месте.
+        e.Handled = true;
+
         if (sender is not Button { Tag: string name })
             return;
 
@@ -552,6 +556,8 @@ public partial class VpnView : UserControl
 
     private void OnRemove(object sender, RoutedEventArgs e)
     {
+        e.Handled = true;
+
         if (sender is not Button { Tag: string name })
             return;
 
