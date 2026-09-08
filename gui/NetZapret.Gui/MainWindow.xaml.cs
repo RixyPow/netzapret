@@ -1,7 +1,9 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
+using NetZapret.Gui.Views;
 
 namespace NetZapret.Gui;
 
@@ -13,6 +15,36 @@ public partial class MainWindow : Window
 
         VersionLabel.Text = "версия " + Version();
         SourceInitialized += (_, _) => DarkenTitleBar();
+    }
+
+    /// <summary>
+    /// Показывает выбранный раздел.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Каждый раз новый объект, а не сохранённый. Разделы читают состояние
+    /// системы — движки, подписку, hosts, — и оно меняется, пока окно открыто.
+    /// Возвращать сохранённый вид значило бы показывать снимок прошлого
+    /// захода, не сказав об этом.
+    /// </para>
+    /// <para>
+    /// Цена известна: замер серверов, начатый в одном разделе, прервётся при
+    /// уходе в другой. Это честнее, чем оставлять его гоняться в невидимом
+    /// разделе, тратя трафик подписки.
+    /// </para>
+    /// </remarks>
+    private void OnSection(object sender, RoutedEventArgs e)
+    {
+        // Отрабатывает и при разборе разметки, когда Section ещё не создан:
+        // IsChecked="True" у первого пункта поднимает событие раньше времени.
+        if (Section is null || sender is not RadioButton { Tag: string name })
+            return;
+
+        Section.Content = name switch
+        {
+            "servers" => new ServersView(),
+            _ => new StatusView(),
+        };
     }
 
     private static string Version() =>

@@ -40,8 +40,8 @@
                            Text="Работает от администратора: иначе не поставить драйвер перехвата и не поднять TUN." />
 
                 <StackPanel x:Name="Rail" Margin="0,4,0,0">
-                    <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" Checked="OnSection" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" Checked="OnSection" />
                     <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" IsEnabled="False" />
                     <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" IsEnabled="False" />
                     <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" IsEnabled="False" />

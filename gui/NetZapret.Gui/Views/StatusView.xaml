@@ -3,8 +3,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource Backdrop}">
 
+    <!--
+        Колонка слева, шириной до 980. Раньше стоял HorizontalAlignment="Left"
+        на самой стопке — и карточки сжимались по содержимому вместо заявленной
+        ширины, оставляя справа пустоту в половину окна. Ограничение ширины
+        колонки в сетке даёт и то и другое: карточки тянутся, а строка текста
+        не разъезжается на всю ширину монитора, где её неудобно читать.
+    -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
-        <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="980" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0">
 
             <TextBlock Text="Состояние" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
@@ -123,5 +136,6 @@
                        Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
         </StackPanel>
+        </Grid>
     </ScrollViewer>
 </UserControl>
