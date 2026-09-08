@@ -194,12 +194,19 @@ public partial class RoutesView : UserControl
 
                 // Перерисовываем весь список: строки — простые объекты
                 // без уведомлений, и городить их ради значка не стоит.
+                //
+                // Но перерисовываем то, что показано сейчас, а не всё подряд:
+                // прежде значок, приехавший через секунду после набора,
+                // сбрасывал поиск и возвращал полный список — человек печатал,
+                // и написанное у него отбирали.
                 Dispatcher.Invoke(() =>
                 {
                     part.Icon = icon;
 
+                    var shown = Services.ItemsSource;
+
                     Services.ItemsSource = null;
-                    Services.ItemsSource = services;
+                    Services.ItemsSource = shown;
                 });
             }
         }, token);
