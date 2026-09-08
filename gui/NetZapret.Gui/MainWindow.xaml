@@ -51,6 +51,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
                     </StackPanel>

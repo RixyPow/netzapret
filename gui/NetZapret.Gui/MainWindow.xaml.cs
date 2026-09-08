@@ -46,6 +46,7 @@ public partial class MainWindow : Window
             "desync" => new DesyncView(),
             "routes" => new RoutesView(),
             "check" => new CheckView(),
+            "dns" => new DnsView(),
             "hosts" => new HostsView(),
             "log" => new LogView(),
             _ => new StatusView(),
