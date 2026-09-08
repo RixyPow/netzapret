@@ -1,5 +1,6 @@
 using System.IO;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Windows.Media.Imaging;
 
 namespace NetZapret.Gui;
@@ -18,6 +19,12 @@ namespace NetZapret.Gui;
 /// Отсюда и особенность: значок закрытого сайта не загрузится, пока обход
 /// выключен. Это честно — мы ходим тем же путём, что и браузер, и если
 /// не дошли, то не дошли. Вместо значка остаётся буква.
+/// </para>
+/// <para>
+/// Спрашивается в два захода: сначала <c>/favicon.ico</c>, а если там пусто —
+/// то, что страница объявляет в <c>link rel="icon"</c>. Одного первого мало:
+/// Figma по этому пути отвечает 404 и объявляет значок в разметке, Miro
+/// держит его вообще на чужом имени. Замер 2026-09-08.
 /// </para>
 /// <para>
 /// Кэш на диске, потому что просить одно и то же при каждом открытии раздела
@@ -87,16 +94,46 @@ public static class SiteIcons
         return new FileInfo(path).Length == 0 ? null : Decode(File.ReadAllBytes(path));
     }
 
+    private const string Agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+
+    /// <summary>
+    /// Спрашивает значок у сайта.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Сначала <c>/favicon.ico</c>: так его кладут чаще всего, и одного
+    /// запроса хватает. Если там пусто или лежит не картинка — читается сама
+    /// страница и берётся то, что она объявляет в <c>link rel="icon"</c>.
+    /// </para>
+    /// <para>
+    /// Второй заход появился не от полноты, а по замеру 2026-09-08: у Figma
+    /// по этому пути 404, а значок объявлен тремя строками ниже в разметке;
+    /// у Miro он и вовсе лежит на чужом имени. У Reddit, GitHub и Spotify
+    /// первого захода хватает — их-то я и проверил, прежде чем писать второй.
+    /// </para>
+    /// </remarks>
     private static async Task<BitmapImage?> FetchAsync(string host, CancellationToken cancellationToken)
     {
         byte[] bytes = [];
+        BitmapImage? image = null;
 
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-            http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            http.DefaultRequestHeaders.Add("User-Agent", Agent);
 
-            bytes = await http.GetByteArrayAsync($"https://{host}/favicon.ico", cancellationToken);
+            (image, bytes) = await TryAsync(http, $"https://{host}/favicon.ico", cancellationToken);
+
+            if (image is null)
+            {
+                foreach (var url in await DeclaredAsync(http, host, cancellationToken))
+                {
+                    (image, bytes) = await TryAsync(http, url, cancellationToken);
+
+                    if (image is not null)
+                        break;
+                }
+            }
         }
         catch (Exception)
         {
@@ -114,7 +151,124 @@ public static class SiteIcons
         {
         }
 
-        return bytes.Length == 0 ? null : Decode(bytes);
+        return image;
+    }
+
+    /// <summary>Забирает и разбирает; пусто — значит не вышло, причина неважна.</summary>
+    private static async Task<(BitmapImage? Image, byte[] Bytes)> TryAsync(
+        HttpClient http,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = await http.GetByteArrayAsync(url, cancellationToken);
+            var image = Decode(body);
+
+            return image is null ? (null, []) : (image, body);
+        }
+        catch (Exception)
+        {
+            return (null, []);
+        }
+    }
+
+    /// <summary>Один тег link из разметки страницы.</summary>
+    private static readonly Regex LinkTag = new(
+        "<link\\s[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex Attribute = new(
+        "(?<name>rel|href)\\s*=\\s*(\"(?<value>[^\"]*)\"|'(?<value>[^']*)')",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// Значки, которые страница объявляет сама.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Читается только начало страницы: объявления живут в head, а тянуть
+    /// ради них мегабайт разметки незачем.
+    /// </para>
+    /// <para>
+    /// Объявленный адрес может вести на чужое имя — сайты кладут значок
+    /// на свою же раздачу. Это допускается: страницу мы уже запросили,
+    /// и переход по её собственной ссылке ничего нового о человеке
+    /// не сообщает. Запрещено другое — спрашивать значок у службы вроде
+    /// Google, которой пришлось бы отдать весь список имён.
+    /// </para>
+    /// <para>
+    /// SVG пропускается: WPF его не разбирает, и такой ответ засчитался бы
+    /// за неудачу, оборвав перебор на первом же кандидате.
+    /// </para>
+    /// </remarks>
+    private static async Task<IReadOnlyList<string>> DeclaredAsync(
+        HttpClient http,
+        string host,
+        CancellationToken cancellationToken)
+    {
+        string page;
+
+        try
+        {
+            using var response = await http.GetAsync(
+                $"https://{host}/", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            var head = new byte[64 * 1024];
+            int read = await stream.ReadAtLeastAsync(head, head.Length, false, cancellationToken);
+
+            page = System.Text.Encoding.UTF8.GetString(head, 0, read);
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+
+        var site = new Uri($"https://{host}/");
+        var found = new List<(int Rank, string Url)>();
+
+        foreach (Match tag in LinkTag.Matches(page))
+        {
+            string rel = string.Empty;
+            string href = string.Empty;
+
+            foreach (Match attribute in Attribute.Matches(tag.Value))
+            {
+                if (attribute.Groups["name"].Value.Equals("rel", StringComparison.OrdinalIgnoreCase))
+                    rel = attribute.Groups["value"].Value;
+                else
+                    href = attribute.Groups["value"].Value;
+            }
+
+            if (href.Length == 0 || !rel.Contains("icon", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (href.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!Uri.TryCreate(site, href, out var absolute))
+                continue;
+
+            if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+                continue;
+
+            // Обычный значок вперёд: он мельче и рисуется в наших двадцать два
+            // пикселя чище, чем apple-touch-icon на сто восемьдесят.
+            int rank = rel.Contains("apple", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+
+            found.Add((rank, absolute.ToString()));
+        }
+
+        return found
+            .OrderBy(x => x.Rank)
+            .Select(x => x.Url)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToList();
     }
 
     private static BitmapImage? Decode(byte[] bytes)
