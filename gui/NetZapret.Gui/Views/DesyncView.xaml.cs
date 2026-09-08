@@ -1,0 +1,279 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using NetZapret.Core;
+using NetZapret.Core.Rules;
+using NetZapret.Zapret;
+
+namespace NetZapret.Gui.Views;
+
+/// <summary>Пресет в списке выбора.</summary>
+public sealed record PresetRow(string Name, string Version, string Fake)
+{
+    public required string Detail { get; set; }
+
+    public bool Chosen { get; set; }
+
+    public Brush Edge =>
+        (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
+
+    public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility VersionShown => Version.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility FakeShown => Fake.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+}
+
+/// <summary>
+/// Выбор пресета десинка.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Пресеты — наши, из папки <c>presets</c> рядом с программой. Читаются тем же
+/// <see cref="PresetReader"/>, что и в консоли, поэтому список здесь и в меню
+/// один и тот же.
+/// </para>
+/// <para>
+/// Выбор пишется в настройки и применяется перезапуском движков. Сами
+/// не перезапускаем: winws2 несёт весь трафик машины, и ронять его в ответ
+/// на нажатие в списке — не та цена, на которую человек соглашался, выбирая
+/// пресет.
+/// </para>
+/// </remarks>
+public partial class DesyncView : UserControl
+{
+    private CancellationTokenSource? _counting;
+
+    public DesyncView()
+    {
+        InitializeComponent();
+
+        Loaded += (_, _) => Reload();
+        Unloaded += (_, _) => _counting?.Cancel();
+    }
+
+    private void Reload()
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        ShowChosen(settings);
+        ShowEngine();
+
+        try
+        {
+            var files = ZapretPaths.PresetFiles;
+
+            if (files.Count == 0)
+            {
+                Status.Text = $"В папке {ZapretPaths.PresetDirectory} нет ни одного пресета.";
+                Presets.ItemsSource = null;
+
+                return;
+            }
+
+            var rows = new PresetReader()
+                .Read(files)
+                .Select(preset => Row(preset, settings.PresetName))
+                .ToList();
+
+            Presets.ItemsSource = rows;
+            Status.Text = $"Пресетов: {rows.Count}. Выбор применяется при следующем запуске движков.";
+
+            StartCounting(rows);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Пресеты не читаются: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private static PresetRow Row(ZapretPreset preset, string? chosen)
+    {
+        int active = preset.ActiveSections.Count();
+        int pass = preset.Sections.Count(s => s.IsPassThrough);
+        int fake = preset.ActiveSections.Count(s => s.UsesFakePackets);
+
+        var detail = $"{preset.Sections.Count} {Ending(preset.Sections.Count, "секция", "секции", "секций")}: "
+            + $"{active} с десинком, {pass} нетронутыми";
+
+        return new PresetRow(
+            preset.Name,
+            preset.BuiltinVersion ?? string.Empty,
+
+            // Про поддельные пакеты сказано отдельно, потому что именно они
+            // ломаются под поднятым TUN, если трафик из туннеля не выведен.
+            // Замер 2026-08-23; чистые split и disorder его переживают.
+            fake == 0
+                ? string.Empty
+                : $"{fake} с поддельным пакетом — под туннелем такие секции работают не всегда")
+        {
+            Detail = detail,
+            Chosen = string.Equals(preset.Name, chosen, StringComparison.OrdinalIgnoreCase),
+        };
+    }
+
+    /// <summary>
+    /// Досчитывает, сколько каждый пресет покрывает.
+    /// </summary>
+    /// <remarks>
+    /// В стороне от показа: счёт открывает каждый список, на который ссылается
+    /// пресет, а их дюжина на дюжину файлов. Ждать этого, чтобы показать
+    /// названия, которые уже разобраны, значит держать раздел пустым секунду
+    /// на ровном месте.
+    /// </remarks>
+    private void StartCounting(IReadOnlyList<PresetRow> rows)
+    {
+        var root = ZapretPaths.Discover()?.Root;
+
+        if (root is null)
+            return;
+
+        _counting?.Cancel();
+        _counting = new CancellationTokenSource();
+
+        var token = _counting.Token;
+
+        _ = Task.Run(() =>
+        {
+            var reader = new PresetReader();
+
+            foreach (var row in rows)
+            {
+                if (token.IsCancellationRequested)
+                    return;
+
+                var path = ZapretPaths.FindPreset(row.Name);
+
+                if (path is null)
+                    continue;
+
+                int domains;
+                int addresses;
+
+                try
+                {
+                    var preset = reader.Load(path);
+
+                    domains = reader.CollectCoveredDomains(preset, root).Count;
+                    addresses = reader.CollectCoveredAddresses(preset, root).Count;
+                }
+                catch (Exception)
+                {
+                    // Список, на который ссылается пресет, мог не приехать
+                    // с установкой Zapret. Пресет от этого не перестаёт быть
+                    // выбираемым — просто покрытие неизвестно.
+                    continue;
+                }
+
+                if (token.IsCancellationRequested)
+                    return;
+
+                Dispatcher.Invoke(() =>
+                {
+                    row.Detail += $" · {domains} доменов, {addresses} подсетей";
+                    Redraw();
+                });
+            }
+        }, token);
+    }
+
+    private void Redraw()
+    {
+        var shown = Presets.ItemsSource;
+
+        Presets.ItemsSource = null;
+        Presets.ItemsSource = shown;
+    }
+
+    private void ShowChosen(AppSettings settings)
+    {
+        ChosenName.Text = settings.DescribePreset();
+
+        ChosenDetail.Text = settings.Mode == OperatingMode.Off
+            ? "Режим «выключено»: десинк не запустится, какой бы пресет ни стоял."
+            : settings.PresetName is null
+                ? "Пакеты не правятся. Всё, что закрыто по имени, останется закрытым — кроме того, что уведено через VPN."
+                : "Применяется при запуске движков в разделе «Состояние».";
+
+        OffButton.IsEnabled = settings.PresetName is not null;
+    }
+
+    /// <summary>
+    /// Проверяет, есть ли чем применять пресет.
+    /// </summary>
+    /// <remarks>
+    /// Пресеты наши, а движок — из установки Zapret. Без неё выбор
+    /// сохраняется и не делает ничего, и молчать об этом нельзя: человек
+    /// выберет пресет, увидит его в «Состоянии» и решит, что десинк работает.
+    /// </remarks>
+    private void ShowEngine()
+    {
+        var paths = ZapretPaths.Discover();
+
+        if (paths is not null && File.Exists(paths.ExecutablePath))
+        {
+            MissingCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        MissingCard.Visibility = Visibility.Visible;
+        MissingTitle.Text = "Движок десинка не найден";
+
+        MissingBody.Text = paths is null
+            ? "Установка Zapret не обнаружена. Пресет выберется и сохранится, но применять его нечем: "
+              + "winws2.exe и списки доменов лежат в ней."
+            : $"Каталог найден ({paths.Root}), а winws2.exe в нём нет — ожидался в подпапке exe. "
+              + "Возможно, антивирус увёз его в карантин: WinDivert рядом с ним помечается как RiskTool.";
+    }
+
+    private void OnChoose(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string name })
+            Save(name);
+    }
+
+    private void OnOff(object sender, RoutedEventArgs e) => Save(null);
+
+    private void Save(string? name)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { PresetName = name };
+            settings.Save(AppSettings.DefaultPath);
+
+            ShowChosen(settings);
+
+            if (Presets.ItemsSource is IEnumerable<PresetRow> rows)
+            {
+                foreach (var row in rows)
+                    row.Chosen = string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase);
+
+                Redraw();
+            }
+
+            Status.Text = name is null
+                ? "Десинк выключен. Применится при следующем запуске движков."
+                : $"Выбран «{name}». Применится при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private static string Ending(int count, string one, string few, string many)
+    {
+        int tail = count % 100;
+
+        if (tail is >= 11 and <= 14)
+            return many;
+
+        return (count % 10) switch
+        {
+            1 => one,
+            2 or 3 or 4 => few,
+            _ => many,
+        };
+    }
+}

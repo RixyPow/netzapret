@@ -17,8 +17,8 @@
         </Grid.ColumnDefinitions>
 
         <!--
-            Боковое меню. Полоса, а не вкладки: разделов будет шесть, и все
-            они равноправны — проверку блокировок нельзя прятать глубже
+            Боковое меню. Полоса, а не вкладки: разделов девять, и все они
+            равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
         <Border Grid.Column="0" Background="{StaticResource Backdrop}"
@@ -39,14 +39,22 @@
                            Margin="22,0,22,18" TextWrapping="Wrap"
                            Text="Работает от администратора: иначе не поставить драйвер перехвата и не поднять TUN." />
 
-                <StackPanel x:Name="Rail" Margin="0,4,0,0">
-                    <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
-                </StackPanel>
+                <!--
+                    Полоса прокручивается: разделов девять, и на невысоком
+                    окне последний иначе уезжает за нижний край — а уехавшего
+                    пункта не существует, его не найти.
+                -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+                    <StackPanel x:Name="Rail">
+                        <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
+                    </StackPanel>
+                </ScrollViewer>
             </DockPanel>
         </Border>
 

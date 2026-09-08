@@ -223,6 +223,44 @@
     </Style>
 
     <!--
+        Строка выбора: пресет, резолвер, сервер. Рамка задаётся снаружи —
+        выбранное обводится зелёным, и это единственное, чем оно отличается
+        от прочих. Заливкой отмечать нельзя: на тёмном она читается как ещё
+        одна поверхность, а не как выбор.
+    -->
+    <Style x:Key="Choice" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="{StaticResource Surface}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border}" />
+        <Setter Property="Padding" Value="16,13" />
+        <Setter Property="Margin" Value="0,0,0,7" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Shape"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Shape" Property="Background" Value="{StaticResource Raised}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         Заголовок папки. Нажимается строка целиком, а не значок: попасть
         в строку легче, чем в треугольник в её начале, а другого действия
         у заголовка нет — промахнуться не во что.
