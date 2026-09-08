@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using NetZapret.Proxy;
 
 namespace NetZapret.Supervisor;
@@ -281,6 +282,18 @@ public sealed class SingBoxService : SupervisedService
         CreateNoWindow = true,
         RedirectStandardOutput = true,
         RedirectStandardError = true,
+
+        // Кодировка задаётся явно, иначе .NET разбирает вывод движка в кодовой
+        // странице консоли — на русской Windows это не UTF-8, и байты имени
+        // сервера превращаются в кашу, которую журнал честно записывает
+        // обратно. Получалось двойное перекодирование: в файле лежало
+        // «рџ‡єрџ‡ё Hysteria2 | РЎРЁРђ» вместо флага и слова «США».
+        //
+        // Стало заметно, когда журнал перестал быть свалкой и начал читаться:
+        // проверка достаёт оттуда, через какой выход шло имя и что ответила
+        // труба, — и имя выхода в отчёте было нечитаемым.
+        StandardOutputEncoding = new UTF8Encoding(false),
+        StandardErrorEncoding = new UTF8Encoding(false),
     };
 
     public override async Task<bool> CheckFunctionalAsync(CancellationToken cancellationToken)
@@ -371,6 +384,12 @@ public sealed class WinwsService : SupervisedService
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+
+            // См. выше: без явной кодировки вывод разбирается кодовой страницей
+            // консоли, и журнал получает перекодированную дважды кашу вместо
+            // текста. Здесь это winws2, и его сообщения тоже читаются.
+            StandardOutputEncoding = new UTF8Encoding(false),
+            StandardErrorEncoding = new UTF8Encoding(false),
         };
 
         foreach (var argument in _arguments)

@@ -286,6 +286,10 @@ internal static class BlockCheckCommand
         // сменить сервер подписки, и советовать это, не проверив сервер,
         // мы больше не хотим.
         var reach = await ReachThroughTunnelAsync(settings, reports, stop.Token);
+
+        // Журнал движка читается первым: он знает то, чего проба снаружи знать
+        // не может — через какой выход шло и что ответила труба.
+        PrintEngineComplaints(reports);
         PrintTunnelReach(reach);
 
         PrintDeadlocks(Deadlocks(reports, engine, setup, reach).Where(d => !pinned.ContainsKey(d.Host)).ToList());
@@ -567,12 +571,24 @@ internal static class BlockCheckCommand
             using var client = new NetZapret.Subscriptions.SubscriptionClient();
             var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
 
-            var server = info.Servers.FirstOrDefault(s =>
+            // Спрашиваем движок, каким выходом он пользуется сейчас, и только
+            // потом смотрим в настройки. Это не придирка: настройка — то, что
+            // просили при сборке конфига, а выбор живёт своей жизнью, его
+            // меняет и группа по задержке, и рука через Clash API. Проверять
+            // не тот сервер, которым идёт трафик, значит выдать успех чужого
+            // замера за оправдание — а мы этот раздел затем и завели, чтобы
+            // перестать говорить о трубе не глядя.
+            var live = await CurrentServerAsync(settings, cancellationToken);
+
+            var server = info.Servers.FirstOrDefault(s => s.IsSupportedBySingBox && s.Tag == live)
+                ?? info.Servers.FirstOrDefault(s =>
                     s.IsSupportedBySingBox && s.Tag == settings.PreferredServer)
                 ?? info.Servers.FirstOrDefault(s => s.IsSupportedBySingBox);
 
             if (server is null)
                 return [];
+
+            Console.WriteLine($"  через {server.Tag}");
 
             return await TunnelReach.CheckAsync(
                 singBox,
@@ -616,6 +632,57 @@ internal static class BlockCheckCommand
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Показывает, что сам движок сказал про эти имена.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прямее источника у нас нет. Проба снаружи видит только, что соединение
+    /// не встало; движок изнутри знает имя, выход и ответ трубы. Строка
+    /// «через 🇺🇸 США: timeout: no recent network activity» отвечает сразу
+    /// и на то, кто виноват, и на то, что делать.
+    /// </para>
+    /// <para>
+    /// Заодно снимает вопрос, который мы обсуждали неделю. Раз движок
+    /// разобрал имя верно, значит рукопожатие до него дошло целым —
+    /// и десинк его не портил, что бы ни говорила секция пресета рядом.
+    /// </para>
+    /// </remarks>
+    private static void PrintEngineComplaints(IReadOnlyList<TargetReport> reports)
+    {
+        var hosts = reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var complaints = EngineLog.Complaints(hosts);
+
+        if (complaints.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Yellow;
+
+        Console.WriteLine();
+        Console.WriteLine("Что об этом сказал сам движок");
+
+        foreach (var c in complaints.OrderBy(c => c.Host, StringComparer.Ordinal))
+        {
+            Console.WriteLine($"  {Truncate(c.Host, 28),-28} через {Truncate(c.Outbound, 30)}");
+            Console.WriteLine($"  {"",-28} {Truncate(c.Error, 60)}");
+        }
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine();
+        Console.WriteLine("  Имя движок разобрал верно — значит рукопожатие дошло до него целым,");
+        Console.WriteLine("  и десинк его не портил. Выход назван тот, через который шло на самом");
+        Console.WriteLine("  деле: он может отличаться от указанного в шапке, если выбор сменился");
+        Console.WriteLine("  посреди прогона. Журнал: " + EngineLog.DefaultPath);
+
+        Console.ForegroundColor = previous;
     }
 
     /// <summary>Показывает, кто на самом деле виноват в недоставке.</summary>
