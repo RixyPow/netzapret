@@ -1,0 +1,57 @@
+<Window x:Class="NetZapret.Gui.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:NetZapret.Gui.Views"
+        Title="NetZapret"
+        Height="720" Width="1080"
+        MinHeight="560" MinWidth="880"
+        Background="{StaticResource Backdrop}"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="212" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!--
+            Боковое меню. Полоса, а не вкладки: разделов будет шесть, и все
+            они равноправны — проверку блокировок нельзя прятать глубже
+            остальных, она и отличает нас от любого клиента VPN.
+        -->
+        <Border Grid.Column="0" Background="{StaticResource Backdrop}"
+                BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+            <DockPanel LastChildFill="True">
+
+                <StackPanel DockPanel.Dock="Top" Margin="22,26,22,22">
+                    <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
+                    <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                </StackPanel>
+
+                <!--
+                    Строка о правах внизу и вполголоса. Сказать о них надо —
+                    окно работает с полными правами, и человек вправе это
+                    знать, — но каждый раз кричать об этом незачем.
+                -->
+                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}"
+                           Margin="22,0,22,18" TextWrapping="Wrap"
+                           Text="Работает от администратора: иначе не поставить драйвер перехвата и не поднять TUN." />
+
+                <StackPanel x:Name="Rail" Margin="0,4,0,0">
+                    <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" IsEnabled="False" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <ContentControl x:Name="Section" Grid.Column="1">
+            <views:StatusView />
+        </ContentControl>
+    </Grid>
+</Window>

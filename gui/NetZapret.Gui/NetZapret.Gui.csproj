@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Оконный вид. Собирается своим решением, gui\NetZapret.Gui.sln, и в
+    NetZapret.sln не входит: пока интерфейс недоделан, он не должен ронять
+    ни сборку консоли, ни CI, ни архив выпуска.
+
+    Общие настройки приходят из Directory.Build.props в корне — та же версия,
+    тот же запрет на сборку не под x64, та же детерминированность.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>NetZapret</AssemblyName>
+    <RootNamespace>NetZapret.Gui</RootNamespace>
+
+    <!--
+      Права администратора запрашиваются манифестом, а не повышением на ходу.
+      Без них не поставить драйвер перехвата и не поднять TUN, то есть окно
+      открылось бы и не смогло сделать ровно то, ради чего открывалось.
+    -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!--
+    Библиотеки берутся как есть и не правятся. В них двенадцать тысяч строк
+    выверенной работы: правила, десинк, туннель, hosts, подписка, супервизор.
+    Интерфейс — второй вид поверх той же основы, и всё, что чинится в консоли,
+    достаётся ему само.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Supervisor\NetZapret.Supervisor.csproj" />
+  </ItemGroup>
+
+</Project>
