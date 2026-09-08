@@ -96,14 +96,28 @@
                                         в название. Значок делает из этого опознавательный
                                         знак вместо опечатки.
                                     -->
-                                    <Border Grid.Column="1" Background="{StaticResource Raised}"
-                                            BorderBrush="{StaticResource Border}" BorderThickness="1"
-                                            CornerRadius="5" Padding="7,3" Margin="0,0,12,0"
-                                            VerticalAlignment="Center"
-                                            Visibility="{Binding CountryShown}">
-                                        <TextBlock Text="{Binding Country}" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource Muted}" />
-                                    </Border>
+                                    <Grid Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <!--
+                                            Картинка, если она есть в Assets\flags\;
+                                            иначе значок с буквами. Видно всегда
+                                            ровно одно из двух.
+                                        -->
+                                        <Border CornerRadius="3" ClipToBounds="True"
+                                                BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                                Visibility="{Binding FlagShown}">
+                                            <Image Source="{Binding Flag}" Width="26" Height="18"
+                                                   Stretch="UniformToFill"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                        </Border>
+
+                                        <Border Background="{StaticResource Raised}"
+                                                BorderBrush="{StaticResource Border}" BorderThickness="1"
+                                                CornerRadius="5" Padding="7,3"
+                                                Visibility="{Binding CountryShown}">
+                                            <TextBlock Text="{Binding Country}" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="{StaticResource Muted}" />
+                                        </Border>
+                                    </Grid>
 
                                     <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />

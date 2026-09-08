@@ -49,6 +49,24 @@
     Интерфейс — второй вид поверх той же основы, и всё, что чинится в консоли,
     достаётся ему само.
   -->
+  <!--
+    Флаги стран картинками. Windows их не рисует, шрифта с ними не поставляет,
+    а тащить чужую гарнитуру ради двадцати значков — лишняя лицензия в архиве.
+    Файлы зовутся по коду страны: de.png, ru.png, us.png.
+
+    Папки может не быть вовсе — это рабочее состояние: тогда вместо флага
+    остаётся значок с буквами.
+  -->
+  <ItemGroup>
+    <!--
+      Только PNG верхнего уровня. Рядом лежит распакованный исходный пак
+      с полутысячей SVG и файлов репозитория — они ни к чему ни в сборке,
+      ни в архиве, а рекурсивный шаблон тащил бы их все.
+    -->
+    <Content Include="Assets\flags\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\flags\NOTICE.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />

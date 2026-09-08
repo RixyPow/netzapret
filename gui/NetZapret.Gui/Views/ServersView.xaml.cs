@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using NetZapret.Core;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
@@ -14,6 +15,8 @@ public sealed record ServerRow(
     string Name,
     string Country,
     Visibility CountryShown,
+    BitmapImage? Flag,
+    Visibility FlagShown,
     string Detail,
     string Latency,
     Brush Color,
@@ -191,12 +194,18 @@ public partial class ServersView : UserControl
                 detail += $" · замер {Ago(known.CheckedAt)}";
 
             var (country, name) = CountryTag.Split(server.Tag);
+            var flag = country.Length == 2 ? FlagImages.For(country) : null;
 
             return new ServerRow(
                 server.Tag,
                 name,
                 country,
-                country.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
+
+                // Ровно одно из двух: картинка либо буквы. Показать оба
+                // значило бы сказать одно и то же дважды в одной строке.
+                country.Length == 0 || flag is not null ? Visibility.Collapsed : Visibility.Visible,
+                flag,
+                flag is null ? Visibility.Collapsed : Visibility.Visible,
                 detail,
                 latency,
                 (Brush)FindResource(chosen ? "Accent" : key),

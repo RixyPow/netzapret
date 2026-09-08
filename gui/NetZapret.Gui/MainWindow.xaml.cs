@@ -43,6 +43,10 @@ public partial class MainWindow : Window
         Section.Content = name switch
         {
             "servers" => new ServersView(),
+            "routes" => new RoutesView(),
+            "check" => new CheckView(),
+            "hosts" => new HostsView(),
+            "log" => new LogView(),
             _ => new StatusView(),
         };
     }

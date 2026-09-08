@@ -42,10 +42,10 @@
                 <StackPanel x:Name="Rail" Margin="0,4,0,0">
                     <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" Checked="OnSection" />
                     <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" Checked="OnSection" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" IsEnabled="False" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" IsEnabled="False" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" IsEnabled="False" />
-                    <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" IsEnabled="False" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
+                    <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
                 </StackPanel>
             </DockPanel>
         </Border>
