@@ -357,13 +357,25 @@ internal static class SupervisorCommands
         Console.WriteLine($"  адаптер {TunName} всё ещё на месте — пробуем запуститься так");
     }
 
+    /// <summary>
+    /// Есть ли в системе туннельный адаптер.
+    /// </summary>
+    /// <remarks>
+    /// Ищем и по имени, и по описанию. Только по имени было мало: адаптер,
+    /// оставшийся от убитого движка, теряет имя <c>netzapret0</c> и остаётся
+    /// в системе под описанием «sing-tun Tunnel» — Windows показывает его
+    /// как обычный Ethernet со своим номером. Проверка по имени такой
+    /// не находила, ожидание проскакивало мгновенно, и следующий sing-box
+    /// снова падал с «Cannot create a file when that file already exists».
+    /// </remarks>
     private static bool TunExists()
     {
         try
         {
             return System.Net.NetworkInformation.NetworkInterface
                 .GetAllNetworkInterfaces()
-                .Any(a => a.Name.Equals(TunName, StringComparison.OrdinalIgnoreCase));
+                .Any(a => a.Name.Equals(TunName, StringComparison.OrdinalIgnoreCase)
+                    || a.Description.Contains("sing-tun", StringComparison.OrdinalIgnoreCase));
         }
         catch (Exception)
         {

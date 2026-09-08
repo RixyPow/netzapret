@@ -331,9 +331,21 @@ public partial class DoctorView : UserControl
                 .Select(p => $"{p.ProcessName} (PID {p.Id})")
                 .ToList();
 
-            return strays.Count == 0
-                ? [Ok("Движков от прошлых запусков нет.")]
-                : [Bad($"Движки без присмотра: {string.Join(", ", strays)}. Они держат "
+            if (strays.Count == 0)
+            {
+                var ghost = Ghost();
+
+                return ghost is null
+                    ? [Ok("Движков и адаптеров от прошлых запусков нет.")]
+                    : [Bad($"В системе остался туннельный адаптер: {ghost}. Живого движка "
+                        + "при этом нет — адаптер пережил его. Новый sing-box не сможет "
+                        + "создать свой и будет падать с «Cannot create a file when that "
+                        + "file already exists». Уберите адаптер в диспетчере устройств "
+                        + "(«Сетевые адаптеры» → sing-tun Tunnel → Удалить) либо командой "
+                        + "pnputil /remove-device, и запустите движки заново.")];
+            }
+
+            return [Bad($"Движки без присмотра: {string.Join(", ", strays)}. Они держат "
                     + "TUN-адаптер и WinDivert, и новый движок не поднимется — он будет "
                     + "числиться запущенным и не отвечать. Остановите движки и запустите "
                     + "заново: запуск из окна убирает такие сам.")];
@@ -341,6 +353,32 @@ public partial class DoctorView : UserControl
         catch (Exception ex)
         {
             return [Warn("Процессы не перечисляются: " + ex.GetBaseException().Message)];
+        }
+    }
+
+    /// <summary>
+    /// Туннельный адаптер, переживший свой движок.
+    /// </summary>
+    /// <remarks>
+    /// Ищется по описанию, а не по имени: брошенный адаптер теряет имя
+    /// <c>netzapret0</c> и остаётся в системе обычным Ethernet со своим
+    /// номером, сохраняя описание «sing-tun Tunnel». Убитый жёстко sing-box
+    /// его за собой не убирает — wintun рассчитывает на спокойный выход.
+    /// </remarks>
+    private static string? Ghost()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface
+                .GetAllNetworkInterfaces()
+                .Where(a => a.Description.Contains("sing-tun", StringComparison.OrdinalIgnoreCase))
+                .Select(a => $"{a.Name} ({a.Description})")
+                .FirstOrDefault();
+        }
+        catch (Exception)
+        {
+            // Не смогли посмотреть — молчим: догадка хуже отсутствия строки.
+            return null;
         }
     }
 
