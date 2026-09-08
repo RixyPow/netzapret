@@ -305,16 +305,59 @@ public partial class DoctorView : UserControl
         return lines;
     }
 
+    /// <summary>
+    /// Движки от прошлого запуска, оставшиеся без присмотра.
+    /// </summary>
+    /// <remarks>
+    /// Самая незаметная из неисправностей и потому первая, о которой стоит
+    /// сказать. Осиротевший sing-box держит TUN-адаптер, осиротевший winws2 —
+    /// WinDivert; новый движок поднимается процессом и не проходит проверку,
+    /// а окно показывает «запущен, но не отвечает», не называя причины.
+    /// Видно её было только в журнале супервизора.
+    /// </remarks>
+    private IReadOnlyList<DoctorLine> Orphans(SupervisorState? state)
+    {
+        try
+        {
+            var ours = state?.Services
+                .Select(s => s.ProcessId)
+                .Where(id => id is not null)
+                .Select(id => id!.Value)
+                .ToHashSet() ?? [];
+
+            var strays = new[] { "sing-box", "winws2", "winws" }
+                .SelectMany(System.Diagnostics.Process.GetProcessesByName)
+                .Where(p => !ours.Contains(p.Id))
+                .Select(p => $"{p.ProcessName} (PID {p.Id})")
+                .ToList();
+
+            return strays.Count == 0
+                ? [Ok("Движков от прошлых запусков нет.")]
+                : [Bad($"Движки без присмотра: {string.Join(", ", strays)}. Они держат "
+                    + "TUN-адаптер и WinDivert, и новый движок не поднимется — он будет "
+                    + "числиться запущенным и не отвечать. Остановите движки и запустите "
+                    + "заново: запуск из окна убирает такие сам.")];
+        }
+        catch (Exception ex)
+        {
+            return [Warn("Процессы не перечисляются: " + ex.GetBaseException().Message)];
+        }
+    }
+
     private IReadOnlyList<DoctorLine> Supervisor()
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
+        bool alive = state is not null && state.IsSupervisorAlive();
 
-        if (state is null || !state.IsSupervisorAlive())
-            return [Warn("Движки не запущены — обход не работает, трафик идёт напрямую.")];
+        var lines = new List<DoctorLine>(Orphans(alive ? state : null));
 
-        var lines = new List<DoctorLine>();
+        if (!alive)
+        {
+            lines.Add(Warn("Движки не запущены — обход не работает, трафик идёт напрямую."));
+            return lines;
+        }
 
-        foreach (var service in state.Services)
+        foreach (var service in state!.Services)
         {
             lines.Add(service.Health switch
             {

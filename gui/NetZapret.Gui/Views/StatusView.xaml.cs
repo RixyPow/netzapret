@@ -355,18 +355,28 @@ public partial class StatusView : UserControl
     /// Ключи запуска супервизора.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Повторяет то, что собирает меню консоли. Туннель поднимается только
     /// там, где он куда-то ведёт: в режиме «только десинк» sing-box был бы
     /// вхолостую поднятым TUN — адаптер есть, маршруты стоят, трафика нет,
     /// и первая же неисправность ищется вдвое дольше.
+    /// </para>
+    /// <para>
+    /// <c>--kill-orphans</c> здесь обязателен, и это выяснилось дорого.
+    /// Движок от прошлого запуска держит TUN-адаптер, новый sing-box
+    /// поднимается процессом и не проходит функциональную проверку —
+    /// в окне это выглядит как «запущен, но не отвечает», и причина
+    /// не видна нигде, кроме журнала супервизора. Меню консоли этот ключ
+    /// добавляет, автозапуск тоже; окно не добавляло.
+    /// </para>
     /// </remarks>
     internal static string BuildStartArguments()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
         var arguments = settings.LogsEnabled
-            ? $"start --log \"{Path.GetFullPath(Path.Combine("runtime", "supervisor.log"))}\""
-            : "start";
+            ? $"start --kill-orphans --log \"{Path.GetFullPath(Path.Combine("runtime", "supervisor.log"))}\""
+            : "start --kill-orphans";
 
         arguments += settings.NeedsProxy
             ? $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\""

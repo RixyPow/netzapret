@@ -165,23 +165,44 @@ public partial class MainWindow : Window
     /// Останавливает движки и поднимает их заново.
     /// </summary>
     /// <remarks>
-    /// Пауза между остановкой и запуском не для красоты: супервизор
-    /// освобождает TUN и снимает фильтр не мгновенно, и запуск, начатый
-    /// сразу, наткнулся бы на ещё живой адаптер.
+    /// <para>
+    /// Ждём не отмеренную паузу, а сам факт: супервизор освобождает TUN
+    /// и снимает фильтр не мгновенно, и запуск, начатый по таймеру, успевал
+    /// застать прошлый движок живым. Тот держал адаптер, новый sing-box
+    /// поднимался процессом и не проходил проверку — в окне это выглядело
+    /// как «запущен, но не отвечает».
+    /// </para>
+    /// <para>
+    /// Ожидание не бесконечно: если через полминуты старый не ушёл, запускаем
+    /// всё равно — <c>--kill-orphans</c> в ключах запуска уберёт то, что
+    /// осталось.
+    /// </para>
     /// </remarks>
-    private void OnToastRestart(object sender, RoutedEventArgs e)
+    private async void OnToastRestart(object sender, RoutedEventArgs e)
     {
         ToastAct.IsEnabled = false;
         ToastTitle.Text = "Перезапускаю движки…";
         _toastTimer.Stop();
 
         Run("stop");
+        await WaitUntilStoppedAsync();
 
-        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
+        Run(StatusView.BuildStartArguments());
+        HideToast();
+    }
+
+    /// <summary>Ждёт, пока супервизор действительно уйдёт.</summary>
+    internal static async Task WaitUntilStoppedAsync()
+    {
+        for (int attempt = 0; attempt < 60; attempt++)
         {
-            Run(StatusView.BuildStartArguments());
-            HideToast();
-        }));
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            if (state is null || !state.IsSupervisorAlive())
+                return;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
     }
 
     private void Run(string arguments)
