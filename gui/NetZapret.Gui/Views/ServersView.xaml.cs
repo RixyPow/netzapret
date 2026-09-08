@@ -11,11 +11,65 @@ namespace NetZapret.Gui.Views;
 /// <summary>Строка одного сервера подписки.</summary>
 public sealed record ServerRow(
     string Tag,
+    string Name,
+    string Country,
+    Visibility CountryShown,
     string Detail,
     string Latency,
     Brush Color,
     string ChooseLabel,
     bool CanChoose);
+
+/// <summary>
+/// Вытаскивает код страны из названия сервера.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Панели подписок ставят в начало тега флаг эмодзи — пару региональных
+/// букв вроде U+1F1E9 U+1F1EA для Германии. Windows их не рисует: в Segoe UI
+/// Emoji флагов стран нет вовсе, и на экране получается «de», влипшее
+/// в название. Это не наша оплошность и шрифтом не лечится — Microsoft
+/// не поставляет флаги намеренно.
+/// </para>
+/// <para>
+/// Раз нарисовать нельзя, обходимся тем, что есть: пара превращается
+/// в обычные заглавные буквы и выносится в значок рядом. Опознавательный
+/// знак вместо опечатки.
+/// </para>
+/// </remarks>
+public static class CountryTag
+{
+    /// <summary>Первая и последняя региональные буквы.</summary>
+    private const int FirstIndicator = 0x1F1E6;
+    private const int LastIndicator = 0x1F1FF;
+
+    /// <summary>Делит тег на код страны и остальное имя.</summary>
+    public static (string Country, string Name) Split(string tag)
+    {
+        var letters = new List<char>();
+        int i = 0;
+
+        while (i < tag.Length)
+        {
+            if (!char.IsHighSurrogate(tag[i]) || i + 1 >= tag.Length)
+                break;
+
+            int code = char.ConvertToUtf32(tag[i], tag[i + 1]);
+
+            if (code is < FirstIndicator or > LastIndicator)
+                break;
+
+            letters.Add((char)('A' + code - FirstIndicator));
+            i += 2;
+        }
+
+        // Пара, а не одна буква: одиночная региональная буква кодом страны
+        // не является, и показывать её значком означало бы выдумать страну.
+        return letters.Count == 2
+            ? (new string(letters.ToArray()), tag[i..].Trim())
+            : (string.Empty, tag.Trim());
+    }
+}
 
 /// <summary>
 /// Серверы подписки: что есть, что живо, чем идём.
@@ -113,9 +167,12 @@ public partial class ServersView : UserControl
         _ => $"{bytes / 1024.0:0.#} КБ",
     };
 
+    /// <summary>Сортировать по задержке, а не по порядку подписки.</summary>
+    private bool _byLatency;
+
     private void Show(AppSettings settings)
     {
-        Servers.ItemsSource = _servers.Select(server =>
+        var rows = _servers.Select(server =>
         {
             var known = _health.Find(server.Tag);
             bool chosen = server.Tag == settings.PreferredServer;
@@ -133,14 +190,42 @@ public partial class ServersView : UserControl
             if (known is not null)
                 detail += $" · замер {Ago(known.CheckedAt)}";
 
+            var (country, name) = CountryTag.Split(server.Tag);
+
             return new ServerRow(
                 server.Tag,
+                name,
+                country,
+                country.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
                 detail,
                 latency,
                 (Brush)FindResource(chosen ? "Accent" : key),
                 chosen ? "выбран" : "выбрать",
                 !chosen);
-        }).ToList();
+        });
+
+        // Незамеренные идут после отвечающих, но раньше молчащих: про них
+        // мы ничего не знаем, и ставить их в конец, к заведомо мёртвым,
+        // значило бы приписать им приговор, которого не выносили.
+        Servers.ItemsSource = (_byLatency ? rows.OrderBy(Rank).ThenBy(Ms) : rows).ToList();
+    }
+
+    private int Rank(ServerRow row) => _health.Find(row.Tag) switch
+    {
+        { Success: true } => 0,
+        null => 1,
+        _ => 2,
+    };
+
+    private double Ms(ServerRow row) =>
+        _health.Find(row.Tag)?.LatencyMs ?? double.MaxValue;
+
+    private void OnSort(object sender, RoutedEventArgs e)
+    {
+        _byLatency = !_byLatency;
+        SortButton.Content = _byLatency ? "По порядку" : "По задержке";
+
+        Show(AppSettings.Load(AppSettings.DefaultPath));
     }
 
     private static string Ago(DateTimeOffset when)
