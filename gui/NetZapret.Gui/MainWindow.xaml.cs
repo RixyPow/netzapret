@@ -191,17 +191,50 @@ public partial class MainWindow : Window
         HideToast();
     }
 
-    /// <summary>Ждёт, пока супервизор действительно уйдёт.</summary>
+    /// <summary>
+    /// Ждёт, пока движки действительно уйдут.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По процессам, а не по файлу состояния, и это не придирка. Команда
+    /// <c>stop</c> стирает файл первым делом, а движки гасит потом; ожидание
+    /// по файлу возвращалось мгновенно и лишь выглядело предохранителем.
+    /// Запуск начинался, пока прежний супервизор был жив, — тот ещё не успел
+    /// исчезнуть, а новый уже не видел состояния и считал, что поле чистое.
+    /// </para>
+    /// <para>
+    /// Получалось два супервизора разом, каждый со своим sing-box, и оба
+    /// дрались за адаптер netzapret0: один его создавал, второй падал
+    /// с «Cannot create a file when that file already exists», перезапускался,
+    /// иногда выигрывал гонку — и тогда падал первый. Со стороны это
+    /// выглядело как «поработает пару секунд и отваливается». Замер
+    /// 2026-09-09: два процесса netzapret, PID 36696 и 38160.
+    /// </para>
+    /// </remarks>
     internal static async Task WaitUntilStoppedAsync()
     {
         for (int attempt = 0; attempt < 60; attempt++)
         {
-            var state = SupervisorState.Load(SupervisorState.DefaultPath);
-
-            if (state is null || !state.IsSupervisorAlive())
+            if (!EnginesAlive())
                 return;
 
             await Task.Delay(TimeSpan.FromMilliseconds(500));
+        }
+    }
+
+    private static bool EnginesAlive()
+    {
+        try
+        {
+            return new[] { "sing-box", "winws2", "winws" }
+                .SelectMany(Process.GetProcessesByName)
+                .Any();
+        }
+        catch (Exception)
+        {
+            // Не смогли посмотреть — лучше подождать положенное, чем
+            // запуститься поверх живого движка.
+            return true;
         }
     }
 
