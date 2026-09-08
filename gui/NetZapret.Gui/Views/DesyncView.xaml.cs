@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -225,6 +226,133 @@ public partial class DesyncView : UserControl
               + "winws2.exe и списки доменов лежат в ней."
             : $"Каталог найден ({paths.Root}), а winws2.exe в нём нет — ожидался в подпапке exe. "
               + "Возможно, антивирус увёз его в карантин: WinDivert рядом с ним помечается как RiskTool.";
+    }
+
+    private void OnOpenFolder(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(ZapretPaths.PresetDirectory);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ZapretPaths.PresetDirectory,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть папку: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnDragOver(object sender, DragEventArgs e)
+    {
+        bool ours = Dropped(e).Count > 0;
+
+        e.Effects = ours ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+
+        DropHint.Visibility = ours ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnDragLeave(object sender, DragEventArgs e) =>
+        DropHint.Visibility = Visibility.Collapsed;
+
+    /// <summary>
+    /// Кладёт принесённые файлы в папку пресетов.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Копируем, а не переносим и не ссылаемся: человек тащит файл из папки
+    /// загрузок, которую однажды почистит, — а пресет к тому времени станет
+    /// тем, чем держится весь обход.
+    /// </para>
+    /// <para>
+    /// Разбор до копирования, а не после. Файл, который не читается нашим
+    /// разбором, лёг бы в папку и молча не появился в списке — и человек
+    /// решил бы, что перетаскивание не работает вовсе.
+    /// </para>
+    /// </remarks>
+    private void OnDrop(object sender, DragEventArgs e)
+    {
+        DropHint.Visibility = Visibility.Collapsed;
+
+        var files = Dropped(e);
+
+        if (files.Count == 0)
+            return;
+
+        var taken = new List<string>();
+        var refused = new List<string>();
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var preset = new PresetReader().Load(file);
+
+                if (preset.Sections.Count == 0)
+                {
+                    refused.Add($"{Path.GetFileName(file)} — ни одной секции");
+                    continue;
+                }
+
+                Directory.CreateDirectory(ZapretPaths.PresetDirectory);
+
+                var target = Path.Combine(ZapretPaths.PresetDirectory, Path.GetFileName(file));
+
+                // Чужой файл не затираем молча: одноимённый пресет мог быть
+                // тем, на котором сейчас держится обход.
+                if (File.Exists(target)
+                    && !string.Equals(Path.GetFullPath(target), Path.GetFullPath(file),
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    var answer = MessageBox.Show(
+                        $"Пресет «{Path.GetFileNameWithoutExtension(file)}» уже есть. Заменить?",
+                        "NetZapret",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (answer != MessageBoxResult.Yes)
+                    {
+                        refused.Add($"{Path.GetFileName(file)} — оставлен прежний");
+                        continue;
+                    }
+                }
+
+                File.Copy(file, target, overwrite: true);
+                taken.Add(preset.Name);
+            }
+            catch (Exception ex)
+            {
+                refused.Add($"{Path.GetFileName(file)} — {ex.GetBaseException().Message}");
+            }
+        }
+
+        Reload();
+
+        Status.Text = (taken.Count, refused.Count) switch
+        {
+            (0, 0) => Status.Text,
+            (_, 0) => $"Добавлено: {string.Join(", ", taken)}.",
+            (0, _) => "Не взято: " + string.Join("; ", refused),
+            _ => $"Добавлено: {string.Join(", ", taken)}. Не взято: {string.Join("; ", refused)}",
+        };
+    }
+
+    /// <summary>Файлы .txt из того, что принесли; всё прочее пресетом быть не может.</summary>
+    private static IReadOnlyList<string> Dropped(DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop))
+            return [];
+
+        return e.Data.GetData(DataFormats.FileDrop) is not string[] files
+            ? []
+            : files
+                .Where(f => File.Exists(f)
+                    && Path.GetExtension(f).Equals(".txt", StringComparison.OrdinalIgnoreCase))
+                .ToList();
     }
 
     private void OnChoose(object sender, RoutedEventArgs e)

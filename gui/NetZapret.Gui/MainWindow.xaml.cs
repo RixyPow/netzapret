@@ -14,7 +14,56 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         VersionLabel.Text = "версия " + Version();
-        SourceInitialized += (_, _) => DarkenTitleBar();
+
+        SourceInitialized += (_, _) =>
+        {
+            DarkenTitleBar();
+            AllowDropFromExplorer();
+        };
+    }
+
+    private const int WmCopyGlobalData = 0x0049;
+    private const int WmCopyData = 0x004A;
+    private const int WmDropFiles = 0x0233;
+
+    /// <summary>Пропустить сообщение сквозь защиту уровней.</summary>
+    private const int MessageAllow = 1;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ChangeWindowMessageFilterEx(
+        nint window, int message, int action, nint info);
+
+    /// <summary>
+    /// Разрешает ронять файлы из проводника в это окно.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Без этого перетаскивание не работает вовсе, и не по нашей вине: окно
+    /// поднято администратором, проводник — нет, а Windows не пропускает
+    /// сообщения снизу вверх между уровнями. Со стороны это выглядит так,
+    /// будто файл просто не берётся: ни отказа, ни объяснения.
+    /// </para>
+    /// <para>
+    /// Снимается фильтр ровно на три сообщения переноса, а не на все:
+    /// открывать окно с полными правами всему подряд ради удобства
+    /// не стоит. Отказ не проверяется — перетаскивание удобство, а не
+    /// единственный путь: рядом есть кнопка «Открыть папку».
+    /// </para>
+    /// </remarks>
+    private void AllowDropFromExplorer()
+    {
+        try
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+
+            foreach (int message in new[] { WmDropFiles, WmCopyData, WmCopyGlobalData })
+                ChangeWindowMessageFilterEx(handle, message, MessageAllow, nint.Zero);
+        }
+        catch (Exception)
+        {
+            // На системах, где вызова нет, останется кнопка «Открыть папку».
+        }
     }
 
     /// <summary>
