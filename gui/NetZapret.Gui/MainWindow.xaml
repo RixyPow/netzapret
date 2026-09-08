@@ -46,8 +46,8 @@
                 -->
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
                     <StackPanel x:Name="Rail">
-                        <RadioButton Style="{StaticResource RailItem}" Content="Состояние" Tag="status" IsChecked="True" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Серверы" Tag="servers" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Главная" Tag="status" IsChecked="True" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="VPN" Tag="vpn" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />

@@ -42,7 +42,7 @@ public partial class MainWindow : Window
 
         Section.Content = name switch
         {
-            "servers" => new ServersView(),
+            "vpn" => new VpnView(),
             "desync" => new DesyncView(),
             "routes" => new RoutesView(),
             "check" => new CheckView(),

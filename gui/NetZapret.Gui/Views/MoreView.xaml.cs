@@ -4,21 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using NetZapret.Core;
-using NetZapret.Core.Rules;
 using NetZapret.Core.Updates;
-using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
-
-/// <summary>Режим работы в списке выбора.</summary>
-public sealed record ModeRow(OperatingMode Key, string Name, string Note)
-{
-    public bool Chosen { get; set; }
-
-    public Brush Edge => (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
-
-    public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
-}
 
 /// <summary>Выключатель без своего раздела.</summary>
 public sealed record FlagRow(string Key, string Name, string Note)
@@ -34,22 +22,13 @@ public sealed record FlagRow(string Key, string Name, string Note)
 /// Всё, что не заслужило своего раздела, но нужно.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Режим здесь не по остаточному принципу: он задаёт рамку, внутри которой
-/// вообще имеют смысл маршруты, и до этого раздела менять его можно было
-/// только из меню консоли.
-/// </para>
-/// <para>
-/// Ссылка подписки вводится скрытым полем и обратно не показывается. По ней
-/// выдаются серверы — это пароль, и место ему в файле настроек, а не на
-/// экране, откуда его унесёт первый же снимок.
-/// </para>
+/// Режим и автозапуск отсюда ушли на «Главную», а подписки — в «VPN».
+/// Здесь они и правда лежали по остаточному принципу: режим задаёт рамку,
+/// внутри которой имеют смысл маршруты, и место ему рядом с кнопкой запуска,
+/// а подписке — там, где видно, что она приносит.
 /// </remarks>
 public partial class MoreView : UserControl
 {
-    /// <summary>Имя задачи в планировщике; то же, что заводит консоль.</summary>
-    private const string TaskName = AutostartTask.DefaultTaskName;
-
     private CancellationTokenSource? _work;
 
     public MoreView()
@@ -64,9 +43,6 @@ public partial class MoreView : UserControl
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        ShowModes(settings);
-        ShowSubscription(settings);
-        ShowAutostart();
         ShowVersion(settings);
         ShowFlags(settings);
 
@@ -76,190 +52,6 @@ public partial class MoreView : UserControl
             + "запуске движков.";
 
         StartDefenderCheck();
-    }
-
-    private void ShowModes(AppSettings settings)
-    {
-        var rows = new List<ModeRow>
-        {
-            new(OperatingMode.Selective,
-                "Выборочно",
-                "Рабочий режим. По умолчанию всё лечится десинком, а через VPN уходит только "
-                + "то, что названо в маршрутах."),
-
-            new(OperatingMode.DesyncOnly,
-                "Только десинк",
-                "Туннель не поднимается вовсе. Для случая, когда подписка кончилась или сервер "
-                + "лёг, а десинка хватает: поднимать TUN ради ничего значит без причины путать "
-                + "поиск неисправностей."),
-
-            new(OperatingMode.ProxyAll,
-                "Всё через VPN, кроме РФ",
-                "В туннель уходит всё, кроме выведенного напрямую. Отечественные сервисы "
-                + "остаются на прямом пути: через зарубежный адрес банки и госуслуги "
-                + "не работают вовсе."),
-
-            new(OperatingMode.ProxyStrict,
-                "Всё через VPN без исключений",
-                "Включая отечественные сервисы, которые от этого ломаются. Режим для проверки: "
-                + "убедиться, что дело не в правилах."),
-
-            new(OperatingMode.Off,
-                "Выключено",
-                "Ни один движок не запускается, весь трафик идёт напрямую."),
-        };
-
-        foreach (var row in rows)
-            row.Chosen = row.Key == settings.Mode;
-
-        Modes.ItemsSource = rows;
-    }
-
-    private void OnMode(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: OperatingMode mode })
-            return;
-
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { Mode = mode };
-            settings.Save(AppSettings.DefaultPath);
-
-            ShowModes(settings);
-            Status.Text = $"Режим: {settings.DescribeMode()}. Применится при следующем запуске движков.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось записать режим: " + ex.GetBaseException().Message;
-        }
-    }
-
-    private void ShowSubscription(AppSettings settings)
-    {
-        bool set = !string.IsNullOrWhiteSpace(settings.SubscriptionUrl);
-
-        SubValue.Text = set ? "задана" : "не задана";
-        SubClear.IsEnabled = set;
-    }
-
-    private void OnSaveSubscription(object sender, RoutedEventArgs e)
-    {
-        var url = SubBox.Password.Trim();
-
-        if (url.Length == 0)
-        {
-            Status.Text = "Поле пустое. Чтобы убрать подписку, есть кнопка «Убрать».";
-            return;
-        }
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed)
-            || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
-        {
-            // Ссылку не показываем даже в жалобе: она уже в поле, и повторять
-            // её в подписи значит вынести на экран ровно то, что мы прячем.
-            Status.Text = "Это не похоже на ссылку http или https.";
-            return;
-        }
-
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { SubscriptionUrl = url };
-            settings.Save(AppSettings.DefaultPath);
-
-            SubBox.Clear();
-            ShowSubscription(settings);
-
-            Status.Text = "Подписка сохранена. Серверы появятся в разделе «Серверы».";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
-        }
-    }
-
-    private void OnClearSubscription(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { SubscriptionUrl = null };
-            settings.Save(AppSettings.DefaultPath);
-
-            ShowSubscription(settings);
-            Status.Text = "Подписка убрана. Серверов больше нет — десинк при этом работает.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
-        }
-    }
-
-    private void ShowAutostart()
-    {
-        bool installed;
-
-        try
-        {
-            installed = AutostartTask.IsInstalled(TaskName);
-        }
-        catch (Exception ex)
-        {
-            AutostartValue.Text = "не читается";
-            AutostartButton.IsEnabled = false;
-            Status.Text = "Планировщик не отвечает: " + ex.GetBaseException().Message;
-
-            return;
-        }
-
-        AutostartValue.Text = installed ? "заведена" : "не заведена";
-        AutostartButton.Content = installed ? "Убрать" : "Завести";
-        AutostartButton.IsEnabled = true;
-    }
-
-    private void OnAutostart(object sender, RoutedEventArgs e)
-    {
-        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
-
-        if (!File.Exists(exe))
-        {
-            Status.Text = $"Не найдена консольная программа: {exe}. Задача запускает именно её.";
-            return;
-        }
-
-        try
-        {
-            if (AutostartTask.IsInstalled(TaskName))
-            {
-                var (removed, output) = AutostartTask.Remove(TaskName);
-
-                Status.Text = removed
-                    ? "Автозапуск убран."
-                    : "Не удалось убрать: " + output;
-            }
-            else
-            {
-                var (ok, output) = AutostartTask.Install(new AutostartOptions
-                {
-                    TaskName = TaskName,
-                    ExecutablePath = exe,
-
-                    // Те же ключи, что у кнопки «Запустить»: иначе автозапуск
-                    // поднимал бы не то, что человек проверил руками.
-                    Arguments = StatusView.BuildStartArguments(),
-                    WorkingDirectory = Path.GetFullPath("."),
-                    UserId = Environment.UserName,
-                });
-
-                Status.Text = ok
-                    ? "Автозапуск заведён: поднимется при следующем входе в систему."
-                    : "Не удалось завести: " + output;
-            }
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Планировщик отказал: " + ex.GetBaseException().Message;
-        }
-
-        ShowAutostart();
     }
 
     private void ShowVersion(AppSettings settings)
