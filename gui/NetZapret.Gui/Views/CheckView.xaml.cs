@@ -72,6 +72,12 @@ public partial class CheckView : UserControl
     private static IReadOnlyList<SectionRow> _sections = [];
     private static string _status = "Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа.";
 
+    /// <summary>Что проверять: <c>null</c> — весь справочник, иначе имя сервиса.</summary>
+    private static string? _scope;
+
+    /// <summary>Пока список заполняется, выбор в нём не считается выбором человека.</summary>
+    private bool _filling;
+
     public CheckView()
     {
         InitializeComponent();
@@ -81,6 +87,7 @@ public partial class CheckView : UserControl
         Loaded += (_, _) =>
         {
             ShowSetup();
+            ShowScopes();
 
             // Возвращаемся к тому, что успело набраться, и к своему состоянию
             // кнопок: уйти и вернуться не должно выглядеть как «ничего не было».
@@ -91,6 +98,38 @@ public partial class CheckView : UserControl
             RunButton.IsEnabled = !_running;
             StopButton.IsEnabled = _running;
         };
+    }
+
+    /// <summary>Заполняет список сервисов и восстанавливает выбранный.</summary>
+    private void ShowScopes()
+    {
+        _filling = true;
+
+        try
+        {
+            var names = new List<string> { "Все сервисы" };
+            names.AddRange(ServiceCatalog.All.Select(s => s.Name));
+
+            Scope.ItemsSource = names;
+
+            int at = _scope is null ? 0 : names.FindIndex(n => n == _scope);
+
+            Scope.SelectedIndex = at < 0 ? 0 : at;
+            RunButton.Content = _scope is null ? "Проверить" : "Проверить сервис";
+        }
+        finally
+        {
+            _filling = false;
+        }
+    }
+
+    private void OnScope(object sender, SelectionChangedEventArgs e)
+    {
+        if (_filling)
+            return;
+
+        _scope = Scope.SelectedIndex <= 0 ? null : Scope.SelectedItem as string;
+        RunButton.Content = _scope is null ? "Проверить" : "Проверить сервис";
     }
 
     /// <summary>
@@ -154,8 +193,22 @@ public partial class CheckView : UserControl
                 // а не настройку. Пометок «через туннель» просто не будет.
             }
 
-            var targets = Targets(zapretRoot);
-            Say($"Проверяю {targets.Count} — по каждому четыре пробы.");
+            var targets = Targets(zapretRoot, _scope);
+
+            if (targets.Count == 0)
+            {
+                Say(_scope is null
+                    ? "Проверять нечего: ни один список доменов не прочитался."
+                    : $"У «{_scope}» нет доменных частей — проверять нечего. "
+                      + "Такой сервис задан подсетями, и стучаться в подсеть наугад не проверка.");
+
+                Header.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            Say(_scope is null
+                ? $"Проверяю {targets.Count} — по каждому четыре пробы."
+                : $"Проверяю «{_scope}»: {targets.Count} имён, по каждому четыре пробы.");
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
 
@@ -185,25 +238,105 @@ public partial class CheckView : UserControl
 
     private void OnStop(object sender, RoutedEventArgs e) => _work?.Cancel();
 
-    /// <summary>По одному имени с каждой части — как быстрая проверка консоли.</summary>
-    private static IReadOnlyList<(string Host, string Service)> Targets(string? zapretRoot)
+    /// <summary>
+    /// Имена, которые в отчёт не идут.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Повторяет набор консоли — в интерфейсе решено дублировать, а не тянуть
+    /// общий. Расхождение здесь стоит дорого: одна и та же машина в двух видах
+    /// программы выдавала бы два разных отчёта, и верить нельзя было бы ни
+    /// одному.
+    /// </para>
+    /// <para>
+    /// Две причины попадания. Голые зоны сетей доставки — записи A у них нет
+    /// и не было, работают только поддомены, и «нет адреса у имени» в каждом
+    /// отчёте чистый шум; список измерен на 1.1.1.1 2026-09-04, а не составлен
+    /// на глаз. И три имени, снятых по решению владельца проекта: у него они
+    /// работают, а отчёт третий прогон подряд утверждал обратное.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> NotWorthChecking = new(StringComparer.OrdinalIgnoreCase)
     {
+        "riotgames.es",
+        "itch.zone",
+        "rutor.info",
+        "valorant.com",
+
+        "cdninstagram.com",
+        "tiktokcdn.com",
+        "licdn.com",
+        "nocookie.net",
+        "cloudfront.net",
+        "ooklaserver.net",
+        "cdnst.net",
+        "rgpub.io",
+        "ytimg.com",
+        "ggpht.com",
+        "twimg.com",
+        "discordapp.net",
+        "rbxcdn.com",
+        "steamstatic.com",
+        "githubusercontent.com",
+    };
+
+    /// <summary>
+    /// Что проверять.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По всему справочнику — по имени с части: сорок имён, и это уже минуты.
+    /// По одному сервису — по четыре: там, где чинят конкретную поломку,
+    /// глубина важнее охвата, а времени на неё уходит меньше, чем на полный
+    /// прогон.
+    /// </para>
+    /// <para>
+    /// Пропущенное имя расходует свой слот. Иначе пропуск втягивает в проверку
+    /// имя глубже по списку — часто такое же бесполезное: у GitHub вместо
+    /// githubusercontent.com проверялся бы githubassets.com. Замалчивая одну
+    /// пустую строку, набирали бы другую.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<(string Host, string Service)> Targets(string? zapretRoot, string? only)
+    {
+        int perPart = only is null ? 1 : 4;
+
         var targets = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var service in ServiceCatalog.All)
         {
+            if (only is not null && !string.Equals(service.Name, only, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             foreach (var part in service.Parts)
             {
+                // Адресные части проверять нечем: у них нет имени, а стучаться
+                // в подсеть наугад — не проверка.
                 if (part.ByAddress)
                     continue;
 
-                var host = HostListReader.Read(part.List, zapretRoot, out _)
-                    .Select(d => d.TrimStart('*', '.'))
-                    .FirstOrDefault(seen.Add);
+                int taken = 0;
 
-                if (host is not null)
+                foreach (var domain in HostListReader.Read(part.List, zapretRoot, out _))
+                {
+                    if (taken == perPart)
+                        break;
+
+                    var host = domain.TrimStart('*', '.');
+
+                    if (NotWorthChecking.Contains(host))
+                    {
+                        taken++;
+                        continue;
+                    }
+
+                    if (!seen.Add(host))
+                        continue;
+
                     targets.Add((host, $"{service.Name} · {part.Name}"));
+                    taken++;
+                }
             }
         }
 
@@ -308,7 +441,12 @@ public partial class CheckView : UserControl
             .ToList();
 
         sections.Add(byKind.Count == 0
-            ? new SectionRow("Всё открыто", "Обходить нечего.", (Brush)FindResource("Accent"))
+            ? new SectionRow(
+                "Всё открыто",
+                _scope is null
+                    ? "Обходить нечего."
+                    : $"У «{_scope}» обходить нечего. Проверено вчетверо глубже полного прогона.",
+                (Brush)FindResource("Accent"))
             : new SectionRow(
                 "Итог",
                 string.Join("\n", byKind.Select(g =>
@@ -343,7 +481,10 @@ public partial class CheckView : UserControl
 
         _sections = sections;
         Sections.ItemsSource = sections;
-        Say($"Готово: проверено {Collected.Count}.");
+
+        Say(_scope is null
+            ? $"Готово: проверено {Collected.Count}."
+            : $"Готово: «{_scope}», проверено {Collected.Count}.");
     }
 
     private static string Describe(RoutingMode mode) => mode switch

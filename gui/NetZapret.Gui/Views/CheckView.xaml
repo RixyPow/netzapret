@@ -26,6 +26,16 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!--
+                            Что проверять. Полная проверка берёт по имени
+                            с каждой части всего справочника и идёт минуты;
+                            точечная — один сервис, но вчетверо глубже.
+                            Когда чинят Discord, ответ нужен про Discord,
+                            а не про сорок имён, из которых он одно.
+                        -->
+                        <ComboBox x:Name="Scope" Width="186" Margin="0,0,8,0"
+                                  SelectionChanged="OnScope" />
+
                         <Button x:Name="StopButton" Style="{StaticResource Ghost}"
                                 Content="Прервать" Click="OnStop" Margin="0,0,8,0" IsEnabled="False" />
                         <Button x:Name="RunButton" Style="{StaticResource Primary}"
