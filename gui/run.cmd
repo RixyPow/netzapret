@@ -26,20 +26,24 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-rem Only the window's own files. The libraries are already there from the
-rem console build, and copying them over a running program fails anyway.
+rem Copied as they are, never renamed. The apphost looks for its library by the
+rem name baked in at build time, and the runtime config must be named after it
+rem too. Renaming on copy made NetZapret.Gui.exe load the console's
+rem netzapret.dll - Windows does not distinguish case - and run it with no
+rem arguments. From the outside: asked for rights, then closed in silence.
+rem
+rem The whole folder, because the window needs its XAML resources and the same
+rem libraries. They are built from the same sources as the console's, so
+rem overwriting them changes nothing.
 echo Deploying to %TARGET%
-copy /y "%SOURCE%\NetZapret.exe" "%TARGET%\NetZapret.Gui.exe" >nul
-if %errorlevel% neq 0 (
+robocopy "%SOURCE%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+if errorlevel 8 (
     echo Could not copy - the window is probably still open. Close it.
     exit /b 1
 )
 
-copy /y "%SOURCE%\NetZapret.dll" "%TARGET%\NetZapret.Gui.dll" >nul 2>&1
-copy /y "%SOURCE%\NetZapret.runtimeconfig.json" "%TARGET%\NetZapret.Gui.runtimeconfig.json" >nul 2>&1
-copy /y "%SOURCE%\NetZapret.deps.json" "%TARGET%\NetZapret.Gui.deps.json" >nul 2>&1
-
 echo Starting - Windows will ask for administrator rights.
 start "" "%TARGET%\NetZapret.Gui.exe"
+
 
 exit /b 0

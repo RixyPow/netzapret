@@ -11,7 +11,16 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
-    <AssemblyName>NetZapret</AssemblyName>
+    <!--
+      Имя отличается от консольного намеренно и до самой сборки. Оба файла
+      кладутся в одну папку, а Windows не различает регистр: библиотека окна,
+      названная NetZapret.dll, оказывалась бы тем же файлом, что консольная
+      netzapret.dll. Переименование после сборки не спасает — запускатор
+      ищет свою библиотеку по зашитому имени и подхватывал консоль, запуская
+      её без аргументов. Со стороны это выглядело так: спросили права и молча
+      закрылось.
+    -->
+    <AssemblyName>NetZapret.Gui</AssemblyName>
     <RootNamespace>NetZapret.Gui</RootNamespace>
 
     <!--
