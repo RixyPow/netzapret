@@ -4,17 +4,18 @@
              Background="{StaticResource Backdrop}">
 
     <!--
-        Колонка слева, шириной до 980. Раньше стоял HorizontalAlignment="Left"
-        на самой стопке — и карточки сжимались по содержимому вместо заявленной
-        ширины, оставляя справа пустоту в половину окна. Ограничение ширины
-        колонки в сетке даёт и то и другое: карточки тянутся, а строка текста
-        не разъезжается на всю ширину монитора, где её неудобно читать.
+        Колонка содержимого. Вторая колонка Auto, а не звёздочка, и это
+        не мелочь: две звёздочки делили окно пополам независимо от MaxWidth,
+        и на широком мониторе половина пропадала впустую, а на среднем
+        заголовок «VPN» сжимался до столбика букв по одной в строке.
+        Теперь колонка берёт всю ширину до 1240, а MinWidth держит её,
+        когда окно сузили до предела.
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="980" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="*" MinWidth="470" MaxWidth="1240" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
         <StackPanel Grid.Column="0">

@@ -22,6 +22,17 @@ public sealed class PartRow
     public required bool CanRoute { get; init; }
     public required string Letter { get; init; }
 
+    /// <summary>Прибито ли в hosts хоть одно имя этой части.</summary>
+    public bool HasPin { get; set; }
+
+    /// <summary>Адресную часть прибить нечем: hosts понимает только имена.</summary>
+    public required bool CanPin { get; init; }
+
+    public string PinLabel => HasPin ? "снять пин" : "пин";
+
+    public Brush PinColor =>
+        (Brush)Application.Current.FindResource(HasPin ? "Accent" : "Text");
+
     public BitmapImage? Icon { get; set; }
 
     public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
@@ -40,14 +51,6 @@ public sealed class PartRow
 public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 {
     public bool Open { get; set; }
-
-    /// <summary>Есть ли у сервиса наши прибитые имена.</summary>
-    public bool HasPin { get; set; }
-
-    public string PinLabel => HasPin ? "снять пин" : "пин";
-
-    public Brush PinColor =>
-        (Brush)Application.Current.FindResource(HasPin ? "Accent" : "Text");
 
     public Visibility PartsShown => Open ? Visibility.Visible : Visibility.Collapsed;
 
@@ -154,8 +157,10 @@ public partial class RoutesView : UserControl
                     .ToList();
 
                 if (parts.Count > 0)
-                    services.Add(new ServiceRow(service.Name, parts) { HasPin = Pinned(service, zapretRoot) });
+                    services.Add(new ServiceRow(service.Name, parts));
             }
+
+            MarkPins(services, zapretRoot);
 
             _all = services;
             Services.ItemsSource = services;
@@ -220,6 +225,10 @@ public partial class RoutesView : UserControl
             // его можно было бы спросить.
             Letter = host.Length > 0 ? host[..1].ToUpperInvariant() : "·",
             CanRoute = true,
+
+            // Адресную часть прибить нечем: hosts понимает только имена,
+            // а подсеть в него не записать.
+            CanPin = !part.Part.ByAddress,
         };
     }
 
@@ -282,41 +291,53 @@ public partial class RoutesView : UserControl
     private void OnReload(object sender, RoutedEventArgs e) => Reload();
 
     /// <summary>
-    /// Прибито ли в hosts хоть одно имя этого сервиса.
+    /// Отмечает части, чьи имена прибиты в hosts.
     /// </summary>
     /// <remarks>
-    /// Сравнение по зоне: списки хранят <c>openai.com</c>, а прибивается
-    /// <c>api.openai.com</c>. При точном сравнении кнопка врала бы «пина нет»
-    /// над живым пином.
+    /// Файл читается один раз на весь раздел, а не на каждую часть: их под
+    /// семьдесят, а hosts у людей вырастает до тысяч строк.
     /// </remarks>
-    private static bool Pinned(ServiceDefinition service, string? zapretRoot)
+    private static void MarkPins(IReadOnlyList<ServiceRow> services, string? zapretRoot)
     {
+        List<string> pins;
+
         try
         {
-            var pins = HostsEditor.Pins().Keys.ToList();
-
-            if (pins.Count == 0)
-                return false;
-
-            var zones = service.Parts
-                .Where(part => !part.ByAddress)
-                .SelectMany(part => HostListReader.Read(part.List, zapretRoot, out _))
-                .Select(d => d.TrimStart('*', '.'))
-                .ToList();
-
-            return pins.Any(name => zones.Any(zone =>
-                string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)));
+            pins = HostsEditor.Pins().Keys.ToList();
         }
         catch (Exception)
         {
             // Нечитаемый hosts не повод не показать раздел.
-            return false;
+            return;
+        }
+
+        if (pins.Count == 0)
+            return;
+
+        foreach (var part in services.SelectMany(s => s.Parts).Where(p => p.CanPin))
+        {
+            var zones = HostListReader.Read(part.Key.Split('|', 2)[1], zapretRoot, out _)
+                .Select(d => d.TrimStart('*', '.'))
+                .ToList();
+
+            part.HasPin = pins.Any(name => Covers(zones, name));
         }
     }
 
     /// <summary>
-    /// Пин сервиса: первым нажатием открывает окно, повторным снимает.
+    /// Покрывает ли зона части это прибитое имя.
+    /// </summary>
+    /// <remarks>
+    /// По зоне, а не по точному совпадению: списки хранят <c>openai.com</c>,
+    /// а прибивается <c>api.openai.com</c>. При точном сравнении кнопка врала
+    /// бы «пина нет» над живым пином.
+    /// </remarks>
+    private static bool Covers(IReadOnlyList<string> zones, string name) =>
+        zones.Any(zone => string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Пин части: первым нажатием открывает окно, повторным снимает.
     /// </summary>
     /// <remarks>
     /// Снятие без вопроса, а закрепление через окно — потому что цена разная.
@@ -325,48 +346,47 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnPin(object sender, RoutedEventArgs e)
     {
-        // Кнопка лежит внутри кнопки-папки, и нажатие иначе дойдёт до неё:
-        // пин ставился бы, а папка при этом захлопывалась.
-        e.Handled = true;
-
-        if (sender is not Button { Tag: string name }
-            || ServiceCatalog.Find(name) is not { } service)
-        {
+        if (sender is not Button { Tag: string key })
             return;
-        }
 
-        var row = _all.FirstOrDefault(s => s.Name == name);
+        var list = key.Split('|', 2) is [_, var path] ? path : null;
+
+        if (list is null)
+            return;
+
+        var service = ServiceCatalog.All.FirstOrDefault(s =>
+            s.Parts.Any(p => string.Equals(p.List, list, StringComparison.OrdinalIgnoreCase)));
+
+        var part = service?.Parts.FirstOrDefault(p =>
+            string.Equals(p.List, list, StringComparison.OrdinalIgnoreCase));
+
+        if (service is null || part is null)
+            return;
+
+        var row = _all.SelectMany(s => s.Parts).FirstOrDefault(p => p.Key == key);
 
         if (row is { HasPin: true })
         {
-            Unpin(service);
+            Unpin(part);
             return;
         }
 
-        var window = new PinWindow(service) { Owner = Window.GetWindow(this) };
+        var window = new PinWindow(service, part) { Owner = Window.GetWindow(this) };
         window.ShowDialog();
 
         if (window.Changed)
             Reload();
     }
 
-    private void Unpin(ServiceDefinition service)
+    private void Unpin(ServicePart part)
     {
         try
         {
-            var zapretRoot = ZapretPaths.Discover()?.Root;
-
-            var zones = service.Parts
-                .Where(part => !part.ByAddress)
-                .SelectMany(part => HostListReader.Read(part.List, zapretRoot, out _))
+            var zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
                 .Select(d => d.TrimStart('*', '.'))
                 .ToList();
 
-            var ours = HostsEditor.Pins().Keys
-                .Where(pin => zones.Any(zone =>
-                    string.Equals(zone, pin, StringComparison.OrdinalIgnoreCase)
-                    || pin.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
+            var ours = HostsEditor.Pins().Keys.Where(pin => Covers(zones, pin)).ToList();
 
             if (ours.Count == 0)
                 return;

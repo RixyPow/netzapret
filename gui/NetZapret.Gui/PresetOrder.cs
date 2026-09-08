@@ -63,23 +63,33 @@ public static class PresetOrder
     /// Раскладывает по сохранённому порядку.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Незнакомые уходят в конец, сохраняя между собой прежний порядок:
     /// пресет, положенный в папку после того, как порядок был задан, должен
     /// появиться, а не пропасть из списка.
+    /// </para>
+    /// <para>
+    /// Повторы в сохранённом порядке переживаются молча. Раскладка ведётся
+    /// по именам файлов, а они уникальны, — но испорченный или дописанный
+    /// руками файл ронять раздел не должен. Прежде ронял: три пресета Zapret
+    /// объявляют себя «Universal V5», порядок сохранялся по этому имени,
+    /// и весь список пропадал с жалобой на повторный ключ.
+    /// </para>
     /// </remarks>
-    public static IReadOnlyList<T> Apply<T>(IReadOnlyList<T> items, Func<T, string> name)
+    public static IReadOnlyList<T> Apply<T>(IReadOnlyList<T> items, Func<T, string> key)
     {
         var order = Load();
 
         if (order.Count == 0)
             return items;
 
-        var place = order
-            .Select((value, index) => (value, index))
-            .ToDictionary(x => x.value, x => x.index, StringComparer.OrdinalIgnoreCase);
+        var place = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (int at = 0; at < order.Count; at++)
+            place.TryAdd(order[at], at);
 
         return items
-            .OrderBy(item => place.TryGetValue(name(item), out int at) ? at : int.MaxValue)
+            .OrderBy(item => place.TryGetValue(key(item), out int at) ? at : int.MaxValue)
             .ToList();
     }
 }

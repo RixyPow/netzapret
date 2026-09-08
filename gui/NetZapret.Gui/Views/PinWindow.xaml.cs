@@ -33,8 +33,8 @@ public sealed record SourceRow(string Id, string Name, string Note);
 public partial class PinWindow : Window
 {
     private readonly ServiceDefinition _service;
+    private readonly ServicePart _part;
     private readonly IReadOnlyList<string> _zones;
-    private readonly IReadOnlyList<ServicePart> _parts;
 
     private ZapretCatalog? _catalog;
     private IReadOnlyList<string> _catalogServices = [];
@@ -43,25 +43,19 @@ public partial class PinWindow : Window
     /// <summary>Что-то изменилось — разделу «Маршруты» надо перечитать.</summary>
     public bool Changed { get; private set; }
 
-    public PinWindow(ServiceDefinition service)
+    public PinWindow(ServiceDefinition service, ServicePart part)
     {
         InitializeComponent();
 
         _service = service;
+        _part = part;
 
-        // Адресные части отбрасываются: hosts понимает только имена,
-        // а подсеть прибить нечем.
-        _parts = service.Parts.Where(p => !p.ByAddress).ToList();
-
-        var root = ZapretPaths.Discover()?.Root;
-
-        _zones = _parts
-            .SelectMany(part => HostListReader.Read(part.List, root, out _))
+        _zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
             .Select(d => d.TrimStart('*', '.'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        ServiceName.Text = service.Name;
+        ServiceName.Text = $"{service.Name} · {part.Name}";
 
         Loaded += (_, _) => Fill();
     }
@@ -80,23 +74,24 @@ public partial class PinWindow : Window
 
             RuleSetExpander.Expand(engine.RuleSet, root);
 
-            var parts = ServiceRouting.Describe(_service, engine, root, UserRulesFile.Load());
-            mode = ServiceRouting.Summarize(parts);
+            mode = ServiceRouting.Describe(_service, engine, root, UserRulesFile.Load())
+                .FirstOrDefault(p => p.Part.List == _part.List)?.DescribeMode()
+                ?? "неизвестно";
         }
         catch (Exception ex)
         {
             mode = "правила не читаются: " + ex.GetBaseException().Message;
         }
 
-        ServiceState.Text = $"Сейчас: {mode}. Имён в списках: {_zones.Count}"
+        ServiceState.Text = $"Сейчас: {mode}. Список: {_part.List} — имён {_zones.Count}"
             + (_zones.Count > 0 ? $", например {_zones[0]}." : ".");
 
         ShowPins();
 
-        if (_parts.Count == 0)
+        if (_part.ByAddress)
         {
-            Status.Text = "У этого сервиса нет доменных частей — он задан подсетями, "
-                + "а hosts понимает только имена.";
+            Status.Text = "Часть задана подсетями, а hosts понимает только имена — "
+                + "прибивать нечего.";
 
             PinButton.IsEnabled = false;
         }
@@ -150,16 +145,12 @@ public partial class PinWindow : Window
         try
         {
             var file = UserRulesFile.Load();
+            var kind = _part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
 
-            foreach (var part in _service.Parts)
-            {
-                var kind = part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
-
-                if (what == "reset")
-                    file.Remove(kind, part.List);
-                else
-                    file.Set(kind, part.List, Mode(what));
-            }
+            if (what == "reset")
+                file.Remove(kind, _part.List);
+            else
+                file.Set(kind, _part.List, Mode(what));
 
             file.Save();
             Changed = true;
@@ -167,7 +158,7 @@ public partial class PinWindow : Window
             Status.Text = what == "reset"
                 ? "Свой выбор убран: снова действует правило из поставки. "
                   + "Применится при следующем запуске движков."
-                : $"Записано: весь «{_service.Name}» → {Describe(Mode(what))}. "
+                : $"Записано: «{_part.Name}» → {Describe(Mode(what))}. "
                   + "Применится при следующем запуске движков.";
         }
         catch (Exception ex)
@@ -285,23 +276,20 @@ public partial class PinWindow : Window
                 return;
             }
 
-            var result = HostsEditor.Pin(answers, note: $"{_service.Name} — {Source(id)}");
+            var result = HostsEditor.Pin(answers, note: $"{_part.Name} — {Source(id)}");
 
             // Маршрут уводится напрямую тем же движением. Это не довесок,
             // а условие работы пина: доменное правило срабатывает поверх
             // прибитого адреса и уводит соединение мимо него.
             var file = UserRulesFile.Load();
-
-            foreach (var part in _parts)
-                file.Set(MatchKind.HostList, part.List, RoutingMode.Direct);
-
+            file.Set(MatchKind.HostList, _part.List, RoutingMode.Direct);
             file.Save();
             HostsEditor.FlushDns();
 
             Changed = true;
             ShowPins();
 
-            Status.Text = $"Прибито имён: {result.Pinned}. Маршрут сервиса уведён напрямую — "
+            Status.Text = $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
                 + "иначе правило сработало бы поверх адреса."
                 + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
 

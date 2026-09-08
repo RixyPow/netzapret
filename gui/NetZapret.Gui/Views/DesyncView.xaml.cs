@@ -13,6 +13,16 @@ namespace NetZapret.Gui.Views;
 /// <summary>Пресет в списке выбора.</summary>
 public sealed record PresetRow(string Name, string Version, string Fake)
 {
+    /// <summary>
+    /// Имя файла — то, чем строка отличается от соседней.
+    /// </summary>
+    /// <remarks>
+    /// Порядок раскладывается по нему, а не по названию пресета: три пресета
+    /// Zapret объявляют себя «Universal V5», и раскладка по названию роняла
+    /// весь список жалобой на повторный ключ.
+    /// </remarks>
+    public required string File { get; init; }
+
     public required string Detail { get; set; }
 
     public bool Chosen { get; set; }
@@ -98,7 +108,7 @@ public partial class DesyncView : UserControl
                     .Read(files)
                     .Select(preset => Row(preset, settings.PresetName))
                     .ToList(),
-                row => row.Name);
+                row => row.File);
 
             _rows = rows;
             Redraw();
@@ -135,6 +145,7 @@ public partial class DesyncView : UserControl
                 ? string.Empty
                 : $"{fake} с поддельным пакетом — под туннелем такие секции работают не всегда")
         {
+            File = Path.GetFileName(preset.FilePath),
             Detail = detail,
             Chosen = string.Equals(preset.Name, chosen, StringComparison.OrdinalIgnoreCase),
         };
@@ -170,9 +181,12 @@ public partial class DesyncView : UserControl
                 if (token.IsCancellationRequested)
                     return;
 
-                var path = ZapretPaths.FindPreset(row.Name);
+                // По имени файла, а не по названию пресета: названия у разных
+                // файлов совпадают, и поиск по ним считал бы покрытие одного
+                // и того же трижды.
+                var path = Path.Combine(ZapretPaths.PresetDirectory, row.File);
 
-                if (path is null)
+                if (!System.IO.File.Exists(path))
                     continue;
 
                 int domains;
@@ -367,7 +381,7 @@ public partial class DesyncView : UserControl
 
         try
         {
-            PresetOrder.Save(rows.Select(row => row.Name));
+            PresetOrder.Save(rows.Select(row => row.File));
 
             int place = rows.Where(row => row.Official == moving.Official).ToList().IndexOf(moving) + 1;
             Status.Text = $"Порядок сохранён: «{moving.Name}» теперь {place}-й в своём списке.";
