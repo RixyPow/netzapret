@@ -31,6 +31,9 @@ public sealed class PartRow
 /// <summary>Сервис со своими частями.</summary>
 public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts);
 
+/// <summary>Своё доменное правило.</summary>
+public sealed record OwnRow(string Value, string Mode, Brush Color);
+
 /// <summary>
 /// Сервисы и их маршруты.
 /// </summary>
@@ -89,7 +92,9 @@ public partial class RoutesView : UserControl
                     services.Add(new ServiceRow(service.Name, parts));
             }
 
+            _all = services;
             Services.ItemsSource = services;
+            ShowOwn();
 
             Status.Text = problems.Count == 0
                 ? $"Сервисов: {services.Count}. Выбор пишется в config\\rules.user.yaml и применяется перезапуском."
@@ -214,6 +219,139 @@ public partial class RoutesView : UserControl
     }
 
     private void OnReload(object sender, RoutedEventArgs e) => Reload();
+
+    /// <summary>Всё, что собрано; поиск отбирает из этого, не перечитывая правила.</summary>
+    private IReadOnlyList<ServiceRow> _all = [];
+
+    private void OnSearch(object sender, TextChangedEventArgs e)
+    {
+        var needle = Search.Text.Trim();
+
+        if (needle.Length == 0)
+        {
+            Services.ItemsSource = _all;
+            return;
+        }
+
+        // Ищем и по названию сервиса, и по имени части, и по домену из примера:
+        // человек помнит «где у меня ютуб» одним из трёх, и заставлять его
+        // угадывать нужное — значит сделать поиск бесполезным.
+        var found = _all
+            .Select(s => s with
+            {
+                Parts = s.Parts.Where(p => Matches(s.Name, p, needle)).ToList(),
+            })
+            .Where(s => s.Parts.Count > 0)
+            .ToList();
+
+        Services.ItemsSource = found;
+
+        Status.Text = found.Count == 0
+            ? $"По «{needle}» ничего нет. Свой домен можно добавить строкой выше."
+            : $"Найдено частей: {found.Sum(s => s.Parts.Count)}.";
+    }
+
+    private static bool Matches(string service, PartRow part, string needle) =>
+        service.Contains(needle, StringComparison.OrdinalIgnoreCase)
+        || part.Title.Contains(needle, StringComparison.OrdinalIgnoreCase)
+        || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Показывает свои доменные правила.</summary>
+    private void ShowOwn()
+    {
+        var file = UserRulesFile.Load();
+
+        Own.ItemsSource = file.Entries
+            .Where(entry => entry.Match == MatchKind.Domain)
+            .Select(entry => new OwnRow(
+                entry.Value,
+                Describe(entry.Mode),
+                (Brush)FindResource(entry.Mode switch
+                {
+                    RoutingMode.Direct => "Muted",
+                    RoutingMode.Desync => "Warn",
+                    _ => "Accent",
+                })))
+            .ToList();
+    }
+
+    private void OnOwnKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            AddOwn();
+    }
+
+    private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
+
+    /// <summary>
+    /// Записывает правило на свой домен.
+    /// </summary>
+    /// <remarks>
+    /// Звёздочка ставится сама: имя означает зону, и <c>example.com</c> должен
+    /// покрывать поддомены — иначе человек напишет корень, а картинки с
+    /// <c>cdn.example.com</c> пойдут мимо правила, и понять это по виду
+    /// не выйдет.
+    /// </remarks>
+    private void AddOwn()
+    {
+        var raw = OwnDomain.Text.Trim().Trim('/').ToLowerInvariant();
+
+        // Из адреса берём только имя: люди вставляют ссылку целиком, и правило
+        // на «https://example.com/page» не совпало бы ни с чем.
+        if (raw.Contains("://"))
+            raw = raw.Split("://")[1];
+
+        raw = raw.Split('/')[0].TrimStart('*', '.');
+
+        if (raw.Length == 0 || !raw.Contains('.') || raw.Contains(' '))
+        {
+            Status.Text = "Это не похоже на имя сайта. Нужно что-то вроде example.com.";
+            return;
+        }
+
+        var mode = OwnMode.SelectedIndex switch
+        {
+            0 => RoutingMode.Direct,
+            1 => RoutingMode.Desync,
+            _ => RoutingMode.Proxy,
+        };
+
+        try
+        {
+            var file = UserRulesFile.Load();
+            file.Set(MatchKind.Domain, "*." + raw, mode);
+            file.Save();
+
+            OwnDomain.Text = string.Empty;
+
+            ShowOwn();
+            Status.Text = $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnRemoveOwn(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string value })
+            return;
+
+        try
+        {
+            var file = UserRulesFile.Load();
+            file.Remove(MatchKind.Domain, value);
+            file.Save();
+
+            ShowOwn();
+            Status.Text = $"Убрано: {value}. Применится при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
+        }
+    }
 
     /// <summary>
     /// Записывает выбранный маршрут.

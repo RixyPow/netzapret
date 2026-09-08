@@ -29,7 +29,74 @@
                             Content="Перечитать" Click="OnReload" VerticalAlignment="Center" />
                 </Grid>
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap" />
+                <!--
+                    Свой домен. Каталог покрывает то, что мы предусмотрели,
+                    а сайтов миллион: без этой строки направить seriesgraph.com
+                    было нечем.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Свой домен" FontWeight="SemiBold" />
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0" x:Name="OwnDomain" Margin="0,0,8,0"
+                                     KeyDown="OnOwnKey" />
+
+                            <ComboBox Grid.Column="1" x:Name="OwnMode" Width="146" SelectedIndex="2" Margin="0,0,8,0">
+                                <ComboBoxItem Content="напрямую" />
+                                <ComboBoxItem Content="десинк" />
+                                <ComboBoxItem Content="через VPN" />
+                            </ComboBox>
+
+                            <Button Grid.Column="2" Style="{StaticResource Primary}"
+                                    Content="Добавить" Click="OnAddOwn" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com. Правило пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
+
+                        <ItemsControl x:Name="Own" Margin="0,12,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource Raised}" CornerRadius="8"
+                                            Padding="12,8" Margin="0,0,0,5">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0" Text="{Binding Value}"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="1" Text="{Binding Mode}"
+                                                       Style="{StaticResource Mono}"
+                                                       Foreground="{Binding Color}"
+                                                       VerticalAlignment="Center" Margin="12,0,12,0" />
+
+                                            <Button Grid.Column="2" Style="{StaticResource Ghost}"
+                                                    Content="убрать" Padding="12,5"
+                                                    Tag="{Binding Value}" Click="OnRemoveOwn" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Поиск: частей под сорок, и глазами их не перебрать. -->
+                <TextBox x:Name="Search" Margin="0,18,0,0" TextChanged="OnSearch" />
+
+                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
 
                 <ItemsControl x:Name="Services" Margin="0,14,0,0">
                     <ItemsControl.ItemTemplate>
