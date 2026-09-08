@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using NetZapret.Core;
+using NetZapret.Core.Rules;
 using NetZapret.Core.Updates;
 
 namespace NetZapret.Gui.Views;
@@ -271,6 +272,135 @@ public partial class MoreView : UserControl
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>
+    /// Обслуживание: сбросы и очистка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Каждое действие переспрашивается: все они необратимы, а первые три
+    /// вдобавок выглядят безобидно рядом с кнопками, которые ничего не ломают.
+    /// </para>
+    /// <para>
+    /// Подписки при сбросе настроек остаются намеренно. Это единственное, чего
+    /// программа не восстановит сама: ссылку выдаёт поставщик, и потерять её
+    /// значит остаться без VPN до тех пор, пока человек не найдёт письмо.
+    /// </para>
+    /// </remarks>
+    private void OnMaintenance(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string what })
+            return;
+
+        var (title, question) = what switch
+        {
+            "settings" => ("Сбросить настройки",
+                "Режим, пресет, сервер, DNS и выключатели вернутся к заводским. "
+                + "Подписки останутся. Продолжить?"),
+
+            "routes" => ("Забыть свои маршруты",
+                "config\\rules.user.yaml будет удалён, и снова начнут действовать правила "
+                + "из поставки. Пины в hosts останутся. Продолжить?"),
+
+            "runtime" => ("Очистить рабочие файлы",
+                "Журналы, собранные конфиги и кэш значков будут удалены. "
+                + "Всё это соберётся заново. Продолжить?"),
+
+            _ => ("Сбросить сетевой стек",
+                "winsock и IP-стек Windows вернутся к умолчанию. Понадобится перезагрузка, "
+                + "а до неё сеть останется в переходном состоянии — то есть хуже исходного. "
+                + "Продолжить?"),
+        };
+
+        if (MessageBox.Show(question, title, MessageBoxButton.YesNo, MessageBoxImage.Warning)
+            != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            Status.Text = what switch
+            {
+                "settings" => ResetSettings(),
+                "routes" => ForgetRoutes(),
+                "runtime" => CleanRuntime(),
+                _ => ResetNetwork(),
+            };
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private string ResetSettings()
+    {
+        var old = AppSettings.Load(AppSettings.DefaultPath);
+
+        new AppSettings { SubscriptionUrl = old.SubscriptionUrl }.Save(AppSettings.DefaultPath);
+
+        Reload();
+
+        return "Настройки сброшены, подписка оставлена. "
+            + "Применится при следующем запуске движков.";
+    }
+
+    private static string ForgetRoutes()
+    {
+        var path = UserRulesFile.DefaultPath;
+
+        if (!System.IO.File.Exists(path))
+            return "Своих маршрутов и не было.";
+
+        System.IO.File.Delete(path);
+
+        return "Свои маршруты забыты: снова действуют правила из поставки. "
+            + "Применится при следующем запуске движков.";
+    }
+
+    /// <summary>Убирает то, что собирается заново.</summary>
+    /// <remarks>
+    /// Отчёты проверки не трогаются: их пишут ради истории, и вычистить их
+    /// заодно с журналами значило бы стереть то, ради чего проверку и гоняли.
+    /// </remarks>
+    private static string CleanRuntime()
+    {
+        int gone = 0;
+
+        foreach (var folder in new[] { "runtime", "logs" })
+        {
+            if (!Directory.Exists(folder))
+                continue;
+
+            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+            {
+                try
+                {
+                    System.IO.File.Delete(file);
+                    gone++;
+                }
+                catch (IOException)
+                {
+                    // Занятый файл — обычное дело при работающих движках.
+                }
+            }
+        }
+
+        return gone == 0
+            ? "Чистить было нечего."
+            : $"Удалено файлов: {gone}. Конфиг туннеля соберётся при следующем запуске.";
+    }
+
+    private string ResetNetwork()
+    {
+        int winsock = Run("netsh", "winsock reset");
+        int ip = Run("netsh", "int ip reset");
+
+        return winsock == 0 && ip == 0
+            ? "Сетевой стек сброшен. Нужна перезагрузка — до неё сеть в переходном состоянии."
+            : $"Не всё прошло: winsock {winsock}, ip {ip}.";
     }
 
     private void OnOpen(object sender, RoutedEventArgs e)
