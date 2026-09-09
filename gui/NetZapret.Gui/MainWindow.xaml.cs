@@ -104,6 +104,7 @@ public partial class MainWindow : Window
             "dns" => new DnsView(),
             "hosts" => new HostsView(),
             "log" => new LogView(),
+            "doctor" => new DoctorView(),
             "more" => new MoreView(),
             _ => new StatusView(),
         };
