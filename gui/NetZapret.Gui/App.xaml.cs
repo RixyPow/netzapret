@@ -25,25 +25,30 @@ public partial class App : Application
         // System32, и без перехода окно читало бы конфиг оттуда.
         MoveToInstallDirectory();
 
-        // Роли без окна: супервизор и остановка. StartupUri из разметки
-        // обрабатывается уже после этого метода, поэтому снять его достаточно
-        // здесь — иначе рядом с движками открылось бы второе окно.
+        // Роли без окна: супервизор и остановка.
+        //
+        // Окно открывается здесь, а не через StartupUri в разметке. Снять
+        // StartupUri для безоконных ролей нельзя: свойство не принимает null
+        // и бросает ArgumentNullException прямо отсюда — а обработчик сбоев
+        // выше её проглатывал, и процесс оставался жить пустым, ничего
+        // не запустив. Каждое нажатие «Запустить» плодило такого зомби.
         if (e.Args.Contains(SupervisorHost.Switch))
         {
             _headless = true;
-            StartupUri = null!;
-
             RunAsSupervisor(e.Args);
+
             return;
         }
 
         if (e.Args.Contains(SupervisorHost.StopSwitch))
         {
             _headless = true;
-            StartupUri = null!;
-
             RunStop();
+
+            return;
         }
+
+        new MainWindow().Show();
     }
 
     private async void RunStop()
