@@ -204,6 +204,16 @@ public abstract class SupervisedService
         });
     }
 
+    /// <summary>
+    /// Пишет в журнал движка строку от самого супервизора.
+    /// </summary>
+    /// <remarks>
+    /// Нужна, когда супервизор принимает решение молча: без отметки в журнале
+    /// отличить «проверка пройдена» от «проверка пропущена» можно только по
+    /// исходникам, а ищут причину обычно как раз по журналу.
+    /// </remarks>
+    protected void Note(string line) => RecordOutput($"[супервизор] {line}");
+
     private void RecordOutput(string line)
     {
         lock (_outputLock)
@@ -236,6 +246,20 @@ public sealed class SingBoxService : SupervisedService
 
     private int _checkCounter;
     private bool _lastTrafficOk = true;
+    private DateTime? _trafficPortMissingSince;
+    private bool _trafficPortMissingNoted;
+
+    /// <summary>
+    /// Сколько ждать порт проверки, прежде чем счесть, что его нет в конфиге.
+    /// </summary>
+    /// <remarks>
+    /// Clash API и вход проверки открываются независимо, и на старте один
+    /// успевает раньше другого. Без выдержки первый же опрос принял бы
+    /// неподнявшийся порт за отсутствующий. Держится заметно короче таймаута
+    /// готовности, иначе выдержка не успела бы истечь и отказ выглядел бы
+    /// по-старому — молчаливым.
+    /// </remarks>
+    private static readonly TimeSpan TrafficPortGrace = TimeSpan.FromSeconds(5);
 
     /// <param name="healthPort">Порт Clash API — быстрая проверка живости.</param>
     /// <param name="trafficPort">
@@ -303,6 +327,33 @@ public sealed class SingBoxService : SupervisedService
 
         if (_trafficPort is null)
             return true;
+
+        // Порт проверки есть не во всяком конфиге: собранный прежней версией
+        // или руками, он может не содержать входа вовсе. Настаивать в таком
+        // случае нельзя — проверка не пройдёт никогда, и супервизор будет
+        // убивать исправный движок, пока не исчерпает попытки перезапуска.
+        // Именно так и было: с TUN локального входа не существовало,
+        // и рабочий туннель гасился по кругу.
+        if (!await SingBoxRunner.IsPortAcceptingAsync(_trafficPort.Value, TimeSpan.FromSeconds(1), cancellationToken))
+        {
+            _trafficPortMissingSince ??= DateTime.UtcNow;
+
+            if (DateTime.UtcNow - _trafficPortMissingSince < TrafficPortGrace)
+                return false;
+
+            if (!_trafficPortMissingNoted)
+            {
+                _trafficPortMissingNoted = true;
+                Note(
+                    $"на порту {_trafficPort} никто не слушает — в конфиге нет входа проверки. " +
+                    "Проход трафика не проверяется, движок считается живым по Clash API. " +
+                    "Пересоберите конфиг командой config.");
+            }
+
+            return true;
+        }
+
+        _trafficPortMissingSince = null;
 
         // Глубокая проверка делается редко: она уходит в сеть и стоит секунды.
         // Между проверками используется её последний результат.
