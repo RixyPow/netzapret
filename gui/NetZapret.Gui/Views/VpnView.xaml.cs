@@ -42,6 +42,15 @@ public sealed class SubRow
 
     public IReadOnlyList<ServerRow> Servers { get; set; } = [];
 
+    /// <summary>Серверы в том порядке, в каком их дала подписка.</summary>
+    /// <remarks>
+    /// Хранится отдельно затем, что сортировка по задержке прежде писалась
+    /// поверх исходного списка. Порядок подписки терялся после первого же
+    /// нажатия, и «По порядку» возвращало тот же отсортированный список —
+    /// кнопка работала ровно один раз.
+    /// </remarks>
+    public IReadOnlyList<ServerRow> AsGiven { get; set; } = [];
+
     public Visibility ServersShown => Open && Servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public string Chevron => Open ? "▼" : "►";
@@ -204,7 +213,8 @@ public partial class VpnView : UserControl
 
             var usable = info.Servers.Where(s => s.IsSupportedBySingBox).ToList();
 
-            row.Servers = Rows(usable, row.Entry.Name, settings);
+            row.AsGiven = Rows(usable, row.Entry.Name, settings);
+            row.Servers = InChosenOrder(row.AsGiven);
 
             // Отброшенные называются числом, а не замалчиваются: человек,
             // видящий в подписке двадцать серверов и пятнадцать здесь,
@@ -228,6 +238,7 @@ public partial class VpnView : UserControl
         }
         catch (Exception ex)
         {
+            row.AsGiven = [];
             row.Servers = [];
             row.Detail = "не прочиталась: " + ex.GetBaseException().Message;
         }
@@ -279,11 +290,22 @@ public partial class VpnView : UserControl
                 !chosen);
         });
 
-        // Незамеренные идут после отвечающих, но раньше молчащих: про них
-        // мы ничего не знаем, и ставить их в конец, к заведомо мёртвым,
-        // значило бы приписать им приговор, которого не выносили.
-        return (_byLatency ? rows.OrderBy(Rank).ThenBy(Ms) : rows).ToList();
+        // Сортировка здесь не применяется: список отдаётся в порядке подписки,
+        // а порядок показа выбирается в Reshow. Иначе исходный порядок негде
+        // было бы взять обратно.
+        return rows.ToList();
     }
+
+    /// <summary>
+    /// Раскладывает серверы в том порядке, который выбран кнопкой.
+    /// </summary>
+    /// <remarks>
+    /// Незамеренные идут после отвечающих, но раньше молчащих: про них мы
+    /// ничего не знаем, и ставить их в конец, к заведомо мёртвым, значило бы
+    /// приписать им приговор, которого не выносили.
+    /// </remarks>
+    private IReadOnlyList<ServerRow> InChosenOrder(IReadOnlyList<ServerRow> rows) =>
+        _byLatency ? rows.OrderBy(Rank).ThenBy(Ms).ToList() : rows;
 
     private int Rank(ServerRow row) => _health.Find(row.Tag) switch
     {
@@ -310,11 +332,9 @@ public partial class VpnView : UserControl
         {
             row.Active = active is not null && ReferenceEquals(row.Entry, active);
 
-            row.Servers = _byLatency
-                ? row.Servers.OrderBy(Rank).ThenBy(Ms).ToList()
-                : row.Servers;
-
-            row.Servers = row.Servers
+            // Раскладка считается от исходного порядка, а не от показанного:
+            // иначе она накапливается сама на себе и вернуться некуда.
+            row.Servers = InChosenOrder(row.AsGiven)
                 .Select(server => server with
                 {
                     Color = (Brush)FindResource(

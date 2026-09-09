@@ -247,32 +247,77 @@ public partial class RoutesView : UserControl
 
         var token = _icons.Token;
 
+        // Значок сервиса ставится частям сразу, до сети: при возврате в раздел
+        // он уже в памяти, и мигания «буквы, потом картинки» не будет.
+        foreach (var service in services)
+            LendServiceIcon(service);
+
         _ = Task.Run(async () =>
         {
-            foreach (var part in services.SelectMany(s => s.Parts))
+            foreach (var service in services)
             {
+                foreach (var part in service.Parts)
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+
+                    var host = Host(part);
+
+                    // Про что уже спрашивали, того не спрашиваем: значок либо
+                    // проставлен при сборке строки, либо его нет вовсе.
+                    if (host is null || SiteIcons.Known(host))
+                        continue;
+
+                    var icon = await SiteIcons.ForAsync(host, token);
+
+                    if (icon is null || token.IsCancellationRequested)
+                        continue;
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        part.Icon = icon;
+                        Redraw();
+                    });
+                }
+
                 if (token.IsCancellationRequested)
                     return;
 
-                var host = Host(part);
-
-                // Про что уже спрашивали, того не спрашиваем: значок либо
-                // проставлен при сборке строки, либо его нет вовсе.
-                if (host is null || SiteIcons.Known(host))
-                    continue;
-
-                var icon = await SiteIcons.ForAsync(host, token);
-
-                if (icon is null || token.IsCancellationRequested)
-                    continue;
-
                 Dispatcher.Invoke(() =>
                 {
-                    part.Icon = icon;
-                    Redraw();
+                    if (LendServiceIcon(service))
+                        Redraw();
                 });
             }
         }, token);
+    }
+
+    /// <summary>
+    /// Отдаёт частям без своего значка значок сервиса.
+    /// </summary>
+    /// <remarks>
+    /// У раздачи и превью своего значка нет и не будет: <c>googlevideo.com</c>
+    /// и <c>i.ytimg.com</c> его не отдают, у Discord и Telegram то же самое
+    /// с их вспомогательными именами. Буква рядом с красным значком YouTube
+    /// говорит, будто это разные вещи, — а это один сервис, разложенный
+    /// по частям.
+    /// </remarks>
+    private static bool LendServiceIcon(ServiceRow service)
+    {
+        var own = service.Parts.FirstOrDefault(p => p.Icon is not null)?.Icon;
+
+        if (own is null)
+            return false;
+
+        var lent = false;
+
+        foreach (var part in service.Parts.Where(p => p.Icon is null))
+        {
+            part.Icon = own;
+            lent = true;
+        }
+
+        return lent;
     }
 
     private static string? Host(PartRow part)

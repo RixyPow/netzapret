@@ -74,14 +74,15 @@ public partial class CheckView : UserControl
     private static IReadOnlyList<SectionRow> _sections = [];
     private static string _status = "Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа.";
 
-    /// <summary>Что проверять: <c>null</c> — весь справочник, иначе имя сервиса.</summary>
-    private static string? _scope;
+    /// <summary>Цель точечной проверки; <c>null</c> — проверяется весь справочник.</summary>
+    private static CheckTarget? _target;
 
     /// <summary>Полная глубина: по два имени с каждой части вместо одного.</summary>
     private static bool _deep;
 
-    private const string QuickScope = "Все сервисы — быстро";
-    private const string FullScope = "Все сервисы — полностью";
+    private const string QuickScope = "Быстрая";
+    private const string FullScope = "Полная";
+    private const string SpotScope = "Точечная";
 
     /// <summary>Пока список заполняется, выбор в нём не считается выбором человека.</summary>
     private bool _filling;
@@ -115,20 +116,14 @@ public partial class CheckView : UserControl
 
         try
         {
-            // Три глубины, как в консоли: быстрая — по имени с каждой части,
-            // полная — по два, точечная — один сервис целиком. Полной не было
-            // вовсе, а именно она отделяет случайную неудачу одного имени
-            // от закрытой части: одно имя ошибается, два подряд — уже нет.
-            var names = new List<string> { QuickScope, FullScope };
-            names.AddRange(ServiceCatalog.All.Select(s => s.Name));
+            // Только глубина: быстрая — по имени с каждой части, полная —
+            // по два, точечная — одна цель целиком. Прежде под этими двумя
+            // лежали ещё и два десятка сервисов одной лентой, и список
+            // отвечал сразу на два разных вопроса — насколько подробно
+            // и что именно, — заставляя пролистывать чужое ради своего.
+            Scope.ItemsSource = new List<string> { QuickScope, FullScope, SpotScope };
+            Scope.SelectedIndex = Selected();
 
-            Scope.ItemsSource = names;
-
-            int at = _scope is null
-                ? (_deep ? 1 : 0)
-                : names.FindIndex(n => n == _scope);
-
-            Scope.SelectedIndex = at < 0 ? 0 : at;
             RunButton.Content = ChooseLabel();
         }
         finally
@@ -142,15 +137,60 @@ public partial class CheckView : UserControl
         if (_filling)
             return;
 
+        if (Scope.SelectedIndex == 2)
+        {
+            AskTarget();
+            return;
+        }
+
         _deep = Scope.SelectedIndex == 1;
-        _scope = Scope.SelectedIndex <= 1 ? null : Scope.SelectedItem as string;
+        _target = null;
 
         RunButton.Content = ChooseLabel();
     }
 
-    private string ChooseLabel() => _scope is not null
-        ? "Проверить сервис"
-        : _deep ? "Проверить полностью" : "Проверить";
+    /// <summary>
+    /// Спрашивает, что проверять точечно.
+    /// </summary>
+    /// <remarks>
+    /// Отказ возвращает список к прежнему выбору: «точечная» без цели
+    /// не значит ничего, и оставить её выбранной означало бы кнопку,
+    /// которой нечего проверять.
+    /// </remarks>
+    private void AskTarget()
+    {
+        var picker = new TargetPicker { Owner = Window.GetWindow(this) };
+
+        if (picker.ShowDialog() == true && picker.Chosen is { } chosen)
+            _target = chosen;
+
+        _filling = true;
+
+        try
+        {
+            Scope.SelectedIndex = Selected();
+        }
+        finally
+        {
+            _filling = false;
+        }
+
+        RunButton.Content = ChooseLabel();
+    }
+
+    private static int Selected() => _target is not null ? 2 : _deep ? 1 : 0;
+
+    private string ChooseLabel()
+    {
+        if (_target is null)
+            return _deep ? "Проверить полностью" : "Проверить";
+
+        var what = _target.Describe;
+
+        // Длинные имена режутся: кнопка стоит в ряду с выбором глубины
+        // и «Прервать», и растянуть её значит сдвинуть оба.
+        return "Проверить " + (what.Length > 18 ? what[..17] + "…" : what);
+    }
 
     /// <summary>
     /// Говорит, в какой обстановке снят замер.
@@ -215,21 +255,21 @@ public partial class CheckView : UserControl
                 // а не настройку. Пометок «через туннель» просто не будет.
             }
 
-            var targets = Targets(zapretRoot, _scope, _deep);
+            var targets = Targets(zapretRoot, _target, _deep);
 
             if (targets.Count == 0)
             {
-                Say(_scope is null
+                Say(_target is null
                     ? "Проверять нечего: ни один список доменов не прочитался."
-                    : $"У «{_scope}» нет доменных частей — проверять нечего. "
+                    : $"У «{_target.Describe}» нет доменных частей — проверять нечего. "
                       + "Такой сервис задан подсетями, и стучаться в подсеть наугад не проверка.");
 
                 Header.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            Say(_scope is not null
-                ? $"Проверяю «{_scope}»: {targets.Count} имён, по каждому четыре пробы."
+            Say(_target is not null
+                ? $"Проверяю «{_target.Describe}»: {targets.Count} имён, по каждому четыре пробы."
                 : _deep
                     ? $"Полная проверка: {targets.Count} имён, по два с каждой части, "
                       + "по каждому четыре пробы."
@@ -318,7 +358,7 @@ public partial class CheckView : UserControl
         text.AppendLine($"Проверка блокировок — {DateTime.Now:dd.MM.yyyy HH:mm}");
         text.AppendLine(new string('=', 78));
         text.AppendLine();
-        text.AppendLine($"Охват:   {_scope ?? (_deep ? "все сервисы, полная" : "все сервисы, быстрая")}");
+        text.AppendLine($"Охват:   {_target?.Describe ?? (_deep ? "все сервисы, полная" : "все сервисы, быстрая")}");
 
         // Состояние движков в отчёте обязательно: без него цифры нечитаемы.
         // Доступное при работающем обходе может быть доступно как раз
@@ -485,8 +525,18 @@ public partial class CheckView : UserControl
     /// пустую строку, набирали бы другую.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<(string Host, string Service)> Targets(string? zapretRoot, string? only, bool deep)
+    private static IReadOnlyList<(string Host, string Service)> Targets(
+        string? zapretRoot,
+        CheckTarget? target,
+        bool deep)
     {
+        // Своё имя проверяется как есть: справочник о нём ничего не знает,
+        // раскладывать его по частям не на что, а спросили именно про него.
+        if (target?.Host is { } own)
+            return [(own.TrimStart('*', '.'), "своё имя")];
+
+        var only = target?.Service;
+
         // Одно имя с части — быстрая; два — полная. Второе имя и отделяет
         // случайную неудачу одного хоста от закрытой части целиком: одно имя
         // ошибается само по себе, два подряд — уже нет. Для одного сервиса
@@ -635,9 +685,9 @@ public partial class CheckView : UserControl
         sections.Add(byKind.Count == 0
             ? new SectionRow(
                 "Всё открыто",
-                _scope is null
+                _target is null
                     ? "Обходить нечего."
-                    : $"У «{_scope}» обходить нечего. Проверено вчетверо глубже полного прогона.",
+                    : $"У «{_target.Describe}» обходить нечего. Проверено вчетверо глубже полного прогона.",
                 (Brush)FindResource("Accent"))
             : new SectionRow(
                 "Итог",
@@ -674,9 +724,9 @@ public partial class CheckView : UserControl
         _sections = sections;
         Sections.ItemsSource = sections;
 
-        Say(_scope is null
+        Say(_target is null
             ? $"Готово: проверено {Collected.Count}."
-            : $"Готово: «{_scope}», проверено {Collected.Count}.");
+            : $"Готово: «{_target.Describe}», проверено {Collected.Count}.");
     }
 
     private static string Describe(RoutingMode mode) => mode switch
