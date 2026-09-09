@@ -158,4 +158,39 @@ public class TunnelScopeTests
         Assert.Equal("mixed", inbound.GetProperty("type").GetString());
         Assert.Equal(21080, inbound.GetProperty("listen_port").GetInt32());
     }
+
+    [Fact]
+    public void TunWithoutHealthInboundHasTunOnly()
+    {
+        var root = Compile(Rules, new SingBoxOptions { UseTun = true });
+        var inbounds = root.GetProperty("inbounds");
+
+        Assert.Equal(1, inbounds.GetArrayLength());
+        Assert.Equal("tun", inbounds[0].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public void TunWithHealthInboundKeepsBoth()
+    {
+        // Ради этого инварианта правка и делалась: прежде инбаунды TUN и mixed
+        // были взаимоисключающи, супервизор стучался на несуществующий порт
+        // и убивал исправный движок, пока не исчерпывал перезапуски.
+        var root = Compile(Rules, new SingBoxOptions { UseTun = true, HealthInbound = true });
+        var inbounds = root.GetProperty("inbounds");
+
+        Assert.Equal(2, inbounds.GetArrayLength());
+        Assert.Equal("tun", inbounds[0].GetProperty("type").GetString());
+        Assert.Equal("mixed", inbounds[1].GetProperty("type").GetString());
+        Assert.Equal(SingBoxOptions.DefaultHealthPort, inbounds[1].GetProperty("listen_port").GetInt32());
+    }
+
+    [Fact]
+    public void HealthInboundDoesNotCollideWithProbePort()
+    {
+        // Замер серверов занимает 21080 и раздаёт параллельным замерам соседние
+        // порты: при обычной пятёрке это 21080..21084. Совпадение означало бы,
+        // что «Замерить все» не стартует, пока поднят туннель, поэтому запас
+        // берётся с двойным перекрытием — на случай большего --parallel.
+        Assert.True(SingBoxOptions.DefaultHealthPort >= 21080 + 10);
+    }
 }
