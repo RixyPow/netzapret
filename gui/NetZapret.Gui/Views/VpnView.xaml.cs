@@ -409,30 +409,27 @@ public partial class VpnView : UserControl
         }
     }
 
-    /// <summary>
-    /// Останавливает движки и поднимает их заново.
-    /// </summary>
-    /// <remarks>
-    /// Ждём сам факт остановки, а не отмеренную паузу: супервизор освобождает
-    /// TUN не мгновенно, и запуск по таймеру успевал застать прошлый движок
-    /// живым — тот держал адаптер, а новый sing-box поднимался процессом
-    /// и не проходил проверку.
-    /// </remarks>
-    private async void Restart(AppSettings settings)
+    /// <summary>Останавливает движки и поднимает их заново.</summary>
+    private void Restart(AppSettings settings)
     {
         PowerButton.IsEnabled = false;
         Status.Text = "Перезапускаю движки…";
 
         Run("stop");
-        await MainWindow.WaitUntilStoppedAsync();
 
-        Run(StatusView.BuildStartArguments());
+        // Пауза, а не гонка: супервизор освобождает TUN и снимает фильтр
+        // не мгновенно, и второй запуск, начатый сразу, наткнулся бы
+        // на ещё живой адаптер.
+        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
+        {
+            Run(StatusView.BuildStartArguments());
 
-        PowerButton.IsEnabled = true;
+            PowerButton.IsEnabled = true;
 
-        Status.Text = settings.NeedsProxy
-            ? "VPN включён, движки перезапущены."
-            : "VPN выключен, движки перезапущены. Десинк работает.";
+            Status.Text = settings.NeedsProxy
+                ? "VPN включён, движки перезапущены."
+                : "VPN выключен, движки перезапущены. Десинк работает.";
+        }));
     }
 
     private void Run(string arguments)

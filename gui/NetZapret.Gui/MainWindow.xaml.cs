@@ -104,7 +104,6 @@ public partial class MainWindow : Window
             "dns" => new DnsView(),
             "hosts" => new HostsView(),
             "log" => new LogView(),
-            "doctor" => new DoctorView(),
             "more" => new MoreView(),
             _ => new StatusView(),
         };
@@ -165,77 +164,23 @@ public partial class MainWindow : Window
     /// Останавливает движки и поднимает их заново.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Ждём не отмеренную паузу, а сам факт: супервизор освобождает TUN
-    /// и снимает фильтр не мгновенно, и запуск, начатый по таймеру, успевал
-    /// застать прошлый движок живым. Тот держал адаптер, новый sing-box
-    /// поднимался процессом и не проходил проверку — в окне это выглядело
-    /// как «запущен, но не отвечает».
-    /// </para>
-    /// <para>
-    /// Ожидание не бесконечно: если через полминуты старый не ушёл, запускаем
-    /// всё равно — <c>--kill-orphans</c> в ключах запуска уберёт то, что
-    /// осталось.
-    /// </para>
+    /// Пауза между остановкой и запуском не для красоты: супервизор
+    /// освобождает TUN и снимает фильтр не мгновенно, и запуск, начатый
+    /// сразу, наткнулся бы на ещё живой адаптер.
     /// </remarks>
-    private async void OnToastRestart(object sender, RoutedEventArgs e)
+    private void OnToastRestart(object sender, RoutedEventArgs e)
     {
         ToastAct.IsEnabled = false;
         ToastTitle.Text = "Перезапускаю движки…";
         _toastTimer.Stop();
 
         Run("stop");
-        await WaitUntilStoppedAsync();
 
-        Run(StatusView.BuildStartArguments());
-        HideToast();
-    }
-
-    /// <summary>
-    /// Ждёт, пока движки действительно уйдут.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// По процессам, а не по файлу состояния, и это не придирка. Команда
-    /// <c>stop</c> стирает файл первым делом, а движки гасит потом; ожидание
-    /// по файлу возвращалось мгновенно и лишь выглядело предохранителем.
-    /// Запуск начинался, пока прежний супервизор был жив, — тот ещё не успел
-    /// исчезнуть, а новый уже не видел состояния и считал, что поле чистое.
-    /// </para>
-    /// <para>
-    /// Получалось два супервизора разом, каждый со своим sing-box, и оба
-    /// дрались за адаптер netzapret0: один его создавал, второй падал
-    /// с «Cannot create a file when that file already exists», перезапускался,
-    /// иногда выигрывал гонку — и тогда падал первый. Со стороны это
-    /// выглядело как «поработает пару секунд и отваливается». Замер
-    /// 2026-09-09: два процесса netzapret, PID 36696 и 38160.
-    /// </para>
-    /// </remarks>
-    internal static async Task WaitUntilStoppedAsync()
-    {
-        for (int attempt = 0; attempt < 60; attempt++)
+        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
         {
-            if (!EnginesAlive())
-                return;
-
-            await Task.Delay(TimeSpan.FromMilliseconds(500));
-        }
-    }
-
-    private static bool EnginesAlive()
-    {
-        try
-        {
-            return new[] { "sing-box", "winws2", "winws" }
-                .SelectMany(Process.GetProcessesByName)
-                .Any();
-        }
-        catch (Exception)
-        {
-            // Не смогли посмотреть — лучше подождать положенное, чем
-            // запуститься поверх живого движка.
-            return true;
-        }
+            Run(StatusView.BuildStartArguments());
+            HideToast();
+        }));
     }
 
     private void Run(string arguments)

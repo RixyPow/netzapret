@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -490,12 +488,9 @@ public partial class CheckView : UserControl
         _sections = sections;
         Sections.ItemsSource = sections;
 
-        var where = Save(sections);
-
-        Say((_scope is null
-                ? $"Готово: проверено {Collected.Count}."
-                : $"Готово: «{_scope}», проверено {Collected.Count}.")
-            + (where is null ? string.Empty : $" Отчёт: {where}"));
+        Say(_scope is null
+            ? $"Готово: проверено {Collected.Count}."
+            : $"Готово: «{_scope}», проверено {Collected.Count}.");
     }
 
     private static string Describe(RoutingMode mode) => mode switch
@@ -504,94 +499,4 @@ public partial class CheckView : UserControl
         RoutingMode.Desync => "десинк",
         _ => "VPN",
     };
-
-    /// <summary>Сколько отчётов держать в папке.</summary>
-    private const int KeepReports = 20;
-
-    /// <summary>
-    /// Кладёт отчёт в файл рядом с консольными.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Сам, а не по кнопке. Проверка идёт минуты и заканчивается тем, ради
-    /// чего затевалась; человек читает таблицу, закрывает окно — и через день,
-    /// когда понадобится сравнить с прежним замером, сравнивать оказывается
-    /// не с чем.
-    /// </para>
-    /// <para>
-    /// В ту же папку и тем же именем, что пишет консоль: отчёты одной машины
-    /// должны лежать вместе и сортироваться по времени, кем бы ни были сняты.
-    /// </para>
-    /// </remarks>
-    private string? Save(IReadOnlyList<SectionRow> sections)
-    {
-        try
-        {
-            Directory.CreateDirectory("reports");
-
-            var path = Path.Combine(
-                "reports", $"blockcheck-{DateTime.Now:yyyy-MM-dd-HHmmss}.txt");
-
-            var text = new StringBuilder();
-
-            text.AppendLine($"NetZapret, проверка блокировок — {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-            text.AppendLine(_scope is null ? "Охват: весь справочник" : $"Охват: {_scope}");
-            text.AppendLine();
-
-            text.AppendLine($"  {"ИМЯ",-34} {"TCP",-6} {"1.2",-6} {"1.3",-6} {"HTTP",-6} {"ДАННЫЕ",-8} ВЕРДИКТ");
-            text.AppendLine("  " + new string('-', 92));
-
-            foreach (var row in Collected)
-            {
-                text.AppendLine(
-                    $"  {Cut(row.Host, 34),-34} {row.Tcp,-6} {row.Tls12,-6} {row.Tls13,-6} "
-                    + $"{row.Http,-6} {row.Data,-8} {row.Verdict}");
-
-                if (row.Why.Length > 0)
-                    text.AppendLine($"      {row.Why}");
-            }
-
-            foreach (var section in sections)
-            {
-                text.AppendLine();
-                text.AppendLine(section.Title);
-                text.AppendLine(section.Body);
-            }
-
-            File.WriteAllText(path, text.ToString(), new UTF8Encoding(false));
-            Sweep();
-
-            return Path.GetFullPath(path);
-        }
-        catch (Exception)
-        {
-            // Отчёт — довесок к таблице, которая уже на экране. Уронить
-            // из-за него готовую проверку было бы нелепо.
-            return null;
-        }
-    }
-
-    private static string Cut(string value, int max) =>
-        value.Length <= max ? value : string.Concat(value.AsSpan(0, max - 1), "…");
-
-    /// <summary>Оставляет последние отчёты, прочие убирает.</summary>
-    /// <remarks>
-    /// Иначе папка растёт без края: каждый прогон — файл, а прогоняют
-    /// по нескольку раз подряд, подбирая пресет.
-    /// </remarks>
-    private static void Sweep()
-    {
-        try
-        {
-            var old = Directory.EnumerateFiles("reports", "blockcheck-*.txt")
-                .OrderByDescending(p => p)
-                .Skip(KeepReports);
-
-            foreach (var file in old)
-                File.Delete(file);
-        }
-        catch (IOException)
-        {
-        }
-    }
 }

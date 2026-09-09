@@ -95,41 +95,6 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <TextBlock Text="Обслуживание" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
-
-                <Button Style="{StaticResource Choice}" Tag="settings" Click="OnMaintenance">
-                    <StackPanel>
-                        <TextBlock Text="Сбросить настройки" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="Режим, пресет, сервер, DNS и выключатели — к заводским. Подписки остаются: их выдаёт поставщик, и потерять их значит остаться без VPN до тех пор, пока не найдётся письмо." />
-                    </StackPanel>
-                </Button>
-
-                <Button Style="{StaticResource Choice}" Tag="routes" Click="OnMaintenance">
-                    <StackPanel>
-                        <TextBlock Text="Забыть свои маршруты" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="Убирает config\rules.user.yaml целиком: снова начинают действовать правила из поставки. Пины в hosts при этом остаются — они живут отдельно." />
-                    </StackPanel>
-                </Button>
-
-                <Button Style="{StaticResource Choice}" Tag="runtime" Click="OnMaintenance">
-                    <StackPanel>
-                        <TextBlock Text="Очистить рабочие файлы" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="Журналы, собранные конфиги и кэш значков. Всё это собирается заново; конфиг туннеля соберётся при следующем запуске движков." />
-                    </StackPanel>
-                </Button>
-
-                <Button Style="{StaticResource Choice}" Tag="network" Click="OnMaintenance">
-                    <StackPanel>
-                        <TextBlock Text="Сбросить сетевой стек Windows" FontWeight="SemiBold"
-                                   Foreground="{StaticResource Danger}" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="Крайняя мера: winsock и IP-стек к умолчанию. Понадобится перезагрузка, а до неё сеть останется в переходном состоянии — то есть хуже исходного. Помогает, когда после жёсткой остановки TUN остался в маршрутах." />
-                    </StackPanel>
-                </Button>
-
                 <TextBlock Text="Папки" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
                 <Border Style="{StaticResource Card}">
