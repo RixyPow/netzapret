@@ -77,6 +77,12 @@ internal static class ConfigCommand
         {
             UseTun = !cmd.Has("no-tun"),
             LocalListenPort = cmd.Int("local-port", 21080),
+
+            // Вход проверки нужен ровно тогда, когда супервизор будет через
+            // него стучаться. Иначе конфиг и запуск расходятся: движок
+            // поднимается без порта, проверка его не находит и считает
+            // исправный туннель мёртвым.
+            HealthInbound = settings.VerifyTraffic,
             Scope = proxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
             DnsServerAddresses = proxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
             DnsServer = cmd.Value("dns", "8.8.8.8"),
@@ -100,6 +106,13 @@ internal static class ConfigCommand
         Console.WriteLine(options.UseTun
             ? "Режим:    TUN (запуск требует прав администратора)"
             : $"Режим:    локальный прокси на 127.0.0.1:{options.LocalListenPort} (прав администратора не нужно)");
+
+        if (options.HealthInbound)
+        {
+            Console.WriteLine(
+                $"Проверка: вход на 127.0.0.1:{SingBoxOptions.DefaultHealthPort} " +
+                "для проверки прохода трафика (настройка VerifyTraffic)");
+        }
 
         if (options.Scope == TunnelScope.ProxyOnly)
         {
