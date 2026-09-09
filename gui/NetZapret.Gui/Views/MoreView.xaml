@@ -118,6 +118,89 @@
                     </StackPanel>
                 </Border>
 
+                <!--
+                    Обслуживание идёт последним намеренно: это разовые действия,
+                    и три из четырёх необратимы. Соседство с переключателями,
+                    которые нажимают мимоходом, им противопоказано.
+                -->
+                <TextBlock Text="Обслуживание" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Сбросить настройки до заводских" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="Режим, пресет, выбранный сервер, свои маршруты и рабочие файлы. Ссылка подписки остаётся: её выдаёт поставщик, и восстановить её программа не может." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="ResetSettingsButton" Style="{StaticResource Destructive}"
+                                    Content="Сбросить" Click="OnResetSettings" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Забыть маршруты" FontWeight="SemiBold" />
+                                <TextBlock x:Name="RoutesValue" Style="{StaticResource Caption}" Margin="0,5,0,0"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="ForgetRoutesButton" Style="{StaticResource Destructive}"
+                                    Content="Забыть" Click="OnForgetRoutes" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Очистить рабочие файлы" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="Журналы и конфиги от прошлых запусков из runtime. В собранных конфигах лежат пароли серверов открытым текстом — держать прошлогодние незачем. Действующий конфиг остаётся." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="CleanButton" Style="{StaticResource Ghost}"
+                                    Content="Очистить" Click="OnClean" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Сбросить сетевой стек Windows" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="winsock и TCP/IP. Лечение для сети, оставшейся в странном состоянии после опытов с адаптерами и DNS. Потребуется перезагрузка компьютера: без неё сеть остаётся в переходном состоянии, то есть хуже исходного." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="ResetNetworkButton" Style="{StaticResource Destructive}"
+                                    Content="Сбросить" Click="OnResetNetwork" VerticalAlignment="Center" />
+                        </Grid>
+
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>

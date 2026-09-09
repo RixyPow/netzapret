@@ -4,7 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using NetZapret.Core;
+using NetZapret.Core.Rules;
 using NetZapret.Core.Updates;
+using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
@@ -45,6 +47,7 @@ public partial class MoreView : UserControl
 
         ShowVersion(settings);
         ShowFlags(settings);
+        ShowRoutes();
 
         RootValue.Text = Path.GetFullPath(".");
 
@@ -183,6 +186,251 @@ public partial class MoreView : UserControl
             // не отвечать вовсе. Ни один из случаев не повод не открыть раздел.
             return false;
         }
+    }
+
+    private void ShowRoutes()
+    {
+        try
+        {
+            var count = UserRulesFile.Load(UserRulesFile.DefaultPath).Entries.Count;
+
+            RoutesValue.Text = count == 0
+                ? "Своих маршрутов нет — судьбу соединений решают общие правила."
+                : $"Своих маршрутов: {count}. Это выборы «напрямую», «десинк» и «через VPN», "
+                  + "сделанные руками поверх общих правил.";
+
+            ForgetRoutesButton.IsEnabled = count > 0;
+        }
+        catch (Exception ex)
+        {
+            RoutesValue.Text = "Файл своих маршрутов не читается: " + ex.GetBaseException().Message;
+            ForgetRoutesButton.IsEnabled = false;
+        }
+    }
+
+    /// <summary>
+    /// Работает ли супервизор прямо сейчас.
+    /// </summary>
+    /// <remarks>
+    /// Стереть рабочие файлы под живым супервизором значит потерять след
+    /// запущенных процессов: остановить их станет нечем, а следующий запуск
+    /// упрётся в занятый драйвер и осиротевший TUN.
+    /// </remarks>
+    private static bool EnginesRunning()
+    {
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+        return state is not null && state.IsSupervisorAlive();
+    }
+
+    private static bool Confirm(string question) =>
+        MessageBox.Show(
+            question,
+            "NetZapret",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
+
+    /// <summary>
+    /// Отодвигает файл в сторону вместо удаления.
+    /// </summary>
+    /// <remarks>
+    /// Настройки и маршруты набираются руками и месяцами, а кнопка стоит
+    /// в разделе, куда заходят посмотреть версию. Копия не стоит ничего
+    /// и однажды окупается целиком.
+    /// </remarks>
+    private static void SetAside(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        var backup = path + ".bak";
+
+        // Затираем предыдущую копию: две правки подряд означают, что
+        // разбираются прямо сейчас, и интересна последняя.
+        if (File.Exists(backup))
+            File.Delete(backup);
+
+        File.Move(path, backup);
+    }
+
+    private void OnResetSettings(object sender, RoutedEventArgs e)
+    {
+        if (EnginesRunning())
+        {
+            Status.Text = "Сначала остановите движки: под ними лежит состояние супервизора, "
+                + "и без него остановить их станет нечем.";
+
+            return;
+        }
+
+        if (!Confirm(
+            "Сбросить настройки до заводских?\n\n"
+            + "Режим, пресет, выбранный сервер и свои маршруты будут забыты, рабочие файлы "
+            + "удалены. Ссылка подписки останется: её выдаёт поставщик, и восстановить её "
+            + "программа не может.\n\n"
+            + "Прежние настройки и маршруты лягут рядом с расширением .bak."))
+        {
+            return;
+        }
+
+        try
+        {
+            var subscription = AppSettings.Load(AppSettings.DefaultPath).SubscriptionUrl;
+
+            SetAside(AppSettings.DefaultPath);
+            SetAside(UserRulesFile.DefaultPath);
+
+            if (Directory.Exists("runtime"))
+                Directory.Delete("runtime", recursive: true);
+
+            new AppSettings { SubscriptionUrl = subscription }.Save(AppSettings.DefaultPath);
+
+            Reload();
+            Status.Text = "Настройки сброшены, подписка сохранена. Прежние лежат рядом с .bak.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnForgetRoutes(object sender, RoutedEventArgs e)
+    {
+        if (!Confirm(
+            "Забыть все свои маршруты?\n\n"
+            + "Выборы «напрямую», «десинк» и «через VPN», сделанные руками, будут сняты — "
+            + "решать станут общие правила.\n\n"
+            + "Прежний файл ляжет рядом с расширением .bak."))
+        {
+            return;
+        }
+
+        try
+        {
+            SetAside(UserRulesFile.DefaultPath);
+
+            ShowRoutes();
+            Status.Text = "Свои маршруты забыты. Прежний файл лежит рядом с .bak.";
+
+            // В отличие от сброса настроек, здесь движки могли остаться
+            // работать — и работают они по прежним маршрутам, пока их
+            // не перезапустить.
+            this.Offer("свои маршруты");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Убирает журналы и конфиги прошлых запусков.
+    /// </summary>
+    /// <remarks>
+    /// Повторяет отбор консольной команды clean: удаляются только json и log,
+    /// действующий конфиг остаётся. Без него не запуститься, а собрать заново
+    /// можно лишь с подпиской под рукой.
+    /// </remarks>
+    private void OnClean(object sender, RoutedEventArgs e)
+    {
+        if (EnginesRunning())
+        {
+            Status.Text = "Супервизор работает и держит эти файлы. Сначала остановите движки.";
+            return;
+        }
+
+        try
+        {
+            const string runtime = "runtime";
+
+            if (!Directory.Exists(runtime))
+            {
+                Status.Text = "Каталог runtime пуст или не существует — убирать нечего.";
+                return;
+            }
+
+            var keep = Path.GetFullPath(Path.Combine(runtime, "singbox.json"));
+
+            var removed = 0;
+            long freed = 0;
+
+            foreach (var file in Directory.EnumerateFiles(runtime, "*", SearchOption.AllDirectories))
+            {
+                if (string.Equals(Path.GetFullPath(file), keep, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var extension = Path.GetExtension(file);
+
+                bool removable = extension is ".json" or ".log"
+                    || Path.GetFileName(file).Contains(".log.", StringComparison.OrdinalIgnoreCase);
+
+                if (!removable)
+                    continue;
+
+                try
+                {
+                    long size = new FileInfo(file).Length;
+                    File.Delete(file);
+
+                    removed++;
+                    freed += size;
+                }
+                catch (Exception)
+                {
+                    // Один занятый файл не повод бросать уборку на половине.
+                }
+            }
+
+            Status.Text = $"Удалено файлов: {removed}, освобождено {freed / 1024.0:0.#} КБ. "
+                + "Действующий конфиг сохранён.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnResetNetwork(object sender, RoutedEventArgs e)
+    {
+        if (!Confirm(
+            "Сбросить сетевой стек Windows?\n\n"
+            + "winsock и TCP/IP вернутся к исходным настройкам. Потребуется перезагрузка "
+            + "компьютера: без неё сеть останется в переходном состоянии, то есть хуже "
+            + "исходного."))
+        {
+            return;
+        }
+
+        ResetNetworkButton.IsEnabled = false;
+        Status.Text = "Сбрасываю сетевой стек…";
+
+        _ = Task.Run(() =>
+        {
+            string? failed = null;
+
+            foreach (var arguments in new[] { "int ip reset", "winsock reset" })
+            {
+                int code = Run("netsh", arguments);
+
+                if (code != 0)
+                {
+                    failed = $"netsh {arguments} завершился с кодом {code}. "
+                        + "Обычно это значит, что не хватило прав администратора.";
+
+                    break;
+                }
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                ResetNetworkButton.IsEnabled = true;
+
+                Status.Text = failed
+                    ?? "Сетевой стек сброшен. Перезагрузите компьютер: без этого сеть "
+                       + "останется в переходном состоянии.";
+            });
+        });
     }
 
     private static int Run(string file, string arguments)
