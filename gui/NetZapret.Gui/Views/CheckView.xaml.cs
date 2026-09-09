@@ -77,6 +77,12 @@ public partial class CheckView : UserControl
     /// <summary>Что проверять: <c>null</c> — весь справочник, иначе имя сервиса.</summary>
     private static string? _scope;
 
+    /// <summary>Полная глубина: по два имени с каждой части вместо одного.</summary>
+    private static bool _deep;
+
+    private const string QuickScope = "Все сервисы — быстро";
+    private const string FullScope = "Все сервисы — полностью";
+
     /// <summary>Пока список заполняется, выбор в нём не считается выбором человека.</summary>
     private bool _filling;
 
@@ -109,15 +115,21 @@ public partial class CheckView : UserControl
 
         try
         {
-            var names = new List<string> { "Все сервисы" };
+            // Три глубины, как в консоли: быстрая — по имени с каждой части,
+            // полная — по два, точечная — один сервис целиком. Полной не было
+            // вовсе, а именно она отделяет случайную неудачу одного имени
+            // от закрытой части: одно имя ошибается, два подряд — уже нет.
+            var names = new List<string> { QuickScope, FullScope };
             names.AddRange(ServiceCatalog.All.Select(s => s.Name));
 
             Scope.ItemsSource = names;
 
-            int at = _scope is null ? 0 : names.FindIndex(n => n == _scope);
+            int at = _scope is null
+                ? (_deep ? 1 : 0)
+                : names.FindIndex(n => n == _scope);
 
             Scope.SelectedIndex = at < 0 ? 0 : at;
-            RunButton.Content = _scope is null ? "Проверить" : "Проверить сервис";
+            RunButton.Content = ChooseLabel();
         }
         finally
         {
@@ -130,9 +142,15 @@ public partial class CheckView : UserControl
         if (_filling)
             return;
 
-        _scope = Scope.SelectedIndex <= 0 ? null : Scope.SelectedItem as string;
-        RunButton.Content = _scope is null ? "Проверить" : "Проверить сервис";
+        _deep = Scope.SelectedIndex == 1;
+        _scope = Scope.SelectedIndex <= 1 ? null : Scope.SelectedItem as string;
+
+        RunButton.Content = ChooseLabel();
     }
+
+    private string ChooseLabel() => _scope is not null
+        ? "Проверить сервис"
+        : _deep ? "Проверить полностью" : "Проверить";
 
     /// <summary>
     /// Говорит, в какой обстановке снят замер.
@@ -197,7 +215,7 @@ public partial class CheckView : UserControl
                 // а не настройку. Пометок «через туннель» просто не будет.
             }
 
-            var targets = Targets(zapretRoot, _scope);
+            var targets = Targets(zapretRoot, _scope, _deep);
 
             if (targets.Count == 0)
             {
@@ -210,9 +228,12 @@ public partial class CheckView : UserControl
                 return;
             }
 
-            Say(_scope is null
-                ? $"Проверяю {targets.Count} — по каждому четыре пробы."
-                : $"Проверяю «{_scope}»: {targets.Count} имён, по каждому четыре пробы.");
+            Say(_scope is not null
+                ? $"Проверяю «{_scope}»: {targets.Count} имён, по каждому четыре пробы."
+                : _deep
+                    ? $"Полная проверка: {targets.Count} имён, по два с каждой части, "
+                      + "по каждому четыре пробы."
+                    : $"Проверяю {targets.Count} — по каждому четыре пробы.");
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
 
@@ -297,7 +318,7 @@ public partial class CheckView : UserControl
         text.AppendLine($"Проверка блокировок — {DateTime.Now:dd.MM.yyyy HH:mm}");
         text.AppendLine(new string('=', 78));
         text.AppendLine();
-        text.AppendLine($"Охват:   {_scope ?? "все сервисы"}");
+        text.AppendLine($"Охват:   {_scope ?? (_deep ? "все сервисы, полная" : "все сервисы, быстрая")}");
 
         // Состояние движков в отчёте обязательно: без него цифры нечитаемы.
         // Доступное при работающем обходе может быть доступно как раз
@@ -464,9 +485,13 @@ public partial class CheckView : UserControl
     /// пустую строку, набирали бы другую.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<(string Host, string Service)> Targets(string? zapretRoot, string? only)
+    private static IReadOnlyList<(string Host, string Service)> Targets(string? zapretRoot, string? only, bool deep)
     {
-        int perPart = only is null ? 1 : 4;
+        // Одно имя с части — быстрая; два — полная. Второе имя и отделяет
+        // случайную неудачу одного хоста от закрытой части целиком: одно имя
+        // ошибается само по себе, два подряд — уже нет. Для одного сервиса
+        // берётся четыре: там время есть, а подробность и есть смысл выбора.
+        int perPart = only is not null ? 4 : deep ? 2 : 1;
 
         var targets = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
