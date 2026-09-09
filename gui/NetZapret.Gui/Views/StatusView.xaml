@@ -29,30 +29,49 @@
                 первое, зачем окно открывают, — понять, идёт ли обход.
             -->
             <Border Style="{StaticResource Card}" Margin="0,22,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                    <Ellipse x:Name="Dot" Grid.Column="0" Width="12" Height="12"
-                             VerticalAlignment="Center" Margin="2,0,16,0"
-                             Fill="{StaticResource Faint}" />
+                        <Ellipse x:Name="Dot" Grid.Column="0" Width="12" Height="12"
+                                 VerticalAlignment="Center" Margin="2,0,16,0"
+                                 Fill="{StaticResource Faint}" />
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="StateLine" FontSize="16" FontWeight="SemiBold" Text="Проверяю…" />
-                        <TextBlock x:Name="StateHint" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                   TextWrapping="Wrap" Text="" />
-                    </StackPanel>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="StateLine" FontSize="16" FontWeight="SemiBold" Text="Проверяю…" />
+                            <TextBlock x:Name="StateHint" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                       TextWrapping="Wrap" Text="" />
+                        </StackPanel>
 
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="StartButton" Style="{StaticResource Primary}"
-                                Content="Запустить" Click="OnStart" Visibility="Collapsed" />
-                        <Button x:Name="StopButton" Style="{StaticResource Destructive}"
-                                Content="Остановить" Click="OnStop" Visibility="Collapsed" />
-                    </StackPanel>
-                </Grid>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="StartButton" Style="{StaticResource Primary}"
+                                    Content="Запустить" Click="OnStart" Visibility="Collapsed" />
+                            <Button x:Name="StopButton" Style="{StaticResource Destructive}"
+                                    Content="Остановить" Click="OnStop" Visibility="Collapsed" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!--
+                        Полоса запуска. Неопределённая намеренно: сколько займёт
+                        подъём, заранее не известно — проверка прохода трафика
+                        уходит в сеть, и её время зависит от выбранного сервера.
+                        Обещать долю выполнения значило бы её выдумывать.
+                    -->
+                    <Border x:Name="StartProgress" Height="3" CornerRadius="2" Margin="0,16,0,0"
+                            Background="{StaticResource Border}" ClipToBounds="True"
+                            Visibility="Collapsed" HorizontalAlignment="Stretch">
+                        <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="2" RadiusY="2"
+                                   HorizontalAlignment="Left" Fill="{StaticResource Accent}">
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="StartProgressShift" />
+                            </Rectangle.RenderTransform>
+                        </Rectangle>
+                    </Border>
+                </StackPanel>
             </Border>
 
             <!-- Настройка. Только показ: правка — в своих разделах. -->

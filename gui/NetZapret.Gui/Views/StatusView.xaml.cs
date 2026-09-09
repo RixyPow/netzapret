@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
@@ -46,7 +47,29 @@ public sealed record ModeRow(OperatingMode Key, string Name, string Note)
 /// </remarks>
 public partial class StatusView : UserControl
 {
-    private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(2) };
+    /// <summary>Обычный период опроса.</summary>
+    private static readonly TimeSpan CalmInterval = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Период опроса во время запуска: подпись фазы и счётчик секунд должны
+    /// успевать за движками, иначе окно выглядит замершим ровно тогда, когда
+    /// на него и смотрят.
+    /// </summary>
+    private static readonly TimeSpan StartingInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Сколько показывать запуск, прежде чем показать состояние как есть.
+    /// </summary>
+    /// <remarks>
+    /// С запасом больше суммы таймаутов готовности обоих движков и первых
+    /// перезапусков: объявить «не поднялось» раньше этого срока значило бы
+    /// соврать про ещё идущую работу.
+    /// </remarks>
+    private static readonly TimeSpan StartupPatience = TimeSpan.FromSeconds(90);
+
+    private readonly DispatcherTimer _refresh = new() { Interval = CalmInterval };
+
+    private DateTimeOffset? _startingSince;
 
     public StatusView()
     {
@@ -67,10 +90,22 @@ public partial class StatusView : UserControl
             ShowModes(AppSettings.Load(AppSettings.DefaultPath));
             ShowAutostart();
 
+            // Возврат на вкладку посреди запуска: сам запуск никуда не делся,
+            // а анимация была снята при уходе — заводим её обратно.
+            if (_startingSince is not null)
+                StartAnimations();
+
             _refresh.Start();
         };
 
-        Unloaded += (_, _) => _refresh.Stop();
+        Unloaded += (_, _) =>
+        {
+            _refresh.Stop();
+
+            // Анимация на скрытом виде продолжала бы будить композитор
+            // впустую. Само состояние запуска при этом сохраняется.
+            StopAnimations();
+        };
     }
 
     private void Update()
@@ -106,6 +141,11 @@ public partial class StatusView : UserControl
 
     private void ShowState(AppSettings settings, SupervisorState? state, bool running)
     {
+        // Запуск показывается своим чередом: пока он идёт, «остановлено»
+        // означает не отказ, а то, что супервизор ещё не дописал состояние.
+        if (_startingSince is not null && ShowStarting(settings, state, running))
+            return;
+
         StartButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         StopButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
 
@@ -136,6 +176,151 @@ public partial class StatusView : UserControl
             : "Часть движков не в порядке — подробности ниже.";
 
         Engines.ItemsSource = services.Select(Row).ToList();
+    }
+
+    /// <summary>
+    /// Показывает ход запуска. Возвращает <c>false</c>, когда показывать
+    /// больше нечего и состояние пора рисовать обычным путём.
+    /// </summary>
+    /// <remarks>
+    /// Умерший движок здесь не считается концом: супервизор его перезапустит,
+    /// и до тех пор запуск продолжается. Концом считается только «сдался»
+    /// либо исчерпанное терпение — иначе окно объявляло бы отказ, пока
+    /// внизу ещё идут попытки.
+    /// </remarks>
+    private bool ShowStarting(AppSettings settings, SupervisorState? state, bool running)
+    {
+        var since = _startingSince!.Value;
+        var services = running ? state!.Services : [];
+
+        bool ready = services.Count > 0 && services.All(s => s.Health == ServiceHealth.Healthy);
+        bool gaveUp = services.Any(s => s.Health == ServiceHealth.Faulted);
+
+        if (ready || gaveUp || DateTimeOffset.Now - since > StartupPatience)
+        {
+            EndStarting();
+            return false;
+        }
+
+        StartButton.Visibility = Visibility.Collapsed;
+        StopButton.Visibility = Visibility.Visible;
+        StopButton.IsEnabled = true;
+
+        Dot.Fill = (Brush)FindResource("Warn");
+        StateLine.Text = "Запускается…";
+
+        var seconds = (int)(DateTimeOffset.Now - since).TotalSeconds;
+        StateHint.Text = $"{DescribePhase(settings, running, services)} — {seconds} с";
+
+        Engines.ItemsSource = services.Count > 0 ? services.Select(Row).ToList() : null;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Чем занят запуск прямо сейчас.
+    /// </summary>
+    /// <remarks>
+    /// До появления состояния фаза определяется по живым процессам, а не по
+    /// файлу: супервизор пишет состояние впервые лишь после того, как поднял
+    /// все службы, — то есть ровно после окончания промежутка, который здесь
+    /// и показывается. Файл в это время либо отсутствует, либо остался от
+    /// прошлого запуска.
+    /// </remarks>
+    private static string DescribePhase(
+        AppSettings settings,
+        bool running,
+        IReadOnlyList<ServiceState> services)
+    {
+        if (!running)
+        {
+            if (!IsRunning("sing-box"))
+                return "Собираем конфиг и поднимаем супервизор";
+
+            // Проверка прохода трафика уходит в сеть и занимает основную часть
+            // ожидания, поэтому названа отдельно: иначе эти секунды выглядят
+            // как необъяснённая пауза.
+            return settings.VerifyTraffic
+                ? "Туннель поднимается, проверяем проход трафика"
+                : "Туннель поднимается";
+        }
+
+        var singBox = services.FirstOrDefault(s => s.Name == "sing-box");
+
+        return singBox?.Health switch
+        {
+            ServiceHealth.Degraded => "Туннель поднят, проверка ещё не прошла",
+            ServiceHealth.Dead => "Туннель не поднялся, идёт перезапуск",
+            _ => "Движки поднимаются",
+        };
+    }
+
+    private static bool IsRunning(string processName)
+    {
+        var found = Process.GetProcessesByName(processName);
+
+        // Каждый Process держит системный дескриптор, а опрос идёт раз
+        // в секунду: без освобождения они копятся всё время запуска.
+        foreach (var process in found)
+            process.Dispose();
+
+        return found.Length > 0;
+    }
+
+    private void BeginStarting()
+    {
+        _startingSince = DateTimeOffset.Now;
+        _refresh.Interval = StartingInterval;
+
+        StartAnimations();
+        Update();
+    }
+
+    private void EndStarting()
+    {
+        _startingSince = null;
+        _refresh.Interval = CalmInterval;
+
+        StopAnimations();
+    }
+
+    private void StartAnimations()
+    {
+        StartProgress.Visibility = Visibility.Visible;
+
+        // Ширину берём измеренную: карточка на экране уже есть, потому что
+        // кнопку только что нажали. Запасное значение — на случай, если
+        // раскладка почему-то ещё не прошла: метка уехала бы мимо полосы.
+        var span = StartProgress.ActualWidth > 0 ? StartProgress.ActualWidth : 520;
+
+        StartProgressShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
+        {
+            From = -StartProgressMark.Width,
+            To = span,
+            Duration = new Duration(TimeSpan.FromSeconds(1.3)),
+            RepeatBehavior = RepeatBehavior.Forever,
+        });
+
+        Dot.BeginAnimation(OpacityProperty, new DoubleAnimation
+        {
+            From = 1,
+            To = 0.2,
+            Duration = new Duration(TimeSpan.FromSeconds(0.8)),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+        });
+    }
+
+    private void StopAnimations()
+    {
+        StartProgress.Visibility = Visibility.Collapsed;
+
+        // Снятие анимации передачей null обязательно: остановленная анимация
+        // продолжает удерживать своё последнее значение, и точка осталась бы
+        // навсегда полупрозрачной, а «работает» выглядело бы приглушённым.
+        StartProgressShift.BeginAnimation(TranslateTransform.XProperty, null);
+        Dot.BeginAnimation(OpacityProperty, null);
+        Dot.Opacity = 1;
     }
 
     private EngineRow Row(ServiceState service)
@@ -347,9 +532,9 @@ public partial class StatusView : UserControl
         ShowAutostart();
     }
 
-    private void OnStart(object sender, RoutedEventArgs e) => Run(BuildStartArguments());
+    private void OnStart(object sender, RoutedEventArgs e) => Run(BuildStartArguments(), starting: true);
 
-    private void OnStop(object sender, RoutedEventArgs e) => Run("stop");
+    private void OnStop(object sender, RoutedEventArgs e) => Run("stop", starting: false);
 
     /// <summary>
     /// Ключи запуска супервизора.
@@ -389,7 +574,7 @@ public partial class StatusView : UserControl
     /// процессом. Окно и так работает от администратора, поэтому запуск идёт
     /// без повышения — оно уже есть.
     /// </remarks>
-    private void Run(string arguments)
+    private void Run(string arguments, bool starting)
     {
         var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
 
@@ -410,12 +595,25 @@ public partial class StatusView : UserControl
                 CreateNoWindow = true,
             });
 
+            if (starting)
+            {
+                // Прежде кнопки просто гасли на три секунды. Этого хватало,
+                // пока запуск был мгновенным; с проверкой прохода трафика он
+                // занимает десятки секунд, и кнопки оживали посреди подъёма,
+                // показывая «остановлено» у ещё запускающегося движка.
+                BeginStarting();
+                return;
+            }
+
+            EndStarting();
+
             StartButton.IsEnabled = false;
             StopButton.IsEnabled = false;
 
-            // Кнопки оживают через опрос: состояние читается из файла, который
-            // супервизор пишет не мгновенно, и мигание «остановлено —
-            // работает — остановлено» выглядело бы сбоем.
+            // Остановка укладывается в пару секунд, и следить за ней нечем:
+            // супервизор просто исчезает. Поэтому здесь по-прежнему пауза,
+            // а не показ хода — мигание «работает — остановлено — работает»
+            // выглядело бы сбоем.
             Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
             {
                 StartButton.IsEnabled = true;
