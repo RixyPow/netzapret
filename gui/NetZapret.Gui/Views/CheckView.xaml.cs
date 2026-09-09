@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -173,6 +175,8 @@ public partial class CheckView : UserControl
         RunButton.IsEnabled = false;
         StopButton.IsEnabled = true;
 
+        bool interrupted = false;
+
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
@@ -216,6 +220,7 @@ public partial class CheckView : UserControl
         }
         catch (OperationCanceledException)
         {
+            interrupted = true;
             Say($"Прервано. Успело проверить {Collected.Count}.");
         }
         catch (Exception ex)
@@ -232,6 +237,162 @@ public partial class CheckView : UserControl
 
             RunButton.IsEnabled = true;
             StopButton.IsEnabled = false;
+
+            // Прерванная проверка тоже пишется: набранное до остановки —
+            // такой же замер, а переделывать его ради файла значит потратить
+            // ещё столько же времени.
+            if (SaveReport(running, interrupted) is { } note)
+                Say(_status + "  " + note);
+        }
+    }
+
+    /// <summary>Сколько отчётов держать. То же число, что у консоли.</summary>
+    private const int KeepReports = 20;
+
+    /// <summary>
+    /// Записывает отчёт и возвращает, чем это кончилось.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Запись идёт всегда, а не по просьбе, и по той же причине, что в консоли:
+    /// отчёт затем и нужен, чтобы его показать, — а до сих пор таблицу
+    /// переносили выделением мышью, теряя половину при прокрутке.
+    /// </para>
+    /// <para>
+    /// Имя со временем замера, а не одно на все прогоны: сравнить «было —
+    /// стало» это половина разбора, потому что сайт ломается между двумя
+    /// проверками, а не во время одной.
+    /// </para>
+    /// </remarks>
+    private string? SaveReport(bool enginesRunning, bool interrupted)
+    {
+        if (Collected.Count == 0)
+            return null;
+
+        try
+        {
+            var full = Path.GetFullPath(Path.Combine(
+                "reports", $"blockcheck-{DateTime.Now:yyyy-MM-dd-HHmm}.txt"));
+
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+
+            // Без метки порядка байтов: файл читают и Windows, и веб-формы,
+            // куда его прикладывают.
+            File.WriteAllText(full, BuildReport(enginesRunning, interrupted), new UTF8Encoding(false));
+
+            KeepRecentReports();
+
+            return $"Отчёт: {full}";
+        }
+        catch (Exception ex)
+        {
+            return "Отчёт записать не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private string BuildReport(bool enginesRunning, bool interrupted)
+    {
+        var text = new StringBuilder();
+
+        text.AppendLine($"Проверка блокировок — {DateTime.Now:dd.MM.yyyy HH:mm}");
+        text.AppendLine(new string('=', 78));
+        text.AppendLine();
+        text.AppendLine($"Охват:   {_scope ?? "все сервисы"}");
+
+        // Состояние движков в отчёте обязательно: без него цифры нечитаемы.
+        // Доступное при работающем обходе может быть доступно как раз
+        // благодаря ему, и через неделю этого уже не вспомнить.
+        text.AppendLine(enginesRunning
+            ? "Движки:  работали — сеть видна уже с обходом"
+            : "Движки:  остановлены — видно, что закрыто на самом деле");
+
+        text.AppendLine($"Имён:    {Collected.Count}{(interrupted ? " (проверка прервана)" : string.Empty)}");
+        text.AppendLine();
+
+        text.AppendLine(
+            Fit("ИМЯ", 38) + Fit("TCP", 8) + Fit("TLS1.2", 8)
+            + Fit("TLS1.3", 8) + Fit("HTTP", 8) + Fit("ДАННЫЕ", 9) + "ВЕРДИКТ");
+
+        text.AppendLine(new string('-', 78));
+
+        foreach (var row in Collected)
+        {
+            var name = row.MarkShown == Visibility.Visible ? $"{row.Host} [{row.Mark}]" : row.Host;
+
+            text.AppendLine(
+                Fit(name, 38) + Fit(row.Tcp, 8) + Fit(row.Tls12, 8)
+                + Fit(row.Tls13, 8) + Fit(row.Http, 8) + Fit(row.Data, 9) + row.Verdict);
+        }
+
+        var explained = Collected
+            .Where(r => r.WhyShown == Visibility.Visible && !string.IsNullOrWhiteSpace(r.Why))
+            .ToList();
+
+        if (explained.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine("ПОЧЕМУ");
+            text.AppendLine(new string('-', 78));
+
+            foreach (var row in explained)
+                text.AppendLine($"{row.Host}: {row.Why}");
+        }
+
+        if (_sections.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine("ЧТО С ЭТИМ ДЕЛАТЬ");
+            text.AppendLine(new string('-', 78));
+
+            foreach (var section in _sections)
+            {
+                text.AppendLine();
+                text.AppendLine(section.Title);
+                text.AppendLine(section.Body);
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>Подрезает и добивает значение до ширины колонки.</summary>
+    private static string Fit(string? value, int width)
+    {
+        var text = value ?? string.Empty;
+
+        if (text.Length >= width)
+            text = text[..(width - 1)];
+
+        return text.PadRight(width);
+    }
+
+    /// <summary>
+    /// Убирает старые отчёты, оставляя последние.
+    /// </summary>
+    /// <remarks>
+    /// Папка, растущая без предела, однажды станет поводом вычистить её
+    /// целиком — вместе с тем отчётом, ради которого всё и затевалось.
+    /// </remarks>
+    private static void KeepRecentReports()
+    {
+        try
+        {
+            var directory = new DirectoryInfo("reports");
+
+            if (!directory.Exists)
+                return;
+
+            foreach (var file in directory.GetFiles("blockcheck-*.txt")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Skip(KeepReports))
+            {
+                file.Delete();
+            }
+        }
+        catch (Exception)
+        {
+            // Уборка не стоит того, чтобы из-за неё пропал только что
+            // записанный отчёт.
         }
     }
 
