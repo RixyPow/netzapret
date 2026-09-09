@@ -155,6 +155,29 @@ public sealed class SingBoxOptions
 
     public int LocalListenPort { get; init; } = 21080;
 
+    /// <summary>
+    /// Порт локального входа для глубокой проверки супервизора.
+    /// </summary>
+    /// <remarks>
+    /// Намеренно не совпадает с <see cref="LocalListenPort"/>: замер серверов
+    /// занимает 21080 и раздаёт параллельным замерам соседние порты, а проверка
+    /// живёт одновременно с туннелем. Общий порт означал бы, что «Замерить все»
+    /// при поднятом туннеле не стартует.
+    /// </remarks>
+    public const int DefaultHealthPort = 21090;
+
+    /// <summary>
+    /// Поднимать рядом с TUN локальный инбаунд <c>mixed</c> на
+    /// <see cref="DefaultHealthPort"/> для глубокой проверки.
+    /// </summary>
+    /// <remarks>
+    /// Инбаунды TUN и локальный прокси взаимоисключающи по построению, поэтому
+    /// с туннелем проверять проход трафика было не через что: супервизор
+    /// стучался на несуществующий порт, получал отказ и убивал исправный движок
+    /// по кругу, пока не исчерпывал попытки перезапуска.
+    /// </remarks>
+    public bool HealthInbound { get; init; }
+
     /// <summary>Что именно заводить в туннель.</summary>
     public TunnelScope Scope { get; init; } = TunnelScope.Everything;
 
@@ -652,9 +675,9 @@ public sealed class SingBoxConfigCompiler
 
     private static JsonArray BuildInbounds(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
-        if (!options.UseTun)
-        {
-            return new JsonArray
+        var inbounds = options.UseTun
+            ? BuildTunInbound(options, proxyAddresses)
+            : new JsonArray
             {
                 new JsonObject
                 {
@@ -664,9 +687,23 @@ public sealed class SingBoxConfigCompiler
                     ["listen_port"] = options.LocalListenPort,
                 },
             };
+
+        // Вход для глубокой проверки добавляется поверх основного, а не вместо:
+        // с туннелем локального прокси нет вовсе, и проверять проход трафика
+        // было не через что. Порт один и тот же в обоих режимах, поэтому
+        // супервизору не нужно знать, с TUN поднят движок или без него.
+        if (options.HealthInbound)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "mixed",
+                ["tag"] = "health-in",
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = SingBoxOptions.DefaultHealthPort,
+            });
         }
 
-        return BuildTunInbound(options, proxyAddresses);
+        return inbounds;
     }
 
     private static JsonArray BuildTunInbound(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
