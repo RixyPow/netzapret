@@ -410,53 +410,28 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>Останавливает движки и поднимает их заново.</summary>
-    private void Restart(AppSettings settings)
+    /// <remarks>
+    /// Конфиг при этом пересобирается: смена сервера ради того и делается,
+    /// чтобы туда пошёл трафик, а не только чтобы поменялась подпись.
+    /// </remarks>
+    private async void Restart(AppSettings settings)
     {
         PowerButton.IsEnabled = false;
         Status.Text = "Перезапускаю движки…";
 
-        Run("stop");
+        var outcome = await EngineControl.RestartAsync(CancellationToken.None);
 
-        // Пауза, а не гонка: супервизор освобождает TUN и снимает фильтр
-        // не мгновенно, и второй запуск, начатый сразу, наткнулся бы
-        // на ещё живой адаптер.
-        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
+        PowerButton.IsEnabled = true;
+
+        if (!outcome.Ok)
         {
-            Run(StatusView.BuildStartArguments());
-
-            PowerButton.IsEnabled = true;
-
-            Status.Text = settings.NeedsProxy
-                ? "VPN включён, движки перезапущены."
-                : "VPN выключен, движки перезапущены. Десинк работает.";
-        }));
-    }
-
-    private void Run(string arguments)
-    {
-        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
-
-        if (!File.Exists(exe))
-        {
-            Status.Text = $"Не найдена консольная программа: {exe}.";
+            Status.Text = outcome.Message;
             return;
         }
 
-        try
-        {
-            using var started = Process.Start(new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = arguments,
-                WorkingDirectory = Directory.GetCurrentDirectory(),
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
-        }
+        Status.Text = settings.NeedsProxy
+            ? "VPN включён, движки перезапущены."
+            : "VPN выключен, движки перезапущены. Десинк работает.";
     }
 
     private void OnFolder(object sender, RoutedEventArgs e)

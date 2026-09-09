@@ -1,9 +1,10 @@
 @echo off
 rem Builds the window and puts it next to the console build, then starts it.
 rem
-rem Next to it on purpose: the window asks netzapret.exe to start and stop the
-rem supervisor, and looks for it in its own folder. Run from gui\bin it would
-rem build fine and then refuse to start anything, for no visible reason.
+rem Next to it, but no longer dependent on it: the window builds the tunnel
+rem config itself and raises the supervisor by restarting itself. It is put in
+rem build\ because config\, presets\ and engines\ are found relative to the
+rem working directory, and build\ is the layout the shipped archive has.
 rem
 rem ASCII only on purpose: cmd.exe reads batch files in the OEM code page,
 rem and UTF-8 Cyrillic here breaks apart into bogus commands.
@@ -13,9 +14,11 @@ set "ROOT=%~dp0.."
 set "TARGET=%ROOT%\build"
 set "SOURCE=%~dp0NetZapret.Gui\bin\Debug\net8.0-windows"
 
-if not exist "%TARGET%\netzapret.exe" (
-    echo The console build is missing: %TARGET%\netzapret.exe
-    echo Run build.cmd in the repository root first - the window drives it.
+rem The engines have to be there; the console does not. Missing engines is the
+rem one thing the window cannot work around - it starts them.
+if not exist "%TARGET%\engines" (
+    echo Engines are missing: %TARGET%\engines
+    echo Run build.cmd in the repository root first - it bundles them.
     exit /b 1
 )
 

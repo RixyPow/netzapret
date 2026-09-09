@@ -33,6 +33,12 @@ jobs:
       - name: Прогнать тесты
         run: dotnet test --no-build --configuration Release --verbosity normal
 
+      # Окно собирается отдельно: оно живёт в своём решении и в NetZapret.sln
+      # не входит. Прежде его не собирал никто, и оно ломалось незаметно —
+      # а теперь именно оно и есть выпускаемая программа.
+      - name: Собрать окно
+        run: dotnet build gui/NetZapret.Gui/NetZapret.Gui.csproj --configuration Release -warnaserror
+
       # Проверка того, что важнее сборки: правила, которые мы поставляем,
       # должны разбираться. Опечатка в YAML не ломает компиляцию, но делает
       # программу неработоспособной у всех, кто её скачал.

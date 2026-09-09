@@ -2176,6 +2176,13 @@ internal static class MenuCommand
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
                 ForeignExitsOnly = settings.ForeignExitsOnly,
+
+                // Вход проверки поднимается ровно тогда, когда супервизор
+                // будет через него стучаться. Здесь его не было, и меню
+                // собирало конфиг без входа даже при включённой проверке:
+                // сама проверка при этом запускалась и не проходила никогда.
+                HealthInbound = settings.VerifyTraffic,
+
                 CaptureAddresses = capture,
                 PinnedProxyAddresses = pinned,
                 AddressOverrides = addresses,

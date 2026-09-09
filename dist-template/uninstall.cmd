@@ -51,7 +51,7 @@ echo   Stopping the engines...
 rem Through the program's own stop, so the supervisor takes its children with
 rem it. Killing the processes by name would leave the state file behind and
 rem the next start would refuse, believing an instance is still running.
-if exist "%ROOT%netzapret.exe" "%ROOT%netzapret.exe" stop >nul 2>&1
+if exist "%ROOT%NetZapret.Gui.exe" "%ROOT%NetZapret.Gui.exe" --stop >nul 2>&1
 
 taskkill /f /im winws2.exe >nul 2>&1
 taskkill /f /im sing-box.exe >nul 2>&1

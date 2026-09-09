@@ -24,7 +24,52 @@ public partial class App : Application
         // запущенной с повышением прав, рабочим каталогом оказывается
         // System32, и без перехода окно читало бы конфиг оттуда.
         MoveToInstallDirectory();
+
+        // Роли без окна: супервизор и остановка. StartupUri из разметки
+        // обрабатывается уже после этого метода, поэтому снять его достаточно
+        // здесь — иначе рядом с движками открылось бы второе окно.
+        if (e.Args.Contains(SupervisorHost.Switch))
+        {
+            _headless = true;
+            StartupUri = null!;
+
+            RunAsSupervisor(e.Args);
+            return;
+        }
+
+        if (e.Args.Contains(SupervisorHost.StopSwitch))
+        {
+            _headless = true;
+            StartupUri = null!;
+
+            RunStop();
+        }
     }
+
+    private async void RunStop()
+    {
+        await SupervisorHost.StopAsync(CancellationToken.None);
+
+        Shutdown(0);
+    }
+
+    /// <summary>
+    /// Работает супервизором вместо показа окна.
+    /// </summary>
+    /// <remarks>
+    /// Ctrl+C у процесса без консоли нет: останавливает его само окно, убивая
+    /// по PID из файла состояния. Поэтому отмены здесь нет — выход только
+    /// по завершению работы супервизора.
+    /// </remarks>
+    private async void RunAsSupervisor(string[] args)
+    {
+        var code = await SupervisorHost.RunAsync(args, CancellationToken.None);
+
+        Shutdown(code);
+    }
+
+    /// <summary>Показывать сбои некому: процесс работает без окна.</summary>
+    private static bool _headless;
 
     /// <summary>
     /// Показывает сбой и продолжает работу, если это возможно.
@@ -81,6 +126,12 @@ public partial class App : Application
         {
             // Не записалось — не беда, показать всё равно показали.
         }
+
+        // В роли супервизора окна нет, и показывать сообщение некому: оно
+        // повисло бы невидимым модальным окном у процесса, который держит
+        // весь трафик машины. Запись в журнал выше уже сделана.
+        if (_headless)
+            return;
 
         MessageBox.Show(
             text,

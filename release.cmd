@@ -71,7 +71,7 @@ if %errorlevel% neq 0 (
 
 rem Checked against the built file rather than trusted: the version lives in
 rem Directory.Build.props, and forgetting to raise it there is the easy mistake.
-for /f "delims=" %%V in ('powershell -NoProfile -Command "(Get-Item '%ROOT%dist\NetZapret\netzapret.exe').VersionInfo.FileVersion"') do set "BUILT=%%V"
+for /f "delims=" %%V in ('powershell -NoProfile -Command "(Get-Item '%ROOT%dist\NetZapret\NetZapret.Gui.exe').VersionInfo.FileVersion"') do set "BUILT=%%V"
 
 echo Tag %VERSION%, built %BUILT%
 echo %BUILT% | find "%VERSION%" >nul
@@ -98,7 +98,7 @@ rem and holds every Russian word; the line below only substitutes numbers.
 set "NOTES=%ROOT%dist\notes.md"
 copy /y "%ROOT%docs\release-notes.md" "%NOTES%" >nul
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=[IO.File]::ReadAllText('%ROOT%docs\release-notes.footer.md',[Text.Encoding]::UTF8); $f=$f.Replace('{ZIP}',(Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash).Replace('{EXE}',(Get-FileHash '%ROOT%dist\NetZapret\netzapret.exe' -Algorithm SHA256).Hash).Replace('{SDK}',(& 'C:\Program Files\dotnet\dotnet.exe' --version)).Replace('{VERSION}','%VERSION%'); [IO.File]::AppendAllText('%NOTES%',$f,(New-Object Text.UTF8Encoding($false)))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=[IO.File]::ReadAllText('%ROOT%docs\release-notes.footer.md',[Text.Encoding]::UTF8); $f=$f.Replace('{ZIP}',(Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash).Replace('{EXE}',(Get-FileHash '%ROOT%dist\NetZapret\NetZapret.Gui.exe' -Algorithm SHA256).Hash).Replace('{SDK}',(& 'C:\Program Files\dotnet\dotnet.exe' --version)).Replace('{VERSION}','%VERSION%'); [IO.File]::AppendAllText('%NOTES%',$f,(New-Object Text.UTF8Encoding($false)))"
 
 if not exist "%NOTES%" (
     echo Could not prepare the notes.

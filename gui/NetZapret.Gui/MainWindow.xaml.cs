@@ -169,46 +169,24 @@ public partial class MainWindow : Window
     /// освобождает TUN и снимает фильтр не мгновенно, и запуск, начатый
     /// сразу, наткнулся бы на ещё живой адаптер.
     /// </remarks>
-    private void OnToastRestart(object sender, RoutedEventArgs e)
+    private async void OnToastRestart(object sender, RoutedEventArgs e)
     {
         ToastAct.IsEnabled = false;
         ToastTitle.Text = "Перезапускаю движки…";
         _toastTimer.Stop();
 
-        Run("stop");
+        var outcome = await EngineControl.RestartAsync(CancellationToken.None);
 
-        Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
+        if (!outcome.Ok)
         {
-            Run(StatusView.BuildStartArguments());
-            HideToast();
-        }));
-    }
+            ToastTitle.Text = "Перезапустить не вышло";
+            ToastBody.Text = outcome.Message;
+            ToastAct.IsEnabled = true;
 
-    private void Run(string arguments)
-    {
-        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
-
-        if (!File.Exists(exe))
-        {
-            ToastBody.Text = $"Не найдена консольная программа: {exe}.";
             return;
         }
 
-        try
-        {
-            using var started = Process.Start(new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = arguments,
-                WorkingDirectory = Directory.GetCurrentDirectory(),
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            ToastBody.Text = "Не удалось: " + ex.GetBaseException().Message;
-        }
+        HideToast();
     }
 
     private static string Version() =>

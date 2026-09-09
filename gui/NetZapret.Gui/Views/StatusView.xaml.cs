@@ -489,11 +489,13 @@ public partial class StatusView : UserControl
 
     private void OnAutostart(object sender, RoutedEventArgs e)
     {
-        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
+        // Задача поднимает эту же программу в роли супервизора. Прежде она
+        // звала консольную рядом, и без неё автозапуск молча не работал.
+        var exe = Environment.ProcessPath;
 
-        if (!File.Exists(exe))
+        if (exe is null)
         {
-            ShowProblem($"Не найдена консольная программа: {exe}. Задача запускает именно её.");
+            ShowProblem("Не удалось определить путь к программе — задача не заведена.");
             return;
         }
 
@@ -515,7 +517,7 @@ public partial class StatusView : UserControl
 
                     // Те же ключи, что у кнопки «Запустить»: иначе автозапуск
                     // поднимал бы не то, что человек проверил руками.
-                    Arguments = BuildStartArguments(),
+                    Arguments = SupervisorHost.BuildArguments(AppSettings.Load(AppSettings.DefaultPath)),
                     WorkingDirectory = Path.GetFullPath("."),
                     UserId = Environment.UserName,
                 });
@@ -532,98 +534,50 @@ public partial class StatusView : UserControl
         ShowAutostart();
     }
 
-    private void OnStart(object sender, RoutedEventArgs e) => Run(BuildStartArguments(), starting: true);
-
-    private void OnStop(object sender, RoutedEventArgs e) => Run("stop", starting: false);
-
     /// <summary>
-    /// Ключи запуска супервизора.
+    /// Собирает конфиг и поднимает движки.
     /// </summary>
     /// <remarks>
-    /// Повторяет то, что собирает меню консоли. Туннель поднимается только
-    /// там, где он куда-то ведёт: в режиме «только десинк» sing-box был бы
-    /// вхолостую поднятым TUN — адаптер есть, маршруты стоят, трафика нет,
-    /// и первая же неисправность ищется вдвое дольше.
+    /// Сборка идёт при каждом запуске, как в меню консоли. Без неё окно
+    /// поднимало движки с тем конфигом, что лежал на диске: смена сервера,
+    /// правки маршрутов и переключение режима показывались новыми, а до
+    /// туннеля не доходили, пока конфиг не соберут отдельно.
     /// </remarks>
-    internal static string BuildStartArguments()
+    private async void OnStart(object sender, RoutedEventArgs e)
     {
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        StartButton.IsEnabled = false;
+        StateLine.Text = "Собираю конфиг…";
+        StateHint.Text = "Читаю подписку и правила.";
 
-        var arguments = settings.LogsEnabled
-            ? $"start --log \"{Path.GetFullPath(Path.Combine("runtime", "supervisor.log"))}\""
-            : "start";
+        var outcome = await EngineControl.StartAsync(CancellationToken.None);
 
-        arguments += settings.NeedsProxy
-            ? $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\""
-            : " --no-proxy";
+        StartButton.IsEnabled = true;
 
-        if (settings.NeedsDesync)
-            arguments += $" --preset \"{settings.PresetName}\"";
-
-        if (settings.VerifyTraffic)
-            arguments += " --verify-traffic";
-
-        return arguments;
-    }
-
-    /// <summary>
-    /// Зовёт консольную программу рядом.
-    /// </summary>
-    /// <remarks>
-    /// Супервизор обязан пережить закрытие окна, а значит быть отдельным
-    /// процессом. Окно и так работает от администратора, поэтому запуск идёт
-    /// без повышения — оно уже есть.
-    /// </remarks>
-    private void Run(string arguments, bool starting)
-    {
-        var exe = Path.Combine(AppContext.BaseDirectory, "netzapret.exe");
-
-        if (!File.Exists(exe))
+        if (!outcome.Ok)
         {
-            ShowProblem($"Не найдена консольная программа: {exe}. Окно кладётся рядом с ней.");
+            ShowProblem(outcome.Message);
+            Update();
             return;
         }
 
-        try
-        {
-            using var started = Process.Start(new ProcessStartInfo
-            {
-                FileName = exe,
-                Arguments = arguments,
-                WorkingDirectory = Directory.GetCurrentDirectory(),
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            });
-
-            if (starting)
-            {
-                // Прежде кнопки просто гасли на три секунды. Этого хватало,
-                // пока запуск был мгновенным; с проверкой прохода трафика он
-                // занимает десятки секунд, и кнопки оживали посреди подъёма,
-                // показывая «остановлено» у ещё запускающегося движка.
-                BeginStarting();
-                return;
-            }
-
-            EndStarting();
-
-            StartButton.IsEnabled = false;
-            StopButton.IsEnabled = false;
-
-            // Остановка укладывается в пару секунд, и следить за ней нечем:
-            // супервизор просто исчезает. Поэтому здесь по-прежнему пауза,
-            // а не показ хода — мигание «работает — остановлено — работает»
-            // выглядело бы сбоем.
-            Task.Delay(TimeSpan.FromSeconds(3)).ContinueWith(_ => Dispatcher.Invoke(() =>
-            {
-                StartButton.IsEnabled = true;
-                StopButton.IsEnabled = true;
-                Update();
-            }));
-        }
-        catch (Exception ex)
-        {
-            ShowProblem($"Не удалось: {ex.Message}");
-        }
+        // Прежде кнопки просто гасли на три секунды. Этого хватало, пока
+        // запуск был мгновенным; с проверкой прохода трафика он занимает
+        // десятки секунд, и кнопки оживали посреди подъёма, показывая
+        // «остановлено» у ещё запускающегося движка.
+        BeginStarting();
     }
+
+    private async void OnStop(object sender, RoutedEventArgs e)
+    {
+        EndStarting();
+
+        StopButton.IsEnabled = false;
+        StateLine.Text = "Останавливаю…";
+
+        await EngineControl.StopAsync(CancellationToken.None);
+
+        StopButton.IsEnabled = true;
+        Update();
+    }
+
 }

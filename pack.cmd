@@ -53,8 +53,18 @@ rem different folder, a different binary, from identical sources.
 rem
 rem Nothing is lost. The pdb is deleted below anyway, so line numbers in stack
 rem traces were never available to anyone downloading this.
+rem The window is what ships, and it ships alone. It no longer needs the
+rem console beside it: it builds the tunnel config itself and raises the
+rem supervisor by restarting itself with --supervisor. Two executables in one
+rem folder, of which the correct one to double-click was the less obvious, is
+rem a choice nobody should have to make - and shipping both would have doubled
+rem the archive, because each carries its own copy of the .NET runtime.
+rem
+rem What goes with the console: the command line. watch, test and rules have
+rem no counterpart in the window yet; they remain developer tools, available
+rem from a source build.
 echo Publishing self-contained...
-"C:\Program Files\dotnet\dotnet.exe" publish "%ROOT%src\NetZapret.Cli\NetZapret.Cli.csproj" ^
+"C:\Program Files\dotnet\dotnet.exe" publish "%ROOT%gui\NetZapret.Gui\NetZapret.Gui.csproj" ^
     -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true ^
     -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -p:DebugSymbols=false ^
     -o "%STAGE%" --nologo -v quiet
@@ -106,10 +116,8 @@ rem and run from a working copy by mistake it would do all of that there.
 copy /y "%ROOT%dist-template\uninstall.cmd" "%STAGE%\" >nul
 copy /y "%ROOT%LICENSE" "%STAGE%\" >nul
 
-rem No launcher script: the program opens the menu and asks for elevation
-rem itself when started with no arguments. Two files side by side, of which
-rem the correct one to double-click was the less obvious, is a choice nobody
-rem should have to make.
+rem No launcher script: one executable, and it asks for elevation itself
+rem through its manifest.
 
 rem Engines. Same selection as build.cmd, and for the same reasons - see
 rem tools\README.md. Without them the archive is not self-contained at all,
