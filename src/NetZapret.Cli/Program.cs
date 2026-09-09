@@ -331,7 +331,7 @@ internal static class Program
               --max-restarts <N>     Сколько раз перезапускать упавшую службу (5)
               --check-interval <с>   Период опроса служб (5)
               --verify-traffic       Проверять не только порт, но и проход трафика
-              --local-port <порт>    Порт локального прокси для --verify-traffic (21080)
+              --local-port <порт>    Порт входа проверки для --verify-traffic (21090)
 
               start работает в переднем плане, Ctrl+C останавливает всё.
               Запуск winws2 требует прав администратора.

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using NetZapret.Proxy;
 using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
@@ -230,7 +231,12 @@ internal static class SupervisorCommands
             return false;
         }
 
-        int? trafficPort = cmd.Has("verify-traffic") ? cmd.Int("local-port", 21080) : null;
+        // Порт по умолчанию берётся оттуда же, откуда его берёт компилятор
+        // конфига: разъехавшись, эти два значения дают вечно проваливающуюся
+        // проверку, а выглядит она как неисправный движок.
+        int? trafficPort = cmd.Has("verify-traffic")
+            ? cmd.Int("local-port", SingBoxOptions.DefaultHealthPort)
+            : null;
 
         services.Add(new SingBoxService(
             singBox,
