@@ -160,7 +160,11 @@ public partial class StatusView : UserControl
                 : "В этом режиме запускать нечего: VPN выключен, пресет не выбран.";
 
             StartButton.IsEnabled = settings.NeedsProxy || settings.NeedsDesync;
-            Engines.ItemsSource = null;
+
+            // Движки остаются на виду и остановленными, просто серыми. Пустое
+            // место на их месте читается как «их нет вовсе», тогда как раздел
+            // отвечает на другой вопрос: что должно работать и работает ли.
+            Engines.ItemsSource = Planned(settings);
 
             return;
         }
@@ -322,6 +326,28 @@ public partial class StatusView : UserControl
         StartProgressShift.BeginAnimation(TranslateTransform.XProperty, null);
         Dot.BeginAnimation(OpacityProperty, null);
         Dot.Opacity = 1;
+    }
+
+    /// <summary>
+    /// Движки, которые поднимутся при нынешней настройке.
+    /// </summary>
+    /// <remarks>
+    /// Список тот же, что собирает супервизор: туннель — когда режим ведёт
+    /// хоть что-то через VPN, десинк — когда выбран пресет. В режиме, где
+    /// не запускается ничего, список пуст, и это верно: запускать нечего.
+    /// </remarks>
+    private IReadOnlyList<EngineRow> Planned(AppSettings settings)
+    {
+        var rows = new List<EngineRow>();
+        var faint = (Brush)FindResource("Faint");
+
+        if (settings.NeedsProxy)
+            rows.Add(new EngineRow("sing-box", "остановлен", faint));
+
+        if (settings.NeedsDesync)
+            rows.Add(new EngineRow("winws2", "остановлен", faint));
+
+        return rows;
     }
 
     private EngineRow Row(ServiceState service)

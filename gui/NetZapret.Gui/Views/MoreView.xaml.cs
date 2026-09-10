@@ -544,11 +544,6 @@ public partial class MoreView : UserControl
                 + "Дороже по времени, зато ловит молчащую трубу.")
             { On = settings.VerifyTraffic },
 
-            new("foreign", "Автоподбор только по зарубежным",
-                "Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой "
-                + "же, — а через него не работает ровно то, ради чего туннель обычно и нужен.")
-            { On = settings.ForeignExitsOnly },
-
             new("discord", "Предлагать перезапуск Discord",
                 "Он запоминает голосовые серверы на сеанс и до перезапуска ходит по-старому. "
                 + "Сам он не перезапускается никогда: посреди звонка это хуже задержки.")
@@ -575,7 +570,6 @@ public partial class MoreView : UserControl
             {
                 "logs" => settings with { LogsEnabled = !settings.LogsEnabled },
                 "verify" => settings with { VerifyTraffic = !settings.VerifyTraffic },
-                "foreign" => settings with { ForeignExitsOnly = !settings.ForeignExitsOnly },
                 "discord" => settings with { OfferDiscordRestart = !settings.OfferDiscordRestart },
                 _ => settings with { CheckForUpdates = !settings.CheckForUpdates },
             };

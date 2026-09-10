@@ -65,6 +65,52 @@
                 </Border>
 
                 <!--
+                    Выбор выхода. Обе ручки живут здесь, рядом со списком
+                    серверов, которого они и касаются: настройка про отбор
+                    кандидатов стояла в «Ещё», среди выключателей журнала
+                    и обновлений, и найти её мог только тот, кто знал,
+                    что она есть.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Через какой сервер идёт трафик" FontWeight="SemiBold" />
+                                <TextBlock x:Name="PickLine" Style="{StaticResource Caption}"
+                                           Margin="0,5,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="AutoButton" Style="{StaticResource Ghost}"
+                                    Content="Вернуть автоподбор" Click="OnAuto"
+                                    VerticalAlignment="Center" Visibility="Collapsed" />
+                        </Grid>
+
+                        <Border Height="1" Background="{StaticResource Border}" Margin="0,14,0,14" />
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Автоподбор только по зарубежным" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой же. Через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ приходит тот же, что и без туннеля." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="ForeignButton" Style="{StaticResource Ghost}"
+                                    Click="OnForeign" VerticalAlignment="Center" MinWidth="96" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!--
                     Новая подписка. Поле скрытое: по ссылке выдаются серверы
                     и ключи, и увидеть её здесь не сможет ни тот, кто заглянет
                     через плечо, ни снимок экрана.

@@ -385,6 +385,79 @@ public partial class VpnView : UserControl
             : settings.Mode == OperatingMode.Off
                 ? "Режим «выключено»: не поднимается ничего, включая десинк."
                 : "Режим «только десинк»: туннель не поднимается, пакеты правятся на лету.";
+
+        ShowPick(settings);
+    }
+
+    /// <summary>
+    /// Показывает, как выбирается выход, и обе ручки к этому выбору.
+    /// </summary>
+    /// <remarks>
+    /// Возврат к автоподбору был невозможен вовсе: закрепить сервер кнопка
+    /// «выбрать» умела, а снять закрепление — ничто, кроме удаления подписки
+    /// целиком. Настройка про отбор кандидатов при этом жила в «Ещё», среди
+    /// выключателей журнала и обновлений, где её находил только тот, кто знал,
+    /// что она есть.
+    /// </remarks>
+    private void ShowPick(AppSettings settings)
+    {
+        var pinned = settings.PreferredServer;
+
+        PickLine.Text = string.IsNullOrWhiteSpace(pinned)
+            ? "Автоподбор: движок сам опрашивает серверы и берёт быстрейший из живых. "
+              + "Мёртвый выход не выбирается — этим автоподбор и отличается от «первого по списку»."
+            : $"Закреплён вручную: {pinned}. Автоподбор не применяется, "
+              + "даже если этот сервер перестанет отвечать.";
+
+        AutoButton.Visibility = string.IsNullOrWhiteSpace(pinned)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        ForeignButton.Content = settings.ForeignExitsOnly ? "включено" : "выключено";
+
+        ForeignButton.Foreground = (Brush)FindResource(
+            settings.ForeignExitsOnly ? "Accent" : "Muted");
+    }
+
+    private void OnAuto(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = null };
+            settings.Save(AppSettings.DefaultPath);
+
+            Reshow();
+            ShowPick(settings);
+
+            Status.Text = "Сервер больше не закреплён — выбирается автоподбором по задержке.";
+            this.Offer("Выбор сервера изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnForeign(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            settings = settings with { ForeignExitsOnly = !settings.ForeignExitsOnly };
+            settings.Save(AppSettings.DefaultPath);
+
+            ShowPick(settings);
+
+            Status.Text = settings.ForeignExitsOnly
+                ? "Автоподбор берёт только зарубежные выходы."
+                : "Автоподбор берёт любые выходы, включая отечественные.";
+
+            this.Offer("Отбор серверов изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>

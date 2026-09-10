@@ -26,7 +26,26 @@ public sealed class PartRow
     /// </remarks>
     public required string Mode { get; set; }
     public required Brush Color { get; init; }
-    public required int Choice { get; init; }
+    /// <summary>
+    /// Что выбрано в списке.
+    /// </summary>
+    /// <remarks>
+    /// Пишется привязкой: SelectedIndex связывается в обе стороны по
+    /// умолчанию, и WPF кладёт сюда новое значение ещё до того, как сработает
+    /// обработчик выбора.
+    /// </remarks>
+    public required int Choice { get; set; }
+
+    /// <summary>
+    /// Маршрут на момент сборки строки.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="Choice"/> именно потому, что тот меняется
+    /// привязкой раньше обработчика: сверка с ним показывала бы, что выбор
+    /// совпал с прежним, всегда и для любого выбора. Так и вышло —
+    /// уведомление о перезапуске перестало появляться вовсе.
+    /// </remarks>
+    public required int Applied { get; init; }
     public required bool CanRoute { get; init; }
     public required string Letter { get; init; }
 
@@ -245,6 +264,7 @@ public partial class RoutesView : UserControl
             Mode = part.DescribeMode(),
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
+            Applied = choice,
 
             // Адресные части значка не получают: у них нет имени, у которого
             // его можно было бы спросить.
@@ -833,7 +853,10 @@ public partial class RoutesView : UserControl
         // при каждой пересборке строк, и без этой проверки открытие папки
         // писало правило и звало уведомление о перезапуске по разу
         // на каждую часть внутри.
-        if (box.DataContext is PartRow current && box.SelectedIndex == current.Choice)
+        //
+        // Сверяется Applied, а не Choice: в Choice привязка уже положила
+        // новое значение, и сравнение с ним всегда говорило «то же самое».
+        if (box.DataContext is PartRow current && box.SelectedIndex == current.Applied)
             return;
 
         var parts = key.Split('|', 2);
