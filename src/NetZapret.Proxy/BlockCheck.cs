@@ -416,6 +416,12 @@ public static class BlockCheck
         if (first.Kind == BlockKind.None)
             return first;
 
+        // Прерывание проверяется здесь, а не только внутри проб. Первый заход
+        // уже провалился, значит второй пойдёт по всем стадиям с их таймаутами,
+        // и прерывание, поданное между заходами, ждало бы их все. В окне это
+        // выглядело так, будто «Прервать» не работает вовсе.
+        cancellationToken.ThrowIfCancellationRequested();
+
         // Второй заход только для неудач: подтверждать успех незачем,
         // а вот обвинять с одного раза нельзя.
         var second = await ProbeAsync(host, service, cancellationToken, throughTunnel);

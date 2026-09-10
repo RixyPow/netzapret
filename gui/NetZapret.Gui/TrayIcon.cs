@@ -27,8 +27,33 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>Ключ, по которому программа запускается сразу в трей.</summary>
     public const string Switch = "--tray";
 
+    // Те же цвета, что в Theme/Palette.xaml. Второй раз названы потому, что
+    // меню трея рисует WinForms, а он словаря ресурсов WPF не видит; расходиться
+    // им нельзя — это одно и то же меню в глазах человека.
+    private static readonly Color Surface = ColorTranslator.FromHtml("#161B22");
+    private static readonly Color Raised = ColorTranslator.FromHtml("#1C2128");
+    private static readonly Color Edge = ColorTranslator.FromHtml("#30363D");
+    private static readonly Color Text = ColorTranslator.FromHtml("#E6EDF3");
+    private static readonly Color Muted = ColorTranslator.FromHtml("#8B949E");
+
+    /// <summary>Тёмное меню: WinForms по умолчанию рисует светлое, системное.</summary>
+    private sealed class DarkMenu : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground => Surface;
+        public override Color MenuBorder => Edge;
+        public override Color MenuItemBorder => Edge;
+        public override Color MenuItemSelected => Raised;
+        public override Color MenuItemSelectedGradientBegin => Raised;
+        public override Color MenuItemSelectedGradientEnd => Raised;
+        public override Color ImageMarginGradientBegin => Surface;
+        public override Color ImageMarginGradientMiddle => Surface;
+        public override Color ImageMarginGradientEnd => Surface;
+        public override Color SeparatorDark => Edge;
+        public override Color SeparatorLight => Edge;
+    }
+
     private readonly NotifyIcon _icon;
-    private readonly ToolStripMenuItem _state;
+    private readonly ToolStripLabel _state;
     private readonly ToolStripMenuItem _toggle;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(2) };
 
@@ -36,10 +61,20 @@ internal sealed class TrayIcon : IDisposable
 
     public TrayIcon()
     {
-        _state = new ToolStripMenuItem("Проверяю…") { Enabled = false };
+        // Подписью, а не выключенным пунктом: выключенный рисуется системным
+        // серым, который на тёмном фоне почти не читается, и подсвечивается
+        // при наведении, обещая нажатие, которого не будет.
+        _state = new ToolStripLabel("Проверяю…") { ForeColor = Muted };
+
         _toggle = new ToolStripMenuItem("Запустить", null, (_, _) => Toggle());
 
-        var menu = new ContextMenuStrip();
+        var menu = new ContextMenuStrip
+        {
+            BackColor = Surface,
+            ForeColor = Text,
+            ShowImageMargin = false,
+            Renderer = new ToolStripProfessionalRenderer(new DarkMenu()) { RoundedEdges = false },
+        };
 
         menu.Items.Add(_state);
         menu.Items.Add(new ToolStripSeparator());

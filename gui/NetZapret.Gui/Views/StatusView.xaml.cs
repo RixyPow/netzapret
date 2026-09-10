@@ -485,6 +485,62 @@ public partial class StatusView : UserControl
         AutostartValue.Text = installed ? "заведена" : "не заведена";
         AutostartButton.Content = installed ? "Убрать" : "Завести";
         AutostartButton.IsEnabled = true;
+
+        if (installed && IsStale())
+        {
+            AutostartValue.Text = "заведена, но устарела";
+
+            ShowProblem(
+                "Задача автозапуска осталась от прежней версии и запускает не то, "
+                + "что нужно: до 0.5.0 это была консольная программа, которой в поставке "
+                + "больше нет. Уберите и заведите заново — это две кнопки.");
+        }
+    }
+
+    /// <summary>
+    /// Запускает ли задача не ту программу.
+    /// </summary>
+    /// <remarks>
+    /// Задача переживает обновление, а её команда — нет: она записана внутрь
+    /// задачи целиком, путём и ключами. До 0.5.0 автозапуск поднимал
+    /// netzapret.exe, которого в поставке уже нет, и «заведена» при мёртвой
+    /// команде — худший из возможных ответов: обход при входе не поднимется,
+    /// а окно скажет, что всё в порядке.
+    /// </remarks>
+    private static bool IsStale()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                ArgumentList = { "/query", "/tn", AutostartTask.DefaultTaskName, "/xml" },
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                StandardOutputEncoding = System.Text.Encoding.Unicode,
+            });
+
+            if (process is null)
+                return false;
+
+            var xml = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(10_000);
+
+            if (xml.Length == 0)
+                return false;
+
+            // Сверяется путь, а не ключи: ключи менялись и ещё будут меняться,
+            // а вот запуск исчезнувшей программы — беда другого порядка.
+            return Environment.ProcessPath is { } exe
+                && !xml.Contains(exe, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            // Не прочиталось — молчим: пугать задачей, о которой мы ничего
+            // не выяснили, хуже, чем не сказать.
+            return false;
+        }
     }
 
     private void OnAutostart(object sender, RoutedEventArgs e)

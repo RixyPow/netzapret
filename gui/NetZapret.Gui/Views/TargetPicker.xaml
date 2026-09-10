@@ -40,15 +40,27 @@
                        Text="Например example.com. Проверяется ровно это имя, четырьмя пробами." />
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Margin="0,18,0,0">
-            <TextBlock Text="Или сервис из справочника" Style="{StaticResource Caption}" />
-            <ListBox x:Name="Services" Margin="0,6,0,0"
+        <!--
+            Сетка, а не StackPanel: тот даёт детям столько высоты, сколько
+            они просят, список просил всю и полосы прокрутки не получал —
+            сервисы ниже восьмого были недостижимы.
+        -->
+        <Grid Grid.Row="2" Margin="0,18,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Text="Или сервис из справочника" Style="{StaticResource Caption}" />
+
+            <ListBox Grid.Row="1" x:Name="Services" Margin="0,6,0,0"
                      Background="{StaticResource Surface}"
                      Foreground="{StaticResource Text}"
                      BorderBrush="{StaticResource Border}"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
                      SelectionChanged="OnServiceChosen"
                      MouseDoubleClick="OnServiceConfirmed" />
-        </StackPanel>
+        </Grid>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button Content="Отмена" Style="{StaticResource Ghost}" Margin="0,0,8,0" Click="OnCancel" />

@@ -464,7 +464,21 @@ public partial class CheckView : UserControl
         Status.Text = text;
     }
 
-    private void OnStop(object sender, RoutedEventArgs e) => _work?.Cancel();
+    /// <summary>
+    /// Прерывает проверку.
+    /// </summary>
+    /// <remarks>
+    /// Отзыв обязателен: пробы, уже ушедшие в сеть, досматриваются до своего
+    /// таймаута, и это секунды. Прежде кнопка молча ничего не показывала, и
+    /// отличить «прерываю» от «зависло» было нельзя — жали ещё раз.
+    /// </remarks>
+    private void OnStop(object sender, RoutedEventArgs e)
+    {
+        StopButton.IsEnabled = false;
+        Say("Прерываю — жду, пока вернутся уже начатые пробы…");
+
+        _work?.Cancel();
+    }
 
     /// <summary>
     /// Имена, которые в отчёт не идут.
