@@ -133,18 +133,27 @@ public partial class DesyncView : UserControl
 
         var file = Path.GetFileName(preset.FilePath);
 
+        // Пресет зовётся по своему файлу, а не по названию внутри него.
+        // Так его и находит запуск: ZapretPaths.FindPreset ищет по имени
+        // файла. Пока показывалось внутреннее название, два разных файла
+        // с одинаковым названием выглядели как одна строка, повторённая
+        // дважды, переименование файла ничего не меняло, а сохранённый выбор
+        // и поиск при запуске расходились на ровном месте.
+        var name = Path.GetFileNameWithoutExtension(file);
+
         var detail = $"{preset.Sections.Count} {Ending(preset.Sections.Count, "секция", "секции", "секций")}: "
             + $"{active} с десинком, {pass} нетронутыми";
 
-        // Имя файла в строке обязательно. Название берётся изнутри пресета,
-        // а не из имени файла, и два разных файла с одинаковым названием
-        // внутри выглядели как одна строка, повторённая дважды: отличить их
-        // было нечем, а переименование файла ничего не меняло.
-        if (!string.Equals(Path.GetFileNameWithoutExtension(file), preset.Name, StringComparison.OrdinalIgnoreCase))
-            detail = $"{file} · {detail}";
+        // Название изнутри показывается, когда расходится с именем файла:
+        // его писал автор пресета, и по нему пресет узнают в чужих советах.
+        if (!string.IsNullOrWhiteSpace(preset.Name)
+            && !string.Equals(preset.Name, name, StringComparison.OrdinalIgnoreCase))
+        {
+            detail = $"внутри «{preset.Name}» · {detail}";
+        }
 
         return new PresetRow(
-            preset.Name,
+            name,
             preset.BuiltinVersion ?? string.Empty,
 
             // Про поддельные пакеты сказано отдельно, потому что именно они
@@ -156,7 +165,7 @@ public partial class DesyncView : UserControl
         {
             File = file,
             Detail = detail,
-            Chosen = string.Equals(preset.Name, chosen, StringComparison.OrdinalIgnoreCase),
+            Chosen = string.Equals(name, chosen, StringComparison.OrdinalIgnoreCase),
         };
     }
 

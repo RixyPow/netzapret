@@ -16,7 +16,15 @@ public sealed class PartRow
     public required string Key { get; init; }
     public required string Title { get; init; }
     public required string Detail { get; init; }
-    public required string Mode { get; init; }
+    /// <summary>
+    /// Куда идёт часть, словами.
+    /// </summary>
+    /// <remarks>
+    /// Задаётся при сборке, но переписывается для прибитых: пометка про пин
+    /// проставляется позже, когда прочитан hosts, и «напрямую» к тому моменту
+    /// уже посчитано.
+    /// </remarks>
+    public required string Mode { get; set; }
     public required Brush Color { get; init; }
     public required int Choice { get; init; }
     public required bool CanRoute { get; init; }
@@ -442,6 +450,13 @@ public partial class RoutesView : UserControl
                 .ToList();
 
             part.HasPin = pins.Any(name => Covers(zones, name));
+
+            // Прибитое имя, идущее напрямую, так и называется. «Напрямую»
+            // здесь недоговаривает: адрес выбран руками, а не резолвером,
+            // и когда он однажды протухнет, искать причину будут где угодно,
+            // только не в hosts.
+            if (part.HasPin && part.Choice == 0)
+                part.Mode = "прибит в hosts";
         }
     }
 
@@ -498,8 +513,48 @@ public partial class RoutesView : UserControl
         if (!window.Changed)
             return;
 
+        RouteDirectIfPinned(part);
+
         Reload();
         this.Offer($"«{part.Name}»: маршрут или пин изменены");
+    }
+
+    /// <summary>
+    /// Прибитой части проставляет маршрут «напрямую».
+    /// </summary>
+    /// <remarks>
+    /// Пин и туннель друг друга исключают: пин говорит «иди на этот адрес»,
+    /// правило «через VPN» — «иди через зарубежный выход», и вместе выходит
+    /// «зайди на отечественный узел из-за границы». Замер 2026-09-11: рукопожатие
+    /// к прибитому адресу через выход в Нидерландах не проходит вовсе, браузер
+    /// показывает ERR_SSL_PROTOCOL_ERROR, и виноватым выглядит пин.
+    ///
+    /// Десинк поверх пина ломает то же самое, только на своём слое: он судит
+    /// по имени и о подмене адреса не знает.
+    ///
+    /// Поэтому пин сам ставит «напрямую» — единственный маршрут, при котором
+    /// он работает.
+    /// </remarks>
+    private void RouteDirectIfPinned(ServicePart part)
+    {
+        try
+        {
+            var zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
+                .Select(d => d.TrimStart('*', '.'))
+                .ToList();
+
+            if (!HostsEditor.Pins().Keys.Any(name => Covers(zones, name)))
+                return;
+
+            var file = UserRulesFile.Load();
+            file.Set(MatchKind.HostList, part.List, RoutingMode.Direct);
+            file.Save();
+        }
+        catch (Exception)
+        {
+            // Не записалось — пин всё равно поставлен, а маршрут виден
+            // в списке и правится вручную.
+        }
     }
 
     private void Unpin(ServicePart part)
@@ -546,12 +601,32 @@ public partial class RoutesView : UserControl
     /// собранное: при поиске в списке лежит отобранное, и подмена его полным
     /// набором отбирала бы у человека то, что он только что набрал.
     /// </remarks>
+    /// <summary>
+    /// Перерисовывает список.
+    /// </summary>
+    /// <remarks>
+    /// Под признаком заполнения, и это не перестраховка. Сброс источника
+    /// пересоздаёт строки, каждый список маршрута заново получает свой
+    /// SelectedIndex, и WPF считает это выбором человека: раскрытие папки
+    /// записывало правило и вызывало уведомление о перезапуске — по разу
+    /// на каждую часть внутри.
+    /// </remarks>
     private void Redraw()
     {
-        var shown = Services.ItemsSource;
+        var was = _filling;
+        _filling = true;
 
-        Services.ItemsSource = null;
-        Services.ItemsSource = shown;
+        try
+        {
+            var shown = Services.ItemsSource;
+
+            Services.ItemsSource = null;
+            Services.ItemsSource = shown;
+        }
+        finally
+        {
+            _filling = was;
+        }
     }
 
     /// <summary>Открывает или закрывает папку.</summary>
@@ -754,6 +829,13 @@ public partial class RoutesView : UserControl
         if (_filling || sender is not ComboBox { Tag: string key } box)
             return;
 
+        // Выбор того же самого — не выбор. Список получает SelectedIndex
+        // при каждой пересборке строк, и без этой проверки открытие папки
+        // писало правило и звало уведомление о перезапуске по разу
+        // на каждую часть внутри.
+        if (box.DataContext is PartRow current && box.SelectedIndex == current.Choice)
+            return;
+
         var parts = key.Split('|', 2);
 
         if (parts.Length != 2)
@@ -771,6 +853,12 @@ public partial class RoutesView : UserControl
             var file = UserRulesFile.Load();
             file.Set(parts[0] == "ipset" ? MatchKind.IpSet : MatchKind.HostList, parts[1], mode);
             file.Save();
+
+            // Перечитываем сразу: подпись слева и сводка папки считаются при
+            // сборке строк, и без этого они показывали прежний маршрут до тех
+            // пор, пока человек не уйдёт с вкладки и не вернётся. Раскрытые
+            // папки перерисовку переживают, так что список остаётся на месте.
+            Reload();
 
             Status.Text = $"Записано: {parts[1]} → {Describe(mode)}. Применится при следующем запуске движков.";
             this.Offer("Маршрут изменён");
