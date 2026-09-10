@@ -212,6 +212,50 @@ public static class HostsFile
     }
 
     /// <summary>
+    /// Прибитые имена, которые десинку трогать нельзя.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пин — это выбранный руками адрес вместо того, что даёт резолвер, и
+    /// выбран он потому, что работает. Десинк опознаёт имя в ClientHello,
+    /// про подмену адреса не знает и применяет рецепт, выверенный на настоящей
+    /// сети доставки, — к постороннему узлу, которому этот рецепт не нужен
+    /// и вреден. Соединение рвётся на рукопожатии.
+    /// </para>
+    /// <para>
+    /// Проксируемые сюда не идут: их трафик уходит в туннель, и десинк его
+    /// не видит вовсе. Берутся только те, что решены напрямую или десинком, —
+    /// то есть ровно те, что доходят до WinDivert.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> CollectPinnedDesyncExclusions(
+        Core.Rules.RuleSet ruleSet,
+        string? hostsPath = null)
+    {
+        var found = new List<string>();
+        var hosts = Read(hostsPath);
+
+        if (hosts.Count == 0)
+            return found;
+
+        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+
+        foreach (var (name, addresses) in hosts)
+        {
+            if (addresses.Count == 0)
+                continue;
+
+            if (FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
+                continue;
+
+            if (!found.Contains(name, StringComparer.OrdinalIgnoreCase))
+                found.Add(name);
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Режим первого правила, покрывающего имя; <c>null</c> — ни одного.
     /// </summary>
     /// <remarks>

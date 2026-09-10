@@ -274,7 +274,17 @@ internal static class SupervisorCommands
         }
 
         var preset = new PresetReader().Load(presetPath);
-        var arguments = WinwsCommandLine.Build(preset);
+
+        // Список исключений пишется при сборке конфига; если его нет —
+        // исключать нечего, и командная строка остаётся нетронутой.
+        var exclude = File.Exists(WinwsCommandLine.DefaultExcludeListPath)
+            ? Path.GetFullPath(WinwsCommandLine.DefaultExcludeListPath)
+            : null;
+
+        var arguments = WinwsCommandLine.Build(preset, exclude);
+
+        if (exclude is not null)
+            Console.WriteLine($"Десинк не трогает прибитые имена: {exclude}");
 
         var missing = WinwsCommandLine.FindMissingFiles(preset, paths.Root);
         if (missing.Count > 0)

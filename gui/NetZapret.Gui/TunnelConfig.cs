@@ -57,6 +57,13 @@ internal static class TunnelConfig
             // не получит fakeip и уйдёт мимо туннеля, сколько бы правил
             // на него ни стояло.
             var pinned = HostsFile.CollectPinnedProxyAddresses(ruleSet, out _);
+
+            // Прибитые имена, идущие мимо туннеля, выводятся из-под десинка.
+            // Пин — выбранный руками адрес, а десинк судит по имени и про
+            // подмену не знает: он применяет к постороннему узлу рецепт,
+            // выверенный на настоящей сети доставки, и рвёт рукопожатие.
+            WinwsCommandLine.WriteExcludeList(HostsFile.CollectPinnedDesyncExclusions(ruleSet));
+
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions

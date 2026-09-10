@@ -2156,6 +2156,15 @@ internal static class MenuCommand
             foreach (var note in pinnedNotes)
                 Console.WriteLine($"Файл hosts: {note}");
 
+            // Прибитые имена, идущие мимо туннеля, выводятся из-под десинка.
+            // Пин — выбранный руками адрес, а десинк судит по имени и про
+            // подмену не знает: он применяет к постороннему узлу рецепт,
+            // выверенный на настоящей сети доставки, и рвёт рукопожатие.
+            var excluded = HostsFile.CollectPinnedDesyncExclusions(ruleSet);
+
+            if (WinwsCommandLine.WriteExcludeList(excluded) is not null)
+                Console.WriteLine($"Десинк не тронет прибитых имён: {excluded.Count}");
+
             // Каталог через резолвер больше не применяется — то же самое
             // делает пин в hosts, и делает на виду. Прежняя настройка
             // называется вслух, чтобы её исчезновение не было тихим.

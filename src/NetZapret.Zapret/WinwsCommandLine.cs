@@ -22,17 +22,74 @@ public static class WinwsCommandLine
     /// установки, а winws2 всё равно резолвит их сам.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<string> Build(ZapretPreset preset)
+    /// <param name="excludeList">
+    /// Файл имён, которые десинку трогать нельзя. <c>null</c> либо пустой
+    /// путь — ключ не добавляется вовсе, и командная строка остаётся ровно
+    /// такой, какой её задумал автор пресета.
+    /// </param>
+    public static IReadOnlyList<string> Build(ZapretPreset preset, string? excludeList = null)
     {
         var arguments = new List<string>(preset.GlobalArguments);
 
         foreach (var section in preset.Sections)
         {
             arguments.Add("--new");
+
+            // Исключение повторяется в каждой секции намеренно: winws2
+            // разбирает --hostlist-exclude в пределах профиля, и один ключ
+            // в начале накрыл бы только первый из полутора десятков.
+            //
+            // Ставится сразу после --new, до аргументов секции: так его
+            // не перекроет собственный --hostlist-exclude пресета, если тот
+            // однажды появится, — последний в профиле побеждает.
+            if (!string.IsNullOrWhiteSpace(excludeList))
+                arguments.Add($"--hostlist-exclude={excludeList}");
+
             arguments.AddRange(section.RawArguments);
         }
 
         return arguments;
+    }
+
+    /// <summary>Где лежит список имён, которые десинку трогать нельзя.</summary>
+    public static string DefaultExcludeListPath => Path.Combine("runtime", "desync-exclude.txt");
+
+    /// <summary>
+    /// Пишет список исключений; <c>null</c> — исключать нечего.
+    /// </summary>
+    /// <remarks>
+    /// Пустой файл не оставляется: winws2 принял бы его молча, а пустой ключ
+    /// в командной строке потом читался бы как «исключения настроены» — тогда
+    /// как их нет. Отсутствие файла честнее.
+    /// </remarks>
+    public static string? WriteExcludeList(IReadOnlyList<string> names, string? path = null)
+    {
+        var target = Path.GetFullPath(path ?? DefaultExcludeListPath);
+
+        try
+        {
+            if (names.Count == 0)
+            {
+                if (File.Exists(target))
+                    File.Delete(target);
+
+                return null;
+            }
+
+            var directory = Path.GetDirectoryName(target);
+
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
+            File.WriteAllLines(target, names);
+            return target;
+        }
+        catch (Exception)
+        {
+            // Не записалось — запускаемся без исключений: десинк без них
+            // работает как прежде, а отказ от запуска стоил бы дороже.
+            return null;
+        }
     }
 
     /// <summary>
