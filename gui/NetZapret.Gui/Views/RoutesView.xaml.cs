@@ -171,6 +171,13 @@ public partial class RoutesView : UserControl
 
             MarkPins(services, zapretRoot);
 
+            // Раскрытые папки переживают перерисовку. Прежде любое действие
+            // внутри папки — пин, свой маршрут, обновление списка — собирало
+            // строки заново, и всё захлопывалось: человек выбирал маршрут
+            // одной части, а искать следующую приходилось с начала.
+            foreach (var service in services)
+                service.Open = _open.Contains(service.Name);
+
             _all = services;
             Services.ItemsSource = services;
             ShowOwn();
@@ -527,6 +534,9 @@ public partial class RoutesView : UserControl
     /// <summary>Всё, что собрано; поиск отбирает из этого, не перечитывая правила.</summary>
     private IReadOnlyList<ServiceRow> _all = [];
 
+    /// <summary>Какие папки раскрыты. Переживает перерисовку списка.</summary>
+    private readonly HashSet<string> _open = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Перерисовывает показанное.
     /// </summary>
@@ -560,7 +570,17 @@ public partial class RoutesView : UserControl
         foreach (var same in _all.Where(s => s.Name == row.Name))
             same.Open = row.Open;
 
+        Remember(row.Name, row.Open);
         Redraw();
+    }
+
+    /// <summary>Запоминает раскрытую папку, чтобы она пережила перерисовку.</summary>
+    private void Remember(string name, bool open)
+    {
+        if (open)
+            _open.Add(name);
+        else
+            _open.Remove(name);
     }
 
     private void OnExpandAll(object sender, RoutedEventArgs e)
@@ -568,7 +588,10 @@ public partial class RoutesView : UserControl
         bool open = ExpandButton.Content as string == "Раскрыть всё";
 
         foreach (var service in _all)
+        {
             service.Open = open;
+            Remember(service.Name, open);
+        }
 
         if (Services.ItemsSource is IEnumerable<ServiceRow> shown)
         {

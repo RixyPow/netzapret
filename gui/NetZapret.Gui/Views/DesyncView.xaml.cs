@@ -131,8 +131,17 @@ public partial class DesyncView : UserControl
         int pass = preset.Sections.Count(s => s.IsPassThrough);
         int fake = preset.ActiveSections.Count(s => s.UsesFakePackets);
 
+        var file = Path.GetFileName(preset.FilePath);
+
         var detail = $"{preset.Sections.Count} {Ending(preset.Sections.Count, "секция", "секции", "секций")}: "
             + $"{active} с десинком, {pass} нетронутыми";
+
+        // Имя файла в строке обязательно. Название берётся изнутри пресета,
+        // а не из имени файла, и два разных файла с одинаковым названием
+        // внутри выглядели как одна строка, повторённая дважды: отличить их
+        // было нечем, а переименование файла ничего не меняло.
+        if (!string.Equals(Path.GetFileNameWithoutExtension(file), preset.Name, StringComparison.OrdinalIgnoreCase))
+            detail = $"{file} · {detail}";
 
         return new PresetRow(
             preset.Name,
@@ -145,7 +154,7 @@ public partial class DesyncView : UserControl
                 ? string.Empty
                 : $"{fake} с поддельным пакетом — под туннелем такие секции работают не всегда")
         {
-            File = Path.GetFileName(preset.FilePath),
+            File = file,
             Detail = detail,
             Chosen = string.Equals(preset.Name, chosen, StringComparison.OrdinalIgnoreCase),
         };
