@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
     Оконный вид. Собирается своим решением, gui\NetZapret.Gui.sln, и в
@@ -11,6 +11,28 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
+
+    <!--
+      WinForms подключён ради одного NotifyIcon: своего значка в трее у WPF
+      нет, а Shell_NotifyIcon вручную — это двести строк вместе с невидимым
+      окном для сообщений. Замер 2026-09-10: единый файл вырос со 156,9
+      до 157,0 МБ, то есть на сто килобайт.
+    -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!--
+      WFAC010 советует убрать настройки DPI из манифеста и задать их через
+      Application.SetHighDpiMode. Совет для программ на WinForms; у нас WPF,
+      и осведомлённость о DPI он читает именно из манифеста. Выполнить совет
+      значит получить мыльное окно на мониторе с масштабом.
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+
+    <!--
+      Значок появляется, когда файл положат: без условия сборка падала бы
+      у всякого, кто клонировал репозиторий до того.
+    -->
+    <ApplicationIcon Condition="Exists('Assets\app.ico')">Assets\app.ico</ApplicationIcon>
     <!--
       Имя отличается от консольного намеренно и до самой сборки. Оба файла
       кладутся в одну папку, а Windows не различает регистр: библиотека окна,
@@ -65,6 +87,17 @@
     -->
     <Content Include="Assets\flags\*.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\flags\NOTICE.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Неявные using от WinForms сняты. Иначе UserControl и Brush становятся
+    двусмысленными между System.Windows.Forms/System.Drawing и WPF — сразу
+    по всему коду, во всех разделах, а WinForms здесь нужен ровно ради
+    значка в трее.
+  -->
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
   </ItemGroup>
 
   <ItemGroup>

@@ -28,6 +28,34 @@ public partial class MainWindow : Window
         _toastTimer.Tick += (_, _) => HideToast();
     }
 
+    /// <summary>
+    /// Крестик прячет окно в трей, а не закрывает программу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Движки живут отдельным процессом и переживают закрытие окна: закрыв
+    /// его по-настоящему, человек остался бы с работающим обходом и без
+    /// единого признака этого на экране. Значок в трее и есть такой признак.
+    /// </para>
+    /// <para>
+    /// Сворачивание при этом остаётся обычным — окно уходит на панель задач,
+    /// а не в трей. Прятать его и туда, и туда значит отобрать привычное
+    /// поведение ради второго способа сделать то же самое.
+    /// </para>
+    /// </remarks>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!App.Exiting)
+        {
+            e.Cancel = true;
+            Hide();
+
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
     private const int WmCopyGlobalData = 0x0049;
     private const int WmCopyData = 0x004A;
     private const int WmDropFiles = 0x0233;

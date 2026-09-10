@@ -48,7 +48,53 @@ public partial class App : Application
             return;
         }
 
+        // Интерфейс — в одном экземпляре. Автозапуск и запуск руками иначе
+        // дают две иконки в трее и два окна, каждое со своим опросом
+        // состояния и своими кнопками к одним и тем же движкам.
+        if (!SingleInstance.Claim())
+        {
+            SingleInstance.RequestShow();
+            Shutdown(0);
+
+            return;
+        }
+
+        // Закрытие окна больше не закрывает программу: крестик прячет её
+        // в трей. Выход остаётся явным — пунктом в меню значка.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        _tray = new TrayIcon();
+        SingleInstance.OnShowRequested(TrayIcon.Show);
+
+        if (e.Args.Contains(TrayIcon.Switch))
+        {
+            // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
+            // в планировщике только показывала бы значок, а обход ждал бы,
+            // пока человек откроет окно и нажмёт кнопку.
+            _ = EngineControl.StartAsync(CancellationToken.None);
+
+            return;
+        }
+
         new MainWindow().Show();
+    }
+
+    /// <summary>Выход по-настоящему, а не прятки в трей.</summary>
+    /// <remarks>
+    /// Крестик отменяет закрытие и прячет окно; без этого признака выход
+    /// из меню значка отменялся бы тем же обработчиком, и программа
+    /// не закрывалась бы вовсе.
+    /// </remarks>
+    internal static bool Exiting;
+
+    private TrayIcon? _tray;
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        _tray?.Dispose();
+        SingleInstance.Release();
+
+        base.OnExit(e);
     }
 
     private async void RunStop()

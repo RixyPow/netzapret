@@ -515,9 +515,12 @@ public partial class StatusView : UserControl
                     TaskName = AutostartTask.DefaultTaskName,
                     ExecutablePath = exe,
 
-                    // Те же ключи, что у кнопки «Запустить»: иначе автозапуск
-                    // поднимал бы не то, что человек проверил руками.
-                    Arguments = SupervisorHost.BuildArguments(AppSettings.Load(AppSettings.DefaultPath)),
+                    // Задача поднимает интерфейс в трей, а движки он заводит
+                    // сам — теми же ключами, что и кнопка «Запустить». Прежде
+                    // задача поднимала один супервизор, и при входе не было
+                    // ни значка, ни способа остановить обход, кроме как
+                    // открыть программу заново.
+                    Arguments = TrayIcon.Switch,
                     WorkingDirectory = Path.GetFullPath("."),
                     UserId = Environment.UserName,
                 });
