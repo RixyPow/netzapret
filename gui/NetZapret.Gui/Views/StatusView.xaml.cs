@@ -501,16 +501,29 @@ public partial class StatusView : UserControl
     /// Запускает ли задача не ту программу.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Задача переживает обновление, а её команда — нет: она записана внутрь
     /// задачи целиком, путём и ключами. До 0.5.0 автозапуск поднимал
     /// netzapret.exe, которого в поставке уже нет, и «заведена» при мёртвой
     /// команде — худший из возможных ответов: обход при входе не поднимется,
     /// а окно скажет, что всё в порядке.
+    /// </para>
+    /// <para>
+    /// Сверяется имя файла, а не путь целиком, и не ключи. Ключи менялись
+    /// и ещё будут меняться, а запуск исчезнувшей программы — беда другого
+    /// порядка. Путь целиком не годится: он может содержать кириллицу,
+    /// а schtasks при перенаправлении отвечает однобайтовой OEM — имя же
+    /// латинское и переживает любую из них.
+    /// </para>
     /// </remarks>
     private static bool IsStale()
     {
         try
         {
+            // Кодировка не задаётся намеренно. Заданная Unicode здесь уже
+            // стояла и всё ломала: schtasks пишет однобайтовый текст, а тот,
+            // прочитанный парами байт, превращался в кашу, не содержащую
+            // вообще ничего, — и всякая задача объявлялась устаревшей.
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "schtasks.exe",
@@ -518,7 +531,6 @@ public partial class StatusView : UserControl
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
-                StandardOutputEncoding = System.Text.Encoding.Unicode,
             });
 
             if (process is null)
@@ -530,10 +542,8 @@ public partial class StatusView : UserControl
             if (xml.Length == 0)
                 return false;
 
-            // Сверяется путь, а не ключи: ключи менялись и ещё будут меняться,
-            // а вот запуск исчезнувшей программы — беда другого порядка.
-            return Environment.ProcessPath is { } exe
-                && !xml.Contains(exe, StringComparison.OrdinalIgnoreCase);
+            return Path.GetFileName(Environment.ProcessPath) is { Length: > 0 } name
+                && !xml.Contains(name, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception)
         {
