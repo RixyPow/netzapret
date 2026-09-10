@@ -101,6 +101,22 @@ exit /b 1
 
 :deploy
 
+rem Files from before the rename go first, and it has to be before the copy,
+rem not after. After the rename the old console and the new window are the same
+rem names to the file system: netzapret.exe and NetZapret.exe differ only in
+rem case, and Windows does not distinguish. Cleaning up afterwards deleted the
+rem very file just deployed, and build\ came out with no window in it at all.
+rem
+rem NetZapret.Gui.exe is the unambiguous marker of an old layout, so the whole
+rem cleanup runs only when one is actually there - once, and never again.
+if exist "%TARGET%\NetZapret.Gui.exe" (
+    echo Removing files from before the rename
+    del /q "%TARGET%\NetZapret.Gui.*" >nul 2>&1
+    del /q "%TARGET%\netzapret.exe" "%TARGET%\netzapret.dll" >nul 2>&1
+    del /q "%TARGET%\netzapret.deps.json" "%TARGET%\netzapret.runtimeconfig.json" >nul 2>&1
+    del /q "%TARGET%\netzapret.pdb" >nul 2>&1
+)
+
 echo Deploying to %TARGET%
 
 rem /R and /W are not optional here. Robocopy defaults to one million retries
@@ -116,12 +132,6 @@ rem named after it too. Both parts share the same libraries, built from the same
 rem sources, so overwriting them changes nothing.
 robocopy "%WINDOW%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if %errorlevel% geq 8 goto :held
-
-rem Files from before the rename. Left alone they sit next to the new ones,
-rem and the one to double-click stops being obvious - which is the whole reason
-rem the rename happened.
-if exist "%TARGET%\NetZapret.Gui.exe" del /q "%TARGET%\NetZapret.Gui.*" >nul 2>&1
-if exist "%TARGET%\netzapret.exe" del /q "%TARGET%\netzapret.exe" "%TARGET%\netzapret.dll" "%TARGET%\netzapret.deps.json" "%TARGET%\netzapret.runtimeconfig.json" "%TARGET%\netzapret.pdb" >nul 2>&1
 
 rem ---------------------------------------------------------------------------
 rem Engines, bundled next to the program so build\ runs on its own.
