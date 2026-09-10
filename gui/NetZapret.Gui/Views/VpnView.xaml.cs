@@ -478,12 +478,27 @@ public partial class VpnView : UserControl
     {
         var url = NewUrl.Password.Trim();
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed)
-            || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
         {
             // Ссылку не повторяем даже в жалобе: она уже в поле, и вынести её
             // в подпись значило бы показать ровно то, что мы прячем.
-            Status.Text = "Это не похоже на ссылку http или https.";
+            Status.Text = "Это не похоже на ссылку.";
+            return;
+        }
+
+        // Обёртки клиентов разворачиваются до проверки, а не после.
+        // Библиотека их и так понимает — happ://add/, clash://install-config,
+        // sn://subscription, — но проверка стояла раньше неё и отбивала
+        // ссылку, которую программа умеет читать. Поставщики раздают именно
+        // такие: у них одна кнопка «добавить в клиент».
+        parsed = SubscriptionClient.Unwrap(parsed);
+        url = parsed.ToString();
+
+        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
+        {
+            Status.Text = "Это не похоже на ссылку подписки: нужна http, https "
+                + "либо обёртка happ, clash или sn.";
+
             return;
         }
 
