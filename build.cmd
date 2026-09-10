@@ -50,26 +50,40 @@ rem runtime\supervisor.state.json relative to the working directory. Called from
 rem elsewhere, --stop reports "not running" and leaves the engines holding the
 rem very files we are about to overwrite.
 rem ---------------------------------------------------------------------------
-rem Every known name is tried, quietly, and none of them is trusted to tell us
-rem whether it worked. Windows does not distinguish case, so "if exist
-rem NetZapret.exe" also matches a leftover netzapret.exe from before the rename
-rem - and the console, handed --stop, prints its help and returns an error that
-rem means nothing here. Whether the stop actually mattered is answered by
-rem robocopy below, which is the only honest source.
+rem Only names that cannot be confused with the current one. The old console
+rem was netzapret.exe, which differs from NetZapret.exe by case alone - and
+rem Windows does not distinguish case, so asking for the old one hands the
+rem window an argument it does not know. It then opens normally, and cmd waits
+rem for that window to be closed: the script hangs at this very line, having
+rem launched the program it was told to stop.
+rem
+rem The leftover console is not stopped by name at all. It cannot outlive its
+rem own supervisor, and the deploy step below removes it.
+rem
+rem Neither call is trusted to report success. Whether the stop mattered is
+rem answered by robocopy below, which is the only honest source.
 rem
 rem From %ROOT%, not from wherever this was invoked: the state file lives at
 rem runtime\supervisor.state.json relative to the working directory. Called from
 rem elsewhere, --stop reports "not running" and leaves the engines holding the
 rem very files we are about to overwrite.
+rem Nothing to stop is the common case, and it is answered by a file rather
+rem than by launching anything. The program asks for administrator rights
+rem through its manifest, so starting it from an ordinary shell just to learn
+rem there was no supervisor cost a minute of waiting on elevation that was
+rem never going to be granted.
+if not exist "%ROOT%runtime\supervisor.state.json" goto :stopped
+
 echo Stopping the engines...
 
 pushd "%ROOT%"
 
 if exist "%TARGET%\NetZapret.exe" "%TARGET%\NetZapret.exe" --stop >nul 2>&1
 if exist "%TARGET%\NetZapret.Gui.exe" "%TARGET%\NetZapret.Gui.exe" --stop >nul 2>&1
-if exist "%TARGET%\netzapret.exe" "%TARGET%\netzapret.exe" stop >nul 2>&1
 
 popd
+
+:stopped
 
 rem Give the engines a moment to release WinDivert and the TUN adapter.
 rem "ping" rather than "timeout": the latter fails outright when this script
