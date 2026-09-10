@@ -4,7 +4,7 @@
 
 ```
 NetZapret.zip   {ZIP}
-netzapret.exe   {EXE}
+NetZapret.exe   {EXE}
 ```
 
 Пакет SDK .NET {SDK}, сборка Release, win-x64, self-contained, один файл.
@@ -22,5 +22,5 @@ git checkout v{VERSION}
 pack.cmd
 ```
 
-Совпасть должен `netzapret.exe`. Архив — нет: в нём лежат winws2 и sing-box,
+Совпасть должен `NetZapret.exe`. Архив — нет: в нём лежат winws2 и sing-box,
 собранные не нами, и их версии у вас могут отличаться.

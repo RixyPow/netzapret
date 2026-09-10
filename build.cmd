@@ -35,10 +35,10 @@ rem and then only kills the engines - leaving the supervisor alive to restart
 rem them and to keep holding the very files we are about to overwrite.
 set "STOPPED=1"
 
-if exist "%TARGET%\netzapret.exe" (
+if exist "%TARGET%\NetZapretOld.exe" (
     echo Stopping the engines...
     pushd "%ROOT%"
-    "%TARGET%\netzapret.exe" stop
+    "%TARGET%\NetZapretOld.exe" stop
     if errorlevel 1 set "STOPPED=0"
     popd
 )
@@ -57,10 +57,10 @@ rem "ping" rather than "timeout": the latter fails outright when this script
 rem runs with redirected input, which is how it runs from other tools.
 ping -n 3 127.0.0.1 >nul 2>&1
 
-rem The menu is netzapret.exe too, and "stop" does not close it - it holds the
+rem The menu is NetZapretOld.exe too, and "stop" does not close it - it holds the
 rem deployed assemblies just as firmly as the supervisor does. Say so plainly,
 rem because robocopy's failure alone does not point at the open window.
-tasklist /fi "imagename eq netzapret.exe" 2>nul | find /i "netzapret.exe" >nul
+tasklist /fi "imagename eq NetZapretOld.exe" 2>nul | find /i "NetZapretOld.exe" >nul
 if not errorlevel 1 (
     echo.
     echo NetZapret is still running - most likely the menu window.

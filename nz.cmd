@@ -7,7 +7,7 @@ rem
 rem ASCII only on purpose: cmd.exe reads batch files in the OEM code page,
 rem and UTF-8 Cyrillic here breaks apart into bogus commands.
 setlocal
-set "NETZAPRET_EXE=%~dp0build\netzapret.exe"
+set "NETZAPRET_EXE=%~dp0build\NetZapretOld.exe"
 
 if not exist "%NETZAPRET_EXE%" (
     echo Not deployed yet: %NETZAPRET_EXE%

@@ -64,6 +64,14 @@ public static class UpdateInstaller
         Path.Combine("config", "catalog.yaml"),
     ];
 
+    /// <summary>Как программа зовётся в поставке.</summary>
+    /// <remarks>
+    /// Нужна ради переименования: до 0.5.3 окно звалось NetZapret.Gui.exe,
+    /// и обновившийся получил бы в папке оба файла — новый рядом со старым,
+    /// который никто не убирал.
+    /// </remarks>
+    private const string Canonical = "NetZapret.exe";
+
     /// <summary>Куда складываем распакованное до перезапуска.</summary>
     public static string StagingDirectory => Path.Combine("runtime", "update");
 
@@ -213,7 +221,7 @@ public static class UpdateInstaller
         // как «обновление сломало всё».
         var executable = relaunch
             ?? Path.GetFileName(Environment.ProcessPath)
-            ?? "NetZapret.Gui.exe";
+            ?? Canonical;
 
         var lines = new List<string>
         {
@@ -253,7 +261,22 @@ public static class UpdateInstaller
         lines.Add(")");
         lines.Add("");
         lines.Add("echo Done.");
-        lines.Add($"start \"\" \"%TARGET%\\{executable}\"");
+        lines.Add($"set \"LAUNCH={executable}\"");
+
+        // Окно звалось NetZapret.Gui.exe до 0.5.3. robocopy добавляет файлы,
+        // но не убирает, поэтому прежний остаётся лежать рядом — и перезапуск
+        // поднял бы именно его, то есть прежнюю версию сразу после удачного
+        // обновления. Со стороны: обновились, а версия та же.
+        //
+        // Двумя отдельными строками, а не одним блоком: без отложенного
+        // раскрытия переменная внутри скобок читается до присваивания.
+        if (!string.Equals(executable, Canonical, StringComparison.OrdinalIgnoreCase))
+        {
+            lines.Add($"if exist \"%TARGET%\\{Canonical}\" del /q \"%TARGET%\\{executable}\" >nul 2>&1");
+            lines.Add($"if exist \"%TARGET%\\{Canonical}\" set \"LAUNCH={Canonical}\"");
+        }
+
+        lines.Add("start \"\" \"%TARGET%\\%LAUNCH%\"");
         lines.Add("");
 
         // Удаляется только распакованное. Сам сценарий лежит уровнем выше

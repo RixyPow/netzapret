@@ -44,7 +44,7 @@ jobs:
       # программу неработоспособной у всех, кто её скачал.
       - name: Проверить поставляемые правила
         run: |
-          $exe = "src/NetZapret.Cli/bin/Release/net8.0-windows/netzapret.exe"
+          $exe = "src/NetZapret.Cli/bin/Release/net8.0-windows/NetZapretOld.exe"
           foreach ($f in Get-ChildItem config/*.yaml) {
             Write-Host "-- $($f.Name)"
             & $exe rules --config $f.FullName

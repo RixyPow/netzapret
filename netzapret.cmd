@@ -20,11 +20,11 @@ cd /d "%~dp0"
 rem Two layouts, one launcher. In a downloaded distribution the program sits
 rem right here; in a working copy it lives in build\, because running it from
 rem the project's bin\ breaks every rebuild - see build.cmd.
-set "NETZAPRET_EXE=%~dp0netzapret.exe"
-if not exist "%NETZAPRET_EXE%" set "NETZAPRET_EXE=%~dp0build\netzapret.exe"
+set "NETZAPRET_EXE=%~dp0NetZapretOld.exe"
+if not exist "%NETZAPRET_EXE%" set "NETZAPRET_EXE=%~dp0build\NetZapretOld.exe"
 
 if not exist "%NETZAPRET_EXE%" (
-    echo netzapret.exe not found next to this file or in build\.
+    echo NetZapretOld.exe not found next to this file or in build\.
     echo In a working copy, build it first: "%~dp0build.cmd"
     pause
     exit /b 1

@@ -24,7 +24,7 @@ rem setup carrying all of this machine's traffic, and taking it down without
 rem asking to build an archive is not a trade anyone agreed to.
 rem
 rem The test is whether dist\ can actually be removed, not whether a process
-rem named netzapret.exe exists anywhere. Those are different questions, and
+rem named NetZapretOld.exe exists anywhere. Those are different questions, and
 rem asking the wrong one blocked a release while the running copy lived
 rem somewhere else entirely - with dist\ empty. Windows will not let go of a
 rem running program's own file, so a wipe that succeeds proves nothing is

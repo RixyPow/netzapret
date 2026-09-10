@@ -2,7 +2,17 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <AssemblyName>netzapret</AssemblyName>
+
+    <!--
+      Прежнее имя, netzapret, отдано окну: программа теперь оконная, и это
+      её имя. Консоль осталась инструментом разработчика — watch, rules,
+      test, — и в поставку не входит.
+
+      Переименовать одну без другой нельзя: обе кладутся в одну папку,
+      Windows не различает регистр, и netzapret.dll рядом с NetZapret.dll
+      оказывались одним файлом.
+    -->
+    <AssemblyName>NetZapretOld</AssemblyName>
     <RootNamespace>NetZapret.Cli</RootNamespace>
   </PropertyGroup>
 

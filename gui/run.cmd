@@ -31,7 +31,7 @@ if %errorlevel% neq 0 (
 
 rem Copied as they are, never renamed. The apphost looks for its library by the
 rem name baked in at build time, and the runtime config must be named after it
-rem too. Renaming on copy made NetZapret.Gui.exe load the console's
+rem too. Renaming on copy made NetZapret.exe load the console's
 rem netzapret.dll - Windows does not distinguish case - and run it with no
 rem arguments. From the outside: asked for rights, then closed in silence.
 rem
@@ -46,7 +46,7 @@ if errorlevel 8 (
 )
 
 echo Starting - Windows will ask for administrator rights.
-start "" "%TARGET%\NetZapret.Gui.exe"
+start "" "%TARGET%\NetZapret.exe"
 
 
 exit /b 0
