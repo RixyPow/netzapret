@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net;
 using System.Security.Principal;
 using System.Windows;
 using System.Windows.Controls;
@@ -441,13 +442,47 @@ public partial class DoctorView : UserControl
         host = host.Split('/')[0].TrimStart('*', '.');
 
         HostHint.Visibility = Host.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        ExeHint.Visibility = Exe.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        AddressHint.Visibility = Address.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
+        PortHint.Visibility = Port.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
 
-        if (host.Length == 0 || !host.Contains('.'))
+        var exe = Exe.Text.Trim();
+        var addressText = Address.Text.Trim();
+
+        if (host.Length == 0 && exe.Length == 0 && addressText.Length == 0)
         {
-            AnswerCard.Visibility = Visibility.Visible;
-            AnswerMode.Text = "Это не похоже на имя сайта";
-            AnswerMode.Foreground = (Brush)FindResource("Warn");
-            AnswerWhy.Text = "Нужно что-то вроде web.whatsapp.com.";
+            Answer("Нечего спрашивать", "Warn",
+                "Задайте хотя бы одно: имя, программу или адрес.");
+
+            return;
+        }
+
+        // Имя проверяется на точку только когда оно и есть вопрос: с одним
+        // лишь процессом или адресом пустое имя — законный случай.
+        if (host.Length > 0 && !host.Contains('.'))
+        {
+            Answer("Это не похоже на имя сайта", "Warn",
+                "Нужно что-то вроде web.whatsapp.com.");
+
+            return;
+        }
+
+        IPAddress? address = null;
+
+        if (addressText.Length > 0 && !IPAddress.TryParse(addressText, out address))
+        {
+            Answer("Это не похоже на адрес", "Warn",
+                $"«{addressText}» не разбирается как IP-адрес.");
+
+            return;
+        }
+
+        ushort port = 443;
+
+        if (Port.Text.Trim().Length > 0 && !ushort.TryParse(Port.Text.Trim(), out port))
+        {
+            Answer("Это не похоже на порт", "Warn",
+                $"«{Port.Text.Trim()}» не разбирается как номер порта.");
 
             return;
         }
@@ -461,20 +496,23 @@ public partial class DoctorView : UserControl
 
             RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
 
-            var decision = engine.Evaluate(new ConnectionEvent
+            var connection = new ConnectionEvent
             {
                 Timestamp = DateTimeOffset.Now,
                 Protocol = ProtocolKind.Tcp,
 
-                // Адрес не подставляется намеренно: мы спрашиваем про имя,
-                // адреса у него сейчас нет, и выдуманный попадает в чужие
-                // правила. IPAddress.None — это 255.255.255.255, и он
-                // однажды уже попал в список российских подсетей, отчего
-                // все сервисы показывались идущими напрямую.
-                RemoteAddress = null,
-                RemotePort = 443,
-                Hostname = host,
-            });
+                // Выдуманный адрес не подставляется: если про него не спросили,
+                // его нет. IPAddress.None — это 255.255.255.255, и он однажды
+                // уже попал в список российских подсетей, отчего все сервисы
+                // показывались идущими напрямую.
+                RemoteAddress = address,
+                RemotePort = port,
+                ExecutablePath = exe.Length > 0 ? exe : null,
+                Hostname = host.Length > 0 ? host : null,
+                Direction = ConnectionDirection.Outbound,
+            };
+
+            var decision = engine.Evaluate(connection);
 
             var (mode, key) = decision.Mode switch
             {
@@ -483,25 +521,41 @@ public partial class DoctorView : UserControl
                 _ => ("через VPN", "Accent"),
             };
 
-            AnswerCard.Visibility = Visibility.Visible;
-            AnswerMode.Text = $"{host} → {mode}";
-            AnswerMode.Foreground = (Brush)FindResource(key);
+            // Спрошенное называется целиком: с тремя полями по одному имени
+            // в ответе уже не понять, что именно проверяли.
+            var asked = new List<string>();
 
-            AnswerWhy.Text = decision.Rule is { } rule
+            if (host.Length > 0)
+                asked.Add(host);
+
+            if (exe.Length > 0)
+                asked.Add(exe);
+
+            if (address is not null)
+                asked.Add($"{address}:{port}");
+            else if (host.Length > 0 || exe.Length > 0)
+                asked.Add($"порт {port}");
+
+            Answer($"{string.Join(" · ", asked)} → {mode}", key, decision.Rule is { } rule
                 ? $"Сработало правило: {rule.Match.ToString().ToLowerInvariant()} «{rule.Value}»"
                   + (decision.Reason is null ? "." : $" — {decision.Reason}.")
                   + (rule.Source == RuleSource.User ? " Это ваше правило." : " Это правило из поставки.")
                 : $"Ни одно правило не совпало, применён режим по умолчанию — {mode}."
                   + (decision.HadUnevaluableDomainRules
-                      ? " Часть доменных правил проверить было нечем."
-                      : string.Empty);
+                      ? " Часть доменных правил проверить было нечем: имя не задано."
+                      : string.Empty));
         }
         catch (Exception ex)
         {
-            AnswerCard.Visibility = Visibility.Visible;
-            AnswerMode.Text = "Правила не читаются";
-            AnswerMode.Foreground = (Brush)FindResource("Danger");
-            AnswerWhy.Text = ex.GetBaseException().Message;
+            Answer("Правила не читаются", "Danger", ex.GetBaseException().Message);
         }
+    }
+
+    private void Answer(string title, string colorKey, string why)
+    {
+        AnswerCard.Visibility = Visibility.Visible;
+        AnswerMode.Text = title;
+        AnswerMode.Foreground = (Brush)FindResource(colorKey);
+        AnswerWhy.Text = why;
     }
 }

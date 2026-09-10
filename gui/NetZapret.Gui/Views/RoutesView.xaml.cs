@@ -40,6 +40,15 @@ public sealed class PartRow
     public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 }
 
+/// <summary>Строка таблицы порядка вычисления.</summary>
+public sealed record RuleRow(
+    string Ordinal,
+    string Kind,
+    string Value,
+    string Mode,
+    string Server,
+    Brush Color);
+
 /// <summary>
 /// Сервис со своими частями — папка.
 /// </summary>
@@ -170,6 +179,7 @@ public partial class RoutesView : UserControl
                 ? $"Сервисов: {services.Count}. Выбор пишется в config\\rules.user.yaml и применяется перезапуском."
                 : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
 
+            ShowOrder(engine);
             StartIcons(services);
         }
         catch (Exception ex)
@@ -290,6 +300,65 @@ public partial class RoutesView : UserControl
                 });
             }
         }, token);
+    }
+
+    /// <summary>
+    /// Показывает правила в том порядке, в каком их вычисляет движок.
+    /// </summary>
+    /// <remarks>
+    /// Список сервисов выше сгруппирован — так о маршрутах и думают, — но
+    /// группировка прячет главное: побеждает правило, до которого очередь
+    /// доходит раньше. Перекрытое в файле есть, а не применяется никогда,
+    /// и увидеть это можно только здесь.
+    /// </remarks>
+    private void ShowOrder(RuleEngine engine)
+    {
+        var ruleSet = engine.RuleSet;
+
+        var rows = ruleSet.Rules.Select(rule => new RuleRow(
+            rule.Ordinal.ToString(),
+            rule.Match.ToString().ToLowerInvariant(),
+            rule.Value,
+            rule.Mode.ToString().ToLowerInvariant(),
+            rule.Mode == RoutingMode.Proxy ? rule.Server ?? ruleSet.DefaultServer ?? "auto" : "—",
+            (Brush)FindResource(ColorOf(rule.Mode)))).ToList();
+
+        // Умолчание — последней строкой: это тоже решение, и без него таблица
+        // обрывается там, где ответ ещё не дан.
+        rows.Add(new RuleRow(
+            "—",
+            "default",
+            "*",
+            ruleSet.DefaultMode.ToString().ToLowerInvariant(),
+            ruleSet.DefaultServer ?? "—",
+            (Brush)FindResource(ColorOf(ruleSet.DefaultMode))));
+
+        Order.ItemsSource = rows;
+
+        OrderSummary.Text = $"{ruleSet.Rules.Count} правил, порядок: process → domain → ip → default. "
+            + "Побеждает то, до которого очередь доходит раньше.";
+
+        OrderNote.Text = ruleSet.Operating != OperatingMode.Selective
+            ? "В этом режиме правила не вычисляются — они показаны для справки."
+            : engine.RequiresHostnames
+                ? "Доменные правила требуют источника имён — его даёт fakeip, "
+                  + "поднимаемый вместе с туннелем."
+                : string.Empty;
+    }
+
+    private static string ColorOf(RoutingMode mode) => mode switch
+    {
+        RoutingMode.Direct => "Muted",
+        RoutingMode.Desync => "Warn",
+        _ => "Accent",
+    };
+
+    private void OnOrderToggle(object sender, RoutedEventArgs e)
+    {
+        var open = OrderPanel.Visibility != Visibility.Visible;
+
+        OrderPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        OrderChevron.Text = open ? "▼" : "►";
     }
 
     /// <summary>

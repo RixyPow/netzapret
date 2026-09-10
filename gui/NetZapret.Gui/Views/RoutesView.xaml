@@ -236,6 +236,97 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
+                <!--
+                    Порядок вычисления. Список выше сгруппирован по сервисам —
+                    так о маршрутах и думают, — но группировка прячет главное:
+                    побеждает правило, до которого очередь доходит раньше.
+                    Перекрытое правило в файле есть, а не применяется никогда,
+                    и увидеть это можно только в этом порядке.
+
+                    Свёрнут по умолчанию: правил под сотню, и разворачивают
+                    их, когда правило написано, а не срабатывает.
+                -->
+                <Button Style="{StaticResource Choice}" Margin="0,22,0,0" Click="OnOrderToggle">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="OrderChevron" Grid.Column="0" Text="►"
+                                   Foreground="{StaticResource Muted}" Margin="0,0,12,0"
+                                   VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Порядок вычисления" FontWeight="SemiBold" />
+                            <TextBlock x:Name="OrderSummary" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <StackPanel x:Name="OrderPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                    <Grid Margin="16,0,16,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="86" />
+                            <ColumnDefinition Width="96" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="#" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="1" Text="ТИП" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="2" Text="ЗНАЧЕНИЕ" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="3" Text="РЕЖИМ" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="4" Text="СЕРВЕР" Style="{StaticResource Caption}" />
+                    </Grid>
+
+                    <ItemsControl x:Name="Order">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,4" Padding="16,9">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="96" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="86" />
+                                            <ColumnDefinition Width="96" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="{Binding Ordinal}"
+                                                   Style="{StaticResource Mono}"
+                                                   Foreground="{StaticResource Muted}" />
+
+                                        <TextBlock Grid.Column="1" Text="{Binding Kind}"
+                                                   Style="{StaticResource Mono}"
+                                                   Foreground="{StaticResource Muted}" />
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Value}"
+                                                   Style="{StaticResource Mono}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Value}" Margin="0,0,8,0" />
+
+                                        <TextBlock Grid.Column="3" Text="{Binding Mode}"
+                                                   Style="{StaticResource Mono}"
+                                                   Foreground="{Binding Color}" />
+
+                                        <TextBlock Grid.Column="4" Text="{Binding Server}"
+                                                   Style="{StaticResource Mono}"
+                                                   Foreground="{StaticResource Muted}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="OrderNote" Style="{StaticResource Caption}"
+                               Margin="4,10,0,0" TextWrapping="Wrap" />
+                </StackPanel>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>
