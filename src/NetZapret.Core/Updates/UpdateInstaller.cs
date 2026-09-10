@@ -198,9 +198,22 @@ public static class UpdateInstaller
     /// ровно тогда, когда её труднее всего заметить.
     /// </para>
     /// </remarks>
-    public static string WriteApplyScript(UpdatePlan plan, string installedAt)
+    /// <param name="relaunch">
+    /// Что запустить после подмены. <c>null</c> — та же программа, которая
+    /// обновлялась.
+    /// </param>
+    public static string WriteApplyScript(UpdatePlan plan, string installedAt, string? relaunch = null)
     {
         var script = Path.Combine(Path.GetFullPath(StagingDirectory), "apply.cmd");
+
+        // Имя берётся у себя, а не зашито в код. Здесь стояло netzapret.exe,
+        // и после перехода на окно обновление возвращало бы человека к файлу,
+        // которого в поставке больше нет: подмена прошла бы, а программа
+        // не открылась — худший исход из возможных, потому что выглядит
+        // как «обновление сломало всё».
+        var executable = relaunch
+            ?? Path.GetFileName(Environment.ProcessPath)
+            ?? "NetZapret.Gui.exe";
 
         var lines = new List<string>
         {
@@ -240,7 +253,7 @@ public static class UpdateInstaller
         lines.Add(")");
         lines.Add("");
         lines.Add("echo Done.");
-        lines.Add("start \"\" \"%TARGET%\\netzapret.exe\"");
+        lines.Add($"start \"\" \"%TARGET%\\{executable}\"");
         lines.Add("");
 
         // Удаляется только распакованное. Сам сценарий лежит уровнем выше

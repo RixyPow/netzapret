@@ -35,12 +35,23 @@
                                            Margin="0,6,0,0" TextWrapping="Wrap" />
                             </StackPanel>
 
-                            <Button Grid.Column="1" x:Name="UpdateButton" Style="{StaticResource Ghost}"
-                                    Content="Проверить" Click="OnCheckUpdate" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
+                                        Content="Проверить" Click="OnCheckUpdate" Margin="0,0,8,0" />
+
+                                <!--
+                                    Появляется только когда есть что ставить:
+                                    кнопка установки при последней версии
+                                    предлагала бы действие без смысла.
+                                -->
+                                <Button x:Name="InstallButton" Style="{StaticResource Primary}"
+                                        Content="Обновить" Click="OnInstallUpdate"
+                                        Visibility="Collapsed" />
+                            </StackPanel>
                         </Grid>
 
                         <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                   Text="Только проверка. Установка — отдельное действие: подменять работающий обход молча нельзя, а обновление трогает движки, которые в этот момент несут весь трафик машины." />
+                                   Text="Обновление останавливает движки: с 0.5.0 супервизор — это та же программа, и заменить её файл, пока он запущен, Windows не даёт. Соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса переживают обновление." />
                     </StackPanel>
                 </Border>
 

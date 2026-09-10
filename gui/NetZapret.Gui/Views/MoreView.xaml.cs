@@ -78,11 +78,16 @@ public partial class MoreView : UserControl
         {
             var release = await UpdateCheck.LatestAsync(_work.Token);
 
+            _release = release is not null && UpdateCheck.IsNewer(release.Version, UpdateCheck.Current)
+                ? release
+                : null;
+
+            InstallButton.Visibility = _release is null ? Visibility.Collapsed : Visibility.Visible;
+
             UpdateValue.Text = release is null
                 ? "Не удалось узнать: GitHub не ответил."
-                : UpdateCheck.IsNewer(release.Version, UpdateCheck.Current)
-                    ? $"Есть новее: {release.Version}. Ставится из консоли — обновление трогает "
-                      + "движки, которые сейчас несут весь трафик машины."
+                : _release is not null
+                    ? $"Есть новее: {release.Version}."
                     : "Установлена последняя.";
         }
         catch (OperationCanceledException)
@@ -156,6 +161,74 @@ public partial class MoreView : UserControl
                         : $"Не вышло, код {code}.";
             });
         });
+    }
+
+    /// <summary>Найденное обновление; <c>null</c> — ставить нечего.</summary>
+    private ReleaseInfo? _release;
+
+    /// <summary>
+    /// Скачивает обновление и передаёт подмену внешнему сценарию.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Движки останавливаются до, а не после. С 0.5.0 супервизор — это та же
+    /// программа с ключом, и пока он работает, Windows держит её файл: подмена
+    /// сорвалась бы на самом главном файле, а сценарий сообщил бы об этом уже
+    /// после того, как окно закрылось.
+    /// </para>
+    /// <para>
+    /// Подменяет внешний сценарий, потому что заменить нужно и себя. Кто-то
+    /// обязан пережить наше завершение, и это не костыль, а единственный
+    /// вариант.
+    /// </para>
+    /// </remarks>
+    private async void OnInstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_release is null)
+            return;
+
+        if (!Confirm(
+            $"Обновить до {_release.Version}?\n\n"
+            + "Движки будут остановлены, соединения оборвутся. Программа закроется, "
+            + "файлы заменятся и она откроется снова.\n\n"
+            + "Настройки, свои маршруты и подставленные адреса сохранятся."))
+        {
+            return;
+        }
+
+        InstallButton.IsEnabled = false;
+        UpdateButton.IsEnabled = false;
+
+        try
+        {
+            Status.Text = "Останавливаю движки…";
+            await EngineControl.StopAsync(CancellationToken.None);
+
+            var progress = new Progress<double>(fraction =>
+                Status.Text = $"Скачиваю… {fraction * 100:0}%");
+
+            var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None);
+            var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
+
+            Status.Text = $"Скачано {plan.Files} файлов. Закрываюсь для подмены…";
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = script,
+                Arguments = Environment.ProcessId.ToString(),
+                UseShellExecute = true,
+            });
+
+            App.Exiting = true;
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Обновиться не вышло: " + ex.GetBaseException().Message;
+
+            InstallButton.IsEnabled = true;
+            UpdateButton.IsEnabled = true;
+        }
     }
 
     private static bool IsExcluded(string path)
