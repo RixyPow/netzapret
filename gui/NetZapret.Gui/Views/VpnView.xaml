@@ -159,6 +159,10 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="WarpTryButton" Style="{StaticResource Ghost}"
+                                        Content="попробовать сейчас" Padding="12,6" Margin="0,0,8,0"
+                                        Visibility="Collapsed" Click="OnTryWarp" />
+
                                 <Button x:Name="WarpCheckButton" Style="{StaticResource Ghost}"
                                         Content="проверить" Padding="12,6" Margin="0,0,8,0"
                                         Visibility="Collapsed" Click="OnCheckWarp" />

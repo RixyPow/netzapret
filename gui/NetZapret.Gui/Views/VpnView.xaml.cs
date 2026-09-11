@@ -280,12 +280,10 @@ public partial class VpnView : UserControl
             var known = _health.Find(server.Tag);
             bool chosen = server.Tag == settings.PreferredServer;
 
-            // Незамеряемые выходы не притворяются замеренными. Пробник поднимает
-            // свой движок, а учётная запись MASQUE лежит в кэше работающего,
-            // и файл занят им же — пробник обязан регистрироваться заново,
-            // а через что, ему взять негде. Подписать такое «не отвечает»
-            // значило бы выдать особенность замера за свойство сервера.
-            var (latency, key) = !server.IsMeasurable
+            // Незамеряемого пробником меряет сам движок — и тогда у него
+            // обычный замер, как у всех. «Только в работе» остаётся лишь
+            // на то время, пока движки стоят и спросить некого.
+            var (latency, key) = !server.IsMeasurable && known is null
                 ? ("только в работе", "Faint")
                 : known switch
                 {
@@ -374,10 +372,15 @@ public partial class VpnView : UserControl
                     Color = (Brush)FindResource(
                         server.Tag == settings.PreferredServer
                             ? "Accent"
-                            : server.Measurable ? Key(server.Tag) : "Faint"),
+                            : server.Measurable || _health.Find(server.Tag) is not null
+                                ? Key(server.Tag)
+                                : "Faint"),
                     ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
                     CanChoose = server.Tag != settings.PreferredServer,
-                    Latency = server.Measurable ? Latency(server.Tag) : "только в работе",
+
+                    Latency = server.Measurable || _health.Find(server.Tag) is not null
+                        ? Latency(server.Tag)
+                        : "только в работе",
 
                     // Возраст замера пересчитывается здесь же: иначе он
                     // оставался тем, каким был при чтении подписки, и «17 мин
@@ -538,6 +541,12 @@ public partial class VpnView : UserControl
         // отдельным пробником не замеряется, так что одна она без ключей
         // WireGuard ничего бы не сделала.
         WarpCheckButton.Visibility = on && WarpAccount.Exits().Any(s => s.IsMeasurable)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        // «Попробовать» есть только при работающих движках: оно переключает
+        // живой селектор, а выключенному движку переключать нечего.
+        WarpTryButton.Visibility = on && EnginesRunning
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
@@ -989,7 +998,14 @@ public partial class VpnView : UserControl
         // Выходы WARP замеряются вместе со всеми: в конфиге они лежат рядом
         // с серверами подписки, и знать про них надо то же самое.
         if (settings.WarpEnabled)
+        {
             servers.AddRange(WarpAccount.Exits().Where(s => s.IsMeasurable));
+
+            // А незамеряемые пробником — руками самого движка, если он работает.
+            // Это не хуже пробника, а лучше: меряется тот выход, через который
+            // пойдёт трафик, а не его копия в отдельном процессе.
+            await MeasureThroughEngineAsync(WarpAccount.Exits().Where(s => !s.IsMeasurable));
+        }
 
         if (servers.Count == 0)
         {
@@ -1100,6 +1116,127 @@ public partial class VpnView : UserControl
             _measuring.Clear();
 
             ShowBusy([]);
+            Reshow();
+        }
+    }
+
+    /// <summary>
+    /// Замеряет выходы руками работающего движка.
+    /// </summary>
+    /// <remarks>
+    /// Для тех, кого не берёт пробник: у MASQUE учётная запись лежит в кэше
+    /// движка, а файл занят им же, и отдельный экземпляр обязан
+    /// регистрироваться заново — дозвониться ему для этого не через что.
+    /// Движок же меряет свой выход сам, и меряет именно тот, через который
+    /// пойдёт трафик.
+    /// </remarks>
+    private async Task MeasureThroughEngineAsync(IEnumerable<ProxyServer> servers)
+    {
+        var list = servers.ToList();
+
+        if (list.Count == 0 || !EnginesRunning)
+            return;
+
+        using var api = new ClashApi();
+
+        if (!await api.AliveAsync(CancellationToken.None))
+            return;
+
+        foreach (var server in list)
+        {
+            var delay = await api.MeasureAsync(
+                server.Tag,
+                "http://cp.cloudflare.com/generate_204",
+                TimeSpan.FromSeconds(15),
+                CancellationToken.None);
+
+            _health.Set(new ServerHealth
+            {
+                Tag = server.Tag,
+                Success = delay is not null,
+                LatencyMs = delay?.TotalMilliseconds,
+                CheckedAt = DateTimeOffset.Now,
+            });
+        }
+
+        _health.Save();
+        Reshow();
+    }
+
+    /// <summary>Работают ли движки прямо сейчас.</summary>
+    private static bool EnginesRunning =>
+        SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive();
+
+    /// <summary>Тег группы, которой движок выбирает выход.</summary>
+    private const string SelectorGroup = "auto";
+
+    /// <summary>
+    /// Пробует WARP на живом движке и возвращает всё обратно.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Через Clash API, а не через настройки. Закрепление сервера правит
+    /// <c>PreferredServer</c>, а оно применяется только при следующем запуске
+    /// движков — то есть «попробовать» стоило бы обрыва всего трафика
+    /// на полминуты, дважды: туда и обратно. Переключение группы в работающем
+    /// движке происходит мгновенно и ничего не роняет.
+    /// </para>
+    /// <para>
+    /// Возврат делается всегда, в том числе когда проба не удалась. Оставить
+    /// человека на неработающем выходе, потому что мы не смогли его проверить,
+    /// — худшее, чем может кончиться кнопка с надписью «попробовать».
+    /// </para>
+    /// </remarks>
+    private async void OnTryWarp(object sender, RoutedEventArgs e)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        using var api = new ClashApi();
+
+        WarpTryButton.IsEnabled = false;
+        WarpTryButton.Content = "пробую…";
+
+        var previous = await api.SelectedAsync(SelectorGroup, CancellationToken.None);
+
+        try
+        {
+            var exit = WarpAccount.Exits().FirstOrDefault(s => s.IsSelfRegistering)
+                ?? WarpAccount.Exits().FirstOrDefault();
+
+            if (exit is null || !await api.SelectAsync(SelectorGroup, exit.Tag, CancellationToken.None))
+            {
+                Status.Text = "Движок не отозвался. Проверьте, что он работает — «Главная».";
+                return;
+            }
+
+            Status.Text = $"Весь трафик временно идёт через «{exit.Tag}». Проверяю…";
+
+            // Через сам движок, а не мимо него: вопрос ровно в том, дойдёт ли
+            // трафик тем путём, которым пойдёт всё остальное.
+            var delay = await api.MeasureAsync(
+                exit.Tag,
+                "http://cp.cloudflare.com/generate_204",
+                TimeSpan.FromSeconds(20),
+                CancellationToken.None);
+
+            Status.Text = delay is { } ms
+                ? $"{exit.Tag} работает: {ms.TotalMilliseconds:0} мс. Выход вернулся на прежний — "
+                  + "чтобы оставить WARP насовсем, выберите его в списке."
+                : $"{exit.Tag} не отозвался за двадцать секунд. Туннель MASQUE поднимается "
+                  + "не мгновенно: если движки только что запущены, повторите через полминуты.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось попробовать: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            // Возврат в любом случае, и без оглядки на исход пробы.
+            if (!string.IsNullOrEmpty(previous))
+                await api.SelectAsync(SelectorGroup, previous, CancellationToken.None);
+
+            WarpTryButton.IsEnabled = true;
+            WarpTryButton.Content = "попробовать сейчас";
+
             Reshow();
         }
     }
