@@ -517,30 +517,21 @@ public partial class VpnView : UserControl
     private void ShowWarp(AppSettings settings)
     {
         bool on = settings.WarpEnabled;
-        var account = WarpAccount.Load();
 
         WarpButton.Content = on ? "включён" : "выключен";
         WarpButton.Foreground = (Brush)FindResource(on ? "Accent" : "Muted");
 
         WarpLine.Text = on
-            ? account is null
-                ? "Добавлен к подписке. Ключей WireGuard нет — работает только MASQUE."
-                : $"Добавлен к подписке. Ключи заведены {account.RegisteredAt:d MMMM yyyy}, "
-                  + $"адрес внутри сети {account.AddressV4}."
-            : account is null
-                ? "Выключен. При включении ключи заводятся на месте — ни почты, ни оплаты."
-                : $"Выключен. Ключи заведены {account.RegisteredAt:d MMMM yyyy} и сохранены.";
+            ? "Добавлен к серверам действующей подписки. Учётную запись движок "
+              + "заводит себе сам — от вас не требуется ничего."
+            : "Выключен. Включается одним нажатием: ни почты, ни оплаты, ни ключей.";
 
-        WarpExits.ItemsSource = on
-            ? Rows(WarpAccount.Exits(), WarpOwner, settings)
-            : null;
-
+        WarpExits.ItemsSource = on ? Rows(Warp.Exits(), WarpOwner, settings) : null;
         WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
 
-        // Кнопка проверки есть, только когда есть что проверять: MASQUE
-        // отдельным пробником не замеряется, так что одна она без ключей
-        // WireGuard ничего бы не сделала.
-        WarpCheckButton.Visibility = on && WarpAccount.Exits().Any(s => s.IsMeasurable)
+        // Кнопка проверки есть, только когда есть что проверять отдельным
+        // пробником. MASQUE им не берётся — его меряет сам движок.
+        WarpCheckButton.Visibility = on && Warp.Exits().Any(s => s.IsMeasurable)
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -561,98 +552,33 @@ public partial class VpnView : UserControl
     private const string WarpOwner = "\0warp";
 
     /// <summary>
-    /// Заводит учётную запись WARP и добавляет её в список подписок.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Порядок именно такой: сперва ключи и регистрация, и только при успехе —
-    /// строка в списке. Иначе в списке появлялась бы подписка, которая ничего
-    /// не отдаёт, и убирать её пришлось бы руками.
-    /// </para>
-    /// <para>
-    /// Повторное нажатие заводит новую запись поверх старой. Это не откат
-    /// и не починка: у WARP нет способа «обновить» запись, а выходной адрес
-    /// у него и так меняется. Прежняя при этом остаётся у Cloudflare
-    /// висеть — удалять её нечем, кроме как её же ключом доступа, и на
-    /// бесплатном тарифе это никого не стесняет.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Включает и выключает WARP.
     /// </summary>
     /// <remarks>
-    /// Ключи заводятся один раз, при первом включении. Выключение их не трогает:
-    /// у Cloudflare нет способа «обновить» запись, и заводить новую при каждом
-    /// щелчке значило бы плодить их на ровном месте.
+    /// Одна запись в настройках, и всё. Заводить ключи и регистрироваться
+    /// больше не нужно: выход остался один — MASQUE, а его учётную запись
+    /// движок делает себе сам и хранит в своём кэше.
     /// </remarks>
-    private async void OnWarp(object sender, RoutedEventArgs e)
+    private void OnWarp(object sender, RoutedEventArgs e)
     {
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-        // Выключение и повторное включение с готовыми ключами — просто запись
-        // в настройках. Сеть здесь не нужна вовсе.
-        if (settings.WarpEnabled || WarpAccount.Load() is not null)
+        try
         {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
             var next = settings with { WarpEnabled = !settings.WarpEnabled };
-            next.Save(AppSettings.DefaultPath);
 
+            next.Save(AppSettings.DefaultPath);
             ShowWarp(next);
 
             Status.Text = next.WarpEnabled
-                ? "WARP добавлен к серверам действующей подписки. "
-                  + "Применится при следующем запуске движков."
-                : "WARP выключен. Ключи сохранены — включить обратно можно без регистрации.";
+                ? "WARP добавлен к серверам действующей подписки. Пока те живы, "
+                  + "автоподбор берёт их. Применится при следующем запуске движков."
+                : "WARP выключен. Применится при следующем запуске движков.";
 
             this.Offer("WARP переключён");
-            return;
-        }
-
-        var singBox = FindSingBox();
-
-        if (singBox is null)
-        {
-            Status.Text = "Движок sing-box не найден рядом с программой — ключи заводить нечем.";
-            return;
-        }
-
-        WarpButton.IsEnabled = false;
-        WarpButton.Content = "включаю…";
-        Status.Text = "Завожу ключи и регистрирую их в Cloudflare…";
-
-        try
-        {
-            var keys = await Task.Run(() => WireGuardKeys.Generate(singBox));
-
-            using var client = new WarpClient();
-            var account = await client.RegisterAsync(keys, CancellationToken.None);
-
-            account.Save();
-
-            (AppSettings.Load(AppSettings.DefaultPath) with { WarpEnabled = true })
-                .Save(AppSettings.DefaultPath);
-
-            Status.Text = $"WARP включён: адрес внутри сети {account.AddressV4}. "
-                + "Его выходы добавлены к серверам действующей подписки, "
-                + "применится при следующем запуске движков.";
-
-            await LoadAsync();
         }
         catch (Exception ex)
         {
-            // Отказ почти всегда один и тот же, и звучит он непонятно:
-            // «время ожидания истекло». Называем причину, раз она известна.
-            var reason = ex.GetBaseException();
-
-            Status.Text = reason is TaskCanceledException or HttpRequestException or IOException
-                ? "Cloudflare не ответил. Его домен закрыт российскими операторами по имени "
-                  + "в TLS, поэтому запрос идёт через туннель — запустите движки с работающей "
-                  + "подпиской и повторите."
-                : "Не удалось подключить WARP: " + reason.Message;
-        }
-        finally
-        {
-            WarpButton.IsEnabled = true;
-            ShowWarp(AppSettings.Load(AppSettings.DefaultPath));
+            Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
         }
     }
 
@@ -999,12 +925,12 @@ public partial class VpnView : UserControl
         // с серверами подписки, и знать про них надо то же самое.
         if (settings.WarpEnabled)
         {
-            servers.AddRange(WarpAccount.Exits().Where(s => s.IsMeasurable));
+            servers.AddRange(Warp.Exits().Where(s => s.IsMeasurable));
 
             // А незамеряемые пробником — руками самого движка, если он работает.
             // Это не хуже пробника, а лучше: меряется тот выход, через который
             // пойдёт трафик, а не его копия в отдельном процессе.
-            await MeasureThroughEngineAsync(WarpAccount.Exits().Where(s => !s.IsMeasurable));
+            await MeasureThroughEngineAsync(Warp.Exits().Where(s => !s.IsMeasurable));
         }
 
         if (servers.Count == 0)
@@ -1199,8 +1125,7 @@ public partial class VpnView : UserControl
 
         try
         {
-            var exit = WarpAccount.Exits().FirstOrDefault(s => s.IsSelfRegistering)
-                ?? WarpAccount.Exits().FirstOrDefault();
+            var exit = Warp.Exits().FirstOrDefault();
 
             if (exit is null || !await api.SelectAsync(SelectorGroup, exit.Tag, CancellationToken.None))
             {

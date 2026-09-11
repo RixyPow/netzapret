@@ -604,10 +604,6 @@ public sealed class SingBoxConfigCompiler
             .Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v)
             .Where(v => !v.Contains('*'))
 
-            // Регистрация WARP тоже должна попасть в туннель, а значит —
-            // получить fakeip: при выборочном перехвате туда идёт только то,
-            // чему подменён адрес.
-            .Concat(haveServers ? WarpClient.ApiDomains : Array.Empty<string>())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -1320,32 +1316,6 @@ public sealed class SingBoxConfigCompiler
                 rules.Add(node);
         }
 
-        // Домены регистрации WARP — после пользовательских, а не до.
-        //
-        // Правило встроенное, то есть человек его не писал и в списке правил
-        // не видит. Стоя первым, оно молча перебивало то, что он написал сам:
-        // домен, помеченный в «Маршрутах» как десинк, всё равно уходил
-        // в туннель, и понять это было неоткуда. Встроенное умолчание вправе
-        // подставляться, когда своего правила нет, но не вправе спорить
-        // с написанным руками.
-        //
-        // Нужно оно затем, что напрямую домен не открывается: российские
-        // операторы закрывают его по имени в TLS — TCP устанавливается,
-        // рукопожатие не доходит.
-        if (haveServers
-            && ruleSet.Operating == OperatingMode.Selective
-            && !CoveredByUserRule(applicable))
-        {
-            var warp = new JsonArray();
-            foreach (var domain in WarpClient.ApiDomains)
-                warp.Add(domain);
-
-            rules.Add(new JsonObject
-            {
-                ["domain"] = warp,
-                ["outbound"] = options.SelectorTag,
-            });
-        }
 
         return new JsonObject
         {
@@ -1363,27 +1333,6 @@ public sealed class SingBoxConfigCompiler
                 ["server"] = options.DnsThroughTunnel && haveServers ? BootstrapTag : "remote",
             },
         };
-    }
-
-    /// <summary>
-    /// Написал ли человек своё правило на домены регистрации WARP.
-    /// </summary>
-    /// <remarks>
-    /// Доменное правило покрывает и зону: <c>cloudflareclient.com</c> берёт
-    /// и <c>api.cloudflareclient.com</c>. Иначе встроенное умолчание сочло бы
-    /// себя незанятым и добавилось бы следом — а следом значит «после»,
-    /// то есть без действия, но с видимостью, что правило есть.
-    /// </remarks>
-    private static bool CoveredByUserRule(IReadOnlyList<RoutingRule> rules) =>
-        rules.Any(rule => rule.Match == MatchKind.Domain
-            && WarpClient.ApiDomains.Any(domain => Covers(rule.Value, domain)));
-
-    private static bool Covers(string pattern, string domain)
-    {
-        var value = pattern.StartsWith("*.", StringComparison.Ordinal) ? pattern[2..] : pattern;
-
-        return domain.Equals(value, StringComparison.OrdinalIgnoreCase)
-            || domain.EndsWith("." + value, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

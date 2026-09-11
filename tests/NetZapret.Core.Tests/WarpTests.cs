@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
@@ -9,260 +8,18 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Бесплатный WARP: разбор ответа Cloudflare и сборка конфига.
+/// Бесплатный WARP: один выход, MASQUE.
 /// </summary>
 /// <remarks>
-/// Сеть здесь не трогается ни разу. Ответ регистрации взят настоящий
-/// по форме, но с выдуманными ключами: в нём закрытый ключ и ключ доступа
-/// к записи, и класть такое в репозиторий нельзя.
+/// Второй выход, по WireGuard, отсюда убран вместе со всей обвязкой —
+/// заведением ключей, регистрацией в Cloudflare и хранением записи. Работать
+/// он не мог: Cloudflare кладёт идентификатор записи в поле <c>reserved</c>
+/// каждого пакета, а sing-box 1.14 убрал это поле из настройки пира вовсе.
+/// Проверено на живой сети: рукопожатие проходит, данные не возвращаются
+/// ни на одном из пяти портов.
 /// </remarks>
 public class WarpTests
 {
-    private const string PrivateKey = "iPb22D7QbgGiuvn8KzUb9ljzytJUBCV43Q15btye+UI=";
-    private const string PeerKey = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=";
-
-    private static JsonNode Response(string? v6 = "2606:4700:110:8949:fed4:e6b0:e2f7:8ab5") =>
-        JsonNode.Parse($$"""
-            {
-              "id": "t.00000000-0000-0000-0000-000000000000",
-              "token": "00000000-0000-0000-0000-000000000000",
-              "account": { "id": "a.0000", "account_type": "free", "license": "LICENSE-KEY" },
-              "config": {
-                "client_id": "kJ4=",
-                "peers": [
-                  {
-                    "public_key": "{{PeerKey}}",
-                    "endpoint": {
-                      "v4": "162.159.192.1:0",
-                      "v6": "[2606:4700:d0::a29f:c001]:0",
-                      "host": "engage.cloudflareclient.com:2408"
-                    }
-                  }
-                ],
-                "interface": {
-                  "addresses": { "v4": "172.16.0.2", "v6": {{(v6 is null ? "null" : $"\"{v6}\"")}} }
-                }
-              }
-            }
-            """)!;
-
-    private static ProxyServer WarpServer() =>
-        WarpClient.Parse(Response(), PrivateKey, "id", "token").ToServer();
-
-    [Fact]
-    public void RegistrationResponseYieldsUsableAccount()
-    {
-        var account = WarpClient.Parse(Response(), PrivateKey, "acc", "tok");
-
-        Assert.Equal(PrivateKey, account.PrivateKey);
-        Assert.Equal(PeerKey, account.PeerPublicKey);
-        Assert.Equal("172.16.0.2", account.AddressV4);
-        Assert.Equal("2606:4700:110:8949:fed4:e6b0:e2f7:8ab5", account.AddressV6);
-        Assert.Equal("kJ4=", account.ClientId);
-        Assert.Equal("LICENSE-KEY", account.License);
-    }
-
-    /// <summary>
-    /// Порт приходит нулём в том поле, где есть адрес, и настоящим — в том,
-    /// где вместо адреса имя. Взять только одно поле значило бы получить
-    /// либо порт 0, либо имя, закрытое тем же оператором.
-    /// </summary>
-    [Fact]
-    public void EndpointTakesAddressFromOneFieldAndPortFromAnother()
-    {
-        var account = WarpClient.Parse(Response(), PrivateKey, null, null);
-
-        Assert.Equal("162.159.192.1", account.EndpointHost);
-        Assert.Equal(2408, account.EndpointPort);
-    }
-
-    [Fact]
-    public void AccountWithoutIpV6StillBuildsServer()
-    {
-        var server = WarpClient.Parse(Response(v6: null), PrivateKey, null, null).ToServer();
-
-        Assert.Equal(["172.16.0.2/32"], server.LocalAddresses);
-    }
-
-    [Fact]
-    public void ResponseWithoutPeersIsRejected()
-    {
-        var broken = JsonNode.Parse("""{ "config": { "peers": [] } }""")!;
-
-        Assert.Throws<InvalidOperationException>(() => WarpClient.Parse(broken, PrivateKey, null, null));
-    }
-
-    [Fact]
-    public void KeyPairIsReadFromEngineOutput()
-    {
-        var pair = WireGuardKeys.Parse($"PrivateKey: {PrivateKey}\nPublicKey: {PeerKey}\n");
-
-        Assert.NotNull(pair);
-        Assert.Equal(PrivateKey, pair!.PrivateKey);
-        Assert.Equal(PeerKey, pair.PublicKey);
-    }
-
-    [Fact]
-    public void EngineComplaintIsNotMistakenForKeys()
-    {
-        Assert.Null(WireGuardKeys.Parse("FATAL[0000] unknown command \"wg-keypair\""));
-    }
-
-    /// <summary>
-    /// WireGuard описывается разделом <c>endpoints</c>, а не исходящим:
-    /// старая форма убрана из sing-box в 1.13.
-    /// </summary>
-    [Fact]
-    public void WireguardGoesToEndpointsNotOutbounds()
-    {
-        var root = Compile(WarpServer());
-
-        var endpoint = root.GetProperty("endpoints").EnumerateArray().Single();
-
-        Assert.Equal("wireguard", endpoint.GetProperty("type").GetString());
-        Assert.Equal(WarpAccount.DefaultTag, endpoint.GetProperty("tag").GetString());
-        Assert.Equal(PrivateKey, endpoint.GetProperty("private_key").GetString());
-
-        var peer = endpoint.GetProperty("peers").EnumerateArray().Single();
-
-        Assert.Equal("162.159.192.1", peer.GetProperty("address").GetString());
-        Assert.Equal(2408, peer.GetProperty("port").GetInt32());
-
-        // Поля reserved в 1.14 нет вовсе: движок отвергает конфиг с ним.
-        Assert.False(peer.TryGetProperty("reserved", out _));
-
-        Assert.DoesNotContain(
-            root.GetProperty("outbounds").EnumerateArray(),
-            o => o.GetProperty("tag").GetString() == WarpAccount.DefaultTag);
-    }
-
-    /// <summary>
-    /// Endpoint обязан входить в группы наравне с исходящими, иначе выбрать
-    /// его нечем: селектор знает только своих участников.
-    /// </summary>
-    [Fact]
-    public void EndpointJoinsSelectorAndLatencyGroups()
-    {
-        var root = Compile(WarpServer());
-
-        foreach (var group in new[] { "auto-latency", "auto" })
-        {
-            var members = root.GetProperty("outbounds").EnumerateArray()
-                .First(o => o.GetProperty("tag").GetString() == group)
-                .GetProperty("outbounds").EnumerateArray()
-                .Select(m => m.GetString());
-
-            Assert.Contains(WarpAccount.DefaultTag, members);
-        }
-    }
-
-    /// <summary>
-    /// Домен регистрации закрыт по имени в TLS у российских операторов,
-    /// а в списках Zapret лежит с рецептом десинка, то есть уходит напрямую.
-    /// Без правила запись нельзя завести с той самой машины, которой она нужна.
-    /// </summary>
-    [Fact]
-    public void RegistrationDomainIsRoutedThroughTheTunnel()
-    {
-        var root = Compile(WarpServer());
-
-        var rule = root.GetProperty("route").GetProperty("rules").EnumerateArray()
-            .Where(r => r.TryGetProperty("domain", out _))
-            .First(r => r.GetProperty("domain").EnumerateArray()
-                .Any(d => d.GetString() == "api.cloudflareclient.com"));
-
-        Assert.Equal("auto", rule.GetProperty("outbound").GetString());
-    }
-
-    /// <summary>
-    /// Встроенное правило не спорит с написанным руками.
-    /// </summary>
-    /// <remarks>
-    /// Человек его не писал и в списке правил не видит. Стоя первым, оно
-    /// молча перебивало его собственное: домен, помеченный в «Маршрутах»
-    /// как десинк, всё равно уходил в туннель, и понять это было неоткуда.
-    /// </remarks>
-    [Fact]
-    public void UserRuleOnTheRegistrationDomainWins()
-    {
-        var engine = RuleSetLoader.Load("""
-            mode: selective
-            rules:
-              - match: domain
-                value: "*.api.cloudflareclient.com"
-                mode: desync
-            """);
-
-        var result = new SingBoxConfigCompiler().Compile(
-            engine.RuleSet, [WarpServer()], new SingBoxOptions());
-
-        var domainRules = JsonDocument.Parse(result.Json).RootElement
-            .GetProperty("route").GetProperty("rules").EnumerateArray()
-            .Where(r => r.TryGetProperty("domain_suffix", out _) || r.TryGetProperty("domain", out _))
-            .ToList();
-
-        // Правило на этот домен ровно одно — его собственное, и ведёт оно
-        // напрямую, как он и просил.
-        var mine = domainRules
-            .Where(r => r.ToString().Contains("api.cloudflareclient.com", StringComparison.Ordinal))
-            .ToList();
-
-        Assert.Single(mine);
-        Assert.Equal("direct", mine[0].GetProperty("outbound").GetString());
-    }
-
-    /// <summary>
-    /// При выборочном перехвате в туннель попадает только то, чему подменён
-    /// адрес. Без fakeip правило маршрута до регистрации не доживёт: запрос
-    /// уйдёт мимо туннеля, не дойдя до разбора правил.
-    /// </summary>
-    [Fact]
-    public void RegistrationDomainGetsFakeIp()
-    {
-        var engine = RuleSetLoader.Load("""
-            mode: selective
-            rules:
-              - match: domain
-                value: "*.rutracker.org"
-                mode: proxy
-            """);
-
-        var result = new SingBoxConfigCompiler().Compile(
-            engine.RuleSet,
-            [WarpServer()],
-            new SingBoxOptions { Scope = TunnelScope.ProxyOnly });
-
-        var suffixes = JsonDocument.Parse(result.Json).RootElement
-            .GetProperty("dns").GetProperty("rules").EnumerateArray()
-            .First(r => r.GetProperty("server").GetString() == "fake")
-            .GetProperty("domain_suffix").EnumerateArray()
-            .Select(d => d.GetString());
-
-        Assert.Contains("api.cloudflareclient.com", suffixes);
-    }
-
-    /// <summary>
-    /// Замер WARP собирал конфиг с исходящим, которого для WireGuard не бывает,
-    /// и «Замерить все» объявляло бы его мёртвым, не подключившись ни разу.
-    /// </summary>
-    [Fact]
-    public void ProbeConfigDescribesWireguardAsEndpoint()
-    {
-        var json = new SingBoxConfigCompiler().CompileProbeConfig(WarpServer(), 21080, null);
-        var root = JsonDocument.Parse(json).RootElement;
-
-        var endpoint = root.GetProperty("endpoints").EnumerateArray().Single();
-
-        Assert.Equal("probe-out", endpoint.GetProperty("tag").GetString());
-        Assert.Equal("probe-out", root.GetProperty("route").GetProperty("final").GetString());
-
-        // Единственный исходящий — direct, для запросов к резолверу.
-        Assert.Equal(
-            ["direct"],
-            root.GetProperty("outbounds").EnumerateArray()
-                .Select(o => o.GetProperty("tag").GetString()));
-    }
-
     /// <summary>
     /// MASQUE описывается двумя строками: узла у него нет, движок выбирает
     /// его сам. Поля server и server_port он объявляет незнакомыми
@@ -272,10 +29,9 @@ public class WarpTests
     [Fact]
     public void MasqueOutboundCarriesNoServerAddress()
     {
-        var root = Compile(WarpAccount.MasqueServer());
-
-        var outbound = root.GetProperty("outbounds").EnumerateArray()
-            .First(o => o.GetProperty("tag").GetString() == WarpAccount.MasqueTag);
+        var outbound = Compile(Warp.MasqueServer())
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == Warp.MasqueTag);
 
         Assert.Equal("masque", outbound.GetProperty("type").GetString());
         Assert.False(outbound.TryGetProperty("server", out _));
@@ -290,7 +46,7 @@ public class WarpTests
     public void ResolvedAddressIsNotPinnedIntoMasque()
     {
         var json = new SingBoxConfigCompiler()
-            .CompileProbeConfig(WarpAccount.MasqueServer(), 21080, null, "warn", "104.16.24.84");
+            .CompileProbeConfig(Warp.MasqueServer(), 21080, null, "warn", "104.16.24.84");
 
         var outbound = JsonDocument.Parse(json).RootElement
             .GetProperty("outbounds").EnumerateArray()
@@ -302,14 +58,12 @@ public class WarpTests
     /// <summary>
     /// Кэш движка включается только вместе с MASQUE: в нём лежит учётная
     /// запись, которую движок заводит себе сам, и без кэша он регистрировался
-    /// бы заново при каждом запуске. Остальным файл не нужен — он переживает
-    /// удаление программы.
+    /// бы заново при каждом запуске.
     /// </summary>
     [Fact]
     public void EngineCacheAppearsOnlyWithMasque()
     {
-        var withMasque = Compile(WarpAccount.MasqueServer())
-            .GetProperty("experimental");
+        var withMasque = Compile(Warp.MasqueServer()).GetProperty("experimental");
 
         Assert.True(withMasque.TryGetProperty("cache_file", out var cache));
         Assert.True(cache.GetProperty("enabled").GetBoolean());
@@ -323,143 +77,52 @@ public class WarpTests
         Assert.True(Path.IsPathFullyQualified(path), $"путь к кэшу не полный: {path}");
         Assert.True(Directory.Exists(Path.GetDirectoryName(path)), "каталог кэша не заведён");
 
-        var withoutMasque = Compile(WarpServer()).GetProperty("experimental");
+        var withoutMasque = Compile(Ordinary()).GetProperty("experimental");
 
         Assert.False(withoutMasque.TryGetProperty("cache_file", out _));
     }
 
     /// <summary>
-    /// Оба выхода WARP встают в группы наравне: автоподбор опрашивает обоих
-    /// и берёт тот, который на этой сети проходит. Который именно — заранее
-    /// не известно, и выбирать за человека мы не беремся.
+    /// WARP встаёт в группы наравне с серверами подписки: пока те живы,
+    /// автоподбор берёт их — они быстрее, — а когда лягут, останется он.
     /// </summary>
     [Fact]
-    public void BothWarpExitsJoinTheSelector()
+    public void WarpJoinsTheSelectorBesideSubscriptionServers()
     {
-        var root = Compile(WarpServer(), WarpAccount.MasqueServer());
+        var root = Compile(Ordinary(), Warp.MasqueServer());
 
-        var members = root.GetProperty("outbounds").EnumerateArray()
-            .First(o => o.GetProperty("tag").GetString() == "auto")
-            .GetProperty("outbounds").EnumerateArray()
-            .Select(m => m.GetString())
-            .ToList();
+        foreach (var group in new[] { "auto-latency", "auto" })
+        {
+            var members = root.GetProperty("outbounds").EnumerateArray()
+                .First(o => o.GetProperty("tag").GetString() == group)
+                .GetProperty("outbounds").EnumerateArray()
+                .Select(m => m.GetString())
+                .ToList();
 
-        Assert.Contains(WarpAccount.DefaultTag, members);
-        Assert.Contains(WarpAccount.MasqueTag, members);
-    }
-
-    /// <summary>
-    /// Порты пробника обходят вход глубокой проверки. Раздавались они подряд
-    /// от 21080, и одиннадцатому серверу списка доставался 21090 — занятый
-    /// работающим движком. Проба падала на старте, сервер объявлялся мёртвым,
-    /// и всегда на одном и том же месте списка.
-    /// </summary>
-    [Fact]
-    public void ProbePortsSkipTheHealthInbound()
-    {
-        var ports = Enumerable.Range(0, 34)
-            .Select(index => ProxyProbe.PortForTesting(21080, index))
-            .ToList();
-
-        Assert.DoesNotContain(SingBoxOptions.DefaultHealthPort, ports);
-        Assert.Equal(ports.Count, ports.Distinct().Count());
-
-        // До занятого порта нумерация обычная, после — со сдвигом на один.
-        Assert.Equal(21089, ports[9]);
-        Assert.Equal(21091, ports[10]);
+            Assert.Contains(Warp.MasqueTag, members);
+            Assert.Contains("NL", members);
+        }
     }
 
     /// <summary>
     /// MASQUE не замеряется отдельным пробником, и это его свойство, а не
-    /// сбой: запись движок держит в кэше работающего экземпляра, а файл
-    /// занят им же.
+    /// сбой: запись движок держит в кэше работающего экземпляра, а файл занят
+    /// им же. Меряет его сам движок через Clash API.
     /// </summary>
     [Fact]
-    public void MasqueIsNotMeasurableButWireguardIs()
+    public void MasqueIsNotMeasurableByTheProbe()
     {
-        Assert.False(WarpAccount.MasqueServer().IsMeasurable);
-        Assert.True(WarpServer().IsMeasurable);
-        Assert.True(WarpAccount.MasqueServer().IsSelfRegistering);
-        Assert.False(WarpServer().IsSelfRegistering);
+        Assert.False(Warp.MasqueServer().IsMeasurable);
+        Assert.True(Warp.MasqueServer().IsSelfRegistering);
+        Assert.True(Ordinary().IsMeasurable);
     }
 
-    /// <summary>
-    /// MASQUE отдаётся всегда, даже без ключей: движок заводит себе запись
-    /// сам, и от нас ему ничего не нужно. WireGuard — только когда ключи есть.
-    /// </summary>
+    /// <summary>Выход ровно один, и ключей он не требует.</summary>
     [Fact]
-    public void MasqueExitIsOfferedEvenWithoutKeys()
+    public void OnlyMasqueRemains()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-{Guid.NewGuid():N}");
-        var previous = Directory.GetCurrentDirectory();
-
-        try
-        {
-            // Каталог без config/warp.json: так выглядит машина, где кнопку
-            // ещё не нажимали.
-            Directory.CreateDirectory(path);
-            Directory.SetCurrentDirectory(path);
-
-            Assert.Equal([WarpAccount.MasqueTag], WarpAccount.Exits().Select(s => s.Tag));
-
-            // А с ключами выходов становится два, и порядок важен: WireGuard
-            // первым, потому что его хотя бы можно замерить.
-            WarpClient.Parse(Response(), PrivateKey, "acc", "tok").Save();
-
-            Assert.Equal(
-                [WarpAccount.DefaultTag, WarpAccount.MasqueTag],
-                WarpAccount.Exits().Select(s => s.Tag));
-        }
-        finally
-        {
-            Directory.SetCurrentDirectory(previous);
-            Directory.Delete(path, recursive: true);
-        }
-    }
-
-    [Fact]
-    public void AccountSurvivesWritingAndReading()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-{Guid.NewGuid():N}.json");
-        var account = WarpClient.Parse(Response(), PrivateKey, "acc", "tok");
-
-        try
-        {
-            account.Save(path);
-
-            var read = WarpAccount.Load(path);
-
-            Assert.NotNull(read);
-            Assert.Equal(account.PrivateKey, read!.PrivateKey);
-            Assert.Equal(account.EndpointPort, read.EndpointPort);
-            Assert.Equal(account.AddressV6, read.AddressV6);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    /// <summary>
-    /// Запись без ключей хуже отсутствующей: конфиг с пустым private_key
-    /// движок не примет, и туннель не поднимется вовсе — включая те серверы,
-    /// которые к WARP отношения не имеют.
-    /// </summary>
-    [Fact]
-    public void AccountWithoutKeysCountsAsMissing()
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-{Guid.NewGuid():N}.json");
-
-        try
-        {
-            File.WriteAllText(path, """{ "PrivateKey": "", "PeerPublicKey": "" }""");
-
-            Assert.Null(WarpAccount.Load(path));
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        Assert.Equal([Warp.MasqueTag], Warp.Exits().Select(s => s.Tag));
+        Assert.Empty(Warp.MasqueServer().Credential);
     }
 
     /// <summary>
@@ -467,7 +130,7 @@ public class WarpTests
     /// в репозитории он не хранится.
     /// </summary>
     [Fact]
-    public void WireguardConfigPassesSingBoxCheck()
+    public void ConfigWithWarpPassesSingBoxCheck()
     {
         var singBox = FindSingBox();
         if (singBox is null)
@@ -482,11 +145,9 @@ public class WarpTests
                 server: "auto"
             """);
 
-        // Оба выхода сразу: конфиг с ними обязан читаться целиком, а лишнее
-        // поле у любого из них роняет туннель, а не портит один выход.
         var result = new SingBoxConfigCompiler().Compile(
             engine.RuleSet,
-            [WarpServer(), WarpAccount.MasqueServer()],
+            [Ordinary(), Warp.MasqueServer()],
             new SingBoxOptions());
 
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-check-{Guid.NewGuid():N}.json");
@@ -516,21 +177,15 @@ public class WarpTests
         }
     }
 
-    /// <summary>Движок обязан уметь выдавать ключи — на этом держится подключение.</summary>
-    [Fact]
-    public void EngineGeneratesKeyPair()
+    private static ProxyServer Ordinary() => new()
     {
-        var singBox = FindSingBox();
-        if (singBox is null)
-            return;
-
-        var pair = WireGuardKeys.Generate(singBox);
-
-        // 32 байта в base64 — 44 знака с выравниванием.
-        Assert.Equal(44, pair.PrivateKey.Length);
-        Assert.Equal(44, pair.PublicKey.Length);
-        Assert.NotEqual(pair.PrivateKey, pair.PublicKey);
-    }
+        Protocol = ProxyProtocol.Hysteria2,
+        Tag = "NL",
+        Host = "nl.example.com",
+        Port = 4443,
+        Credential = "PLACEHOLDER",
+        Security = "tls",
+    };
 
     private static JsonElement Compile(params ProxyServer[] servers)
     {

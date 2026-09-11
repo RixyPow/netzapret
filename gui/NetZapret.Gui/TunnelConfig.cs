@@ -53,7 +53,7 @@ internal static class TunnelConfig
             // заведён. Автоподбор опрашивает всех вместе и, пока живы серверы
             // подписки, оседает на них: они быстрее.
             var servers = settings.WarpEnabled
-                ? [.. info.Servers, .. WarpAccount.Exits()]
+                ? [.. info.Servers, .. Warp.Exits()]
                 : info.Servers;
 
             var zapretRoot = ZapretPaths.Discover()?.Root;

@@ -133,16 +133,7 @@ public class TunnelScopeTests
                 mode: proxy
             """, new SingBoxOptions { Scope = TunnelScope.ProxyOnly });
 
-        // Правило fakeip при этом есть: в нём домены регистрации WARP,
-        // которые заводятся в туннель всегда, когда есть куда вести.
-        var suffixes = root.GetProperty("dns").GetProperty("rules").EnumerateArray()
-            .Single()
-            .GetProperty("domain_suffix").EnumerateArray()
-            .Select(d => d.GetString())
-            .ToList();
-
-        Assert.DoesNotContain(suffixes, d => d!.Contains("example.com", StringComparison.Ordinal));
-        Assert.All(suffixes, d => Assert.EndsWith("cloudflareclient.com", d!, StringComparison.Ordinal));
+        Assert.Empty(root.GetProperty("dns").GetProperty("rules").EnumerateArray());
     }
 
     [Fact]
