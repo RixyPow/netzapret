@@ -167,6 +167,81 @@ public class DesyncRecipeTests
     }
 
     /// <summary>
+    /// Рецепт находится и по имени секции, которая в группе не первая.
+    /// </summary>
+    /// <remarks>
+    /// Имя рецепта — это имя первой секции группы, а группу задаёт порядок
+    /// секций в файле. Поменяй его — и вчерашний выбор перестаёт находиться;
+    /// молча, потому что ненайденный рецепт даёт пустой набор шагов, профиль
+    /// без шагов не выпускается вовсе, а в меню по-прежнему написано
+    /// «десинк: …». Ровно так пропал голос Discord: правка V8 поставила
+    /// updates.discord.com выше discord.com, и сохранённое «discord.com»
+    /// перестало значить что-либо.
+    /// </remarks>
+    [Fact]
+    public void RecipeIsFoundBySectionThatIsNotFirstInItsGroup()
+    {
+        var preset = Load();
+
+        // Claude и Notion делят набор, и группа зовётся по первой — Claude.
+        var byOwnName = DesyncRecipes.Find(preset, "Claude");
+        var byMember = DesyncRecipes.Find(preset, "Notion");
+
+        Assert.NotNull(byMember);
+        Assert.Equal(byOwnName!.Name, byMember!.Name);
+        Assert.Equal(byOwnName.Steps, byMember.Steps);
+    }
+
+    /// <summary>
+    /// Своё имя важнее чужого: секция, давшая группе имя, не должна
+    /// проигрывать совпадению внутри чужого списка.
+    /// </summary>
+    [Fact]
+    public void OwnNameWinsOverMembership()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-preset-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(path, """
+                #name=Проба
+                --wf-tcp=80,443
+
+                --new
+                --name=Первый
+                --filter-tcp=80,443
+                --hostlist=lists/a.txt
+                --lua-desync=split:pos=2
+
+                --new
+                --name=Второй
+                --filter-tcp=80,443
+                --hostlist=lists/b.txt
+                --lua-desync=split:pos=2
+
+                --new
+                --name=Второй набор
+                --filter-tcp=80,443
+                --hostlist=lists/c.txt
+                --lua-desync=multidisorder:pos=1
+                """);
+
+            var preset = new PresetReader().Load(path);
+
+            // «Второй» — и член первой группы, и начало имени третьей секции.
+            // Точное совпадение с членом группы должно победить.
+            var found = DesyncRecipes.Find(preset, "Второй");
+
+            Assert.NotNull(found);
+            Assert.Equal(["split:pos=2"], found!.Steps);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// Секции по UDP в выбор не попадают.
     /// </summary>
     /// <remarks>

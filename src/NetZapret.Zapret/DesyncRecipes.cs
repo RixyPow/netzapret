@@ -156,9 +156,42 @@ public static class DesyncRecipes
     /// применить чужой набор вместо названного было бы хуже, чем не
     /// применить ничего.
     /// </remarks>
-    public static DesyncRecipe? Find(ZapretPreset preset, string? name) =>
-        string.IsNullOrWhiteSpace(name)
-            ? null
-            : FromPresetFile(preset).FirstOrDefault(
-                recipe => recipe.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
+    /// <summary>
+    /// Рецепт по сохранённому имени.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ищется и среди хранимых имён, и среди <see cref="DesyncRecipe.UsedBy"/>.
+    /// Имя рецепта — это имя первой секции в группе, а группу задаёт порядок
+    /// секций в файле. Поменяй его — и рецепт, выбранный вчера, перестаёт
+    /// находиться: в правиле лежит «discord.com», а группа зовётся теперь
+    /// «updates.discord.com», потому что та секция стоит выше.
+    /// </para>
+    /// <para>
+    /// Молча, что хуже всего: ненайденный рецепт означает пустой набор шагов,
+    /// профиль с пустым набором не выпускается вовсе, и выбор просто
+    /// не применяется. В меню при этом честно написано «десинк:
+    /// hostfakesplit_multi». Ровно так пропал голос Discord: правка V8
+    /// поставила <c>updates.discord.com</c> выше <c>discord.com</c>, и
+    /// сохранённый выбор для голоса перестал что-либо значить.
+    /// </para>
+    /// <para>
+    /// Своё имя проверяется первым: набор шагов у него тот же, но искать
+    /// сперва по точному совпадению дешевле и понятнее.
+    /// </para>
+    /// </remarks>
+    public static DesyncRecipe? Find(ZapretPreset preset, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var wanted = name.Trim();
+        var recipes = FromPresetFile(preset);
+
+        return recipes.FirstOrDefault(r =>
+                   r.Name.Equals(wanted, StringComparison.OrdinalIgnoreCase))
+            ?? recipes.FirstOrDefault(r =>
+                   r.UsedBy.Any(section =>
+                       section.Equals(wanted, StringComparison.OrdinalIgnoreCase)));
+    }
 }

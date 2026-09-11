@@ -1,7 +1,9 @@
+using System.IO;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
+using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
 namespace NetZapret.Gui;
@@ -182,6 +184,16 @@ internal static class TunnelConfig
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
+                    // Ненайденный рецепт — это молча неприменённая настройка:
+                    // пустой набор шагов, профиль без шагов не выпускается,
+                    // а в меню по-прежнему написано «десинк: hostfakesplit_multi».
+                    // Так пропал голос Discord, и заметить это было нечем.
+                    if (recipe is null)
+                    {
+                        Note($"рецепт «{group.Key}» не найден в пресете «{preset.Name}» — "
+                            + $"профиль не создан, имён затронуто {domains.Count}");
+                    }
+
                     return (
                         Name: group.Key,
                         Steps: recipe?.Steps ?? [],
@@ -201,6 +213,31 @@ internal static class TunnelConfig
             // Своя настройка не должна мешать сборке конфига: без неё
             // всё работает ровно так, как работало до неё.
             OwnDesyncLists.Write([]);
+        }
+    }
+
+    /// <summary>
+    /// Строка в общий журнал.
+    /// </summary>
+    /// <remarks>
+    /// Тот же файл, что у супервизора, и тот же, что показывает раздел
+    /// «Журнал»: у окна консоли нет, а заводить второй журнал ради одной
+    /// строки значило бы разложить историю одного запуска по двум файлам.
+    /// Писать в него из двух процессов разом безопасно —
+    /// <see cref="SharedLogWriter"/> для того и заведён.
+    /// </remarks>
+    private static void Note(string message)
+    {
+        try
+        {
+            using var log = SharedLogWriter.TryOpen(
+                Path.Combine("runtime", "supervisor.log"));
+
+            log?.WriteLine($"[{DateTime.Now:HH:mm:ss}] конфиг: {message}");
+        }
+        catch (Exception)
+        {
+            // Потеря строки журнала не должна ронять то, о чём она.
         }
     }
 }
