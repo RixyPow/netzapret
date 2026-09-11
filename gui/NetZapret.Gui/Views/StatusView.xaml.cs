@@ -164,7 +164,7 @@ public partial class StatusView : UserControl
             // Движки остаются на виду и остановленными, просто серыми. Пустое
             // место на их месте читается как «их нет вовсе», тогда как раздел
             // отвечает на другой вопрос: что должно работать и работает ли.
-            Engines.ItemsSource = Planned(settings);
+            Engines.ItemsSource = Planned(settings, "остановлен", "Faint");
 
             return;
         }
@@ -217,7 +217,13 @@ public partial class StatusView : UserControl
         var seconds = (int)(DateTimeOffset.Now - since).TotalSeconds;
         StateHint.Text = $"{DescribePhase(settings, running, services)} — {seconds} с";
 
-        Engines.ItemsSource = services.Count > 0 ? services.Select(Row).ToList() : null;
+        // Пока супервизор не дописал состояние, движки показываются жёлтыми
+        // и «запускается». Прежде список опустошался, и они пропадали ровно
+        // на те десятки секунд, когда на них и смотрят: раздел отвечал «их
+        // нет» на вопрос «поднимаются ли они».
+        Engines.ItemsSource = services.Count > 0
+            ? services.Select(Row).ToList()
+            : Planned(settings, "запускается", "Warn");
 
         return true;
     }
@@ -336,16 +342,16 @@ public partial class StatusView : UserControl
     /// хоть что-то через VPN, десинк — когда выбран пресет. В режиме, где
     /// не запускается ничего, список пуст, и это верно: запускать нечего.
     /// </remarks>
-    private IReadOnlyList<EngineRow> Planned(AppSettings settings)
+    private IReadOnlyList<EngineRow> Planned(AppSettings settings, string detail, string colourKey)
     {
         var rows = new List<EngineRow>();
-        var faint = (Brush)FindResource("Faint");
+        var colour = (Brush)FindResource(colourKey);
 
         if (settings.NeedsProxy)
-            rows.Add(new EngineRow("sing-box", "остановлен", faint));
+            rows.Add(new EngineRow("sing-box", detail, colour));
 
         if (settings.NeedsDesync)
-            rows.Add(new EngineRow("winws2", "остановлен", faint));
+            rows.Add(new EngineRow("winws2", detail, colour));
 
         return rows;
     }
