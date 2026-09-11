@@ -295,10 +295,7 @@ public partial class VpnView : UserControl
                     _ => ("не замерян", "Faint"),
                 };
 
-            var detail = $"{server.Protocol}, {server.Host}:{server.Port}";
-
-            if (known is not null)
-                detail += $" · замер {Ago(known.CheckedAt)}";
+            var detail = Detail(server.Protocol.ToString(), server.Host, server.Port, server.Tag);
 
             var (country, name) = CountryTag.Split(server.Tag);
             var flag = country.Length == 2 ? FlagImages.For(country) : null;
@@ -381,12 +378,60 @@ public partial class VpnView : UserControl
                     ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
                     CanChoose = server.Tag != settings.PreferredServer,
                     Latency = server.Measurable ? Latency(server.Tag) : "только в работе",
+
+                    // Возраст замера пересчитывается здесь же: иначе он
+                    // оставался тем, каким был при чтении подписки, и «17 мин
+                    // назад» висело даже на только что замеренном сервере.
+                    Detail = Refresh(server.Detail, server.Tag),
                 })
                 .ToList();
         }
 
         Redraw();
     }
+
+    /// <summary>
+    /// Подпись под именем сервера: протокол, адрес и возраст замера.
+    /// </summary>
+    /// <remarks>
+    /// Считается заново при каждой перерисовке, а не один раз при чтении
+    /// подписки. Иначе «замер 17 мин назад» так и висел до перезахода
+    /// на вкладку — в том числе на сервере, который только что замерили.
+    /// </remarks>
+    private string Detail(string protocol, string host, int port, string tag)
+    {
+        var detail = $"{protocol}, {host}:{port}";
+
+        if (_measuring.Contains(tag))
+            return detail + " · идёт замер";
+
+        return _health.Find(tag) is { } known
+            ? detail + $" · замер {Ago(known.CheckedAt)}"
+            : detail;
+    }
+
+    /// <summary>
+    /// Обновляет хвост подписи, оставив её начало нетронутым.
+    /// </summary>
+    /// <remarks>
+    /// Протокол и адрес заново собирать не из чего — исходного сервера
+    /// у строки уже нет, — зато всё до разделителя от замера не зависит.
+    /// </remarks>
+    private string Refresh(string detail, string tag)
+    {
+        int cut = detail.IndexOf(" · ", StringComparison.Ordinal);
+        var head = cut < 0 ? detail : detail[..cut];
+
+        if (_measuring.Contains(tag))
+            return head + " · идёт замер";
+
+        return _health.Find(tag) is { } known
+            ? head + $" · замер {Ago(known.CheckedAt)}"
+            : head;
+    }
+
+    /// <summary>Теги, которые замеряются прямо сейчас.</summary>
+    private readonly HashSet<string> _measuring = new(StringComparer.Ordinal);
 
     private string Key(string tag) => _health.Find(tag) switch
     {
@@ -488,6 +533,13 @@ public partial class VpnView : UserControl
             : null;
 
         WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+        // Кнопка проверки есть, только когда есть что проверять: MASQUE
+        // отдельным пробником не замеряется, так что одна она без ключей
+        // WireGuard ничего бы не сделала.
+        WarpCheckButton.Visibility = on && WarpAccount.Exits().Any(s => s.IsMeasurable)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -966,7 +1018,13 @@ public partial class VpnView : UserControl
         Progress.Value = 0;
         Progress.Visibility = Visibility.Visible;
 
+        _measuring.Clear();
+
+        foreach (var server in servers)
+            _measuring.Add(server.Tag);
+
         ShowBusy(which);
+        Reshow();
 
         int done = 0;
 
@@ -998,6 +1056,13 @@ public partial class VpnView : UserControl
                     {
                         done++;
                         Progress.Value = done;
+                        _measuring.Remove(result.ServerTag);
+
+                        // Счёт и на кнопке тоже. Полоса и строка состояния
+                        // стоят вверху раздела, а смотрят во время замера
+                        // на список серверов — и оттуда их попросту не видно.
+                        MeasureButton.Content = $"{done} из {servers.Count}…";
+
                         Status.Text = $"Измерено {done} из {servers.Count}…";
                         Reshow();
                     });
@@ -1029,9 +1094,23 @@ public partial class VpnView : UserControl
             MeasureButton.Content = "Замерить все";
 
             Progress.Visibility = Visibility.Collapsed;
+
+            // Незамеренные остались бы с подписью «идёт замер» навсегда,
+            // если прогон прервали на середине.
+            _measuring.Clear();
+
             ShowBusy([]);
+            Reshow();
         }
     }
+
+    /// <summary>Замеряет выходы WARP.</summary>
+    /// <remarks>
+    /// Отдельной кнопкой, потому что они живут в карточке, а не в папке
+    /// подписки: общая «Замерить все» их берёт, а вот проверить их одних
+    /// было нечем.
+    /// </remarks>
+    private async void OnCheckWarp(object sender, RoutedEventArgs e) => await MeasureAsync([]);
 
     /// <summary>Отмечает, какие папки сейчас замеряются.</summary>
     private void ShowBusy(IReadOnlyList<SubRow> checking)
