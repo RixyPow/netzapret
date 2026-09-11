@@ -160,6 +160,9 @@ public partial class RoutesView : UserControl
     /// <summary>Пока идёт первичное заполнение, выбор в списках не считается выбором человека.</summary>
     private bool _filling;
 
+    /// <summary>Пользовательские правила текущей сборки строк.</summary>
+    private UserRulesFile _own = UserRulesFile.Load();
+
     public RoutesView()
     {
         InitializeComponent();
@@ -177,6 +180,10 @@ public partial class RoutesView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             var zapretRoot = ZapretPaths.Discover()?.Root;
             var userRules = UserRulesFile.Load();
+
+            // Те же правила держим под рукой при сборке строк: по ним
+            // подписывается выбранный рецепт.
+            _own = userRules;
 
             var engine = RuleSetLoader.LoadLayered(
                 settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
@@ -226,7 +233,7 @@ public partial class RoutesView : UserControl
         }
     }
 
-    private static PartRow Row(ServiceRouting.PartStatus part)
+    private PartRow Row(ServiceRouting.PartStatus part)
     {
         // Ключ несёт и тип, и путь: правило по адресам пишется ipset'ом,
         // по именам — hostlist'ом, и перепутать их значит записать правило,
@@ -261,7 +268,14 @@ public partial class RoutesView : UserControl
             Key = kind + "|" + part.Part.List,
             Title = part.Part.Name,
             Detail = detail,
-            Mode = part.DescribeMode(),
+
+            // Рецепт называется прямо в подписи маршрута. Выбранный однажды,
+            // он иначе пропадал бы из виду: в списке стоит «десинк», а чем
+            // именно чинится — видно только в yaml.
+            Mode = RecipeFor(part.Part.List) is { } recipe
+                ? $"десинк: {recipe}"
+                : part.DescribeMode(),
+
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
             Applied = choice,
@@ -931,10 +945,29 @@ public partial class RoutesView : UserControl
             _ => RoutingMode.Proxy,
         };
 
+        var match = parts[0] == "ipset" ? MatchKind.IpSet : MatchKind.HostList;
+
+        // Рецепт спрашиваем и у сервисов, а не только у своих доменов.
+        // Именно здесь он и нужен чаще: сервис — это список из десятков имён,
+        // и когда пресет их не открывает, руками разбираться не в чем.
+        //
+        // У списков адресов не спрашиваем: рецепт применяется по имени
+        // в приветствии TLS, а в правиле по адресу имени нет вовсе.
+        string? recipe = null;
+
+        if (mode == RoutingMode.Desync && match == MatchKind.HostList
+            && !AskRecipe(ServiceName(parts[1]), out recipe))
+        {
+            // Отказ от выбора — отказ от всего действия. Список при этом
+            // остался на новом значении, и его надо вернуть.
+            Reload();
+            return;
+        }
+
         try
         {
             var file = UserRulesFile.Load();
-            file.Set(parts[0] == "ipset" ? MatchKind.IpSet : MatchKind.HostList, parts[1], mode);
+            file.Set(match, parts[1], mode, recipe);
             file.Save();
 
             // Перечитываем сразу: подпись слева и сводка папки считаются при
@@ -943,13 +976,46 @@ public partial class RoutesView : UserControl
             // папки перерисовку переживают, так что список остаётся на месте.
             Reload();
 
-            Status.Text = $"Записано: {parts[1]} → {Describe(mode)}. Применится при следующем запуске движков.";
+            Status.Text = string.IsNullOrEmpty(recipe)
+                ? $"Записано: {parts[1]} → {Describe(mode)}. Применится при следующем запуске движков."
+                : $"Записано: {parts[1]} → десинк рецептом «{recipe}». "
+                  + "Применится при следующем запуске движков.";
+
             this.Offer("Маршрут изменён");
         }
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>
+    /// Рецепт, выбранный для этого списка; <c>null</c> — решает пресет.
+    /// </summary>
+    /// <remarks>
+    /// Читается из пользовательских правил при каждой сборке строк, а не
+    /// хранится рядом: правило могли поправить в файле руками, и вторая копия
+    /// разошлась бы с ним молча.
+    /// </remarks>
+    private string? RecipeFor(string listPath) =>
+        _own.Entries.FirstOrDefault(e =>
+            e.Match == MatchKind.HostList
+            && e.Mode == RoutingMode.Desync
+            && e.Matches(listPath))?.Recipe;
+
+    /// <summary>
+    /// Имя списка в читаемое название — для заголовка окна рецептов.
+    /// </summary>
+    /// <remarks>
+    /// Путь вида <c>config/lists/discord-media.txt</c> в заголовке «Чем
+    /// чинить» выглядел бы вопросом не о том. Человек выбирает маршрут
+    /// сервису, а не файлу.
+    /// </remarks>
+    private static string ServiceName(string listPath)
+    {
+        var name = System.IO.Path.GetFileNameWithoutExtension(listPath);
+
+        return name.Length == 0 ? listPath : name.Replace('-', ' ');
     }
 
     private static string Describe(RoutingMode mode) => mode switch

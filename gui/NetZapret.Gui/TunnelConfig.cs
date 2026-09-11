@@ -115,6 +115,23 @@ internal static class TunnelConfig
     }
 
     /// <summary>
+    /// Имена одного правила: само имя либо всё содержимое его списка.
+    /// </summary>
+    /// <remarks>
+    /// Списки к этому моменту уже развёрнуты <c>RuleSetExpander</c>'ом, так
+    /// что читать файл заново не нужно. Звёздочка снимается: в списках Zapret
+    /// записи — это зоны, и winws2 понимает их так же, без маски.
+    /// </remarks>
+    private static IEnumerable<string> Names(RoutingRule rule)
+    {
+        var values = rule.Match == MatchKind.HostList
+            ? rule.HostListDomains
+            : [rule.Value];
+
+        return values.Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v);
+    }
+
+    /// <summary>
     /// Раскладывает имена с выбранным рецептом по профилям winws2.
     /// </summary>
     /// <remarks>
@@ -125,9 +142,12 @@ internal static class TunnelConfig
     {
         try
         {
+            // И одиночные имена, и списки: у сервиса рецепт нужен чаще, чем
+            // у своего домена, — там десятки имён, и когда пресет их не
+            // открывает, разбираться руками не в чем.
             var chosen = ruleSet.Rules
                 .Where(r => r.Mode == RoutingMode.Desync
-                    && r.Match == MatchKind.Domain
+                    && r.Match is MatchKind.Domain or MatchKind.HostList
                     && !string.IsNullOrWhiteSpace(r.Recipe))
                 .ToList();
 
@@ -161,9 +181,7 @@ internal static class TunnelConfig
                         Name: group.Key,
                         Steps: recipe?.Steps ?? [],
                         Domains: (IReadOnlyList<string>)group
-                            .Select(r => r.Value.StartsWith("*.", StringComparison.Ordinal)
-                                ? r.Value[2..]
-                                : r.Value)
+                            .SelectMany(Names)
                             .Distinct(StringComparer.OrdinalIgnoreCase)
                             .ToList());
                 })
