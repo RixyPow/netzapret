@@ -108,9 +108,19 @@ goto :deploy
 
 :open
 echo.
-echo NetZapret is still running - most likely the window itself.
-echo Close it, then run this again. If nothing is open, an elevated
-echo instance is left over and needs an elevated shell to stop.
+echo ============================================================
+echo  СБОРКА НЕ ВЫПОЛНЕНА: NetZapret ещё работает.
+echo ============================================================
+echo.
+echo  Скорее всего окно свёрнуто в трей. Крестик его прячет,
+echo  а не закрывает - процесс остаётся жив и держит файлы.
+echo.
+echo  Выйдите через значок в трее: правой кнопкой - "Выйти".
+echo  Затем запустите сборку заново.
+echo.
+echo  Если в трее пусто, остался запущенный от администратора
+echo  экземпляр - его снимет только консоль с теми же правами.
+echo.
 exit /b 1
 
 :deploy
@@ -242,8 +252,18 @@ exit /b 0
 
 :held
 echo.
-echo Could not update %TARGET% - something is still holding the files.
-echo The engines were stopped above, so look for strays:
-echo   tasklist ^| findstr /i "netzapret sing-box winws2"
-echo Stopping an elevated instance needs an elevated shell.
+echo ============================================================
+echo  СБОРКА НЕ ВЫПОЛНЕНА: файлы в %TARGET% заняты.
+echo ============================================================
+echo.
+echo  Движки остановлены выше, значит держит их кто-то другой.
+echo  Чаще всего это само окно, свёрнутое в трей: крестик его
+echo  прячет, а не закрывает.
+echo.
+echo  Кто держит:
+echo    tasklist ^| findstr /i "netzapret sing-box winws2"
+echo.
+echo  Экземпляр, запущенный от администратора, снимет только
+echo  консоль с теми же правами.
+echo.
 exit /b 1

@@ -268,7 +268,7 @@ public partial class RecipeWindow : Window
         start.ArgumentList.Add("--new");
         start.ArgumentList.Add("--name=NetZapret: проба");
         start.ArgumentList.Add("--filter-tcp=80,443");
-        start.ArgumentList.Add($"--hostlist={list}");
+        start.ArgumentList.Add($"--hostlist={WinwsCommandLine.Forward(list)}");
         start.ArgumentList.Add(WinwsCommandLine.ProbeOutRange);
 
         foreach (var step in recipe.Steps)

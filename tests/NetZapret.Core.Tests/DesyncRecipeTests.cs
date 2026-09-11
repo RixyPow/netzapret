@@ -296,6 +296,65 @@ public class DesyncRecipeTests
     }
 
     /// <summary>
+    /// Имя файла — только латиница и цифры, а путь — с прямыми слэшами.
+    /// </summary>
+    /// <remarks>
+    /// Дело не в файловой системе: Windows приняла бы и кириллицу, и скобки.
+    /// Их не принимает winws2 — он собран под Cygwin, где обратный слэш это
+    /// знак экранирования. На имени «googlevideo.com-(CDN-сервера).txt» путь
+    /// доезжал до движка как «C:UsersrogfaProjects…», без единого разделителя,
+    /// и список к профилю не прицеплялся. Снаружи это выглядело неработающим
+    /// рецептом: профиль есть, имя не совпадает ни с чем.
+    /// </remarks>
+    [Fact]
+    public void ListPathSurvivesTheEnginesArgumentParsing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"netzapret-own-{Guid.NewGuid():N}");
+
+        try
+        {
+            var profiles = WinwsCommandLine.WriteOwnLists(
+                [("googlevideo.com (CDN сервера)", ["multidisorder:pos=1"], ["one.example"])],
+                root);
+
+            var name = Path.GetFileName(profiles.Single().HostListPath);
+
+            Assert.All(name, c => Assert.True(
+                char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_',
+                $"в имени файла остался знак «{c}»: {name}"));
+
+            // Списки пресета тоже приходят ключом --hostlist=, поэтому ищем
+            // именно наш — по каталогу, в который его записали.
+            var arguments = WinwsCommandLine.Build(Load(), null, profiles).ToList();
+
+            var hostlist = arguments.Single(a =>
+                a.StartsWith("--hostlist=", StringComparison.Ordinal)
+                && a.Contains(name, StringComparison.Ordinal));
+
+            Assert.DoesNotContain('\\', hostlist);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Имена, от которых после отсева не остаётся ничего, не сливаются
+    /// в один файл: хвост считается от полного имени.
+    /// </summary>
+    [Fact]
+    public void NamesThatLoseEverythingStayDistinct()
+    {
+        var first = WinwsCommandLine.Sanitize("Голосовые звонки");
+        var second = WinwsCommandLine.Sanitize("Голосовые чаты");
+
+        Assert.NotEqual(first, second);
+        Assert.Equal(first, WinwsCommandLine.Sanitize("Голосовые звонки"));
+    }
+
+    /// <summary>
     /// Осиротевшие списки убираются: рецепт могли переименовать или снять,
     /// и старый файл остался бы лежать ничьим.
     /// </summary>
@@ -307,9 +366,12 @@ public class DesyncRecipeTests
         try
         {
             WinwsCommandLine.WriteOwnLists([("Старый", ["split:pos=2"], ["one.example"])], root);
-            WinwsCommandLine.WriteOwnLists([("Новый", ["split:pos=2"], ["one.example"])], root);
 
-            Assert.Equal(["Новый.txt"], Directory.GetFiles(root).Select(Path.GetFileName));
+            var kept = WinwsCommandLine.WriteOwnLists([("Новый", ["split:pos=2"], ["one.example"])], root);
+
+            Assert.Equal(
+                [Path.GetFileName(kept.Single().HostListPath)],
+                Directory.GetFiles(root).Select(Path.GetFileName));
         }
         finally
         {

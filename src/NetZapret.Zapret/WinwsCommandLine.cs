@@ -73,11 +73,14 @@ public static class WinwsCommandLine
             arguments.Add("--new");
             arguments.Add($"--name=NetZapret: {profile.Name}");
             arguments.Add("--filter-tcp=80,443");
-            arguments.Add($"--hostlist={profile.HostListPath}");
+            // Прямые слэши, а не обратные. winws2 собран под Cygwin, и обратный
+            // слэш проходит у него как знак экранирования: путь доезжал
+            // без разделителей вовсе. Прямые понимают и Windows, и Cygwin.
+            arguments.Add($"--hostlist={Forward(profile.HostListPath)}");
             arguments.Add(OutRange);
 
             if (!string.IsNullOrWhiteSpace(excludeList))
-                arguments.Add($"--hostlist-exclude={excludeList}");
+                arguments.Add($"--hostlist-exclude={Forward(excludeList)}");
 
             foreach (var step in profile.Steps)
                 arguments.Add($"--lua-desync={step}");
@@ -95,7 +98,7 @@ public static class WinwsCommandLine
             // не перекроет собственный --hostlist-exclude пресета, если тот
             // однажды появится, — последний в профиле побеждает.
             if (!string.IsNullOrWhiteSpace(excludeList))
-                arguments.Add($"--hostlist-exclude={excludeList}");
+                arguments.Add($"--hostlist-exclude={Forward(excludeList)}");
 
             arguments.AddRange(section.RawArguments);
         }
@@ -202,15 +205,58 @@ public static class WinwsCommandLine
         return profiles;
     }
 
-    /// <summary>Имя рецепта в имя файла: в нём бывают пробелы и скобки.</summary>
-    private static string Sanitize(string name)
+    /// <summary>
+    /// Путь в том виде, в каком его не испортит разбор аргументов winws2.
+    /// </summary>
+    /// <remarks>
+    /// Он собран под Cygwin, где обратный слэш — знак экранирования. Путь
+    /// доезжал до движка без разделителей вовсе: <c>C:UsersrogfaProjects…</c>.
+    /// Прямые слэши понимают обе стороны.
+    /// </remarks>
+    public static string Forward(string path) => path.Replace('\\', '/');
+
+    /// <summary>
+    /// Имя рецепта в имя файла — строго латиницей и цифрами.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Осторожность не про файловую систему: Windows приняла бы и кириллицу,
+    /// и скобки. Их не принимает winws2. Он собран под Cygwin, и путь проходит
+    /// через его разбор аргументов, где обратный слэш — знак экранирования.
+    /// На имени «googlevideo.com-(CDN-сервера).txt» разбор срабатывал, и до
+    /// движка доезжало <c>C:UsersrogfaProjects…</c> — без единого разделителя.
+    /// В журнале это выглядело как «cannot access hostlist file», а снаружи —
+    /// как неработающий рецепт: профиль есть, список к нему не прицеплен,
+    /// имя не совпадает ни с чем.
+    /// </para>
+    /// <para>
+    /// Хвост из восьми знаков — чтобы «Голосовые звонки» и «Голосовые чаты»,
+    /// от которых после отсева кириллицы не остаётся ничего, не превратились
+    /// в один и тот же файл. Считается от полного имени, поэтому у одного
+    /// рецепта он всегда один и тот же.
+    /// </para>
+    /// </remarks>
+    public static string Sanitize(string name)
     {
-        var safe = name.Trim();
+        var safe = new StringBuilder();
 
-        foreach (char bad in Path.GetInvalidFileNameChars())
-            safe = safe.Replace(bad, '-');
+        foreach (char c in name.Trim())
+        {
+            if (char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_')
+                safe.Append(c);
+            else if (safe.Length > 0 && safe[^1] != '-')
+                safe.Append('-');
+        }
 
-        return safe.Replace(' ', '-').Replace(":", string.Empty);
+        var head = safe.ToString().Trim('-', '.');
+
+        // Устойчивый хвост: у одного имени всегда один, у разных — разные.
+        uint hash = 2166136261;
+
+        foreach (char c in name)
+            hash = (hash ^ c) * 16777619;
+
+        return (head.Length == 0 ? "recipe" : head) + "-" + hash.ToString("x8");
     }
 
     /// <summary>
