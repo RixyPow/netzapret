@@ -131,6 +131,28 @@ public sealed record ZapretSection
         }
     }
 
+    /// <summary>
+    /// Порты из <c>--filter-tcp</c> как они записаны; <c>null</c> — ключа нет.
+    /// </summary>
+    /// <remarks>
+    /// Нужны своим профилям. Наш профиль встаёт перед пресетовскими и забирает
+    /// имя себе — значит обязан покрывать то же, что покрыла бы секция. Стоя
+    /// на <c>80,443</c> там, где у секции восемь портов, он забирает часть
+    /// трафика и оставляет остальной вообще без обработки: у Discord это
+    /// <c>2053,2083,2087,2096,8443</c> — запасные порты HTTPS у Cloudflare,
+    /// на которые клиент сам переходит, когда сеть ведёт себя плохо.
+    /// </remarks>
+    public string? TcpPorts
+    {
+        get
+        {
+            var key = RawArguments.FirstOrDefault(a =>
+                a.StartsWith("--filter-tcp=", StringComparison.OrdinalIgnoreCase));
+
+            return key?["--filter-tcp=".Length..] is { Length: > 0 } value ? value : null;
+        }
+    }
+
     /// <summary>Протоколы <c>--filter-l7</c>, живущие только в UDP.</summary>
     private static readonly HashSet<string> UdpProtocols =
         new(StringComparer.OrdinalIgnoreCase) { "stun", "discord", "quic", "wireguard", "dht" };

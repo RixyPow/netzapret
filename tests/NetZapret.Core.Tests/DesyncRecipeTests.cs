@@ -370,8 +370,8 @@ public class DesyncRecipeTests
         {
             var profiles = WinwsCommandLine.WriteOwnLists(
                 [
-                    ("Claude", ["fake:blob=tls_google"], ["one.example", "two.example"]),
-                    ("Discord", ["split:pos=2"], ["three.example"]),
+                    ("Claude", ["fake:blob=tls_google"], ["one.example", "two.example"], null),
+                    ("Discord", ["split:pos=2"], ["three.example"], null),
                 ],
                 root);
 
@@ -411,7 +411,7 @@ public class DesyncRecipeTests
         try
         {
             var profiles = WinwsCommandLine.WriteOwnLists(
-                [("googlevideo.com (CDN сервера)", ["multidisorder:pos=1"], ["one.example"])],
+                [("googlevideo.com (CDN сервера)", ["multidisorder:pos=1"], ["one.example"], null)],
                 root);
 
             var name = Path.GetFileName(profiles.Single().HostListPath);
@@ -462,9 +462,9 @@ public class DesyncRecipeTests
 
         try
         {
-            WinwsCommandLine.WriteOwnLists([("Старый", ["split:pos=2"], ["one.example"])], root);
+            WinwsCommandLine.WriteOwnLists([("Старый", ["split:pos=2"], ["one.example"], null)], root);
 
-            var kept = WinwsCommandLine.WriteOwnLists([("Новый", ["split:pos=2"], ["one.example"])], root);
+            var kept = WinwsCommandLine.WriteOwnLists([("Новый", ["split:pos=2"], ["one.example"], null)], root);
 
             Assert.Equal(
                 [Path.GetFileName(kept.Single().HostListPath)],

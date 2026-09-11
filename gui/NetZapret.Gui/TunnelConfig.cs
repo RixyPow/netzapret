@@ -177,13 +177,20 @@ internal static class TunnelConfig
                 {
                     var recipe = DesyncRecipes.Find(preset, group.Key);
 
+                    var domains = (IReadOnlyList<string>)group
+                        .SelectMany(Names)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
                     return (
                         Name: group.Key,
                         Steps: recipe?.Steps ?? [],
-                        Domains: (IReadOnlyList<string>)group
-                            .SelectMany(Names)
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList());
+                        Domains: domains,
+
+                        // Порты берутся у секции, которую профиль подменяет.
+                        // Свой профиль стоит первым и забирает имя себе,
+                        // а значит обязан покрывать то же, что покрыла бы она.
+                        Ports: (string?)PresetPorts.ForDomains(preset, zapretRoot, domains));
                 })
                 .ToList();
 

@@ -20,6 +20,17 @@ public sealed record OwnDesyncProfile
 
     /// <summary>Полный путь к списку имён для этого профиля.</summary>
     public required string HostListPath { get; init; }
+
+    /// <summary>
+    /// Порты для <c>--filter-tcp</c>; пусто — <see cref="PresetPorts.Default"/>.
+    /// </summary>
+    /// <remarks>
+    /// Берутся у секции пресета, которую профиль подменяет, — см.
+    /// <see cref="PresetPorts.ForDomains"/>. Прежде тут стояло зашитое
+    /// <c>80,443</c>, и на Discord это значило, что половина его портов
+    /// оставалась без обработки вовсе.
+    /// </remarks>
+    public string? Ports { get; init; }
 }
 
 /// <summary>
@@ -72,7 +83,14 @@ public static class WinwsCommandLine
 
             arguments.Add("--new");
             arguments.Add($"--name=NetZapret: {profile.Name}");
-            arguments.Add("--filter-tcp=80,443");
+
+            // Порты те же, что у подменяемой секции. Зашитое 80,443 стоило
+            // дорого: у Discord секция объявлена на восьми портах, и пять
+            // из них — запасные HTTPS у Cloudflare, куда клиент уходит сам,
+            // когда сеть ведёт себя плохо. Профиль забирал имя себе, а его
+            // трафик на 2053 или 8443 не видел вовсе.
+            arguments.Add("--filter-tcp="
+                + (string.IsNullOrWhiteSpace(profile.Ports) ? PresetPorts.Default : profile.Ports));
             // Прямые слэши, а не обратные. winws2 собран под Cygwin, и обратный
             // слэш проходит у него как знак экранирования: путь доезжал
             // без разделителей вовсе. Прямые понимают и Windows, и Cygwin.
@@ -159,7 +177,11 @@ public static class WinwsCommandLine
     /// </remarks>
     /// <param name="byRecipe">Рецепт (имя и шаги) → имена, которые им чинить.</param>
     public static IReadOnlyList<OwnDesyncProfile> WriteOwnLists(
-        IReadOnlyList<(string Name, IReadOnlyList<string> Steps, IReadOnlyList<string> Domains)> byRecipe,
+        IReadOnlyList<(
+            string Name,
+            IReadOnlyList<string> Steps,
+            IReadOnlyList<string> Domains,
+            string? Ports)> byRecipe,
         string? directory = null)
     {
         var root = directory ?? OwnListsDirectory;
@@ -176,7 +198,7 @@ public static class WinwsCommandLine
             foreach (var stale in Directory.EnumerateFiles(root, "*.txt"))
                 File.Delete(stale);
 
-            foreach (var (name, steps, domains) in byRecipe)
+            foreach (var (name, steps, domains, ports) in byRecipe)
             {
                 if (steps.Count == 0 || domains.Count == 0)
                     continue;
@@ -193,6 +215,7 @@ public static class WinwsCommandLine
                     Name = name,
                     Steps = steps,
                     HostListPath = Path.GetFullPath(path),
+                    Ports = ports,
                 });
             }
         }
