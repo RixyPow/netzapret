@@ -191,6 +191,7 @@ public static class RuleSetLoader
                     : raw.Value.Trim(),
                 Mode = ParseMode(raw.Mode, $"правило #{i}"),
                 Server = string.IsNullOrWhiteSpace(raw.Server) ? null : raw.Server.Trim(),
+                Recipe = string.IsNullOrWhiteSpace(raw.Recipe) ? null : raw.Recipe.Trim(),
                 Enabled = raw.Enabled ?? true,
                 Ordinal = i,
             });
@@ -324,6 +325,9 @@ public static class RuleSetLoader
         public string? Value { get; set; }
         public string? Mode { get; set; }
         public string? Server { get; set; }
+
+        /// <summary>Чем чинить имя при <c>mode: desync</c>.</summary>
+        public string? Recipe { get; set; }
 
         /// <summary>Выключенное правило хранится, но не применяется.</summary>
         public bool? Enabled { get; set; }

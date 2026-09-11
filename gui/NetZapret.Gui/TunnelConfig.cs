@@ -72,6 +72,12 @@ internal static class TunnelConfig
             // выверенный на настоящей сети доставки, и рвёт рукопожатие.
             WinwsCommandLine.WriteExcludeList(HostsFile.CollectPinnedDesyncExclusions(ruleSet));
 
+            // Имена, которым рецепт выбран руками, уходят в свои профили
+            // winws2. Без этого «десинк» в маршрутах означал только «мимо
+            // туннеля»: что сделать с именем, решал пресет, а не попавшему
+            // ни в один его список не делалось ничего.
+            WriteOwnDesync(ruleSet, zapretRoot);
+
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
@@ -105,6 +111,71 @@ internal static class TunnelConfig
         catch (Exception ex)
         {
             return new BuildOutcome(false, "Конфиг не собрался: " + ex.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>
+    /// Раскладывает имена с выбранным рецептом по профилям winws2.
+    /// </summary>
+    /// <remarks>
+    /// Пишется всегда, в том числе пустым: снятый рецепт иначе продолжал бы
+    /// применяться из вчерашнего файла, и снять его было бы нечем.
+    /// </remarks>
+    private static void WriteOwnDesync(RuleSet ruleSet, string? zapretRoot)
+    {
+        try
+        {
+            var chosen = ruleSet.Rules
+                .Where(r => r.Mode == RoutingMode.Desync
+                    && r.Match == MatchKind.Domain
+                    && !string.IsNullOrWhiteSpace(r.Recipe))
+                .ToList();
+
+            if (chosen.Count == 0)
+            {
+                OwnDesyncLists.Write([]);
+                return;
+            }
+
+            // Пресет может быть не выбран вовсе — тогда десинк не запускается
+            // и чинить имя нечем; правило при этом остаётся, просто без рецепта.
+            var presetPath = AppSettings.Load(AppSettings.DefaultPath).PresetName is { } name
+                ? ZapretPaths.FindPreset(name)
+                : null;
+
+            if (presetPath is null)
+            {
+                OwnDesyncLists.Write([]);
+                return;
+            }
+
+            var preset = new PresetReader().Load(presetPath);
+
+            var groups = chosen
+                .GroupBy(r => r.Recipe!, StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var recipe = DesyncRecipes.Find(preset, group.Key);
+
+                    return (
+                        Name: group.Key,
+                        Steps: recipe?.Steps ?? [],
+                        Domains: (IReadOnlyList<string>)group
+                            .Select(r => r.Value.StartsWith("*.", StringComparison.Ordinal)
+                                ? r.Value[2..]
+                                : r.Value)
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList());
+                })
+                .ToList();
+
+            OwnDesyncLists.Write(WinwsCommandLine.WriteOwnLists(groups));
+        }
+        catch (Exception)
+        {
+            // Своя настройка не должна мешать сборке конфига: без неё
+            // всё работает ровно так, как работало до неё.
+            OwnDesyncLists.Write([]);
         }
     }
 }

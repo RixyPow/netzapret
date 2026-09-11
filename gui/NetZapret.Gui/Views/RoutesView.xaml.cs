@@ -746,7 +746,13 @@ public partial class RoutesView : UserControl
             .Where(entry => entry.Match == MatchKind.Domain)
             .Select(entry => new OwnRow(
                 entry.Value,
-                Describe(entry.Mode),
+
+                // Рецепт называется прямо в строке: иначе выбранный однажды,
+                // он пропадал бы из виду, и понять, чем чинится имя, можно
+                // было бы только заглянув в yaml.
+                entry.Mode == RoutingMode.Desync && !string.IsNullOrWhiteSpace(entry.Recipe)
+                    ? $"десинк: {entry.Recipe}"
+                    : Describe(entry.Mode),
                 (Brush)FindResource(entry.Mode switch
                 {
                     RoutingMode.Direct => "Muted",
@@ -797,21 +803,75 @@ public partial class RoutesView : UserControl
             _ => RoutingMode.Proxy,
         };
 
+        // Для десинка спрашиваем, чем именно чинить. Без этого вопроса режим
+        // означал лишь «мимо туннеля»: что сделать с именем, решал пресет,
+        // а не попавшему ни в один его список не делалось ничего.
+        string? recipe = null;
+
+        if (mode == RoutingMode.Desync && !AskRecipe(raw, out recipe))
+            return;
+
         try
         {
             var file = UserRulesFile.Load();
-            file.Set(MatchKind.Domain, "*." + raw, mode);
+            file.Set(MatchKind.Domain, "*." + raw, mode, recipe);
             file.Save();
 
             OwnDomain.Text = string.Empty;
 
             ShowOwn();
-            Status.Text = $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков.";
+
+            Status.Text = string.IsNullOrEmpty(recipe)
+                ? $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков."
+                : $"Записано: {raw} → десинк рецептом «{recipe}». "
+                  + "Применится при следующем запуске движков.";
+
             this.Offer($"Добавлен маршрут: {raw}");
         }
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Спрашивает рецепт; <c>false</c> — человек передумал добавлять правило.
+    /// </summary>
+    /// <remarks>
+    /// Отказ от окна — это отмена всего действия, а не молчаливое «решает
+    /// пресет». Иначе закрытый крестиком выбор превращался бы в правило,
+    /// которого не просили.
+    /// </remarks>
+    private bool AskRecipe(string domain, out string? recipe)
+    {
+        recipe = null;
+
+        try
+        {
+            // Без выбранного пресета выбирать не из чего: рецепты берутся
+            // из него. Правило при этом записывается как прежде.
+            if (AppSettings.Load(AppSettings.DefaultPath).PresetName is not { } name
+                || ZapretPaths.FindPreset(name) is not { } presetPath)
+            {
+                return true;
+            }
+
+            var window = new RecipeWindow(domain, new PresetReader().Load(presetPath))
+            {
+                Owner = Window.GetWindow(this),
+            };
+
+            if (window.ShowDialog() != true)
+                return false;
+
+            recipe = string.IsNullOrEmpty(window.Chosen) ? null : window.Chosen;
+            return true;
+        }
+        catch (Exception)
+        {
+            // Пресет не прочитался — выбирать не из чего, но и мешать записи
+            // правила незачем: без рецепта оно ведёт себя как прежде.
+            return true;
         }
     }
 

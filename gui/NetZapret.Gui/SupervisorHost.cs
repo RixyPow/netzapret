@@ -270,10 +270,18 @@ internal static class SupervisorHost
             ? Path.GetFullPath(WinwsCommandLine.DefaultExcludeListPath)
             : null;
 
-        var arguments = WinwsCommandLine.Build(preset, exclude);
+        // Свои профили: имена, которым рецепт выбран руками в «Маршрутах».
+        // Списки под них пишет сборка конфига — здесь их только подбирают,
+        // потому что правила читаются там, а запуск живёт тут.
+        var own = OwnDesyncLists.Read();
+
+        var arguments = WinwsCommandLine.Build(preset, exclude, own);
 
         if (exclude is not null)
             Console.WriteLine($"Десинк не трогает прибитые имена: {exclude}");
+
+        foreach (var profile in own)
+            Console.WriteLine($"Свой рецепт «{profile.Name}»: {profile.HostListPath}");
 
         var missing = WinwsCommandLine.FindMissingFiles(preset, paths.Root);
 

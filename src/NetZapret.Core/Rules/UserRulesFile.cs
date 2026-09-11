@@ -51,6 +51,7 @@ public sealed class UserRulesFile
                     Match = r.Match,
                     Value = r.Value,
                     Mode = r.Mode,
+                    Recipe = r.Recipe,
                     Enabled = r.Enabled,
                 })
                 .ToList();
@@ -99,7 +100,11 @@ public sealed class UserRulesFile
     /// <summary>
     /// Добавляет или заменяет запись. Совпадением считается пара «тип + значение».
     /// </summary>
-    public void Set(MatchKind match, string value, RoutingMode mode)
+    /// <param name="recipe">
+    /// Чем чинить имя при <see cref="RoutingMode.Desync"/>; <c>null</c> —
+    /// решает пресет, как было до появления выбора.
+    /// </param>
+    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null)
     {
         var trimmed = value.Trim();
         int index = _entries.FindIndex(e => e.Match == match && e.Matches(trimmed));
@@ -109,6 +114,11 @@ public sealed class UserRulesFile
             Match = match,
             Value = trimmed,
             Mode = mode,
+
+            // Рецепт хранится только у десинка: у прочих режимов ему нечего
+            // означать, а оставленный при смене режима он всплыл бы потом
+            // необъяснимой строкой в файле.
+            Recipe = mode == RoutingMode.Desync ? recipe : null,
             Enabled = true,
         };
 
@@ -191,6 +201,9 @@ public sealed class UserRulesFile
                 builder.AppendLine($"    value: \"{entry.Value.Replace("\"", "\\\"")}\"");
                 builder.AppendLine($"    mode: {Describe(entry.Mode)}");
 
+                if (!string.IsNullOrWhiteSpace(entry.Recipe))
+                    builder.AppendLine($"    recipe: \"{entry.Recipe.Replace("\"", "\\\"")}\"");
+
                 if (!entry.Enabled)
                     builder.AppendLine("    enabled: false");
             }
@@ -223,6 +236,9 @@ public sealed record UserRuleEntry
     public required string Value { get; init; }
 
     public required RoutingMode Mode { get; init; }
+
+    /// <summary>Чем чинить имя; <c>null</c> — решает пресет.</summary>
+    public string? Recipe { get; init; }
 
     public bool Enabled { get; init; } = true;
 

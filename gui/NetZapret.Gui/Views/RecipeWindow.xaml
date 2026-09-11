@@ -1,0 +1,84 @@
+<Window x:Class="NetZapret.Gui.Views.RecipeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Чем чинить имя" Height="620" Width="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Backdrop}"
+        ResizeMode="CanResize">
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" />
+            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                       Text="Рецепт — это то, что winws2 сделает с рукопожатием: подделает пакет, порежет его, переставит куски. Наборы взяты из вашего пресета: там они подобраны под живые блокировки, а не выдуманы нами." />
+        </StackPanel>
+
+        <TextBlock Grid.Row="1" x:Name="Status" Style="{StaticResource Caption}"
+                   Margin="0,16,0,0" TextWrapping="Wrap" />
+
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
+                <ItemsControl x:Name="Recipes">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource Raised}" CornerRadius="8"
+                                    BorderBrush="{Binding Edge}" BorderThickness="1"
+                                    Padding="14,11" Margin="0,0,0,7">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}"
+                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}"
+                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding Verdict}" Style="{StaticResource Mono}"
+                                               VerticalAlignment="Center" Margin="0,0,12,0"
+                                               MinWidth="104" TextAlignment="Right"
+                                               Foreground="{Binding VerdictColour}" />
+
+                                    <Button Grid.Column="2" Style="{StaticResource Ghost}"
+                                            Content="выбрать" Padding="14,7"
+                                            Tag="{Binding Name}" Click="OnPick" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Margin="0,0,16,0"
+                       Text="«Решает пресет» — прежнее поведение: имя выпускается напрямую, а что с ним делать, решают его списки. Если имя в них не попало, не делается ничего." />
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="TestButton" Style="{StaticResource Ghost}"
+                        Content="Проверить все" Click="OnTest" Margin="0,0,8,0" />
+                <Button Style="{StaticResource Ghost}" Content="Решает пресет"
+                        Click="OnPreset" Margin="0,0,8,0" />
+                <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
