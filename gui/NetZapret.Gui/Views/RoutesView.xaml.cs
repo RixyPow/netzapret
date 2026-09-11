@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
@@ -837,8 +838,26 @@ public partial class RoutesView : UserControl
         string? recipe = null;
 
         // У своего домена заголовок и проверяемое имя — одно и то же.
-        if (mode == RoutingMode.Desync && !AskRecipe(raw, raw, out recipe))
-            return;
+        // Защита от второго окна нужна и здесь: кнопку успевают нажать
+        // дважды, а второе модальное окно поверх первого делает первое
+        // недоступным — «выбрать» в нём просто не отзывается.
+        if (mode == RoutingMode.Desync)
+        {
+            if (_asking)
+                return;
+
+            _asking = true;
+
+            try
+            {
+                if (!AskRecipe(raw, raw, out recipe))
+                    return;
+            }
+            finally
+            {
+                _asking = false;
+            }
+        }
 
         try
         {
@@ -970,22 +989,70 @@ public partial class RoutesView : UserControl
         //
         // У списков адресов не спрашиваем: рецепт применяется по имени
         // в приветствии TLS, а в правиле по адресу имени нет вовсе.
-        string? recipe = null;
-
         // Проверять надо на настоящем имени из списка, а не на названии
         // сервиса: «discord» не разрешается, и на нём любой рецепт отвечает
         // «не помогает».
         var example = box.DataContext is PartRow row ? row.Probe : null;
 
         if (mode == RoutingMode.Desync && match == MatchKind.HostList
-            && !string.IsNullOrWhiteSpace(example)
-            && !AskRecipe(ServiceName(parts[1]), example, out recipe))
+            && !string.IsNullOrWhiteSpace(example))
         {
-            // Отказ от выбора — отказ от всего действия. Список при этом
-            // остался на новом значении, и его надо вернуть.
-            Reload();
+            // Окно выбора поднимается не отсюда, а следующим ходом очереди
+            // сообщений. Внутри обработчика выбора нельзя: список ещё
+            // не закончил свою работу и успевает поднять событие второй раз,
+            // а мы на нём открываем второе модальное окно. Тогда первое
+            // остаётся на экране, но нажать в нём ничего нельзя — поверх
+            // стоит модальное, и «выбрать» не отзывается вовсе.
+            AskLater(key, parts[1], example, match, mode);
             return;
         }
+
+        Write(key, parts[1], match, mode, recipe: null);
+    }
+
+    /// <summary>Не спрашиваем ли рецепт прямо сейчас.</summary>
+    /// <remarks>
+    /// Страховка на случай, если событие выбора придёт ещё раз, пока окно
+    /// открыто: второе окно поверх первого делает первое недоступным.
+    /// </remarks>
+    private bool _asking;
+
+    private void AskLater(
+        string key,
+        string list,
+        string example,
+        MatchKind match,
+        RoutingMode mode)
+    {
+        if (_asking)
+            return;
+
+        _asking = true;
+
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                if (!AskRecipe(ServiceName(list), example, out var recipe))
+                {
+                    // Отказ от выбора — отказ от всего действия. Список при
+                    // этом остался на новом значении, и его надо вернуть.
+                    Reload();
+                    return;
+                }
+
+                Write(key, list, match, mode, recipe);
+            }
+            finally
+            {
+                _asking = false;
+            }
+        }), DispatcherPriority.Background);
+    }
+
+    private void Write(string key, string list, MatchKind match, RoutingMode mode, string? recipe)
+    {
+        var parts = key.Split('|', 2);
 
         try
         {

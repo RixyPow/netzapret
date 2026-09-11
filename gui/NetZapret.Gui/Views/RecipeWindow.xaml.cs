@@ -152,16 +152,40 @@ public partial class RecipeWindow : Window
             return;
 
         Chosen = name;
-        DialogResult = true;
+        Close(true);
     }
 
     private void OnPreset(object sender, RoutedEventArgs e)
     {
         Chosen = DesyncRecipes.FromPreset;
-        DialogResult = true;
+        Close(true);
     }
 
-    private void OnCancel(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void OnCancel(object sender, RoutedEventArgs e) => Close(false);
+
+    /// <summary>
+    /// Закрывает окно с ответом.
+    /// </summary>
+    /// <remarks>
+    /// Через try, потому что <c>DialogResult</c> у окна, показанного не через
+    /// <c>ShowDialog</c>, бросает исключение. Пока такое окно у нас одно
+    /// и модальное, но нажатие «выбрать» не должно ронять программу, если
+    /// однажды его откроют иначе: человек в этот момент делает ровно то,
+    /// зачем окно и открыл.
+    /// </remarks>
+    private void Close(bool answer)
+    {
+        _work?.Cancel();
+
+        try
+        {
+            DialogResult = answer;
+        }
+        catch (InvalidOperationException)
+        {
+            Close();
+        }
+    }
 
     /// <summary>
     /// Перебирает рецепты и смотрит, с каким имя открывается.
