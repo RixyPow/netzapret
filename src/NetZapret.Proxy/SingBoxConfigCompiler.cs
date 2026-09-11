@@ -1313,13 +1313,28 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
-        // Тоже раньше пользовательских, и по схожей причине: в списках Zapret
-        // cloudflareclient.com уже лежит с рецептом десинка, то есть уходит
-        // напрямую, — а напрямую он не открывается. Российские операторы
-        // закрывают его по имени в TLS: TCP устанавливается, рукопожатие
-        // не доходит. Отсюда порядок работы: запись WARP заводится через
-        // работающий туннель и становится запасным выходом, когда тот ляжет.
-        if (haveServers && ruleSet.Operating == OperatingMode.Selective)
+        foreach (var rule in applicable)
+        {
+            var node = BuildRule(rule, tags, options, haveServers);
+            if (node is not null)
+                rules.Add(node);
+        }
+
+        // Домены регистрации WARP — после пользовательских, а не до.
+        //
+        // Правило встроенное, то есть человек его не писал и в списке правил
+        // не видит. Стоя первым, оно молча перебивало то, что он написал сам:
+        // домен, помеченный в «Маршрутах» как десинк, всё равно уходил
+        // в туннель, и понять это было неоткуда. Встроенное умолчание вправе
+        // подставляться, когда своего правила нет, но не вправе спорить
+        // с написанным руками.
+        //
+        // Нужно оно затем, что напрямую домен не открывается: российские
+        // операторы закрывают его по имени в TLS — TCP устанавливается,
+        // рукопожатие не доходит.
+        if (haveServers
+            && ruleSet.Operating == OperatingMode.Selective
+            && !CoveredByUserRule(applicable))
         {
             var warp = new JsonArray();
             foreach (var domain in WarpClient.ApiDomains)
@@ -1330,13 +1345,6 @@ public sealed class SingBoxConfigCompiler
                 ["domain"] = warp,
                 ["outbound"] = options.SelectorTag,
             });
-        }
-
-        foreach (var rule in applicable)
-        {
-            var node = BuildRule(rule, tags, options, haveServers);
-            if (node is not null)
-                rules.Add(node);
         }
 
         return new JsonObject
@@ -1355,6 +1363,27 @@ public sealed class SingBoxConfigCompiler
                 ["server"] = options.DnsThroughTunnel && haveServers ? BootstrapTag : "remote",
             },
         };
+    }
+
+    /// <summary>
+    /// Написал ли человек своё правило на домены регистрации WARP.
+    /// </summary>
+    /// <remarks>
+    /// Доменное правило покрывает и зону: <c>cloudflareclient.com</c> берёт
+    /// и <c>api.cloudflareclient.com</c>. Иначе встроенное умолчание сочло бы
+    /// себя незанятым и добавилось бы следом — а следом значит «после»,
+    /// то есть без действия, но с видимостью, что правило есть.
+    /// </remarks>
+    private static bool CoveredByUserRule(IReadOnlyList<RoutingRule> rules) =>
+        rules.Any(rule => rule.Match == MatchKind.Domain
+            && WarpClient.ApiDomains.Any(domain => Covers(rule.Value, domain)));
+
+    private static bool Covers(string pattern, string domain)
+    {
+        var value = pattern.StartsWith("*.", StringComparison.Ordinal) ? pattern[2..] : pattern;
+
+        return domain.Equals(value, StringComparison.OrdinalIgnoreCase)
+            || domain.EndsWith("." + value, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

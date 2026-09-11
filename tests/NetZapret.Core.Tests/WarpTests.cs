@@ -175,6 +175,43 @@ public class WarpTests
     }
 
     /// <summary>
+    /// Встроенное правило не спорит с написанным руками.
+    /// </summary>
+    /// <remarks>
+    /// Человек его не писал и в списке правил не видит. Стоя первым, оно
+    /// молча перебивало его собственное: домен, помеченный в «Маршрутах»
+    /// как десинк, всё равно уходил в туннель, и понять это было неоткуда.
+    /// </remarks>
+    [Fact]
+    public void UserRuleOnTheRegistrationDomainWins()
+    {
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.api.cloudflareclient.com"
+                mode: desync
+            """);
+
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet, [WarpServer()], new SingBoxOptions());
+
+        var domainRules = JsonDocument.Parse(result.Json).RootElement
+            .GetProperty("route").GetProperty("rules").EnumerateArray()
+            .Where(r => r.TryGetProperty("domain_suffix", out _) || r.TryGetProperty("domain", out _))
+            .ToList();
+
+        // Правило на этот домен ровно одно — его собственное, и ведёт оно
+        // напрямую, как он и просил.
+        var mine = domainRules
+            .Where(r => r.ToString().Contains("api.cloudflareclient.com", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Single(mine);
+        Assert.Equal("direct", mine[0].GetProperty("outbound").GetString());
+    }
+
+    /// <summary>
     /// При выборочном перехвате в туннель попадает только то, чему подменён
     /// адрес. Без fakeip правило маршрута до регистрации не доживёт: запрос
     /// уйдёт мимо туннеля, не дойдя до разбора правил.

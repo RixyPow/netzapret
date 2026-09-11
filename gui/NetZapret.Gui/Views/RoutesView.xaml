@@ -66,6 +66,14 @@
                         <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                    Text="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com. Правило пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
 
+                        <!--
+                            Оговорка не лишняя: «десинк» здесь обещает больше,
+                            чем делает, и без этой строки человек вправе ждать,
+                            что рецепт подберётся сам.
+                        -->
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="«Десинк» здесь означает только «мимо туннеля» — рецепт при этом не назначается. Чем чинить имя, решает пресет на вкладке «Десинк»: если оно не попало ни в один его список, с ним не сделают ничего. Проверить, что применится, можно в «Проверке блокировок»." />
+
                         <ItemsControl x:Name="Own" Margin="0,12,0,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
