@@ -16,6 +16,15 @@ public sealed class PartRow
     public required string Key { get; init; }
     public required string Title { get; init; }
     public required string Detail { get; init; }
+
+    /// <summary>
+    /// Настоящее имя из списка — на нём проверяются рецепты.
+    /// </summary>
+    /// <remarks>
+    /// Название части в заголовок годится, а в пробу нет: «Текст и вход»
+    /// не разрешается, и проверка отвечала бы «не помогает» на всё подряд.
+    /// </remarks>
+    public string? Probe { get; init; }
     /// <summary>
     /// Куда идёт часть, словами.
     /// </summary>
@@ -267,6 +276,11 @@ public partial class RoutesView : UserControl
             Icon = host.Contains('.') ? SiteIcons.Cached(host) : null,
             Key = kind + "|" + part.Part.List,
             Title = part.Part.Name,
+
+            // Ровно то имя, что показано в подписи «например …»: оно взято
+            // из самого списка и потому заведомо им покрыто.
+            Probe = part.Part.ByAddress ? null : host,
+
             Detail = detail,
 
             // Рецепт называется прямо в подписи маршрута. Выбранный однажды,
@@ -822,7 +836,8 @@ public partial class RoutesView : UserControl
         // а не попавшему ни в один его список не делалось ничего.
         string? recipe = null;
 
-        if (mode == RoutingMode.Desync && !AskRecipe(raw, out recipe))
+        // У своего домена заголовок и проверяемое имя — одно и то же.
+        if (mode == RoutingMode.Desync && !AskRecipe(raw, raw, out recipe))
             return;
 
         try
@@ -856,7 +871,9 @@ public partial class RoutesView : UserControl
     /// пресет». Иначе закрытый крестиком выбор превращался бы в правило,
     /// которого не просили.
     /// </remarks>
-    private bool AskRecipe(string domain, out string? recipe)
+    /// <param name="title">Что писать в заголовке окна.</param>
+    /// <param name="domain">На чём проверять рецепты — настоящее имя.</param>
+    private bool AskRecipe(string title, string domain, out string? recipe)
     {
         recipe = null;
 
@@ -870,7 +887,7 @@ public partial class RoutesView : UserControl
                 return true;
             }
 
-            var window = new RecipeWindow(domain, new PresetReader().Load(presetPath))
+            var window = new RecipeWindow(title, domain, new PresetReader().Load(presetPath))
             {
                 Owner = Window.GetWindow(this),
             };
@@ -955,8 +972,14 @@ public partial class RoutesView : UserControl
         // в приветствии TLS, а в правиле по адресу имени нет вовсе.
         string? recipe = null;
 
+        // Проверять надо на настоящем имени из списка, а не на названии
+        // сервиса: «discord» не разрешается, и на нём любой рецепт отвечает
+        // «не помогает».
+        var example = box.DataContext is PartRow row ? row.Probe : null;
+
         if (mode == RoutingMode.Desync && match == MatchKind.HostList
-            && !AskRecipe(ServiceName(parts[1]), out recipe))
+            && !string.IsNullOrWhiteSpace(example)
+            && !AskRecipe(ServiceName(parts[1]), example, out recipe))
         {
             // Отказ от выбора — отказ от всего действия. Список при этом
             // остался на новом значении, и его надо вернуть.

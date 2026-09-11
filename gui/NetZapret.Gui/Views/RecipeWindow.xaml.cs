@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -12,8 +14,18 @@ using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Строка одного рецепта в окне выбора.</summary>
-public sealed record RecipeRow
+/// <summary>
+/// Строка одного рецепта в окне выбора.
+/// </summary>
+/// <remarks>
+/// Класс с уведомлениями, а не запись. Перебор рецептов меняет вердикт
+/// у каждой строки по очереди, и прежде для показа этого пересоздавался весь
+/// <c>ItemsSource</c> — присваиванием <c>null</c> и обратно. WPF на этом падал:
+/// подмена приходила из продолжения задачи и попадала в середину раскладки,
+/// а <c>StackPanel</c> в этот момент уже держал в руках прежний список.
+/// Отсюда «ArgumentOutOfRangeException: Parameter 'index'» посреди проверки.
+/// </remarks>
+public sealed class RecipeRow : INotifyPropertyChanged
 {
     /// <summary>Что запишется в правило: имя секции пресета.</summary>
     public required string Name { get; init; }
@@ -27,11 +39,38 @@ public sealed record RecipeRow
     /// <summary>Где ещё этот набор применяется — чтобы судить по знакомому.</summary>
     public required string UsedBy { get; init; }
 
-    public string Verdict { get; set; } = string.Empty;
+    private string _verdict = string.Empty;
+    private Brush _verdictColour = Brushes.Transparent;
+    private Brush _edge = Brushes.Transparent;
 
-    public Brush VerdictColour { get; set; } = Brushes.Transparent;
+    public string Verdict
+    {
+        get => _verdict;
+        set => Set(ref _verdict, value);
+    }
 
-    public Brush Edge { get; set; } = Brushes.Transparent;
+    public Brush VerdictColour
+    {
+        get => _verdictColour;
+        set => Set(ref _verdictColour, value);
+    }
+
+    public Brush Edge
+    {
+        get => _edge;
+        set => Set(ref _edge, value);
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Set<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
 }
 
 /// <summary>
@@ -62,14 +101,27 @@ public partial class RecipeWindow : Window
     /// <summary>Что выбрали; <c>null</c> — окно закрыли отменой.</summary>
     public string? Chosen { get; private set; }
 
-    public RecipeWindow(string domain, ZapretPreset preset)
+    /// <param name="title">Что показать в заголовке: имя или название сервиса.</param>
+    /// <param name="domain">
+    /// Имя, на котором проверяются рецепты. Для сервиса — любое из его списка.
+    /// </param>
+    /// <remarks>
+    /// Разделены намеренно, и это исправление. Сервису в заголовок идёт
+    /// «discord», а проверять на нём нечего: такого имени не существует,
+    /// оно не разрешается, и каждый рецепт отвечал «не помогает» — все
+    /// одиннадцать, включая заведомо рабочие.
+    /// </remarks>
+    public RecipeWindow(string title, string domain, ZapretPreset preset)
     {
         InitializeComponent();
 
         _domain = domain;
         _preset = preset;
 
-        Head.Text = $"Чем чинить {domain}";
+        Head.Text = $"Чем чинить {title}";
+
+        if (!string.Equals(title, domain, StringComparison.OrdinalIgnoreCase))
+            Head.Text += $" — проверяю на {domain}";
 
         foreach (var recipe in DesyncRecipes.FromPresetFile(preset))
         {
@@ -178,7 +230,6 @@ public partial class RecipeWindow : Window
 
                 row.Verdict = "проверяю…";
                 row.VerdictColour = (Brush)FindResource("Muted");
-                Redraw();
 
                 bool ok = await TryAsync(winws, paths!.Root, row.Name, _work.Token);
 
@@ -188,8 +239,6 @@ public partial class RecipeWindow : Window
 
                 if (ok)
                     worked++;
-
-                Redraw();
             }
 
             Status.Text = worked == 0
@@ -384,9 +433,4 @@ public partial class RecipeWindow : Window
         }
     }
 
-    private void Redraw()
-    {
-        Recipes.ItemsSource = null;
-        Recipes.ItemsSource = _rows;
-    }
 }
