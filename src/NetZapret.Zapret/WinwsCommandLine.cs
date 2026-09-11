@@ -74,6 +74,7 @@ public static class WinwsCommandLine
             arguments.Add($"--name=NetZapret: {profile.Name}");
             arguments.Add("--filter-tcp=80,443");
             arguments.Add($"--hostlist={profile.HostListPath}");
+            arguments.Add(OutRange);
 
             if (!string.IsNullOrWhiteSpace(excludeList))
                 arguments.Add($"--hostlist-exclude={excludeList}");
@@ -101,6 +102,43 @@ public static class WinwsCommandLine
 
         return arguments;
     }
+
+    /// <summary>
+    /// Насколько глубоко в соединение пускать рецепт.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Из встроенной справки winws2: <c>d</c> — номер исходящего пакета
+    /// <i>с данными</i>, поэтому <c>-d8</c> означает «первые девять, считая
+    /// с нуля». Рукопожатие TLS укладывается в них с запасом, а дальше идёт
+    /// уже полезная нагрузка, которую корёжить незачем.
+    /// </para>
+    /// <para>
+    /// Пропуск этого ключа стоил дорого и выглядел загадочно. Без него рецепт
+    /// применяется к каждому исходящему пакету соединения подряд. Домен при
+    /// этом открывался в браузере и curl, но sing-box получал от Cloudflare
+    /// <c>tls: handshake failure</c> — мгновенно, не по таймауту. То есть
+    /// имя было открыто, а пользоваться им движок не мог, и по симптомам
+    /// это неотличимо от нерабочего рецепта.
+    /// </para>
+    /// <para>
+    /// Почему именно восемь: столько стоит у профилей пресета, чинящих
+    /// рукопожатие TLS. Там, где рецепт из нескольких шагов и ему нужно окно
+    /// шире, автор ставит <c>-d10</c> — но это его решение для его секций,
+    /// а не общее правило.
+    /// </para>
+    /// </remarks>
+    private const string OutRange = "--out-range=-d8";
+
+    /// <summary>
+    /// Тот же ключ для проверки рецептов.
+    /// </summary>
+    /// <remarks>
+    /// Открыт наружу затем, чтобы проверка собирала профиль ровно теми же
+    /// ключами, что уйдут в работу. Разойдись они — она мерила бы не то,
+    /// что потом применится.
+    /// </remarks>
+    public static string ProbeOutRange => OutRange;
 
     /// <summary>Где лежит список имён, которые десинку трогать нельзя.</summary>
     public static string DefaultExcludeListPath => Path.Combine("runtime", "desync-exclude.txt");

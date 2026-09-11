@@ -197,6 +197,13 @@ public class DesyncRecipeTests
         Assert.True(theirs >= 0, "профилей пресета нет в командной строке");
         Assert.True(ours < theirs, $"свой профиль ({ours}) должен идти раньше пресетовского ({theirs})");
 
+        // --out-range обязателен. Без него рецепт применяется к каждому
+        // исходящему пакету подряд, а не только к рукопожатию: домен при этом
+        // открывался в curl, а sing-box получал tls: handshake failure —
+        // то есть имя открыто, а пользоваться им движок не мог.
+        Assert.Contains("--out-range=-d8", line);
+        Assert.True(line.IndexOf("--out-range=-d8") > ours, "--out-range должен быть внутри нашего профиля");
+
         // И глобальные ключи остаются впереди всех: они не принадлежат
         // ни одному профилю.
         Assert.True(line.IndexOf("--wf-tcp=80,443") < ours);

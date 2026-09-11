@@ -261,10 +261,15 @@ public partial class RecipeWindow : Window
         foreach (var argument in _preset.GlobalArguments)
             start.ArgumentList.Add(argument);
 
+        // Профиль собирается теми же ключами, что уйдут в работу. Разойдись
+        // они — проверка мерила бы не то, что потом применится, и это
+        // не теория: без --out-range рецепт открывал домен для curl,
+        // а sing-box получал от того же сервера отказ в рукопожатии.
         start.ArgumentList.Add("--new");
         start.ArgumentList.Add("--name=NetZapret: проба");
         start.ArgumentList.Add("--filter-tcp=80,443");
         start.ArgumentList.Add($"--hostlist={list}");
+        start.ArgumentList.Add(WinwsCommandLine.ProbeOutRange);
 
         foreach (var step in recipe.Steps)
             start.ArgumentList.Add($"--lua-desync={step}");
@@ -310,10 +315,11 @@ public partial class RecipeWindow : Window
     /// Ждёт, пока winws2 доложит о готовности.
     /// </summary>
     /// <remarks>
-    /// Он печатает загрузку списков и число профилей, и последняя такая
-    /// строка означает, что фильтр поставлен. Ждать по часам вслепую значило
-    /// бы либо торопиться — и мерить незащищённое соединение, — либо
-    /// закладывать запас на каждый рецепт подряд.
+    /// Ждём ровно ту строку, которой он сообщает о поставленном фильтре:
+    /// раньше неё пакеты не перехватываются вовсе, и проба мерила бы
+    /// незащищённое соединение. Прежде здесь ждали строку про число профилей —
+    /// она печатается при разборе настроек, то есть до того, как драйвер
+    /// встал в разрыв.
     /// </remarks>
     private static async Task ReadyAsync(Process process, CancellationToken cancellationToken)
     {
@@ -331,9 +337,8 @@ public partial class RecipeWindow : Window
             if (line.Result is null)
                 break;
 
-            // «we have N user defined desync profile(s)» — последняя строка
-            // разбора настроек, дальше он уже слушает сеть.
-            if (line.Result.Contains("desync profile", StringComparison.OrdinalIgnoreCase))
+            // «windivert initialized. capture is started.» — драйвер в разрыве.
+            if (line.Result.Contains("capture is started", StringComparison.OrdinalIgnoreCase))
                 break;
 
             line = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
