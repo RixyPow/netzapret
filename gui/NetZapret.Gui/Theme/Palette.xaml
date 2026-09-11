@@ -26,6 +26,17 @@
     <Color x:Key="DangerColor">#FFF85149</Color>
     <Color x:Key="WarnColor">#FFD29922</Color>
 
+    <!--
+        Заливка кнопки и подпись на ней. На тёмном фоне они почти совпадают
+        с обычными, но ключи заведены и здесь: стиль кнопки один на обе темы,
+        и без них его пришлось бы писать дважды. На светлом они расходятся
+        по-настоящему — там текстовый зелёный обязан быть тёмным, а заливка
+        с тёмной подписью сливается в грязь.
+    -->
+    <Color x:Key="AccentFillColor">#FF2EA043</Color>
+    <Color x:Key="OnAccentColor">#FF06110A</Color>
+    <Color x:Key="WarnFillColor">#FFD29922</Color>
+
     <SolidColorBrush x:Key="Backdrop" Color="{StaticResource BackdropColor}" />
     <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
     <SolidColorBrush x:Key="Raised" Color="{StaticResource RaisedColor}" />
@@ -39,6 +50,10 @@
     <SolidColorBrush x:Key="AccentDim" Color="{StaticResource AccentDimColor}" />
     <SolidColorBrush x:Key="Danger" Color="{StaticResource DangerColor}" />
     <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+
+    <SolidColorBrush x:Key="AccentFill" Color="{StaticResource AccentFillColor}" />
+    <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
+    <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
     <!--
         Шрифт назван явно. По умолчанию WPF берёт Segoe UI в начертании,

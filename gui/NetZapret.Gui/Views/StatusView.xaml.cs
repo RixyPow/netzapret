@@ -315,7 +315,9 @@ public partial class StatusView : UserControl
 
     private void StartAnimations()
     {
-        ShowStateBar("Warn");
+        // Дорожка тусклая, засечка яркая. Прежде оба красились в Warn,
+        // и бегущая метка была невидима: она ехала по полосе своего же цвета.
+        ShowStateBar("Border");
         StartProgressMark.Visibility = Visibility.Visible;
 
         // Ширину берём измеренную: полоса на экране уже есть, потому что
@@ -362,7 +364,11 @@ public partial class StatusView : UserControl
     /// из них верить.
     /// </remarks>
     private void ShowStateBar(string colourKey) =>
-        StateBarFill.Fill = (Brush)FindResource(colourKey);
+        StateBarFill.Fill = (Brush)FindResource(
+            // Точки и полосы берут насыщенный жёлтый: текстовый на светлой
+            // теме выглядит у мелкой метки не предупреждением, а выцветшей
+            // серостью — у неё нет площади, чтобы донести приглушённый оттенок.
+            colourKey == "Warn" ? "WarnFill" : colourKey);
 
     /// <summary>
     /// Движки, которые поднимутся при нынешней настройке.

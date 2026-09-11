@@ -33,6 +33,24 @@
     <Color x:Key="DangerColor">#FFCF222E</Color>
     <Color x:Key="WarnColor">#FF9A6700</Color>
 
+    <!--
+        Заливки отдельно от текста, и это не украшательство. На светлом фоне
+        одно значение не может служить обоим: зелёный, читаемый как текст
+        на белом, должен быть тёмным, а тёмная заливка кнопки с тёмной же
+        подписью сливается в грязь. На тёмном фоне разницы нет, и там оба
+        ключа совпадают — но ключи есть в обеих палитрах, иначе стиль кнопки
+        пришлось бы писать дважды.
+    -->
+    <Color x:Key="AccentFillColor">#FF2DA44E</Color>
+    <Color x:Key="OnAccentColor">#FFFFFFFF</Color>
+
+    <!--
+        Жёлтый для точек и полос — насыщенный. Текстовый #9A6700 на них
+        выглядел не предупреждением, а выцветшей серостью: у мелкой метки
+        нет площади, чтобы донести приглушённый оттенок.
+    -->
+    <Color x:Key="WarnFillColor">#FFD4A017</Color>
+
     <SolidColorBrush x:Key="Backdrop" Color="{StaticResource BackdropColor}" />
     <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
     <SolidColorBrush x:Key="Raised" Color="{StaticResource RaisedColor}" />
@@ -46,6 +64,10 @@
     <SolidColorBrush x:Key="AccentDim" Color="{StaticResource AccentDimColor}" />
     <SolidColorBrush x:Key="Danger" Color="{StaticResource DangerColor}" />
     <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+
+    <SolidColorBrush x:Key="AccentFill" Color="{StaticResource AccentFillColor}" />
+    <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
+    <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>

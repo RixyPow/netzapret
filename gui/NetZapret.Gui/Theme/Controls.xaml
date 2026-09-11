@@ -88,9 +88,9 @@
 
     <!-- Главное действие раздела: одно на экран, иначе перестаёт быть главным. -->
     <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource Ghost}">
-        <Setter Property="Background" Value="{StaticResource AccentDim}" />
-        <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
-        <Setter Property="Foreground" Value="#FF06110A" />
+        <Setter Property="Background" Value="{StaticResource AccentFill}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentFill}" />
+        <Setter Property="Foreground" Value="{StaticResource OnAccent}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Padding" Value="26,11" />
     </Style>

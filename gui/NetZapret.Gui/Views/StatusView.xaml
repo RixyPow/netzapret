@@ -79,7 +79,7 @@
 
                     <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="3" RadiusY="3"
                                HorizontalAlignment="Left" Visibility="Collapsed"
-                               Fill="{StaticResource Warn}">
+                               Fill="{StaticResource WarnFill}">
                         <Rectangle.RenderTransform>
                             <TranslateTransform x:Name="StartProgressShift" />
                         </Rectangle.RenderTransform>
