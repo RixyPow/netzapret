@@ -304,6 +304,27 @@ public class WarpTests
     }
 
     /// <summary>
+    /// Порты пробника обходят вход глубокой проверки. Раздавались они подряд
+    /// от 21080, и одиннадцатому серверу списка доставался 21090 — занятый
+    /// работающим движком. Проба падала на старте, сервер объявлялся мёртвым,
+    /// и всегда на одном и том же месте списка.
+    /// </summary>
+    [Fact]
+    public void ProbePortsSkipTheHealthInbound()
+    {
+        var ports = Enumerable.Range(0, 34)
+            .Select(index => ProxyProbe.PortForTesting(21080, index))
+            .ToList();
+
+        Assert.DoesNotContain(SingBoxOptions.DefaultHealthPort, ports);
+        Assert.Equal(ports.Count, ports.Distinct().Count());
+
+        // До занятого порта нумерация обычная, после — со сдвигом на один.
+        Assert.Equal(21089, ports[9]);
+        Assert.Equal(21091, ports[10]);
+    }
+
+    /// <summary>
     /// MASQUE не замеряется отдельным пробником, и это его свойство, а не
     /// сбой: запись движок держит в кэше работающего экземпляра, а файл
     /// занят им же.

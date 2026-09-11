@@ -153,6 +153,25 @@ public sealed class ProxyProbe
     }
 
     /// <summary>
+    /// Какой порт достанется проверке под этим номером.
+    /// </summary>
+    /// <remarks>
+    /// Вход глубокой проверки обходится стороной, и это исправление, а не
+    /// предосторожность. Порты раздавались подряд от 21080, то есть
+    /// одиннадцатому серверу списка доставался 21090 — тот самый, на котором
+    /// висит вход работающего движка. Занять его не выходило, проба падала
+    /// на старте, и сервер объявлялся мёртвым. Каждый прогон, всегда на одном
+    /// и том же месте списка, и только при поднятом туннеле — то есть ровно
+    /// тогда, когда в результат и смотрят.
+    /// </remarks>
+    internal static int PortForTesting(int first, int index)
+    {
+        int port = first + index;
+
+        return port >= SingBoxOptions.DefaultHealthPort ? port + 1 : port;
+    }
+
+    /// <summary>
     /// Проверяет несколько серверов одновременно.
     /// </summary>
     /// <param name="onResult">Вызывается по мере готовности каждого результата.</param>
@@ -168,6 +187,7 @@ public sealed class ProxyProbe
         var results = new List<ProbeResult>();
         var sync = new object();
 
+
         using var limit = new SemaphoreSlim(Math.Max(1, options.Parallelism));
 
         var tasks = servers.Select(async (server, index) =>
@@ -180,7 +200,7 @@ public sealed class ProxyProbe
             {
                 // Каждой проверке свой порт: процессы sing-box поднимаются
                 // одновременно и за один порт подрались бы.
-                var own = options with { ListenPort = options.ListenPort + index };
+                var own = options with { ListenPort = PortForTesting(options.ListenPort, index) };
                 result = await RunAsync(server, own, cancellationToken);
             }
             catch (Exception ex)
