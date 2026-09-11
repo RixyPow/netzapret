@@ -4,15 +4,29 @@ namespace NetZapret.Subscriptions;
 /// Скачивает подписку по ссылке.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Заголовок User-Agent имеет значение: многие панели отдают разный формат
 /// в зависимости от клиента, а некоторые вовсе отказывают неизвестным.
+/// </para>
+/// <para>
+/// Представляемся движком, который ведём. Замер 2026-09-11 на двух живых
+/// подписках: под видом Happ одна панель отдаёт готовый конфиг Xray — без имён
+/// серверов, с тегами proxy, proxy-2 и повторами, двадцать один вместо
+/// двенадцати. Она же под видом sing-box отдаёт обычный список ссылок
+/// с флагами и названиями стран. Вторая подписка на оба заголовка отвечает
+/// одинаково, так что терять нечего.
+/// </para>
+/// <para>
+/// Своё имя пробовать нельзя: на NetZapret/0.5.3 первая панель ответила
+/// отказом. Незнакомых там не любят.
+/// </para>
 /// </remarks>
 public sealed class SubscriptionClient : IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
 
-    public SubscriptionClient(HttpClient? http = null, string userAgent = "Happ/2.18.3")
+    public SubscriptionClient(HttpClient? http = null, string userAgent = "sing-box/1.14.0")
     {
         _ownsClient = http is null;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
