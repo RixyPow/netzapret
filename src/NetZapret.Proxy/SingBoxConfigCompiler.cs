@@ -616,10 +616,13 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
+        // independent_cache не пишется: в 1.14.0 он объявлен устаревшим, а в
+        // 1.16.0 будет убран, и кэш там разделяется сам по резолверам. Держать
+        // ключ до последнего значило бы чинить его по чужому расписанию —
+        // в тот день, когда движок обновится и конфиг перестанет собираться.
         var dns = new JsonObject
         {
             ["servers"] = servers,
-            ["independent_cache"] = true,
         };
 
         // Fakeip выдаёт каждому домену собственный адрес, поэтому соответствие
@@ -1071,6 +1074,25 @@ public sealed class SingBoxConfigCompiler
 
                 if (!string.IsNullOrEmpty(server.Path))
                     transport["path"] = server.Path;
+
+                return transport;
+            }
+
+            case "xhttp":
+            {
+                var transport = new JsonObject { ["type"] = "xhttp" };
+
+                if (!string.IsNullOrEmpty(server.Path))
+                    transport["path"] = server.Path;
+
+                if (!string.IsNullOrEmpty(server.HostHeader))
+                    transport["host"] = server.HostHeader;
+
+                // Набивка обязательна: без неё движок отказывается разбирать
+                // конфиг со словами «x_padding_bytes cannot be disabled».
+                // Значение взято по умолчанию из самого XHTTP — оно и прячет
+                // длину запроса, ради чего транспорт и придуман.
+                transport["x_padding_bytes"] = "100-1000";
 
                 return transport;
             }

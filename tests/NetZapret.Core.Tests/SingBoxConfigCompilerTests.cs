@@ -432,8 +432,12 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
-    public void XhttpServersAreSkippedAndReported()
+    public void XhttpServersAreUsedNotSkipped()
     {
+        // Прежде такой сервер выбрасывался: xhttp придуман в Xray, и обычный
+        // sing-box его не знает. Подписка из семнадцати серверов показывала
+        // четырнадцать, а целиком построенная на xhttp — ноль. Со сборкой
+        // extended он идёт в конфиг наравне с остальными.
         var engine = RuleSetLoader.Load("mode: selective\nrules: []");
         var servers = new[]
         {
@@ -443,10 +447,37 @@ public class SingBoxConfigCompilerTests
 
         var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions());
 
-        Assert.Single(result.UsedServers);
-        Assert.Single(result.SkippedServers);
-        Assert.Equal("xhttp-node", result.SkippedServers[0].Tag);
-        Assert.DoesNotContain("xhttp", result.Json, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, result.UsedServers.Count);
+        Assert.Empty(result.SkippedServers);
+        Assert.Contains("xhttp", result.Json, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void XhttpTransportCarriesPadding()
+    {
+        // Без набивки движок отказывается разбирать конфиг со словами
+        // «x_padding_bytes cannot be disabled», и отказ приходит уже
+        // при запуске, а не при сборке.
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server("xhttp-node", ProxyProtocol.Vless, transport: "xhttp")],
+            new SingBoxOptions());
+
+        Assert.Contains("x_padding_bytes", result.Json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DnsCarriesNoDeprecatedIndependentCache()
+    {
+        // Объявлен устаревшим в 1.14.0 и будет убран в 1.16.0. Держать его
+        // до последнего значило бы чинить конфиг в тот день, когда движок
+        // обновится и перестанет его собирать.
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server("ok")], new SingBoxOptions());
+
+        Assert.DoesNotContain("independent_cache", result.Json, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -24,11 +24,11 @@ internal static class SubCommand
 
         foreach (var server in info.Servers)
         {
-            var engine = server.IsSupportedBySingBox ? "sing-box" : "только Xray";
+            // Колонка осталась, а выбора в ней больше нет: со сборкой extended
+            // sing-box обслуживает всё, включая xhttp. Убирать её целиком —
+            // отдельная правка ширины таблицы, и она того не стоит.
+            var engine = "sing-box";
             var previous = Console.ForegroundColor;
-
-            if (!server.IsSupportedBySingBox)
-                Console.ForegroundColor = ConsoleColor.DarkGray;
 
             Console.WriteLine(
                 $"  {server.Protocol.ToString().ToLowerInvariant(),-11} {server.Transport,-11} " +

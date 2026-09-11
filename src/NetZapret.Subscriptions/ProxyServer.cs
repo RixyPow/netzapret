@@ -91,12 +91,13 @@ public sealed record ProxyServer
 
     /// <summary>Движок, способный обслужить этот сервер.</summary>
     /// <remarks>
-    /// sing-box не поддерживает транспорт xhttp — это транспорт Xray.
-    /// Всё остальное, включая Hysteria2, которого нет в Xray, он умеет.
-    /// Подробнее — docs/singbox.md.
+    /// Отсеивать больше нечего. Транспорт xhttp — придумка Xray, и до перехода
+    /// на сборку extended серверы с ним приходилось пропускать: подписка
+    /// из семнадцати серверов показывала четырнадцать, а целиком построенная
+    /// на xhttp — ноль. Замер 2026-09-11: extended разбирает такой конфиг,
+    /// обычный 1.13.19 отказывается.
     /// </remarks>
-    public bool IsSupportedBySingBox =>
-        !string.Equals(Transport, "xhttp", StringComparison.OrdinalIgnoreCase);
+    public bool IsSupportedBySingBox => true;
 
     public override string ToString() =>
         $"{Protocol.ToString().ToLowerInvariant()} {Host}:{Port} [{Transport}/{Security}] {Tag}";

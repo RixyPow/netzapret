@@ -110,7 +110,7 @@ public class ProxyUriParserTests
     }
 
     [Fact]
-    public void XhttpTransportIsParsedButFlaggedUnsupportedBySingBox()
+    public void XhttpTransportIsParsedAndUsable()
     {
         var server = Parse(
             "vless://b7f3c1d2-4a5e-4c11-9f2b-8e7d6a1c0f33@se.example.com:3443" +
@@ -120,8 +120,10 @@ public class ProxyUriParserTests
         Assert.Equal("xhttp", server.Transport);
         Assert.Equal("/abc", server.Path);
 
-        // sing-box такой транспорт не реализует — для него нужен Xray.
-        Assert.False(server.IsSupportedBySingBox);
+        // Прежде такой сервер помечался неподдерживаемым и выбрасывался:
+        // xhttp придуман в Xray, и обычный sing-box его не знает. Со сборкой
+        // extended он доступен, и отсеивать больше нечего.
+        Assert.True(server.IsSupportedBySingBox);
     }
 
     [Fact]

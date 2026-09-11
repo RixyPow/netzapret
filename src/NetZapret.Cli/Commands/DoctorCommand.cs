@@ -101,11 +101,9 @@ internal static class DoctorCommand
             ? new Check(Level.Problem, "sing-box.exe не найден в tools/")
             : new Check(Level.Ok, $"sing-box: {Shorten(singBox)}"));
 
-        var xray = EngineLocator.FindXray();
-        checks.Add(xray is null
-            ? new Check(Level.Warning, "xray.exe не найден — серверы с транспортом xhttp будут недоступны")
-            : new Check(Level.Ok, $"xray: {Shorten(xray)}"));
-
+        // Проверки на xray больше нет. Она предупреждала, что без него
+        // недоступны серверы с транспортом xhttp, — с переходом на сборку
+        // extended он есть у самого sing-box, и предупреждение стало неправдой.
         if (singBox is not null)
         {
             var wintun = Path.Combine(Path.GetDirectoryName(singBox)!, "wintun.dll");
