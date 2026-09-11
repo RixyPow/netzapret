@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.WatchView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <Grid Margin="32,28,32,28">
         <Grid.RowDefinitions>
@@ -72,7 +72,7 @@
                                 </Grid.ColumnDefinitions>
 
                                 <TextBlock Grid.Column="0" Text="{Binding Time}" Style="{StaticResource Mono}"
-                                           Foreground="{StaticResource Muted}" />
+                                           Foreground="{DynamicResource Muted}" />
 
                                 <TextBlock Grid.Column="1" Text="{Binding Mode}" Style="{StaticResource Mono}"
                                            Foreground="{Binding Colour}" />

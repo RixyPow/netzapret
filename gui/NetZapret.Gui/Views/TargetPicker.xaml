@@ -5,9 +5,9 @@
         Width="460" Height="560"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
-        Background="{StaticResource Backdrop}"
-        FontFamily="{StaticResource UiFont}"
-        Foreground="{StaticResource Text}">
+        Background="{DynamicResource Backdrop}"
+        FontFamily="{DynamicResource UiFont}"
+        Foreground="{DynamicResource Text}">
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -30,11 +30,11 @@
         <StackPanel Grid.Row="1" Margin="0,18,0,0">
             <TextBlock Text="Своё имя" Style="{StaticResource Caption}" />
             <TextBox x:Name="Own" Margin="0,6,0,0" Padding="10,8"
-                     Background="{StaticResource Surface}"
-                     Foreground="{StaticResource Text}"
-                     BorderBrush="{StaticResource Border}"
-                     CaretBrush="{StaticResource Text}"
-                     FontFamily="{StaticResource MonoFont}"
+                     Background="{DynamicResource Surface}"
+                     Foreground="{DynamicResource Text}"
+                     BorderBrush="{DynamicResource Border}"
+                     CaretBrush="{DynamicResource Text}"
+                     FontFamily="{DynamicResource MonoFont}"
                      TextChanged="OnOwnChanged" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Например example.com. Проверяется ровно это имя, четырьмя пробами." />
@@ -54,9 +54,9 @@
             <TextBlock Grid.Row="0" Text="Или сервис из справочника" Style="{StaticResource Caption}" />
 
             <ListBox Grid.Row="1" x:Name="Services" Margin="0,6,0,0"
-                     Background="{StaticResource Surface}"
-                     Foreground="{StaticResource Text}"
-                     BorderBrush="{StaticResource Border}"
+                     Background="{DynamicResource Surface}"
+                     Foreground="{DynamicResource Text}"
+                     BorderBrush="{DynamicResource Border}"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                      SelectionChanged="OnServiceChosen"
                      MouseDoubleClick="OnServiceConfirmed" />

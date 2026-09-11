@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.MoreView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -151,7 +151,7 @@
                         </WrapPanel>
 
                         <TextBlock x:Name="RootValue" Style="{StaticResource Mono}"
-                                   Foreground="{StaticResource Muted}" Margin="0,4,0,0"
+                                   Foreground="{DynamicResource Muted}" Margin="0,4,0,0"
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
@@ -182,7 +182,7 @@
                                     Content="Сбросить" Click="OnResetSettings" VerticalAlignment="Center" />
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,16" />
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -200,7 +200,7 @@
                                     Content="Забыть" Click="OnForgetRoutes" VerticalAlignment="Center" />
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,16" />
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -218,7 +218,7 @@
                                     Content="Очистить" Click="OnClean" VerticalAlignment="Center" />
                         </Grid>
 
-                        <Border Height="1" Background="{StaticResource Border}" Margin="0,16,0,16" />
+                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,16" />
 
                         <Grid>
                             <Grid.ColumnDefinitions>

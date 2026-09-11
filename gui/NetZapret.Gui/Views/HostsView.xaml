@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.HostsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -35,9 +35,9 @@
 
                 <!-- Стёртый защитником файл: сказать до того, как человек решит, что ничего не прибивал. -->
                 <Border x:Name="ReplacedCard" Style="{StaticResource Card}" Margin="0,20,0,0"
-                        BorderBrush="{StaticResource Danger}" Visibility="Collapsed">
+                        BorderBrush="{DynamicResource Danger}" Visibility="Collapsed">
                     <StackPanel>
-                        <TextBlock x:Name="ReplacedTitle" FontWeight="SemiBold" Foreground="{StaticResource Danger}" />
+                        <TextBlock x:Name="ReplacedTitle" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
                         <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
                                    Text="Изменённый hosts он считает признаком заражения и вернул файл к своему умолчанию — вместе со всеми пинами. Пин на этой машине не живёт, пока файл не внесён в доверенные в настройках защитника." />
                     </StackPanel>

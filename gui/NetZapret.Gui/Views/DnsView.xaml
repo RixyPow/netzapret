@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.DnsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -34,10 +34,10 @@
                     менять рабочий на нерабочий.
                 -->
                 <Border x:Name="TunnelCard" Style="{StaticResource Card}" Margin="0,20,0,0"
-                        BorderBrush="{StaticResource Warn}" Visibility="Collapsed">
+                        BorderBrush="{DynamicResource Warn}" Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock Text="Туннель поднят — замер занизит доступность"
-                                   FontWeight="SemiBold" Foreground="{StaticResource Warn}" />
+                                   FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
                         <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                    Text="Мы сами закрываем DoH к системным резолверам, чтобы Windows вернулась на обычный UDP, и наш собственный запрос попадает под то же правило. Для чистой картины остановите движки в разделе «Состояние»." />
                     </StackPanel>
@@ -101,7 +101,7 @@
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
                                         <TextBlock Text="{Binding Address}" Style="{StaticResource Mono}"
-                                                   Foreground="{StaticResource Muted}" />
+                                                   Foreground="{DynamicResource Muted}" />
                                         <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
                                                    Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
@@ -113,7 +113,7 @@
                                                VerticalAlignment="Center" />
 
                                     <TextBlock Grid.Column="3" Text="сейчас" Style="{StaticResource Mono}"
-                                               Foreground="{StaticResource Accent}"
+                                               Foreground="{DynamicResource Accent}"
                                                Margin="14,0,0,0" MinWidth="48"
                                                VerticalAlignment="Center"
                                                Visibility="{Binding MarkShown}" />

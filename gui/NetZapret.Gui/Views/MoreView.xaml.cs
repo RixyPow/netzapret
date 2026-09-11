@@ -47,14 +47,23 @@ public partial class MoreView : UserControl
         var current = Themes.Parse(settings.Theme);
         bool light = current == ThemeKind.Light;
 
-        DarkButton.Foreground = (Brush)FindResource(light ? "Muted" : "Accent");
-        LightButton.Foreground = (Brush)FindResource(light ? "Accent" : "Muted");
+        // Обводка, а не только цвет подписи: у двух кнопок рядом разница
+        // в оттенке текста читается как «одна поярче», а не как выбор.
+        Mark(DarkButton, !light);
+        Mark(LightButton, light);
 
         ThemeHint.Text = light
             ? "Светлая. Цвета состояния те же по смыслу: зелёный «работает», "
               + "красный «закрыто», жёлтый «требует внимания»."
             : "Тёмная. Программу держат открытой минуту в день, и тёмная здесь "
               + "по умолчанию — но выбор ваш.";
+    }
+
+    /// <summary>Отмечает кнопку выбранной: обводка и цвет подписи.</summary>
+    private void Mark(Button button, bool chosen)
+    {
+        button.BorderBrush = (Brush)FindResource(chosen ? "Accent" : "Border");
+        button.Foreground = (Brush)FindResource(chosen ? "Accent" : "Muted");
     }
 
     /// <summary>

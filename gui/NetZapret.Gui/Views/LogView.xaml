@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.LogView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <Grid Margin="32,28,32,28">
         <Grid.RowDefinitions>
@@ -46,8 +46,8 @@
                           HorizontalScrollBarVisibility="Auto" Padding="16,12">
                 <TextBox x:Name="Text" Style="{x:Null}"
                          Background="Transparent" BorderThickness="0"
-                         Foreground="{StaticResource Text}"
-                         FontFamily="{StaticResource MonoFont}" FontSize="12"
+                         Foreground="{DynamicResource Text}"
+                         FontFamily="{DynamicResource MonoFont}" FontSize="12"
                          IsReadOnly="True" TextWrapping="NoWrap"
                          VerticalScrollBarVisibility="Disabled"
                          HorizontalScrollBarVisibility="Disabled" />

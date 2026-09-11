@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.DoctorView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -95,7 +95,7 @@
                             </Grid>
                         </Grid>
 
-                        <Border x:Name="AnswerCard" Background="{StaticResource Raised}" CornerRadius="8"
+                        <Border x:Name="AnswerCard" Background="{DynamicResource Raised}" CornerRadius="8"
                                 Padding="14,12" Margin="0,12,0,0" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock x:Name="AnswerMode" FontSize="15" FontWeight="SemiBold" />

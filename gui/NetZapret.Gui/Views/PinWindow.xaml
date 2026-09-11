@@ -4,7 +4,7 @@
         Title="Пин в hosts"
         Height="620" Width="720"
         MinHeight="420" MinWidth="560"
-        Background="{StaticResource Backdrop}"
+        Background="{DynamicResource Backdrop}"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         UseLayoutRounding="True"
@@ -71,7 +71,7 @@
                     <Button x:Name="UnpinButton" Style="{StaticResource Choice}" Click="OnUnpin"
                             Visibility="Collapsed">
                         <StackPanel>
-                            <TextBlock Text="Снять пин" FontWeight="SemiBold" Foreground="{StaticResource Warn}" />
+                            <TextBlock Text="Снять пин" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
                             <TextBlock x:Name="UnpinDetail" Style="{StaticResource Caption}"
                                        Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>

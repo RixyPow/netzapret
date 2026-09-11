@@ -5,7 +5,7 @@
         Title="NetZapret"
         Height="720" Width="1080"
         MinHeight="560" MinWidth="880"
-        Background="{StaticResource Backdrop}"
+        Background="{DynamicResource Backdrop}"
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal">
@@ -21,8 +21,8 @@
             равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
-        <Border Grid.Column="0" Background="{StaticResource Backdrop}"
-                BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="{DynamicResource Backdrop}"
+                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
             <DockPanel LastChildFill="True">
 
                 <StackPanel DockPanel.Dock="Top" Margin="22,26,22,22">
@@ -77,8 +77,8 @@
             <Border x:Name="Toast" Visibility="Collapsed"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,28,24" MaxWidth="460"
-                    Background="{StaticResource Surface}"
-                    BorderBrush="{StaticResource Accent}" BorderThickness="1"
+                    Background="{DynamicResource Surface}"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="1"
                     CornerRadius="10" Padding="18,15">
                 <StackPanel>
                     <TextBlock x:Name="ToastTitle" FontWeight="SemiBold" TextWrapping="Wrap" />

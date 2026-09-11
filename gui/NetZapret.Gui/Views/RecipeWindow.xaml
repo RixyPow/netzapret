@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Чем чинить имя" Height="620" Width="720"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource Backdrop}"
+        Background="{DynamicResource Backdrop}"
         ResizeMode="CanResize">
 
     <Grid Margin="28,24,28,24">
@@ -28,7 +28,7 @@
                 <ItemsControl x:Name="Recipes">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{StaticResource Raised}" CornerRadius="8"
+                            <Border Background="{DynamicResource Raised}" CornerRadius="8"
                                     BorderBrush="{Binding Edge}" BorderThickness="1"
                                     Padding="14,11" Margin="0,0,0,7">
                                 <Grid>

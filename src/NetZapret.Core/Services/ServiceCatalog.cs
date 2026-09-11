@@ -112,21 +112,23 @@ public static class ServiceCatalog
                     List = "config/lists/discord-media.txt",
                     Note = "голосовые серверы; ломается отдельно от переписки",
                 },
+                // Одной строкой, а не тремя, и это не упрощение показа.
+                // Записи в списках — зоны: discordapp.net в discord.txt
+                // покрывает и media.discordapp.net, и обе images-ext, а
+                // discord.com покрывает updates.discord.com. Отдельные части
+                // «Картинки» и «Обновления» решали судьбу имён, которые
+                // и так решены соседней строкой, — и какая из них победит,
+                // зависело от порядка правил в файле.
+                //
+                // Видно это стало, когда с «текста и входа» сняли рецепт:
+                // отвалился весь Discord разом, включая картинки и обновления,
+                // у которых свой маршрут стоял нетронутым.
                 new ServicePart
                 {
-                    Name = "Текст и вход",
+                    Name = "Сайт и переписка",
                     List = "config/lists/discord.txt",
-                    Note = "переписка, шлюз, приглашения",
-                },
-                new ServicePart
-                {
-                    Name = "Картинки и вложения",
-                    List = "config/lists/discord-images.txt",
-                },
-                new ServicePart
-                {
-                    Name = "Обновления",
-                    List = "config/lists/discord-updates.txt",
+                    Note = "всё, кроме голоса: переписка, шлюз, приглашения, "
+                        + "картинки, вложения и обновления",
                 },
                 new ServicePart
                 {

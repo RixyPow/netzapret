@@ -1,7 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.CheckView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource Backdrop}">
+             Background="{DynamicResource Backdrop}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
@@ -55,9 +55,9 @@
                     какая она есть.
                 -->
                 <Border x:Name="SetupCard" Style="{StaticResource Card}" Margin="0,20,0,0"
-                        BorderBrush="{StaticResource Warn}" Visibility="Collapsed">
+                        BorderBrush="{DynamicResource Warn}" Visibility="Collapsed">
                     <StackPanel>
-                        <TextBlock x:Name="SetupTitle" FontWeight="SemiBold" Foreground="{StaticResource Warn}" />
+                        <TextBlock x:Name="SetupTitle" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
                         <TextBlock x:Name="SetupBody" Style="{StaticResource Caption}"
                                    TextWrapping="Wrap" Margin="0,6,0,0" />
                     </StackPanel>
@@ -121,12 +121,12 @@
                                                        TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center" />
 
-                                            <Border Grid.Column="1" Background="{StaticResource Raised}"
+                                            <Border Grid.Column="1" Background="{DynamicResource Raised}"
                                                     CornerRadius="4" Padding="5,1" Margin="8,0,0,0"
                                                     VerticalAlignment="Center"
                                                     Visibility="{Binding MarkShown}">
                                                 <TextBlock Text="{Binding Mark}" FontSize="10"
-                                                           Foreground="{StaticResource Muted}" />
+                                                           Foreground="{DynamicResource Muted}" />
                                             </Border>
                                         </Grid>
 
