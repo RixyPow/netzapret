@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using NetZapret.Core;
 
 namespace NetZapret.Gui;
 
@@ -92,6 +93,9 @@ public partial class App : Application
 
             return;
         }
+
+        // До создания окна: иначе оно мигнёт тёмным и перекрасится на глазах.
+        Themes.Apply(Themes.Parse(AppSettings.Load(AppSettings.DefaultPath).Theme));
 
         new MainWindow().Show();
     }

@@ -1,0 +1,53 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Светлая пара к тёмной палитре. Ключи те же до последнего: стили
+        в Controls.xaml опираются только на них и про тему не знают вовсе.
+        Поэтому переключение — это подмена одного словаря, а не второй набор
+        стилей, который пришлось бы править парами.
+
+        Значения цветов состояния взяты не «посветлее тех же», а из палитры,
+        рассчитанной на светлый фон: зелёный #3FB950 на белом теряет контраст
+        и читается салатовым. Смысл при этом сохранён ровно тот же — зелёный
+        «работает», красный «закрыто», жёлтый «требует внимания», — иначе
+        человек, сменивший тему, начал бы читать таблицу заново.
+
+        Контраст текста к подложке: 14.2:1 у основного, 4.6:1 у приглушённого,
+        3.2:1 у бледного. Первые два проходят AA, третий намеренно нет —
+        это подписи, которые должны уходить на второй план, и в тёмной теме
+        у них ровно та же роль.
+    -->
+
+    <Color x:Key="BackdropColor">#FFF6F8FA</Color>
+    <Color x:Key="SurfaceColor">#FFFFFFFF</Color>
+    <Color x:Key="RaisedColor">#FFF0F3F6</Color>
+    <Color x:Key="BorderColor">#FFD0D7DE</Color>
+
+    <Color x:Key="TextColor">#FF1F2328</Color>
+    <Color x:Key="MutedColor">#FF636C76</Color>
+    <Color x:Key="FaintColor">#FF8C959F</Color>
+
+    <Color x:Key="AccentColor">#FF1A7F37</Color>
+    <Color x:Key="AccentDimColor">#FF116329</Color>
+    <Color x:Key="DangerColor">#FFCF222E</Color>
+    <Color x:Key="WarnColor">#FF9A6700</Color>
+
+    <SolidColorBrush x:Key="Backdrop" Color="{StaticResource BackdropColor}" />
+    <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
+    <SolidColorBrush x:Key="Raised" Color="{StaticResource RaisedColor}" />
+    <SolidColorBrush x:Key="Border" Color="{StaticResource BorderColor}" />
+
+    <SolidColorBrush x:Key="Text" Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="Muted" Color="{StaticResource MutedColor}" />
+    <SolidColorBrush x:Key="Faint" Color="{StaticResource FaintColor}" />
+
+    <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentDim" Color="{StaticResource AccentDimColor}" />
+    <SolidColorBrush x:Key="Danger" Color="{StaticResource DangerColor}" />
+    <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+
+    <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
+    <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
+
+</ResourceDictionary>

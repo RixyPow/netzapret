@@ -153,6 +153,17 @@ public sealed record AppSettings
     public bool WarpEnabled { get; init; }
 
     /// <summary>
+    /// Палитра окна: <c>dark</c> либо <c>light</c>.
+    /// </summary>
+    /// <remarks>
+    /// Строкой, а не логическим полем: тем может стать больше двух, и тогда
+    /// <c>LightTheme: false</c> пришлось бы читать как «какая-то из
+    /// остальных». Неизвестное значение считается тёмной темой — она была
+    /// единственной, и старые настройки не должны ломаться.
+    /// </remarks>
+    public string? Theme { get; init; }
+
+    /// <summary>
     /// Какой набор адресов брать из каталога Zapret.
     /// </summary>
     /// <remarks>

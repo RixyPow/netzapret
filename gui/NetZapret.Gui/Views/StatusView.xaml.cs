@@ -153,6 +153,8 @@ public partial class StatusView : UserControl
         if (!running)
         {
             Dot.Fill = (Brush)FindResource("Faint");
+            ShowStateBar("Faint");
+
             StateLine.Text = "Остановлено";
 
             StateHint.Text = settings.NeedsProxy || settings.NeedsDesync
@@ -172,13 +174,27 @@ public partial class StatusView : UserControl
         var services = state!.Services;
         bool healthy = services.All(s => s.Health == ServiceHealth.Healthy);
 
-        Dot.Fill = (Brush)FindResource(healthy ? "Accent" : "Warn");
+        // Три состояния, а не два. «Оговорки» бывают разной тяжести: движок,
+        // которому не удалась глубокая проверка, ещё несёт трафик, а умерший
+        // не несёт ничего. Одним жёлтым это выглядело одинаково, и разницу
+        // приходилось искать в списке ниже.
+        bool broken = services.Any(s =>
+            s.Health is ServiceHealth.Dead or ServiceHealth.Faulted);
 
-        StateLine.Text = healthy ? "Работает" : "Работает с оговорками";
+        var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
+
+        Dot.Fill = (Brush)FindResource(colour);
+        ShowStateBar(colour);
+
+        StateLine.Text = healthy
+            ? "Работает"
+            : broken ? "Движок не работает" : "Работает с оговорками";
 
         StateHint.Text = healthy
             ? $"Запущено {Ago(state.StartedAt)}."
-            : "Часть движков не в порядке — подробности ниже.";
+            : broken
+                ? "Один из движков не запущен — обход работает не полностью. Подробности ниже."
+                : "Часть движков не в порядке — подробности ниже.";
 
         Engines.ItemsSource = services.Select(Row).ToList();
     }
@@ -212,6 +228,8 @@ public partial class StatusView : UserControl
         StopButton.IsEnabled = true;
 
         Dot.Fill = (Brush)FindResource("Warn");
+        ShowStateBar("Warn");
+
         StateLine.Text = "Запускается…";
 
         var seconds = (int)(DateTimeOffset.Now - since).TotalSeconds;
@@ -297,12 +315,13 @@ public partial class StatusView : UserControl
 
     private void StartAnimations()
     {
-        StartProgress.Visibility = Visibility.Visible;
+        ShowStateBar("Warn");
+        StartProgressMark.Visibility = Visibility.Visible;
 
-        // Ширину берём измеренную: карточка на экране уже есть, потому что
+        // Ширину берём измеренную: полоса на экране уже есть, потому что
         // кнопку только что нажали. Запасное значение — на случай, если
         // раскладка почему-то ещё не прошла: метка уехала бы мимо полосы.
-        var span = StartProgress.ActualWidth > 0 ? StartProgress.ActualWidth : 520;
+        var span = StateBar.ActualWidth > 0 ? StateBar.ActualWidth : 520;
 
         StartProgressShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
         {
@@ -324,7 +343,7 @@ public partial class StatusView : UserControl
 
     private void StopAnimations()
     {
-        StartProgress.Visibility = Visibility.Collapsed;
+        StartProgressMark.Visibility = Visibility.Collapsed;
 
         // Снятие анимации передачей null обязательно: остановленная анимация
         // продолжает удерживать своё последнее значение, и точка осталась бы
@@ -333,6 +352,17 @@ public partial class StatusView : UserControl
         Dot.BeginAnimation(OpacityProperty, null);
         Dot.Opacity = 1;
     }
+
+    /// <summary>
+    /// Красит полосу состояния в тот же цвет, что и точка.
+    /// </summary>
+    /// <remarks>
+    /// Один источник цвета на оба показа: разойдясь, они дали бы зелёную
+    /// точку над красной полосой — и человеку пришлось бы решать, какой
+    /// из них верить.
+    /// </remarks>
+    private void ShowStateBar(string colourKey) =>
+        StateBarFill.Fill = (Brush)FindResource(colourKey);
 
     /// <summary>
     /// Движки, которые поднимутся при нынешней настройке.

@@ -38,6 +38,26 @@ public sealed class AppSettingsTests : IDisposable
         Assert.True(loaded.VerifyTraffic);
     }
 
+    /// <summary>
+    /// Тема хранится строкой, и неизвестное значение читается как тёмная.
+    /// </summary>
+    /// <remarks>
+    /// Настройки старше выбора тем поля вовсе не содержат, и падать на этом
+    /// нельзя: тёмная была единственной, она же и остаётся умолчанием.
+    /// </remarks>
+    [Fact]
+    public void ThemeSurvivesAndDefaultsToDark()
+    {
+        new AppSettings { Theme = "light" }.Save(_path);
+
+        Assert.Equal("light", AppSettings.Load(_path).Theme);
+
+        // Файл без поля — ровно то, что лежит у всех, кто ставил до 0.5.5.
+        File.WriteAllText(_path, """{ "Mode": "Selective" }""");
+
+        Assert.Null(AppSettings.Load(_path).Theme);
+    }
+
     [Fact]
     public void ModeIsStoredAsNameNotNumber()
     {

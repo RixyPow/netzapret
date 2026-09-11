@@ -529,9 +529,12 @@ public partial class VpnView : UserControl
         WarpExits.ItemsSource = on ? Rows(Warp.Exits(), WarpOwner, settings) : null;
         WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
 
-        // Кнопка проверки есть, только когда есть что проверять отдельным
-        // пробником. MASQUE им не берётся — его меряет сам движок.
-        WarpCheckButton.Visibility = on && Warp.Exits().Any(s => s.IsMeasurable)
+        // Замер есть, пока есть у кого спросить. Отдельным пробником MASQUE
+        // не берётся — его меряет сам движок, и значит при остановленных
+        // движках мерить нечем. Прежде здесь стояло условие «есть хоть один
+        // замеряемый пробником», и с уходом выхода по WireGuard кнопка
+        // пропала совсем.
+        WarpCheckButton.Visibility = on && EnginesRunning
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -1172,7 +1175,39 @@ public partial class VpnView : UserControl
     /// подписки: общая «Замерить все» их берёт, а вот проверить их одних
     /// было нечем.
     /// </remarks>
-    private async void OnCheckWarp(object sender, RoutedEventArgs e) => await MeasureAsync([]);
+    /// <summary>
+    /// Замеряет выходы WARP руками работающего движка.
+    /// </summary>
+    /// <remarks>
+    /// Через движок, а не пробником: учётная запись MASQUE лежит в его кэше,
+    /// а файл занят им же — отдельный экземпляр обязан регистрироваться
+    /// заново, и дозвониться ему для этого не через что.
+    /// </remarks>
+    private async void OnCheckWarp(object sender, RoutedEventArgs e)
+    {
+        WarpCheckButton.IsEnabled = false;
+        WarpCheckButton.Content = "меряю…";
+        Status.Text = "Спрашиваю движок о задержке WARP…";
+
+        try
+        {
+            await MeasureThroughEngineAsync(Warp.Exits());
+
+            var known = Warp.Exits()
+                .Select(s => (s.Tag, Health: _health.Find(s.Tag)))
+                .ToList();
+
+            Status.Text = known.All(p => p.Health is { Success: true })
+                ? string.Join(", ", known.Select(p => $"{p.Tag}: {p.Health!.LatencyMs:0} мс"))
+                : "WARP не отозвался. Туннель поднимается не мгновенно — если движки "
+                  + "только что запущены, повторите через полминуты.";
+        }
+        finally
+        {
+            WarpCheckButton.IsEnabled = true;
+            WarpCheckButton.Content = "проверить";
+        }
+    }
 
     /// <summary>Отмечает, какие папки сейчас замеряются.</summary>
     private void ShowBusy(IReadOnlyList<SubRow> checking)

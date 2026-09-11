@@ -41,6 +41,53 @@ public partial class MoreView : UserControl
         Unloaded += (_, _) => _work?.Cancel();
     }
 
+    /// <summary>Отмечает выбранную тему.</summary>
+    private void ShowTheme(AppSettings settings)
+    {
+        var current = Themes.Parse(settings.Theme);
+        bool light = current == ThemeKind.Light;
+
+        DarkButton.Foreground = (Brush)FindResource(light ? "Muted" : "Accent");
+        LightButton.Foreground = (Brush)FindResource(light ? "Accent" : "Muted");
+
+        ThemeHint.Text = light
+            ? "Светлая. Цвета состояния те же по смыслу: зелёный «работает», "
+              + "красный «закрыто», жёлтый «требует внимания»."
+            : "Тёмная. Программу держат открытой минуту в день, и тёмная здесь "
+              + "по умолчанию — но выбор ваш.";
+    }
+
+    /// <summary>
+    /// Переключает тему.
+    /// </summary>
+    /// <remarks>
+    /// Применяется сразу, без перезапуска: подменяется один словарь ресурсов
+    /// из двух, а стили элементов опираются только на его ключи и про тему
+    /// не знают вовсе.
+    /// </remarks>
+    private void OnTheme(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string value })
+            return;
+
+        try
+        {
+            var kind = Themes.Parse(value);
+
+            (AppSettings.Load(AppSettings.DefaultPath) with { Theme = Themes.Describe(kind) })
+                .Save(AppSettings.DefaultPath);
+
+            Themes.Apply(kind);
+            ShowTheme(AppSettings.Load(AppSettings.DefaultPath));
+
+            Status.Text = kind == ThemeKind.Light ? "Тема светлая." : "Тема тёмная.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сменить тему: " + ex.GetBaseException().Message;
+        }
+    }
+
     private void Reload()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
@@ -48,6 +95,7 @@ public partial class MoreView : UserControl
         ShowVersion(settings);
         ShowFlags(settings);
         ShowRoutes();
+        ShowTheme(settings);
 
         RootValue.Text = Path.GetFullPath(".");
 

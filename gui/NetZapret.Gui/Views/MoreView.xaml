@@ -18,6 +18,33 @@
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
+                <TextBlock Text="Оформление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Тема" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ThemeHint" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="DarkButton" Style="{StaticResource Ghost}"
+                                    Content="тёмная" MinWidth="92" Margin="0,0,8,0"
+                                    Tag="dark" Click="OnTheme" />
+
+                            <Button x:Name="LightButton" Style="{StaticResource Ghost}"
+                                    Content="светлая" MinWidth="92"
+                                    Tag="light" Click="OnTheme" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
                 <Border Style="{StaticResource Card}">

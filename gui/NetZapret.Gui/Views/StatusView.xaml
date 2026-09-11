@@ -55,23 +55,36 @@
                         </StackPanel>
                     </Grid>
 
-                    <!--
-                        Полоса запуска. Неопределённая намеренно: сколько займёт
-                        подъём, заранее не известно — проверка прохода трафика
-                        уходит в сеть, и её время зависит от выбранного сервера.
-                        Обещать долю выполнения значило бы её выдумывать.
-                    -->
-                    <Border x:Name="StartProgress" Height="3" CornerRadius="2" Margin="0,16,0,0"
-                            Background="{StaticResource Border}" ClipToBounds="True"
-                            Visibility="Collapsed" HorizontalAlignment="Stretch">
-                        <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="2" RadiusY="2"
-                                   HorizontalAlignment="Left" Fill="{StaticResource Accent}">
-                            <Rectangle.RenderTransform>
-                                <TranslateTransform x:Name="StartProgressShift" />
-                            </Rectangle.RenderTransform>
-                        </Rectangle>
-                    </Border>
                 </StackPanel>
+            </Border>
+
+            <!--
+                Полоса состояния. Отдельным блоком под карточкой, а не внутри
+                неё: появляясь внутри, она раздвигала карточку, и та прыгала
+                в размерах при каждом запуске и остановке.
+
+                Цвет несёт то же, что и точка выше, — серый «стоит», жёлтый
+                «поднимается», зелёный «работает», красный «беда». Бегущая
+                засечка только при подъёме, и она неопределённая намеренно:
+                сколько он займёт, заранее не известно — проверка прохода
+                трафика уходит в сеть. Обещать долю выполнения значило бы
+                её выдумывать.
+            -->
+            <Border x:Name="StateBar" Height="6" CornerRadius="3" Margin="0,10,0,0"
+                    Background="{StaticResource Border}" ClipToBounds="True"
+                    HorizontalAlignment="Stretch">
+                <Grid>
+                    <Rectangle x:Name="StateBarFill" RadiusX="3" RadiusY="3"
+                               Fill="{StaticResource Faint}" />
+
+                    <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="3" RadiusY="3"
+                               HorizontalAlignment="Left" Visibility="Collapsed"
+                               Fill="{StaticResource Warn}">
+                        <Rectangle.RenderTransform>
+                            <TranslateTransform x:Name="StartProgressShift" />
+                        </Rectangle.RenderTransform>
+                    </Rectangle>
+                </Grid>
             </Border>
 
             <!-- Настройка. Только показ: правка — в своих разделах. -->
