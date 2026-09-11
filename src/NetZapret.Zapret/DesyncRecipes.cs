@@ -100,6 +100,14 @@ public static class DesyncRecipes
             if (section.IsPassThrough || section.DesyncRecipes.Count == 0)
                 continue;
 
+            // Секции по UDP тоже мимо: выбранный рецепт проверяется
+            // рукопожатием TLS, а ему в UDP проверять нечего. Такие приёмы
+            // получали «не помогает» независимо от собственных достоинств —
+            // и попадали в список наравне с работающими, сбивая выбор.
+            // Заодно уходит и «как у „AnyDesk UDP“» в названиях.
+            if (!section.CarriesTcp)
+                continue;
+
             var key = string.Join(Separator, section.DesyncRecipes);
 
             if (!groups.TryGetValue(key, out var members))

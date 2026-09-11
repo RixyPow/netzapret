@@ -167,6 +167,103 @@ public class DesyncRecipeTests
     }
 
     /// <summary>
+    /// Секции по UDP в выбор не попадают.
+    /// </summary>
+    /// <remarks>
+    /// Выбранный рецепт проверяется рукопожатием TLS, а ему в UDP проверять
+    /// нечего: приём получал «не помогает» независимо от собственных достоинств
+    /// и стоял в списке наравне с работающими. У голоса Discord транспорт
+    /// назван не прямо, а классификатором — <c>stun</c> и <c>discord</c> оба
+    /// живут в UDP.
+    /// </remarks>
+    [Fact]
+    public void UdpSectionsAreNotOfferedAsRecipes()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-preset-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(path, """
+                #name=Проба
+                --wf-tcp=80,443
+
+                --new
+                --name=Сайт
+                --filter-tcp=80,443
+                --hostlist=lists/site.txt
+                --lua-desync=split:pos=2
+
+                --new
+                --name=Голосовые звонки/чаты
+                --filter-l7=stun,discord
+                --lua-desync=fake:blob=quic_google:repeats=10
+
+                --new
+                --name=AnyDesk UDP
+                --filter-udp=443-65535
+                --lua-desync=fake:blob=quic_google:repeats=4
+
+                --new
+                --name=Без фильтра
+                --hostlist=lists/other.txt
+                --lua-desync=multidisorder:pos=1
+                """);
+
+            var names = DesyncRecipes.FromPresetFile(new PresetReader().Load(path))
+                .SelectMany(r => r.UsedBy)
+                .ToList();
+
+            Assert.Contains("Сайт", names);
+
+            // Фильтра нет вовсе — значит секция ловит всё подряд, TCP в том
+            // числе, и проверить её рукопожатием можно.
+            Assert.Contains("Без фильтра", names);
+
+            Assert.DoesNotContain("Голосовые звонки/чаты", names);
+            Assert.DoesNotContain("AnyDesk UDP", names);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// В <c>--filter-l7</c> бывает и TCP: <c>http</c> с <c>tls</c> ходят по нему,
+    /// и такую секцию проверить рукопожатием как раз можно. Отбор идёт
+    /// по названным протоколам, а не по самому факту классификатора.
+    /// </summary>
+    [Fact]
+    public void TcpLevelSevenSectionStaysInTheChoice()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-preset-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(path, """
+                #name=Проба
+                --wf-tcp=80,443
+
+                --new
+                --name=Через классификатор
+                --filter-l7=http,tls
+                --hostlist=lists/site.txt
+                --lua-desync=split:pos=2
+                """);
+
+            var names = DesyncRecipes.FromPresetFile(new PresetReader().Load(path))
+                .SelectMany(r => r.UsedBy)
+                .ToList();
+
+            Assert.Contains("Через классификатор", names);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// Свои профили обязаны стоять перед пресетовскими. winws2 отдаёт пакет
     /// первому профилю, чей фильтр совпал, и дальше не смотрит: стоя после,
     /// наш рецепт не сработал бы на именах, которые пресет уже забрал себе

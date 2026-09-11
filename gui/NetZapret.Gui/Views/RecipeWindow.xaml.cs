@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -97,6 +98,9 @@ public partial class RecipeWindow : Window
     private readonly List<RecipeRow> _rows = [];
 
     private CancellationTokenSource? _work;
+
+    /// <summary>Куда стучаться приветствием; узнаётся раз на проверку.</summary>
+    private IPAddress? _address;
 
     /// <summary>Что выбрали; <c>null</c> — окно закрыли отменой.</summary>
     public string? Chosen { get; private set; }
@@ -233,11 +237,28 @@ public partial class RecipeWindow : Window
 
         try
         {
+            // Адрес спрашивается один раз на всю проверку. Имя пробы может
+            // не разрешаться вовсе, и тогда каждый повтор — это ещё один отказ
+            // резолвера в цепочке из десятка рецептов.
+            _address = await AddressForAsync(_domain, _work.Token);
+
+            if (_address is null)
+            {
+                Status.Text = $"Не удалось узнать адрес ни у {_domain}, ни у его зоны — "
+                    + "проверять некуда стучаться.";
+
+                return;
+            }
+
             // Сперва без всякого рецепта: если имя открывается само, дальше
             // мерить нечего и выбирать не из чего.
-            var plain = await BlockCheck.ProbeOnceAsync(_domain, null, _work.Token);
-
-            if (plain.Kind == BlockKind.None)
+            //
+            // Тем же способом, что и весь перебор, а не полной пробой. Полная
+            // ходит через DNS и пять стадий, и на имени пробы, которого в DNS
+            // нет, отвечала про резолвер вместо фильтра. Разные мерки в одном
+            // окне вдобавок расходятся в ответах — а сравнивать предстоит
+            // именно их.
+            if (await OpensAsync(_domain, _work.Token))
             {
                 Status.Text = $"{_domain} открывается и без десинка. Рецепт ему не нужен — "
                     + "берите «решает пресет».";
@@ -426,23 +447,40 @@ public partial class RecipeWindow : Window
     /// Открывается ли имя: одно рукопожатие TLS, и всё.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Полная проба спрашивает TCP, TLS 1.2, TLS 1.3, HTTP и передачу данных —
     /// пять ответов там, где нужен один. Рецепт чинит ровно приветствие TLS,
     /// и вопрос к нему ровно один: дошло ли оно. На десятке рецептов разница
     /// между «одно рукопожатие» и «пять проб» — это минуты.
+    /// </para>
+    /// <para>
+    /// Чужой сертификат и любой ответ об ошибке считаются успехом: отвечает
+    /// сервер — значит приветствие дошло, а это и есть предмет замера.
+    /// Проверять имя на сертификате тут незачем и вредно: у выдуманного
+    /// имени пробы его не будет никогда.
+    /// </para>
     /// </remarks>
-    private static async Task<bool> OpensAsync(string host, CancellationToken cancellationToken)
+    private async Task<bool> OpensAsync(string host, CancellationToken cancellationToken)
     {
         try
         {
+            var address = _address;
+
+            if (address is null)
+                return false;
+
             using var client = new TcpClient();
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(TimeSpan.FromSeconds(4));
 
-            await client.ConnectAsync(host, 443, deadline.Token);
+            await client.ConnectAsync(address, 443, deadline.Token);
 
-            await using var tls = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+            await using var tls = new SslStream(
+                client.GetStream(),
+                leaveInnerStreamOpen: false,
+                userCertificateValidationCallback: (_, _, _, _) => true);
+
             await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
             {
                 TargetHost = host,
@@ -457,4 +495,46 @@ public partial class RecipeWindow : Window
         }
     }
 
+    /// <summary>
+    /// Адрес, куда стучаться приветствием с этим именем.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Имя пробы может не разрешаться вовсе, и это не помеха: фильтр читает
+    /// его из приветствия TLS, а не из DNS. Голосовые серверы Discord
+    /// выдаются под звонок, постоянного имени у них нет, и проверять зону
+    /// больше нечем — <c>frankfurt1234.discord.media</c> сегодня отвечает
+    /// пустотой у любого резолвера.
+    /// </para>
+    /// <para>
+    /// Поэтому адрес берётся у ближайшего предка, который разрешается:
+    /// он в той же зоне и стоит за той же сетью доставки. Цепочку предков
+    /// строит <see cref="HostNames.ZoneChain"/>, там же и решено, где
+    /// остановиться.
+    /// </para>
+    /// </remarks>
+    private static async Task<IPAddress?> AddressForAsync(
+        string host,
+        CancellationToken cancellationToken)
+    {
+        foreach (var name in HostNames.ZoneChain(host))
+        {
+            try
+            {
+                var found = await Dns.GetHostAddressesAsync(name, cancellationToken);
+
+                var address = found.FirstOrDefault(a =>
+                    a.AddressFamily == AddressFamily.InterNetwork) ?? found.FirstOrDefault();
+
+                if (address is not null)
+                    return address;
+            }
+            catch (Exception)
+            {
+                // Не разрешилось — спросим про предка.
+            }
+        }
+
+        return null;
+    }
 }

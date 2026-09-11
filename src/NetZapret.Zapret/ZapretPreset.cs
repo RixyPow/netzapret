@@ -85,6 +85,59 @@ public sealed record ZapretSection
     public bool UsesFakePackets =>
         DesyncRecipes.Any(r => r.StartsWith("fake", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Секция ловит TCP.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Нужно там, где рецепт проверяют рукопожатием TLS: у секции по UDP
+    /// проверять этим нечего, и ответ выйдет отрицательный независимо от того,
+    /// хорош рецепт или плох. В окне выбора такие честно писали «не помогает»
+    /// про приёмы, которые в TCP и не применялись, — а человек читал это как
+    /// приговор рецепту.
+    /// </para>
+    /// <para>
+    /// Отсутствие <c>--filter-tcp</c> само по себе ничего не значит: секция
+    /// без фильтров ловит всё подряд, TCP в том числе. Не по TCP она только
+    /// тогда, когда транспорт назван и это не TCP — прямо
+    /// (<c>--filter-udp</c>) либо через классификатор
+    /// (<c>--filter-l7=stun,discord</c>), где оба протокола живут в UDP.
+    /// </para>
+    /// <para>
+    /// Протоколы перечислены поимённо, а не взяты как «раз l7, значит UDP»:
+    /// в <c>--filter-l7</c> бывают и <c>http</c> с <c>tls</c>, а это TCP,
+    /// и такую секцию проверить рукопожатием как раз можно.
+    /// </para>
+    /// </remarks>
+    public bool CarriesTcp
+    {
+        get
+        {
+            if (Has("--filter-tcp="))
+                return true;
+
+            if (Has("--filter-udp="))
+                return false;
+
+            var l7 = RawArguments.FirstOrDefault(a =>
+                a.StartsWith("--filter-l7=", StringComparison.OrdinalIgnoreCase));
+
+            if (l7 is null)
+                return true;
+
+            return !l7["--filter-l7=".Length..]
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .All(UdpProtocols.Contains);
+        }
+    }
+
+    /// <summary>Протоколы <c>--filter-l7</c>, живущие только в UDP.</summary>
+    private static readonly HashSet<string> UdpProtocols =
+        new(StringComparer.OrdinalIgnoreCase) { "stun", "discord", "quic", "wireguard", "dht" };
+
+    private bool Has(string key) =>
+        RawArguments.Any(a => a.StartsWith(key, StringComparison.OrdinalIgnoreCase));
+
     public override string ToString() =>
         $"{Name} [{(IsPassThrough ? "pass" : string.Join(", ", DesyncRecipes.Select(Head)))}]";
 
