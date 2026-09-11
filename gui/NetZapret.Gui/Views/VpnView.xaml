@@ -139,10 +139,10 @@
                 </Border>
 
                 <!--
-                    WARP. Подписка без подписки: ключи заводятся на месте,
-                    ни почты, ни оплаты. Стоит отдельной карточкой, а не
-                    строкой в списке, потому что добавляется иначе — кнопкой,
-                    а не ссылкой, которой у него нет.
+                    WARP. Выключатель, а не подписка: его выходы подмешиваются
+                    к серверам действующей подписки. Отдельной строкой в списке
+                    он занимал её место — выбор его выхода делал действующим
+                    его и отключал рабочий VPN целиком.
                 -->
                 <Border Style="{StaticResource Card}" Margin="0,10,0,0">
                     <StackPanel>
@@ -159,14 +159,51 @@
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="WarpButton" Style="{StaticResource Ghost}"
-                                    Click="OnWarp" VerticalAlignment="Center" MinWidth="120" />
+                                    Click="OnWarp" VerticalAlignment="Center" MinWidth="110" />
                         </Grid>
 
+                        <ItemsControl x:Name="WarpExits" Margin="0,12,0,0" Visibility="Collapsed">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,5">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,12,0"
+                                                 VerticalAlignment="Center" Fill="{Binding Color}" />
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                                       Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Latency}" Style="{StaticResource Mono}"
+                                                   VerticalAlignment="Center" Margin="12,0,14,0"
+                                                   TextAlignment="Right" MinWidth="100"
+                                                   Foreground="{Binding Color}" />
+
+                                        <Button Grid.Column="3" Style="{StaticResource Ghost}"
+                                                Content="{Binding ChooseLabel}" Padding="14,7"
+                                                IsEnabled="{Binding CanChoose}"
+                                                Tag="{Binding Tag}" Click="OnChoose" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                   Text="Запасной выход на случай, когда подписка кончилась или её серверы легли: скорость ниже платных, страна не выбирается, но работает без счёта и без срока." />
+                                   Text="Включённый, он добавляется к серверам действующей подписки, а не заменяет её: пока те живы, автоподбор берёт их — они быстрее, — а когда лягут, останется он. Без счёта и без срока." />
 
                         <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Выходов два, и различаются они транспортом. WireGuard — на ключах, которые заводит эта кнопка; у части операторов он проходит рукопожатие и глохнет на данных. MASQUE идёт поверх QUIC на 443 порту и оператору неотличим от обычного веба, но движок регистрируется для него сам и направить этот запрос нечем — он поднимется только там, где Cloudflare открывается напрямую. Какой из двух работает, покажет замер и автоподбор: он опрашивает обоих." />
+                                   Text="Выпускает трафик в ближайшей стране — на российском подключении это Москва. От блокировок оператора спасает, от отказов по стране нет: адрес остаётся отечественным." />
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Выходов два, и различаются они транспортом. WireGuard — на ключах, которые заводит эта кнопка; у части операторов он проходит рукопожатие и глохнет на данных. MASQUE идёт поверх QUIC на 443 порту и оператору неотличим от обычного веба, но движок регистрируется для него сам и направить этот запрос нечем — он поднимется только там, где Cloudflare открывается напрямую. Отдельно не замеряется." />
                     </StackPanel>
                 </Border>
 

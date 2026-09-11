@@ -48,6 +48,14 @@ internal static class TunnelConfig
             using var client = new SubscriptionClient();
             var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
 
+            // WARP добавляется к серверам подписки, а не вместо них: он запасной
+            // выход, и подменять им основной — ровно обратное тому, зачем он
+            // заведён. Автоподбор опрашивает всех вместе и, пока живы серверы
+            // подписки, оседает на них: они быстрее.
+            var servers = settings.WarpEnabled
+                ? [.. info.Servers, .. WarpAccount.Exits()]
+                : info.Servers;
+
             var zapretRoot = ZapretPaths.Discover()?.Root;
             var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out _);
 
@@ -66,7 +74,7 @@ internal static class TunnelConfig
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
-            var result = new SingBoxConfigCompiler().Compile(ruleSet, info.Servers, new SingBoxOptions
+            var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = settings.ProxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),

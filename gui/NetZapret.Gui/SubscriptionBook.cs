@@ -86,6 +86,37 @@ public sealed class SubscriptionBook
 
         book.Entries.RemoveAll(e => string.IsNullOrWhiteSpace(e.Url));
 
+        // WARP успел побыть отдельной строкой списка и оказался в этой роли
+        // вреден: конфиг собирается по одной ссылке, и выбор его выхода делал
+        // действующим его, отключая рабочую подписку целиком. Теперь это
+        // выключатель, а старая строка переносится в него и убирается.
+        if (book.Entries.RemoveAll(e => e.Url.StartsWith("warp://", StringComparison.OrdinalIgnoreCase)) > 0)
+        {
+            try
+            {
+                var moved = AppSettings.Load(AppSettings.DefaultPath);
+
+                (moved with
+                {
+                    WarpEnabled = true,
+
+                    // Если действующей была она, указатель повис бы на ссылку,
+                    // которой больше нет, и раздел показал бы «ни одна
+                    // не действует» при живых подписках.
+                    SubscriptionUrl = moved.SubscriptionUrl?.StartsWith("warp://", StringComparison.OrdinalIgnoreCase) == true
+                        ? book.Entries.FirstOrDefault()?.Url
+                        : moved.SubscriptionUrl,
+                }).Save(AppSettings.DefaultPath);
+
+                book.Save(target);
+            }
+            catch (Exception)
+            {
+                // Перенос — удобство. Не вышло, значит выключатель просто
+                // окажется выключенным, и его включат руками.
+            }
+        }
+
         var active = AppSettings.Load(AppSettings.DefaultPath).SubscriptionUrl;
 
         if (!string.IsNullOrWhiteSpace(active) && !book.Entries.Any(e => Same(e.Url, active)))

@@ -318,16 +318,37 @@ public class WarpTests
     }
 
     /// <summary>
-    /// Ссылка WARP не должна уходить в сеть: скачивать нечего, серверы
-    /// собираются из учётной записи рядом с настройками.
+    /// MASQUE отдаётся всегда, даже без ключей: движок заводит себе запись
+    /// сам, и от нас ему ничего не нужно. WireGuard — только когда ключи есть.
     /// </summary>
     [Fact]
-    public void WarpUrlIsRecognisedAndOthersAreNot()
+    public void MasqueExitIsOfferedEvenWithoutKeys()
     {
-        Assert.True(SubscriptionClient.IsWarp(new Uri(SubscriptionClient.WarpUrl)));
-        Assert.True(SubscriptionClient.IsWarp(new Uri("WARP://free")));
-        Assert.False(SubscriptionClient.IsWarp(new Uri("https://example.com/sub")));
-        Assert.False(SubscriptionClient.IsWarp(new Uri("happ://add/https://example.com/sub")));
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-{Guid.NewGuid():N}");
+        var previous = Directory.GetCurrentDirectory();
+
+        try
+        {
+            // Каталог без config/warp.json: так выглядит машина, где кнопку
+            // ещё не нажимали.
+            Directory.CreateDirectory(path);
+            Directory.SetCurrentDirectory(path);
+
+            Assert.Equal([WarpAccount.MasqueTag], WarpAccount.Exits().Select(s => s.Tag));
+
+            // А с ключами выходов становится два, и порядок важен: WireGuard
+            // первым, потому что его хотя бы можно замерить.
+            WarpClient.Parse(Response(), PrivateKey, "acc", "tok").Save();
+
+            Assert.Equal(
+                [WarpAccount.DefaultTag, WarpAccount.MasqueTag],
+                WarpAccount.Exits().Select(s => s.Tag));
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(previous);
+            Directory.Delete(path, recursive: true);
+        }
     }
 
     [Fact]

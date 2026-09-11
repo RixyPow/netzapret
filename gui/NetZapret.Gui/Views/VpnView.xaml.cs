@@ -165,7 +165,10 @@ public partial class VpnView : UserControl
         _book = SubscriptionBook.Load();
         var active = _book.Active(settings);
 
-        ShowWarp();
+        // Перенос старой строки WARP в выключатель мог поправить настройки —
+        // перечитываем, иначе карточка покажет состояние до переноса.
+        settings = AppSettings.Load(AppSettings.DefaultPath);
+        ShowWarp(settings);
 
         _rows = _book.Entries
             .Select(entry => new SubRow
@@ -221,19 +224,6 @@ public partial class VpnView : UserControl
 
             row.AsGiven = Rows(usable, row.Entry.Name, settings);
             row.Servers = InChosenOrder(row.AsGiven);
-
-            // У WARP нет ни квоты, ни срока, ни отброшенных серверов — общая
-            // подпись из трёх частей сказала бы про него «0 серверов ·
-            // без ограничения · без срока», то есть ничего.
-            if (SubscriptionClient.IsWarp(new Uri(row.Entry.Url)))
-            {
-                row.Detail = usable.Count > 0
-                    ? "выход Cloudflare · без счёта и без срока"
-                    : "ключи не заведены — карточка «Бесплатный WARP» выше";
-
-                Redraw();
-                return;
-            }
 
             // Отброшенные называются числом, а не замалчиваются: человек,
             // видящий в подписке двадцать серверов и пятнадцать здесь,
@@ -355,6 +345,11 @@ public partial class VpnView : UserControl
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var active = _book.Active(settings);
 
+        // Выходы WARP живут в карточке, а не в списке, и общий обход строк
+        // их не касается — пересобираем отдельно, иначе замер по ним виден
+        // только после перезахода на вкладку.
+        ShowWarp(settings);
+
         foreach (var row in _rows)
         {
             row.Active = active is not null && ReferenceEquals(row.Entry, active);
@@ -448,39 +443,46 @@ public partial class VpnView : UserControl
             settings.ForeignExitsOnly ? "Accent" : "Muted");
     }
 
-    /// <summary>Есть ли строка WARP в списке подписок.</summary>
-    private bool WarpListed => _book.Entries.Any(entry => entry.Url == SubscriptionClient.WarpUrl);
-
-    /// <summary>Показывает, заведена ли учётная запись WARP.</summary>
+    /// <summary>
+    /// Показывает состояние выключателя WARP и его выходы.
+    /// </summary>
     /// <remarks>
-    /// Состояний три, а не два: запись может быть заведена, а строка — убрана.
-    /// Тогда заводить заново не нужно и вредно, достаточно вернуть строку.
+    /// Выключатель, а не строка списка: выходы WARP подмешиваются к серверам
+    /// действующей подписки. Отдельной подпиской он занимал её место — выбор
+    /// его выхода делал действующим его и отключал рабочий VPN целиком.
     /// </remarks>
-    private void ShowWarp()
+    private void ShowWarp(AppSettings settings)
     {
+        bool on = settings.WarpEnabled;
         var account = WarpAccount.Load();
 
-        if (account is null)
-        {
-            WarpLine.Text = "Не подключён. Ключи заводятся на месте, регистрация занимает секунду.";
-            WarpButton.Content = "Подключить";
-            return;
-        }
+        WarpButton.Content = on ? "включён" : "выключен";
+        WarpButton.Foreground = (Brush)FindResource(on ? "Accent" : "Muted");
 
-        WarpLine.Text = $"Ключи заведены {account.RegisteredAt:d MMMM yyyy}, "
-            + $"адрес внутри сети {account.AddressV4}.";
+        WarpLine.Text = on
+            ? account is null
+                ? "Добавлен к подписке. Ключей WireGuard нет — работает только MASQUE."
+                : $"Добавлен к подписке. Ключи заведены {account.RegisteredAt:d MMMM yyyy}, "
+                  + $"адрес внутри сети {account.AddressV4}."
+            : account is null
+                ? "Выключен. При включении ключи заводятся на месте — ни почты, ни оплаты."
+                : $"Выключен. Ключи заведены {account.RegisteredAt:d MMMM yyyy} и сохранены.";
 
-        if (WarpListed)
-        {
-            WarpLine.Text += " Выбирается как обычный сервер — в списке ниже.";
-            WarpButton.Content = "Завести заново";
-        }
-        else
-        {
-            WarpLine.Text += " Из списка подписок убран.";
-            WarpButton.Content = "Вернуть в список";
-        }
+        WarpExits.ItemsSource = on
+            ? Rows(WarpAccount.Exits(), WarpOwner, settings)
+            : null;
+
+        WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    /// <summary>
+    /// Чем подписаны выходы WARP в <see cref="ServerRow.Owner"/>.
+    /// </summary>
+    /// <remarks>
+    /// Подписки с таким именем нет и быть не должно — по нему <see cref="OnChoose"/>
+    /// и узнаёт, что действующую менять не надо: выход и так уже в конфиге.
+    /// </remarks>
+    private const string WarpOwner = "\0warp";
 
     /// <summary>
     /// Заводит учётную запись WARP и добавляет её в список подписок.
@@ -499,16 +501,33 @@ public partial class VpnView : UserControl
     /// бесплатном тарифе это никого не стесняет.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Включает и выключает WARP.
+    /// </summary>
+    /// <remarks>
+    /// Ключи заводятся один раз, при первом включении. Выключение их не трогает:
+    /// у Cloudflare нет способа «обновить» запись, и заводить новую при каждом
+    /// щелчке значило бы плодить их на ровном месте.
+    /// </remarks>
     private async void OnWarp(object sender, RoutedEventArgs e)
     {
-        // Запись есть, а строки нет — заводить нечего, надо вернуть строку.
-        // Регистрация тут завела бы вторую запись впустую.
-        if (WarpAccount.Load() is not null && !WarpListed)
-        {
-            ListWarp();
-            Status.Text = "WARP вернулся в список подписок.";
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-            await LoadAsync();
+        // Выключение и повторное включение с готовыми ключами — просто запись
+        // в настройках. Сеть здесь не нужна вовсе.
+        if (settings.WarpEnabled || WarpAccount.Load() is not null)
+        {
+            var next = settings with { WarpEnabled = !settings.WarpEnabled };
+            next.Save(AppSettings.DefaultPath);
+
+            ShowWarp(next);
+
+            Status.Text = next.WarpEnabled
+                ? "WARP добавлен к серверам действующей подписки. "
+                  + "Применится при следующем запуске движков."
+                : "WARP выключен. Ключи сохранены — включить обратно можно без регистрации.";
+
+            this.Offer("WARP переключён");
             return;
         }
 
@@ -521,7 +540,7 @@ public partial class VpnView : UserControl
         }
 
         WarpButton.IsEnabled = false;
-        WarpButton.Content = "Подключаю…";
+        WarpButton.Content = "включаю…";
         Status.Text = "Завожу ключи и регистрирую их в Cloudflare…";
 
         try
@@ -532,10 +551,13 @@ public partial class VpnView : UserControl
             var account = await client.RegisterAsync(keys, CancellationToken.None);
 
             account.Save();
-            ListWarp();
 
-            Status.Text = $"WARP подключён: адрес внутри сети {account.AddressV4}. "
-                + "Выберите его в списке, как любой другой сервер.";
+            (AppSettings.Load(AppSettings.DefaultPath) with { WarpEnabled = true })
+                .Save(AppSettings.DefaultPath);
+
+            Status.Text = $"WARP включён: адрес внутри сети {account.AddressV4}. "
+                + "Его выходы добавлены к серверам действующей подписки, "
+                + "применится при следующем запуске движков.";
 
             await LoadAsync();
         }
@@ -554,30 +576,8 @@ public partial class VpnView : UserControl
         finally
         {
             WarpButton.IsEnabled = true;
-            ShowWarp();
+            ShowWarp(AppSettings.Load(AppSettings.DefaultPath));
         }
-    }
-
-    /// <summary>Заводит строку WARP в списке подписок, если её там нет.</summary>
-    private static void ListWarp()
-    {
-        var book = SubscriptionBook.Load();
-
-        if (book.Entries.Any(entry => entry.Url == SubscriptionClient.WarpUrl))
-            return;
-
-        book.Entries.Add(new SubscriptionEntry
-        {
-            Name = WarpAccount.DefaultTag,
-            Url = SubscriptionClient.WarpUrl,
-        });
-
-        book.Save();
-
-        // Первая подписка становится действующей сама — иначе человек
-        // подключил бы WARP и не понял, почему туннель его не берёт.
-        if (book.Entries.Count == 1)
-            SubscriptionBook.MakeActive(book.Entries[0]);
     }
 
     private void OnAuto(object sender, RoutedEventArgs e)
@@ -901,6 +901,11 @@ public partial class VpnView : UserControl
             }
         }
 
+        // Выходы WARP замеряются вместе со всеми: в конфиге они лежат рядом
+        // с серверами подписки, и знать про них надо то же самое.
+        if (settings.WarpEnabled)
+            servers.AddRange(WarpAccount.Exits().Where(s => s.IsMeasurable));
+
         if (servers.Count == 0)
         {
             Status.Text = "Замерять нечего: серверов нет.";
@@ -993,7 +998,13 @@ public partial class VpnView : UserControl
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var owner = _book.Entries.FirstOrDefault(entry => entry.Name == row.Owner);
+
+            // Выходы WARP действующую подписку не меняют: они добавлены
+            // к ней, а не вместо неё, и уже лежат в том же конфиге. Попытка
+            // «сделать действующим» WARP как раз и отключала рабочий VPN.
+            var owner = row.Owner == WarpOwner
+                ? null
+                : _book.Entries.FirstOrDefault(entry => entry.Name == row.Owner);
 
             bool switched = owner is not null && _book.Active(settings)?.Name != owner.Name;
 
