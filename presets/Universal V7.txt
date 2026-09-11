@@ -135,6 +135,14 @@
 
 --new
 
+--name=Cloudflare WARP API
+--filter-tcp=443
+--hostlist-domains=api.cloudflareclient.com
+--out-range=-d8
+--lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
+
+--new
+
 --name=Cloudflare TCP
 --filter-tcp=80,443-65535
 --hostlist=lists/cloudflare.txt
