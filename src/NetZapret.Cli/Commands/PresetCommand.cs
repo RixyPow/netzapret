@@ -60,7 +60,7 @@ internal static class PresetCommand
         }
 
         Console.WriteLine();
-        Console.WriteLine("Подробности: netzapret preset --preset \"Universal V7\"");
+        Console.WriteLine("Подробности: netzapret preset --preset \"Universal V8\"");
     }
 
     private static void ShowPreset(PresetReader reader, ZapretPaths paths, string path, bool verbose)

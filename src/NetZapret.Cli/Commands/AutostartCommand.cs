@@ -171,7 +171,7 @@ internal static class AutostartCommand
         {
             Console.WriteLine();
             Console.WriteLine("Включить (из консоли администратора):");
-            Console.WriteLine("  netzapret autostart install --preset \"Universal V7\"");
+            Console.WriteLine("  netzapret autostart install --preset \"Universal V8\"");
         }
 
         return installed ? 0 : 1;
