@@ -8,6 +8,17 @@ public enum ProxyProtocol
     Trojan,
     Shadowsocks,
     Hysteria2,
+
+    /// <summary>
+    /// WireGuard. В подписках не встречается — так подключается WARP.
+    /// </summary>
+    /// <remarks>
+    /// Стоит особняком не названием, а местом в конфиге: sing-box собирает
+    /// его не исходящим, а <c>endpoint</c>'ом, то есть сетевым интерфейсом
+    /// со своим адресом. Разница видна в генераторе, а для остальной программы
+    /// это такой же сервер, как прочие.
+    /// </remarks>
+    Wireguard,
 }
 
 /// <summary>
@@ -85,9 +96,42 @@ public sealed record ProxyServer
     /// <summary>Пароль обфускации; отдельный от пароля подключения.</summary>
     public string? ObfsPassword { get; init; }
 
+    /// <summary>Открытый ключ узла WireGuard.</summary>
+    public string? PeerPublicKey { get; init; }
+
+    /// <summary>
+    /// Адреса нашего конца туннеля WireGuard, с маской: <c>172.16.0.2/32</c>.
+    /// </summary>
+    /// <remarks>
+    /// У прочих протоколов такого нет вовсе: там мы клиент и своего адреса
+    /// внутри не имеем. WireGuard — сеть, и без выданного адреса из неё
+    /// не ответят.
+    /// </remarks>
+    public IReadOnlyList<string> LocalAddresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// MTU туннеля WireGuard.
+    /// </summary>
+    /// <remarks>
+    /// 1280 — наименьший, обязательный для IPv6, и потому проходящий везде.
+    /// Считать его от внешнего интерфейса можно было бы точнее, но туннель
+    /// внутри туннеля: наш TUN отдаёт 1400, заголовок WireGuard съедает
+    /// до восьмидесяти, и запас в сорок байт дешевле, чем разбирательство,
+    /// почему грузятся мелкие страницы и не грузятся крупные.
+    /// </remarks>
+    public int Mtu { get; init; } = 1280;
+
+    /// <summary>Как часто слать пустые пакеты, чтобы NAT не закрыл проход.</summary>
+    public int KeepaliveSeconds { get; init; } = 30;
+
     /// <summary>Остальные параметры ссылки — чтобы ничего не терять при разборе.</summary>
     public IReadOnlyDictionary<string, string> Extra { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Собирается ли этот сервер в раздел <c>endpoints</c>, а не в исходящие.
+    /// </summary>
+    public bool IsEndpoint => Protocol == ProxyProtocol.Wireguard;
 
     /// <summary>Движок, способный обслужить этот сервер.</summary>
     /// <remarks>

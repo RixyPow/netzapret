@@ -41,6 +41,13 @@ public sealed class SubscriptionClient : IDisposable
     /// <exception cref="HttpRequestException">Если сервер вернул ошибку.</exception>
     public async Task<SubscriptionInfo> FetchAsync(Uri subscriptionUrl, CancellationToken cancellationToken)
     {
+        // WARP — подписка без подписки: скачивать нечего, сервер собирается
+        // из учётной записи, лежащей рядом с настройками. Сделан отдельной
+        // строкой в списке намеренно: так его видно, он выключается и
+        // выбирается теми же кнопками, что и остальные.
+        if (IsWarp(subscriptionUrl))
+            return Warp();
+
         // Ссылки вида happ://add/https://... — обёртка клиента вокруг обычного URL.
         var target = Unwrap(subscriptionUrl);
 
@@ -56,6 +63,38 @@ public sealed class SubscriptionClient : IDisposable
             Header(response, "subscription-userinfo"),
             Header(response, "profile-title"),
             Header(response, "profile-update-interval"));
+    }
+
+    /// <summary>Ссылка, под которой в списке подписок живёт WARP.</summary>
+    public const string WarpUrl = "warp://free";
+
+    /// <summary>Ведёт ли ссылка к учётной записи WARP, а не в сеть.</summary>
+    public static bool IsWarp(Uri url) =>
+        url.Scheme.Equals("warp", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Собирает «подписку» из учётной записи WARP.
+    /// </summary>
+    /// <remarks>
+    /// Отсутствие записи — не ошибка чтения, а состояние «ещё не подключено»:
+    /// строка в списке показывается пустой с объяснением, а не красной.
+    /// </remarks>
+    private static SubscriptionInfo Warp()
+    {
+        var account = WarpAccount.Load();
+
+        return new SubscriptionInfo
+        {
+            Servers = account is null
+                ? Array.Empty<ProxyServer>()
+                : new[] { account.ToServer() },
+
+            Title = "Cloudflare WARP",
+
+            Errors = account is null
+                ? new[] { "учётная запись WARP не заведена" }
+                : Array.Empty<string>(),
+        };
     }
 
     /// <summary>

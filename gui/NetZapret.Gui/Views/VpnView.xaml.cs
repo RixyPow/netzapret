@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -161,6 +162,8 @@ public partial class VpnView : UserControl
         _book = SubscriptionBook.Load();
         var active = _book.Active(settings);
 
+        ShowWarp();
+
         _rows = _book.Entries
             .Select(entry => new SubRow
             {
@@ -215,6 +218,19 @@ public partial class VpnView : UserControl
 
             row.AsGiven = Rows(usable, row.Entry.Name, settings);
             row.Servers = InChosenOrder(row.AsGiven);
+
+            // У WARP нет ни квоты, ни срока, ни отброшенных серверов — общая
+            // подпись из трёх частей сказала бы про него «0 серверов ·
+            // без ограничения · без срока», то есть ничего.
+            if (SubscriptionClient.IsWarp(new Uri(row.Entry.Url)))
+            {
+                row.Detail = usable.Count > 0
+                    ? "выход Cloudflare · без счёта и без срока"
+                    : "ключи не заведены — карточка «Бесплатный WARP» выше";
+
+                Redraw();
+                return;
+            }
 
             // Отброшенные называются числом, а не замалчиваются: человек,
             // видящий в подписке двадцать серверов и пятнадцать здесь,
@@ -417,6 +433,138 @@ public partial class VpnView : UserControl
 
         ForeignButton.Foreground = (Brush)FindResource(
             settings.ForeignExitsOnly ? "Accent" : "Muted");
+    }
+
+    /// <summary>Есть ли строка WARP в списке подписок.</summary>
+    private bool WarpListed => _book.Entries.Any(entry => entry.Url == SubscriptionClient.WarpUrl);
+
+    /// <summary>Показывает, заведена ли учётная запись WARP.</summary>
+    /// <remarks>
+    /// Состояний три, а не два: запись может быть заведена, а строка — убрана.
+    /// Тогда заводить заново не нужно и вредно, достаточно вернуть строку.
+    /// </remarks>
+    private void ShowWarp()
+    {
+        var account = WarpAccount.Load();
+
+        if (account is null)
+        {
+            WarpLine.Text = "Не подключён. Ключи заводятся на месте, регистрация занимает секунду.";
+            WarpButton.Content = "Подключить";
+            return;
+        }
+
+        WarpLine.Text = $"Ключи заведены {account.RegisteredAt:d MMMM yyyy}, "
+            + $"адрес внутри сети {account.AddressV4}.";
+
+        if (WarpListed)
+        {
+            WarpLine.Text += " Выбирается как обычный сервер — в списке ниже.";
+            WarpButton.Content = "Завести заново";
+        }
+        else
+        {
+            WarpLine.Text += " Из списка подписок убран.";
+            WarpButton.Content = "Вернуть в список";
+        }
+    }
+
+    /// <summary>
+    /// Заводит учётную запись WARP и добавляет её в список подписок.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Порядок именно такой: сперва ключи и регистрация, и только при успехе —
+    /// строка в списке. Иначе в списке появлялась бы подписка, которая ничего
+    /// не отдаёт, и убирать её пришлось бы руками.
+    /// </para>
+    /// <para>
+    /// Повторное нажатие заводит новую запись поверх старой. Это не откат
+    /// и не починка: у WARP нет способа «обновить» запись, а выходной адрес
+    /// у него и так меняется. Прежняя при этом остаётся у Cloudflare
+    /// висеть — удалять её нечем, кроме как её же ключом доступа, и на
+    /// бесплатном тарифе это никого не стесняет.
+    /// </para>
+    /// </remarks>
+    private async void OnWarp(object sender, RoutedEventArgs e)
+    {
+        // Запись есть, а строки нет — заводить нечего, надо вернуть строку.
+        // Регистрация тут завела бы вторую запись впустую.
+        if (WarpAccount.Load() is not null && !WarpListed)
+        {
+            ListWarp();
+            Status.Text = "WARP вернулся в список подписок.";
+
+            await LoadAsync();
+            return;
+        }
+
+        var singBox = FindSingBox();
+
+        if (singBox is null)
+        {
+            Status.Text = "Движок sing-box не найден рядом с программой — ключи заводить нечем.";
+            return;
+        }
+
+        WarpButton.IsEnabled = false;
+        WarpButton.Content = "Подключаю…";
+        Status.Text = "Завожу ключи и регистрирую их в Cloudflare…";
+
+        try
+        {
+            var keys = await Task.Run(() => WireGuardKeys.Generate(singBox));
+
+            using var client = new WarpClient();
+            var account = await client.RegisterAsync(keys, CancellationToken.None);
+
+            account.Save();
+            ListWarp();
+
+            Status.Text = $"WARP подключён: адрес внутри сети {account.AddressV4}. "
+                + "Выберите его в списке, как любой другой сервер.";
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            // Отказ почти всегда один и тот же, и звучит он непонятно:
+            // «время ожидания истекло». Называем причину, раз она известна.
+            var reason = ex.GetBaseException();
+
+            Status.Text = reason is TaskCanceledException or HttpRequestException or IOException
+                ? "Cloudflare не ответил. Его домен закрыт российскими операторами по имени "
+                  + "в TLS, поэтому запрос идёт через туннель — запустите движки с работающей "
+                  + "подпиской и повторите."
+                : "Не удалось подключить WARP: " + reason.Message;
+        }
+        finally
+        {
+            WarpButton.IsEnabled = true;
+            ShowWarp();
+        }
+    }
+
+    /// <summary>Заводит строку WARP в списке подписок, если её там нет.</summary>
+    private static void ListWarp()
+    {
+        var book = SubscriptionBook.Load();
+
+        if (book.Entries.Any(entry => entry.Url == SubscriptionClient.WarpUrl))
+            return;
+
+        book.Entries.Add(new SubscriptionEntry
+        {
+            Name = WarpAccount.DefaultTag,
+            Url = SubscriptionClient.WarpUrl,
+        });
+
+        book.Save();
+
+        // Первая подписка становится действующей сама — иначе человек
+        // подключил бы WARP и не понял, почему туннель его не берёт.
+        if (book.Entries.Count == 1)
+            SubscriptionBook.MakeActive(book.Entries[0]);
     }
 
     private void OnAuto(object sender, RoutedEventArgs e)

@@ -306,7 +306,7 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
-            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet), tags.Count > 0),
+            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options),
             ["route"] = BuildRoute(ruleSet, tags, options),
@@ -315,6 +315,14 @@ public sealed class SingBoxConfigCompiler
                 ["clash_api"] = new JsonObject { ["external_controller"] = options.ClashApiListen },
             },
         };
+
+        // Раздел заводится только при надобности: пустой массив endpoints
+        // движок принимает, но лишняя секция в конфиге — лишний повод
+        // разбираться, откуда она взялась.
+        var endpoints = BuildEndpoints(usable, tags);
+
+        if (endpoints.Count > 0)
+            root["endpoints"] = endpoints;
 
         return new CompilationResult
         {
@@ -374,11 +382,13 @@ public sealed class SingBoxConfigCompiler
                     ["listen_port"] = listenPort,
                 },
             },
-            ["outbounds"] = new JsonArray
-            {
-                PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress),
-                new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
-            },
+            ["outbounds"] = server.IsEndpoint
+                ? new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } }
+                : new JsonArray
+                {
+                    PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress),
+                    new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
+                },
             ["route"] = new JsonObject
             {
                 ["rules"] = new JsonArray
@@ -413,6 +423,13 @@ public sealed class SingBoxConfigCompiler
                 },
             },
         };
+
+        // Endpoint проверяется ровно так же, как исходящий: разница только
+        // в том, каким разделом он описан. Без этого «Замерить все» молча
+        // объявляло бы WARP мёртвым — конфиг проверки собирался бы с исходящим,
+        // которого для WireGuard не бывает.
+        if (server.IsEndpoint)
+            root["endpoints"] = BuildEndpoints(new[] { server }, new Dictionary<ProxyServer, string> { [server] = "probe-out" });
 
         return root.ToJsonString(SerializerOptions);
     }
@@ -517,7 +534,11 @@ public sealed class SingBoxConfigCompiler
     /// Домены, которые по правилам уходят в прокси. При выборочном перехвате
     /// только им выдаётся адрес fakeip — и только они попадают в туннель.
     /// </summary>
-    private static IReadOnlyList<string> CollectProxyDomains(RuleSet ruleSet)
+    /// <param name="haveServers">
+    /// Есть ли куда вести. Без серверов домен регистрации WARP получил бы
+    /// fakeip и ушёл в <c>direct</c> с подменённым адресом — то есть никуда.
+    /// </param>
+    private static IReadOnlyList<string> CollectProxyDomains(RuleSet ruleSet, bool haveServers)
     {
         if (ruleSet.Operating != OperatingMode.Selective)
             return Array.Empty<string>();
@@ -537,6 +558,11 @@ public sealed class SingBoxConfigCompiler
         return domains
             .Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v)
             .Where(v => !v.Contains('*'))
+
+            // Регистрация WARP тоже должна попасть в туннель, а значит —
+            // получить fakeip: при выборочном перехвате туда идёт только то,
+            // чему подменён адрес.
+            .Concat(haveServers ? WarpClient.ApiDomains : Array.Empty<string>())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -786,7 +812,9 @@ public sealed class SingBoxConfigCompiler
             new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
         };
 
-        foreach (var server in servers)
+        // Endpoint'ы описаны отдельным разделом, но в группы входят наравне
+        // с исходящими: для urltest и селектора это такой же тег.
+        foreach (var server in servers.Where(s => !s.IsEndpoint))
             outbounds.Add(BuildOutbound(server, tags[server]));
 
         if (servers.Count == 0)
@@ -847,6 +875,58 @@ public sealed class SingBoxConfigCompiler
         });
 
         return outbounds;
+    }
+
+    /// <summary>
+    /// Собирает раздел <c>endpoints</c>: серверы, которые для движка не выход,
+    /// а сетевой интерфейс со своим адресом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Единственный такой протокол у нас — WireGuard, и появился он ради WARP.
+    /// До sing-box 1.11 он описывался обычным исходящим; в 1.13 старая форма
+    /// убрана, и другого способа, кроме <c>endpoints</c>, нет.
+    /// </para>
+    /// <para>
+    /// Поле <c>reserved</c> у пира не пишется: в 1.14 его нет в структуре
+    /// вовсе — движок отвергает конфиг со словами <c>json: unknown field</c>.
+    /// Cloudflare кладёт туда идентификатор клиента, но и <c>wg-quick</c>,
+    /// которым WARP пользуются повсеместно, о таком поле не знает.
+    /// </para>
+    /// </remarks>
+    private static JsonArray BuildEndpoints(
+        IReadOnlyList<ProxyServer> servers,
+        IReadOnlyDictionary<ProxyServer, string> tags)
+    {
+        var endpoints = new JsonArray();
+
+        foreach (var server in servers.Where(s => s.IsEndpoint))
+        {
+            var addresses = new JsonArray();
+            foreach (var address in server.LocalAddresses)
+                addresses.Add(address);
+
+            var peer = new JsonObject
+            {
+                ["address"] = server.Host,
+                ["port"] = (int)server.Port,
+                ["public_key"] = server.PeerPublicKey ?? string.Empty,
+                ["allowed_ips"] = new JsonArray { "0.0.0.0/0", "::/0" },
+                ["persistent_keepalive_interval"] = server.KeepaliveSeconds,
+            };
+
+            endpoints.Add(new JsonObject
+            {
+                ["type"] = "wireguard",
+                ["tag"] = tags[server],
+                ["mtu"] = server.Mtu,
+                ["address"] = addresses,
+                ["private_key"] = server.Credential,
+                ["peers"] = new JsonArray { peer },
+            });
+        }
+
+        return endpoints;
     }
 
     /// <summary>
@@ -960,6 +1040,10 @@ public sealed class SingBoxConfigCompiler
                 }
 
                 break;
+
+            case ProxyProtocol.Wireguard:
+                throw new InvalidOperationException(
+                    "WireGuard собирается в endpoints, а не в исходящие — см. BuildEndpoints.");
 
             default:
                 throw new NotSupportedException($"Протокол {server.Protocol} не поддерживается генератором.");
@@ -1153,6 +1237,25 @@ public sealed class SingBoxConfigCompiler
             {
                 ["ip_cidr"] = pinned,
                 ["outbound"] = haveServers ? options.SelectorTag : "direct",
+            });
+        }
+
+        // Тоже раньше пользовательских, и по схожей причине: в списках Zapret
+        // cloudflareclient.com уже лежит с рецептом десинка, то есть уходит
+        // напрямую, — а напрямую он не открывается. Российские операторы
+        // закрывают его по имени в TLS: TCP устанавливается, рукопожатие
+        // не доходит. Отсюда порядок работы: запись WARP заводится через
+        // работающий туннель и становится запасным выходом, когда тот ляжет.
+        if (haveServers && ruleSet.Operating == OperatingMode.Selective)
+        {
+            var warp = new JsonArray();
+            foreach (var domain in WarpClient.ApiDomains)
+                warp.Add(domain);
+
+            rules.Add(new JsonObject
+            {
+                ["domain"] = warp,
+                ["outbound"] = options.SelectorTag,
             });
         }
 
