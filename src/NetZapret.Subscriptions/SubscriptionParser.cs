@@ -21,6 +21,13 @@ public static class SubscriptionParser
 
         var text = body.Trim();
 
+        // Конфиг распознаётся до всего остального. Часть поставщиков отдаёт
+        // готовый документ Xray, и серверы в нём лежат в outbounds: ссылок нет
+        // вовсе. Ставить проверку ниже нельзя — документ без «://» внутри
+        // уходит в разбор base64, не проходит его и объявляется испорченным.
+        if (XrayConfigParser.LooksLikeConfig(text))
+            return XrayConfigParser.Parse(text);
+
         // Признак открытого вида — наличие схемы. Пробовать base64 первым нельзя:
         // список ссылок иногда случайно проходит проверку на base64-алфавит.
         if (!text.Contains("://", StringComparison.Ordinal))
@@ -33,6 +40,11 @@ public static class SubscriptionParser
             }
 
             text = decoded;
+
+            // И ещё раз после раскодирования: конфиг попадается и запакованным
+            // в base64, как обычный список ссылок.
+            if (XrayConfigParser.LooksLikeConfig(text))
+                return XrayConfigParser.Parse(text);
         }
 
         foreach (var rawLine in text.Split('\n'))
