@@ -1,7 +1,7 @@
 # Preset: Universal V8
 # BuiltinVersion: 2.26
 # IconColor: #3fb950
-# Description: V7 + рецепт discord.com заменён на hostfakesplit_multi. Прежний send + syndata на этой сети перестал открывать discord.com — перебор рецептов дал три рабочих из одиннадцати, и hostfakesplit_multi среди них. Остальные части Discord (updates, discord.media, запасное правило по адресам и UDP) оставлены как в V7: их проверяли отдельно, и менять их вслепую значило бы чинить то, что не ломалось.
+# Description: V7 + рецепт hostfakesplit_multi у discord.com и updates.discord.com. Прежний send + syndata на этой сети их не открывал: перебор рецептов дал три рабочих из одиннадцати, и hostfakesplit_multi среди них. Обе секции правлены вместе не для симметрии — updates.discord.com стоит раньше по списку и потому забирает имя себе, а десктопный клиент стучится туда при запуске и виснет, если ответа нет. Замер: discord.com отдавал 200, весь остальной Discord тоже, и только updates молчал восемь секунд. discord.media и правило по адресам не тронуты — первый отвечает 520, то есть рукопожатие проходит, а второй про голос и лечится иначе.
 
 --lua-init=@lua/zapret-lib.lua
 --lua-init=@lua/zapret-antidpi.lua
@@ -190,8 +190,7 @@
 --filter-tcp=443
 --hostlist=lists/discord-updates.txt
 --out-range=-d10
---lua-desync=send:repeats=3
---lua-desync=syndata:blob=tls_google
+--lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
 
 --new
 
