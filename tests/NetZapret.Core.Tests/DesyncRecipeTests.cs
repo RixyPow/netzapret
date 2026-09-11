@@ -93,6 +93,68 @@ public class DesyncRecipeTests
             recipe => recipe.Name == "Cloudflare TCP");
     }
 
+    /// <summary>
+    /// Показывается то, что рецепт делает, а не сервис, у которого его взяли.
+    /// Секции пресета названы по тому, что чинят, и рецепту доставалось имя
+    /// вроде «AnyDesk UDP» — при том что чинить им собрались другое имя.
+    /// </summary>
+    [Fact]
+    public void RecipesAreTitledByWhatTheyDo()
+    {
+        var recipes = DesyncRecipes.FromPresetFile(Load());
+
+        var shared = recipes.Single(r => r.UsedBy.Count > 1);
+        var alone = recipes.Single(r => r.UsedBy.Count == 1);
+
+        Assert.Equal("fake + multidisorder", shared.Title);
+        Assert.Equal("split", alone.Title);
+
+        // А хранится по-прежнему имя секции: только оно устойчиво.
+        Assert.Equal("Claude", shared.Name);
+
+        // И видно, где этот же набор применяется, — по знакомому и выбирают.
+        Assert.Equal("в пресете: Claude, Notion", shared.Where);
+    }
+
+    /// <summary>
+    /// Одного приёма мало, когда его делят несколько наборов: «fake»
+    /// встречается у половины пресета с разными настройками.
+    /// </summary>
+    [Fact]
+    public void SameTechniqueWithDifferentSettingsIsDisambiguated()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-preset-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(path, """
+                #name=Проба
+                --wf-tcp=80,443
+
+                --new
+                --name=Первый
+                --hostlist=lists/a.txt
+                --lua-desync=fake:repeats=2
+
+                --new
+                --name=Второй
+                --hostlist=lists/b.txt
+                --lua-desync=fake:repeats=6
+                """);
+
+            var titles = DesyncRecipes.FromPresetFile(new PresetReader().Load(path))
+                .Select(r => r.Title)
+                .ToList();
+
+            Assert.Equal(2, titles.Distinct().Count());
+            Assert.All(titles, t => Assert.Contains("как у", t, StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void RecipeIsFoundByNameAndMissingOneIsNull()
     {

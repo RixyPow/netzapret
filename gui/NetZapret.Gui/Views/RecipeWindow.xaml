@@ -39,11 +39,11 @@
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Caption}"
-                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Mono}"
+                                                   FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}"
-                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
                                     </StackPanel>
 
                                     <TextBlock Grid.Column="1" Text="{Binding Verdict}" Style="{StaticResource Mono}"

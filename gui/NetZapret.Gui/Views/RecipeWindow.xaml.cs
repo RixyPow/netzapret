@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Security;
+using System.Net.Sockets;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,8 +15,13 @@ namespace NetZapret.Gui.Views;
 /// <summary>Строка одного рецепта в окне выбора.</summary>
 public sealed record RecipeRow
 {
+    /// <summary>Что запишется в правило: имя секции пресета.</summary>
     public required string Name { get; init; }
 
+    /// <summary>Что показывается в заголовке: приёмы, а не сервис.</summary>
+    public required string Title { get; init; }
+
+    /// <summary>Набор целиком, с настройками.</summary>
     public required string Summary { get; init; }
 
     /// <summary>Где ещё этот набор применяется — чтобы судить по знакомому.</summary>
@@ -69,10 +76,9 @@ public partial class RecipeWindow : Window
             _rows.Add(new RecipeRow
             {
                 Name = recipe.Name,
-                Summary = recipe.Summary,
-                UsedBy = recipe.UsedBy.Count > 1
-                    ? "как у: " + string.Join(", ", recipe.UsedBy.Take(6))
-                    : "секция пресета",
+                Title = recipe.Title,
+                Summary = recipe.Detail,
+                UsedBy = recipe.Where,
                 Edge = (Brush)FindResource("Border"),
             });
         }
@@ -164,10 +170,11 @@ public partial class RecipeWindow : Window
             }
 
             int worked = 0;
+            int tried = 0;
 
             foreach (var row in _rows)
             {
-                Status.Text = $"Проверяю «{row.Name}»…";
+                Status.Text = $"Проверяю {++tried} из {_rows.Count}: {row.Title}…";
 
                 row.Verdict = "проверяю…";
                 row.VerdictColour = (Brush)FindResource("Muted");
@@ -239,6 +246,23 @@ public partial class RecipeWindow : Window
             RedirectStandardError = true,
         };
 
+        // Глобальные ключи пресета обязательны, и это выяснилось дорого:
+        // без них проверка отвечала «не помогает» на каждый рецепт подряд,
+        // включая заведомо рабочие. В них три вещи, без которых рецепт —
+        // пустой звук:
+        //
+        //   --lua-init   загружает библиотеку, где эти самые fake,
+        //                multidisorder и hostfakesplit_multi определены;
+        //                без неё имя в --lua-desync не значит ничего;
+        //   --wf-*       фильтр WinDivert, то есть какой трафик вообще
+        //                перехватывать; без него не перехватывается ничего;
+        //   --blob       заготовки поддельных пакетов, на которые рецепты
+        //                ссылаются по имени (blob=tls_google).
+        foreach (var argument in _preset.GlobalArguments)
+            start.ArgumentList.Add(argument);
+
+        start.ArgumentList.Add("--new");
+        start.ArgumentList.Add("--name=NetZapret: проба");
         start.ArgumentList.Add("--filter-tcp=80,443");
         start.ArgumentList.Add($"--hostlist={list}");
 
@@ -254,13 +278,13 @@ public partial class RecipeWindow : Window
             if (process is null)
                 return false;
 
-            // Драйверу нужно мгновение, чтобы встать в разрыв: без паузы
-            // первая проба уходит мимо фильтра и всегда отвечает «не помогает».
-            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            // Ждём, пока драйвер встанет в разрыв, — но по его же словам,
+            // а не по часам. Раньше здесь стояли глухие две секунды на каждый
+            // рецепт: на десятке это двадцать секунд чистого ожидания, и почти
+            // всё оно лишнее — winws2 обычно готов за треть секунды.
+            await ReadyAsync(process, cancellationToken);
 
-            var report = await BlockCheck.ProbeOnceAsync(_domain, null, cancellationToken);
-
-            return report.Kind == BlockKind.None;
+            return await OpensAsync(_domain, cancellationToken);
         }
         finally
         {
@@ -279,6 +303,79 @@ public partial class RecipeWindow : Window
             }
 
             process?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Ждёт, пока winws2 доложит о готовности.
+    /// </summary>
+    /// <remarks>
+    /// Он печатает загрузку списков и число профилей, и последняя такая
+    /// строка означает, что фильтр поставлен. Ждать по часам вслепую значило
+    /// бы либо торопиться — и мерить незащищённое соединение, — либо
+    /// закладывать запас на каждый рецепт подряд.
+    /// </remarks>
+    private static async Task ReadyAsync(Process process, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(6);
+
+        var line = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var finished = await Task.WhenAny(line, Task.Delay(300, cancellationToken));
+
+            if (finished != line)
+                continue;
+
+            if (line.Result is null)
+                break;
+
+            // «we have N user defined desync profile(s)» — последняя строка
+            // разбора настроек, дальше он уже слушает сеть.
+            if (line.Result.Contains("desync profile", StringComparison.OrdinalIgnoreCase))
+                break;
+
+            line = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
+        }
+
+        // Небольшая доводка всё же нужна: между разбором настроек и первым
+        // перехваченным пакетом драйвер успевает не всегда.
+        await Task.Delay(TimeSpan.FromMilliseconds(400), cancellationToken);
+    }
+
+    /// <summary>
+    /// Открывается ли имя: одно рукопожатие TLS, и всё.
+    /// </summary>
+    /// <remarks>
+    /// Полная проба спрашивает TCP, TLS 1.2, TLS 1.3, HTTP и передачу данных —
+    /// пять ответов там, где нужен один. Рецепт чинит ровно приветствие TLS,
+    /// и вопрос к нему ровно один: дошло ли оно. На десятке рецептов разница
+    /// между «одно рукопожатие» и «пять проб» — это минуты.
+    /// </remarks>
+    private static async Task<bool> OpensAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new TcpClient();
+
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(4));
+
+            await client.ConnectAsync(host, 443, deadline.Token);
+
+            await using var tls = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+            await tls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions
+            {
+                TargetHost = host,
+            }, deadline.Token);
+
+            return true;
+        }
+        catch (Exception)
+        {
+            // Молчание, сброс, отказ — для нас это одно: не открылось.
+            return false;
         }
     }
 
