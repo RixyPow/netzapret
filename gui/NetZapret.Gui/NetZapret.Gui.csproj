@@ -104,6 +104,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
+
+    <!--
+      Ради раздела «Наблюдение»: события о соединениях берутся из ETW.
+      Тянет за собой TraceEvent, но он и так едет в поставке — им же
+      пользуется консольный watch.
+    -->
+    <ProjectReference Include="..\..\src\NetZapret.Etw\NetZapret.Etw.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
     <ProjectReference Include="..\..\src\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />

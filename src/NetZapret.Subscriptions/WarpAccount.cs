@@ -150,4 +150,34 @@ public sealed record WarpAccount
 
     /// <summary>Имя, под которым WARP показывается в списке серверов.</summary>
     public const string DefaultTag = "Cloudflare WARP";
+
+    /// <summary>Имя второго выхода — того же WARP, но поверх QUIC.</summary>
+    public const string MasqueTag = "Cloudflare WARP (MASQUE)";
+
+    /// <summary>
+    /// Второй выход WARP: MASQUE, без ключей и без учётной записи с нашей
+    /// стороны.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Показывается всегда, даже когда ключей WireGuard нет: движок заводит
+    /// себе запись сам, и от нас ему нужен только путь до Cloudflare. Поэтому
+    /// он и не зависит от того, нажимали ли «Подключить».
+    /// </para>
+    /// <para>
+    /// Адрес и порт здесь условны: движок выбирает узел сам и полей для них
+    /// не принимает вовсе. Держим их ради общей модели — показу нужно что-то
+    /// написать в подписи строки.
+    /// </para>
+    /// </remarks>
+    public static ProxyServer MasqueServer() => new()
+    {
+        Protocol = ProxyProtocol.Masque,
+        Tag = MasqueTag,
+        Host = "cloudflareclient.com",
+        Port = 443,
+        Credential = string.Empty,
+        Transport = "quic",
+        Security = "tls",
+    };
 }

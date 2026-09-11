@@ -53,6 +53,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />

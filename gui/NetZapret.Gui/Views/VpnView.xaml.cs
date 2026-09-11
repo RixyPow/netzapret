@@ -26,7 +26,10 @@ public sealed record ServerRow(
     string Latency,
     Brush Color,
     string ChooseLabel,
-    bool CanChoose);
+    bool CanChoose,
+
+    /// <summary>Можно ли замерить его отдельным пробником.</summary>
+    bool Measurable);
 
 /// <summary>Папка одной подписки.</summary>
 public sealed class SubRow
@@ -272,13 +275,20 @@ public partial class VpnView : UserControl
             var known = _health.Find(server.Tag);
             bool chosen = server.Tag == settings.PreferredServer;
 
-            var (latency, key) = known switch
-            {
-                { Success: true, LatencyMs: { } ms } => ($"{ms:0} мс", "Accent"),
-                { Success: true } => ("отвечает", "Accent"),
-                { Success: false } => ("не отвечает", "Danger"),
-                _ => ("не замерян", "Faint"),
-            };
+            // Незамеряемые выходы не притворяются замеренными. Пробник поднимает
+            // свой движок, а учётная запись MASQUE лежит в кэше работающего,
+            // и файл занят им же — пробник обязан регистрироваться заново,
+            // а через что, ему взять негде. Подписать такое «не отвечает»
+            // значило бы выдать особенность замера за свойство сервера.
+            var (latency, key) = !server.IsMeasurable
+                ? ("только в работе", "Faint")
+                : known switch
+                {
+                    { Success: true, LatencyMs: { } ms } => ($"{ms:0} мс", "Accent"),
+                    { Success: true } => ("отвечает", "Accent"),
+                    { Success: false } => ("не отвечает", "Danger"),
+                    _ => ("не замерян", "Faint"),
+                };
 
             var detail = $"{server.Protocol}, {server.Host}:{server.Port}";
 
@@ -303,7 +313,8 @@ public partial class VpnView : UserControl
                 latency,
                 (Brush)FindResource(chosen ? "Accent" : key),
                 chosen ? "выбран" : "выбрать",
-                !chosen);
+                !chosen,
+                server.IsMeasurable);
         });
 
         // Сортировка здесь не применяется: список отдаётся в порядке подписки,
@@ -354,10 +365,12 @@ public partial class VpnView : UserControl
                 .Select(server => server with
                 {
                     Color = (Brush)FindResource(
-                        server.Tag == settings.PreferredServer ? "Accent" : Key(server.Tag)),
+                        server.Tag == settings.PreferredServer
+                            ? "Accent"
+                            : server.Measurable ? Key(server.Tag) : "Faint"),
                     ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
                     CanChoose = server.Tag != settings.PreferredServer,
-                    Latency = Latency(server.Tag),
+                    Latency = server.Measurable ? Latency(server.Tag) : "только в работе",
                 })
                 .ToList();
         }
@@ -877,7 +890,9 @@ public partial class VpnView : UserControl
                 using var client = new SubscriptionClient();
                 var info = await client.FetchAsync(new Uri(row.Entry.Url), CancellationToken.None);
 
-                servers.AddRange(info.Servers.Where(s => s.IsSupportedBySingBox));
+                // Незамеряемые отсеиваются здесь, а не внутри пробника: иначе
+                // счётчик «измерено N из M» считал бы и тех, кого не трогали.
+                servers.AddRange(info.Servers.Where(s => s.IsSupportedBySingBox && s.IsMeasurable));
             }
             catch (Exception)
             {

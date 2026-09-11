@@ -55,6 +55,16 @@ public sealed class SingBoxOptions
     public string ClashApiListen { get; init; } = "127.0.0.1:9090";
 
     /// <summary>
+    /// Куда движок кладёт своё: учётную запись MASQUE и выбор в селекторе.
+    /// </summary>
+    /// <remarks>
+    /// Рядом с прочим рантаймом, а не в корне рабочего каталога, куда движок
+    /// положил бы <c>cache.db</c> по умолчанию. Файл появляется только у тех,
+    /// у кого включён MASQUE, — остальным он не нужен и не заводится.
+    /// </remarks>
+    public string CachePath { get; init; } = Path.Combine("runtime", "engine-cache.db");
+
+    /// <summary>
     /// Апстрим DNS. Указывается адресом, а не именем: имя потребовало бы
     /// отдельного резолвера для его собственного разрешения.
     /// </summary>
@@ -323,6 +333,22 @@ public sealed class SingBoxConfigCompiler
 
         if (endpoints.Count > 0)
             root["endpoints"] = endpoints;
+
+        // Кэш движка нужен ровно одному выходу — MASQUE: движок заводит себе
+        // учётную запись Cloudflare сам и хранит её там. Без кэша он
+        // регистрировался бы заново при каждом запуске, плодя записи и теряя
+        // единственное, ради чего всё затевалось: работать, когда подписки
+        // уже нет. Включается вместе с ним, а не всем подряд — файл
+        // переживает удаление программы и хранит ещё и выбор в селекторе.
+        if (usable.Any(s => s.IsSelfRegistering))
+        {
+            ((JsonObject)root["experimental"]!)["cache_file"] = new JsonObject
+            {
+                ["enabled"] = true,
+                ["path"] = options.CachePath,
+                ["store_masque_config"] = true,
+            };
+        }
 
         return new CompilationResult
         {
@@ -971,6 +997,11 @@ public sealed class SingBoxConfigCompiler
     /// </remarks>
     private static JsonObject PinAddress(JsonObject outbound, ProxyServer server, string? resolvedAddress)
     {
+        // У MASQUE узла нет: движок выбирает его сам и поле server не примет.
+        // Подставлять туда адрес — значит собрать конфиг, который не читается.
+        if (server.Protocol == ProxyProtocol.Masque)
+            return outbound;
+
         if (string.IsNullOrEmpty(resolvedAddress)
             || string.Equals(resolvedAddress, server.Host, StringComparison.OrdinalIgnoreCase))
         {
@@ -987,6 +1018,29 @@ public sealed class SingBoxConfigCompiler
 
     private static JsonObject BuildOutbound(ProxyServer server, string tag)
     {
+        // MASQUE описывается двумя строками, и это не упрощение с нашей
+        // стороны: движок несёт готовый клиент WARP и настроек у него
+        // почти нет. Узел он выбирает сам, а поля server и server_port
+        // объявляет незнакомыми и отказывается читать конфиг целиком.
+        //
+        // Направить его регистрацию нечем — проверено 2026-09-11 двумя
+        // способами. Ни detour у самого выхода, ни route.default_http_client
+        // на неё не влияют: с заведомо мёртвым прокси в обоих случаях
+        // приходит та же «TLS handshake timeout» через десять секунд, что
+        // и без них, то есть запрос уходит напрямую мимо любых настроек.
+        // Значит, MASQUE поднимается там и только там, где
+        // api.cloudflareclient.com открывается напрямую. У российских
+        // операторов он закрыт по имени в TLS — и починить это может
+        // десинк, но не мы.
+        if (server.Protocol == ProxyProtocol.Masque)
+        {
+            return new JsonObject
+            {
+                ["type"] = "masque",
+                ["tag"] = tag,
+            };
+        }
+
         var outbound = new JsonObject
         {
             ["tag"] = tag,

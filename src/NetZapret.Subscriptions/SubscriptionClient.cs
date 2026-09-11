@@ -76,23 +76,36 @@ public sealed class SubscriptionClient : IDisposable
     /// Собирает «подписку» из учётной записи WARP.
     /// </summary>
     /// <remarks>
-    /// Отсутствие записи — не ошибка чтения, а состояние «ещё не подключено»:
-    /// строка в списке показывается пустой с объяснением, а не красной.
+    /// <para>
+    /// Выходов два, и они разные не страной, а транспортом: WireGuard
+    /// на ключах, которые заводим мы, и MASQUE поверх QUIC, где запись движок
+    /// заводит себе сам. Второй показывается всегда — ему от нас ключей
+    /// не нужно; первый появляется, когда нажали «Подключить».
+    /// </para>
+    /// <para>
+    /// Показаны оба намеренно, а не выбраны за человека. Который из них
+    /// пройдёт, зависит от оператора, и узнаётся это только пробой: где
+    /// WireGuard глохнет после рукопожатия, MASQUE может пройти, и наоборот.
+    /// Автоподбор при этом разберётся сам — он опрашивает обоих.
+    /// </para>
     /// </remarks>
     private static SubscriptionInfo Warp()
     {
         var account = WarpAccount.Load();
+        var servers = new List<ProxyServer>();
+
+        if (account is not null)
+            servers.Add(account.ToServer());
+
+        servers.Add(WarpAccount.MasqueServer());
 
         return new SubscriptionInfo
         {
-            Servers = account is null
-                ? Array.Empty<ProxyServer>()
-                : new[] { account.ToServer() },
-
+            Servers = servers,
             Title = "Cloudflare WARP",
 
             Errors = account is null
-                ? new[] { "учётная запись WARP не заведена" }
+                ? new[] { "ключи WireGuard не заведены — остаётся только MASQUE" }
                 : Array.Empty<string>(),
         };
     }

@@ -227,6 +227,97 @@ public class WarpTests
     }
 
     /// <summary>
+    /// MASQUE описывается двумя строками: узла у него нет, движок выбирает
+    /// его сам. Поля server и server_port он объявляет незнакомыми
+    /// и отказывается читать конфиг целиком — то есть лишнее поле здесь
+    /// роняет туннель, а не портит один выход.
+    /// </summary>
+    [Fact]
+    public void MasqueOutboundCarriesNoServerAddress()
+    {
+        var root = Compile(WarpAccount.MasqueServer());
+
+        var outbound = root.GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == WarpAccount.MasqueTag);
+
+        Assert.Equal("masque", outbound.GetProperty("type").GetString());
+        Assert.False(outbound.TryGetProperty("server", out _));
+        Assert.False(outbound.TryGetProperty("server_port", out _));
+    }
+
+    /// <summary>
+    /// Даже когда адрес выяснен заранее, в MASQUE его подставлять нельзя:
+    /// поля для него нет, и конфиг пробника перестал бы читаться.
+    /// </summary>
+    [Fact]
+    public void ResolvedAddressIsNotPinnedIntoMasque()
+    {
+        var json = new SingBoxConfigCompiler()
+            .CompileProbeConfig(WarpAccount.MasqueServer(), 21080, null, "warn", "104.16.24.84");
+
+        var outbound = JsonDocument.Parse(json).RootElement
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == "probe-out");
+
+        Assert.False(outbound.TryGetProperty("server", out _));
+    }
+
+    /// <summary>
+    /// Кэш движка включается только вместе с MASQUE: в нём лежит учётная
+    /// запись, которую движок заводит себе сам, и без кэша он регистрировался
+    /// бы заново при каждом запуске. Остальным файл не нужен — он переживает
+    /// удаление программы.
+    /// </summary>
+    [Fact]
+    public void EngineCacheAppearsOnlyWithMasque()
+    {
+        var withMasque = Compile(WarpAccount.MasqueServer())
+            .GetProperty("experimental");
+
+        Assert.True(withMasque.TryGetProperty("cache_file", out var cache));
+        Assert.True(cache.GetProperty("enabled").GetBoolean());
+        Assert.True(cache.GetProperty("store_masque_config").GetBoolean());
+
+        var withoutMasque = Compile(WarpServer()).GetProperty("experimental");
+
+        Assert.False(withoutMasque.TryGetProperty("cache_file", out _));
+    }
+
+    /// <summary>
+    /// Оба выхода WARP встают в группы наравне: автоподбор опрашивает обоих
+    /// и берёт тот, который на этой сети проходит. Который именно — заранее
+    /// не известно, и выбирать за человека мы не беремся.
+    /// </summary>
+    [Fact]
+    public void BothWarpExitsJoinTheSelector()
+    {
+        var root = Compile(WarpServer(), WarpAccount.MasqueServer());
+
+        var members = root.GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == "auto")
+            .GetProperty("outbounds").EnumerateArray()
+            .Select(m => m.GetString())
+            .ToList();
+
+        Assert.Contains(WarpAccount.DefaultTag, members);
+        Assert.Contains(WarpAccount.MasqueTag, members);
+    }
+
+    /// <summary>
+    /// MASQUE не замеряется отдельным пробником, и это его свойство, а не
+    /// сбой: запись движок держит в кэше работающего экземпляра, а файл
+    /// занят им же.
+    /// </summary>
+    [Fact]
+    public void MasqueIsNotMeasurableButWireguardIs()
+    {
+        Assert.False(WarpAccount.MasqueServer().IsMeasurable);
+        Assert.True(WarpServer().IsMeasurable);
+        Assert.True(WarpAccount.MasqueServer().IsSelfRegistering);
+        Assert.False(WarpServer().IsSelfRegistering);
+    }
+
+    /// <summary>
     /// Ссылка WARP не должна уходить в сеть: скачивать нечего, серверы
     /// собираются из учётной записи рядом с настройками.
     /// </summary>
@@ -304,9 +395,11 @@ public class WarpTests
                 server: "auto"
             """);
 
+        // Оба выхода сразу: конфиг с ними обязан читаться целиком, а лишнее
+        // поле у любого из них роняет туннель, а не портит один выход.
         var result = new SingBoxConfigCompiler().Compile(
             engine.RuleSet,
-            [WarpServer()],
+            [WarpServer(), WarpAccount.MasqueServer()],
             new SingBoxOptions());
 
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-warp-check-{Guid.NewGuid():N}.json");

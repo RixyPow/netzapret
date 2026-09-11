@@ -131,6 +131,7 @@ public partial class MainWindow : Window
             "check" => new CheckView(),
             "dns" => new DnsView(),
             "hosts" => new HostsView(),
+            "watch" => new WatchView(),
             "log" => new LogView(),
             "doctor" => new DoctorView(),
             "more" => new MoreView(),
