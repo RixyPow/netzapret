@@ -278,6 +278,14 @@ public class WarpTests
         Assert.True(cache.GetProperty("enabled").GetBoolean());
         Assert.True(cache.GetProperty("store_masque_config").GetBoolean());
 
+        // Полным путём, и это не придирка: относительный решается от текущего
+        // каталога движка, где runtime может не существовать вовсе. Движок
+        // его не создаёт, а падает на старте — вместе со всем туннелем.
+        var path = cache.GetProperty("path").GetString()!;
+
+        Assert.True(Path.IsPathFullyQualified(path), $"путь к кэшу не полный: {path}");
+        Assert.True(Directory.Exists(Path.GetDirectoryName(path)), "каталог кэша не заведён");
+
         var withoutMasque = Compile(WarpServer()).GetProperty("experimental");
 
         Assert.False(withoutMasque.TryGetProperty("cache_file", out _));

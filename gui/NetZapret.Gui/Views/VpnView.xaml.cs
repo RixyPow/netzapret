@@ -55,6 +55,21 @@ public sealed class SubRow
     /// </remarks>
     public IReadOnlyList<ServerRow> AsGiven { get; set; } = [];
 
+    /// <summary>Идёт ли замер именно этой подписки.</summary>
+    public bool Checking { get; set; }
+
+    /// <summary>Занят ли замер вообще — хоть этой подпиской, хоть соседней.</summary>
+    public bool Busy { get; set; }
+
+    public string CheckLabel => Checking ? "проверяю…" : "проверить";
+
+    /// <summary>
+    /// Пока идёт один замер, второй не начинают: каждый поднимает по пять
+    /// движков разом, и два прогона вместе дают десять — это уже заметно
+    /// машине и ничего не ускоряет.
+    /// </summary>
+    public bool CanCheck => !Busy && Servers.Count > 0;
+
     public Visibility ServersShown => Open && Servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     public string Chevron => Open ? "▼" : "►";
@@ -878,12 +893,30 @@ public partial class VpnView : UserControl
     /// Через локальный вход, без TUN: работающий обход при этом не прерывается,
     /// и права администратора не нужны — хотя у окна они и так есть.
     /// </remarks>
-    private async void OnMeasure(object sender, RoutedEventArgs e)
+    /// <summary>Замеряет серверы одной подписки.</summary>
+    private async void OnCheckOne(object sender, RoutedEventArgs e)
+    {
+        // Кнопка внутри кнопки-папки: без этого нажатие дойдёт до неё,
+        // и папка захлопнется на ровном месте.
+        e.Handled = true;
+
+        if (sender is not Button { Tag: string name })
+            return;
+
+        var row = _rows.FirstOrDefault(r => r.Entry.Name == name);
+
+        if (row is not null)
+            await MeasureAsync([row]);
+    }
+
+    private async void OnMeasure(object sender, RoutedEventArgs e) => await MeasureAsync(_rows);
+
+    private async Task MeasureAsync(IReadOnlyList<SubRow> which)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var servers = new List<ProxyServer>();
 
-        foreach (var row in _rows)
+        foreach (var row in which)
         {
             try
             {
@@ -926,6 +959,15 @@ public partial class VpnView : UserControl
         MeasureButton.IsEnabled = false;
         MeasureButton.Content = "Измеряю…";
 
+        // Полоса и подписи у папок: замер идёт десятками секунд и до этого
+        // выглядел зависанием. Строки оживали по одной, а понять, идёт ли
+        // ещё что-то или всё кончилось, было не по чему.
+        Progress.Maximum = servers.Count;
+        Progress.Value = 0;
+        Progress.Visibility = Visibility.Visible;
+
+        ShowBusy(which);
+
         int done = 0;
 
         try
@@ -955,6 +997,7 @@ public partial class VpnView : UserControl
                     Dispatcher.Invoke(() =>
                     {
                         done++;
+                        Progress.Value = done;
                         Status.Text = $"Измерено {done} из {servers.Count}…";
                         Reshow();
                     });
@@ -968,7 +1011,13 @@ public partial class VpnView : UserControl
         }
         catch (OperationCanceledException)
         {
-            Status.Text = "Замер прерван.";
+            // Называем причину: замер останавливается при уходе с вкладки,
+            // и это единственное объяснение тому, почему у соседних серверов
+            // одной подписки замеры разного возраста. Молчаливое «прервано»
+            // оставляло человека гадать, что сломалось.
+            Status.Text = $"Замер прерван на {done} из {servers.Count}. Он останавливается, "
+                + "когда уходишь с вкладки: иначе движки проверки остались бы работать "
+                + "без окна. Остальные серверы сохранили прежние замеры.";
         }
         catch (Exception ex)
         {
@@ -978,7 +1027,27 @@ public partial class VpnView : UserControl
         {
             MeasureButton.IsEnabled = true;
             MeasureButton.Content = "Замерить все";
+
+            Progress.Visibility = Visibility.Collapsed;
+            ShowBusy([]);
         }
+    }
+
+    /// <summary>Отмечает, какие папки сейчас замеряются.</summary>
+    private void ShowBusy(IReadOnlyList<SubRow> checking)
+    {
+        foreach (var row in _rows)
+        {
+            row.Checking = checking.Contains(row);
+
+            // Занятыми помечаются все, а не только замеряемая: пока идёт один
+            // прогон, второй не начинают. Каждый поднимает по пять движков
+            // разом, и два вместе дают десять — машине заметно, а быстрее
+            // не становится.
+            row.Busy = checking.Count > 0;
+        }
+
+        Redraw();
     }
 
     /// <summary>

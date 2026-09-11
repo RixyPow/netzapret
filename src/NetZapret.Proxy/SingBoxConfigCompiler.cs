@@ -58,9 +58,19 @@ public sealed class SingBoxOptions
     /// Куда движок кладёт своё: учётную запись MASQUE и выбор в селекторе.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Рядом с прочим рантаймом, а не в корне рабочего каталога, куда движок
     /// положил бы <c>cache.db</c> по умолчанию. Файл появляется только у тех,
     /// у кого включён MASQUE, — остальным он не нужен и не заводится.
+    /// </para>
+    /// <para>
+    /// В конфиг уходит полным путём, и это не придирка к аккуратности.
+    /// Относительный решается от текущего каталога <b>движка</b>, а не
+    /// нашего, и каталога <c>runtime</c> там может не оказаться вовсе —
+    /// сам движок его не создаёт. Стоило включить MASQUE, как sing-box падал
+    /// на старте с «cannot find the path specified», унося с собой весь
+    /// туннель: не запасной выход отваливался, а основной.
+    /// </para>
     /// </remarks>
     public string CachePath { get; init; } = Path.Combine("runtime", "engine-cache.db");
 
@@ -342,10 +352,19 @@ public sealed class SingBoxConfigCompiler
         // переживает удаление программы и хранит ещё и выбор в селекторе.
         if (usable.Any(s => s.IsSelfRegistering))
         {
+            var cache = Path.GetFullPath(options.CachePath);
+
+            // Каталог заводим мы: движок его не создаёт и просто падает,
+            // а падение на старте — это весь туннель, а не один выход.
+            var directory = Path.GetDirectoryName(cache);
+
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+
             ((JsonObject)root["experimental"]!)["cache_file"] = new JsonObject
             {
                 ["enabled"] = true,
-                ["path"] = options.CachePath,
+                ["path"] = cache,
                 ["store_masque_config"] = true,
             };
         }

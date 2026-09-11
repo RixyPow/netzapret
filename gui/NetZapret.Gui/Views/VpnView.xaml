@@ -210,6 +210,17 @@
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0"
                            TextWrapping="Wrap" Text="Читаю подписки…" />
 
+                <!--
+                    Полоса замера. Замер идёт десятками секунд и до неё
+                    выглядел зависанием: строки оживали по одной, а понять,
+                    идёт ли ещё что-то, было не по чему.
+                -->
+                <ProgressBar x:Name="Progress" Height="3" Margin="4,10,0,0"
+                             Visibility="Collapsed" Minimum="0"
+                             Background="{StaticResource Raised}"
+                             Foreground="{StaticResource Accent}"
+                             BorderThickness="0" />
+
                 <ItemsControl x:Name="Subscriptions" Margin="0,12,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
@@ -258,10 +269,17 @@
                                                        Margin="0,5,0,0" TextWrapping="Wrap" />
                                         </StackPanel>
 
-                                        <Button Grid.Column="2" Style="{StaticResource Ghost}"
-                                                Content="сделать действующей" Padding="12,6" Margin="0,0,8,0"
-                                                Visibility="{Binding ActivateShown}"
-                                                Tag="{Binding Name}" Click="OnActivate" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <Button Style="{StaticResource Ghost}"
+                                                    Content="сделать действующей" Padding="12,6" Margin="0,0,8,0"
+                                                    Visibility="{Binding ActivateShown}"
+                                                    Tag="{Binding Name}" Click="OnActivate" />
+
+                                            <Button Style="{StaticResource Ghost}"
+                                                    Content="{Binding CheckLabel}" Padding="12,6" Margin="0,0,8,0"
+                                                    IsEnabled="{Binding CanCheck}"
+                                                    Tag="{Binding Name}" Click="OnCheckOne" />
+                                        </StackPanel>
 
                                         <Button Grid.Column="3" Style="{StaticResource Ghost}"
                                                 Content="убрать" Padding="12,6"
