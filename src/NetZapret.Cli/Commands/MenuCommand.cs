@@ -2160,10 +2160,10 @@ internal static class MenuCommand
             // Пин — выбранный руками адрес, а десинк судит по имени и про
             // подмену не знает: он применяет к постороннему узлу рецепт,
             // выверенный на настоящей сети доставки, и рвёт рукопожатие.
-            var excluded = HostsFile.CollectPinnedDesyncExclusions(ruleSet);
+            var excluded = HostsFile.CollectDesyncExclusions(ruleSet);
 
             if (WinwsCommandLine.WriteExcludeList(excluded) is not null)
-                Console.WriteLine($"Десинк не тронет прибитых имён: {excluded.Count}");
+                Console.WriteLine($"Десинк не тронет имён: {excluded.Count} — прибитые в hosts и «напрямую»");
 
             // Каталог через резолвер больше не применяется — то же самое
             // делает пин в hosts, и делает на виду. Прежняя настройка

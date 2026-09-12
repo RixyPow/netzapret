@@ -212,35 +212,48 @@ public static class HostsFile
     }
 
     /// <summary>
-    /// Прибитые имена, которые десинку трогать нельзя.
+    /// Имена, которые десинку трогать нельзя.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Пин — это выбранный руками адрес вместо того, что даёт резолвер, и
-    /// выбран он потому, что работает. Десинк опознаёт имя в ClientHello,
-    /// про подмену адреса не знает и применяет рецепт, выверенный на настоящей
-    /// сети доставки, — к постороннему узлу, которому этот рецепт не нужен
-    /// и вреден. Соединение рвётся на рукопожатии.
+    /// Источника два, и оба означают одно: «этому имени вмешательство
+    /// не нужно». Поэтому и список один.
     /// </para>
     /// <para>
-    /// Проксируемые сюда не идут: их трафик уходит в туннель, и десинк его
-    /// не видит вовсе. Берутся только те, что решены напрямую или десинком, —
-    /// то есть ровно те, что доходят до WinDivert.
+    /// Первый — пин в файле hosts. Это выбранный руками адрес вместо того,
+    /// что даёт резолвер, и выбран он потому, что работает. Десинк опознаёт
+    /// имя в ClientHello, про подмену адреса не знает и применяет рецепт,
+    /// выверенный на настоящей сети доставки, — к постороннему узлу, которому
+    /// этот рецепт не нужен и вреден. Соединение рвётся на рукопожатии.
+    /// </para>
+    /// <para>
+    /// Второй — правило «напрямую». Прежде оно означало только «мимо туннеля»,
+    /// и для winws2 ничем не отличалось от «десинка»: имя всё равно попадало
+    /// в секцию пресета и получало рецепт. Снаружи это выглядело так, будто
+    /// переключатель не работает, и один такой случай стоил вечера разбора —
+    /// у части Discord стояло «напрямую», а к discord.media применялся
+    /// <c>send + syndata</c> из пресета.
+    /// </para>
+    /// <para>
+    /// Проксируемые сюда не идут ни из того источника, ни из другого: их
+    /// трафик уходит в туннель, и десинк его не видит вовсе. Берутся ровно
+    /// те, что доходят до WinDivert.
     /// </para>
     /// </remarks>
-    public static IReadOnlyList<string> CollectPinnedDesyncExclusions(
+    public static IReadOnlyList<string> CollectDesyncExclusions(
         Core.Rules.RuleSet ruleSet,
         string? hostsPath = null)
     {
         var found = new List<string>();
-        var hosts = Read(hostsPath);
-
-        if (hosts.Count == 0)
-            return found;
-
         var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
 
-        foreach (var (name, addresses) in hosts)
+        void Add(string name)
+        {
+            if (!found.Contains(name, StringComparer.OrdinalIgnoreCase))
+                found.Add(name);
+        }
+
+        foreach (var (name, addresses) in Read(hostsPath))
         {
             if (addresses.Count == 0)
                 continue;
@@ -248,8 +261,26 @@ public static class HostsFile
             if (FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
                 continue;
 
-            if (!found.Contains(name, StringComparer.OrdinalIgnoreCase))
-                found.Add(name);
+            Add(name);
+        }
+
+        // Имена правил «напрямую» — но только те, которым это правило
+        // и достаётся. Порядок здесь решает всё: правило может быть
+        // перекрыто более ранним, и тогда имя живёт по чужому режиму.
+        // У Discord так и вышло — «обновления» стоят на «напрямую», а до них
+        // имя забирает список сайта, стоящий выше и покрывающий ту же зону.
+        // Записав такое имя в исключения, мы отменили бы десинк там, где
+        // человек его не отменял.
+        foreach (var (mode, domains) in order)
+        {
+            if (mode != Core.Rules.RoutingMode.Direct)
+                continue;
+
+            foreach (var domain in domains)
+            {
+                if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Direct)
+                    Add(domain);
+            }
         }
 
         return found;
