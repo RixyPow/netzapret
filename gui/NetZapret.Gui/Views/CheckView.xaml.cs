@@ -69,6 +69,16 @@ public partial class CheckView : UserControl
     /// </remarks>
     private static readonly ObservableCollection<CheckRow> Collected = [];
 
+    /// <summary>
+    /// Имена без адреса — их в таблице не показываем.
+    /// </summary>
+    /// <remarks>
+    /// Считаются отдельно и называются под таблицей: пропустить строку молча
+    /// хуже, чем показать бесполезную. Человек должен видеть, что имя
+    /// проверялось и почему о нём нечего сказать.
+    /// </remarks>
+    private static readonly List<string> _markers = [];
+
     private static CancellationTokenSource? _work;
     private static bool _running;
     private static IReadOnlyList<SectionRow> _sections = [];
@@ -222,6 +232,7 @@ public partial class CheckView : UserControl
         bool running = ShowSetup();
 
         Collected.Clear();
+        _markers.Clear();
         _sections = [];
         Sections.ItemsSource = null;
         Header.Visibility = Visibility.Visible;
@@ -383,6 +394,15 @@ public partial class CheckView : UserControl
             text.AppendLine(
                 Fit(name, 38) + Fit(row.Tcp, 8) + Fit(row.Tls12, 8)
                 + Fit(row.Tls13, 8) + Fit(row.Http, 8) + Fit(row.Data, 9) + row.Verdict);
+        }
+
+        if (_markers.Count > 0)
+        {
+            text.AppendLine();
+            text.AppendLine(
+                $"Пропущено маркеров зон: {_markers.Count} — {string.Join(", ", _markers)}. "
+                + "Записи A у них нет ни у кого: работают только поддомены, "
+                + "а само имя стоит в списке, чтобы покрыть зону целиком.");
         }
 
         var explained = Collected
@@ -620,6 +640,24 @@ public partial class CheckView : UserControl
 
                 Dispatcher.Invoke(() =>
                 {
+                    // Маркеры зон в таблицу не идут. Записи A у akamai.net,
+                    // scdn.co, playstation.net нет и не было ни у кого:
+                    // работают только их поддомены, а само имя стоит в списке
+                    // затем, чтобы покрыть зону целиком. Проверять там нечего,
+                    // и строка «нет адреса у имени» среди закрытого только
+                    // сбивает — её начинают чинить.
+                    //
+                    // Из списков такие имена убирать нельзя: они там несут
+                    // работу, а не показ. Пропущенные считаются и называются
+                    // под таблицей, чтобы их отсутствие не было тихим.
+                    if (report.Kind == BlockKind.NoAddress)
+                    {
+                        _markers.Add(report.Host);
+                        Say($"Проверено {Collected.Count} из {targets.Count}…");
+
+                        return;
+                    }
+
                     Collected.Add(Row(report, tunnelled));
                     Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
@@ -656,7 +694,12 @@ public partial class CheckView : UserControl
         {
             BlockKind.None => "Accent",
             BlockKind.NoAddress => "Faint",
-            BlockKind.TlsDpi or BlockKind.Stall => "Warn",
+
+            // Жёлтый, а не красный. Гео-отказ — это работающая связь: ответ
+            // пришёл, и пришёл от самого сайта. Красный ставил его в один ряд
+            // с закрытым наглухо, а лечится он совсем иначе — не рецептом,
+            // а выходом в другой стране.
+            BlockKind.TlsDpi or BlockKind.Stall or BlockKind.GeoBlock => "Warn",
             _ => "Danger",
         };
 
