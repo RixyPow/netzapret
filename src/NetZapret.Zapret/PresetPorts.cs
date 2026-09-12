@@ -43,12 +43,9 @@ public static class PresetPorts
         var ports = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var section in preset.Sections)
+        foreach (var section in SectionsFor(preset, zapretRoot, domains))
         {
             if (section.TcpPorts is not { } value)
-                continue;
-
-            if (!Covers(section, zapretRoot, domains))
                 continue;
 
             foreach (var port in value.Split(
@@ -60,6 +57,29 @@ public static class PresetPorts
         }
 
         return ports.Count == 0 ? Default : string.Join(',', ports);
+    }
+
+    /// <summary>
+    /// Секции пресета, покрывающие эти имена, в порядке файла.
+    /// </summary>
+    /// <remarks>
+    /// Порядок сохранён намеренно: winws2 отдаёт пакет первому профилю, чей
+    /// фильтр совпал, и дальше не смотрит. Значит первая в этом перечне —
+    /// и есть та, что решит судьбу имени, а остальные до него не дойдут.
+    /// </remarks>
+    public static IEnumerable<ZapretSection> SectionsFor(
+        ZapretPreset preset,
+        string? zapretRoot,
+        IReadOnlyList<string> domains)
+    {
+        if (domains.Count == 0)
+            yield break;
+
+        foreach (var section in preset.Sections)
+        {
+            if (Covers(section, zapretRoot, domains))
+                yield return section;
+        }
     }
 
     /// <summary>Есть ли в секции хоть одно из этих имён.</summary>

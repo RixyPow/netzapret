@@ -42,6 +42,17 @@ public static class ServiceRouting
         /// <summary>Первый домен списка — чтобы было видно, о чём речь.</summary>
         public string? Example { get; init; }
 
+        /// <summary>
+        /// Состав части целиком: имена либо подсети.
+        /// </summary>
+        /// <remarks>
+        /// Список уже прочитан здесь, и отдавать его наружу дешевле, чем
+        /// читать второй раз. Нужен, чтобы ответить, какая секция пресета
+        /// заберёт эти имена себе, — без этого показ говорит «десинк»,
+        /// не уточняя, будет ли с именем сделано хоть что-нибудь.
+        /// </remarks>
+        public IReadOnlyList<string> Domains { get; init; } = [];
+
         public string DescribeMode() => Mode switch
         {
             RoutingMode.Proxy => "VPN",
@@ -96,6 +107,7 @@ public static class ServiceRouting
                 DomainCount = entries.Count,
                 Explicit = set,
                 Example = entries[0],
+                Domains = entries,
             });
         }
 

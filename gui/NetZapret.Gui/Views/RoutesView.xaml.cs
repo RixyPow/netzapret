@@ -173,6 +173,11 @@ public partial class RoutesView : UserControl
     /// <summary>Пользовательские правила текущей сборки строк.</summary>
     private UserRulesFile _own = UserRulesFile.Load();
 
+    /// <summary>Действующий пресет — по нему и видно, что будет с именем.</summary>
+    private ZapretPreset? _preset;
+
+    private string? _zapretRoot;
+
     public RoutesView()
     {
         InitializeComponent();
@@ -194,6 +199,22 @@ public partial class RoutesView : UserControl
             // Те же правила держим под рукой при сборке строк: по ним
             // подписывается выбранный рецепт.
             _own = userRules;
+            _zapretRoot = zapretRoot;
+
+            // И пресет: без него «десинк» в списке не отличить от «десинк,
+            // но пресет об этом имени не знает и не сделает ничего».
+            _preset = null;
+
+            try
+            {
+                if (settings.PresetName is { } name && ZapretPaths.FindPreset(name) is { } path)
+                    _preset = new PresetReader().Load(path);
+            }
+            catch (Exception)
+            {
+                // Испорченный пресет не повод не показать маршруты: подпись
+                // просто скажет, что чинить имя нечем.
+            }
 
             var engine = RuleSetLoader.LoadLayered(
                 settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
@@ -287,12 +308,10 @@ public partial class RoutesView : UserControl
 
             Detail = detail,
 
-            // Рецепт называется прямо в подписи маршрута. Выбранный однажды,
-            // он иначе пропадал бы из виду: в списке стоит «десинк», а чем
-            // именно чинится — видно только в yaml.
-            Mode = RecipeFor(part.Part.List) is { } recipe
-                ? $"десинк: {recipe}"
-                : part.DescribeMode(),
+            // Чем именно пойдёт часть — прямо в подписи маршрута. «Десинк»
+            // сам по себе не говорит ничего: решает пресет, и решить он может
+            // в том числе «не знаю такого имени».
+            Mode = Describe(part),
 
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
@@ -1095,6 +1114,67 @@ public partial class RoutesView : UserControl
             e.Match == MatchKind.HostList
             && e.Mode == RoutingMode.Desync
             && e.Matches(listPath))?.Recipe;
+
+    /// <summary>
+    /// Чем именно пойдёт эта часть.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// «Десинк» сам по себе не говорит ничего: он означает «мимо туннеля,
+    /// решает пресет», а решить пресет может и «не трогать», и «ничего
+    /// не знаю об этом имени». И то и другое выглядело в списке одинаково
+    /// с работающим правилом — а это ровно тот случай, из-за которого
+    /// разбираться приходилось замерами.
+    /// </para>
+    /// <para>
+    /// Показывается название приёма, а не имя секции, у которой он взят.
+    /// Секции пресета названы по тому, что чинят, и подпись выходила вроде
+    /// «десинк: rutracker.org» у Speedtest — человек читал это как ошибку.
+    /// </para>
+    /// <para>
+    /// Первая совпавшая секция и решает: winws2 отдаёт пакет первому профилю,
+    /// чей фильтр совпал, и дальше не смотрит.
+    /// </para>
+    /// </remarks>
+    private string Describe(ServiceRouting.PartStatus part)
+    {
+        if (part.Mode != RoutingMode.Desync)
+            return part.DescribeMode();
+
+        // Свой выбор важнее пресетовского: он и стоит первым в командной
+        // строке. Хранится имя секции, показывается название приёма.
+        if (RecipeFor(part.Part.List) is { } stored && !string.IsNullOrWhiteSpace(stored))
+        {
+            return _preset is not null && DesyncRecipes.Find(_preset, stored) is { } own
+                ? $"десинк: {own.Technique}"
+                : $"десинк: {stored} — нет в пресете";
+        }
+
+        if (_preset is null)
+            return "десинк: пресет не выбран";
+
+        // Правила по адресам рецепта не получают: десинк отбирает трафик
+        // по имени в приветствии TLS, а в таких пакетах имени нет.
+        if (part.Part.ByAddress)
+            return "десинк";
+
+        var section = PresetPorts
+            .SectionsFor(_preset, _zapretRoot, part.Domains)
+            .FirstOrDefault();
+
+        if (section is null)
+            return "десинк: пресет не чинит";
+
+        return section.IsPassThrough
+            ? "десинк: пресет пропускает"
+            : $"десинк: {Technique(section)}";
+    }
+
+    /// <summary>Приёмы секции по порядку, без настроек.</summary>
+    private static string Technique(ZapretSection section) =>
+        string.Join(" + ", section.DesyncRecipes
+            .Select(r => r.IndexOf(':') is var c && c < 0 ? r : r[..c])
+            .Distinct());
 
     /// <summary>
     /// Имя списка в читаемое название — для заголовка окна рецептов.

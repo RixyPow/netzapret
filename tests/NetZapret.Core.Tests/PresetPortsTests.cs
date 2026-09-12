@@ -172,6 +172,34 @@ public class PresetPortsTests : IDisposable
         Assert.Contains("--filter-tcp=80,443,8443", arguments);
     }
 
+    /// <summary>
+    /// Секции отдаются в порядке файла: первая и решает судьбу имени.
+    /// </summary>
+    /// <remarks>
+    /// winws2 отдаёт пакет первому профилю, чей фильтр совпал, и дальше
+    /// не смотрит. На этом порядке держится подпись маршрута: показывать
+    /// надо приём той секции, до которой очередь дойдёт, а не любой
+    /// совпавшей.
+    /// </remarks>
+    [Fact]
+    public void SectionsComeInFileOrder()
+    {
+        var names = PresetPorts
+            .SectionsFor(Load(Preset), _root, ["discord.com", "example.com"])
+            .Select(s => s.Name)
+            .ToList();
+
+        Assert.Equal(["Сайт", "discord.com"], names);
+    }
+
+    /// <summary>Ни одна секция имя не покрывает — перечень пуст.</summary>
+    [Fact]
+    public void UnknownNameMatchesNoSection()
+    {
+        Assert.Empty(PresetPorts.SectionsFor(Load(Preset), _root, ["ничего-такого.example"]));
+        Assert.Empty(PresetPorts.SectionsFor(Load(Preset), _root, []));
+    }
+
     /// <summary>Без портов профиль остаётся на прежнем умолчании.</summary>
     [Fact]
     public void ProfileWithoutPortsKeepsTheDefault()
