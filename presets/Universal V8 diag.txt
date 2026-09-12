@@ -1,7 +1,7 @@
 # Preset: Universal V8 diag
 # BuiltinVersion: 2.26
 # IconColor: #d29922
-# Description: ВРЕМЕННЫЙ, для замера. Тот же V8, плюс ключ --debug (без него DLOG из custom_diag.lua пишет в пустоту), шаг diag_once первым в пяти секциях Discord и секция-ловушка в конце. Строка на соединение: протокол, порты, адрес назначения, имя из SNI, класс L7; пакеты не трогает. Журнал: diag-discord.log рядом с winws2.exe. Обычная работа - на Universal V8.
+# Description: ВРЕМЕННЫЙ, для замера. Тот же V8, плюс --debug, diag_once в пяти секциях Discord и ловушка. Журнал: diag-discord.log рядом с winws2.exe.
 
 --debug=@diag-discord.log
 
@@ -247,23 +247,29 @@
 
 --new
 
+# Через эту секцию идёт сам звук: --payload=all, то есть все UDP-пакеты
+# к адресам Discord. Соседняя «Голосовые звонки/чаты» берёт только stun
+# и discord_ip_discovery - установление связи, но не поток.
+#
+# Окно снято. Прежнее -n8 держало камуфляж на первых девяти пакетах,
+# дальше звонок шёл голым до конца. Замер: пинг 29 мс и ноль потерь
+# первые две минуты, затем качели 200-2000 мс волнами при нулевых
+# Decryption Failures - пакеты не портятся, их задерживают. Так и выглядит
+# переклассификация потока, когда камуфляж кончился.
+#
+# Рецепт заменён на udplen, и это обязательно вместе со снятым окном:
+# fake:repeats=10 на каждый пакет звонка дал бы десятикратный трафик
+# и джиттер хуже исходного. udplen ничего не дублирует и не переставляет -
+# дописывает два байта к payload от 64 байт, меняя длину, но не тайминг.
+#
+# Если пойдут Decryption Failures - откатывать сюда, к fake и -n8.
 --name=Discord UDP (обычно не нужно)
 --filter-udp=443-65535
 --ipset=lists/ipset-discord.txt
---out-range=-n8
+--out-range=a
 --payload=all
 --lua-desync=diag_once
---lua-desync=fake:blob=quic_google:ip_autottl=-2,3-20:ip6_autottl=-2,3-20:repeats=10:payload=all
-
---new
-
-# Ловушка. После всех секций Discord намеренно: первый совпавший профиль
-# забирает пакет, и встань она раньше - отобрала бы голос у секции выше.
---name=ЗАМЕР: UDP голоса, не забранный никем
---filter-udp=50000-50099,19294-19344
---out-range=-n8
---payload=all
---lua-desync=diag_once
+--lua-desync=udplen:increment=2:min=64
 
 --new
 
