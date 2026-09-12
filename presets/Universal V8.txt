@@ -208,11 +208,20 @@
 # Рецепт тот же, что у discord.com: перебор одиннадцати на probe.discord
 # .media дал три рабочих, и hostfakesplit_multi среди них. Порты и окно
 # секции не тронуты.
+# Рецепт без поддельных пакетов, и это не вкус. Окно -d10 накрывает
+# первые одиннадцать пакетов с данными: рукопожатие занимает пять-шесть,
+# дальше идут WebSocket-upgrade и кадр Identify. hostfakesplit_multi
+# подмешивал бы фальшивки прямо в них, а ответом на Identify как раз
+# и должен прийти Ready с адресом для UDP. Замер: клиент пять раз
+# достучался до finland14033.discord.media по TCP и ни разу не открыл
+# UDP-сокет - секции STUN и ловушка пусты обе. multidisorder только
+# режет и переставляет настоящее приветствие, живой сессии от него
+# не достаётся ничего.
 --name=discord.media (voice RTC)
 --filter-tcp=80,443,1080,2053,2083,2087,2096,8443
 --hostlist=lists/discord-media.txt
 --out-range=-d10
---lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
+--lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
 
 --new
 
