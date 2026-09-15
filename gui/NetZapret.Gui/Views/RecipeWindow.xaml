@@ -20,8 +20,27 @@
                        Text="Рецепт — это то, что winws2 сделает с рукопожатием: подделает пакет, порежет его, переставит куски. Наборы взяты из вашего пресета: там они подобраны под живые блокировки, а не выдуманы нами." />
         </StackPanel>
 
-        <TextBlock Grid.Row="1" x:Name="Status" Style="{StaticResource Caption}"
-                   Margin="0,16,0,0" TextWrapping="Wrap" />
+        <!--
+            Полоса ответа, а не одна строка внизу. Прежде окно отвечало
+            подписью под заголовком, и её не замечали: человек жал «Проверить
+            все», ничего видимого не происходило, и он приходил с «проверка
+            не начинается». Чаще всего она и не должна была начаться — имя
+            открывается без десинка либо движки работают, — но сказано это
+            было так, что не читалось.
+        -->
+        <Border Grid.Row="1" x:Name="StatusCard" Margin="0,16,0,0" Padding="14,10"
+                CornerRadius="8" Visibility="Collapsed"
+                Background="{DynamicResource Raised}" BorderThickness="1"
+                BorderBrush="{DynamicResource Border}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="StatusMark" FontSize="16" Margin="0,0,10,0"
+                           VerticalAlignment="Top"
+                           Foreground="{DynamicResource Muted}" Text="•" />
+
+                <TextBlock x:Name="Status" Style="{StaticResource Caption}"
+                           TextWrapping="Wrap" VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
 
         <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="14,12">
@@ -75,6 +94,16 @@
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="TestButton" Style="{StaticResource Ghost}"
                         Content="Проверить все" Click="OnTest" Margin="0,0,8,0" />
+
+                <!--
+                    Остановка. Перебор идёт до сорока секунд, и до неё прервать
+                    его можно было только закрыв окно — то есть потеряв и уже
+                    полученные ответы.
+                -->
+                <Button x:Name="StopButton" Style="{StaticResource Ghost}"
+                        Content="Остановить" Click="OnStop" Margin="0,0,8,0"
+                        IsEnabled="False" />
+
                 <Button Style="{StaticResource Ghost}" Content="Решает пресет"
                         Click="OnPreset" Margin="0,0,8,0" />
                 <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" />

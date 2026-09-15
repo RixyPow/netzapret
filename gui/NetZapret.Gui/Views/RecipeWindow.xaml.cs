@@ -141,10 +141,10 @@ public partial class RecipeWindow : Window
 
         Recipes.ItemsSource = _rows;
 
-        Status.Text = _rows.Count == 0
+        Say(_rows.Count == 0
             ? "В пресете нет ни одного рецепта — выбирать не из чего."
             : $"Рецептов в пресете «{preset.Name}»: {_rows.Count}. "
-              + "Проверка подбирает рабочий сама, но требует остановленных движков.";
+              + "Проверка подбирает рабочий сама, но требует остановленных движков.");
 
         TestButton.IsEnabled = _rows.Count > 0;
         Closed += (_, _) => _work?.Cancel();
@@ -166,6 +166,31 @@ public partial class RecipeWindow : Window
     }
 
     private void OnCancel(object sender, RoutedEventArgs e) => Close(false);
+
+    /// <summary>Прерывает перебор, оставляя уже полученные ответы.</summary>
+    private void OnStop(object sender, RoutedEventArgs e)
+    {
+        _work?.Cancel();
+        StopButton.IsEnabled = false;
+    }
+
+    /// <summary>
+    /// Отвечает человеку так, чтобы ответ было видно.
+    /// </summary>
+    /// <remarks>
+    /// Полосой, а не строкой под заголовком. Прежде окно отвечало подписью,
+    /// и её не замечали: нажал «Проверить все», ничего видимого не случилось,
+    /// и человек приходил с «проверка не начинается». Чаще всего она и не
+    /// должна была начаться — имя открывается без десинка либо движки
+    /// работают, — но сказано это было так, что не читалось.
+    /// </remarks>
+    private void Say(string text, string colour = "Muted", string mark = "•")
+    {
+        Status.Text = text;
+        StatusMark.Text = mark;
+        StatusMark.Foreground = (Brush)FindResource(colour);
+        StatusCard.Visibility = Visibility.Visible;
+    }
 
     /// <summary>
     /// Закрывает окно с ответом.
@@ -213,9 +238,9 @@ public partial class RecipeWindow : Window
 
         if (state is not null && state.IsSupervisorAlive())
         {
-            Status.Text = "Сначала остановите движки на «Главной». Работающий десинк правил бы "
+            Say("Сначала остановите движки на «Главной». Работающий десинк правил бы "
                 + "те же пакеты вторым слоем, а туннель открыл бы имя любым рецептом — "
-                + "проверять было бы нечего.";
+                + "проверять было бы нечего.", "Warn", "⏸");
 
             return;
         }
@@ -225,7 +250,7 @@ public partial class RecipeWindow : Window
 
         if (winws is null || !File.Exists(winws))
         {
-            Status.Text = "winws2 не найден рядом с программой — проверять нечем.";
+            Say("winws2 не найден рядом с программой — проверять нечем.", "Danger", "✕");
             return;
         }
 
@@ -234,6 +259,10 @@ public partial class RecipeWindow : Window
 
         TestButton.IsEnabled = false;
         TestButton.Content = "Проверяю…";
+        StopButton.IsEnabled = true;
+
+        int worked = 0;
+        int tried = 0;
 
         try
         {
@@ -244,8 +273,8 @@ public partial class RecipeWindow : Window
 
             if (_address is null)
             {
-                Status.Text = $"Не удалось узнать адрес ни у {_domain}, ни у его зоны — "
-                    + "проверять некуда стучаться.";
+                Say($"Не удалось узнать адрес ни у {_domain}, ни у его зоны — "
+                    + "проверять некуда стучаться.", "Danger", "✕");
 
                 return;
             }
@@ -260,18 +289,17 @@ public partial class RecipeWindow : Window
             // именно их.
             if (await OpensAsync(_domain, _work.Token))
             {
-                Status.Text = $"{_domain} открывается и без десинка. Рецепт ему не нужен — "
-                    + "берите «решает пресет».";
+                Say($"{_domain} открывается и без десинка. Рецепт ему не нужен — "
+                    + "берите «решает пресет».", "Accent", "✓");
 
                 return;
             }
 
-            int worked = 0;
-            int tried = 0;
+            worked = 0;
 
             foreach (var row in _rows)
             {
-                Status.Text = $"Проверяю {++tried} из {_rows.Count}: {row.Title}…";
+                Say($"Проверяю {++tried} из {_rows.Count}: {row.Title}…", "Warn", "◐");
 
                 row.Verdict = "проверяю…";
                 row.VerdictColour = (Brush)FindResource("Muted");
@@ -286,24 +314,32 @@ public partial class RecipeWindow : Window
                     worked++;
             }
 
-            Status.Text = worked == 0
-                ? $"Ни один рецепт не открыл {_domain}. Дело может быть не в десинке — "
-                  + "посмотрите «Проверку блокировок» целиком."
-                : $"Открывают {worked} из {_rows.Count}. Берите любой из отмеченных — "
-                  + "если сомневаетесь, тот, что применяется к знакомому сервису.";
+            if (worked == 0)
+            {
+                Say($"Ни один рецепт не открыл {_domain}. Дело может быть не в десинке — "
+                    + "посмотрите «Проверку блокировок» целиком.", "Danger", "✕");
+            }
+            else
+            {
+                Say($"Открывают {worked} из {_rows.Count}. Берите любой из отмеченных — "
+                    + "если сомневаетесь, тот, что применяется к знакомому сервису.",
+                    "Accent", "✓");
+            }
         }
         catch (OperationCanceledException)
         {
-            Status.Text = "Проверка прервана.";
+            Say($"Остановлено. Проверено {tried} из {_rows.Count}, ответы сохранены.",
+                "Muted", "⏹");
         }
         catch (Exception ex)
         {
-            Status.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+            Say("Проверка не удалась: " + ex.GetBaseException().Message, "Danger", "✕");
         }
         finally
         {
             TestButton.IsEnabled = true;
             TestButton.Content = "Проверить все";
+            StopButton.IsEnabled = false;
         }
     }
 
