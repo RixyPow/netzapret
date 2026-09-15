@@ -116,7 +116,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
         Single || Open ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Вложенные сдвинуты под шапку, одиночные стоят вровень.</summary>
-    public Thickness PartsMargin => Single ? new Thickness(0) : new Thickness(20, 6, 0, 6);
+    public Thickness PartsMargin => Single ? new Thickness(0) : new Thickness(20, 0, 0, 0);
 
     /// <summary>
     /// Значок сервиса — тот же, что у первой его части.
@@ -316,7 +316,7 @@ public partial class RoutesView : UserControl
                 service.Open = _open.Contains(service.Name);
 
             _all = services;
-            Services.ItemsSource = services;
+            Services.ItemsSource = InChosenOrder(services);
             ShowOwn();
 
             Status.Text = problems.Count == 0
@@ -801,6 +801,34 @@ public partial class RoutesView : UserControl
             _open.Remove(name);
     }
 
+    /// <summary>
+    /// По алфавиту или в порядке каталога.
+    /// </summary>
+    /// <remarks>
+    /// Порядок каталога не случаен: сверху то, что ломается чаще, — Discord,
+    /// YouTube, Telegram. Он хорош, пока помнишь его наизусть, и плох, когда
+    /// ищешь Zoom среди пятидесяти пяти строк. Алфавит отвечает на второй
+    /// случай, поэтому оба и оставлены.
+    /// </remarks>
+    private bool _alphabetical;
+
+    private void OnSort(object sender, RoutedEventArgs e)
+    {
+        _alphabetical = !_alphabetical;
+
+        SortButton.Content = _alphabetical ? "По умолчанию" : "По алфавиту";
+
+        // Пересобираем показ, не перечитывая правила: порядок — дело показа,
+        // и лезть за ним на диск незачем.
+        OnSearch(Search, null!);
+    }
+
+    /// <summary>Раскладывает так, как выбрано кнопкой.</summary>
+    private IReadOnlyList<ServiceRow> InChosenOrder(IEnumerable<ServiceRow> rows) =>
+        _alphabetical
+            ? rows.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
+            : rows.ToList();
+
     private void OnExpandAll(object sender, RoutedEventArgs e)
     {
         bool open = ExpandButton.Content as string == "Раскрыть всё";
@@ -829,7 +857,7 @@ public partial class RoutesView : UserControl
 
         if (needle.Length == 0)
         {
-            Services.ItemsSource = _all;
+            Services.ItemsSource = InChosenOrder(_all);
             return;
         }
 
@@ -848,7 +876,7 @@ public partial class RoutesView : UserControl
             .Where(s => s.Parts.Count > 0)
             .ToList();
 
-        Services.ItemsSource = found;
+        Services.ItemsSource = InChosenOrder(found);
 
         Status.Text = found.Count == 0
             ? $"По «{needle}» ничего нет. Свой домен можно добавить строкой выше."

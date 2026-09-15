@@ -26,11 +26,17 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="SortButton" Style="{StaticResource Ghost}"
+                                Content="По алфавиту" Click="OnSort" Margin="0,0,8,0"
+                                ToolTip="Порядок каталога сверху ставит то, что ломается чаще. Алфавит удобнее, когда ищешь конкретный сервис." />
+
                         <Button x:Name="ExpandButton" Style="{StaticResource Ghost}"
-                                Content="Раскрыть всё" Click="OnExpandAll" Margin="0,0,8,0" />
+                                Content="Раскрыть всё" Click="OnExpandAll" Margin="0,0,8,0"
+                                ToolTip="Раскрывает все папки разом. Разворачиваются только те пять сервисов, у которых части ломаются врозь." />
 
                         <Button x:Name="ReloadButton" Style="{StaticResource Ghost}"
-                                Content="Перечитать" Click="OnReload" />
+                                Content="Перечитать" Click="OnReload"
+                                ToolTip="Перечитывает правила, пресет и файл hosts с диска. Нужно, если правили их снаружи программы." />
                     </StackPanel>
                 </Grid>
 
@@ -125,8 +131,15 @@
                 <ItemsControl x:Name="Services" Margin="0,14,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <!-- Одинаковый шаг между сервисами: и у папки, и у одиночного. -->
-                            <StackPanel Margin="0,0,0,6">
+                            <!--
+                                Шаг задают сами строки, не эта стопка: у папки
+                                шапка, у одиночного его единственная строка,
+                                и у обеих снизу одинаковые шесть. Стопка со
+                                своим полем добавляла их второй раз, и под
+                                одиночным сервисом выходило вдвое больше,
+                                чем под свёрнутой папкой.
+                            -->
+                            <StackPanel>
 
                                 <!--
                                     Папка сервиса. Свёрнутая, но не немая:
@@ -136,6 +149,7 @@
                                     всё — открыть все двадцать две.
                                 -->
                                 <Button Style="{StaticResource Folder}" Click="OnFolder"
+                                        Margin="0,0,0,6"
                                         Visibility="{Binding HeaderShown}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
