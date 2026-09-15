@@ -383,7 +383,7 @@ public partial class CheckView : UserControl
 
         text.AppendLine(
             Fit("ИМЯ", 38) + Fit("TCP", 8) + Fit("TLS1.2", 8)
-            + Fit("TLS1.3", 8) + Fit("HTTP", 8) + Fit("ДАННЫЕ", 9) + "ВЕРДИКТ");
+            + Fit("TLS1.3", 8) + Fit("ПОРТ 80", 9) + Fit("ДАННЫЕ", 9) + "ВЕРДИКТ");
 
         text.AppendLine(new string('-', 78));
 

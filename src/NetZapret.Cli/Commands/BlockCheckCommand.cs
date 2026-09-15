@@ -1464,7 +1464,7 @@ internal static class BlockCheckCommand
     {
         var previous = Console.ForegroundColor;
         Console.ForegroundColor = ConsoleColor.DarkGray;
-        Console.WriteLine($"  {"",-27} {"",-3}{"TCP",-5} {"1.2",-5} {"1.3",-5} {"HTTP",-5} {"ДАННЫЕ",-5}  вердикт");
+        Console.WriteLine($"  {"",-27} {"",-3}{"TCP",-5} {"1.2",-5} {"1.3",-5} {"ПОРТ80",-7} {"ДАННЫЕ",-5}  вердикт");
         Console.ForegroundColor = previous;
     }
 
