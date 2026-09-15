@@ -367,7 +367,9 @@ public partial class RoutesView : UserControl
             // Уже загруженный значок ставится сразу. Раздел пересоздаётся при
             // каждом заходе, и без этого он начинал бы с букв, а значки
             // проступали бы заново — при живом кэше в памяти.
-            Icon = host.Contains('.') ? SiteIcons.Cached(host) : null,
+            // С диска, если в памяти пусто: после перезапуска памяти нет вовсе,
+            // и список открывался буквами при полном кэше на диске.
+            Icon = host.Contains('.') && !IsAddress(host) ? SiteIcons.Cached(host) : null,
             Key = kind + "|" + part.Part.List,
             Title = part.Part.Name,
 
@@ -557,7 +559,22 @@ public partial class RoutesView : UserControl
         var rest = part.Detail[(at + "например ".Length)..];
         var host = rest.Split(' ', '·')[0].TrimStart('*', '.');
 
-        return host.Contains('.') ? host : null;
+        if (!host.Contains('.'))
+            return null;
+
+        // У подсети значка нет и быть не может: значок берут у сайта, а сайт
+        // узнают по имени. Прежде такие имена спрашивались наравне со всеми,
+        // и в кэше оседали пустышки вроде «104.244.42.0_24.ico» — по одному
+        // сетевому запросу на каждую впустую.
+        return IsAddress(host) ? null : host;
+    }
+
+    /// <summary>Похоже ли на адрес или подсеть, а не на имя.</summary>
+    private static bool IsAddress(string host)
+    {
+        var address = host.Split('/')[0];
+
+        return System.Net.IPAddress.TryParse(address, out _);
     }
 
     private void OnReload(object sender, RoutedEventArgs e) => Reload();
