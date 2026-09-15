@@ -116,7 +116,24 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
         Single || Open ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Вложенные сдвинуты под шапку, одиночные стоят вровень.</summary>
-    public Thickness PartsMargin => Single ? new Thickness(0, 0, 0, 5) : new Thickness(20, 7, 0, 12);
+    public Thickness PartsMargin => Single ? new Thickness(0) : new Thickness(20, 6, 0, 6);
+
+    /// <summary>
+    /// Значок сервиса — тот же, что у первой его части.
+    /// </summary>
+    /// <remarks>
+    /// Шапка без значка выходила ниже строки с ним, и список шёл ступеньками:
+    /// у папки одна высота, у одиночного сервиса другая. Взять первый значок
+    /// честно — части одного сервиса живут на одном домене, и картинка у них
+    /// общая.
+    /// </remarks>
+    public BitmapImage? Icon => Parts.Count > 0 ? Parts[0].Icon : null;
+
+    public string Letter => Parts.Count > 0 ? Parts[0].Letter : "·";
+
+    public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Значок раскрытия.
