@@ -86,6 +86,26 @@ public sealed record ServiceDefinition
     public required string Name { get; init; }
 
     public required IReadOnlyList<ServicePart> Parts { get; init; }
+
+    /// <summary>
+    /// Это полка с разными сервисами, а не один сервис из частей.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Разница видна сразу, как только её назвать. У Discord части — стороны
+    /// одного сервиса: голос, переписка, запасной путь. Они ломаются врозь,
+    /// и держать их вместе осмысленно. А «Мессенджеры» — это Signal и Viber,
+    /// два чужих друг другу сервиса, и общего у них ровно то, что мы положили
+    /// их на одну полку.
+    /// </para>
+    /// <para>
+    /// Показ от этого расходится. Одному сервису идёт папка со стрелкой:
+    /// свернул — и не мешает. Полке папка не идёт вовсе: человек ищет Signal,
+    /// а не «мессенджеры», и лишний щелчок стоит между ним и его сервисом.
+    /// Части такой полки показываются сразу, каждая своей строкой.
+    /// </para>
+    /// </remarks>
+    public bool Grouping { get; init; }
 }
 
 /// <summary>
@@ -227,6 +247,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Instagram и Facebook",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "Instagram", List = "config/lists/instagram.txt" },
@@ -291,6 +312,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Кино и сериалы",
+            Grouping = true,
             Parts =
             [
                 new ServicePart
@@ -344,6 +366,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Мессенджеры",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "Signal", List = "config/lists/signal.txt" },
@@ -392,6 +415,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Нейросети",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
@@ -413,6 +437,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Игры",
+            Grouping = true,
             Parts =
             [
                 new ServicePart
@@ -463,6 +488,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Соцсети",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "Twitter / X", List = "config/lists/twitter.txt" },
@@ -486,6 +512,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Торренты",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "RuTracker", List = "config/lists/rutracker.txt" },

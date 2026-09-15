@@ -134,7 +134,8 @@
                                     открывать YouTube, а чтобы окинуть взглядом
                                     всё — открыть все двадцать две.
                                 -->
-                                <Button Style="{StaticResource Folder}" Click="OnFolder">
+                                <Button Style="{StaticResource Folder}" Click="OnFolder"
+                                        Visibility="{Binding HeaderShown}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -144,9 +145,18 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
+                                        <!--
+                                            Размер и ширина заданы явно. Свёрнутая
+                                            стрелка тоньше развёрнутой по рисунку
+                                            самого знака, и на десятом кегле она
+                                            выглядела царапиной. Одинаковое поле
+                                            вдобавок держит заголовок на месте
+                                            при раскрытии.
+                                        -->
                                         <TextBlock Grid.Column="0" Text="{Binding Chevron}"
-                                                   Foreground="{DynamicResource Muted}" FontSize="10"
-                                                   Width="16" VerticalAlignment="Center" />
+                                                   Foreground="{DynamicResource Faint}" FontSize="13"
+                                                   Width="22" TextAlignment="Center"
+                                                   VerticalAlignment="Center" />
 
                                         <TextBlock Grid.Column="1" Text="{Binding Name}"
                                                    FontWeight="SemiBold" FontSize="14"
@@ -164,9 +174,14 @@
                                     </Grid>
                                 </Button>
 
+                                <!--
+                                    Отступ слева только у вложенных: одиночный
+                                    сервис показывается без шапки, и сдвигать
+                                    его не от чего.
+                                -->
                                 <ItemsControl ItemsSource="{Binding Parts}"
                                               Visibility="{Binding PartsShown}"
-                                              Margin="20,7,0,12">
+                                              Margin="{Binding PartsMargin}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11">

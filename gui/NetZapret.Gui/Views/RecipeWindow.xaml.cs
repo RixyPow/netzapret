@@ -167,11 +167,21 @@ public partial class RecipeWindow : Window
 
     private void OnCancel(object sender, RoutedEventArgs e) => Close(false);
 
-    /// <summary>Прерывает перебор, оставляя уже полученные ответы.</summary>
+    /// <summary>
+    /// Прерывает перебор, оставляя уже полученные ответы.
+    /// </summary>
+    /// <remarks>
+    /// Отвечает немедленно, не дожидаясь, пока прерывание дойдёт до проб.
+    /// Дойти оно может не сразу: текущий рецепт держит запущенный winws2,
+    /// и его завершения ждут до четырёх секунд. Молчащая кнопка эти секунды
+    /// выглядит неработающей.
+    /// </remarks>
     private void OnStop(object sender, RoutedEventArgs e)
     {
-        _work?.Cancel();
         StopButton.IsEnabled = false;
+        Say("Останавливаю: жду, пока закончится текущий рецепт…", "Muted", "⏹");
+
+        _work?.Cancel();
     }
 
     /// <summary>

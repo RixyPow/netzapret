@@ -12,7 +12,7 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Часть сервиса и её маршрут.</summary>
-public sealed class PartRow
+public sealed record PartRow
 {
     public required string Key { get; init; }
     public required string Title { get; init; }
@@ -98,9 +98,35 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 {
     public bool Open { get; set; }
 
-    public Visibility PartsShown => Open ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>
+    /// Разворачивать нечего: часть одна, и она же вся строка.
+    /// </summary>
+    /// <remarks>
+    /// Папка вокруг единственной части обещает содержимое, которого нет:
+    /// раскрыл — а внутри то же самое имя, только названное «Всё». Такие
+    /// показываются одной строкой без шапки и без стрелки, а имя сервиса
+    /// переходит в саму строку.
+    /// </remarks>
+    public bool Single => Parts.Count == 1;
 
-    public string Chevron => Open ? "▼" : "►";
+    /// <summary>Шапка — только у того, что вправду сворачивается.</summary>
+    public Visibility HeaderShown => Single ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility PartsShown =>
+        Single || Open ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Вложенные сдвинуты под шапку, одиночные стоят вровень.</summary>
+    public Thickness PartsMargin => Single ? new Thickness(0, 0, 0, 5) : new Thickness(20, 7, 0, 12);
+
+    /// <summary>
+    /// Значок раскрытия.
+    /// </summary>
+    /// <remarks>
+    /// Треугольники вместо стрелок: «►» нарисован уже своего собрата «▼»
+    /// и на мелком кегле выглядел царапиной, а не знаком. Эти два — одной
+    /// ширины и одной массы, потому и поворот читается как поворот.
+    /// </remarks>
+    public string Chevron => Open ? "▾" : "▸";
 
     public string Count => Parts.Count + " " + Ending(Parts.Count);
 
@@ -235,8 +261,32 @@ public partial class RoutesView : UserControl
                     .Select(Row)
                     .ToList();
 
-                if (parts.Count > 0)
-                    services.Add(new ServiceRow(service.Name, parts));
+                if (parts.Count == 0)
+                    continue;
+
+                // Полка с разными сервисами раскладывается сразу: человек ищет
+                // Signal, а не «мессенджеры», и лишний щелчок стоит между ним
+                // и его сервисом. Каждая часть получает свою строку.
+                if (service.Grouping)
+                {
+                    services.AddRange(parts.Select(p => new ServiceRow(p.Title, [p])));
+                    continue;
+                }
+
+                // Сервис из одной части папкой не становится: разворачивать
+                // нечего, а стрелка обещает содержимое, которого нет. Имя
+                // сервиса переходит в саму строку — часть у таких зовётся
+                // «Всё», и это ничего не говорит в общем списке.
+                if (parts.Count == 1)
+                {
+                    services.Add(new ServiceRow(
+                        service.Name,
+                        [parts[0] with { Title = service.Name }]));
+
+                    continue;
+                }
+
+                services.Add(new ServiceRow(service.Name, parts));
             }
 
             MarkPins(services, zapretRoot);

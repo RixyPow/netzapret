@@ -32,14 +32,24 @@
                 CornerRadius="8" Visibility="Collapsed"
                 Background="{DynamicResource Raised}" BorderThickness="1"
                 BorderBrush="{DynamicResource Border}">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock x:Name="StatusMark" FontSize="16" Margin="0,0,10,0"
-                           VerticalAlignment="Top"
+            <!--
+                Сеткой, а не стопкой. В горизонтальной стопке ребёнок получает
+                бесконечную ширину, и TextWrapping не срабатывает никогда:
+                строка уезжала за край карточки и налезала на соседнее.
+            -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" x:Name="StatusMark" FontSize="16"
+                           Margin="0,0,10,0" VerticalAlignment="Top"
                            Foreground="{DynamicResource Muted}" Text="•" />
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}"
+                <TextBlock Grid.Column="1" x:Name="Status" Style="{StaticResource Caption}"
                            TextWrapping="Wrap" VerticalAlignment="Center" />
-            </StackPanel>
+            </Grid>
         </Border>
 
         <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
