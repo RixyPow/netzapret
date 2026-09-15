@@ -26,10 +26,23 @@ public sealed class SubscriptionClient : IDisposable
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
 
+    /// <summary>
+    /// Сколько ждать панель подписки.
+    /// </summary>
+    /// <remarks>
+    /// Было тридцать секунд, и это много для действия, на которое смотрят.
+    /// Подписки читаются по очереди, и при трёх ссылках зависшая панель
+    /// держала надпись «Читаю подписки…» полторы минуты без единого признака
+    /// жизни. Хуже того, запрос уходит через туннель, и когда выход мёртв —
+    /// а мёртвым он бывает ровно тогда, когда человек лезет за серверами, —
+    /// ждать полную минуту не за чем: ответа не будет.
+    /// </remarks>
+    public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(12);
+
     public SubscriptionClient(HttpClient? http = null, string userAgent = "sing-box/1.14.0")
     {
         _ownsClient = http is null;
-        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        _http = http ?? new HttpClient { Timeout = DefaultTimeout };
 
         if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent))
             _http.DefaultRequestHeaders.Add("User-Agent", userAgent);

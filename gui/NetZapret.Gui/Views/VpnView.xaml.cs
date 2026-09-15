@@ -158,7 +158,19 @@ public partial class VpnView : UserControl
 
     private SubscriptionBook _book = new();
     private List<SubRow> _rows = [];
+    /// <summary>
+    /// Замер серверов.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от чтения подписок, и это не аккуратность ради аккуратности.
+    /// Источник был один на оба действия, а раздел перечитывает подписки при
+    /// каждом заходе — и отменял этим замер, начатый секундой раньше. Снаружи
+    /// это выглядело как «кнопка „Замерить все“ работает через раз».
+    /// </remarks>
     private CancellationTokenSource? _work;
+
+    /// <summary>Чтение подписок.</summary>
+    private CancellationTokenSource? _reading;
 
     /// <summary>Сортировать по задержке, а не по порядку подписки.</summary>
     private bool _byLatency;
@@ -168,7 +180,12 @@ public partial class VpnView : UserControl
         InitializeComponent();
 
         Loaded += async (_, _) => await LoadAsync();
-        Unloaded += (_, _) => _work?.Cancel();
+
+        Unloaded += (_, _) =>
+        {
+            _work?.Cancel();
+            _reading?.Cancel();
+        };
     }
 
     private async Task LoadAsync()
@@ -204,21 +221,48 @@ public partial class VpnView : UserControl
             return;
         }
 
-        Status.Text = "Читаю подписки…";
+        // Прежнее чтение прерываем. Оно могло висеть на мёртвой панели,
+        // и без этого второе нажатие просто вставало за первым в очередь.
+        //
+        // Свой источник, а не общий с замером. Общий и был причиной того,
+        // что «Замерить все» работало через раз: раздел перечитывает подписки
+        // при каждом заходе, отменял этим общий токен — и замер, начатый
+        // секундой раньше, обрывался на первом же сервере. Снаружи выглядело
+        // как «кнопка срабатывает не всегда».
+        _reading?.Cancel();
+        _reading = new CancellationTokenSource();
+
+        var token = _reading.Token;
+
         RefreshButton.IsEnabled = false;
 
         try
         {
             // По очереди, а не разом: панели подписок нередко одна и та же,
             // и три запроса в одну секунду с одного адреса ей не нравятся.
-            foreach (var row in _rows)
-                await FillAsync(row, settings);
+            //
+            // Номер называется вслух: при зависшей панели «Читаю подписки…»
+            // без номера не говорит даже того, которая из трёх не отвечает.
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+
+                Status.Text = _rows.Count > 1
+                    ? $"Читаю подписку {i + 1} из {_rows.Count}…"
+                    : "Читаю подписку…";
+
+                await FillAsync(_rows[i], settings, token);
+            }
 
             int servers = _rows.Sum(r => r.Servers.Count);
 
             Status.Text = servers == 0
                 ? "Ни одна подписка не отдала серверов."
                 : $"Подписок: {_rows.Count}, серверов: {servers}.";
+        }
+        catch (OperationCanceledException)
+        {
+            Status.Text = "Чтение прервано.";
         }
         finally
         {
@@ -228,12 +272,12 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>Читает одну подписку и заполняет её папку.</summary>
-    private async Task FillAsync(SubRow row, AppSettings settings)
+    private async Task FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken)
     {
         try
         {
             using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(new Uri(row.Entry.Url), CancellationToken.None);
+            var info = await client.FetchAsync(new Uri(row.Entry.Url), cancellationToken);
 
             var usable = info.Servers.Where(s => s.IsSupportedBySingBox).ToList();
 

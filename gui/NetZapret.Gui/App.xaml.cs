@@ -7,6 +7,35 @@ namespace NetZapret.Gui;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// Ключи, которые программа понимает.
+    /// </summary>
+    /// <remarks>
+    /// Перечислены в одном месте намеренно, хотя разбираются в трёх разных:
+    /// два здесь, один у значка в трее, пять у супервизора. Проверка
+    /// на незнакомый ключ обязана видеть их все сразу, иначе она объявляет
+    /// незнакомым то, до чего разбор просто ещё не дошёл.
+    ///
+    /// Так и ломался автозапуск. Задача в планировщике зовёт программу
+    /// с <c>--tray</c>, а он разбирается ниже проверки — и программа отвечала
+    /// «ключ не поддерживается» на собственный ключ, выходя с кодом 2.
+    /// Увидеть это можно было только в планировщике: окно с жалобой в сеансе
+    /// автозапуска показывать некому.
+    /// </remarks>
+    private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
+    {
+        SupervisorHost.Switch,      // --supervisor
+        SupervisorHost.StopSwitch,  // --stop
+        TrayIcon.Switch,            // --tray
+
+        // Разбираются супервизором: он получает ту же командную строку.
+        "--no-proxy",
+        "--verify-traffic",
+        "--proxy-config",
+        "--preset",
+        "--log",
+    };
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -19,6 +48,10 @@ public partial class App : Application
 
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Show(args.ExceptionObject as Exception, fatal: true);
+
+        static bool Unknown(string argument) =>
+            argument.StartsWith("--", StringComparison.Ordinal)
+            && !Known.Contains(argument.Split('=')[0]);
 
         // Тот же поиск, что делает консоль: все пути в настройках, правилах
         // и списках заданы относительно корня установки. У программы,
@@ -56,7 +89,16 @@ public partial class App : Application
         //
         // Проверяется только то, что похоже на ключ. Путь к файлу аргументом
         // быть законно может — например, когда пресет перетаскивают на значок.
-        if (e.Args.FirstOrDefault(a => a.StartsWith("--", StringComparison.Ordinal)) is { } unknown)
+        //
+        // Перечень нужен весь и до проверки. Прежде здесь стояли только те
+        // два ключа, что разбираются выше, а --tray разбирается ниже — и
+        // проверка успевала объявить его незнакомым раньше, чем до него
+        // доходило дело. Ровно так и ломался автозапуск: задача в планировщике
+        // зовёт программу с --tray, программа отвечает «ключ не поддерживается»
+        // и выходит с кодом 2. В планировщике это выглядит как «последний
+        // результат: 2» — и больше нигде, потому что окно с жалобой в сеансе
+        // автозапуска показать некому.
+        if (e.Args.FirstOrDefault(Unknown) is { } unknown)
         {
             _headless = true;
 
