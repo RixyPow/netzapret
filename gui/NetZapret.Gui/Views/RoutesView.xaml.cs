@@ -115,8 +115,20 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public Visibility PartsShown =>
         Single || Open ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Вложенные сдвинуты под шапку, одиночные стоят вровень.</summary>
-    public Thickness PartsMargin => Single ? new Thickness(0) : new Thickness(20, 0, 0, 0);
+    /// <summary>
+    /// Отступ строк слева — ровно под ширину колонки со стрелкой.
+    /// </summary>
+    /// <remarks>
+    /// Одинаковый и у вложенных, и у одиночных, и это выравнивает значки
+    /// по всему списку в одну линию. У папки перед значком стоит стрелка
+    /// и сдвигает его вправо; у сервиса без стрелки значок прижимался
+    /// к краю, и список шёл зигзагом.
+    ///
+    /// Вложенность при этом не теряется: карточка части начинается на те же
+    /// двадцать четыре правее карточки папки, и видно её по самой карточке,
+    /// а не по сдвигу значка внутри неё.
+    /// </remarks>
+    public Thickness PartsMargin => new(24, 0, 0, 0);
 
     /// <summary>
     /// Значок сервиса — тот же, что у первой его части.
