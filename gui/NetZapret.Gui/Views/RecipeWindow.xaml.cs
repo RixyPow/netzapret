@@ -407,7 +407,11 @@ public partial class RecipeWindow : Window
         // а sing-box получал от того же сервера отказ в рукопожатии.
         start.ArgumentList.Add("--new");
         start.ArgumentList.Add("--name=NetZapret: проба");
-        start.ArgumentList.Add("--filter-tcp=80,443");
+        // Порты те же, что у секции, которая это имя забирает. Зашитое
+        // 80,443 мерило бы не то, что применится: у обложек Spotify секция
+        // объявлена на одном 443, а у Discord - на восьми портах.
+        start.ArgumentList.Add("--filter-tcp="
+            + PresetPorts.ForDomains(_preset, zapretRoot, [_domain]));
         start.ArgumentList.Add($"--hostlist={WinwsCommandLine.Forward(list)}");
         start.ArgumentList.Add(WinwsCommandLine.ProbeOutRange);
 
@@ -532,13 +536,91 @@ public partial class RecipeWindow : Window
                 TargetHost = host,
             }, deadline.Token);
 
-            return true;
+            return await FlowsAsync(tls, host, cancellationToken);
         }
         catch (Exception)
         {
             // Молчание, сброс, отказ — для нас это одно: не открылось.
             return false;
         }
+    }
+
+    /// <summary>
+    /// Сколько данных считать доказательством, что рецепт работает.
+    /// </summary>
+    /// <remarks>
+    /// Шестнадцать килобайт — выше всех порогов, на которых у нас рвались
+    /// потоки: steamcommunity.com умирал на 14 381 Б, skinsrestorer.net
+    /// на 13 505, Steam на 16 384. Меньший порог такие обрывы пропустил бы,
+    /// а больший стоил бы времени на каждом из восьми рецептов.
+    /// </remarks>
+    private const int Enough = 16 * 1024;
+
+    /// <summary>Сколько ждать продолжения, прежде чем счесть поток убитым.</summary>
+    private static readonly TimeSpan Silence = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Идут ли данные после того, как рукопожатие состоялось.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Этот урок мы уже оплатили однажды — в проверке блокировок. Там
+    /// состоявшееся рукопожатие перестало считаться ответом после разбора
+    /// steamcommunity.com: он не открывался, а проверка называла его
+    /// доступным, потому что рукопожатие и вправду проходило — поток умирал
+    /// после, на четырнадцатой тысяче байт.
+    /// </para>
+    /// <para>
+    /// Окно выбора рецепта того урока не получило и продолжало отвечать
+    /// по одному рукопожатию. Отсюда и «три рецепта из восьми открывают»
+    /// у раздачи Spotify при неработающих обложках: приветствие доходило
+    /// со всеми тремя, а картинка не приходила ни с одним.
+    /// </para>
+    /// <para>
+    /// Закрытое сервером соединение — успех, а не отказ: короткая страница
+    /// кончается раньше порога, и ждать от неё шестнадцати килобайт незачем.
+    /// Отказ — это тишина при живом соединении.
+    /// </para>
+    /// </remarks>
+    private static async Task<bool> FlowsAsync(
+        SslStream tls,
+        string host,
+        CancellationToken cancellationToken)
+    {
+        var request = System.Text.Encoding.ASCII.GetBytes(
+            $"GET / HTTP/1.1\r\nHost: {host}\r\n"
+            + "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n"
+            + "Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
+
+        await tls.WriteAsync(request, cancellationToken);
+
+        var buffer = new byte[16 * 1024];
+        int total = 0;
+
+        while (total < Enough)
+        {
+            using var quiet = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            quiet.CancelAfter(Silence);
+
+            int read;
+
+            try
+            {
+                read = await tls.ReadAsync(buffer, quiet.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Тишина при живом соединении — то самое, что ищем.
+                return false;
+            }
+
+            if (read == 0)
+                break;
+
+            total += read;
+        }
+
+        return total > 0;
     }
 
     /// <summary>
