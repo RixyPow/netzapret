@@ -335,6 +335,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Музыка",
+            Grouping = true,
             Parts =
             [
                 new ServicePart
@@ -523,6 +524,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Работа и заметки",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "Notion", List = "config/lists/notion.txt" },
@@ -556,6 +558,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Разработка",
+            Grouping = true,
             Parts =
             [
                 new ServicePart { Name = "Stack Overflow", List = "config/lists/stackoverflow.txt" },
@@ -579,6 +582,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Знание и архивы",
+            Grouping = true,
             Parts =
             [
                 new ServicePart
@@ -595,6 +599,7 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Платформы и CDN",
+            Grouping = true,
             Parts =
             [
                 new ServicePart

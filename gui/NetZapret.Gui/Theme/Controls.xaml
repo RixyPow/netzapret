@@ -307,7 +307,8 @@
                             BorderBrush="{DynamicResource Border}"
                             BorderThickness="1"
                             CornerRadius="10"
-                            Padding="14,10">
+                            Padding="14,10"
+                            MinHeight="64">
                         <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>

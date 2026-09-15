@@ -209,7 +209,14 @@
                                               Margin="{Binding PartsMargin}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,10">
+                                            <!--
+                                                Высота задана явно и одна на всех.
+                                                Список выбора внутри строки выше
+                                                простого текста в шапке папки,
+                                                и без этого строки шли ступеньками.
+                                            -->
+                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6"
+                                                    Padding="14,10" MinHeight="64">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
