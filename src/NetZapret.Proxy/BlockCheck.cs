@@ -295,7 +295,14 @@ public sealed record TargetReport
             if (decisive?.Detail is not { Length: > 0 } detail)
                 return null;
 
-            return Kind is BlockKind.TlsDpi or BlockKind.Handshake && decisive.Elapsed > TimeSpan.Zero
+            // Время приписывается только там, где сторона ответила: обрыв
+            // и отказ согласования сами по себе не говорят, быстро это было
+            // или на исходе срока, а разница тут и есть весь смысл.
+            //
+            // К истёкшему ожиданию не приписывается: оно и так названо
+            // словами — «нет ответа за 4 с», — и вторая цифра рядом
+            // повторяла то же самое: «нет ответа за 4 с, …, 4,0 с».
+            return (decisive.Reset || decisive.Unsupported) && decisive.Elapsed > TimeSpan.Zero
                 ? $"{detail}, {decisive.Elapsed.TotalSeconds:0.0} с"
                 : detail;
         }
@@ -759,7 +766,15 @@ public static class BlockCheck
         // Переименование, а не другой разбор: измерения те же, а вот кто
         // за ними стоит — другой. Виды, говорящие о вмешательстве в наше
         // рукопожатие, через туннель означают лишь, что туннель не довёз.
-        return throughTunnel && kind is BlockKind.TlsDpi or BlockKind.Stall or BlockKind.Full or BlockKind.HttpsPort
+        //
+        // Отказ согласования сюда же, и это исправление. Через туннель он
+        // почти наверняка не про настройки сайта: доходит до нас не сайт,
+        // а выход подписки, и его сханневые отказы выглядят точно так же.
+        // Без этого nflxvideo.net и speedtest.net, оба заведённые в туннель
+        // и оба с адресом из fakeip, получили вердикт «сторона не даёт наш
+        // TLS» — то есть нас отправляли не чинить туннель, а верить сайту.
+        return throughTunnel && kind is BlockKind.TlsDpi or BlockKind.Stall
+            or BlockKind.Full or BlockKind.HttpsPort or BlockKind.Handshake
             ? BlockKind.TunnelFailed
             : kind;
     }

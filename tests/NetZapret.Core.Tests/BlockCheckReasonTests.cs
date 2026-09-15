@@ -124,6 +124,50 @@ public class BlockCheckReasonTests
         Assert.Contains("0,2 с", report.Why!.Replace('.', ','));
     }
 
+    /// <summary>
+    /// К истёкшему ожиданию время не приписывается: оно уже названо словами.
+    /// </summary>
+    /// <remarks>
+    /// Иначе выходило «нет ответа за 4 с, 151.101.130.167:443 — всего адресов
+    /// 4, 4,0 с» — одна и та же цифра дважды в одной строке.
+    /// </remarks>
+    [Fact]
+    public void TimeoutDoesNotRepeatItsOwnTiming()
+    {
+        var report = Report(
+            Ok("1.2.3.4"),
+            No("нет ответа за 4 с, 151.101.130.167:443 — всего адресов 4"),
+            No("нет ответа за 4 с, 151.101.130.167:443 — всего адресов 4"),
+            Nope(),
+            Nope());
+
+        Assert.Equal(BlockKind.TlsDpi, report.Kind);
+        Assert.Equal("нет ответа за 4 с, 151.101.130.167:443 — всего адресов 4", report.Why);
+    }
+
+    /// <summary>
+    /// Через туннель отказ согласования — про туннель, а не про сайт.
+    /// </summary>
+    /// <remarks>
+    /// Доходит до нас не сайт, а выход подписки, и его отказы выглядят точно
+    /// так же. Без этого nflxvideo.net и speedtest.net, оба заведённые
+    /// в туннель и оба с адресом из fakeip, получали «сторона не даёт наш
+    /// TLS» — то есть совет верить сайту вместо того, чтобы чинить туннель.
+    /// </remarks>
+    [Fact]
+    public void RefusedVersionThroughTunnelBlamesTheTunnel()
+    {
+        var unsupported = new ProbeOutcome { Ok = false, Unsupported = true, Detail = "нет 1.2" };
+
+        Assert.Equal(
+            BlockKind.Handshake,
+            BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope()));
+
+        Assert.Equal(
+            BlockKind.TunnelFailed,
+            BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope(), throughTunnel: true));
+    }
+
     /// <summary>Гео-отказ объясняется ответом сайта.</summary>
     [Fact]
     public void GeoBlockIsExplainedByTheSite()
