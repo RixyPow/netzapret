@@ -43,7 +43,7 @@ public static class PresetPorts
         var ports = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var section in SectionsFor(preset, zapretRoot, domains))
+        foreach (var section in PresetZones.Build(preset, zapretRoot).AllFor(domains))
         {
             if (section.TcpPorts is not { } value)
                 continue;
@@ -70,81 +70,6 @@ public static class PresetPorts
     public static IEnumerable<ZapretSection> SectionsFor(
         ZapretPreset preset,
         string? zapretRoot,
-        IReadOnlyList<string> domains)
-    {
-        if (domains.Count == 0)
-            yield break;
-
-        foreach (var section in preset.Sections)
-        {
-            if (Covers(section, zapretRoot, domains))
-                yield return section;
-        }
-    }
-
-    /// <summary>Есть ли в секции хоть одно из этих имён.</summary>
-    private static bool Covers(
-        ZapretSection section,
-        string? zapretRoot,
-        IReadOnlyList<string> domains)
-    {
-        foreach (var entry in Entries(section, zapretRoot))
-        {
-            foreach (var domain in domains)
-            {
-                if (SameZone(entry, domain))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<string> Entries(ZapretSection section, string? zapretRoot)
-    {
-        foreach (var inline in section.InlineDomains)
-            yield return inline;
-
-        foreach (var path in section.HostListPaths)
-        {
-            IReadOnlyList<string> names;
-
-            try
-            {
-                names = HostListReader.Read(path, zapretRoot, out _);
-            }
-            catch (Exception)
-            {
-                // Списка может не быть: пресет пишут под полную установку
-                // Zapret, а у нас встроенная копия. Отсутствие файла —
-                // не повод остаться вовсе без портов.
-                continue;
-            }
-
-            foreach (var name in names)
-                yield return name;
-        }
-    }
-
-    /// <summary>
-    /// Одна ли это зона.
-    /// </summary>
-    /// <remarks>
-    /// В обе стороны: запись списка — зона, и <c>discord.media</c> покрывает
-    /// голосовые серверы, а <c>discordapp.net</c> — оба прокси картинок.
-    /// Но и наше имя бывает шире записи, когда правило поставлено на сервис
-    /// целиком, а секция знает лишь один его поддомен.
-    /// </remarks>
-    private static bool SameZone(string entry, string domain)
-    {
-        var a = entry.Trim().Trim('*', '.');
-        var b = domain.Trim().Trim('*', '.');
-
-        if (a.Length == 0 || b.Length == 0)
-            return false;
-
-        return string.Equals(a, b, StringComparison.OrdinalIgnoreCase)
-            || a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)
-            || b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase);
-    }
+        IReadOnlyList<string> domains) =>
+        PresetZones.Build(preset, zapretRoot).AllFor(domains);
 }

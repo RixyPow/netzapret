@@ -176,6 +176,9 @@ public partial class RoutesView : UserControl
     /// <summary>Действующий пресет — по нему и видно, что будет с именем.</summary>
     private ZapretPreset? _preset;
 
+    /// <summary>Его списки, прочитанные один раз.</summary>
+    private PresetZones? _zones;
+
     private string? _zapretRoot;
 
     public RoutesView()
@@ -209,6 +212,8 @@ public partial class RoutesView : UserControl
             {
                 if (settings.PresetName is { } name && ZapretPaths.FindPreset(name) is { } path)
                     _preset = new PresetReader().Load(path);
+
+                _zones = _preset is null ? null : PresetZones.Build(_preset, zapretRoot);
             }
             catch (Exception)
             {
@@ -1158,9 +1163,12 @@ public partial class RoutesView : UserControl
         if (part.Part.ByAddress)
             return "десинк";
 
-        var section = PresetPorts
-            .SectionsFor(_preset, _zapretRoot, part.Domains)
-            .FirstOrDefault();
+        // Через готовый указатель, а не перечитывая списки пресета заново.
+        // Прежде этот вопрос задавался на каждую из восьмидесяти частей,
+        // и каждый раз читался весь пресет: в russia-blacklist.txt сто
+        // семнадцать тысяч имён, и он оказывался прочитан восемьдесят раз.
+        // Раздел от этого открывался секундами.
+        var section = _zones?.FirstFor(part.Domains);
 
         if (section is null)
             return "десинк: пресет не чинит";
