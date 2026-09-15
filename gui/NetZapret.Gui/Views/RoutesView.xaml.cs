@@ -75,6 +75,20 @@ public sealed record PartRow
     public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Поле слева от значка — под ширину колонки со стрелкой.
+    /// </summary>
+    /// <remarks>
+    /// Внутри карточки, а не полем самой карточки. Сдвинув карточку, мы
+    /// выровняли значки, но укоротили строку: у папки она шла во всю ширину,
+    /// а у сервиса без стрелки кончалась на те же двадцать четыре раньше.
+    /// Вложенным частям сдвиг карточки как раз нужен — он и показывает
+    /// вложенность, — а строке верхнего уровня нужно только поле внутри.
+    /// </remarks>
+    public double Lead { get; init; }
+
+    public Thickness IconMargin => new(Lead, 0, 12, 0);
 }
 
 /// <summary>Строка таблицы порядка вычисления.</summary>
@@ -128,7 +142,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     /// двадцать четыре правее карточки папки, и видно её по самой карточке,
     /// а не по сдвигу значка внутри неё.
     /// </remarks>
-    public Thickness PartsMargin => new(24, 0, 0, 0);
+    public Thickness PartsMargin => Single ? new Thickness(0) : new Thickness(24, 0, 0, 0);
 
     /// <summary>
     /// Значок сервиса — тот же, что у первой его части.
@@ -298,7 +312,8 @@ public partial class RoutesView : UserControl
                 // и его сервисом. Каждая часть получает свою строку.
                 if (service.Grouping)
                 {
-                    services.AddRange(parts.Select(p => new ServiceRow(p.Title, [p])));
+                    services.AddRange(parts.Select(p =>
+                        new ServiceRow(p.Title, [p with { Lead = 24 }])));
                     continue;
                 }
 
@@ -308,9 +323,12 @@ public partial class RoutesView : UserControl
                 // «Всё», и это ничего не говорит в общем списке.
                 if (parts.Count == 1)
                 {
+                    // Поле под стрелку — внутри карточки: строка верхнего уровня
+                    // должна идти во всю ширину, а значок стоять там же, где
+                    // у папки.
                     services.Add(new ServiceRow(
                         service.Name,
-                        [parts[0] with { Title = service.Name }]));
+                        [parts[0] with { Title = service.Name, Lead = 24 }]));
 
                     continue;
                 }
