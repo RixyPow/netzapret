@@ -161,6 +161,17 @@ public enum BlockKind
     /// VPN там, где лечить нечего.
     /// </remarks>
     NoAddress,
+
+    /// <summary>
+    /// Сторона не согласовала ни одну из версий TLS, которые мы умеем.
+    /// </summary>
+    /// <remarks>
+    /// Не блокировка: отказ пришёл словами и быстро, а фильтр так не отвечает —
+    /// он рвёт соединение либо молчит. Встречается у площадок, отключивших
+    /// TLS 1.2, и у старых серверов без 1.3. Лечить нечем и не нужно:
+    /// настоящий браузер умеет больше версий, чем проверка.
+    /// </remarks>
+    Handshake,
 }
 
 /// <summary>Исход одной пробы.</summary>
@@ -180,11 +191,26 @@ public sealed record ProbeOutcome
     /// </remarks>
     public bool Refused { get; init; }
 
+    /// <summary>
+    /// Сторона отказалась от версии протокола, а не оборвала разговор.
+    /// </summary>
+    /// <remarks>
+    /// Различие видно по тому, как именно провалилось рукопожатие. Сервер,
+    /// не умеющий TLS 1.2, отвечает отказом согласования — быстро и словами.
+    /// Фильтр не отвечает вовсе: он либо рвёт соединение, либо молчит до
+    /// истечения срока.
+    /// </remarks>
+    public bool Unsupported { get; init; }
+
     public TimeSpan Elapsed { get; init; }
 
     public string? Detail { get; init; }
 
-    public string Describe() => Ok ? "ок" : Reset ? "RST" : Detail is null ? "—" : "нет";
+    public string Describe() => Ok
+        ? "ок"
+        : Reset ? "RST"
+        : Unsupported ? "н/д"
+        : Detail is null ? "—" : "нет";
 }
 
 /// <summary>Что выяснилось про одну цель.</summary>
@@ -224,6 +250,7 @@ public sealed record TargetReport
         BlockKind.Dns => "резолвер даёт нерабочий адрес",
         BlockKind.GeoBlock => "сайт отказывает по стране",
         BlockKind.BrokenCname => "оборванный CNAME",
+        BlockKind.Handshake => "сторона не даёт наш TLS",
         _ => "нет адреса у имени",
     };
 
@@ -232,7 +259,51 @@ public sealed record TargetReport
     /// Имя без адреса — свойство списка, а не сети: советовать по нему
     /// нечего, и в перечне закрытого оно только сбивает.
     /// </remarks>
-    public bool Actionable => Kind is not (BlockKind.None or BlockKind.NoAddress);
+    public bool Actionable => Kind is not (BlockKind.None or BlockKind.NoAddress or BlockKind.Handshake);
+
+    /// <summary>
+    /// Отчего именно вердикт таков — словами той пробы, что его решила.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Берётся стадия, а не первая непустая деталь. Прежде выбиралась первая,
+    /// и у имени с убитым рукопожатием в отчёт попадал рассказ про удавшийся
+    /// TCP — то есть про то, что как раз сработало. Читать это было
+    /// невозможно: строка объясняла не ту стадию, на которой сломалось.
+    /// </para>
+    /// <para>
+    /// Время добавляется к отказам рукопожатия: полсекунды и полные четыре —
+    /// это разные поломки. Быстрый отказ означает ответ, четыре секунды —
+    /// тишину, а тишина и есть почерк отбрасывания.
+    /// </para>
+    /// </remarks>
+    public string? Why
+    {
+        get
+        {
+            var decisive = Kind switch
+            {
+                BlockKind.None => null,
+                BlockKind.GeoBlock or BlockKind.Stall => Data,
+                BlockKind.TlsDpi or BlockKind.Handshake => Worse(Tls13, Tls12),
+                BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
+                    or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
+                BlockKind.TunnelFailed => Data.Detail is not null ? Data : Worse(Tls13, Tls12),
+                _ => null,
+            };
+
+            if (decisive?.Detail is not { Length: > 0 } detail)
+                return null;
+
+            return Kind is BlockKind.TlsDpi or BlockKind.Handshake && decisive.Elapsed > TimeSpan.Zero
+                ? $"{detail}, {decisive.Elapsed.TotalSeconds:0.0} с"
+                : detail;
+        }
+    }
+
+    /// <summary>Из двух проб та, что сказала больше.</summary>
+    private static ProbeOutcome Worse(ProbeOutcome a, ProbeOutcome b) =>
+        a.Detail is { Length: > 0 } ? a : b;
 
     /// <summary>
     /// Мог ли этот вердикт возникнуть от тесноты, а не от блокировки.
@@ -276,6 +347,7 @@ public sealed record TargetReport
         BlockKind.Dns => "свой DNS",
         BlockKind.GeoBlock => "только VPN — десинк не поможет",
         BlockKind.BrokenCname => "подставить адрес",
+        BlockKind.Handshake => "ничего не нужно — браузер умеет больше версий",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -717,6 +789,13 @@ public static class BlockCheck
         if (tcp.Ok && (tls12.Reset || tls13.Reset))
             return BlockKind.TlsDpi;
 
+        // Обе версии отвергнуты согласованием — это настройка стороны,
+        // а не фильтр. Бывает у площадок, отключивших старый протокол:
+        // они отвечают отказом, и отвечают быстро. Десинк такому не поможет,
+        // и предлагать его значит посылать чинить исправное.
+        if (tcp.Ok && tls12.Unsupported && tls13.Unsupported)
+            return BlockKind.Handshake;
+
         // TCP есть, TLS не отвечает без обрыва — так выглядит тихое
         // отбрасывание пакетов, и лечится оно тем же десинком.
         if (tcp.Ok)
@@ -911,14 +990,50 @@ public static class BlockCheck
         }
         catch (Exception ex)
         {
+            bool unsupported = RefusedVersion(ex);
+
             return new ProbeOutcome
             {
                 Ok = false,
                 Reset = IsReset(ex),
+                Unsupported = unsupported,
                 Elapsed = stopwatch.Elapsed,
-                Detail = Explain(ex, dialled, 443),
+                Detail = unsupported
+                    ? $"сторона не согласовала {Name(protocol)} — это её настройка, не фильтр"
+                    : Explain(ex, dialled, 443),
             };
         }
+    }
+
+    private static string Name(SslProtocols protocol) =>
+        protocol == SslProtocols.Tls12 ? "TLS 1.2" : "TLS 1.3";
+
+    /// <summary>
+    /// Отказ согласования, а не обрыв разговора.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Половина «нет» в таблице — вовсе не блокировка. У Cloudflare часть
+    /// площадок отключила TLS 1.2, а у старых серверов нет 1.3, и обе стороны
+    /// честно об этом сообщают. Прежде такая ячейка выглядела как убитое
+    /// рукопожатие, и человек шёл подбирать рецепт к тому, что не сломано.
+    /// </para>
+    /// <para>
+    /// Опознаётся по типу отказа: провал согласования приходит
+    /// <see cref="System.Security.Authentication.AuthenticationException"/>
+    /// и приходит быстро. Фильтр так не отвечает — он рвёт соединение
+    /// или молчит до истечения срока, а это уже сокетная ошибка либо отмена.
+    /// </para>
+    /// </remarks>
+    private static bool RefusedVersion(Exception ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is System.Security.Authentication.AuthenticationException)
+                return e.InnerException is not System.Net.Sockets.SocketException;
+        }
+
+        return false;
     }
 
     /// <summary>

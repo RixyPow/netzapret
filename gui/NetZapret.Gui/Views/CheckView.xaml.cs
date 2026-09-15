@@ -700,11 +700,17 @@ public partial class CheckView : UserControl
             // с закрытым наглухо, а лечится он совсем иначе — не рецептом,
             // а выходом в другой стране.
             BlockKind.TlsDpi or BlockKind.Stall or BlockKind.GeoBlock => "Warn",
+
+            // Отказ согласования — не поломка вовсе: сторона сама не даёт
+            // тех версий, что мы пробуем, а браузер умеет больше.
+            BlockKind.Handshake => "Faint",
             _ => "Danger",
         };
 
-        var why = report.Data.Detail ?? report.Tcp.Detail
-            ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
+        // Причину выбирает сам отчёт — по той стадии, что решила вердикт.
+        // Прежде здесь бралась первая непустая, и у имени с убитым
+        // рукопожатием в строке оказывался рассказ про удавшийся TCP.
+        var why = report.Why;
 
         return new CheckRow(
             report.Host,

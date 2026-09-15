@@ -901,8 +901,8 @@ internal static class BlockCheckCommand
         if (!report.Actionable)
             return;
 
-        var why = report.Data.Detail ?? report.Tcp.Detail
-            ?? report.Tls13.Detail ?? report.Tls12.Detail ?? report.Http.Detail;
+        // По той стадии, что решила вердикт, а не первая непустая.
+        var why = report.Why;
 
         if (why is not null)
             Console.WriteLine($"      {Truncate(why, 88)}");
