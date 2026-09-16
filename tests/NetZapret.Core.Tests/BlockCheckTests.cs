@@ -267,6 +267,54 @@ public class BlockCheckTests
             BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok(), throughTunnel: true));
     }
 
+    /// <summary>
+    /// Отказ согласования через туннель — не вина туннеля.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отказ согласования приходит словами: сторона ответила, что нашей
+    /// версии не даёт. Чтобы этот ответ до нас дошёл, туннель должен был
+    /// доставить и запрос, и ответ, — то есть он как раз сработал.
+    /// </para>
+    /// <para>
+    /// Прежде такое переименовывалось в «туннель не доставил» из соображения,
+    /// что закрывшийся выход подписки выглядит так же. Соображение неверно:
+    /// замер 2026-09-16 на четырёх видах поведения собеседника — принял
+    /// и закрыл, подождал и закрыл, оборвал с RST, молчит — даёт IOException
+    /// либо отмену по сроку, но ни разу не отказ согласования.
+    /// </para>
+    /// <para>
+    /// В отчёте противоречие стояло двумя строками подряд: вердикт «туннель
+    /// не доставил» и причина «сторона не согласовала TLS 1.3 — это её
+    /// настройка, не фильтр». speedtest.net и nflxvideo.net числились
+    /// мёртвыми, работая.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void A_version_refusal_through_the_tunnel_is_not_the_tunnels_fault()
+    {
+        var refused = new ProbeOutcome { Ok = false, Unsupported = true };
+
+        Assert.Equal(
+            BlockKind.Handshake,
+            BlockCheck.Classify(Ok(), refused, refused, No(), No(), throughTunnel: true));
+    }
+
+    /// <summary>Молчание и обрыв через туннель по-прежнему его вина.</summary>
+    [Theory]
+    [InlineData(BlockKind.TlsDpi)]
+    [InlineData(BlockKind.Full)]
+    [InlineData(BlockKind.HttpsPort)]
+    [InlineData(BlockKind.Stall)]
+    public void Silence_through_the_tunnel_still_blames_it(BlockKind kind)
+    {
+        var (tcp, tls12, tls13, http, data) = Outcomes(kind);
+
+        Assert.Equal(
+            BlockKind.TunnelFailed,
+            BlockCheck.Classify(tcp, tls12, tls13, http, data, throughTunnel: true));
+    }
+
     /// <summary>Совет по нему — про сервер, а не про рецепт.</summary>
     [Fact]
     public void A_tunnel_failure_points_at_the_server()

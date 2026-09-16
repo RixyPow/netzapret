@@ -146,16 +146,32 @@ public class BlockCheckReasonTests
     }
 
     /// <summary>
-    /// Через туннель отказ согласования — про туннель, а не про сайт.
+    /// Отказ согласования остаётся отказом согласования и через туннель.
     /// </summary>
     /// <remarks>
-    /// Доходит до нас не сайт, а выход подписки, и его отказы выглядят точно
-    /// так же. Без этого nflxvideo.net и speedtest.net, оба заведённые
-    /// в туннель и оба с адресом из fakeip, получали «сторона не даёт наш
-    /// TLS» — то есть совет верить сайту вместо того, чтобы чинить туннель.
+    /// <para>
+    /// Здесь стояло обратное, и это отменено замером. Прежнее рассуждение:
+    /// доходит до нас не сайт, а выход подписки, и его отказы выглядят так же,
+    /// значит через туннель отказ согласования надо звать недоставкой.
+    /// </para>
+    /// <para>
+    /// Замер 2026-09-16 показал, что выход подписки так не выглядит. Четыре
+    /// вида поведения собеседника — принял и закрыл, подождал и закрыл,
+    /// оборвал с RST, молчит — дают IOException либо отмену по сроку.
+    /// Отказом согласования считается AuthenticationException без сокетной
+    /// причины, и ни один из четырёх его не даёт.
+    /// </para>
+    /// <para>
+    /// Обратное верно всегда: отказ согласования — ответ, пришедший словами,
+    /// и чтобы он дошёл, туннель должен был доставить и запрос, и ответ.
+    /// В отчёте противоречие стояло двумя строками подряд — вердикт «туннель
+    /// не доставил» и причина «сторона не согласовала TLS 1.3, это её
+    /// настройка, не фильтр», — и speedtest.net с nflxvideo.net числились
+    /// мёртвыми, работая.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void RefusedVersionThroughTunnelBlamesTheTunnel()
+    public void RefusedVersionThroughTunnelStillBlamesTheSite()
     {
         var unsupported = new ProbeOutcome { Ok = false, Unsupported = true, Detail = "нет 1.2" };
 
@@ -164,7 +180,7 @@ public class BlockCheckReasonTests
             BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope()));
 
         Assert.Equal(
-            BlockKind.TunnelFailed,
+            BlockKind.Handshake,
             BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope(), throughTunnel: true));
     }
 
