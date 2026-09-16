@@ -276,6 +276,10 @@ public partial class DesyncView : UserControl
                 : "Применяется при запуске движков в разделе «Состояние».";
 
         OffButton.IsEnabled = settings.PresetName is not null;
+
+        // Открывать нечего, пока пресет не выбран: карточка в этом состоянии
+        // описывает отсутствие выбора, а не файл.
+        EditButton.IsEnabled = settings.PresetName is not null;
     }
 
     /// <summary>
@@ -425,6 +429,78 @@ public partial class DesyncView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось открыть папку: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Открывает выбранный пресет в редакторе по умолчанию.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пресет правится руками: в нём порядок секций, от которого зависит,
+    /// до какой дойдёт очередь, и рецепты, подобранные замерами. Путь
+    /// «открыть папку → найти нужный файл среди дюжины» проходился каждый раз
+    /// заново, причём имя файла и название пресета внутри него совпадают
+    /// не всегда — промахнуться было легко.
+    /// </para>
+    /// <para>
+    /// Файл ищется тем же <see cref="ZapretPaths.FindPreset"/>, которым его
+    /// находит запуск движков. Иначе открылся бы один файл, а применялся
+    /// другой — и правка «не действовала» бы без всякого объяснения.
+    /// </para>
+    /// </remarks>
+    private void OnOpenPreset(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var name = AppSettings.Load(AppSettings.DefaultPath).PresetName;
+
+            if (name is null)
+            {
+                Status.Text = "Пресет не выбран — открывать нечего.";
+                return;
+            }
+
+            var path = ZapretPaths.FindPreset(name);
+
+            if (path is null || !File.Exists(path))
+            {
+                Status.Text = $"Файл пресета «{name}» не найден в {ZapretPaths.PresetDirectory}.";
+                return;
+            }
+
+            Open(path);
+
+            // Про перезапуск сказано прямо: winws2 читает пресет один раз
+            // при старте, и правка в открытом файле сама по себе не меняет
+            // ничего. Без этой строки исправленная секция выглядит нерабочей.
+            Status.Text = $"Открыт {Path.GetFileName(path)}. "
+                + "Правка подействует после перезапуска движков в разделе «Состояние».";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть пресет: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Отдаёт файл системе, а при отказе — «Блокноту».
+    /// </summary>
+    /// <remarks>
+    /// Через оболочку, чтобы открылся редактор, которым человек правит текст,
+    /// а не навязанный нами. Но у .txt может не быть сопоставленной программы
+    /// вовсе — тогда оболочка отвечает отказом, и «Блокнот» здесь лучше
+    /// сообщения об ошибке: он есть в любой Windows.
+    /// </remarks>
+    private static void Open(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            Process.Start(new ProcessStartInfo { FileName = "notepad.exe", Arguments = $"\"{path}\"" });
         }
     }
 

@@ -130,8 +130,21 @@
                                        Margin="0,5,0,0" TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <Button Grid.Column="1" x:Name="OffButton" Style="{StaticResource Ghost}"
-                                Content="Не запускать десинк" Click="OnOff" VerticalAlignment="Center" />
+                        <!--
+                            Обе кнопки про выбранный пресет, поэтому стоят
+                            в его карточке, а не в шапке раздела: «Открыть
+                            папку» наверху — про папку целиком, и класть
+                            рядом с ней действие над одним файлом значило бы
+                            путать «где лежат» с «какой сейчас».
+                        -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="EditButton" Style="{StaticResource Ghost}"
+                                    Content="Открыть в редакторе" Click="OnOpenPreset"
+                                    Margin="0,0,10,0" />
+
+                            <Button x:Name="OffButton" Style="{StaticResource Ghost}"
+                                    Content="Не запускать десинк" Click="OnOff" />
+                        </StackPanel>
                     </Grid>
                 </Border>
 
