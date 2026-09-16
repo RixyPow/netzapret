@@ -31,7 +31,20 @@ public sealed record CheckRow(
 
     /// <summary>Чем имя выведено из-под десинка; пусто — ничем.</summary>
     string Bypass,
-    Visibility BypassShown);
+    Visibility BypassShown,
+
+    /// <summary>
+    /// Есть ли по этой строке что делать.
+    /// </summary>
+    /// <remarks>
+    /// Берётся у самого отчёта, а не выводится из текста вердикта. Прежде
+    /// итог отбирал строки сравнением со словами «доступен» и «нет адреса
+    /// у имени», и стоило появиться третьему виду, по которому лечить нечего,
+    /// как он попал в раздел «что с этим делать». Так «сторона не даёт наш
+    /// TLS» и оказалось среди дел: браузер умеет больше версий, чем наша
+    /// проба, и человеку там делать нечего.
+    /// </remarks>
+    bool Actionable);
 
 /// <summary>Раздел итога под таблицей.</summary>
 public sealed record SectionRow(string Title, string Body, Brush Color);
@@ -778,7 +791,8 @@ public partial class CheckView : UserControl
             why ?? string.Empty,
             report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
             note,
-            note.Length == 0 ? Visibility.Collapsed : Visibility.Visible);
+            note.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
+            report.Actionable);
     }
 
     /// <summary>Строка с пометкой про путь и про десинк — для сохраняемого отчёта.</summary>
@@ -801,8 +815,13 @@ public partial class CheckView : UserControl
     {
         var sections = new List<SectionRow>();
 
+        // По признаку, а не по тексту вердикта. Сверка со словами держалась,
+        // пока видов «лечить нечего» было два — «доступен» и «нет адреса
+        // у имени»; третий, «сторона не даёт наш TLS», в список слов никто
+        // не дописал, и он попал в раздел «что с этим делать», где делать
+        // нечего: браузер умеет больше версий, чем наша проба.
         var byKind = Collected
-            .Where(r => r.Verdict != "доступен" && r.Verdict != "нет адреса у имени")
+            .Where(r => r.Actionable)
             .GroupBy(r => r.Verdict)
             .OrderByDescending(g => g.Count())
             .ToList();
