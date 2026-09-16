@@ -27,7 +27,11 @@ public sealed record CheckRow(
     string Verdict,
     Brush Color,
     string Why,
-    Visibility WhyShown);
+    Visibility WhyShown,
+
+    /// <summary>Чем имя выведено из-под десинка; пусто — ничем.</summary>
+    string Bypass,
+    Visibility BypassShown);
 
 /// <summary>Раздел итога под таблицей.</summary>
 public sealed record SectionRow(string Title, string Body, Brush Color);
@@ -405,8 +409,12 @@ public partial class CheckView : UserControl
                 + "а само имя стоит в списке, чтобы покрыть зону целиком.");
         }
 
+        // Имена без объяснения, но выведенные из-под десинка, тоже сюда:
+        // отчёт читают через неделю, и файл, умалчивающий про исключение,
+        // вводит в заблуждение ровно так же, как вводило окно.
         var explained = Collected
-            .Where(r => r.WhyShown == Visibility.Visible && !string.IsNullOrWhiteSpace(r.Why))
+            .Where(r => (r.WhyShown == Visibility.Visible && !string.IsNullOrWhiteSpace(r.Why))
+                || !string.IsNullOrWhiteSpace(r.Bypass))
             .ToList();
 
         if (explained.Count > 0)
@@ -416,7 +424,17 @@ public partial class CheckView : UserControl
             text.AppendLine(new string('-', 78));
 
             foreach (var row in explained)
-                text.AppendLine($"{row.Host}: {row.Why}");
+            {
+                // Пометка идёт первой: она отменяет совет, а не дополняет его.
+                var line = (row.Bypass, row.Why) switch
+                {
+                    ("", var w) => w,
+                    (var b, "") => b,
+                    var (b, w) => $"{b}; {w}",
+                };
+
+                text.AppendLine($"{row.Host}: {line}");
+            }
         }
 
         if (_sections.Count > 0)
@@ -627,6 +645,16 @@ public partial class CheckView : UserControl
     {
         using var slots = new SemaphoreSlim(Parallelism);
 
+        // Имена, выведенные из-под десинка. Считается раз на прогон, а не
+        // на строку: вызов читает hosts с диска и проходит весь набор правил.
+        //
+        // Тем же вызовом, каким они пишутся движку в runtime\desync-exclude.txt
+        // при запуске. Посчитай мы здесь по-своему, окно объясняло бы замер
+        // не тем, что winws2 на самом деле получил.
+        IReadOnlyList<(string Name, DesyncBypass Why)> bypassed = engine is null
+            ? []
+            : HostsFile.DescribeDesyncExclusions(engine.RuleSet);
+
         var running = targets.Select(async target =>
         {
             await slots.WaitAsync(cancellationToken);
@@ -658,7 +686,7 @@ public partial class CheckView : UserControl
                         return;
                     }
 
-                    Collected.Add(Row(report, tunnelled));
+                    Collected.Add(Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host)));
                     Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
             }
@@ -688,7 +716,7 @@ public partial class CheckView : UserControl
             Hostname = host,
         }).Mode == RoutingMode.Proxy;
 
-    private CheckRow Row(TargetReport report, bool tunnelled)
+    private CheckRow Row(TargetReport report, bool tunnelled, DesyncBypass bypass)
     {
         var key = report.Kind switch
         {
@@ -712,6 +740,18 @@ public partial class CheckView : UserControl
         // рукопожатием в строке оказывался рассказ про удавшийся TCP.
         var why = report.Why;
 
+        // Имя, выведенное из-под десинка, проваливается и получает вердикт
+        // «DPI по TLS» с советом «десинк» — которого к нему по нашему же
+        // решению не применяют: список уходит в --hostlist-exclude, и winws2
+        // отбрасывает имя раньше, чем начнёт разбирать секции. Со стороны
+        // это неотличимо от неудачного рецепта, и вечер уходил на правку
+        // секции, до которой дело не доходит. Теперь строка говорит об этом
+        // сама.
+        //
+        // Только у провалившихся, как и в консоли: у «доступен» объяснять
+        // нечего, а пометка на всех пятидесяти строках стала бы шумом.
+        var note = report.Actionable ? HostsFile.DescribeBypass(bypass) : string.Empty;
+
         return new CheckRow(
             report.Host,
             tunnelled ? "чз" : string.Empty,
@@ -724,7 +764,9 @@ public partial class CheckView : UserControl
             report.Describe(),
             (Brush)FindResource(key),
             why ?? string.Empty,
-            report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed);
+            report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
+            note,
+            note.Length == 0 ? Visibility.Collapsed : Visibility.Visible);
     }
 
     /// <summary>

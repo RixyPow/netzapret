@@ -142,6 +142,18 @@
                                     <TextBlock Text="{Binding Why}" Style="{StaticResource Caption}"
                                                Margin="0,6,0,0" TextWrapping="Wrap"
                                                Visibility="{Binding WhyShown}" />
+
+                                    <!--
+                                        Отдельной строкой и цветом предупреждения:
+                                        она не объясняет замер, а отменяет совет
+                                        из колонки вердикта. Слитая с «почему»,
+                                        она читалась бы как ещё одна подробность
+                                        и пропускалась бы ровно теми, кому нужна.
+                                    -->
+                                    <TextBlock Text="{Binding Bypass}" Style="{StaticResource Caption}"
+                                               Foreground="{DynamicResource Warn}"
+                                               Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Visibility="{Binding BypassShown}" />
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

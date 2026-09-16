@@ -209,6 +209,19 @@ internal static class BlockCheckCommand
         // а не задним числом в итоге.
         var pinned = FindPinned(targets.Select(t => t.Host));
 
+        // Имена, выведенные из-под десинка. Считается тем же вызовом, который
+        // при запуске движков пишет runtime\desync-exclude.txt, и по тем же
+        // правилам — по развёрнутому набору, где списки уже загружены
+        // (CollectTargets зовёт RuleSetExpander). Считай мы иначе, отчёт
+        // рассказывал бы про исключения, которых движку не отдавали.
+        //
+        // Оговорка, которую отчёт не проверяет: файл пишется при запуске
+        // движков, и правило, изменённое после него, попадёт в эту пометку
+        // раньше, чем в работающий winws2.
+        IReadOnlyList<(string Name, DesyncBypass Why)> bypassed = engine is null
+            ? []
+            : HostsFile.DescribeDesyncExclusions(engine.RuleSet);
+
         var reports = await RunProbesAsync(
             targets,
             engine,
@@ -219,6 +232,7 @@ internal static class BlockCheckCommand
             enginesRunning && settings.NeedsProxy,
             pinned,
             LoadPreset(settings, zapretRoot),
+            bypassed,
             stop.Token);
 
         // Сторож снимается здесь, а не в конце метода. Он читает клавиши
@@ -375,6 +389,7 @@ internal static class BlockCheckCommand
         bool tunnelInUse,
         IReadOnlyDictionary<string, string> pinned,
         (ZapretPreset Preset, string? Root)? preset,
+        IReadOnlyList<(string Name, DesyncBypass Why)> bypassed,
         CancellationToken cancellationToken)
     {
         using var slots = new SemaphoreSlim(Parallelism);
@@ -406,7 +421,13 @@ internal static class BlockCheckCommand
                 lock (console)
                 {
                     reports.Add(report);
-                    PrintRow(report, tunnelled, pinned.ContainsKey(target.Host), preset);
+
+                    PrintRow(
+                        report,
+                        tunnelled,
+                        pinned.ContainsKey(target.Host),
+                        preset,
+                        HostsFile.BypassFor(bypassed, target.Host));
                 }
             }
             finally
@@ -876,11 +897,16 @@ internal static class BlockCheckCommand
     /// <param name="preset">
     /// Действующий пресет; по нему вычисляется, какая секция взяла бы это имя.
     /// </param>
+    /// <param name="bypass">
+    /// Чем имя выведено из-под десинка, если выведено. Отменяет строку про
+    /// секцию: до секций дело не доходит.
+    /// </param>
     private static void PrintRow(
         TargetReport report,
         bool throughTunnel,
         bool pinned,
-        (ZapretPreset Preset, string? Root)? preset)
+        (ZapretPreset Preset, string? Root)? preset,
+        DesyncBypass bypass)
     {
         var previous = Console.ForegroundColor;
 
@@ -906,6 +932,25 @@ internal static class BlockCheckCommand
 
         if (why is not null)
             Console.WriteLine($"      {Truncate(why, 88)}");
+
+        // Выведенное из-под десинка называется вместо секции, а не рядом с ней.
+        // Секция для такого имени вычисляется и ничего не значит: список
+        // исключений уходит в --hostlist-exclude, и winws2 отбрасывает имя
+        // до того, как начнёт разбирать профили. Строка «секция #7 …» рядом
+        // с провалившимся замером звала чинить секцию, которая к делу
+        // не относится, и звала дважды — оба раза с потерей вечера.
+        //
+        // Только у провалившихся: выше стоит выход по !Actionable, и открытые
+        // имена сюда не доходят. Так и задумано — пометка объясняет неудачу,
+        // а у «доступен» объяснять нечего.
+        if (bypass != DesyncBypass.None)
+        {
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+            Console.WriteLine($"      {HostsFile.DescribeBypass(bypass)} — секция пресета не применяется");
+            Console.ForegroundColor = previous;
+
+            return;
+        }
 
         // Какая секция пресета взяла бы это имя. Без этого правка пресета —
         // угадывание: чинят секцию, до которой исполнение не доходит, потому

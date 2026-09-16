@@ -156,4 +156,88 @@ public sealed class DesyncExclusionTests : IDisposable
 
         Assert.Empty(HostsFile.CollectDesyncExclusions(engine.RuleSet, _hosts));
     }
+
+    /// <summary>
+    /// Источник у каждого имени свой, и отчёт его называет.
+    /// </summary>
+    /// <remarks>
+    /// Лечатся они по-разному: пин снимается в разделе «Файл hosts»,
+    /// «напрямую» — переключателем в маршрутах. Совет «уберите исключение»
+    /// без указания, какое именно, отправляет искать не туда.
+    /// </remarks>
+    [Fact]
+    public void ReasonTellsPinFromDirect()
+    {
+        Write("72.56.93.144 canva.com");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.discord.media"
+                mode: direct
+            """);
+
+        var found = HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts);
+
+        Assert.Equal(
+            [("canva.com", DesyncBypass.Pin), ("discord.media", DesyncBypass.Direct)],
+            found);
+    }
+
+    /// <summary>
+    /// Имя, и прибитое, и поставленное на «напрямую», числится за пином.
+    /// </summary>
+    /// <remarks>
+    /// Так честнее: пин бьёт резолв независимо от режима, и снимать надо
+    /// сперва его. Порядок тот же, в каком имена собираются, — hosts читается
+    /// первым.
+    /// </remarks>
+    [Fact]
+    public void PinWinsWhenBothApply()
+    {
+        Write("72.56.93.144 canva.com");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.canva.com"
+                mode: direct
+            """);
+
+        Assert.Equal([("canva.com", DesyncBypass.Pin)], HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts));
+    }
+
+    /// <summary>
+    /// Поддомен исключённой зоны тоже выведен из-под десинка.
+    /// </summary>
+    /// <remarks>
+    /// Список уезжает движку файлом, а файловый список winws2 раскрывает
+    /// до поддоменов сам — «subdomains auto apply» в его справке. Дословное
+    /// сравнение сказало бы про <c>api.canva.com</c>, что десинк к нему
+    /// применяется, тогда как движок не трогает и его.
+    /// </remarks>
+    [Fact]
+    public void BypassCoversSubdomains()
+    {
+        Write(string.Empty);
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.canva.com"
+                mode: direct
+            """);
+
+        var found = HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts);
+
+        Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(found, "api.canva.com"));
+        Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(found, "canva.com"));
+
+        // Чужая зона, начинающаяся теми же буквами, — не поддомен.
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, "notcanva.com"));
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, "youtube.com"));
+    }
 }

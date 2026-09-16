@@ -3,6 +3,25 @@ using System.Net.Sockets;
 
 namespace NetZapret.Proxy;
 
+/// <summary>Чем имя выведено из-под десинка.</summary>
+/// <remarks>
+/// Причины две, и различать их приходится ради отчёта: лечатся они по-разному.
+/// Пин снимается в разделе «Файл hosts», «напрямую» — переключателем
+/// в маршрутах, и совет «уберите исключение» без указания, какое именно,
+/// отправляет искать не туда.
+/// </remarks>
+public enum DesyncBypass
+{
+    /// <summary>Ничем: десинк к имени применяется.</summary>
+    None,
+
+    /// <summary>Прибито в hosts своим адресом.</summary>
+    Pin,
+
+    /// <summary>Поставлено на «напрямую».</summary>
+    Direct,
+}
+
 /// <summary>
 /// Читает системный файл hosts.
 /// </summary>
@@ -242,15 +261,38 @@ public static class HostsFile
     /// </remarks>
     public static IReadOnlyList<string> CollectDesyncExclusions(
         Core.Rules.RuleSet ruleSet,
+        string? hostsPath = null) =>
+        DescribeDesyncExclusions(ruleSet, hostsPath).Select(each => each.Name).ToList();
+
+    /// <summary>
+    /// То же самое, но с причиной у каждого имени.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Движку причина не нужна — ему уходит плоский список, — а отчёту нужна.
+    /// Проверка блокировок про исключение молчала вовсе: имя, выведенное
+    /// из-под десинка, проваливалось и получало вердикт «DPI по TLS» с советом
+    /// «десинк», которого к нему по нашему же решению не применяют. Со стороны
+    /// это неотличимо от неудачного рецепта, и вечер уходил на правку секции,
+    /// до которой дело не доходит.
+    /// </para>
+    /// <para>
+    /// Порядок перебора тот же, что и был, и он значим: пин читается первым,
+    /// поэтому имя, и прибитое в hosts, и поставленное на «напрямую», числится
+    /// за пином. Так честнее — пин бьёт резолв независимо от режима.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<(string Name, DesyncBypass Why)> DescribeDesyncExclusions(
+        Core.Rules.RuleSet ruleSet,
         string? hostsPath = null)
     {
-        var found = new List<string>();
+        var found = new List<(string Name, DesyncBypass Why)>();
         var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
 
-        void Add(string name)
+        void Add(string name, DesyncBypass why)
         {
-            if (!found.Contains(name, StringComparer.OrdinalIgnoreCase))
-                found.Add(name);
+            if (!found.Any(each => string.Equals(each.Name, name, StringComparison.OrdinalIgnoreCase)))
+                found.Add((name, why));
         }
 
         foreach (var (name, addresses) in Read(hostsPath))
@@ -261,7 +303,7 @@ public static class HostsFile
             if (FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
                 continue;
 
-            Add(name);
+            Add(name, DesyncBypass.Pin);
         }
 
         // Имена правил «напрямую» — но только те, которым это правило
@@ -279,12 +321,53 @@ public static class HostsFile
             foreach (var domain in domains)
             {
                 if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Direct)
-                    Add(domain);
+                    Add(domain, DesyncBypass.Direct);
             }
         }
 
         return found;
     }
+
+    /// <summary>
+    /// Чем выведено из-под десинка это имя; <see cref="DesyncBypass.None"/> — ничем.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение по зоне, а не дословное. Список уезжает движку файлом,
+    /// а файловый список winws2 раскрывает до поддоменов сам — в его справке
+    /// у <c>--hostlist=</c> так и написано, «subdomains auto apply». Дословное
+    /// сравнение сказало бы про <c>api.openai.com</c>, что десинк к нему
+    /// применяется, тогда как движок не трогает и его — из-за записи
+    /// <c>openai.com</c> строкой выше.
+    /// </remarks>
+    public static DesyncBypass BypassFor(
+        IReadOnlyList<(string Name, DesyncBypass Why)> exclusions,
+        string host)
+    {
+        foreach (var (name, why) in exclusions)
+        {
+            var zone = name.TrimStart('*', '.');
+
+            if (string.Equals(zone, host, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase))
+            {
+                return why;
+            }
+        }
+
+        return DesyncBypass.None;
+    }
+
+    /// <summary>Пометка для отчёта; пусто — имя десинку доступно.</summary>
+    /// <remarks>
+    /// Слова одни на консоль и на окно. Разойдись они — два вида одного и того
+    /// же замера объясняли бы его по-разному, и сверять их пришлось бы вручную.
+    /// </remarks>
+    public static string DescribeBypass(DesyncBypass bypass) => bypass switch
+    {
+        DesyncBypass.Pin => "мимо десинка: пин в hosts",
+        DesyncBypass.Direct => "мимо десинка: «напрямую»",
+        _ => string.Empty,
+    };
 
     /// <summary>
     /// Режим первого правила, покрывающего имя; <c>null</c> — ни одного.
