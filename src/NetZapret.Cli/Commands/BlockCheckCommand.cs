@@ -306,6 +306,11 @@ internal static class BlockCheckCommand
         PrintEngineComplaints(reports);
         PrintTunnelReach(reach);
 
+        // Тот же вопрос, но о действующей настройке, а не о выбранном сервере.
+        // Молча пропускается, когда служебного входа нет: поднимать его
+        // перезапуском ради замера нельзя — движки несут весь трафик машины.
+        PrintLiveTunnel(await ThroughLiveTunnelAsync(reports, stop.Token));
+
         PrintDeadlocks(Deadlocks(reports, engine, setup, reach).Where(d => !pinned.ContainsKey(d.Host)).ToList());
         PrintAdvice(suggestions, partial: stop.IsCancellationRequested);
 
@@ -701,6 +706,87 @@ internal static class BlockCheckCommand
         Console.WriteLine("  и десинк его не портил. Выход назван тот, через который шло на самом");
         Console.WriteLine("  деле: он может отличаться от указанного в шапке, если выбор сменился");
         Console.WriteLine("  посреди прогона. Журнал: " + EngineLog.DefaultPath);
+
+        Console.ForegroundColor = previous;
+    }
+
+    /// <summary>
+    /// Меряет недоставленные имена через сам боевой туннель, по стадиям.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отличается от <see cref="TunnelReach"/> тем, чей туннель измеряется.
+    /// Тот поднимает свой sing-box с одним выбранным сервером и отвечает
+    /// на вопрос «довёз бы этот сервер». Здесь — действующая настройка
+    /// целиком, со всеми её правилами и тем выходом, который выбран сейчас.
+    /// </para>
+    /// <para>
+    /// Разница видна ровно там, где она и нужна: сервер имя довозит, а живой
+    /// туннель — нет. Значит дело не в сервере, а в том, как собран конфиг.
+    /// Прежде эти два случая были неразличимы.
+    /// </para>
+    /// <para>
+    /// Только когда служебный вход уже поднят. Перезапускать ради замера
+    /// работающие движки нельзя: они несут весь трафик машины, а ответ,
+    /// ради которого это делалось бы, <see cref="TunnelReach"/> уже даёт —
+    /// своим движком, на своём порту и никого не роняя.
+    /// </para>
+    /// </remarks>
+    private static async Task<IReadOnlyList<TargetReport>> ThroughLiveTunnelAsync(
+        IReadOnlyList<TargetReport> reports,
+        CancellationToken cancellationToken)
+    {
+        var lost = reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        if (lost.Count == 0)
+            return [];
+
+        if (!await TunnelProbe.IsUpAsync(SingBoxOptions.DefaultHealthPort, cancellationToken))
+            return [];
+
+        var measured = new List<TargetReport>();
+
+        foreach (var host in lost)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            measured.Add(await BlockCheck.ProbeThroughTunnelAsync(
+                host, null, SingBoxOptions.DefaultHealthPort, cancellationToken));
+        }
+
+        return measured;
+    }
+
+    private static void PrintLiveTunnel(IReadOnlyList<TargetReport> measured)
+    {
+        if (measured.Count == 0)
+            return;
+
+        var previous = Console.ForegroundColor;
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine();
+        Console.WriteLine("Те же имена, пущенные в действующий туннель нарочно");
+
+        foreach (var report in measured)
+        {
+            Console.WriteLine(
+                $"  {Truncate(report.Host, 28),-28} " +
+                $"{report.Tcp.Describe(),-5} {report.Tls12.Describe(),-5} " +
+                $"{report.Tls13.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
+        }
+
+        Console.ForegroundColor = ConsoleColor.DarkGray;
+        Console.WriteLine();
+        Console.WriteLine("  Здесь имя уехало движку именем, через служебный вход на петле,");
+        Console.WriteLine("  и правила по доменам сработали так же, как для настоящей программы.");
+        Console.WriteLine("  Открылось тут, но не открылось выше — значит дело не в сервере,");
+        Console.WriteLine("  а в том, как собран конфиг: адрес, fakeip либо порядок правил.");
 
         Console.ForegroundColor = previous;
     }

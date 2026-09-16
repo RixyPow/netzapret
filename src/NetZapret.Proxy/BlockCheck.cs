@@ -581,6 +581,95 @@ public static class BlockCheck
             ? alone
             : crowded;
 
+    /// <summary>
+    /// Меряет имя нарочно через туннель, чем бы его ни вели правила.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отвечает на вопрос, которого прямая проба не задаёт: «поможет ли этому
+    /// имени VPN». Прежде он решался догадкой — лесенка в советах предлагала
+    /// ступень по виду блокировки, — а теперь его можно померить.
+    /// </para>
+    /// <para>
+    /// Стадии те же и тем же кодом: разойдись прямой и туннельный замеры
+    /// реализацией, сравнивать их было бы нельзя. Разница ровно одна —
+    /// соединение открывает служебный вход, и потому <see cref="TargetReport
+    /// .Tunnelled"/> здесь не вычисляется, а known: мы сами туда и отправили.
+    /// </para>
+    /// <para>
+    /// Адресов в отчёте нет намеренно. Имя разрешает сам движок на своей
+    /// стороне, и назвать адрес мы не можем — а выдумать его значило бы
+    /// показать не тот, по которому шёл замер.
+    /// </para>
+    /// </remarks>
+    /// <param name="port">Порт служебного входа <c>health-in</c>.</param>
+    public static async Task<TargetReport> ProbeThroughTunnelAsync(
+        string host,
+        string? service,
+        int port,
+        CancellationToken cancellationToken)
+    {
+        var tcp = await TunnelTcpAsync(host, port, cancellationToken);
+
+        var tls12 = tcp.Ok
+            ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, through: port)
+            : Failed(null);
+
+        var tls13 = tcp.Ok
+            ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, through: port)
+            : Failed(null);
+
+        var data = tls12.Ok || tls13.Ok
+            ? await TransferAsync(host, cancellationToken, through: port)
+            : Failed(null);
+
+        return new TargetReport
+        {
+            Host = host,
+            Service = service,
+            Tcp = tcp,
+            Tls12 = tls12,
+            Tls13 = tls13,
+
+            // Восьмидесятый через туннель не спрашиваем: он различает закрытый
+            // маршрут и вмешательство в рукопожатие, а внутри туннеля ни то,
+            // ни другое от нашего оператора не зависит.
+            Http = Failed(null),
+            Data = data,
+            Kind = Classify(tcp, tls12, tls13, Failed(null), data, throughTunnel: true),
+            Tunnelled = true,
+            ExpectedTunnel = true,
+        };
+    }
+
+    /// <summary>Открылось ли соединение до хоста через служебный вход.</summary>
+    private static async Task<ProbeOutcome> TunnelTcpAsync(
+        string host,
+        int port,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        try
+        {
+            using var client = await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken);
+
+            return new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed };
+        }
+        catch (Exception ex)
+        {
+            return new ProbeOutcome
+            {
+                Ok = false,
+                Reset = IsReset(ex),
+                Elapsed = stopwatch.Elapsed,
+                Detail = ex is IOException
+                    ? ex.Message
+                    : "служебный вход не отозвался — движки запущены без него",
+            };
+        }
+    }
+
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
@@ -1036,22 +1125,35 @@ public static class BlockCheck
     /// в закрытый адрес того же имени и врёт про рукопожатие то, что на деле
     /// про маршрут.
     /// </param>
+    /// <param name="through">
+    /// Порт служебного входа: соединяться нарочно через туннель, а не по
+    /// адресу. Тогда имя уезжает движку именем, и правила по доменам
+    /// срабатывают так же, как для настоящего приложения.
+    /// </param>
     private static async Task<ProbeOutcome> TlsAsync(
         string host,
         SslProtocols protocol,
         CancellationToken cancellationToken,
         IReadOnlyList<IPAddress>? dialled = null,
-        IPAddress? via = null)
+        IPAddress? via = null,
+        int? through = null)
     {
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(Timeout);
 
-            if (via is null)
+            using var client = through is { } port
+                ? await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken)
+                : new TcpClient(AddressFamily.InterNetwork);
+
+            if (through is not null)
+            {
+                // Соединение уже открыто входом — дальше сразу рукопожатие.
+            }
+            else if (via is null)
                 await client.ConnectAsync(host, 443, timeout.Token);
             else
                 await client.ConnectAsync(via, 443, timeout.Token);
@@ -1141,22 +1243,34 @@ public static class BlockCheck
         "CA5359:Do not disable certificate validation",
         Justification = "Измеряется проходимость потока, а не доверие. " +
             "Подлинность проверяется отдельно, в CertificateMatchesAsync.")]
+    /// <param name="through">
+    /// Порт служебного входа: качать нарочно через туннель. См.
+    /// <see cref="TunnelProbe"/>.
+    /// </param>
     private static async Task<ProbeOutcome> TransferAsync(
         string host,
         CancellationToken cancellationToken,
         IReadOnlyList<IPAddress>? dialled = null,
-        IPAddress? via = null)
+        IPAddress? via = null,
+        int? through = null)
     {
         var stopwatch = Stopwatch.StartNew();
         int total = 0;
 
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork);
             using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             connect.CancelAfter(Timeout);
 
-            if (via is null)
+            using var client = through is { } port
+                ? await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken)
+                : new TcpClient(AddressFamily.InterNetwork);
+
+            if (through is not null)
+            {
+                // Соединение открыл вход — дальше всё как при прямом замере.
+            }
+            else if (via is null)
                 await client.ConnectAsync(host, 443, connect.Token);
             else
                 await client.ConnectAsync(via, 443, connect.Token);
