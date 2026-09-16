@@ -16,9 +16,14 @@ public class BlockCheckTests
 {
     private static ProbeOutcome Ok() => new() { Ok = true };
 
-    private static ProbeOutcome No() => new() { Ok = false, Detail = "нет ответа за 6 с" };
+    // Started = true: в этих проверках неудачный исход означает «разговор
+    // начался и умер», а не «соединение не поднялось». Различать их стало
+    // нужно после замера 2026-09-16 — часть площадок отшивает четвёртое
+    // подряд соединение с одного адреса, и несостоявшийся замер данных
+    // нельзя выдавать за обрыв у сайта.
+    private static ProbeOutcome No() => new() { Ok = false, Started = true, Detail = "нет ответа за 6 с" };
 
-    private static ProbeOutcome Rst() => new() { Ok = false, Reset = true, Detail = "соединение разорвано" };
+    private static ProbeOutcome Rst() => new() { Ok = false, Reset = true, Started = true, Detail = "соединение разорвано" };
 
     [Fact]
     public void Working_tls_means_open()

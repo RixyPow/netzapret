@@ -18,12 +18,12 @@ public class BlockCheckReasonTests
         new() { Ok = true, Detail = detail, Elapsed = TimeSpan.FromSeconds(0.1) };
 
     private static ProbeOutcome No(string detail, double seconds = 4) =>
-        new() { Ok = false, Detail = detail, Elapsed = TimeSpan.FromSeconds(seconds) };
+        new() { Ok = false, Started = true, Detail = detail, Elapsed = TimeSpan.FromSeconds(seconds) };
 
     private static ProbeOutcome Rst(string detail = "соединение разорвано") =>
-        new() { Ok = false, Reset = true, Detail = detail, Elapsed = TimeSpan.FromSeconds(0.2) };
+        new() { Ok = false, Reset = true, Started = true, Detail = detail, Elapsed = TimeSpan.FromSeconds(0.2) };
 
-    private static ProbeOutcome Nope() => new() { Ok = false };
+    private static ProbeOutcome Nope() => new() { Ok = false, Started = true };
 
     private static TargetReport Report(
         ProbeOutcome tcp,
