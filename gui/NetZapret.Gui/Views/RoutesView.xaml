@@ -83,7 +83,13 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="OwnChevron" Grid.Column="0" Text="►"
+                        <!--
+                            Тот же знак, что у папок сервисов ниже — ▸/▾,
+                            а не ►/▼: разные символы для одного и того же
+                            жеста «свернуть/развернуть» читались бы как два
+                            разных языка на одном экране.
+                        -->
+                        <TextBlock x:Name="OwnChevron" Grid.Column="0" Text="▸" FontSize="15"
                                    Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
                                    VerticalAlignment="Center" />
 
@@ -408,7 +414,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="OrderChevron" Grid.Column="0" Text="►"
+                        <TextBlock x:Name="OrderChevron" Grid.Column="0" Text="▸" FontSize="15"
                                    Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
                                    VerticalAlignment="Center" />
 

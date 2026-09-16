@@ -556,7 +556,7 @@ public partial class RoutesView : UserControl
         var open = OrderPanel.Visibility != Visibility.Visible;
 
         OrderPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        OrderChevron.Text = open ? "▼" : "►";
+        OrderChevron.Text = open ? "▾" : "▸";
     }
 
     /// <summary>
@@ -961,7 +961,7 @@ public partial class RoutesView : UserControl
         var open = OwnPanel.Visibility != Visibility.Visible;
 
         OwnPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        OwnChevron.Text = open ? "▼" : "►";
+        OwnChevron.Text = open ? "▾" : "▸";
 
         // Поле берёт ввод сразу: карточку раскрывают ровно затем, чтобы
         // вписать в неё домен.
