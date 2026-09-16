@@ -247,6 +247,27 @@ for %%D in (exe lists lua bin windivert.filter) do (
         )
     )
 )
+rem ---------------------------------------------------------------------------
+rem Our own lists, delivered where the engine looks for them.
+rem
+rem Preset sections reference hostlists as "lists/<name>" relative to the Zapret
+rem root, and winws2 resolves them there - not next to our config. So a section
+rem pointing at config\lists\proton.txt would load nothing and match nothing.
+rem
+rem Prefixed with nz- so they cannot collide with Zapret's own files. Without
+rem the prefix our discord.txt would quietly replace theirs, and the preset
+rem would start matching a different set of names than its author wrote.
+rem
+rem Needed because --hostlist-domains is a FIXED list: it matches the written
+rem name and nothing under it. Only the file form carries "subdomains auto
+rem apply", so anything that has to cover a zone must ship as a file.
+rem ---------------------------------------------------------------------------
+
+echo Bundling our lists
+for %%F in ("%ROOT%config\lists\*.txt") do (
+    copy /y "%%F" "%ENGINES%\zapret\lists\nz-%%~nxF" >nul
+)
+
 
 rem Presets are ours and come from presets\ in the repository. Nothing is taken
 rem from the Zapret installation any more: it keeps two folders and a hundred

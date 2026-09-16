@@ -654,6 +654,14 @@
 
 --new
 
+# Списки файлами, а не именами в строке. Ключ --hostlist-domains у winws2
+# значится как "comma separated FIXED domain list" - он сопоставляет
+# буквально и поддоменов не покрывает. Только файловый --hostlist несёт
+# "subdomains auto apply", а мессенджеры и почта живут на поддоменах:
+# chat.signal.org, mail.proton.me, web.archive.org.
+#
+# Файлы кладут сюда build.cmd и pack.cmd из config\lists с приставкой nz-,
+# чтобы не столкнуться с одноимёнными файлами самого Zapret.#
 # Пять имён, у которых своей секции не было вовсе. Их ловил только
 # подвальный russia-blacklist ниже — то есть рецепт доставался им
 # последним по очереди и неспециализированный, а Bluesky не покрыт был
@@ -680,7 +688,7 @@
 # не проверенный пока вариант, а не повтор того же.
 --name=Proton
 --filter-tcp=80,443
---hostlist-domains=proton.me,protonmail.com,protonmail.ch,protonvpn.com
+--hostlist=lists/nz-proton.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
@@ -688,7 +696,7 @@
 
 --name=Signal
 --filter-tcp=80,443
---hostlist-domains=signal.org,whispersystems.org
+--hostlist=lists/nz-signal.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
@@ -696,7 +704,7 @@
 
 --name=Viber
 --filter-tcp=80,443
---hostlist-domains=viber.com,vbrpl.io
+--hostlist=lists/nz-viber.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
@@ -704,7 +712,7 @@
 
 --name=archive.org
 --filter-tcp=80,443
---hostlist-domains=archive.org
+--hostlist=lists/nz-archive.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
@@ -715,7 +723,7 @@
 # рецепт, который эту сигнатуру уже брал у них.
 --name=Bluesky
 --filter-tcp=80,443
---hostlist-domains=bsky.app,bsky.social
+--hostlist=lists/nz-bluesky.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 

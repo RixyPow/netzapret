@@ -166,6 +166,17 @@ for %%D in (exe lists lua bin windivert.filter) do (
         if errorlevel 8 exit /b 1
     )
 )
+rem Our own lists, delivered where the engine looks for them. Preset sections
+rem name hostlists as "lists/<name>" relative to the Zapret root, and winws2
+rem resolves them there - not next to our config, so a section pointing at
+rem config\lists\proton.txt would load nothing and match nothing.
+rem
+rem Prefixed with nz- so they cannot collide with Zapret's own files: without
+rem it our discord.txt would quietly replace theirs, and the preset would match
+rem a different set of names than its author wrote.
+for %%F in ("%ROOT%config\lists\*.txt") do (
+    copy /y "%%F" "%ENGINES%\zapret\lists\nz-%%~nxF" >nul
+)
 
 rem Presets are ours and come from presets\ in the repository. Nothing is taken
 rem from the Zapret installation: it keeps two folders and a hundred and fifty
