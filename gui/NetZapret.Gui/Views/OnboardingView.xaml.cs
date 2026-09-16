@@ -3,18 +3,15 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
 using NetZapret.Core;
-using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
-using NetZapret.Core.Services;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
-using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
 
 /// <summary>
-/// Сценарий первого запуска: четыре шага от «что не работает» до результата.
+/// Сценарий первого запуска: три шага от подписки до результата.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,27 +23,28 @@ namespace NetZapret.Gui.Views;
 /// это — называет вслух то, что раньше узнавали методом тыка.
 /// </para>
 /// <para>
+/// Шага «что у вас не работает» здесь больше нет — он был первым в исходном
+/// варианте и просил выбрать сервис из полусотни, ничего не решая: список
+/// такой же длины, как меню слева, от которого мастер и должен избавлять.
+/// Результат меряет сеть в целом, а не одно выбранное имя.
+/// </para>
+/// <para>
 /// Показывается вместо «Главной» ровно один раз, пока в настройках не стоит
 /// <see cref="AppSettings.OnboardingDone"/>. Не окно, а обычный раздел:
 /// отдельное модальное окно нельзя было бы прервать, вернувшись позже
 /// к любому другому разделу, а мастер должен позволять это в любой момент —
-/// он не единственный путь в программу, а первое, что видно.
+/// он не единственный путь в программу, а первое, что видно. Повторно его
+/// можно открыть из «Ещё».
 /// </para>
 /// </remarks>
 public partial class OnboardingView : UserControl
 {
+    private const int LastStep = 3;
+
     /// <summary>Мастер закрыт — завершением или пропуском.</summary>
     public event EventHandler? Completed;
 
     private int _step = 1;
-
-    private ServiceDefinition? _target;
-
-    /// <summary>Имя, на котором проверяется результат; <c>null</c> — проверять нечего.</summary>
-    private string? _probeHost;
-
-    /// <summary>Подпись цели для отчёта проверки.</summary>
-    private string? _probeService;
 
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(1) };
 
@@ -56,12 +54,11 @@ public partial class OnboardingView : UserControl
     {
         InitializeComponent();
 
-        Targets.ItemsSource = ServiceCatalog.All.Select(s => s.Name).ToList();
-        Targets.SelectionChanged += (_, _) => Step1Next.IsEnabled = Targets.SelectedItem is not null;
-
         _poll.Tick += (_, _) => UpdateTrial();
 
         Unloaded += (_, _) => _poll.Stop();
+
+        Show(1);
     }
 
     private void Show(int step)
@@ -71,93 +68,52 @@ public partial class OnboardingView : UserControl
         Step1.Visibility = step == 1 ? Visibility.Visible : Visibility.Collapsed;
         Step2.Visibility = step == 2 ? Visibility.Visible : Visibility.Collapsed;
         Step3.Visibility = step == 3 ? Visibility.Visible : Visibility.Collapsed;
-        Step4.Visibility = step == 4 ? Visibility.Visible : Visibility.Collapsed;
 
-        StepLabel.Text = $"Шаг {step} из 4";
+        StepLabel.Text = $"Шаг {step} из {LastStep}";
 
-        if (step == 3)
+        // Подпись меняется по шагу: на последнем «пропустить» пропускать
+        // уже нечего, и кнопка честно называется «Готово», а не молчит
+        // о том, что делает то же самое другими словами.
+        HeaderSkip.Content = step == LastStep ? "Готово" : "Пропустить";
+
+        if (step == 2)
             PrepareTrial();
 
-        if (step == 4)
+        if (step == 3)
             _ = RunCheckAsync();
     }
 
-    // --- Шаг 1: что не работает -------------------------------------------
-
-    private void OnStep1Next(object sender, RoutedEventArgs e)
-    {
-        if (Targets.SelectedItem is not string name)
-            return;
-
-        _target = ServiceCatalog.All.FirstOrDefault(s => s.Name == name);
-        (_probeHost, _probeService) = ResolveProbe(_target);
-
-        Show(2);
-    }
-
     /// <summary>
-    /// «Не знаю, включите всё» — мастер не настаивает на выборе.
+    /// Пропускает текущий шаг, а не весь мастер.
     /// </summary>
     /// <remarks>
-    /// Список из полусотни сервисов способен отпугнуть не хуже одиннадцати
-    /// разделов, от которых мастер и должен избавлять. Без цели шаг
-    /// результата не проверяет ничего конкретного и говорит об этом прямо.
+    /// Раньше эта кнопка стояла одна на весь мастер и закрывала его целиком
+    /// с любого шага — человек, нажавший её на первом шаге случайно, терял
+    /// пробный запуск и результат, хотя хотел пропустить только подписку.
+    /// Теперь она делает ровно то же, что назвал бы следующий шаг сам —
+    /// на подписке это «десинк без VPN», на пробном запуске — «не запускать
+    /// сейчас», а на последнем шаге пропускать нечего, и кнопка завершает.
     /// </remarks>
-    private void OnSkipTarget(object sender, RoutedEventArgs e)
+    private void OnHeaderSkip(object sender, RoutedEventArgs e)
     {
-        _target = null;
-        _probeHost = null;
-        _probeService = null;
-
-        Show(2);
-    }
-
-    /// <summary>
-    /// Имя, на котором можно измерить результат для выбранного сервиса.
-    /// </summary>
-    /// <remarks>
-    /// Берётся первая часть не по адресу: часть по адресу (Telegram и
-    /// подобные) проверить пробой на имени нечем — фильтр там смотрит
-    /// не на SNI. Внутри части — своё пробное имя, если оно задано
-    /// (голос Discord так и устроен, апекс зоны из блокировки выпадает),
-    /// иначе первое имя из списка части.
-    /// </remarks>
-    private static (string? Host, string? Service) ResolveProbe(ServiceDefinition? target)
-    {
-        if (target is null)
-            return (null, null);
-
-        var zapretRoot = ZapretPaths.Discover()?.Root;
-
-        foreach (var part in target.Parts)
+        switch (_step)
         {
-            if (part.ByAddress)
-                continue;
+            case 1:
+                SkipSubscription();
+                break;
 
-            if (!string.IsNullOrWhiteSpace(part.Probe))
-                return (part.Probe, $"{target.Name} · {part.Name}");
+            case 2:
+                _poll.Stop();
+                Show(3);
+                break;
 
-            IReadOnlyList<string> domains;
-
-            try
-            {
-                domains = HostListReader.Read(part.List, zapretRoot, out _);
-            }
-            catch (Exception)
-            {
-                continue;
-            }
-
-            if (domains.Count > 0)
-                return (domains[0].TrimStart('*', '.'), $"{target.Name} · {part.Name}");
+            default:
+                Finish();
+                break;
         }
-
-        return (null, target.Name);
     }
 
-    // --- Шаг 2: подписка на VPN --------------------------------------------
-
-    private void OnStep2Back(object sender, RoutedEventArgs e) => Show(1);
+    // --- Шаг 1: подписка на VPN --------------------------------------------
 
     /// <summary>
     /// Без подписки режим переключается на «только десинк».
@@ -170,7 +126,7 @@ public partial class OnboardingView : UserControl
     /// как раз работает без всякой подписки. «Только десинк» — тот же
     /// режим, что предлагает раздел «Главная» на этот самый случай.
     /// </remarks>
-    private void OnStep2Skip(object sender, RoutedEventArgs e)
+    private void SkipSubscription()
     {
         try
         {
@@ -187,7 +143,7 @@ public partial class OnboardingView : UserControl
             // Не сохранился — шаг всё равно идёт дальше.
         }
 
-        Show(3);
+        Show(2);
     }
 
     /// <summary>
@@ -198,19 +154,19 @@ public partial class OnboardingView : UserControl
     /// значение нигде не печатается и не остаётся в журнале, а после
     /// использования очищается.
     /// </remarks>
-    private async void OnStep2Next(object sender, RoutedEventArgs e)
+    private async void OnAddSubscription(object sender, RoutedEventArgs e)
     {
         var raw = SubLink.Password.Trim();
 
         if (raw.Length == 0)
         {
-            Step2Status.Text = "Ссылку никто не вставил — нажмите «Пропустить», если подписки нет.";
+            Step1Status.Text = "Ссылку никто не вставил — нажмите «Пропустить», если подписки нет.";
             return;
         }
 
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
         {
-            Step2Status.Text = "Это не похоже на ссылку.";
+            Step1Status.Text = "Это не похоже на ссылку.";
             return;
         }
 
@@ -218,14 +174,14 @@ public partial class OnboardingView : UserControl
 
         if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
         {
-            Step2Status.Text = "Это не похоже на ссылку подписки: нужна http, https "
+            Step1Status.Text = "Это не похоже на ссылку подписки: нужна http, https "
                 + "либо обёртка happ, clash или sn.";
 
             return;
         }
 
-        Step2Next.IsEnabled = false;
-        Step2Status.Text = "Загружаю список серверов…";
+        Step1Next.IsEnabled = false;
+        Step1Status.Text = "Загружаю список серверов…";
 
         try
         {
@@ -243,26 +199,26 @@ public partial class OnboardingView : UserControl
             SubLink.Clear();
 
             int usable = info.Servers.Count(s => s.IsSupportedBySingBox);
-            Step2Status.Text = $"Подписка подключена: серверов {usable}.";
+            Step1Status.Text = $"Подписка подключена: серверов {usable}.";
 
-            Show(3);
+            Show(2);
         }
         catch (Exception ex)
         {
-            Step2Status.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
+            Step1Status.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
         }
         finally
         {
-            Step2Next.IsEnabled = true;
+            Step1Next.IsEnabled = true;
         }
     }
 
-    // --- Шаг 3: пробный запуск ---------------------------------------------
+    // --- Шаг 2: пробный запуск ---------------------------------------------
 
-    private void OnStep3Back(object sender, RoutedEventArgs e)
+    private void OnStep2Back(object sender, RoutedEventArgs e)
     {
         _poll.Stop();
-        Show(2);
+        Show(1);
     }
 
     private void PrepareTrial()
@@ -277,15 +233,14 @@ public partial class OnboardingView : UserControl
         if (settings.NeedsProxy)
             planned.Add("VPN");
 
-        Step3Detail.Text = planned.Count == 0
+        Step2Detail.Text = planned.Count == 0
             ? "Запускать пока нечего: ни пресет, ни подписка не заданы. Можно вернуться шагом назад "
               + "или просто посмотреть результат — там же будет сказано, что чинить."
             : "Поднимутся: " + string.Join(" и ", planned) + ". "
               + "Пара секунд на десинк, до полуминуты на туннель.";
 
-        Step3Start.IsEnabled = planned.Count > 0;
-        Step3Next.IsEnabled = true;
-        Step3Status.Text = string.Empty;
+        Step2Start.IsEnabled = planned.Count > 0;
+        Step2Status.Text = "Ничего ещё не запускалось.";
     }
 
     /// <summary>
@@ -296,17 +251,17 @@ public partial class OnboardingView : UserControl
     /// когда обрывать текущий прямой трафик ради обхода, — дело человека,
     /// даже во время мастера.
     /// </remarks>
-    private async void OnStep3Start(object sender, RoutedEventArgs e)
+    private async void OnStep2Start(object sender, RoutedEventArgs e)
     {
-        Step3Start.IsEnabled = false;
-        Step3Status.Text = "Собираю конфиг…";
+        Step2Start.IsEnabled = false;
+        Step2Status.Text = "Собираю конфиг…";
 
         var outcome = await EngineControl.StartAsync(CancellationToken.None);
 
         if (!outcome.Ok)
         {
-            Step3Status.Text = outcome.Message;
-            Step3Start.IsEnabled = true;
+            Step2Status.Text = outcome.Message;
+            Step2Start.IsEnabled = true;
 
             return;
         }
@@ -324,7 +279,7 @@ public partial class OnboardingView : UserControl
         if (!running)
         {
             var seconds = _startedAt is { } since ? (int)(DateTimeOffset.Now - since).TotalSeconds : 0;
-            Step3Status.Text = $"Поднимается… {seconds} с";
+            Step2Status.Text = $"Поднимается… {seconds} с";
 
             return;
         }
@@ -333,68 +288,44 @@ public partial class OnboardingView : UserControl
 
         bool healthy = state!.Services.All(s => s.Health == ServiceHealth.Healthy);
 
-        Step3Status.Text = healthy
+        Step2Status.Text = healthy
             ? "Движки работают."
             : "Движки запущены, но не все службы в порядке — подробности на «Главной». "
               + "Можно идти дальше: проверка на следующем шаге покажет, помогло ли.";
     }
 
-    private void OnStep3Next(object sender, RoutedEventArgs e)
+    private void OnStep2Next(object sender, RoutedEventArgs e)
     {
         _poll.Stop();
-        Show(4);
+        Show(3);
     }
 
-    // --- Шаг 4: результат ----------------------------------------------------
+    // --- Шаг 3: результат ----------------------------------------------------
 
-    private void OnStep4Back(object sender, RoutedEventArgs e) => Show(3);
+    private void OnStep3Back(object sender, RoutedEventArgs e) => Show(2);
 
-    private void OnStep4Recheck(object sender, RoutedEventArgs e) => _ = RunCheckAsync();
+    private void OnStep3Recheck(object sender, RoutedEventArgs e) => _ = RunCheckAsync();
 
     /// <summary>
-    /// Меряет ровно то же имя, что выбор сервиса на первом шаге.
+    /// Меряет саму сеть, а не одно выбранное имя.
     /// </summary>
     /// <remarks>
-    /// Через тот же <see cref="BlockCheck"/>, что и полная проверка блокировок:
-    /// два разных измерения одного и того же имени, дай они разный ответ,
-    /// подорвали бы доверие к обоим.
+    /// Тот же замер, что открывает полную «Проверку блокировок» в консоли
+    /// и в окне: TLS, HTTP и DoH решают вердикт, ICMP и IPv6 — свойство сети,
+    /// а не след вмешательства, и на него не влияют. Без выбранной на первом
+    /// шаге цели (которого в мастере больше нет) это единственный результат,
+    /// который можно показать, не выдумывая его.
     /// </remarks>
     private async Task RunCheckAsync()
     {
-        if (_probeHost is null)
-        {
-            ResultTitle.Text = _target is null ? "Проверять нечего" : "Эту часть проверить нечем";
-
-            ResultBody.Text = _target is null
-                ? "Вы не выбирали, что не работает. Откройте то, что чинили, и посмотрите глазами — "
-                  + "либо загляните в «Проверка блокировок», там сорок с лишним имён разом."
-                : $"«{_target.Name}» определяется по адресу, а не по имени сайта — измерить пробой "
-                  + "нечем. Устроен так Telegram и похожие: клиент ходит по IP, минуя DNS. "
-                  + "Проверить его можно в «Наблюдении», по тому, идут ли соединения.";
-
-            ResultVerdict.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        ResultTitle.Text = $"Проверяю «{_probeService}»…";
+        ResultTitle.Text = "Проверяю сеть…";
         ResultBody.Text = string.Empty;
         ResultVerdict.Visibility = Visibility.Collapsed;
 
-        RuleEngine? engine = null;
-
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-            engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
-
-            var state = SupervisorState.Load(SupervisorState.DefaultPath);
-            bool tunnelInUse = state is not null && state.IsSupervisorAlive() && settings.NeedsProxy;
-
-            bool tunnelled = tunnelInUse && Proxied(engine, _probeHost);
-
-            var report = await BlockCheck.CheckAsync(_probeHost, _probeService, CancellationToken.None, tunnelled);
-
-            ShowResult(report);
+            var baseline = await BlockCheck.MeasureBaselineAsync(CancellationToken.None);
+            ShowResult(baseline);
         }
         catch (Exception ex)
         {
@@ -403,44 +334,31 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    private static bool Proxied(RuleEngine engine, string host) =>
-        engine.Evaluate(new ConnectionEvent
-        {
-            Timestamp = DateTimeOffset.Now,
-            Protocol = ProtocolKind.Tcp,
-            RemoteAddress = null,
-            RemotePort = 443,
-            Hostname = host,
-        }).Mode == RoutingMode.Proxy;
-
-    private void ShowResult(TargetReport report)
+    private void ShowResult(NetworkBaseline baseline)
     {
-        ResultTitle.Text = report.Kind == BlockKind.None
-            ? $"«{_probeService}» открывается"
-            : $"«{_probeService}» не открывается";
+        bool ok = baseline.Tls && baseline.Http;
 
-        var key = report.Kind switch
+        ResultTitle.Text = ok ? "Сеть отвечает" : "Сеть отвечает не полностью";
+
+        ResultVerdict.Text = string.Join(" · ", new[]
         {
-            BlockKind.None => "Accent",
-            BlockKind.GeoBlock => "Warn",
-            _ => "Danger",
-        };
+            $"TLS {(baseline.Tls ? "доступен" : "недоступен")}",
+            $"HTTP {(baseline.Http ? "доступен" : "недоступен")}",
+            $"DoH {(baseline.Doh ? "доступен" : "недоступен")}",
+        });
 
-        ResultVerdict.Text = report.Describe();
-        ResultVerdict.Foreground = (Brush)FindResource(key);
+        ResultVerdict.Foreground = (Brush)FindResource(ok ? "Accent" : "Danger");
         ResultVerdict.Visibility = Visibility.Visible;
 
-        ResultBody.Text = report.Kind == BlockKind.None
-            ? "Похоже, обход справился. Если что-то другое всё ещё не открывается — "
-              + "«Проверка блокировок» покажет остальное разом."
-            : (report.Why is { Length: > 0 } why ? why + " " : string.Empty)
-              + "Чем лечится: " + report.Remedy()
-              + ". Это настраивается в «Маршрутах» — выбором маршрута для этого сервиса.";
+        ResultBody.Text = ok
+            ? "Обход настроен и сеть под ним отвечает. Что именно теперь открывается — "
+              + "«Проверка блокировок» покажет разом на сорока с лишним именах. Если что-то "
+              + "конкретное всё ещё не работает — «Маршруты» переключают способ для него отдельно."
+            : "TLS или HTTP не отвечают даже так — движки могли не подняться. Загляните "
+              + "на «Главную»: там видно, что именно не запустилось, и можно попробовать снова.";
     }
 
     // --- Завершение -----------------------------------------------------------
-
-    private void OnSkipAll(object sender, RoutedEventArgs e) => Finish();
 
     private void OnFinish(object sender, RoutedEventArgs e) => Finish();
 
@@ -450,7 +368,7 @@ public partial class OnboardingView : UserControl
     /// <remarks>
     /// Ставится и при пропуске, не только при полном прохождении: «пропустить»
     /// тоже решение человека, и показывать мастер второй раз значило бы
-    /// не уважать его.
+    /// не уважать его. Повторно открыть его можно из «Ещё».
     /// </remarks>
     private void Finish()
     {

@@ -50,7 +50,7 @@ public partial class MainWindow : Window
     /// Уходит навсегда, стоит уйти на любой другой раздел и вернуться: клик
     /// по «Главной» снова показывает обычную <see cref="StatusView"/>.
     /// Мастер — это то, что видно один раз при входе, а не отдельный
-    /// постоянный режим «Главной».
+    /// постоянный режим «Главной». Открыть его заново можно из «Ещё».
     /// </para>
     /// </remarks>
     private void ShowOnboardingIfNeeded()
@@ -66,10 +66,30 @@ public partial class MainWindow : Window
             // и заведёт файл настроек первым сохранением.
         }
 
+        ShowOnboarding();
+    }
+
+    private void ShowOnboarding()
+    {
         var onboarding = new OnboardingView();
         onboarding.Completed += (_, _) => Section.Content = new StatusView();
 
         Section.Content = onboarding;
+    }
+
+    /// <summary>
+    /// Открывает мастер первого запуска заново — по кнопке из «Ещё».
+    /// </summary>
+    /// <remarks>
+    /// Отмечает «Главную» выбранной в меню прежде, чем подменить содержимое
+    /// мастером: без этого пункт меню продолжал бы показывать «Ещё»
+    /// выбранным, хотя видно уже другое, — тот же разнобой, что был бы
+    /// у любого раздела, подменённого в обход <c>OnSection</c>.
+    /// </remarks>
+    public void RestartOnboarding()
+    {
+        RailStatus.IsChecked = true;
+        ShowOnboarding();
     }
 
     /// <summary>

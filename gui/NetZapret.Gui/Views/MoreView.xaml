@@ -45,6 +45,26 @@
                     </Grid>
                 </Border>
 
+                <TextBlock Text="Первый запуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Мастер первого запуска" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Подписка, пробный запуск и проверка сети — три шага, которые показываются один раз при первом открытии. Ничего из настроенного он не сбрасывает." />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource Ghost}"
+                                Content="Повторить" Click="OnRestartOnboarding" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
                 <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
                 <Border Style="{StaticResource Card}">

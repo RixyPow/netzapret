@@ -22,39 +22,18 @@
                 </StackPanel>
 
                 <!--
-                    Пропуск виден с самого первого шага, а не только в конце.
-                    Мастер помогает, а не держит: человек, который уже
-                    настраивал такие программы, должен уйти в любой момент,
-                    не отвечая на четыре вопроса ради этого.
+                    Пропускает шаг, на котором сейчас стоите, а не весь
+                    мастер — подпись меняется на «Готово» на последнем шаге,
+                    где пропускать уже нечего.
                 -->
-                <Button Grid.Column="1" Style="{StaticResource Ghost}"
-                        Content="Пропустить" Click="OnSkipAll" VerticalAlignment="Top" />
+                <Button Grid.Column="1" x:Name="HeaderSkip" Style="{StaticResource Ghost}"
+                        Content="Пропустить" Click="OnHeaderSkip" VerticalAlignment="Top" />
             </Grid>
 
             <StackPanel Grid.Row="1" Margin="0,24,0,0">
 
-                <!-- Шаг 1: что не работает -->
+                <!-- Шаг 1: подписка на VPN -->
                 <StackPanel x:Name="Step1">
-                    <TextBlock Text="Что у вас не открывается?" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Выберите сервис — по нему мастер проверит результат на последнем шаге. Список тот же, что в разделе «Маршруты»." />
-
-                    <ListBox x:Name="Targets" Height="280" Margin="0,16,0,0"
-                             Background="{DynamicResource Surface}"
-                             Foreground="{DynamicResource Text}"
-                             BorderBrush="{DynamicResource Border}"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Не знаю, включить всё"
-                                Margin="0,0,8,0" Click="OnSkipTarget" />
-                        <Button x:Name="Step1Next" Style="{StaticResource Primary}"
-                                Content="Дальше" IsEnabled="False" Click="OnStep1Next" />
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Шаг 2: подписка на VPN -->
-                <StackPanel x:Name="Step2" Visibility="Collapsed">
                     <TextBlock Text="Есть подписка на VPN?" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Своя подписка — та же ссылка, что вставляют в Happ или другой клиент. Программа её не выдаёт: десинк работает и без неё, но открывает не всё — то, что закрывается по стране (например ChatGPT), лечится только через VPN." />
@@ -67,42 +46,37 @@
                     -->
                     <PasswordBox x:Name="SubLink" Padding="10,8" />
 
-                    <TextBlock x:Name="Step2Status" Style="{StaticResource Caption}"
+                    <TextBlock x:Name="Step1Status" Style="{StaticResource Caption}"
                                Margin="4,10,0,0" TextWrapping="Wrap" />
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnStep2Back" />
-                        <Button Style="{StaticResource Ghost}" Content="Пропустить — только десинк"
-                                Margin="0,0,8,0" Click="OnStep2Skip" />
-                        <Button x:Name="Step2Next" Style="{StaticResource Primary}"
-                                Content="Загрузить и продолжить" Click="OnStep2Next" />
+                        <Button x:Name="Step1Next" Style="{StaticResource Primary}"
+                                Content="Загрузить и продолжить" Click="OnAddSubscription" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 3: пробный запуск -->
-                <StackPanel x:Name="Step3" Visibility="Collapsed">
+                <!-- Шаг 2: пробный запуск -->
+                <StackPanel x:Name="Step2" Visibility="Collapsed">
                     <TextBlock Text="Пробный запуск" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock x:Name="Step3Detail" Style="{StaticResource Caption}"
+                    <TextBlock x:Name="Step2Detail" Style="{StaticResource Caption}"
                                Margin="0,8,0,0" TextWrapping="Wrap" />
 
                     <Border Style="{StaticResource Card}" Margin="0,18,0,0">
-                        <TextBlock x:Name="Step3Status" TextWrapping="Wrap"
+                        <TextBlock x:Name="Step2Status" TextWrapping="Wrap"
                                    Text="Ничего ещё не запускалось." />
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                         <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnStep3Back" />
-                        <Button x:Name="Step3Start" Style="{StaticResource Primary}"
-                                Content="Запустить" Margin="0,0,8,0" Click="OnStep3Start" />
-                        <Button x:Name="Step3Next" Style="{StaticResource Ghost}"
-                                Content="Дальше" Click="OnStep3Next" />
+                                Margin="0,0,8,0" Click="OnStep2Back" />
+                        <Button x:Name="Step2Start" Style="{StaticResource Primary}"
+                                Content="Запустить" Margin="0,0,8,0" Click="OnStep2Start" />
+                        <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep2Next" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 4: результат -->
-                <StackPanel x:Name="Step4" Visibility="Collapsed">
+                <!-- Шаг 3: результат -->
+                <StackPanel x:Name="Step3" Visibility="Collapsed">
                     <TextBlock Text="Результат" FontSize="17" FontWeight="SemiBold" />
 
                     <Border Style="{StaticResource Card}" Margin="0,16,0,0">
@@ -119,9 +93,9 @@
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                         <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnStep4Back" />
+                                Margin="0,0,8,0" Click="OnStep3Back" />
                         <Button Style="{StaticResource Ghost}" Content="Проверить ещё раз"
-                                Margin="0,0,8,0" Click="OnStep4Recheck" />
+                                Margin="0,0,8,0" Click="OnStep3Recheck" />
                         <Button Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" />
                     </StackPanel>
                 </StackPanel>
