@@ -69,3 +69,6 @@ docs/rollback-todo.md
 
 # Временные файлы Word, пока документ открыт
 ~$*
+
+# Номер сборки: пишет build.cmd, в поставку не попадает
+build/build-number.txt

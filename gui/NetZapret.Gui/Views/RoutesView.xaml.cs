@@ -346,7 +346,15 @@ public partial class RoutesView : UserControl
                 service.Open = _open.Contains(service.Name);
 
             _all = services;
+
+            // Отбор переживает пересборку. Любое действие внутри строки —
+            // смена маршрута, пин, выбор рецепта — собирает список заново,
+            // и без этого он возвращался целиком: найденное пропадало,
+            // и приходилось дописывать пробел в поле, чтобы отбор случился
+            // ещё раз.
             Services.ItemsSource = InChosenOrder(services);
+            Filter();
+
             ShowOwn();
 
             Status.Text = problems.Count == 0
@@ -867,7 +875,7 @@ public partial class RoutesView : UserControl
 
         // Пересобираем показ, не перечитывая правила: порядок — дело показа,
         // и лезть за ним на диск незачем.
-        OnSearch(Search, null!);
+        Filter();
     }
 
     /// <summary>Раскладывает так, как выбрано кнопкой.</summary>
@@ -896,7 +904,10 @@ public partial class RoutesView : UserControl
         Redraw();
     }
 
-    private void OnSearch(object sender, TextChangedEventArgs e)
+    private void OnSearch(object sender, TextChangedEventArgs e) => Filter();
+
+    /// <summary>Показывает то, что подходит под поиск.</summary>
+    private void Filter()
     {
         var needle = Search.Text.Trim();
 
@@ -1123,6 +1134,43 @@ public partial class RoutesView : UserControl
     /// перезапускаем: движки несут весь трафик машины, и ронять их в ответ
     /// на выбор в списке — не та цена, на которую человек соглашался.
     /// </remarks>
+    /// <summary>
+    /// Список закрыли, ничего не поменяв.
+    /// </summary>
+    /// <remarks>
+    /// Выбрав «десинк» при уже выбранном «десинке», человек хочет одного —
+    /// сменить рецепт. Но список не поднимает события: значение то же,
+    /// менять нечего. Приходилось переключать на «напрямую» и обратно,
+    /// то есть дважды переписывать правило ради окна выбора.
+    ///
+    /// Закрытие списка событие даёт всегда, и по нему видно, что человек
+    /// в него лазил. Если выбран десинк и он же был выбран до этого —
+    /// открываем окно рецептов, больше он там ничего и не мог хотеть.
+    /// </remarks>
+    private void OnRouteClosed(object sender, EventArgs e)
+    {
+        if (_filling || sender is not ComboBox { Tag: string key } box)
+            return;
+
+        if (box.DataContext is not PartRow row)
+            return;
+
+        // Только десинк и только без смены: смену обработает OnRoute,
+        // и она же спросит рецепт по дороге.
+        if (box.SelectedIndex != 1 || row.Applied != 1)
+            return;
+
+        // У правил по адресам рецепт не спрашивается: он применяется по имени
+        // в приветствии TLS, а в таких пакетах имени нет вовсе.
+        if (row.Probe is not { Length: > 0 } example)
+            return;
+
+        var parts = key.Split('|', 2);
+
+        if (parts.Length == 2 && parts[0] == "hostlist")
+            AskLater(key, parts[1], example, MatchKind.HostList, RoutingMode.Desync);
+    }
+
     private void OnRoute(object sender, SelectionChangedEventArgs e)
     {
         if (_filling || sender is not ComboBox { Tag: string key } box)

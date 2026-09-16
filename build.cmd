@@ -158,7 +158,30 @@ robocopy "%WINDOW%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if %errorlevel% geq 8 goto :held
 
 rem ---------------------------------------------------------------------------
-rem Engines, bundled next to the program so build\ runs on its own.
+rem Build number - for the developer, never for a release.
+rem
+rem The version does not change for days while the program is built ten times
+rem an evening: looking at "0.5.8" alone there is no telling a fresh build from
+rem the one left over from yesterday. The window shows this number next to the
+rem version when the file is there.
+rem
+rem It cannot reach a release by construction: pack.cmd builds the archive from
+rem a fresh publish, where this file does not exist. Nothing needs hiding -
+rem it is enough not to create it.
+rem ---------------------------------------------------------------------------
+
+set "COUNTER=%TARGET%\build-number.txt"
+set /a NUMBER=1
+
+if exist "%COUNTER%" (
+    for /f "usebackq delims=" %%N in ("%COUNTER%") do set /a NUMBER=%%N+1
+)
+
+> "%COUNTER%" echo %NUMBER%
+echo Build %NUMBER%
+
+rem ---------------------------------------------------------------------------
+rem Engines, bundled next to the program) so build\ runs on its own.
 rem
 rem Copied at build time rather than committed. Two reasons. The lists are
 rem Zapret's data and change with it - a copy in git would be a stale fork of

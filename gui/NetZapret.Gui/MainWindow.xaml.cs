@@ -218,11 +218,53 @@ public partial class MainWindow : Window
         HideToast();
     }
 
-    private static string Version() =>
-        Assembly.GetExecutingAssembly()
+    private static string Version()
+    {
+        var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
             .InformationalVersion.Split('+')[0]
-        ?? "—";
+            ?? "—";
+
+        return Build() is { } build ? $"{version} ({build})" : version;
+    }
+
+    /// <summary>
+    /// Номер сборки — только у собранного своими руками.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Нужен затем, что версия при разработке не меняется днями, а собирают
+    /// по десять раз за вечер: глядя на «0.5.8», не отличить свежую сборку
+    /// от той, что осталась с прошлого захода. Отсюда и вопросы вроде
+    /// «я пересобрал, а изменилось ли что-нибудь».
+    /// </para>
+    /// <para>
+    /// Файл пишет <c>build.cmd</c> и только он. В поставку номер попасть
+    /// не может по построению: <c>pack.cmd</c> собирает архив из свежей
+    /// публикации, где этого файла нет, — то есть скрывать его отдельно
+    /// не требуется, достаточно не создавать.
+    /// </para>
+    /// </remarks>
+    private static string? Build()
+    {
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "build-number.txt");
+
+            if (!File.Exists(path))
+                return null;
+
+            var number = File.ReadAllText(path).Trim();
+
+            return number.Length is > 0 and < 12 ? number : null;
+        }
+        catch (Exception)
+        {
+            // Номер сборки — удобство разработчика. Его отсутствие
+            // не повод не показать окно.
+            return null;
+        }
+    }
 
     /// <summary>Идентификатор атрибута тёмного оформления рамки.</summary>
     private const int UseImmersiveDarkMode = 20;

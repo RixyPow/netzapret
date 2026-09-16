@@ -131,7 +131,7 @@ public partial class App : Application
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
             // в планировщике только показывала бы значок, а обход ждал бы,
             // пока человек откроет окно и нажмёт кнопку.
-            _ = EngineControl.StartAsync(CancellationToken.None);
+            _ = StartOnLogonAsync();
 
             return;
         }
@@ -140,6 +140,72 @@ public partial class App : Application
         Themes.Apply(Themes.Parse(AppSettings.Load(AppSettings.DefaultPath).Theme));
 
         new MainWindow().Show();
+    }
+
+    /// <summary>
+    /// Поднимает движки при входе в систему.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// С повторами и с записью в журнал, и то и другое по делу. Прежде вызов
+    /// стоял брошенной задачей — <c>_ = StartAsync(...)</c>, — и его исход
+    /// не проверял никто: значок появлялся, движки не поднимались, и узнать
+    /// причину было негде. Окна в этот момент нет, сказать человеку нечем,
+    /// поэтому исход пишется туда же, куда пишет супервизор.
+    /// </para>
+    /// <para>
+    /// Повторы нужны из-за того, когда именно это происходит. Задача срабатывает
+    /// по входу в систему, а сеть к этому моменту поднимается не всегда:
+    /// адаптер ещё договаривается, DNS не отвечает, подписка не читается.
+    /// Через полминуты то же самое обычно проходит. Три попытки с растущим
+    /// ожиданием покрывают этот случай и кончаются меньше чем за две минуты.
+    /// </para>
+    /// </remarks>
+    private static async Task StartOnLogonAsync()
+    {
+        TimeSpan[] waits = [TimeSpan.Zero, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(45)];
+
+        for (int attempt = 0; attempt < waits.Length; attempt++)
+        {
+            if (waits[attempt] > TimeSpan.Zero)
+                await Task.Delay(waits[attempt]);
+
+            try
+            {
+                var outcome = await EngineControl.StartAsync(CancellationToken.None);
+
+                if (outcome.Ok)
+                {
+                    Note($"автозапуск: движки подняты с попытки {attempt + 1}");
+                    return;
+                }
+
+                Note($"автозапуск, попытка {attempt + 1} из {waits.Length}: {outcome.Message}");
+            }
+            catch (Exception ex)
+            {
+                Note($"автозапуск, попытка {attempt + 1} из {waits.Length}: "
+                    + ex.GetBaseException().Message);
+            }
+        }
+
+        Note("автозапуск: движки поднять не удалось. Откройте окно и запустите руками.");
+    }
+
+    /// <summary>Строка в общий журнал: при автозапуске окна нет.</summary>
+    private static void Note(string message)
+    {
+        try
+        {
+            using var log = Supervisor.SharedLogWriter.TryOpen(
+                Path.Combine("runtime", "supervisor.log"));
+
+            log?.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
+        }
+        catch (Exception)
+        {
+            // Потеря строки журнала не должна ронять то, о чём она.
+        }
     }
 
     /// <summary>Выход по-настоящему, а не прятки в трей.</summary>

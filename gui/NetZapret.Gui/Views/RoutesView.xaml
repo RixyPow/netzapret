@@ -277,6 +277,7 @@
                                                         <ComboBox Width="132" SelectedIndex="{Binding Choice}"
                                                                   Tag="{Binding Key}"
                                                                   SelectionChanged="OnRoute"
+                                                                  DropDownClosed="OnRouteClosed"
                                                                   IsEnabled="{Binding CanRoute}">
                                                             <ComboBoxItem Content="напрямую" />
                                                             <ComboBoxItem Content="десинк" />
