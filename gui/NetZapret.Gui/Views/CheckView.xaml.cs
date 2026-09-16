@@ -96,6 +96,17 @@ public partial class CheckView : UserControl
     /// </remarks>
     private static readonly List<string> _markers = [];
 
+    /// <summary>
+    /// Сами отчёты, а не строки таблицы.
+    /// </summary>
+    /// <remarks>
+    /// Строка таблицы несёт вердикт словами, и разбирать её обратно, чтобы
+    /// узнать вид блокировки, значило бы сверять текст — ровно то, на чём
+    /// итог уже однажды разошёлся с консолью. Разделы, которым нужен вид,
+    /// берут его у отчёта.
+    /// </remarks>
+    private static readonly List<TargetReport> _reports = [];
+
     private static CancellationTokenSource? _work;
     private static bool _running;
     private static IReadOnlyList<SectionRow> _sections = [];
@@ -250,6 +261,7 @@ public partial class CheckView : UserControl
 
         Collected.Clear();
         _markers.Clear();
+        _reports.Clear();
         _sections = [];
         Sections.ItemsSource = null;
         Header.Visibility = Visibility.Visible;
@@ -305,7 +317,7 @@ public partial class CheckView : UserControl
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
 
-            Summarise(engine);
+            await Summarise(engine);
         }
         catch (OperationCanceledException)
         {
@@ -690,6 +702,8 @@ public partial class CheckView : UserControl
                         return;
                     }
 
+                    _reports.Add(report);
+
                     Collected.Add(Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host)));
                     Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
@@ -811,7 +825,7 @@ public partial class CheckView : UserControl
     /// которого не доходит очередь, — поломка, которая ждёт своего часа,
     /// и заметить её иначе нечем.
     /// </remarks>
-    private void Summarise(RuleEngine? engine)
+    private async Task Summarise(RuleEngine? engine)
     {
         var sections = new List<SectionRow>();
 
@@ -856,6 +870,38 @@ public partial class CheckView : UserControl
             }
         }
 
+        // Что сказал сам движок. Самый прямой источник, какой есть, и в окне
+        // его до сих пор не было вовсе — только в консоли. Разница видна
+        // на живом случае: 16 сентября четыре имени числились «туннель
+        // не доставил», а движок за весь прогон не записал ни одной ошибки
+        // соединения. Значит исходящий он поднял и байты провёз, а закрыла
+        // рукопожатие удалённая сторона — то есть чинить надо не трубу.
+        // Выяснять это пришлось чтением журнала руками, три захода подряд.
+        var lost = _reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .ToList();
+
+        if (lost.Count > 0)
+        {
+            var complaints = EngineLog.Complaints(lost);
+
+            sections.Add(complaints.Count > 0
+                ? new SectionRow(
+                    "Что об этом сказал сам движок",
+                    string.Join("\n", complaints.Select(c => $"{c.Host} через {c.Outbound}: {c.Error}"))
+                    + "\n\nИмя движок разобрал верно — значит рукопожатие дошло до него целым, "
+                    + "и десинк его не портил. Выход назван тот, через который шло на самом деле.",
+                    (Brush)FindResource("Warn"))
+                : new SectionRow(
+                    "Движку жаловаться не на что",
+                    "За этот прогон он не записал ни одной ошибки соединения по этим именам: "
+                    + "исходящий поднят, байты провезены. Значит рукопожатие закрыла удалённая "
+                    + "сторона, а не труба, и менять сервер подписки по этим строкам — не туда.\n\n"
+                    + "Журнал: " + EngineLog.DefaultPath,
+                    (Brush)FindResource("Muted")));
+        }
+
         if (HostsEditor.WhoReplaced() is { } who)
         {
             sections.Add(new SectionRow(
@@ -868,9 +914,110 @@ public partial class CheckView : UserControl
         _sections = sections;
         Sections.ItemsSource = sections;
 
+        // Показ идёт до замера, а ожидание — после: итог на экране появляется
+        // сразу, а раздел про туннель догоняет его через несколько секунд.
+        //
+        // Но дождаться обязательно: отчёт пишется сразу за этим вызовом,
+        // и брошенный замер не попал бы в файл — то есть в единственное,
+        // что остаётся от проверки назавтра.
+        await AddLiveTunnelAsync(sections);
+
         Say(_target is null
             ? $"Готово: проверено {Collected.Count}."
             : $"Готово: «{_target.Describe}», проверено {Collected.Count}.");
+    }
+
+    /// <summary>
+    /// Догоняет итог замером недоставленных имён через действующий туннель.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отвечает на вопрос, который прямая проба задать не может: имя
+    /// уезжает движку именем через служебный вход на петле, и доменные
+    /// правила срабатывают так же, как для настоящей программы. Открылось
+    /// там, но не открылось в таблице — значит виноват не сервер, а то,
+    /// как собран конфиг.
+    /// </para>
+    /// <para>
+    /// Тот же <see cref="BlockCheck.ProbeThroughTunnelAsync"/>, что и в консоли.
+    /// Раздел молча не появляется, когда служебного входа нет: он поднимается
+    /// выключателем «проверять проход трафика», а перезапускать ради замера
+    /// работающие движки нельзя — они несут весь трафик машины.
+    /// </para>
+    /// </remarks>
+    private async Task AddLiveTunnelAsync(List<SectionRow> sections)
+    {
+        var lost = _reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        if (lost.Count == 0)
+            return;
+
+        var token = _work?.Token ?? CancellationToken.None;
+
+        try
+        {
+            if (!await TunnelProbe.IsUpAsync(SingBoxOptions.DefaultHealthPort, token))
+            {
+                sections.Add(new SectionRow(
+                    "Через туннель нарочно проверить нечем",
+                    "Служебный вход не поднят, а без него не узнать, довозит ли туннель эти "
+                    + "имена, когда их отправляют в него намеренно. Включается выключателем "
+                    + "«Проверять проход трафика» в разделе «Ещё» и начинает работать "
+                    + "с ближайшего перезапуска движков.",
+                    (Brush)FindResource("Muted")));
+
+                Sections.ItemsSource = null;
+                Sections.ItemsSource = sections;
+                _sections = sections;
+
+                return;
+            }
+
+            var lines = new List<string>();
+
+            foreach (var host in lost)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var report = await BlockCheck.ProbeThroughTunnelAsync(
+                    host, null, SingBoxOptions.DefaultHealthPort, token);
+
+                lines.Add($"{host}: {report.Describe()}"
+                    + (report.Why is { Length: > 0 } why ? $" — {why}" : string.Empty));
+            }
+
+            sections.Add(new SectionRow(
+                "Те же имена, пущенные в туннель нарочно",
+                string.Join("\n", lines)
+                + "\n\nЗдесь имя уехало движку именем, через служебный вход на петле. "
+                + "Открылось тут, но не открылось выше — значит дело не в сервере, "
+                + "а в том, как собран конфиг: адрес, fakeip либо порядок правил.",
+                (Brush)FindResource("Warn")));
+
+            Sections.ItemsSource = null;
+            Sections.ItemsSource = sections;
+            _sections = sections;
+        }
+        catch (OperationCanceledException)
+        {
+            // Проверку прервали — догонять нечего.
+        }
+        catch (Exception ex)
+        {
+            sections.Add(new SectionRow(
+                "Замер через туннель не состоялся",
+                ex.GetBaseException().Message,
+                (Brush)FindResource("Muted")));
+
+            Sections.ItemsSource = null;
+            Sections.ItemsSource = sections;
+            _sections = sections;
+        }
     }
 
     private static string Describe(RoutingMode mode) => mode switch
