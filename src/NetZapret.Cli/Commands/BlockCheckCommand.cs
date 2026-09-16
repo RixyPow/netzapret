@@ -2253,52 +2253,6 @@ internal static class BlockCheckCommand
     /// я сделал отчёт про itch.io наполовину слепым.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> NotWorthChecking = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Единственное оставшееся зеркало. Остальные — twitter.com, twitch.com,
-        // ubi.com, claude.com, telegram.me — из списков либо убраны, либо
-        // опущены ниже проверяемых, так что глушить их больше нечего.
-        // Это зеркало живёт в riot-valorant.txt, где договорено не трогать
-        // ничего: цена ошибки там выше обычной.
-        "riotgames.es",     // испанское зеркало riotgames.com
-
-        // Снято с показа по решению владельца проекта: у него они работают,
-        // а отчёт про них третий прогон подряд утверждает обратное.
-        //
-        // Из списков они не убраны и маршруты сохраняют: itch.zone раздаёт
-        // картинки и сборки самого itch.io, rutor.info — это и есть трекер,
-        // а Riot условлено не трогать вовсе. Убрать их оттуда значило бы
-        // сломать работающее ради тишины в отчёте.
-        //
-        // Цена решения известна и записана здесь, чтобы не забылась: itch.zone
-        // и rutor.info были двумя из четырёх улик в догадке о том, что десинк
-        // портит рукопожатие, уходящее в туннель. Проверять её теперь придётся
-        // по itch.io и rutracker.org, которые в отчёте остались.
-        "itch.zone",
-        "rutor.info",
-        "valorant.com",
-
-        // Голые зоны сетей доставки. Записи A у них нет и не было: работают
-        // только поддомены, а сама зона существует ради сопоставления
-        // по суффиксу. Проверять там нечего, и строки «нет адреса у имени»
-        // в каждом отчёте — чистый шум. Список измерен, а не составлен
-        // на глаз: 1.1.1.1, 2026-09-04, каждое имя опрошено на запись A.
-        "cdninstagram.com",
-        "tiktokcdn.com",
-        "licdn.com",
-        "nocookie.net",
-        "cloudfront.net",
-        "ooklaserver.net",
-        "cdnst.net",
-        "rgpub.io",
-        "ytimg.com",
-        "ggpht.com",
-        "twimg.com",
-        "discordapp.net",
-        "rbxcdn.com",
-        "steamstatic.com",
-        "githubusercontent.com",
-    };
 
     private static IReadOnlyList<(string Host, string Service)> CollectTargets(
         string configPath,

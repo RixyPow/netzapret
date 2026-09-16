@@ -561,29 +561,6 @@ public partial class CheckView : UserControl
     /// работают, а отчёт третий прогон подряд утверждал обратное.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> NotWorthChecking = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "riotgames.es",
-        "itch.zone",
-        "rutor.info",
-        "valorant.com",
-
-        "cdninstagram.com",
-        "tiktokcdn.com",
-        "licdn.com",
-        "nocookie.net",
-        "cloudfront.net",
-        "ooklaserver.net",
-        "cdnst.net",
-        "rgpub.io",
-        "ytimg.com",
-        "ggpht.com",
-        "twimg.com",
-        "discordapp.net",
-        "rbxcdn.com",
-        "steamstatic.com",
-        "githubusercontent.com",
-    };
 
     /// <summary>
     /// Что проверять.
