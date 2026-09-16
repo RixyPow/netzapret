@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using NetZapret.Core;
 using NetZapret.Gui.Views;
 using NetZapret.Supervisor;
 
@@ -18,6 +19,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         VersionLabel.Text = "версия " + Version();
+        ShowOnboardingIfNeeded();
 
         SourceInitialized += (_, _) =>
         {
@@ -26,6 +28,48 @@ public partial class MainWindow : Window
         };
 
         _toastTimer.Tick += (_, _) => HideToast();
+    }
+
+    /// <summary>
+    /// Подменяет «Главную» мастером первого запуска, пока он не пройден.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Разметка ставит в <c>Section</c> <see cref="StatusView"/> статически —
+    /// это верно для всех, кто уже настроился. Здесь она перекрывается ровно
+    /// для тех, у кого <see cref="AppSettings.OnboardingDone"/> ещё не стоит:
+    /// свежая установка либо файл настроек, который ещё не читали.
+    /// </para>
+    /// <para>
+    /// Заменяется в конструкторе, а не в обработчике «Главной»: пункт «Главная»
+    /// уже отмечен выбранным в разметке, и его переключатель за время
+    /// разбора XAML событий не поднимает — <c>OnSection</c> в этот момент
+    /// видит <c>Section</c> ещё не созданным и ничего не делает.
+    /// </para>
+    /// <para>
+    /// Уходит навсегда, стоит уйти на любой другой раздел и вернуться: клик
+    /// по «Главной» снова показывает обычную <see cref="StatusView"/>.
+    /// Мастер — это то, что видно один раз при входе, а не отдельный
+    /// постоянный режим «Главной».
+    /// </para>
+    /// </remarks>
+    private void ShowOnboardingIfNeeded()
+    {
+        try
+        {
+            if (AppSettings.Load(AppSettings.DefaultPath).OnboardingDone)
+                return;
+        }
+        catch (Exception)
+        {
+            // Настройки не читаются — не повод не показать мастер. Он же
+            // и заведёт файл настроек первым сохранением.
+        }
+
+        var onboarding = new OnboardingView();
+        onboarding.Completed += (_, _) => Section.Content = new StatusView();
+
+        Section.Content = onboarding;
     }
 
     /// <summary>

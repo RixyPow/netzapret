@@ -190,6 +190,24 @@ public sealed record AppSettings
     /// </remarks>
     public bool CheckForUpdates { get; init; } = true;
 
+    /// <summary>
+    /// Сценарий первого запуска показан и закрыт.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Без этого поля программа не могла бы отличить человека, который
+    /// впервые открыл окно, от того, кто уже всё настроил и просто зашёл
+    /// на «Главную». Файла настроек ещё нет — значение по умолчанию
+    /// <c>false</c>, и мастер показывается.
+    /// </para>
+    /// <para>
+    /// Ставится и при пропуске мастера, не только при его завершении:
+    /// «пропустить» — тоже решение, и показывать мастер второй раз человеку,
+    /// который его уже закрыл, значит не уважать этот выбор.
+    /// </para>
+    /// </remarks>
+    public bool OnboardingDone { get; init; }
+
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
     private static readonly JsonSerializerOptions Options = new()
