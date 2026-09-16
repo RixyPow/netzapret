@@ -946,12 +946,35 @@ public partial class RoutesView : UserControl
         || part.Title.Contains(needle, StringComparison.OrdinalIgnoreCase)
         || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Разворачивает карточку своего домена.
+    /// </summary>
+    /// <remarks>
+    /// Свёрнута по умолчанию, потому что полоса над списком больше
+    /// не прокручивается: развёрнутая карточка занимает её треть постоянно,
+    /// а нужна, когда добавляют домен. Тем же приёмом, что и «Порядок
+    /// вычисления» ниже, — два разных способа свернуть на одном экране
+    /// читались бы как два разных вида карточек.
+    /// </remarks>
+    private void OnOwnToggle(object sender, RoutedEventArgs e)
+    {
+        var open = OwnPanel.Visibility != Visibility.Visible;
+
+        OwnPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        OwnChevron.Text = open ? "▼" : "►";
+
+        // Поле берёт ввод сразу: карточку раскрывают ровно затем, чтобы
+        // вписать в неё домен.
+        if (open)
+            OwnDomain.Focus();
+    }
+
     /// <summary>Показывает свои доменные правила.</summary>
     private void ShowOwn()
     {
         var file = UserRulesFile.Load();
 
-        Own.ItemsSource = file.Entries
+        var own = file.Entries
             .Where(entry => entry.Match == MatchKind.Domain)
             .Select(entry => new OwnRow(
                 entry.Value,
@@ -969,6 +992,16 @@ public partial class RoutesView : UserControl
                     _ => "Accent",
                 })))
             .ToList();
+
+        Own.ItemsSource = own;
+
+        // Сколько правил уже написано, видно и в свёрнутом виде. Иначе
+        // сворачивание прятало бы ровно то, ради чего в эту карточку
+        // заходят во второй раз, — свои же правила.
+        OwnSummary.Text = own.Count == 0
+            ? "Направить сайт, которого нет в каталоге."
+            : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3).Select(row => row.Value))}"
+              + (own.Count > 3 ? $" и ещё {own.Count - 3}." : ".");
     }
 
     private void OnOwnKey(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1149,11 +1182,14 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnRouteClosed(object sender, EventArgs e)
     {
-        if (_filling || sender is not ComboBox { Tag: string key } box)
+        if (_filling || sender is not ComboBox box)
             return;
 
         if (box.DataContext is not PartRow row)
             return;
+
+        // Ключ у строки, а не в Tag — по той же причине, что и в OnRoute.
+        var key = row.Key;
 
         // Только десинк и только без смены: смену обработает OnRoute,
         // и она же спросит рецепт по дороге.
@@ -1173,7 +1209,24 @@ public partial class RoutesView : UserControl
 
     private void OnRoute(object sender, SelectionChangedEventArgs e)
     {
-        if (_filling || sender is not ComboBox { Tag: string key } box)
+        if (_filling || sender is not ComboBox box)
+            return;
+
+        // Строка обязана быть на месте, и это не придирка к типу. Список
+        // виртуализирован и переиспользует карточки: контейнер получает
+        // то строку, то заглушку BindingOperations.DisconnectedSource,
+        // и на заглушке SelectedIndex съезжает в -1, поднимая событие
+        // выбора. Прежде проверка была написана так, что строка без типа
+        // проваливалась дальше: сверять с Applied было не с чем, ключ брался
+        // из Tag от прошлого жильца карточки, а режим доставался из ветки
+        // по умолчанию — «через VPN». Прокрутка списка переписывала бы
+        // правила молча.
+        if (box.DataContext is not PartRow current)
+            return;
+
+        // Пустой выбор выбором не является: значение -1 ставит сам WPF,
+        // отцепляя привязку, и ни один из трёх режимов ему не соответствует.
+        if (box.SelectedIndex < 0)
             return;
 
         // Выбор того же самого — не выбор. Список получает SelectedIndex
@@ -1183,9 +1236,13 @@ public partial class RoutesView : UserControl
         //
         // Сверяется Applied, а не Choice: в Choice привязка уже положила
         // новое значение, и сравнение с ним всегда говорило «то же самое».
-        if (box.DataContext is PartRow current && box.SelectedIndex == current.Applied)
+        if (box.SelectedIndex == current.Applied)
             return;
 
+        // Ключ берётся у строки, а не из Tag. Обе привязки обновляются
+        // при смене строки, но порядок между ними не оговорён, и Tag может
+        // ещё нести ключ прошлого жильца карточки. У строки он всегда свой.
+        var key = current.Key;
         var parts = key.Split('|', 2);
 
         if (parts.Length != 2)
@@ -1209,7 +1266,7 @@ public partial class RoutesView : UserControl
         // Проверять надо на настоящем имени из списка, а не на названии
         // сервиса: «discord» не разрешается, и на нём любой рецепт отвечает
         // «не помогает».
-        var example = box.DataContext is PartRow row ? row.Probe : null;
+        var example = current.Probe;
 
         if (mode == RoutingMode.Desync && match == MatchKind.HostList
             && !string.IsNullOrWhiteSpace(example))

@@ -3,14 +3,38 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{DynamicResource Backdrop}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" MaxWidth="1240" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+    <!--
+        Три полосы вместо одного свитка на весь раздел, и это вынужденно,
+        а не ради вида. Свиток снаружи отдаёт вложенному списку бесконечную
+        высоту, а на бесконечной высоте VirtualizingStackPanel строит все
+        строки разом — виртуализация выключается сама и молча. Сервисов
+        пятьдесят пять, карточек под семьдесят, и в каждой список выбора,
+        кнопка и картинка: об это прокрутка и спотыкалась.
 
-            <StackPanel Grid.Column="0">
+        Прокручивается теперь один список — он и занимает всё, что осталось
+        от полос сверху и снизу. Поиск с кнопками остаётся на виду, и это
+        скорее к лучшему: прежде строка поиска уезжала вверх ровно тогда,
+        когда доходили до найденного.
+
+        Плата за это — две карточки, которые пришлось сделать сворачиваемыми:
+        прибитые к верху во всю высоту, они съедали список. «Порядок
+        вычисления» сворачивался и раньше, «Свой домен» — теперь тоже, тем же
+        приёмом и с тем же значком.
+    -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="470" MaxWidth="1240" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <Grid Grid.Column="0" Margin="32,28,32,28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0">
 
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -44,73 +68,95 @@
                     Свой домен. Каталог покрывает то, что мы предусмотрели,
                     а сайтов миллион: без этой строки направить seriesgraph.com
                     было нечем.
+
+                    Свёрнут по умолчанию. Развёрнутый он занимает треть полосы
+                    над списком — форма, два абзаца оговорок и перечень своих
+                    правил, — а нужен раз в неделю, когда добавляют домен.
+                    Сколько правил уже написано, видно и в свёрнутом виде:
+                    иначе сворачивание прятало бы то, ради чего сюда заходят
+                    во второй раз.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Свой домен" FontWeight="SemiBold" />
+                <Button Style="{StaticResource Choice}" Margin="0,20,0,0" Click="OnOwnToggle">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="OwnChevron" Grid.Column="0" Text="►"
+                                   Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
+                                   VerticalAlignment="Center" />
 
-                            <TextBox Grid.Column="0" x:Name="OwnDomain" Margin="0,0,8,0"
-                                     KeyDown="OnOwnKey" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Свой домен" FontWeight="SemiBold" />
+                            <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
 
-                            <ComboBox Grid.Column="1" x:Name="OwnMode" Width="146" SelectedIndex="2" Margin="0,0,8,0">
-                                <ComboBoxItem Content="напрямую" />
-                                <ComboBoxItem Content="десинк" />
-                                <ComboBoxItem Content="через VPN" />
-                            </ComboBox>
+                <StackPanel x:Name="OwnPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                            <Button Grid.Column="2" Style="{StaticResource Primary}"
-                                    Content="Добавить" Click="OnAddOwn" />
-                        </Grid>
+                        <TextBox Grid.Column="0" x:Name="OwnDomain" Margin="0,0,8,0"
+                                 KeyDown="OnOwnKey" />
 
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com. Правило пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
+                        <ComboBox Grid.Column="1" x:Name="OwnMode" Width="146" SelectedIndex="2" Margin="0,0,8,0">
+                            <ComboBoxItem Content="напрямую" />
+                            <ComboBoxItem Content="десинк" />
+                            <ComboBoxItem Content="через VPN" />
+                        </ComboBox>
 
-                        <!--
-                            Оговорка не лишняя: «десинк» здесь обещает больше,
-                            чем делает, и без этой строки человек вправе ждать,
-                            что рецепт подберётся сам.
-                        -->
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего. «Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts. Проверить, что применится, можно в «Проверке блокировок»." />
+                        <Button Grid.Column="2" Style="{StaticResource Primary}"
+                                Content="Добавить" Click="OnAddOwn" />
+                    </Grid>
 
-                        <ItemsControl x:Name="Own" Margin="0,12,0,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="{DynamicResource Raised}" CornerRadius="8"
-                                            Padding="12,8" Margin="0,0,0,5">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com. Правило пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
 
-                                            <TextBlock Grid.Column="0" Text="{Binding Value}"
-                                                       VerticalAlignment="Center"
-                                                       TextTrimming="CharacterEllipsis" />
+                    <!--
+                        Оговорка не лишняя: «десинк» здесь обещает больше,
+                        чем делает, и без этой строки человек вправе ждать,
+                        что рецепт подберётся сам.
+                    -->
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего. «Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts. Проверить, что применится, можно в «Проверке блокировок»." />
 
-                                            <TextBlock Grid.Column="1" Text="{Binding Mode}"
-                                                       Style="{StaticResource Mono}"
-                                                       Foreground="{Binding Color}"
-                                                       VerticalAlignment="Center" Margin="12,0,12,0" />
+                    <ItemsControl x:Name="Own" Margin="0,12,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource Raised}" CornerRadius="8"
+                                        Padding="12,8" Margin="0,0,0,5">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
 
-                                            <Button Grid.Column="2" Style="{StaticResource Ghost}"
-                                                    Content="убрать" Padding="12,5"
-                                                    Tag="{Binding Value}" Click="OnRemoveOwn" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
+                                        <TextBlock Grid.Column="0" Text="{Binding Value}"
+                                                   VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Grid.Column="1" Text="{Binding Mode}"
+                                                   Style="{StaticResource Mono}"
+                                                   Foreground="{Binding Color}"
+                                                   VerticalAlignment="Center" Margin="12,0,12,0" />
+
+                                        <Button Grid.Column="2" Style="{StaticResource Ghost}"
+                                                Content="убрать" Padding="12,5"
+                                                Tag="{Binding Value}" Click="OnRemoveOwn" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
 
                 <!--
                     Поиск: частей под семьдесят, и глазами их не перебрать.
@@ -127,185 +173,222 @@
                 </Grid>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
+            </StackPanel>
 
-                <ItemsControl x:Name="Services" Margin="0,14,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
+            <!--
+                Единственное, что здесь прокручивается, и единственное, чему
+                нужна виртуализация. Собственный свиток внутри шаблона — затем,
+                что у ItemsControl своего нет вовсе, а без него список меряется
+                на бесконечной высоте и строит все строки сразу.
+
+                Переиспользование контейнеров, а не пересоздание: карточка
+                части — это список выбора, кнопка и картинка, и заново собирать
+                её на каждый оборот колеса ровно то же расточительство,
+                от которого уходим.
+
+                Шаг прокрутки в точках, а не в строках: строки разной высоты —
+                свёрнутая папка в одну карточку и раскрытая в шесть, — и шаг
+                строкой перепрыгивал бы через полэкрана.
+            -->
+            <ItemsControl Grid.Row="1" x:Name="Services" Margin="0,14,0,0"
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel">
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="ItemsControl">
+                        <ScrollViewer CanContentScroll="True" Focusable="False"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <!--
+                            Шаг задают сами строки, не эта стопка: у папки
+                            шапка, у одиночного его единственная строка,
+                            и у обеих снизу одинаковые шесть. Стопка со
+                            своим полем добавляла их второй раз, и под
+                            одиночным сервисом выходило вдвое больше,
+                            чем под свёрнутой папкой.
+                        -->
+                        <StackPanel>
+
                             <!--
-                                Шаг задают сами строки, не эта стопка: у папки
-                                шапка, у одиночного его единственная строка,
-                                и у обеих снизу одинаковые шесть. Стопка со
-                                своим полем добавляла их второй раз, и под
-                                одиночным сервисом выходило вдвое больше,
-                                чем под свёрнутой папкой.
+                                Папка сервиса. Свёрнутая, но не немая:
+                                в заголовке видно, куда идут её части, —
+                                иначе, чтобы узнать про YouTube, пришлось бы
+                                открывать YouTube, а чтобы окинуть взглядом
+                                всё — открыть все двадцать две.
                             -->
-                            <StackPanel>
+                            <Button Style="{StaticResource Folder}" Click="OnFolder"
+                                    Margin="0,0,0,6"
+                                    Visibility="{Binding HeaderShown}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <!--
-                                    Папка сервиса. Свёрнутая, но не немая:
-                                    в заголовке видно, куда идут её части, —
-                                    иначе, чтобы узнать про YouTube, пришлось бы
-                                    открывать YouTube, а чтобы окинуть взглядом
-                                    всё — открыть все двадцать две.
-                                -->
-                                <Button Style="{StaticResource Folder}" Click="OnFolder"
-                                        Margin="0,0,0,6"
-                                        Visibility="{Binding HeaderShown}">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
+                                    <!--
+                                        Размер и ширина заданы явно. Свёрнутая
+                                        стрелка тоньше развёрнутой по рисунку
+                                        самого знака, и на десятом кегле она
+                                        выглядела царапиной. Одинаковое поле
+                                        вдобавок держит заголовок на месте
+                                        при раскрытии.
+                                    -->
+                                    <TextBlock Grid.Column="0" Text="{Binding Chevron}"
+                                               Foreground="{DynamicResource Muted}" FontSize="17"
+                                               Width="20" TextAlignment="Left"
+                                               Margin="0,0,4,0"
+                                               VerticalAlignment="Center" />
 
-                                        <!--
-                                            Размер и ширина заданы явно. Свёрнутая
-                                            стрелка тоньше развёрнутой по рисунку
-                                            самого знака, и на десятом кегле она
-                                            выглядела царапиной. Одинаковое поле
-                                            вдобавок держит заголовок на месте
-                                            при раскрытии.
-                                        -->
-                                        <TextBlock Grid.Column="0" Text="{Binding Chevron}"
-                                                   Foreground="{DynamicResource Muted}" FontSize="17"
-                                                   Width="20" TextAlignment="Left"
-                                                   Margin="0,0,4,0"
-                                                   VerticalAlignment="Center" />
+                                    <!--
+                                        Значок той же меры, что у строки части.
+                                        Без него шапка выходила ниже, и список
+                                        шёл ступеньками: у папки одна высота,
+                                        у одиночного сервиса другая.
+                                    -->
+                                    <Grid Grid.Column="1" Width="22" Height="22"
+                                          Margin="0,0,12,0" VerticalAlignment="Center">
+                                        <Border Background="{DynamicResource Raised}"
+                                                CornerRadius="5"
+                                                Visibility="{Binding LetterShown}">
+                                            <TextBlock Text="{Binding Letter}" FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Muted}"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" />
+                                        </Border>
 
-                                        <!--
-                                            Значок той же меры, что у строки части.
-                                            Без него шапка выходила ниже, и список
-                                            шёл ступеньками: у папки одна высота,
-                                            у одиночного сервиса другая.
-                                        -->
-                                        <Grid Grid.Column="1" Width="22" Height="22"
-                                              Margin="0,0,12,0" VerticalAlignment="Center">
-                                            <Border Background="{DynamicResource Raised}"
-                                                    CornerRadius="5"
-                                                    Visibility="{Binding LetterShown}">
-                                                <TextBlock Text="{Binding Letter}" FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource Muted}"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center" />
-                                            </Border>
-
-                                            <Image Source="{Binding Icon}" Stretch="Uniform"
-                                                   RenderOptions.BitmapScalingMode="HighQuality"
-                                                   Visibility="{Binding IconShown}" />
-                                        </Grid>
-
-                                        <TextBlock Grid.Column="2" Text="{Binding Name}"
-                                                   FontWeight="SemiBold" FontSize="14"
-                                                   VerticalAlignment="Center" />
-
-                                        <TextBlock Grid.Column="3" Text="{Binding Count}"
-                                                   Style="{StaticResource Caption}" Margin="10,0,12,0"
-                                                   VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis" />
-
-                                        <TextBlock Grid.Column="4" Text="{Binding Summary}"
-                                                   Style="{StaticResource Mono}"
-                                                   Foreground="{Binding Color}"
-                                                   VerticalAlignment="Center" />
+                                        <Image Source="{Binding Icon}" Stretch="Uniform"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               Visibility="{Binding IconShown}" />
                                     </Grid>
-                                </Button>
 
-                                <!--
-                                    Отступ слева только у вложенных: одиночный
-                                    сервис показывается без шапки, и сдвигать
-                                    его не от чего.
-                                -->
-                                <ItemsControl ItemsSource="{Binding Parts}"
-                                              Visibility="{Binding PartsShown}"
-                                              Margin="{Binding PartsMargin}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <!--
-                                                Высота задана явно и одна на всех.
-                                                Список выбора внутри строки выше
-                                                простого текста в шапке папки,
-                                                и без этого строки шли ступеньками.
-                                            -->
-                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6"
-                                                    Padding="14,10" MinHeight="64">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="2" Text="{Binding Name}"
+                                               FontWeight="SemiBold" FontSize="14"
+                                               VerticalAlignment="Center" />
+
+                                    <TextBlock Grid.Column="3" Text="{Binding Count}"
+                                               Style="{StaticResource Caption}" Margin="10,0,12,0"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <TextBlock Grid.Column="4" Text="{Binding Summary}"
+                                               Style="{StaticResource Mono}"
+                                               Foreground="{Binding Color}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+
+                            <!--
+                                Отступ слева только у вложенных: одиночный
+                                сервис показывается без шапки, и сдвигать
+                                его не от чего.
+                            -->
+                            <ItemsControl ItemsSource="{Binding Parts}"
+                                          Visibility="{Binding PartsShown}"
+                                          Margin="{Binding PartsMargin}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!--
+                                            Высота задана явно и одна на всех.
+                                            Список выбора внутри строки выше
+                                            простого текста в шапке папки,
+                                            и без этого строки шли ступеньками.
+                                        -->
+                                        <Border Style="{StaticResource Card}" Margin="0,0,0,6"
+                                                Padding="14,10" MinHeight="64">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <!--
+                                                    Значок сайта, если он у нас есть.
+                                                    Тянется с самого сайта и лежит
+                                                    в кэше; чужим службам список имён
+                                                    не отдаётся.
+                                                -->
+                                                <Grid Grid.Column="0" Width="22" Height="22"
+                                                      Margin="{Binding IconMargin}"
+                                                      VerticalAlignment="Center">
+                                                    <Border Background="{DynamicResource Raised}"
+                                                            CornerRadius="5"
+                                                            Visibility="{Binding LetterShown}">
+                                                        <TextBlock Text="{Binding Letter}" FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="{DynamicResource Muted}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                    </Border>
+
+                                                    <Image Source="{Binding Icon}" Stretch="Uniform"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                           Visibility="{Binding IconShown}" />
+                                                </Grid>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                                               Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Mode}" Style="{StaticResource Mono}"
+                                                               Foreground="{Binding Color}"
+                                                               VerticalAlignment="Center"
+                                                               TextAlignment="Right" MinWidth="72" Margin="0,0,12,0" />
+
+                                                    <ComboBox Width="132" SelectedIndex="{Binding Choice}"
+                                                              Tag="{Binding Key}"
+                                                              SelectionChanged="OnRoute"
+                                                              DropDownClosed="OnRouteClosed"
+                                                              IsEnabled="{Binding CanRoute}">
+                                                        <ComboBoxItem Content="напрямую" />
+                                                        <ComboBoxItem Content="десинк" />
+                                                        <ComboBoxItem Content="через VPN" />
+                                                    </ComboBox>
 
                                                     <!--
-                                                        Значок сайта, если он у нас есть.
-                                                        Тянется с самого сайта и лежит
-                                                        в кэше; чужим службам список имён
-                                                        не отдаётся.
+                                                        Пин у части, а не у сервиса: адрес
+                                                        прибивается конкретным именам, и
+                                                        у Discord голос лечится отдельно
+                                                        от картинок.
                                                     -->
-                                                    <Grid Grid.Column="0" Width="22" Height="22"
-                                                          Margin="{Binding IconMargin}"
-                                                          VerticalAlignment="Center">
-                                                        <Border Background="{DynamicResource Raised}"
-                                                                CornerRadius="5"
-                                                                Visibility="{Binding LetterShown}">
-                                                            <TextBlock Text="{Binding Letter}" FontSize="11"
-                                                                       FontWeight="SemiBold"
-                                                                       Foreground="{DynamicResource Muted}"
-                                                                       HorizontalAlignment="Center"
-                                                                       VerticalAlignment="Center" />
-                                                        </Border>
+                                                    <Button Style="{StaticResource Ghost}"
+                                                            Content="{Binding PinLabel}" Padding="12,7"
+                                                            Margin="8,0,0,0" MinWidth="92"
+                                                            Foreground="{Binding PinColor}"
+                                                            Tag="{Binding Key}" Click="OnPin"
+                                                            IsEnabled="{Binding CanPin}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-                                                        <Image Source="{Binding Icon}" Stretch="Uniform"
-                                                               RenderOptions.BitmapScalingMode="HighQuality"
-                                                               Visibility="{Binding IconShown}" />
-                                                    </Grid>
-
-                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
-                                                    </StackPanel>
-
-                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Mode}" Style="{StaticResource Mono}"
-                                                                   Foreground="{Binding Color}"
-                                                                   VerticalAlignment="Center"
-                                                                   TextAlignment="Right" MinWidth="72" Margin="0,0,12,0" />
-
-                                                        <ComboBox Width="132" SelectedIndex="{Binding Choice}"
-                                                                  Tag="{Binding Key}"
-                                                                  SelectionChanged="OnRoute"
-                                                                  DropDownClosed="OnRouteClosed"
-                                                                  IsEnabled="{Binding CanRoute}">
-                                                            <ComboBoxItem Content="напрямую" />
-                                                            <ComboBoxItem Content="десинк" />
-                                                            <ComboBoxItem Content="через VPN" />
-                                                        </ComboBox>
-
-                                                        <!--
-                                                            Пин у части, а не у сервиса: адрес
-                                                            прибивается конкретным именам, и
-                                                            у Discord голос лечится отдельно
-                                                            от картинок.
-                                                        -->
-                                                        <Button Style="{StaticResource Ghost}"
-                                                                Content="{Binding PinLabel}" Padding="12,7"
-                                                                Margin="8,0,0,0" MinWidth="92"
-                                                                Foreground="{Binding PinColor}"
-                                                                Tag="{Binding Key}" Click="OnPin"
-                                                                IsEnabled="{Binding CanPin}" />
-                                                    </StackPanel>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+            <StackPanel Grid.Row="2">
 
                 <!--
                     Порядок вычисления. Список выше сгруппирован по сервисам —
@@ -354,7 +437,33 @@
                         <TextBlock Grid.Column="4" Text="СЕРВЕР" Style="{StaticResource Caption}" />
                     </Grid>
 
-                    <ItemsControl x:Name="Order">
+                    <!--
+                        Своя высота и свой свиток. Полоса под списком больше
+                        не растягивает раздел — растягивать некуда, — и сотня
+                        правил, развёрнутая целиком, выдавила бы список
+                        сервисов с экрана. Виртуализация здесь по той же
+                        причине, что и там: строк под сотню, а видно десяток.
+                    -->
+                    <ItemsControl x:Name="Order" MaxHeight="320"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer CanContentScroll="True" Focusable="False"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Style="{StaticResource Card}" Margin="0,0,0,4" Padding="16,9">
@@ -397,8 +506,7 @@
                     <TextBlock x:Name="OrderNote" Style="{StaticResource Caption}"
                                Margin="4,10,0,0" TextWrapping="Wrap" />
                 </StackPanel>
-
             </StackPanel>
         </Grid>
-    </ScrollViewer>
+    </Grid>
 </UserControl>
