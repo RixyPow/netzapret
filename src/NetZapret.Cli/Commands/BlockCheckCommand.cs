@@ -184,6 +184,12 @@ internal static class BlockCheckCommand
 
         bool enginesRunning = WarnIfEnginesRunning();
 
+        // Метка журнала до первой пробы. Без неё читался хвост целиком,
+        // и жалобы прошлых запусков выдавались за нынешние — движок пишет
+        // секунды от собственного старта, и отличить одно от другого
+        // по содержимому строки нельзя.
+        var logMark = EngineLog.Position();
+
         var setup = await PrintSetupAsync(settings, enginesRunning, cancellationToken);
         PrintLegend();
 
@@ -303,7 +309,7 @@ internal static class BlockCheckCommand
 
         // Журнал движка читается первым: он знает то, чего проба снаружи знать
         // не может — через какой выход шло и что ответила труба.
-        PrintEngineComplaints(reports);
+        PrintEngineComplaints(reports, logMark);
         PrintTunnelReach(reach);
 
         // Тот же вопрос, но о действующей настройке, а не о выбранном сервере.
@@ -675,7 +681,11 @@ internal static class BlockCheckCommand
     /// и десинк его не портил, что бы ни говорила секция пресета рядом.
     /// </para>
     /// </remarks>
-    private static void PrintEngineComplaints(IReadOnlyList<TargetReport> reports)
+    /// <param name="logMark">
+    /// Длина журнала на начало прогона: всё, что было записано раньше,
+    /// к этой проверке не относится и жалобой на неё считаться не может.
+    /// </param>
+    private static void PrintEngineComplaints(IReadOnlyList<TargetReport> reports, long logMark)
     {
         var hosts = reports
             .Where(r => r.Kind == BlockKind.TunnelFailed)
@@ -683,7 +693,7 @@ internal static class BlockCheckCommand
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var complaints = EngineLog.Complaints(hosts);
+        var complaints = EngineLog.Complaints(hosts, path: null, since: logMark);
 
         if (complaints.Count == 0)
             return;

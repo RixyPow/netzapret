@@ -107,6 +107,9 @@ public partial class CheckView : UserControl
     /// </remarks>
     private static readonly List<TargetReport> _reports = [];
 
+    /// <summary>Длина журнала движка на начало прогона.</summary>
+    private static long _logMark;
+
     private static CancellationTokenSource? _work;
     private static bool _running;
     private static IReadOnlyList<SectionRow> _sections = [];
@@ -263,6 +266,11 @@ public partial class CheckView : UserControl
         _markers.Clear();
         _reports.Clear();
         _sections = [];
+
+        // Метка журнала снимается до первой пробы: всё, что движок напишет
+        // после неё, относится к этому прогону, а всё, что было раньше, —
+        // к прошлым запускам и к делу не относится.
+        _logMark = EngineLog.Position();
         Sections.ItemsSource = null;
         Header.Visibility = Visibility.Visible;
 
@@ -884,7 +892,7 @@ public partial class CheckView : UserControl
 
         if (lost.Count > 0)
         {
-            var complaints = EngineLog.Complaints(lost);
+            var complaints = EngineLog.Complaints(lost, path: null, since: _logMark);
 
             sections.Add(complaints.Count > 0
                 ? new SectionRow(

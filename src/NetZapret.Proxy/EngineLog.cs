@@ -60,19 +60,62 @@ public static class EngineLog
         RegexOptions.Compiled);
 
     /// <summary>
+    /// Длина журнала сейчас — метка, от которой читать потом.
+    /// </summary>
+    /// <remarks>
+    /// Снимается перед прогоном и передаётся в <see cref="Complaints"/>.
+    /// По длине, а не по времени: движок пишет секунды от собственного старта,
+    /// а не часы, и отличить вчерашнюю запись от сегодняшней по содержимому
+    /// строки нельзя.
+    /// </remarks>
+    public static long Position(string? path = null)
+    {
+        var target = path ?? DefaultPath;
+
+        try
+        {
+            return File.Exists(target) ? new FileInfo(target).Length : 0;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
     /// Ищет в журнале жалобы про названные имена.
     /// </summary>
     /// <param name="hosts">Имена, о которых проверка сказала «не доставил».</param>
     /// <param name="path">Журнал; по умолчанию — движка под супервизором.</param>
+    /// <param name="since">
+    /// Откуда читать — метка, снятая <see cref="Position"/> перед прогоном.
+    /// </param>
     /// <remarks>
+    /// <para>
     /// Совпадение по зоне, а не по точному имени. Проверка стучится
     /// в <c>whatsapp.com</c>, а приложение и браузер ходят на
     /// <c>web.whatsapp.com</c> и <c>static.whatsapp.net</c>; жалоба про них
     /// относится к тому же сервису и объясняет ровно то, что мы измеряли.
+    /// </para>
+    /// <para>
+    /// Метка обязательна, и это исправление. Без неё читался хвост файла
+    /// целиком, и жалобы прошлых запусков выдавались за нынешние. Стоило
+    /// это прямой ошибки в отчёте 16.09 в 21:44: движок за прогон не записал
+    /// ни строки — журнал стоял с 21:30, а движки перезапустили в 21:43, —
+    /// а раздел показал четыре жалобы про <c>direct</c>, оставшиеся
+    /// от позапрошлого запуска. По ним едва не была построена причина,
+    /// которой нет.
+    /// </para>
+    /// <para>
+    /// По длине файла, а не по времени в строке: движок пишет секунды
+    /// от собственного старта, и они начинаются заново при каждом запуске —
+    /// по ним прошлое от нынешнего не отличить вовсе.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<EngineComplaint> Complaints(
         IReadOnlyCollection<string> hosts,
-        string? path = null)
+        string? path = null,
+        long since = 0)
     {
         var target = path ?? DefaultPath;
 
@@ -88,6 +131,12 @@ public static class EngineLog
             // то есть ровно тогда, когда журнал и нужен.
             using var stream = new FileStream(
                 target, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+            // Файл короче метки — значит его подменили при обороте журнала,
+            // и метка указывает в никуда. Тогда читаем с начала: это хуже
+            // точного отсчёта, но лучше пустоты.
+            if (since > 0 && stream.Length >= since)
+                stream.Seek(since, SeekOrigin.Begin);
 
             using var reader = new StreamReader(stream);
             lines = ReadTail(reader, Tail);
