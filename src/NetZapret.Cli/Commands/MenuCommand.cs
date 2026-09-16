@@ -411,7 +411,7 @@ internal static class MenuCommand
         {
             using var client = new SubscriptionClient();
             var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
-            servers = info.Servers.Where(s => s.IsSupportedBySingBox).ToList();
+            servers = info.Servers.Where(s => s.IsUsableOutbound).ToList();
         }
         catch (Exception ex)
         {

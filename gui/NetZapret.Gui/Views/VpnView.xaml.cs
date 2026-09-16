@@ -279,7 +279,7 @@ public partial class VpnView : UserControl
             using var client = new SubscriptionClient();
             var info = await client.FetchAsync(new Uri(row.Entry.Url), cancellationToken);
 
-            var usable = info.Servers.Where(s => s.IsSupportedBySingBox).ToList();
+            var usable = info.Servers.Where(s => s.IsUsableOutbound).ToList();
 
             row.AsGiven = Rows(usable, row.Entry.Name, settings);
             row.Servers = InChosenOrder(row.AsGiven);
@@ -959,7 +959,7 @@ public partial class VpnView : UserControl
 
                 // Незамеряемые отсеиваются здесь, а не внутри пробника: иначе
                 // счётчик «измерено N из M» считал бы и тех, кого не трогали.
-                servers.AddRange(info.Servers.Where(s => s.IsSupportedBySingBox && s.IsMeasurable));
+                servers.AddRange(info.Servers.Where(s => s.IsUsableOutbound && s.IsMeasurable));
             }
             catch (Exception)
             {

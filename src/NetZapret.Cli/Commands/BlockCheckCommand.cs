@@ -605,10 +605,10 @@ internal static class BlockCheckCommand
             // перестать говорить о трубе не глядя.
             var live = await CurrentServerAsync(settings, cancellationToken);
 
-            var server = info.Servers.FirstOrDefault(s => s.IsSupportedBySingBox && s.Tag == live)
+            var server = info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
                 ?? info.Servers.FirstOrDefault(s =>
-                    s.IsSupportedBySingBox && s.Tag == settings.PreferredServer)
-                ?? info.Servers.FirstOrDefault(s => s.IsSupportedBySingBox);
+                    s.IsUsableOutbound && s.Tag == settings.PreferredServer)
+                ?? info.Servers.FirstOrDefault(s => s.IsUsableOutbound);
 
             if (server is null)
                 return [];

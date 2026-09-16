@@ -318,8 +318,8 @@ public sealed class SingBoxConfigCompiler
 
     public CompilationResult Compile(RuleSet ruleSet, IReadOnlyList<ProxyServer> servers, SingBoxOptions options)
     {
-        var usable = servers.Where(s => s.IsSupportedBySingBox).ToList();
-        var skipped = servers.Where(s => !s.IsSupportedBySingBox).ToList();
+        var usable = servers.Where(s => s.IsUsableOutbound).ToList();
+        var skipped = servers.Where(s => !s.IsUsableOutbound).ToList();
 
         var tags = AssignUniqueTags(usable);
 

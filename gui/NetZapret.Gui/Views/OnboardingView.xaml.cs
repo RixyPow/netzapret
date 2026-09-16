@@ -198,7 +198,7 @@ public partial class OnboardingView : UserControl
 
             SubLink.Clear();
 
-            int usable = info.Servers.Count(s => s.IsSupportedBySingBox);
+            int usable = info.Servers.Count(s => s.IsUsableOutbound);
             Step1Status.Text = $"Подписка подключена: серверов {usable}.";
 
             Show(2);

@@ -122,7 +122,7 @@ internal static class ProbeCommand
 
     private static IReadOnlyList<ProxyServer> SelectServers(IReadOnlyList<ProxyServer> servers, CommandLine cmd)
     {
-        var usable = servers.Where(s => s.IsSupportedBySingBox).ToList();
+        var usable = servers.Where(s => s.IsUsableOutbound).ToList();
         var filter = cmd.Value("server");
 
         if (filter is not null)

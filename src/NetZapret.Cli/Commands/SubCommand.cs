@@ -37,13 +37,25 @@ internal static class SubCommand
             Console.ForegroundColor = previous;
         }
 
-        var unsupported = info.Servers.Count(s => !s.IsSupportedBySingBox);
-        if (unsupported > 0)
+        // Разделители называются своим именем, а не «неподдерживаемыми».
+        // Прежде здесь стояло «сервер(ов) с транспортом xhttp — sing-box его
+        // не реализует»: неправда дважды, потому что extended его как раз
+        // разбирает (замер 2026-09-11), и потому что пропускаются вовсе
+        // не из-за транспорта.
+        var separators = info.Servers.Where(s => !s.HasDialableAddress).ToList();
+
+        if (separators.Count > 0)
         {
             Console.WriteLine();
             Console.WriteLine(
-                $"{unsupported} сервер(ов) с транспортом xhttp — sing-box его не реализует, " +
-                "они будут пропущены при генерации конфига.");
+                $"{separators.Count} запис(ей) без адреса — это разделители списка, "
+                + "а не серверы: поставщик кладёт их, чтобы клиент нарисовал заголовки групп.");
+
+            foreach (var separator in separators)
+                Console.WriteLine($"  {separator.Tag}");
+
+            Console.WriteLine("Они пропускаются: попав в автоподбор, такая запись обрывает "
+                + "всякое соединение мгновенно.");
         }
 
         return 0;
