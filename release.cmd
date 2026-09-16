@@ -124,6 +124,34 @@ if not "%PUBLISHED%"=="0" (
     exit /b 1
 )
 
+rem The unpacked copy goes away with the release that produced it.
+rem
+rem dist\NetZapret\NetZapret.exe and build\NetZapret.exe look identical and sit
+rem two folders apart, but only build\ is kept current - build.cmd rewrites it,
+rem while this script never returns to dist\. Within a day of a release the
+rem unpacked copy is stale, and both of us have already tested against the wrong
+rem one: 16 Sep the two were 22 hours apart with nothing on screen saying so.
+rem
+rem Removed only after publishing succeeded. Before that it is still the thing
+rem being released, and a failed upload that also deleted the build would mean
+rem packing 55 MB again.
+rem
+rem The zip stays: it is not mistakable for a program to run, and the checksum
+rem in the notes is only checkable while the file it describes is here.
+echo Removing the unpacked copy from dist\
+rd /s /q "%ROOT%dist\NetZapret" 2>nul
+del /q "%NOTES%" >nul 2>&1
+
+rem Not a failure of the release - it is published either way. But saying so
+rem matters: a folder left behind is exactly the stale copy this removes, and
+rem silence would leave it looking current.
+if exist "%ROOT%dist\NetZapret" (
+    echo.
+    echo Note: dist\NetZapret could not be removed - something is holding files
+    echo there, most likely a copy running from it. The release is published;
+    echo delete the folder by hand so it is not mistaken for a current build.
+)
+
 echo.
 echo Done.
 exit /b 0
