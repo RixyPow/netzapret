@@ -987,6 +987,7 @@ public partial class CheckView : UserControl
             }
 
             var lines = new List<string>();
+            int opened = 0;
 
             foreach (var host in lost)
             {
@@ -995,16 +996,32 @@ public partial class CheckView : UserControl
                 var report = await BlockCheck.ProbeThroughTunnelAsync(
                     host, null, SingBoxOptions.DefaultHealthPort, token);
 
+                if (report.Kind == BlockKind.None)
+                    opened++;
+
                 lines.Add($"{host}: {report.Describe()}"
                     + (report.Why is { Length: > 0 } why ? $" — {why}" : string.Empty));
             }
+
+            // Вывод зависит от исхода, а не печатается один на все случаи.
+            // Прежде под таблицей стояло «открылось тут, но не открылось
+            // выше», когда тут как раз не открылось ни одно имя, — то есть
+            // раздел спорил сам с собой в двух строках подряд.
+            var conclusion = opened == lost.Count
+                ? "Здесь открылись все, а выше — ни одно. Значит сервер их довозит, "
+                  + "и дело в том, как собран конфиг: адрес, fakeip либо порядок правил."
+                : opened > 0
+                    ? "Часть открылась здесь, но не выше — по этим именам виноват "
+                      + "не сервер, а сборка конфига. Остальные не дошли и так."
+                    : "Здесь не открылось ни одно — значит дело не в обходе этого имени "
+                      + "мимо туннеля. Либо не довозит сервер, либо отвергает сама "
+                      + "удалённая сторона.";
 
             sections.Add(new SectionRow(
                 "Те же имена, пущенные в туннель нарочно",
                 string.Join("\n", lines)
                 + "\n\nЗдесь имя уехало движку именем, через служебный вход на петле. "
-                + "Открылось тут, но не открылось выше — значит дело не в сервере, "
-                + "а в том, как собран конфиг: адрес, fakeip либо порядок правил.",
+                + conclusion,
                 (Brush)FindResource("Warn")));
 
             Sections.ItemsSource = null;

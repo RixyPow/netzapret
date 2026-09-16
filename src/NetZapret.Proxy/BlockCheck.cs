@@ -817,6 +817,52 @@ public static class BlockCheck
         var kind = Classify(tcp, tls12, tls13, http, data, viaTunnel);
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
+        // Маркер зоны, спрятанный за fakeip.
+        //
+        // Имя без записи A — akamai.net, scdn.co, spotifycdn.com,
+        // whatsapp.com — напрямую опознаётся сразу: адреса нет, проверять
+        // нечего, строка в таблицу не идёт. Но заведённому в туннель
+        // движок выдаёт fakeip, то есть адрес появляется, и опознание
+        // не срабатывает вовсе.
+        //
+        // Дальше всё выглядит хостом, который не отвечает: TUN принимает
+        // всякое соединение мгновенно, поэтому TCP «ок», а затем движок
+        // не находит, к кому идти, и закрывает. В отчёте это выходило
+        // «туннель не доставил» — обвинение трубе за имя, которого нет.
+        //
+        // Замер 2026-09-16: у scdn.co и spotifycdn.com записи A нет
+        // ни у одного резолвера, whatsapp.com не существует вовсе,
+        // а i.scdn.co отвечает двумя адресами. Три из четырёх строк
+        // «туннель не доставил» в отчёте 21:59 были маркерами зон.
+        //
+        // Спрашивается только у провалившихся: на каждое проксируемое имя
+        // это был бы лишний запрос к DoH, а их два десятка.
+        if (viaTunnel && kind == BlockKind.TunnelFailed)
+        {
+            var exists = await DohResolveAsync(host, cancellationToken);
+
+            if (exists.Count == 0)
+            {
+                var missing = await DohCanonicalNameAsync(host, cancellationToken);
+
+                return new TargetReport
+                {
+                    Host = host,
+                    Service = service,
+                    Tcp = Failed(missing is null
+                        ? "записи A нет ни у кого — имя покрывает зону, а не хост"
+                        : $"ведёт на {missing}, а у того адреса нет"),
+                    Tls12 = Failed(null),
+                    Tls13 = Failed(null),
+                    Http = Failed(null),
+                    Data = Failed(null),
+                    Kind = missing is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
+                    Tunnelled = viaTunnel,
+                    ExpectedTunnel = throughTunnel,
+                };
+            }
+        }
+
         // «Не ответило ничего» бывает двух видов, и лечатся они разным.
         // Закрыт может быть маршрут до хоста — тогда нужен туннель. А может
         // не отвечать ровно тот адрес, который выдал резолвер, тогда как
