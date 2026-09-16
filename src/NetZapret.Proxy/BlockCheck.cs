@@ -284,7 +284,12 @@ public sealed record TargetReport
         BlockKind.Dns => "резолвер даёт нерабочий адрес",
         BlockKind.GeoBlock => "сайт отказывает по стране",
         BlockKind.BrokenCname => "оборванный CNAME",
-        BlockKind.Handshake => "сторона не даёт наш TLS",
+
+        // «Сторона не даёт наш TLS» звучало приговором сайту, а замер
+        // 2026-09-16 показал обратное: на speedtest.net и i.scdn.co
+        // приветствие Chrome принимается там же, где наше отвергают.
+        // Значит дело в нашем приветствии, а не в TLS у стороны.
+        BlockKind.Handshake => "наше приветствие TLS отвергнуто",
         _ => "нет адреса у имени",
     };
 
@@ -388,7 +393,10 @@ public sealed record TargetReport
         BlockKind.Dns => "свой DNS",
         BlockKind.GeoBlock => "только VPN — десинк не поможет",
         BlockKind.BrokenCname => "подставить адрес",
-        BlockKind.Handshake => "ничего не нужно — браузер умеет больше версий",
+        // Браузеру этот сайт открывается: у него приветствие TLS другое
+        // по составу — с GREASE, с расширениями, которых SChannel не шлёт
+        // вовсе. Замерено 2026-09-16 на speedtest.net и i.scdn.co.
+        BlockKind.Handshake => "ничего не нужно — в браузере откроется",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -1239,8 +1247,16 @@ public static class BlockCheck
                 Reset = IsReset(ex),
                 Unsupported = unsupported,
                 Elapsed = stopwatch.Elapsed,
+                // Про «это её настройка» здесь больше не утверждается,
+                // и это исправление по замеру. 2026-09-16: на speedtest.net
+                // и i.scdn.co приветствие SChannel отвергнуто, а собранное
+                // по образцу Chrome — с GREASE, полным набором расширений
+                // и тремя шифрами вместо двух — принято с ServerHello.
+                // Значит сторона TLS даёт, она не принимает наше приветствие,
+                // и списывать отказ на её настройку — врать про причину.
                 Detail = unsupported
-                    ? $"сторона не согласовала {Name(protocol)} — это её настройка, не фильтр"
+                    ? $"отвергнуто наше приветствие {Name(protocol)} — "
+                      + "у браузера оно другое по составу"
                     : Explain(ex, dialled, 443),
             };
         }

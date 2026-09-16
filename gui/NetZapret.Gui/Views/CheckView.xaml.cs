@@ -324,6 +324,7 @@ public partial class CheckView : UserControl
                     : $"Проверяю {targets.Count} — по каждому четыре пробы.");
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
+            await ReprobeAloneAsync(engine, running && settings.NeedsProxy, _work.Token);
 
             await Summarise(engine);
         }
@@ -729,6 +730,70 @@ public partial class CheckView : UserControl
         catch (OperationCanceledException)
         {
             // Прерывание — штатный исход. Что успели, то и покажем.
+        }
+    }
+
+    /// <summary>
+    /// Перепроверяет в тишине то, что могло провалиться от тесноты.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Консоль так делала с самого начала, окно — нет, и это стоило прямой
+    /// ошибки в отчёте: itch.io числился оборванным, работая. Он отдаёт
+    /// страницу chunked на сто одиннадцать килобайт и честно закрывает
+    /// соединение — замер 2026-09-16 в одиночку доходит целиком. Но проверка
+    /// гонит сотню имён разом, и трёхсекундная пауза посреди такой страницы
+    /// набегает от соседей по прогону, а не от сети.
+    /// </para>
+    /// <para>
+    /// Перепроверяются только вердикты, которые теснота способна подделать:
+    /// они ставятся по неполученному ответу. Заглушка в DNS и отказ по стране
+    /// получены по ответу, который пришёл, — такое теснота не подделает.
+    /// Список решает сам отчёт через <see cref="TargetReport.MayBeCrowding"/>.
+    /// </para>
+    /// <para>
+    /// По одному и с бюджетом: перепроверка идёт после полного прогона,
+    /// и превращать её во второй такой же прогон незачем — она нужна, чтобы
+    /// снять обвинение с немногих, а не чтобы удвоить ожидание.
+    /// </para>
+    /// </remarks>
+    private async Task ReprobeAloneAsync(RuleEngine? engine, bool tunnelInUse, CancellationToken cancellationToken)
+    {
+        var suspect = _reports.Where(r => r.Actionable && r.MayBeCrowding).Take(12).ToList();
+
+        if (suspect.Count == 0)
+            return;
+
+        Say($"Перепроверяю в тишине: {suspect.Count}…");
+
+        var budget = System.Diagnostics.Stopwatch.StartNew();
+
+        foreach (var crowded in suspect)
+        {
+            if (cancellationToken.IsCancellationRequested || budget.Elapsed > TimeSpan.FromSeconds(90))
+                break;
+
+            bool tunnelled = tunnelInUse && engine is not null && Proxied(engine, crowded.Host);
+
+            var alone = await BlockCheck.ProbeOnceAsync(
+                crowded.Host, crowded.Service, cancellationToken, tunnelled);
+
+            var settled = BlockCheck.Reconcile(crowded, alone);
+
+            if (settled.Kind == crowded.Kind)
+                continue;
+
+            // Строка в таблице заменяется на месте: вердикт, признанный
+            // недостоверным, не должен остаться на экране рядом с исправленным.
+            int at = _reports.IndexOf(crowded);
+
+            if (at >= 0)
+                _reports[at] = settled;
+
+            int row = Collected.ToList().FindIndex(r => r.Host == crowded.Host);
+
+            if (row >= 0)
+                Collected[row] = Row(settled, tunnelled, DesyncBypass.None);
         }
     }
 
