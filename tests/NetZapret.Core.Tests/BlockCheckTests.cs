@@ -419,4 +419,52 @@ public class BlockCheckTests
         Data = Ok(),
         Kind = kind,
     };
+
+    /// <summary>
+    /// Правило ведёт в туннель, а замер пошёл мимо — это надо называть.
+    /// </summary>
+    /// <remarks>
+    /// Прежде вердикт про туннель ставился по ответу движка правил, и никто
+    /// не проверял, что соединение вправду туда ушло. Расходятся они легко:
+    /// пин в hosts бьёт любой резолв, правило может быть перекрыто более
+    /// ранним, а в ветке с честным резолвером проба берёт настоящие адреса
+    /// в обход fakeip. Во всех трёх случаях измерялся прямой путь,
+    /// а подписывалось это «туннель не доставил».
+    /// </remarks>
+    [Fact]
+    public void A_rule_that_promised_the_tunnel_but_went_direct_is_named()
+    {
+        var missed = Report(BlockKind.Full) with { ExpectedTunnel = true, Tunnelled = false };
+
+        Assert.True(missed.TunnelMissed);
+    }
+
+    /// <summary>Совпали намерение и дело — говорить не о чем.</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    public void Nothing_is_claimed_when_the_path_matches_the_rule(bool expected, bool tunnelled)
+    {
+        var report = Report(BlockKind.Full) with { ExpectedTunnel = expected, Tunnelled = tunnelled };
+
+        Assert.False(report.TunnelMissed);
+    }
+
+    /// <summary>
+    /// Fakeip — единственный признак туннеля, видный снаружи.
+    /// </summary>
+    /// <remarks>
+    /// Проба опирается на него, решая, через что прошёл замер. Настоящий
+    /// адрес означает прямой путь, какое бы правило на имя ни стояло.
+    /// </remarks>
+    [Theory]
+    [InlineData("198.18.0.1", true)]
+    [InlineData("198.19.255.254", true)]
+    [InlineData("142.250.74.14", false)]
+    [InlineData("127.0.0.1", false)]
+    public void Only_a_fakeip_address_means_the_tunnel(string address, bool expected)
+    {
+        Assert.Equal(expected, TunnelHealth.IsFakeIp(System.Net.IPAddress.Parse(address)));
+    }
 }

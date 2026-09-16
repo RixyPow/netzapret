@@ -233,6 +233,40 @@ public sealed record TargetReport
 
     public IReadOnlyList<string> Addresses { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Замер вправду ушёл в туннель — по адресу, в который разрешилось имя.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Замеренный факт, а не вычитанное из правил намерение. Прежде вердикты
+    /// про туннель ставились по ответу движка правил — «этому имени положено
+    /// идти через VPN», — и никто не проверял, что так и вышло. Разойтись
+    /// им легко: пин в hosts бьёт любой резолв, правило могло быть перекрыто
+    /// более ранним, а в ветке с honest DNS проба и вовсе берёт настоящие
+    /// адреса от 1.1.1.1 и стучится прямо в них, мимо fakeip.
+    /// </para>
+    /// <para>
+    /// Во всех этих случаях измерялось прямое соединение, а подписывалось
+    /// оно «туннель не доставил» — то есть человека отправляли чинить трубу,
+    /// которой замер не касался.
+    /// </para>
+    /// </remarks>
+    public bool Tunnelled { get; init; }
+
+    /// <summary>
+    /// Правила ведут имя в туннель, а замер прошёл мимо него.
+    /// </summary>
+    /// <remarks>
+    /// Само по себе не поломка: так выглядит имя, прибитое в hosts или
+    /// перекрытое более ранним правилом. Но вердикт по такому замеру
+    /// описывает прямой путь, а не туннель, и об этом надо сказать —
+    /// иначе «закрыт полностью» у проксируемого имени читается как беда
+    /// подписки.
+    /// </remarks>
+    public bool ExpectedTunnel { get; init; }
+
+    public bool TunnelMissed => ExpectedTunnel && !Tunnelled;
+
     public string Describe() => Kind switch
     {
         BlockKind.None => "доступен",
@@ -586,6 +620,12 @@ public static class BlockCheck
                     Data = Failed(null),
                     Kind = BlockKind.Dns,
                     Addresses = honest.Take(3).ToList(),
+
+                    // Имя не разрешилось вовсе — соединения не было, и путь
+                    // ему взяться неоткуда. Правило при этом называется:
+                    // по нему видно, чего от имени ждали.
+                    Tunnelled = false,
+                    ExpectedTunnel = throughTunnel,
                 };
             }
 
@@ -607,6 +647,8 @@ public static class BlockCheck
                 Http = Failed(null),
                 Data = Failed(null),
                 Kind = alias is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
+                Tunnelled = false,
+                ExpectedTunnel = throughTunnel,
             };
         }
 
@@ -627,8 +669,25 @@ public static class BlockCheck
                 Data = Failed(null),
                 Kind = BlockKind.Sinkhole,
                 Addresses = real.Select(a => a.ToString()).Take(3).ToList(),
+
+                // Заглушка — это настоящий адрес, пусть и негодный: fakeip
+                // он не является, и соединение по нему пошло бы напрямую.
+                Tunnelled = false,
+                ExpectedTunnel = throughTunnel,
             };
         }
+
+        // Через туннель или мимо — решает адрес, в который разрешилось имя,
+        // а не правило. Fakeip выдаётся только тем именам, которые движок
+        // заводит в туннель, и это единственный признак, видный снаружи:
+        // настоящий адрес означает, что соединение пойдёт напрямую, какое бы
+        // правило на имя ни стояло.
+        //
+        // Прежде сюда приходило намерение из правил, и всякий раз, когда
+        // они расходились с делом — пин в hosts, перекрытое правило, честный
+        // резолвер вместо fakeip, — прямое соединение получало вердикт
+        // «туннель не доставил».
+        bool viaTunnel = real.Any(a => TunnelHealth.IsFakeIp(a));
 
         var (answered, tcp) = await ConnectAnyAsync(
             host, 443, AddressFamily.InterNetwork, real, cancellationToken);
@@ -665,7 +724,8 @@ public static class BlockCheck
             ? await TransferAsync(host, cancellationToken, real, answered)
             : Failed(null);
 
-        var kind = Classify(tcp, tls12, tls13, http, data, throughTunnel);
+        // Разбор идёт по замеренному пути, а не по обещанному правилами.
+        var kind = Classify(tcp, tls12, tls13, http, data, viaTunnel);
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
         // «Не ответило ничего» бывает двух видов, и лечатся они разным.
@@ -675,7 +735,7 @@ public static class BlockCheck
         // системный DNS разрешал в 157.240.205.60, куда соединение не встаёт,
         // а 1.1.1.1 давал 57.144.249.32, который отвечает за десятые доли.
         // Первое лечится VPN, второе — сменой резолвера, и путать их дорого.
-        if (kind == BlockKind.Full && !throughTunnel)
+        if (kind == BlockKind.Full && !viaTunnel)
         {
             var honest = await DohResolveAsync(host, cancellationToken);
 
@@ -700,6 +760,12 @@ public static class BlockCheck
                     Data = data,
                     Kind = BlockKind.Dns,
                     Addresses = honest.Take(3).ToList(),
+
+                    // Адреса взяты у честного резолвера, мимо fakeip, —
+                    // значит замер заведомо шёл не через туннель, что бы
+                    // ни говорили правила.
+                    Tunnelled = false,
+                    ExpectedTunnel = throughTunnel,
                 };
             }
         }
@@ -715,6 +781,8 @@ public static class BlockCheck
             Data = data,
             Kind = kind,
             Addresses = shown,
+            Tunnelled = viaTunnel,
+            ExpectedTunnel = throughTunnel,
         };
     }
 

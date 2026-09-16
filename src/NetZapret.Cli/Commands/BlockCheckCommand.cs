@@ -424,7 +424,6 @@ internal static class BlockCheckCommand
 
                     PrintRow(
                         report,
-                        tunnelled,
                         pinned.ContainsKey(target.Host),
                         preset,
                         HostsFile.BypassFor(bypassed, target.Host));
@@ -903,7 +902,6 @@ internal static class BlockCheckCommand
     /// </param>
     private static void PrintRow(
         TargetReport report,
-        bool throughTunnel,
         bool pinned,
         (ZapretPreset Preset, string? Root)? preset,
         DesyncBypass bypass)
@@ -912,7 +910,11 @@ internal static class BlockCheckCommand
 
         // Метка «чз» — через туннель, «hs» — через прибитый в hosts адрес.
         // Обе означают одно: измерен посредник, и вердикт относится к нему.
-        var mark = pinned ? "hs" : throughTunnel ? "чз" : "  ";
+        //
+        // «чз» ставится по замеру, а не по правилу. Прежде её ставило
+        // намерение — «этому имени положено идти через VPN», — и у имени,
+        // ушедшего мимо туннеля, в строке всё равно стояло «чз».
+        var mark = pinned ? "hs" : report.Tunnelled ? "чз" : "  ";
 
         Console.ForegroundColor = report.Actionable && !pinned ? ConsoleColor.Red : ConsoleColor.DarkGray;
         Console.WriteLine(
@@ -932,6 +934,22 @@ internal static class BlockCheckCommand
 
         if (why is not null)
             Console.WriteLine($"      {Truncate(why, 88)}");
+
+        // Правило ведёт в туннель, а замер прошёл мимо. Называется прежде
+        // всего прочего, потому что меняет смысл всей строки: вердикт описал
+        // прямой путь, и чинить подписку по нему — не туда.
+        //
+        // Причин ровно три, и все три чинятся не там, где ищут: имя прибито
+        // в hosts (пин бьёт любой резолв, включая наш), правило перекрыто
+        // более ранним, либо адрес пришёл от честного резолвера в обход
+        // fakeip.
+        if (report.TunnelMissed)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("      правило ведёт в VPN, а замер пошёл напрямую — "
+                + "вердикт не о туннеле");
+            Console.ForegroundColor = previous;
+        }
 
         // Выведенное из-под десинка называется вместо секции, а не рядом с ней.
         // Секция для такого имени вычисляется и ничего не значит: список

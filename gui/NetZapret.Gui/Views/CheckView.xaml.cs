@@ -423,18 +423,9 @@ public partial class CheckView : UserControl
             text.AppendLine("ПОЧЕМУ");
             text.AppendLine(new string('-', 78));
 
+            // Пометка идёт первой: она отменяет совет, а не дополняет его.
             foreach (var row in explained)
-            {
-                // Пометка идёт первой: она отменяет совет, а не дополняет его.
-                var line = (row.Bypass, row.Why) switch
-                {
-                    ("", var w) => w,
-                    (var b, "") => b,
-                    var (b, w) => $"{b}; {w}",
-                };
-
-                text.AppendLine($"{row.Host}: {line}");
-            }
+                text.AppendLine($"{row.Host}: {Explain(row)}");
         }
 
         if (_sections.Count > 0)
@@ -752,10 +743,22 @@ public partial class CheckView : UserControl
         // нечего, а пометка на всех пятидесяти строках стала бы шумом.
         var note = report.Actionable ? HostsFile.DescribeBypass(bypass) : string.Empty;
 
+        // Правило ведёт в туннель, а замер прошёл мимо. Пометка важнее той,
+        // что про десинк: она меняет смысл вердикта целиком — он описал
+        // прямой путь, а не трубу, и чинить подписку по нему не туда.
+        if (report.TunnelMissed)
+        {
+            note = "правило ведёт в VPN, а замер пошёл напрямую — вердикт не о туннеле"
+                + (note.Length == 0 ? string.Empty : "; " + note);
+        }
+
         return new CheckRow(
             report.Host,
-            tunnelled ? "чз" : string.Empty,
-            tunnelled ? Visibility.Visible : Visibility.Collapsed,
+
+            // Пометка ставится по замеру, а не по правилу: у имени, ушедшего
+            // мимо туннеля, прежде всё равно стояло «чз».
+            report.Tunnelled ? "чз" : string.Empty,
+            report.Tunnelled ? Visibility.Visible : Visibility.Collapsed,
             report.Tcp.Describe(),
             report.Tls12.Describe(),
             report.Tls13.Describe(),
@@ -768,6 +771,14 @@ public partial class CheckView : UserControl
             note,
             note.Length == 0 ? Visibility.Collapsed : Visibility.Visible);
     }
+
+    /// <summary>Строка с пометкой про путь и про десинк — для сохраняемого отчёта.</summary>
+    private static string Explain(CheckRow row) => (row.Bypass, row.Why) switch
+    {
+        ("", var why) => why,
+        (var bypass, "") => bypass,
+        var (bypass, why) => $"{bypass}; {why}",
+    };
 
     /// <summary>
     /// Итог: по видам блокировок и по спорящим правилам.
