@@ -1422,6 +1422,22 @@ public static class BlockCheck
                 // настроек, а не от нашей связи.
                 if (promised is { } body && header > 0 && total - header >= body)
                     break;
+
+                // Ответ, которому тело не положено, закончен на заголовках.
+                // Перенаправление несёт всё нужное в Location, у 204 и 304
+                // содержимого нет по определению — и Content-Length такие
+                // ответы обычно не шлют вовсе, так что проверка выше
+                // не срабатывает и читать приходится «до упора».
+                //
+                // Упор оказывался закрытием сессии, и стоило это строки
+                // в отчёте: whatsapp.net отвечает «302 Found» в 403 байтах,
+                // а проба звала это «Получено непредвиденное сообщение или
+                // оно имеет неправильный формат» — то есть объявляла
+                // мессенджер сломанным при работающем мессенджере.
+                // Замер 2026-09-16: рукопожатие проходит всеми тремя
+                // способами, GET / отдаёт 302 и 403 байта.
+                if (header > 0 && status is >= 300 and < 400 or 204 or 304)
+                    break;
             }
 
             return new ProbeOutcome
@@ -1490,7 +1506,7 @@ public static class BlockCheck
     /// нужна ровно затем, чтобы отличить убитый поток от медленного, а без
     /// обещанного остаётся просто «пришло», как и было.
     /// </remarks>
-    private static long? ParseContentLength(byte[] buffer, int length)
+    internal static long? ParseContentLength(byte[] buffer, int length)
     {
         var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 4096));
 
@@ -1510,7 +1526,7 @@ public static class BlockCheck
         return null;
     }
 
-    private static int? ParseStatus(byte[] buffer, int length)
+    internal static int? ParseStatus(byte[] buffer, int length)
     {
         var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 64));
 
