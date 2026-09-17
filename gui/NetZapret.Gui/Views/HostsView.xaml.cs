@@ -8,7 +8,15 @@ using NetZapret.Proxy;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Прибитое имя.</summary>
-public sealed record PinRow(string Name, string Detail, string Note, Brush Color);
+/// <param name="Ours">
+/// Запись поставила программа. Только такие она и снимает: файл общий,
+/// чужие записи ведёт кто-то ещё, и кнопка «снять» у них означала бы право,
+/// которого у нас нет.
+/// </param>
+public sealed record PinRow(string Name, string Detail, string Note, Brush Color, bool Ours = true)
+{
+    public Visibility UnpinShown => Ours ? Visibility.Visible : Visibility.Collapsed;
+}
 
 /// <summary>
 /// Файл hosts: что прибито и живо ли оно.
@@ -65,13 +73,74 @@ public partial class HostsView : UserControl
                 .ToList();
 
             Status.Text = pins.Count == 0
-                ? "Нами ничего не прибито. Чужие записи в файле, если они есть, мы не трогаем."
+                ? "Нами ничего не прибито."
                 : $"Прибито нами: {pins.Count}. Файл: {HostsFile.DefaultPath}";
+
+            OursNote.Text = pins.Count == 0
+                ? "Программа сюда ничего не ставила."
+                : "Эти записи поставила программа, и она же их снимает.";
+
+            ShowForeign(pins);
         }
         catch (Exception ex)
         {
             Status.Text = "Файл не читается: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>
+    /// Показывает записи, которые в файле есть, а нашими не являются.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Видеть их надо, а трогать нельзя, и это два разных утверждения.
+    /// Прежде окно показывало только свой блок — и чужой пин оставался
+    /// невидим ровно тогда, когда объяснял происходящее: записи от редактора
+    /// hosts из Zapret GUI на Canva, RuTracker и LinkedIn однажды выглядели
+    /// как неисправный VPN, и разбор стоил дня.
+    /// </para>
+    /// <para>
+    /// Свёрнуты по умолчанию: на живой машине их бывают сотни — на той,
+    /// где это писалось, семьсот восемьдесят две против ста трёх наших.
+    /// </para>
+    /// </remarks>
+    private void ShowForeign(IReadOnlyDictionary<string, string> ours)
+    {
+        try
+        {
+            var foreign = HostsFile.Read()
+                .Where(e => e.Value.Count > 0 && !ours.ContainsKey(e.Key))
+                .OrderBy(e => e.Key, StringComparer.Ordinal)
+                .Select(e => new PinRow(
+                    e.Key,
+                    string.Join(", ", e.Value.Take(2)),
+                    "чужая",
+                    (Brush)FindResource("Faint"),
+                    Ours: false))
+                .ToList();
+
+            Foreign.ItemsSource = foreign;
+
+            ForeignToggle.Visibility = foreign.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+            ForeignSummary.Text = $"{foreign.Count} — их ведёт кто-то ещё: редактор hosts "
+                + "из Zapret GUI, антивирус либо вы сами. Показаны, потому что объясняют "
+                + "вердикты проверки; снять их отсюда нельзя.";
+        }
+        catch (Exception)
+        {
+            // Файл системный и может быть занят. Свой блок при этом уже
+            // показан — половина сведений лучше жалобы вместо них.
+            ForeignToggle.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void OnForeignToggle(object sender, RoutedEventArgs e)
+    {
+        bool open = ForeignPanel.Visibility != Visibility.Visible;
+
+        ForeignPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        ForeignChevron.Text = open ? "▾" : "▸";
     }
 
     private void OnOpen(object sender, RoutedEventArgs e)

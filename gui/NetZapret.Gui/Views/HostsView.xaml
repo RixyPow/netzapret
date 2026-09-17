@@ -3,6 +3,45 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{DynamicResource Backdrop}">
 
+    <!--
+        Строка одна на оба списка — наш и чужой. Вид у неё один, и держать
+        две копии разметки значило бы чинить каждую правку дважды.
+        Отличается только кнопка «снять»: у чужой записи её нет, потому что
+        трогать чужое мы не вправе.
+    -->
+    <UserControl.Resources>
+        <DataTemplate x:Key="PinItem">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,12,0"
+                             VerticalAlignment="Center" Fill="{Binding Color}" />
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" Text="{Binding Note}" Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="12,0,14,0"
+                               Foreground="{Binding Color}" />
+
+                    <Button Grid.Column="3" Style="{StaticResource Ghost}"
+                            Content="снять" Padding="14,7"
+                            Visibility="{Binding UnpinShown}"
+                            Tag="{Binding Name}" Click="OnUnpin" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -45,39 +84,75 @@
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap" />
 
-                <ItemsControl x:Name="Pins" Margin="0,12,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                <!--
+                    Наши и чужие врозь, тем же приёмом, что у пресетов.
+                    За свои мы отвечаем и снимаем их кнопкой; чужие ведёт
+                    кто-то ещё — редактор Zapret GUI, антивирус, рука, — и
+                    трогать их мы не вправе. Но видеть обязаны: именно чужой
+                    пин на Canva и RuTracker однажды выглядел как неисправный
+                    VPN, и разбор стоил дня.
+                -->
+                <TextBlock x:Name="OursHeader" Text="Прибито нами"
+                           FontWeight="SemiBold" FontSize="15" Margin="4,20,0,4" />
+                <TextBlock x:Name="OursNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
+                           TextWrapping="Wrap"
+                           Text="Эти записи поставила программа, и она же их снимает." />
 
-                                    <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,12,0"
-                                             VerticalAlignment="Center" Fill="{Binding Color}" />
+                <ItemsControl x:Name="Pins" ItemTemplate="{StaticResource PinItem}" />
 
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                <!--
+                    Чужих у людей бывают сотни — на этой машине семьсот
+                    восемьдесят два. Плоским списком их класть нельзя: раздел
+                    целиком лежит в свитке, и на бесконечной высоте
+                    виртуализация выключается сама. Отсюда своя высота
+                    и свой свиток, как у «Порядка вычисления» в маршрутах.
+                -->
+                <Button x:Name="ForeignToggle" Style="{StaticResource Choice}"
+                        Margin="0,22,0,0" Click="OnForeignToggle">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="2" Text="{Binding Note}" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" Margin="12,0,14,0"
-                                               Foreground="{Binding Color}" />
+                        <TextBlock x:Name="ForeignChevron" Grid.Column="0" Text="▸" FontSize="15"
+                                   Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
+                                   VerticalAlignment="Center" />
 
-                                    <Button Grid.Column="3" Style="{StaticResource Ghost}"
-                                            Content="снять" Padding="14,7"
-                                            Tag="{Binding Name}" Click="OnUnpin" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Чужие записи" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ForeignSummary" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <StackPanel x:Name="ForeignPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                    <ItemsControl x:Name="Foreign" MaxHeight="360"
+                                  ItemTemplate="{StaticResource PinItem}"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling"
+                                  VirtualizingPanel.ScrollUnit="Pixel">
+                        <ItemsControl.Template>
+                            <ControlTemplate TargetType="ItemsControl">
+                                <ScrollViewer CanContentScroll="True" Focusable="False"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </ControlTemplate>
+                        </ItemsControl.Template>
+
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+
+                    <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
+                               Text="Снять их отсюда нельзя намеренно: файл общий, записи ведёт кто-то ещё, и кнопка «почистить» в системном файле однажды сотрёт то, на чём всё держалось. Правятся они вручную — кнопкой «Открыть файл» выше." />
+                </StackPanel>
 
                 <TextBlock Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap"
                            Text="Имя разрешается до нашего резолвера, fakeip не выдаётся, и адрес берётся из файла. Но маршрут этим не отменяется: имя вынюхивается из рукопожатия, и правило по домену срабатывает всё равно. Чужие записи мы не трогаем — их ведёт кто-то ещё." />
