@@ -98,9 +98,6 @@ public sealed record ZapretPaths
         Directory.Exists(PresetDirectory)
             ? Directory.EnumerateFiles(PresetDirectory, "*.txt").OrderBy(p => p).ToList()
             : [];
-
-    public string ListDirectory => Path.Combine(Root, "lists");
-
     /// <summary>
     /// Путь к winws2.exe.
     /// </summary>

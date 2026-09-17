@@ -55,19 +55,6 @@ public abstract class SupervisedService
     private string? _outputLogPath;
     private RollingLog? _log;
 
-    /// <summary>Последние строки вывода — для диагностики при падении.</summary>
-    public IReadOnlyList<string> RecentOutput
-    {
-        get
-        {
-            lock (_outputLock)
-                return _recentOutput.ToList();
-        }
-    }
-
-    private readonly object _outputLock = new();
-    private readonly Queue<string> _recentOutput = new();
-
     public int? ProcessId => Process is { HasExited: false } ? Process.Id : null;
 
     public DateTimeOffset? StartedAt { get; private set; }
@@ -214,18 +201,17 @@ public abstract class SupervisedService
     /// </remarks>
     protected void Note(string line) => RecordOutput($"[супервизор] {line}");
 
-    private void RecordOutput(string line)
-    {
-        lock (_outputLock)
-        {
-            _recentOutput.Enqueue(line);
-
-            while (_recentOutput.Count > 100)
-                _recentOutput.Dequeue();
-        }
-
-        _log?.AppendLine(line);
-    }
+    /// <remarks>
+    /// Зовётся на каждую строку вывода движка, а winws2 пишет строку
+    /// на соединение — то есть это горячий путь, и лишней работы здесь
+    /// быть не должно.
+    ///
+    /// Её тут и было: строки складывались в очередь на сотню, под замком,
+    /// с подрезкой на каждой записи. Читать эту очередь было некому —
+    /// свойство, ради которого она велась, не вызывалось ни разу
+    /// ни в консоли, ни в окне, ни в проверках.
+    /// </remarks>
+    private void RecordOutput(string line) => _log?.AppendLine(line);
 }
 
 /// <summary>
