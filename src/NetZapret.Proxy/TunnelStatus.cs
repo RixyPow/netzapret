@@ -51,7 +51,7 @@ public static class TunnelStatus
             if (!document.RootElement.TryGetProperty("now", out var now))
                 return null;
 
-            var name = now.GetString();
+            var name = Named(now);
 
             // Селектор может указывать на группу, а не на сервер. Тогда
             // спрашиваем ещё раз у неё — иначе получится «auto-latency»,
@@ -64,8 +64,13 @@ public static class TunnelStatus
 
                 using var group = JsonDocument.Parse(inner);
 
-                if (group.RootElement.TryGetProperty("now", out var chosen))
-                    return chosen.GetString();
+                // Пустой ответ означает, что группа ещё не выбрала: она
+                // из тех, что меряют задержку, и до первого замера ей выбирать
+                // не из чего. Возвращаем имя самой группы, а не пустоту —
+                // по нему хотя бы можно спросить состояние.
+                return group.RootElement.TryGetProperty("now", out var chosen)
+                    ? Named(chosen) ?? name
+                    : name;
             }
 
             return name;
@@ -77,6 +82,24 @@ public static class TunnelStatus
             return null;
         }
     }
+
+    /// <summary>
+    /// Имя из ответа движка; пустая строка считается отсутствием имени.
+    /// </summary>
+    /// <remarks>
+    /// Разница видна в отчёте. Группа, меряющая задержку, до первого замера
+    /// отвечает пустым <c>now</c>, а не отсутствующим, — и проверка, начатая
+    /// сразу после запуска движков, писала в шапку «Сервер: » с пустотой
+    /// после двоеточия и «Туннель: состояние не выяснено». Замер 17.09 17:44:
+    /// движки подняты в 17:43:28, отчёт снят через полминуты, а в 17:46 та же
+    /// группа уже называла «Германия — TLS XHTTP».
+    /// </remarks>
+    private static string? Named(JsonElement element) =>
+        element.ValueKind == JsonValueKind.String
+            && element.GetString() is { Length: > 0 } name
+            && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : null;
 
     /// <summary>
     /// Проходит ли трафик через названный выход.
@@ -92,14 +115,17 @@ public static class TunnelStatus
         CancellationToken cancellationToken,
         int clashPort = DefaultClashPort)
     {
-        if (string.IsNullOrWhiteSpace(server))
-            return TunnelState.Unknown;
+        // Имени нет — спрашиваем селектор. Он есть всегда, пока движок жив,
+        // и запрос задержки к нему заставляет группу выбрать. Прежде здесь
+        // возвращалось «состояние не выяснено», и отчёт, снятый сразу после
+        // запуска движков, молчал о туннеле при живом туннеле.
+        var target = string.IsNullOrWhiteSpace(server) ? "auto" : server;
 
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
 
-            var url = $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(server)}/delay"
+            var url = $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(target)}/delay"
                 + "?timeout=5000&url=" + Uri.EscapeDataString("https://www.gstatic.com/generate_204");
 
             using var response = await http.GetAsync(url, cancellationToken);
