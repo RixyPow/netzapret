@@ -86,6 +86,60 @@ public sealed class PresetZones
     public ZapretSection? FirstFor(IReadOnlyList<string> domains) =>
         AllFor(domains).FirstOrDefault();
 
+    /// <summary>
+    /// Та же первая секция, но с подробностями для отчёта.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Заведено взамен отдельного <c>PresetMatcher</c>, который отвечал
+    /// на тот же вопрос вторым способом. Две реализации одного правила
+    /// расходились по существу: тот перечитывал списки с диска на каждое имя
+    /// и не знал обратного совпадения — когда запись секции лежит под нашим
+    /// именем, как <c>updates.discord.com</c> под правилом на
+    /// <c>discord.com</c>. На одном и том же пресете они могли дать разный
+    /// ответ, и какой из них верен, зависело от того, кто спрашивал.
+    /// </para>
+    /// <para>
+    /// Номер секции нужен именно для отчёта: «секция #7» — это то, что человек
+    /// пойдёт искать в файле. Правится обычно секция, до которой исполнение
+    /// не доходит, потому что её перехватывает более ранняя по большому
+    /// списку; пять попыток починить один сайт ушли впустую именно так.
+    /// </para>
+    /// </remarks>
+    public PresetMatch? MatchFor(string host)
+    {
+        IReadOnlyList<string> one = [host];
+
+        for (int i = 0; i < _sections.Count; i++)
+        {
+            var (section, zones) = _sections[i];
+
+            if (!Covers(zones, Ours(one), one))
+                continue;
+
+            return new PresetMatch
+            {
+                Ordinal = i + 1,
+                Name = string.IsNullOrWhiteSpace(section.Name) ? "без имени" : section.Name,
+                Recipes = section.IsPassThrough ? [] : section.DesyncRecipes,
+                IsPassThrough = section.IsPassThrough,
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>Зоны наших имён — для обратного совпадения.</summary>
+    private static HashSet<string> Ours(IReadOnlyList<string> domains)
+    {
+        var ours = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var domain in domains)
+            Add(ours, domain);
+
+        return ours;
+    }
+
     /// <summary>Все покрывающие секции, в порядке файла.</summary>
     public IEnumerable<ZapretSection> AllFor(IReadOnlyList<string> domains)
     {

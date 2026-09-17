@@ -123,6 +123,17 @@ public partial class CheckView : UserControl
     /// <summary>Состояние туннеля на момент прогона.</summary>
     private static TunnelState _tunnel = TunnelState.Unknown;
 
+    /// <summary>
+    /// Секции действующего пресета, разобранные один раз на прогон.
+    /// </summary>
+    /// <remarks>
+    /// Собираются заранее, а не на каждую строку: сборка открывает каждый
+    /// список, на который ссылается пресет, а их дюжина на дюжину файлов.
+    /// Делать это по сто двадцать раз значило бы прочитать одно и то же
+    /// полторы тысячи раз за прогон.
+    /// </remarks>
+    private static PresetZones? _zones;
+
     private static CancellationTokenSource? _work;
     private static bool _running;
     private static IReadOnlyList<SectionRow> _sections = [];
@@ -314,6 +325,19 @@ public partial class CheckView : UserControl
             {
                 // Без правил проверка всё равно осмысленна: она мерит сеть,
                 // а не настройку. Пометок «через туннель» просто не будет.
+            }
+
+            _zones = null;
+
+            try
+            {
+                if (settings.PresetName is { } name && ZapretPaths.FindPreset(name) is { } path)
+                    _zones = PresetZones.Build(new PresetReader().Load(path), zapretRoot);
+            }
+            catch (Exception)
+            {
+                // Пресета может не быть — в режиме «только VPN» он не запускается,
+                // да и файл могли удалить. Тогда строк про секции просто не будет.
             }
 
             var targets = Targets(zapretRoot, _target, _deep);
@@ -837,6 +861,24 @@ public partial class CheckView : UserControl
         // Только у провалившихся, как и в консоли: у «доступен» объяснять
         // нечего, а пометка на всех пятидесяти строках стала бы шумом.
         var note = report.Actionable ? HostsFile.DescribeBypass(bypass) : string.Empty;
+
+        // Какая секция пресета взяла бы это имя. Без неё правка пресета —
+        // угадывание: чинят секцию, до которой исполнение не доходит, потому
+        // что раньше сработала другая, по большому списку. На этом обжигались
+        // трижды за двое суток — голос Discord чинился секцией, до которой
+        // не доходила очередь; пять новых секций встали ниже «Моих сайтов»
+        // и не работали ни дня.
+        //
+        // Не показывается там, где имя выведено из-под десинка: список
+        // исключений уходит в --hostlist-exclude, и winws2 отбрасывает имя
+        // раньше, чем начнёт разбирать профили, — секция вычисляется
+        // и ничего не значит.
+        if (report.Actionable && note.Length == 0 && _zones is { } zones)
+        {
+            note = zones.MatchFor(report.Host) is { } match
+                ? $"секция #{match.Ordinal} {match.Describe()}"
+                : "секция: ни одна доменная не совпала";
+        }
 
         // Правило ведёт в туннель, а замер прошёл мимо. Пометка важнее той,
         // что про десинк: она меняет смысл вердикта целиком — он описал

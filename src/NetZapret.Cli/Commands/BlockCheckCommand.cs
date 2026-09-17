@@ -237,7 +237,7 @@ internal static class BlockCheckCommand
             // на именах остаются — и без этой оговорки отчёт помечал их «чз».
             enginesRunning && settings.NeedsProxy,
             pinned,
-            LoadPreset(settings, zapretRoot),
+            LoadZones(settings, zapretRoot),
             bypassed,
             stop.Token);
 
@@ -399,7 +399,7 @@ internal static class BlockCheckCommand
         RuleEngine? engine,
         bool tunnelInUse,
         IReadOnlyDictionary<string, string> pinned,
-        (ZapretPreset Preset, string? Root)? preset,
+        PresetZones? zones,
         IReadOnlyList<(string Name, DesyncBypass Why)> bypassed,
         CancellationToken cancellationToken)
     {
@@ -436,7 +436,7 @@ internal static class BlockCheckCommand
                     PrintRow(
                         report,
                         pinned.ContainsKey(target.Host),
-                        preset,
+                        zones,
                         HostsFile.BypassFor(bypassed, target.Host));
                 }
             }
@@ -640,7 +640,8 @@ internal static class BlockCheckCommand
             return [];
         }
     }
-
+
+
 
     /// <summary>
     /// Показывает, что сам движок сказал про эти имена.
@@ -976,7 +977,7 @@ internal static class BlockCheckCommand
     private static void PrintRow(
         TargetReport report,
         bool pinned,
-        (ZapretPreset Preset, string? Root)? preset,
+        PresetZones? zones,
         DesyncBypass bypass)
     {
         var previous = Console.ForegroundColor;
@@ -1046,12 +1047,12 @@ internal static class BlockCheckCommand
         // Какая секция пресета взяла бы это имя. Без этого правка пресета —
         // угадывание: чинят секцию, до которой исполнение не доходит, потому
         // что раньше сработала другая, по большому списку.
-        if (preset is not { } p)
+        if (zones is not { } p)
             return;
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
 
-        Console.WriteLine(PresetMatcher.For(p.Preset, report.Host, p.Root) is { } match
+        Console.WriteLine(p.MatchFor(report.Host) is { } match
             ? $"      секция #{match.Ordinal} {Truncate(match.Describe(), 82)}"
             : "      секция: ни одна доменная не совпала");
 
@@ -1065,7 +1066,7 @@ internal static class BlockCheckCommand
     /// Отсутствие пресета — не ошибка: режим «только VPN» его не запускает,
     /// да и файл могли удалить. Тогда строк про секции просто не будет.
     /// </remarks>
-    private static (ZapretPreset Preset, string? Root)? LoadPreset(AppSettings settings, string? zapretRoot)
+    private static PresetZones? LoadZones(AppSettings settings, string? zapretRoot)
     {
         if (settings.PresetName is null)
             return null;
@@ -1074,7 +1075,7 @@ internal static class BlockCheckCommand
         {
             var path = ZapretPaths.FindPreset(settings.PresetName);
 
-            return path is null ? null : (new PresetReader().Load(path), zapretRoot);
+            return path is null ? null : PresetZones.Build(new PresetReader().Load(path), zapretRoot);
         }
         catch (Exception)
         {
@@ -1347,9 +1348,12 @@ internal static class BlockCheckCommand
 
         public required ExitReading Exit { get; init; }
     }
-
-
-
+
+
+
+
+
+
 
     private static void PrintExit(ExitReading exit)
     {
@@ -1411,7 +1415,8 @@ internal static class BlockCheckCommand
 
         Console.ForegroundColor = previous;
     }
-
+
+
 
     /// <summary>
     /// Объясняет столбцы до того, как они появятся.
