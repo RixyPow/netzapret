@@ -52,10 +52,56 @@ internal sealed class TrayIcon : IDisposable
         public override Color SeparatorLight => Edge;
     }
 
+    /// <summary>
+    /// Сообщение, которым оболочка объявляет, что область уведомлений создана.
+    /// </summary>
+    /// <remarks>
+    /// Рассылается всем окнам верхнего уровня — и при первом создании панели
+    /// задач, и после перезапуска проводника.
+    /// </remarks>
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int RegisterWindowMessage(string message);
+
+    private static readonly int TaskbarCreated = RegisterWindowMessage("TaskbarCreated");
+
+    /// <summary>
+    /// Окно, слушающее рассылку о создании панели задач.
+    /// </summary>
+    /// <remarks>
+    /// Своё, потому что в режиме <c>--tray</c> никакого другого окна у нас нет
+    /// вовсе: программа поднимается значком и живёт без него.
+    /// </remarks>
+    private sealed class ShellWatcher : NativeWindow
+    {
+        private readonly Action _restored;
+
+        public ShellWatcher(Action restored)
+        {
+            _restored = restored;
+            CreateHandle(new CreateParams());
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == TaskbarCreated)
+                _restored();
+
+            base.WndProc(ref m);
+        }
+    }
+
     private readonly NotifyIcon _icon;
     private readonly ToolStripLabel _state;
     private readonly ToolStripMenuItem _toggle;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(2) };
+    private ShellWatcher? _shell;
+
+    /// <summary>Сколько раз ещё перевыставить значок после запуска.</summary>
+    /// <remarks>
+    /// Считается вниз по тикам опроса; ноль означает, что попытки исчерпаны
+    /// и значок больше не трогаем.
+    /// </remarks>
+    private int _readds = 2;
 
     private bool _busy;
 
@@ -103,10 +149,47 @@ internal sealed class TrayIcon : IDisposable
 
         _icon.DoubleClick += (_, _) => Show();
 
+        // Оболочка объявляет о создании области уведомлений один раз. Мы
+        // запускаемся автозапуском в ту же секунду, что и проводник, и если
+        // наше окно появилось позже рассылки, сообщения мы не получим никогда —
+        // а повторять добавление значка нечему. Так он и пропадал: при запуске
+        // руками виден, при входе в систему нет.
+        try
+        {
+            _shell = new ShellWatcher(Readd);
+        }
+        catch (Exception)
+        {
+            // Без наблюдателя значок переживёт всё, кроме перезапуска
+            // проводника. Это хуже, чем с ним, но лучше, чем не открыться.
+        }
+
         _refresh.Tick += (_, _) => Update();
         _refresh.Start();
 
         Update();
+    }
+
+    /// <summary>
+    /// Добавляет значок заново.
+    /// </summary>
+    /// <remarks>
+    /// Через снятие и возврат видимости: это заставляет систему удалить
+    /// запись и создать её снова. Просто выставить <c>Visible = true</c>
+    /// у уже видимого значка не делает ничего, а нам нужно именно повторное
+    /// добавление — первое могло не дойти.
+    /// </remarks>
+    private void Readd()
+    {
+        try
+        {
+            _icon.Visible = false;
+            _icon.Visible = true;
+        }
+        catch (Exception)
+        {
+            // Значок — удобство. Из-за него не падаем.
+        }
     }
 
     /// <summary>
@@ -136,6 +219,20 @@ internal sealed class TrayIcon : IDisposable
 
     private void Update()
     {
+        // Две попытки в первые шесть секунд, и только они.
+        //
+        // Рассылки от оболочки может не быть вовсе: при входе в систему она
+        // уходит раньше, чем мы успеваем завести окно. Узнать, дошёл ли значок,
+        // система не даёт — NotifyIcon не отдаёт наружу ответ Shell_NotifyIcon,
+        // — поэтому добавляем вслепую и ровно дважды. Больше нельзя: каждое
+        // добавление гасит и зажигает значок, и десяток таких подряд человек
+        // увидит миганием.
+        if (_readds > 0)
+        {
+            _readds--;
+            Readd();
+        }
+
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         var running = state is not null && state.IsSupervisorAlive();
 
@@ -233,5 +330,10 @@ internal sealed class TrayIcon : IDisposable
         // в панели до наведения мышью, и программа выглядит незакрытой.
         _icon.Visible = false;
         _icon.Dispose();
+
+        // Окно наблюдателя — тоже окно, и оставленное висеть оно держит
+        // процесс живым после того, как всё остальное закрыто.
+        _shell?.DestroyHandle();
+        _shell = null;
     }
 }
