@@ -163,13 +163,22 @@ public enum BlockKind
     NoAddress,
 
     /// <summary>
-    /// Сторона не согласовала ни одну из версий TLS, которые мы умеем.
+    /// Сторона не приняла наше приветствие, а браузерное приняла.
     /// </summary>
     /// <remarks>
-    /// Не блокировка: отказ пришёл словами и быстро, а фильтр так не отвечает —
-    /// он рвёт соединение либо молчит. Встречается у площадок, отключивших
-    /// TLS 1.2, и у старых серверов без 1.3. Лечить нечем и не нужно:
-    /// настоящий браузер умеет больше версий, чем проверка.
+    /// <para>
+    /// Не блокировка, и это теперь не догадка. При отказе рукопожатия проба
+    /// задаёт тот же вопрос второй раз — приветствием, собранным по образцу
+    /// Chrome (см. <see cref="BrowserHello"/>). Пришёл ServerHello — значит
+    /// путь до стороны исправен, TLS она даёт, и отказало именно то
+    /// приветствие, которое выдаёт нам Windows.
+    /// </para>
+    /// <para>
+    /// Лечить нечем и не нужно: в браузере имя открывается. Прежде этот вид
+    /// ставился по одному лишь типу исключения и назывался «настройкой
+    /// стороны» — так <c>speedtest.net</c> и <c>nflxvideo.net</c> числились
+    /// мёртвыми, работая.
+    /// </para>
     /// </remarks>
     Handshake,
 }
@@ -232,8 +241,28 @@ public sealed record TargetReport
     public string? Service { get; init; }
 
     public required ProbeOutcome Tcp { get; init; }
-    public required ProbeOutcome Tls12 { get; init; }
-    public required ProbeOutcome Tls13 { get; init; }
+
+    /// <summary>
+    /// Рукопожатие: одно, с обеими версиями сразу.
+    /// </summary>
+    /// <remarks>
+    /// Прежде их было два — отдельно 1.2, отдельно 1.3, — и это стоило двух
+    /// лишних соединений к каждому имени. Браузер делает одно: предлагает обе
+    /// версии и берёт ту, которую выбрала сторона. Так теперь и здесь, а какую
+    /// выбрали — сказано в <see cref="Version"/>.
+    /// </remarks>
+    public required ProbeOutcome Tls { get; init; }
+
+    /// <summary>
+    /// Версия, на которой сошлись; пусто, если рукопожатия не вышло.
+    /// </summary>
+    /// <remarks>
+    /// Показывается вместо прежних двух колонок. Одна отвергнутая версия
+    /// при другой работающей — это настройка сайта, а не блокировка, и целой
+    /// колонки с «н/д» напротив каждого исправного имени она не стоила.
+    /// </remarks>
+    public string? Version { get; init; }
+
     public required ProbeOutcome Http { get; init; }
 
     /// <summary>Идут ли данные после того, как рукопожатие состоялось.</summary>
@@ -276,6 +305,16 @@ public sealed record TargetReport
     public bool ExpectedTunnel { get; init; }
 
     public bool TunnelMissed => ExpectedTunnel && !Tunnelled;
+
+    /// <summary>
+    /// Ячейка рукопожатия: версия при успехе, причина отказа при неудаче.
+    /// </summary>
+    /// <remarks>
+    /// Здесь, а не в окне и не в консоли, потому что показывают обе, и
+    /// разойдись они — сравнивать два отчёта стало бы нельзя. Ровно так
+    /// и вышло за вечер 16.09: четыре расхождения консоли и окна.
+    /// </remarks>
+    public string DescribeTls() => Tls.Ok ? Version ?? "ок" : Tls.Describe();
 
     public string Describe() => Kind switch
     {
@@ -334,10 +373,10 @@ public sealed record TargetReport
             {
                 BlockKind.None => null,
                 BlockKind.GeoBlock or BlockKind.Stall => Data,
-                BlockKind.TlsDpi or BlockKind.Handshake => Worse(Tls13, Tls12),
+                BlockKind.TlsDpi or BlockKind.Handshake => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
-                BlockKind.TunnelFailed => Data.Detail is not null ? Data : Worse(Tls13, Tls12),
+                BlockKind.TunnelFailed => Data.Detail is not null ? Data : Tls,
                 _ => null,
             };
 
@@ -356,10 +395,6 @@ public sealed record TargetReport
                 : detail;
         }
     }
-
-    /// <summary>Из двух проб та, что сказала больше.</summary>
-    private static ProbeOutcome Worse(ProbeOutcome a, ProbeOutcome b) =>
-        a.Detail is { Length: > 0 } ? a : b;
 
     /// <summary>
     /// Мог ли этот вердикт возникнуть от тесноты, а не от блокировки.
@@ -627,65 +662,25 @@ public static class BlockCheck
         int port,
         CancellationToken cancellationToken)
     {
-        var tcp = await TunnelTcpAsync(host, port, cancellationToken);
-
-        var tls12 = tcp.Ok
-            ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, through: port)
-            : Failed(null);
-
-        var tls13 = tcp.Ok
-            ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, through: port)
-            : Failed(null);
-
-        var data = tls12.Ok || tls13.Ok
-            ? await TransferAsync(host, cancellationToken, through: port)
-            : Failed(null);
+        var walk = await WalkAsync(host, [], cancellationToken, through: port);
 
         return new TargetReport
         {
             Host = host,
             Service = service,
-            Tcp = tcp,
-            Tls12 = tls12,
-            Tls13 = tls13,
+            Tcp = walk.Tcp,
+            Tls = walk.Tls,
+            Version = walk.Version,
 
             // Восьмидесятый через туннель не спрашиваем: он различает закрытый
             // маршрут и вмешательство в рукопожатие, а внутри туннеля ни то,
             // ни другое от нашего оператора не зависит.
             Http = Failed(null),
-            Data = data,
-            Kind = Classify(tcp, tls12, tls13, Failed(null), data, throughTunnel: true),
+            Data = walk.Data,
+            Kind = Classify(walk.Tcp, walk.Tls, Failed(null), walk.Data, throughTunnel: true),
             Tunnelled = true,
             ExpectedTunnel = true,
         };
-    }
-
-    /// <summary>Открылось ли соединение до хоста через служебный вход.</summary>
-    private static async Task<ProbeOutcome> TunnelTcpAsync(
-        string host,
-        int port,
-        CancellationToken cancellationToken)
-    {
-        var stopwatch = Stopwatch.StartNew();
-
-        try
-        {
-            using var client = await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken);
-
-            return new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed };
-        }
-        catch (Exception ex)
-        {
-            return new ProbeOutcome
-            {
-                Ok = false,
-                Reset = IsReset(ex),
-                Elapsed = stopwatch.Elapsed,
-                Detail = ex is IOException
-                    ? ex.Message
-                    : "служебный вход не отозвался — движки запущены без него",
-            };
-        }
     }
 
     private static async Task<TargetReport> ProbeAsync(
@@ -721,8 +716,7 @@ public static class BlockCheck
                     Host = host,
                     Service = service,
                     Tcp = Failed("системный DNS не разрешает имя"),
-                    Tls12 = Failed(null),
-                    Tls13 = Failed(null),
+                    Tls = Failed(null),
                     Http = Failed(null),
                     Data = Failed(null),
                     Kind = BlockKind.Dns,
@@ -749,8 +743,7 @@ public static class BlockCheck
                 Tcp = Failed(alias is null
                     ? "записи A нет"
                     : $"ведёт на {alias}, а у того адреса нет"),
-                Tls12 = Failed(null),
-                Tls13 = Failed(null),
+                Tls = Failed(null),
                 Http = Failed(null),
                 Data = Failed(null),
                 Kind = alias is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
@@ -770,8 +763,7 @@ public static class BlockCheck
                 Host = host,
                 Service = service,
                 Tcp = Failed($"адрес-заглушка {real[0]}"),
-                Tls12 = Failed(null),
-                Tls13 = Failed(null),
+                Tls = Failed(null),
                 Http = Failed(null),
                 Data = Failed(null),
                 Kind = BlockKind.Sinkhole,
@@ -796,17 +788,10 @@ public static class BlockCheck
         // «туннель не доставил».
         bool viaTunnel = real.Any(a => TunnelHealth.IsFakeIp(a));
 
-        var (answered, tcp) = await ConnectAnyAsync(
-            host, 443, AddressFamily.InterNetwork, real, cancellationToken);
-
-        // Пробы идут последовательно, а не разом: одновременные соединения
-        // к одному хосту DPI иногда обрывает скопом, и картина смазывается.
-        //
-        // Все — на тот адрес, который ответил на TCP. Иначе каждая заново
-        // тянет жребий среди адресов имени, и закрытый среди них сделает
-        // из «маршрут до одного адреса закрыт» вывод «рукопожатие рвут».
-        var tls12 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls12, cancellationToken, real, answered) : Failed(null);
-        var tls13 = tcp.Ok ? await TlsAsync(host, SslProtocols.Tls13, cancellationToken, real, answered) : Failed(null);
+        // Одно соединение на все стадии: TCP, рукопожатие и передача идут
+        // по нему подряд, как у браузера.
+        var walk = await WalkAsync(host, real, cancellationToken);
+        var (answered, tcp, tls, data) = (walk.Answered, walk.Tcp, walk.Tls, walk.Data);
 
         // Восьмидесятый порт спрашивается только тогда, когда не встал 443,
         // и лишь затем, чтобы отличить закрытый маршрут от вмешательства
@@ -824,15 +809,15 @@ public static class BlockCheck
         // у него закрыт — как и положено.
         var http = tcp.Ok ? Failed(null) : await HttpAsync(host, cancellationToken, real, answered);
 
-        // Передача проверяется только там, где рукопожатие состоялось: без него
-        // качать нечего, а вопрос «идут ли данные» имеет смысл ровно тогда,
-        // когда соединение с виду установлено.
-        var data = tls12.Ok || tls13.Ok
-            ? await TransferAsync(host, cancellationToken, real, answered)
-            : Failed(null);
+        // Отвергнутое рукопожатие спрашивается второй раз — приветствием
+        // по образцу браузера. Это единственное место, где проба открывает
+        // второе соединение, и открывает она его только там, где первое
+        // уже провалилось.
+        if (!tls.Ok && tcp.Ok && answered is not null)
+            tls = await AskBrowserHelloAsync(tls, answered, host, cancellationToken);
 
         // Разбор идёт по замеренному пути, а не по обещанному правилами.
-        var kind = Classify(tcp, tls12, tls13, http, data, viaTunnel);
+        var kind = Classify(tcp, tls, http, data, viaTunnel);
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
         // Маркер зоны, спрятанный за fakeip.
@@ -870,8 +855,7 @@ public static class BlockCheck
                     Tcp = Failed(missing is null
                         ? "записи A нет ни у кого — имя покрывает зону, а не хост"
                         : $"ведёт на {missing}, а у того адреса нет"),
-                    Tls12 = Failed(null),
-                    Tls13 = Failed(null),
+                    Tls = Failed(null),
                     Http = Failed(null),
                     Data = Failed(null),
                     Kind = missing is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
@@ -907,8 +891,8 @@ public static class BlockCheck
                     Host = host,
                     Service = service,
                     Tcp = Failed($"{real[0]} молчит, а {other} от честного резолвера отвечает"),
-                    Tls12 = tls12,
-                    Tls13 = tls13,
+                    Tls = tls,
+                    Version = walk.Version,
                     Http = http,
                     Data = data,
                     Kind = BlockKind.Dns,
@@ -928,8 +912,8 @@ public static class BlockCheck
             Host = host,
             Service = service,
             Tcp = tcp,
-            Tls12 = tls12,
-            Tls13 = tls13,
+            Tls = tls,
+            Version = walk.Version,
             Http = http,
             Data = data,
             Kind = kind,
@@ -976,13 +960,12 @@ public static class BlockCheck
     /// </param>
     internal static BlockKind Classify(
         ProbeOutcome tcp,
-        ProbeOutcome tls12,
-        ProbeOutcome tls13,
+        ProbeOutcome tls,
         ProbeOutcome http,
         ProbeOutcome data,
         bool throughTunnel = false)
     {
-        var kind = Decide(tcp, tls12, tls13, http, data);
+        var kind = Decide(tcp, tls, http, data);
 
         // Переименование, а не другой разбор: измерения те же, а вот кто
         // за ними стоит — другой. Виды, говорящие о вмешательстве в наше
@@ -1012,8 +995,7 @@ public static class BlockCheck
 
     private static BlockKind Decide(
         ProbeOutcome tcp,
-        ProbeOutcome tls12,
-        ProbeOutcome tls13,
+        ProbeOutcome tls,
         ProbeOutcome http,
         ProbeOutcome data)
     {
@@ -1021,28 +1003,24 @@ public static class BlockCheck
         // Раньше считалось — и проверка называла steamcommunity.com доступным,
         // пока он не открывался: рукопожатие проходило, а поток умирал
         // на четырнадцатой тысяче байт.
-        if (tls12.Ok || tls13.Ok)
+        if (tls.Ok)
         {
             if (!data.Ok)
             {
-                // Оборвали посреди ответа — это про сайт. Не подняли
-                // соединение вовсе — это про наш способ спрашивать.
+                // Оборвали посреди ответа — это про сайт. Не начали разговор
+                // вовсе — это про наш способ спрашивать.
                 //
-                // Проба делает к одному адресу четыре соединения подряд:
-                // TCP, рукопожатие 1.2, рукопожатие 1.3 и только потом
-                // качает данные. Браузер делает одно. Часть площадок отшивает
-                // такую очередь, и отказ достаётся четвёртому — при живых
-                // первых трёх.
+                // Проверка осталась и после того, как соединение стало одним.
+                // Рукопожатие по нему уже прошло, то есть путь до хоста
+                // исправен, — и объявлять обрыв по ответу, из которого
+                // не пришло ни байта, значило бы обвинять сайт в том, чего
+                // мы не измерили.
                 //
                 // Замер 2026-09-16 на whatsapp.net, три захода из трёх:
-                // TCP ок, оба рукопожатия ок, четвёртое падает с «Получено
-                // непредвиденное сообщение». По одному то же соединение
-                // проходит двадцать раз из двадцати, а сам сайт отвечает
-                // «302 Found». Мессенджер при этом работал.
-                //
-                // Два состоявшихся рукопожатия — это доказательство, что путь
-                // до хоста исправен. Объявлять по несостоявшемуся четвёртому
-                // замеру обрыв значит обвинять сайт в нашей же торопливости.
+                // четыре соединения подряд, TCP и оба рукопожатия ок,
+                // четвёртое падает с «Получено непредвиденное сообщение».
+                // По одному то же соединение проходит двадцать раз
+                // из двадцати, а сам сайт отвечает «302 Found».
                 if (!data.Started)
                     return BlockKind.None;
 
@@ -1055,14 +1033,13 @@ public static class BlockCheck
             return data.Refused ? BlockKind.GeoBlock : BlockKind.None;
         }
 
-        if (tcp.Ok && (tls12.Reset || tls13.Reset))
+        if (tcp.Ok && tls.Reset)
             return BlockKind.TlsDpi;
 
-        // Обе версии отвергнуты согласованием — это настройка стороны,
-        // а не фильтр. Бывает у площадок, отключивших старый протокол:
-        // они отвечают отказом, и отвечают быстро. Десинк такому не поможет,
-        // и предлагать его значит посылать чинить исправное.
-        if (tcp.Ok && tls12.Unsupported && tls13.Unsupported)
+        // Приветствие отвергнуто, и отвергнуто словами — а браузерное та же
+        // сторона приняла. Это её разборчивость, а не фильтр: десинк такому
+        // не поможет, и предлагать его значит посылать чинить исправное.
+        if (tcp.Ok && tls.Unsupported)
             return BlockKind.Handshake;
 
         // TCP есть, TLS не отвечает без обрыва — так выглядит тихое
@@ -1117,8 +1094,17 @@ public static class BlockCheck
     /// все, а не первый попавшийся.
     /// </para>
     /// </remarks>
-    /// <returns>Адрес, который ответил, и исход пробы.</returns>
-    private static async Task<(IPAddress? Answered, ProbeOutcome Outcome)> ConnectAnyAsync(
+    /// <returns>
+    /// Адрес, который ответил, <b>живое соединение</b> с ним и исход пробы.
+    /// Соединение закрывает вызывающий; при неудаче оно пустое.
+    /// </returns>
+    /// <remarks>
+    /// Соединение отдаётся наружу, а не закрывается здесь, и это не мелочь
+    /// удобства. По нему дальше идут рукопожатие и передача — теми же тремя
+    /// пакетами, что у браузера. Прежде каждая стадия открывала своё, и
+    /// четвёртое по счёту площадки отшивали при живых первых трёх.
+    /// </remarks>
+    private static async Task<(IPAddress? Answered, TcpClient? Client, ProbeOutcome Outcome)> ConnectAnyAsync(
         string host,
         int port,
         AddressFamily family,
@@ -1132,19 +1118,22 @@ public static class BlockCheck
         // измерение сети, где имени соответствует известно что.
         if (targets.Count == 0)
         {
+            var client = new TcpClient(family);
+
             try
             {
-                using var client = new TcpClient(family);
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeout.CancelAfter(Timeout);
 
                 await client.ConnectAsync(host, port, timeout.Token);
 
-                return (null, new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed });
+                return (null, client, new ProbeOutcome { Ok = true, Elapsed = stopwatch.Elapsed });
             }
             catch (Exception ex)
             {
-                return (null, new ProbeOutcome
+                client.Dispose();
+
+                return (null, null, new ProbeOutcome
                 {
                     Ok = false,
                     Reset = IsReset(ex),
@@ -1161,15 +1150,16 @@ public static class BlockCheck
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var client = new TcpClient(family);
+
             try
             {
-                using var client = new TcpClient(family);
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 timeout.CancelAfter(Timeout);
 
                 await client.ConnectAsync(address, port, timeout.Token);
 
-                return (address, new ProbeOutcome
+                return (address, client, new ProbeOutcome
                 {
                     Ok = true,
                     Elapsed = stopwatch.Elapsed,
@@ -1183,12 +1173,13 @@ public static class BlockCheck
             }
             catch (Exception ex)
             {
+                client.Dispose();
                 last = ex;
                 silent.Add(address);
             }
         }
 
-        return (null, new ProbeOutcome
+        return (null, null, new ProbeOutcome
         {
             Ok = false,
             Reset = last is not null && IsReset(last),
@@ -1202,38 +1193,253 @@ public static class BlockCheck
         int port,
         AddressFamily family,
         CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null) =>
-        (await ConnectAnyAsync(host, port, family, dialled, cancellationToken)).Outcome;
+        IReadOnlyList<IPAddress>? dialled = null)
+    {
+        var (_, client, outcome) = await ConnectAnyAsync(host, port, family, dialled, cancellationToken);
 
+        client?.Dispose();
+
+        return outcome;
+    }
+
+    /// <summary>Что вышло из одного соединения, прожитого до конца.</summary>
+    private sealed record Walk
+    {
+        public IPAddress? Answered { get; init; }
+        public required ProbeOutcome Tcp { get; init; }
+        public required ProbeOutcome Tls { get; init; }
+        public required ProbeOutcome Data { get; init; }
+
+        /// <summary>Версия, на которой сошлись; пусто, если не сошлись.</summary>
+        public string? Version { get; init; }
+    }
+
+    /// <summary>
+    /// Проживает одно соединение целиком: TCP, рукопожатие, ответ.
+    /// </summary>
     /// <remarks>
-    /// Проверка сертификата здесь отключена намеренно, о чём ниже. Анализатор
-    /// об этом знать не может и справедливо ругается на всякий такой колбэк —
-    /// подавлено адресно, чтобы предупреждение осталось живым в остальном коде,
-    /// где оно означало бы настоящую дыру.
+    /// <para>
+    /// Одно на все стадии, и в этом весь смысл метода. Прежде их было четыре
+    /// подряд к одному адресу — отдельно TCP, отдельно рукопожатие 1.2,
+    /// отдельно 1.3, отдельно передача, — а браузер делает одно. Часть
+    /// площадок такую очередь отшивает, и отказ доставался четвёртому при
+    /// живых первых трёх: <c>whatsapp.net</c>, три захода из трёх, тогда как
+    /// по одному то же соединение проходило двадцать раз из двадцати.
+    /// </para>
+    /// <para>
+    /// Версии предлагаются обе сразу, как и положено клиенту: сторона берёт
+    /// ту, которую умеет, и какую взяла — сказано в <see cref="Walk.Version"/>.
+    /// Спрашивать их по очереди значило бы мерить не доступность имени,
+    /// а состав настроек сайта, и платить за это лишним соединением.
+    /// </para>
+    /// <para>
+    /// Проверка сертификата отключена намеренно: мерится доходимость
+    /// рукопожатия, а не доверие. Подлинность проверяется отдельно
+    /// и строго — в <see cref="CertificateMatchesAsync"/>.
+    /// </para>
     /// </remarks>
+    /// <param name="through">
+    /// Порт служебного входа: идти нарочно через туннель, а не по адресу.
+    /// Тогда имя уезжает движку именем, и правила по доменам срабатывают
+    /// так же, как для настоящего приложения.
+    /// </param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Security",
         "CA5359:Do not disable certificate validation",
         Justification = "Измеряется доходимость рукопожатия, а не доверие. " +
             "Подлинность проверяется отдельно, в CertificateMatchesAsync, и строго.")]
-    /// <param name="via">
-    /// Адрес, который только что ответил на TCP. Соединяемся с ним, а имя
-    /// в рукопожатии остаётся настоящим: иначе проба заново упирается
-    /// в закрытый адрес того же имени и врёт про рукопожатие то, что на деле
-    /// про маршрут.
-    /// </param>
-    /// <param name="through">
-    /// Порт служебного входа: соединяться нарочно через туннель, а не по
-    /// адресу. Тогда имя уезжает движку именем, и правила по доменам
-    /// срабатывают так же, как для настоящего приложения.
-    /// </param>
+    private static async Task<Walk> WalkAsync(
+        string host,
+        IReadOnlyList<IPAddress> real,
+        CancellationToken cancellationToken,
+        int? through = null)
+    {
+        IPAddress? answered = null;
+        TcpClient? client;
+        ProbeOutcome tcp;
+
+        if (through is { } inbound)
+        {
+            var reach = Stopwatch.StartNew();
+
+            try
+            {
+                client = await TunnelProbe.ConnectAsync(inbound, host, 443, Timeout, cancellationToken);
+                tcp = new ProbeOutcome { Ok = true, Elapsed = reach.Elapsed };
+            }
+            catch (Exception ex)
+            {
+                client = null;
+                tcp = new ProbeOutcome
+                {
+                    Ok = false,
+                    Reset = IsReset(ex),
+                    Elapsed = reach.Elapsed,
+                    Detail = ex is IOException
+                        ? ex.Message
+                        : "служебный вход не отозвался — движки запущены без него",
+                };
+            }
+        }
+        else
+        {
+            (answered, client, tcp) = await ConnectAnyAsync(
+                host, 443, AddressFamily.InterNetwork, real, cancellationToken);
+        }
+
+        if (client is null)
+        {
+            return new Walk
+            {
+                Answered = answered,
+                Tcp = tcp,
+                Tls = Failed(null),
+                Data = Failed(null),
+            };
+        }
+
+        using var live = client;
+        using var ssl = new SslStream(live.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
+
+        var handshake = Stopwatch.StartNew();
+
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(Timeout);
+
+            await ssl.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions
+                {
+                    TargetHost = host,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+
+                    // Только HTTP/1.1, тогда как браузер предлагает ещё и h2.
+                    // Предложи мы h2 — сторона его и выберет, а говорить
+                    // на нём мы не умеем: следом идёт обычный GET строкой.
+                    ApplicationProtocols = [SslApplicationProtocol.Http11],
+                },
+                limit.Token);
+        }
+        catch (Exception ex)
+        {
+            return new Walk
+            {
+                Answered = answered,
+                Tcp = tcp,
+                Tls = Refusal(ex, handshake.Elapsed, real),
+                Data = Failed(null),
+            };
+        }
+
+        return new Walk
+        {
+            Answered = answered,
+            Tcp = tcp,
+            Tls = new ProbeOutcome { Ok = true, Elapsed = handshake.Elapsed },
+            Version = Name(ssl.SslProtocol),
+            Data = await ReadBodyAsync(ssl, host, real, cancellationToken),
+        };
+    }
+
+    /// <summary>Несостоявшееся рукопожатие — словами.</summary>
+    private static ProbeOutcome Refusal(
+        Exception ex,
+        TimeSpan elapsed,
+        IReadOnlyList<IPAddress>? dialled)
+    {
+        bool unsupported = RefusedVersion(ex);
+
+        return new ProbeOutcome
+        {
+            Ok = false,
+            Reset = IsReset(ex),
+            Unsupported = unsupported,
+            Elapsed = elapsed,
+
+            // Причина здесь не называется, и это нарочно: у отказа
+            // согласования её отсюда не видно. Назовёт её следующий шаг —
+            // тот же вопрос, заданный браузерным приветствием.
+            Detail = unsupported ? "приветствие не принято" : Explain(ex, dialled, 443),
+        };
+    }
+
+    /// <summary>
+    /// Переспрашивает отвергнутое рукопожатие приветствием браузера.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отвечает на вопрос, который прежде решался догадкой: отказало
+    /// приветствие или отказал путь. Ответ измеряется — то же соединение,
+    /// тот же адрес, та же минута, и разница ровно в составе приветствия.
+    /// </para>
+    /// <para>
+    /// Это единственное место, где проба открывает второе соединение, и
+    /// открывается оно только там, где первое уже провалилось. У исправного
+    /// имени соединение по-прежнему одно.
+    /// </para>
+    /// </remarks>
+    /// <param name="ours">Чем кончилось рукопожатие системным приветствием.</param>
+    private static async Task<ProbeOutcome> AskBrowserHelloAsync(
+        ProbeOutcome ours,
+        IPAddress via,
+        string host,
+        CancellationToken cancellationToken)
+    {
+        var answer = await BrowserHello.AskAsync(via, host, Timeout, cancellationToken);
+
+        return answer.Answer switch
+        {
+            // Браузерное принято, наше нет. Значит путь до стороны исправен,
+            // TLS она даёт, и отвергнуто именно то приветствие, которое
+            // выдаёт нам Windows. Лечить тут нечего.
+            HelloAnswer.Accepted => ours with
+            {
+                Unsupported = true,
+                Reset = false,
+                Detail = "наше приветствие отвергнуто, браузерное принято — "
+                    + "в браузере имя откроется",
+            },
+
+            // Отказано и браузерному, но отказано словами. Сторона ответила,
+            // то есть дошло и туда, и обратно: это её разборчивость,
+            // а не вмешательство по дороге.
+            HelloAnswer.Refused => ours with
+            {
+                Unsupported = true,
+                Reset = false,
+                Detail = $"отказано и браузерному приветствию: {answer.Detail}",
+            },
+
+            // Браузерное постигла та же участь — молчание или обрыв. Значит
+            // дело не в составе приветствия, и признак «это её настройка»
+            // снимается: он увёл бы от вмешательства, которое тут и есть.
+            _ => ours with
+            {
+                Unsupported = false,
+                Detail = ours.Detail is { Length: > 0 } said
+                    ? $"{said}; браузерное тоже не прошло: {answer.Detail}"
+                    : $"браузерное приветствие тоже не прошло: {answer.Detail}",
+            },
+        };
+    }
+
+    /// <summary>
+    /// Рукопожатие само по себе — для замера того, что эта сеть вообще умеет.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="WalkAsync"/> потому, что вопрос другой. Там
+    /// меряется имя, и ответ сайта — часть замера; здесь меряется сеть,
+    /// и качать что-либо с <c>google.com</c> ради этого незачем.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA5359:Do not disable certificate validation",
+        Justification = "Измеряется доходимость рукопожатия, а не доверие.")]
     private static async Task<ProbeOutcome> TlsAsync(
         string host,
         SslProtocols protocol,
-        CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null,
-        IPAddress? via = null,
-        int? through = null)
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -1242,22 +1448,9 @@ public static class BlockCheck
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(Timeout);
 
-            using var client = through is { } port
-                ? await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken)
-                : new TcpClient(AddressFamily.InterNetwork);
+            using var client = new TcpClient(AddressFamily.InterNetwork);
+            await client.ConnectAsync(host, 443, timeout.Token);
 
-            if (through is not null)
-            {
-                // Соединение уже открыто входом — дальше сразу рукопожатие.
-            }
-            else if (via is null)
-                await client.ConnectAsync(host, 443, timeout.Token);
-            else
-                await client.ConnectAsync(via, 443, timeout.Token);
-
-            // Сертификат не проверяется: нас занимает, доходит ли рукопожатие,
-            // а не доверяем ли мы стороне. Подмена — отдельная проверка,
-            // и сертификат там как раз проверяется строго.
             using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
 
             await ssl.AuthenticateAsClientAsync(
@@ -1272,47 +1465,32 @@ public static class BlockCheck
         }
         catch (Exception ex)
         {
-            bool unsupported = RefusedVersion(ex);
-
-            return new ProbeOutcome
-            {
-                Ok = false,
-                Reset = IsReset(ex),
-                Unsupported = unsupported,
-                Elapsed = stopwatch.Elapsed,
-                // Про «это её настройка» здесь больше не утверждается,
-                // и это исправление по замеру. 2026-09-16: на speedtest.net
-                // и i.scdn.co приветствие SChannel отвергнуто, а собранное
-                // по образцу Chrome — с GREASE, полным набором расширений
-                // и тремя шифрами вместо двух — принято с ServerHello.
-                // Значит сторона TLS даёт, она не принимает наше приветствие,
-                // и списывать отказ на её настройку — врать про причину.
-                Detail = unsupported
-                    ? $"отвергнуто наше приветствие {Name(protocol)} — "
-                      + "у браузера оно другое по составу"
-                    : Explain(ex, dialled, 443),
-            };
+            return Refusal(ex, stopwatch.Elapsed, null);
         }
     }
 
-    private static string Name(SslProtocols protocol) =>
-        protocol == SslProtocols.Tls12 ? "TLS 1.2" : "TLS 1.3";
+    /// <summary>Как называется версия, на которой сошлись.</summary>
+    private static string Name(SslProtocols protocol) => protocol switch
+    {
+        SslProtocols.Tls12 => "1.2",
+        SslProtocols.Tls13 => "1.3",
+        _ => protocol.ToString(),
+    };
 
     /// <summary>
     /// Отказ согласования, а не обрыв разговора.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Половина «нет» в таблице — вовсе не блокировка. У Cloudflare часть
-    /// площадок отключила TLS 1.2, а у старых серверов нет 1.3, и обе стороны
-    /// честно об этом сообщают. Прежде такая ячейка выглядела как убитое
-    /// рукопожатие, и человек шёл подбирать рецепт к тому, что не сломано.
-    /// </para>
-    /// <para>
-    /// Опознаётся по типу отказа: провал согласования приходит
+    /// Половина «нет» в таблице — вовсе не блокировка. Сторона может отвергнуть
+    /// приветствие по составу, и делает это словами: отказ приходит
     /// <see cref="System.Security.Authentication.AuthenticationException"/>
     /// и приходит быстро. Фильтр так не отвечает — он рвёт соединение
     /// или молчит до истечения срока, а это уже сокетная ошибка либо отмена.
+    /// </para>
+    /// <para>
+    /// Признак этот — лишь повод переспросить. Кто именно отказал, решает
+    /// <see cref="AskBrowserHelloAsync"/>, и решает замером.
     /// </para>
     /// </remarks>
     private static bool RefusedVersion(Exception ex)
@@ -1327,7 +1505,7 @@ public static class BlockCheck
     }
 
     /// <summary>
-    /// Проверяет, идут ли данные после того, как рукопожатие состоялось.
+    /// Читает ответ по уже установленному рукопожатию.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1343,52 +1521,23 @@ public static class BlockCheck
     /// у страниц он разный, и всякое число было бы взято с потолка.
     /// </para>
     /// </remarks>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(
-        "Security",
-        "CA5359:Do not disable certificate validation",
-        Justification = "Измеряется проходимость потока, а не доверие. " +
-            "Подлинность проверяется отдельно, в CertificateMatchesAsync.")]
-    /// <param name="through">
-    /// Порт служебного входа: качать нарочно через туннель. См.
-    /// <see cref="TunnelProbe"/>.
-    /// </param>
-    private static async Task<ProbeOutcome> TransferAsync(
+    private static async Task<ProbeOutcome> ReadBodyAsync(
+        SslStream ssl,
         string host,
-        CancellationToken cancellationToken,
-        IReadOnlyList<IPAddress>? dialled = null,
-        IPAddress? via = null,
-        int? through = null)
+        IReadOnlyList<IPAddress>? dialled,
+        CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         int total = 0;
 
         try
         {
-            using var connect = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            connect.CancelAfter(Timeout);
-
-            using var client = through is { } port
-                ? await TunnelProbe.ConnectAsync(port, host, 443, Timeout, cancellationToken)
-                : new TcpClient(AddressFamily.InterNetwork);
-
-            if (through is not null)
-            {
-                // Соединение открыл вход — дальше всё как при прямом замере.
-            }
-            else if (via is null)
-                await client.ConnectAsync(host, 443, connect.Token);
-            else
-                await client.ConnectAsync(via, 443, connect.Token);
-
-            using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
-            await ssl.AuthenticateAsClientAsync(new SslClientAuthenticationOptions { TargetHost = host }, connect.Token);
-
             var request = System.Text.Encoding.ASCII.GetBytes(
                 $"GET / HTTP/1.1\r\nHost: {host}\r\n" +
                 "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n" +
                 "Accept: text/html\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
 
-            await ssl.WriteAsync(request, connect.Token);
+            await ssl.WriteAsync(request, cancellationToken);
 
             var buffer = new byte[16 * 1024];
             int? status = null;
@@ -1471,8 +1620,6 @@ public static class BlockCheck
                 // а проба звала это «Получено непредвиденное сообщение или
                 // оно имеет неправильный формат» — то есть объявляла
                 // мессенджер сломанным при работающем мессенджере.
-                // Замер 2026-09-16: рукопожатие проходит всеми тремя
-                // способами, GET / отдаёт 302 и 403 байта.
                 if (header > 0 && status is >= 300 and < 400 or 204 or 304)
                     break;
             }

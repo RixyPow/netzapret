@@ -28,7 +28,7 @@ public class BlockCheckTests
     [Fact]
     public void Working_tls_means_open()
     {
-        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok()));
+        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok()));
     }
 
     /// <summary>Рукопожатие само по себе больше не считается ответом.</summary>
@@ -42,24 +42,32 @@ public class BlockCheckTests
     [Fact]
     public void Handshake_without_data_is_a_stall()
     {
-        Assert.Equal(BlockKind.Stall, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), No()));
+        Assert.Equal(BlockKind.Stall, BlockCheck.Classify(Ok(), Ok(), Ok(), No()));
     }
 
+    /// <summary>В ячейке рукопожатия — версия, на которой сошлись.</summary>
     /// <remarks>
-    /// Так выглядят <c>instagram.com</c> и <c>facebook.com</c>: старый TLS
-    /// не отвечает, новый работает. Сайт открывается, лечить нечего.
+    /// Заменило прежнее «одной работающей версии достаточно». Тот случай —
+    /// <c>instagram.com</c> и <c>facebook.com</c>, где не отвечает старый TLS,
+    /// а новый работает, — теперь не может возникнуть вовсе: версии
+    /// предлагаются обе сразу, одним рукопожатием, и сторона берёт свою.
+    /// Проверять нечего там, где выбор делает не проба.
     /// </remarks>
     [Fact]
-    public void One_working_tls_version_is_enough()
+    public void The_cell_says_which_version_was_agreed()
     {
-        Assert.Equal(BlockKind.None, BlockCheck.Classify(Ok(), No(), Ok(), Ok(), Ok()));
+        Assert.Equal("1.3", (Report(BlockKind.None) with { Version = "1.3" }).DescribeTls());
+        Assert.Equal("1.2", (Report(BlockKind.None) with { Version = "1.2" }).DescribeTls());
+
+        // Не сошлись — в ячейке причина, а не выдуманная версия.
+        Assert.Equal("RST", (Report(BlockKind.TlsDpi) with { Tls = Rst() }).DescribeTls());
     }
 
     /// <remarks>Почерк <c>twitter.com</c>: TCP встал, рукопожатие оборвали.</remarks>
     [Fact]
     public void Reset_during_handshake_is_dpi()
     {
-        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), Rst(), Rst(), Ok(), No()));
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), Rst(), Ok(), No()));
     }
 
     /// <remarks>
@@ -69,7 +77,7 @@ public class BlockCheckTests
     [Fact]
     public void Silent_drop_after_tcp_is_dpi()
     {
-        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), No(), No(), Ok(), No()));
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Classify(Ok(), No(), Ok(), No()));
     }
 
     /// <remarks>
@@ -80,14 +88,14 @@ public class BlockCheckTests
     [Fact]
     public void Dead_443_with_live_80_is_port_block()
     {
-        Assert.Equal(BlockKind.HttpsPort, BlockCheck.Classify(No(), No(), No(), Ok(), No()));
+        Assert.Equal(BlockKind.HttpsPort, BlockCheck.Classify(No(), No(), Ok(), No()));
     }
 
     /// <remarks>Молчание по всем протоколам — <c>rutor.info</c>.</remarks>
     [Fact]
     public void Silence_everywhere_is_full_block()
     {
-        Assert.Equal(BlockKind.Full, BlockCheck.Classify(No(), No(), No(), No(), No()));
+        Assert.Equal(BlockKind.Full, BlockCheck.Classify(No(), No(), No(), No()));
     }
 
     /// <summary>Десинк предлагается только там, где есть во что вмешиваться.</summary>
@@ -180,7 +188,7 @@ public class BlockCheckTests
     {
         var refused = new ProbeOutcome { Ok = true, Refused = true };
 
-        Assert.Equal(BlockKind.GeoBlock, BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), refused));
+        Assert.Equal(BlockKind.GeoBlock, BlockCheck.Classify(Ok(), Ok(), Ok(), refused));
         Assert.Contains("VPN", Report(BlockKind.GeoBlock).Remedy());
         Assert.Contains("десинк не поможет", Report(BlockKind.GeoBlock).Remedy());
     }
@@ -240,12 +248,12 @@ public class BlockCheckTests
     [InlineData(BlockKind.HttpsPort)]
     public void Failures_inside_the_tunnel_are_not_blamed_on_dpi(BlockKind direct)
     {
-        var (tcp, tls12, tls13, http, data) = Outcomes(direct);
+        var (tcp, tls, http, data) = Outcomes(direct);
 
-        Assert.Equal(direct, BlockCheck.Classify(tcp, tls12, tls13, http, data));
+        Assert.Equal(direct, BlockCheck.Classify(tcp, tls, http, data));
         Assert.Equal(
             BlockKind.TunnelFailed,
-            BlockCheck.Classify(tcp, tls12, tls13, http, data, throughTunnel: true));
+            BlockCheck.Classify(tcp, tls, http, data, throughTunnel: true));
     }
 
     /// <summary>Отказ сайта туннель не переименовывает.</summary>
@@ -261,7 +269,7 @@ public class BlockCheckTests
 
         Assert.Equal(
             BlockKind.GeoBlock,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), refused, throughTunnel: true));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), refused, throughTunnel: true));
     }
 
     [Fact]
@@ -269,7 +277,7 @@ public class BlockCheckTests
     {
         Assert.Equal(
             BlockKind.None,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok(), throughTunnel: true));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), throughTunnel: true));
     }
 
     /// <summary>
@@ -302,7 +310,7 @@ public class BlockCheckTests
 
         Assert.Equal(
             BlockKind.Handshake,
-            BlockCheck.Classify(Ok(), refused, refused, No(), No(), throughTunnel: true));
+            BlockCheck.Classify(Ok(), refused, No(), No(), throughTunnel: true));
     }
 
     /// <summary>Молчание и обрыв через туннель по-прежнему его вина.</summary>
@@ -313,11 +321,11 @@ public class BlockCheckTests
     [InlineData(BlockKind.Stall)]
     public void Silence_through_the_tunnel_still_blames_it(BlockKind kind)
     {
-        var (tcp, tls12, tls13, http, data) = Outcomes(kind);
+        var (tcp, tls, http, data) = Outcomes(kind);
 
         Assert.Equal(
             BlockKind.TunnelFailed,
-            BlockCheck.Classify(tcp, tls12, tls13, http, data, throughTunnel: true));
+            BlockCheck.Classify(tcp, tls, http, data, throughTunnel: true));
     }
 
     /// <summary>Совет по нему — про сервер, а не про рецепт.</summary>
@@ -332,13 +340,13 @@ public class BlockCheckTests
     }
 
     /// <summary>Наборы исходов, дающие каждый вид без туннеля.</summary>
-    private static (ProbeOutcome, ProbeOutcome, ProbeOutcome, ProbeOutcome, ProbeOutcome) Outcomes(BlockKind kind) =>
+    private static (ProbeOutcome, ProbeOutcome, ProbeOutcome, ProbeOutcome) Outcomes(BlockKind kind) =>
         kind switch
         {
-            BlockKind.TlsDpi => (Ok(), Rst(), Rst(), Ok(), No()),
-            BlockKind.Stall => (Ok(), Ok(), Ok(), Ok(), No()),
-            BlockKind.HttpsPort => (No(), No(), No(), Ok(), No()),
-            _ => (No(), No(), No(), No(), No()),
+            BlockKind.TlsDpi => (Ok(), Rst(), Ok(), No()),
+            BlockKind.Stall => (Ok(), Ok(), Ok(), No()),
+            BlockKind.HttpsPort => (No(), No(), Ok(), No()),
+            _ => (No(), No(), No(), No()),
         };
 
     /// <summary>Конец заголовков находится по пустой строке.</summary>
@@ -466,8 +474,7 @@ public class BlockCheckTests
     {
         Host = "example.org",
         Tcp = Ok(),
-        Tls12 = Ok(),
-        Tls13 = Ok(),
+        Tls = Ok(),
         Http = Ok(),
         Data = Ok(),
         Kind = kind,

@@ -8,10 +8,13 @@ namespace NetZapret.Core.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Проба делает к одному адресу четыре соединения подряд: TCP, рукопожатие
-/// 1.2, рукопожатие 1.3 и только потом качает данные. Браузер делает одно.
-/// Часть площадок отшивает такую очередь, и отказ достаётся четвёртому —
-/// при живых первых трёх.
+/// Проверка пережила ту перестройку, которая её и породила. Прежде проба
+/// делала к одному адресу четыре соединения подряд — TCP, рукопожатие 1.2,
+/// рукопожатие 1.3 и только потом передача, — и часть площадок такую очередь
+/// отшивала, отдавая отказ четвёртому при живых первых трёх. Теперь
+/// соединение одно, но остаться проверка должна: рукопожатие по нему уже
+/// прошло, и объявлять обрыв по ответу, из которого не пришло ни байта,
+/// значило бы судить о том, чего мы не измерили.
 /// </para>
 /// <para>
 /// Замер 2026-09-16 на whatsapp.net, три захода из трёх: TCP ок, оба
@@ -27,8 +30,8 @@ public sealed class UnstartedTransferTests
     /// Соединение не поднялось — судить по нему нечего.
     /// </summary>
     /// <remarks>
-    /// Два состоявшихся рукопожатия доказывают, что путь до хоста исправен.
-    /// Объявлять обрыв по несостоявшемуся четвёртому замеру значит обвинять
+    /// Состоявшееся рукопожатие доказывает, что путь до хоста исправен.
+    /// Объявлять обрыв по замеру, которого не случилось, значит обвинять
     /// сайт в нашей же торопливости.
     /// </remarks>
     [Fact]
@@ -38,7 +41,7 @@ public sealed class UnstartedTransferTests
 
         Assert.Equal(
             BlockKind.None,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), unstarted));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), unstarted));
     }
 
     /// <summary>
@@ -57,7 +60,7 @@ public sealed class UnstartedTransferTests
 
         Assert.Equal(
             BlockKind.Stall,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), cut));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), cut));
     }
 
     /// <summary>Через туннель различие то же самое.</summary>
@@ -69,11 +72,11 @@ public sealed class UnstartedTransferTests
 
         Assert.Equal(
             BlockKind.None,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), unstarted, throughTunnel: true));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), unstarted, throughTunnel: true));
 
         Assert.Equal(
             BlockKind.TunnelFailed,
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), cut, throughTunnel: true));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), cut, throughTunnel: true));
     }
 
     private static ProbeOutcome Ok() => new() { Ok = true };

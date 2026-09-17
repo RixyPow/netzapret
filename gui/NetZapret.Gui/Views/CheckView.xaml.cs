@@ -21,8 +21,10 @@ public sealed record CheckRow(
     string Mark,
     Visibility MarkShown,
     string Tcp,
-    string Tls12,
-    string Tls13,
+
+    /// <summary>Версия, на которой сошлись, либо причина отказа.</summary>
+    string Tls,
+
     string Http,
     string Data,
     string Verdict,
@@ -462,8 +464,8 @@ public partial class CheckView : UserControl
         text.AppendLine();
 
         text.AppendLine(
-            Fit("ИМЯ", 38) + Fit("TCP", 8) + Fit("TLS1.2", 8)
-            + Fit("TLS1.3", 8) + Fit("ПОРТ 80", 9) + Fit("ДАННЫЕ", 9) + "ВЕРДИКТ");
+            Fit("ИМЯ", 38) + Fit("TCP", 8) + Fit("TLS", 8)
+            + Fit("ПОРТ 80", 9) + Fit("ДАННЫЕ", 9) + "ВЕРДИКТ");
 
         text.AppendLine(new string('-', 78));
 
@@ -472,8 +474,8 @@ public partial class CheckView : UserControl
             var name = row.MarkShown == Visibility.Visible ? $"{row.Host} [{row.Mark}]" : row.Host;
 
             text.AppendLine(
-                Fit(name, 38) + Fit(row.Tcp, 8) + Fit(row.Tls12, 8)
-                + Fit(row.Tls13, 8) + Fit(row.Http, 8) + Fit(row.Data, 9) + row.Verdict);
+                Fit(name, 38) + Fit(row.Tcp, 8) + Fit(row.Tls, 8)
+                + Fit(row.Http, 9) + Fit(row.Data, 9) + row.Verdict);
         }
 
         if (_markers.Count > 0)
@@ -906,8 +908,7 @@ public partial class CheckView : UserControl
             report.Tunnelled ? "чз" : string.Empty,
             report.Tunnelled ? Visibility.Visible : Visibility.Collapsed,
             report.Tcp.Describe(),
-            report.Tls12.Describe(),
-            report.Tls13.Describe(),
+            report.DescribeTls(),
             report.Http.Describe(),
             report.Data.Describe(),
             report.Describe(),

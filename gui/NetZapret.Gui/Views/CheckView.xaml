@@ -64,13 +64,12 @@
                 </Border>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap"
-                           Text="Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа." />
+                           Text="Проверка идёт минуты: по каждому имени соединение, и каждое ждёт ответа." />
 
                 <!-- Шапка таблицы. Повторяет консольную, чтобы отчёты читались одинаково. -->
                 <Grid x:Name="Header" Margin="18,18,18,6" Visibility="Collapsed">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" MinWidth="120" />
-                        <ColumnDefinition Width="52" />
                         <ColumnDefinition Width="52" />
                         <ColumnDefinition Width="52" />
                         <ColumnDefinition Width="52" />
@@ -80,11 +79,10 @@
 
                     <TextBlock Grid.Column="0" Text="Имя" Style="{StaticResource Caption}" />
                     <TextBlock Grid.Column="1" Text="TCP" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="2" Text="1.2" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="3" Text="1.3" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="4" Text="ПОРТ 80" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="5" Text="ДАННЫЕ" Style="{StaticResource Caption}" />
-                    <TextBlock Grid.Column="6" Text="вердикт" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="2" Text="TLS" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="3" Text="ПОРТ 80" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="4" Text="ДАННЫЕ" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="5" Text="вердикт" Style="{StaticResource Caption}" />
                 </Grid>
 
                 <ItemsControl x:Name="Rows">
@@ -95,7 +93,6 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" MinWidth="120" />
-                                            <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="52" />
                                             <ColumnDefinition Width="52" />
@@ -131,11 +128,10 @@
                                         </Grid>
 
                                         <TextBlock Grid.Column="1" Text="{Binding Tcp}" Style="{StaticResource Mono}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Tls12}" Style="{StaticResource Mono}" />
-                                        <TextBlock Grid.Column="3" Text="{Binding Tls13}" Style="{StaticResource Mono}" />
-                                        <TextBlock Grid.Column="4" Text="{Binding Http}" Style="{StaticResource Mono}" />
-                                        <TextBlock Grid.Column="5" Text="{Binding Data}" Style="{StaticResource Mono}" />
-                                        <TextBlock Grid.Column="6" Text="{Binding Verdict}"
+                                        <TextBlock Grid.Column="2" Text="{Binding Tls}" Style="{StaticResource Mono}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Http}" Style="{StaticResource Mono}" />
+                                        <TextBlock Grid.Column="4" Text="{Binding Data}" Style="{StaticResource Mono}" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Verdict}"
                                                    Foreground="{Binding Color}" TextTrimming="CharacterEllipsis" />
                                     </Grid>
 

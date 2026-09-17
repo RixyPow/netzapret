@@ -27,28 +27,27 @@ public class BlockCheckReasonTests
 
     private static TargetReport Report(
         ProbeOutcome tcp,
-        ProbeOutcome tls12,
-        ProbeOutcome tls13,
+        ProbeOutcome tls,
         ProbeOutcome http,
         ProbeOutcome data) => new()
         {
             Host = "example.com",
             Tcp = tcp,
-            Tls12 = tls12,
-            Tls13 = tls13,
+            Tls = tls,
             Http = http,
             Data = data,
-            Kind = BlockCheck.Classify(tcp, tls12, tls13, http, data),
+            Kind = BlockCheck.Classify(tcp, tls, http, data),
         };
 
     /// <summary>
     /// Отказ согласования — не блокировка.
     /// </summary>
     /// <remarks>
-    /// Сторона отвечает словами и быстро: так говорят площадки, отключившие
-    /// TLS 1.2, и старые серверы без 1.3. Фильтр так не отвечает — он рвёт
-    /// соединение либо молчит. Прежде обе ячейки показывали «нет», и человек
-    /// шёл подбирать рецепт к тому, что не сломано.
+    /// Сторона отвечает словами и быстро — фильтр так не отвечает, он рвёт
+    /// соединение либо молчит. Признак этот ставится не по одному лишь типу
+    /// исключения: отвергнутое приветствие переспрашивается вторым,
+    /// собранным по образцу браузера, и «н/д» означает, что браузерное
+    /// прошло там, где наше отвергли.
     /// </remarks>
     [Fact]
     public void RefusedVersionIsNotABlock()
@@ -61,7 +60,7 @@ public class BlockCheckReasonTests
             Elapsed = TimeSpan.FromSeconds(0.2),
         };
 
-        var report = Report(Ok(), unsupported, unsupported, Nope(), Nope());
+        var report = Report(Ok(), unsupported, Nope(), Nope());
 
         Assert.Equal(BlockKind.Handshake, report.Kind);
 
@@ -70,19 +69,6 @@ public class BlockCheckReasonTests
         Assert.Equal("н/д", unsupported.Describe());
     }
 
-    /// <summary>
-    /// Отказ согласования у одной версии при живой другой блокировкой тоже
-    /// не является: рукопожатие состоялось, значит связь исправна.
-    /// </summary>
-    [Fact]
-    public void OneRefusedVersionStillOpen()
-    {
-        var unsupported = new ProbeOutcome { Ok = false, Unsupported = true, Detail = "нет 1.2" };
-
-        Assert.Equal(
-            BlockKind.None,
-            BlockCheck.Classify(Ok(), unsupported, Ok(), Nope(), Ok("1200 Б")));
-    }
 
     /// <summary>
     /// Обрыв объясняется цифрами передачи, а не удавшимся TCP.
@@ -97,7 +83,6 @@ public class BlockCheckReasonTests
     {
         var report = Report(
             Ok("162.159.128.233"),
-            Ok(),
             Ok(),
             Nope(),
             No("поток замер на 14381 из 154921 Б, тишина 3 с"));
@@ -116,7 +101,7 @@ public class BlockCheckReasonTests
     [Fact]
     public void TlsBlockCarriesItsTiming()
     {
-        var report = Report(Ok("1.2.3.4"), Rst(), Rst(), Nope(), Nope());
+        var report = Report(Ok("1.2.3.4"), Rst(), Nope(), Nope());
 
         Assert.Equal(BlockKind.TlsDpi, report.Kind);
         Assert.NotNull(report.Why);
@@ -136,7 +121,6 @@ public class BlockCheckReasonTests
     {
         var report = Report(
             Ok("1.2.3.4"),
-            No("нет ответа за 4 с, 151.101.130.167:443 — всего адресов 4"),
             No("нет ответа за 4 с, 151.101.130.167:443 — всего адресов 4"),
             Nope(),
             Nope());
@@ -177,11 +161,11 @@ public class BlockCheckReasonTests
 
         Assert.Equal(
             BlockKind.Handshake,
-            BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope()));
+            BlockCheck.Classify(Ok(), unsupported, Nope(), Nope()));
 
         Assert.Equal(
             BlockKind.Handshake,
-            BlockCheck.Classify(Ok(), unsupported, unsupported, Nope(), Nope(), throughTunnel: true));
+            BlockCheck.Classify(Ok(), unsupported, Nope(), Nope(), throughTunnel: true));
     }
 
     /// <summary>Гео-отказ объясняется ответом сайта.</summary>
@@ -195,7 +179,7 @@ public class BlockCheckReasonTests
             Detail = "сайт ответил 403 — связь исправна, отказывает он сам",
         };
 
-        var report = Report(Ok(), Ok(), Ok(), Nope(), refused);
+        var report = Report(Ok(), Ok(), Nope(), refused);
 
         Assert.Equal(BlockKind.GeoBlock, report.Kind);
         Assert.Equal("сайт ответил 403 — связь исправна, отказывает он сам", report.Why);
@@ -211,7 +195,6 @@ public class BlockCheckReasonTests
             No("нет ответа за 4 с, 185.70.42.12:443"),
             Nope(),
             Nope(),
-            Nope(),
             Nope());
 
         Assert.Equal(BlockKind.Full, report.Kind);
@@ -222,7 +205,7 @@ public class BlockCheckReasonTests
     [Fact]
     public void OpenNameHasNothingToExplain()
     {
-        Assert.Null(Report(Ok(), Ok(), Ok(), Nope(), Ok("1200 Б")).Why);
+        Assert.Null(Report(Ok(), Ok(), Nope(), Ok("1200 Б")).Why);
     }
 
     /// <summary>
@@ -238,16 +221,16 @@ public class BlockCheckReasonTests
         // 443 не встал, 80 отвечает — маршрут жив, закрыт порт.
         Assert.Equal(
             BlockKind.HttpsPort,
-            BlockCheck.Classify(Nope(), Nope(), Nope(), Ok(), Nope()));
+            BlockCheck.Classify(Nope(), Nope(), Ok(), Nope()));
 
         // 443 не встал, и 80 молчит — закрыто всё.
         Assert.Equal(
             BlockKind.Full,
-            BlockCheck.Classify(Nope(), Nope(), Nope(), Nope(), Nope()));
+            BlockCheck.Classify(Nope(), Nope(), Nope(), Nope()));
 
         // А при живом 443 его значение не меняет ничего.
         Assert.Equal(
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok(), Ok()),
-            BlockCheck.Classify(Ok(), Ok(), Ok(), Nope(), Ok()));
+            BlockCheck.Classify(Ok(), Ok(), Ok(), Ok()),
+            BlockCheck.Classify(Ok(), Ok(), Nope(), Ok()));
     }
 }

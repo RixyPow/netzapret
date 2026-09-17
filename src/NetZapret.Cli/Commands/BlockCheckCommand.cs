@@ -765,8 +765,8 @@ internal static class BlockCheckCommand
         {
             Console.WriteLine(
                 $"  {Truncate(report.Host, 28),-28} " +
-                $"{report.Tcp.Describe(),-5} {report.Tls12.Describe(),-5} " +
-                $"{report.Tls13.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
+                $"{report.Tcp.Describe(),-5} {report.DescribeTls(),-5} " +
+                $"{report.Data.Describe(),-5}  {report.Describe()}");
         }
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -994,7 +994,7 @@ internal static class BlockCheckCommand
         Console.WriteLine(
             $"  {Truncate(report.Host, 27),-27} {mark,-3}" +
             $"{report.Tcp.Describe(),-5} " +
-            $"{report.Tls12.Describe(),-5} {report.Tls13.Describe(),-5} " +
+            $"{report.DescribeTls(),-5} " +
             $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
         Console.ForegroundColor = previous;
 
@@ -1436,8 +1436,7 @@ internal static class BlockCheckCommand
         Console.WriteLine("  Что проверяется                              Что означает отказ");
         Console.WriteLine("  " + new string('-', 74));
         Console.WriteLine("  TCP     соединение на 443                     порт или маршрут закрыт → VPN");
-        Console.WriteLine("  TLS1.2  рукопожатие старой версии             DPI разбирает имя сайта → десинк");
-        Console.WriteLine("  TLS1.3  рукопожатие нынешней версии           DPI разбирает имя сайта → десинк");
+        Console.WriteLine("  TLS     рукопожатие; в ячейке — версия        DPI разбирает имя сайта → десинк");
         Console.WriteLine("  HTTP    обычный запрос на 80                  отвечает ли хост вообще");
         Console.WriteLine("  ДАННЫЕ  идёт ли поток после рукопожатия       поток убивают позже → VPN");
         Console.WriteLine();
