@@ -588,7 +588,7 @@ internal static class BlockCheckCommand
         if (hosts.Count == 0 || string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
             return [];
 
-        var singBox = FindSingBox();
+        var singBox = TunnelStatus.FindSingBox();
 
         if (singBox is null)
             return [];
@@ -609,7 +609,7 @@ internal static class BlockCheckCommand
             // не тот сервер, которым идёт трафик, значит выдать успех чужого
             // замера за оправдание — а мы этот раздел затем и завели, чтобы
             // перестать говорить о трубе не глядя.
-            var live = await CurrentServerAsync(settings, cancellationToken);
+            var live = await TunnelStatus.CurrentServerAsync(cancellationToken, ClashApiPort);
 
             var server = info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
                 ?? info.Servers.FirstOrDefault(s =>
@@ -640,30 +640,7 @@ internal static class BlockCheckCommand
             return [];
         }
     }
-
-    /// <summary>Где лежит движок; <c>null</c> — не нашли.</summary>
-    private static string? FindSingBox()
-    {
-        var beside = Path.Combine(AppContext.BaseDirectory, "engines", "sing-box", "sing-box.exe");
-
-        if (File.Exists(beside))
-            return beside;
-
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            var candidate = Directory.GetFiles(directory.FullName, "sing-box.exe", SearchOption.AllDirectories)
-                .FirstOrDefault();
-
-            if (candidate is not null)
-                return candidate;
-
-            directory = directory.Parent;
-        }
-
-        return null;
-    }
+
 
     /// <summary>
     /// Показывает, что сам движок сказал про эти имена.
@@ -1339,7 +1316,7 @@ internal static class BlockCheckCommand
         Console.WriteLine($"  Пресет:  {(enginesRunning ? settings.DescribePreset() : "не применён — движки остановлены")}");
 
         var server = enginesRunning
-            ? await CurrentServerAsync(settings, cancellationToken)
+            ? await TunnelStatus.CurrentServerAsync(cancellationToken, ClashApiPort)
             : null;
 
         Console.WriteLine($"  Сервер:  {server ?? "не определён"}");
@@ -1353,8 +1330,8 @@ internal static class BlockCheckCommand
         // Порядок важен: состояние туннеля выясняется до всего прочего.
         // Мёртвый туннель обесценивает вердикты по проксируемым именам,
         // и знать об этом надо раньше, чем они напечатаны.
-        var tunnel = await TunnelStateAsync(server, cancellationToken);
-        var exit = await ReadExitAsync(cancellationToken);
+        var tunnel = await TunnelStatus.StateAsync(server, cancellationToken, ClashApiPort);
+        var exit = await TunnelStatus.ReadExitAsync(cancellationToken);
 
         PrintExit(exit);
         WarnIfTunnelIsDead(tunnel);
@@ -1370,107 +1347,9 @@ internal static class BlockCheckCommand
 
         public required ExitReading Exit { get; init; }
     }
-
-    /// <summary>
-    /// Проходит ли через туннель хоть что-нибудь.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Спрашивается у самого движка: Clash API умеет прогнать пробный запрос
-    /// через названный выход и вернуть задержку. Это единственный способ
-    /// отделить «сайт закрыт» от «труба не работает», не трогая маршруты.
-    /// </para>
-    /// <para>
-    /// Заведено после случая, когда пятнадцать серверов подписки разом
-    /// перестали отвечать — ни один порт не принимал соединение, — а проверка
-    /// исправно обвиняла в этом сайты и предлагала менять им маршруты.
-    /// </para>
-    /// </remarks>
-    private static async Task<TunnelState> TunnelStateAsync(string? server, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(server))
-            return TunnelState.Unknown;
-
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
-
-            var url = $"http://127.0.0.1:{ClashApiPort}/proxies/{Uri.EscapeDataString(server)}/delay"
-                + "?timeout=5000&url=" + Uri.EscapeDataString("https://www.gstatic.com/generate_204");
-
-            using var response = await http.GetAsync(url, cancellationToken);
-
-            // Движок отвечает 200 с задержкой, когда проба дошла, и 5xx,
-            // когда не дошла. Различать по телу не нужно: сам факт неуспеха
-            // и означает, что через этот выход трафик не идёт.
-            return response.IsSuccessStatusCode ? TunnelState.Alive : TunnelState.Dead;
-        }
-        catch (Exception)
-        {
-            // Движок мог не поднять Clash API. Это незнание, а не приговор:
-            // объявить туннель мёртвым по недоступности его же диагностики
-            // значило бы обвинить исправную трубу.
-            return TunnelState.Unknown;
-        }
-    }
-
-    /// <summary>
-    /// Внешний адрес и то, через что он получен.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Прежде здесь стоял простой запрос к службе определения адреса, а ответ
-    /// подписывался «Выход туннеля». Замер показал, что это неверно: имя
-    /// службы разрешается в настоящий адрес, а не в fakeip, — значит правило
-    /// маршрутизации отправляет её напрямую, и полученная страна описывает
-    /// домашнего провайдера. Отчёт уверенно называл выход туннеля российским,
-    /// ни разу через туннель не сходив.
-    /// </para>
-    /// <para>
-    /// Теперь замер сопровождается ответом на вопрос, через что он шёл.
-    /// Утверждение о туннеле делается только когда он и вправду измерен.
-    /// </para>
-    /// </remarks>
-    private static async Task<ExitReading> ReadExitAsync(CancellationToken cancellationToken)
-    {
-        const string probe = "api.ipify.org";
-
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-
-            var address = (await http.GetStringAsync($"https://{probe}", cancellationToken)).Trim();
-            var country = (await http.GetStringAsync("https://ipinfo.io/country", cancellationToken)).Trim();
-
-            return new ExitReading
-            {
-                Address = address,
-                Country = country,
-                Tunnelled = await WentThroughTunnelAsync(probe, cancellationToken),
-            };
-        }
-        catch (Exception)
-        {
-            // Не выяснилось — молчим. Отсутствие сведений хуже ложных,
-            // но ложные здесь стоили бы смены рабочего сервера ни за чем.
-            return new ExitReading { Tunnelled = false };
-        }
-    }
-
-    /// <summary>Разрешается ли имя в fakeip — то есть уйдёт ли оно в туннель.</summary>
-    private static async Task<bool> WentThroughTunnelAsync(string host, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var addresses = await System.Net.Dns.GetHostAddressesAsync(host, cancellationToken);
-
-            return addresses.Any(a => TunnelHealth.IsFakeIp(a));
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
+
+
+
 
     private static void PrintExit(ExitReading exit)
     {
@@ -1532,56 +1411,7 @@ internal static class BlockCheckCommand
 
         Console.ForegroundColor = previous;
     }
-
-    /// <summary>
-    /// Какой сервер подписки работает прямо сейчас.
-    /// </summary>
-    /// <remarks>
-    /// Через Clash API движка. Настройка «авто по задержке» означает, что имени
-    /// сервера в конфиге нет вовсе — выбор делается на ходу, и узнать его можно
-    /// только у того, кто его сделал.
-    /// </remarks>
-    private static async Task<string?> CurrentServerAsync(AppSettings settings, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
-
-            var json = await http.GetStringAsync(
-                $"http://127.0.0.1:{ClashApiPort}/proxies/auto",
-                cancellationToken);
-
-            using var document = System.Text.Json.JsonDocument.Parse(json);
-
-            if (!document.RootElement.TryGetProperty("now", out var now))
-                return null;
-
-            var name = now.GetString();
-
-            // Селектор может указывать на группу, а не на сервер. Тогда
-            // спрашиваем ещё раз у неё — иначе в отчёте будет «auto-latency»,
-            // что не ответ на вопрос «через что мы сейчас ходим».
-            if (name is not null && name.StartsWith("auto", StringComparison.OrdinalIgnoreCase))
-            {
-                var inner = await http.GetStringAsync(
-                    $"http://127.0.0.1:{ClashApiPort}/proxies/{Uri.EscapeDataString(name)}",
-                    cancellationToken);
-
-                using var group = System.Text.Json.JsonDocument.Parse(inner);
-
-                if (group.RootElement.TryGetProperty("now", out var chosen))
-                    return chosen.GetString();
-            }
-
-            return name;
-        }
-        catch (Exception)
-        {
-            // Движок мог не поднять API или уже остановиться. Отчёт без имени
-            // сервера хуже, но всё ещё отчёт.
-            return null;
-        }
-    }
+
 
     /// <summary>
     /// Объясняет столбцы до того, как они появятся.

@@ -9,6 +9,7 @@ using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
@@ -109,6 +110,18 @@ public partial class CheckView : UserControl
 
     /// <summary>Длина журнала движка на начало прогона.</summary>
     private static long _logMark;
+
+    /// <summary>Обстановка замера: через что ходим и куда выходим.</summary>
+    private static SectionRow? _setupRow;
+
+    /// <summary>Она же, но всегда чем-то заполненная — для показа.</summary>
+    private SectionRow _setup => _setupRow ?? new SectionRow(
+        "Обстановка не выяснена",
+        "Через что шёл замер, узнать не удалось.",
+        (Brush)FindResource("Muted"));
+
+    /// <summary>Состояние туннеля на момент прогона.</summary>
+    private static TunnelState _tunnel = TunnelState.Unknown;
 
     private static CancellationTokenSource? _work;
     private static bool _running;
@@ -322,6 +335,11 @@ public partial class CheckView : UserControl
                     ? $"Полная проверка: {targets.Count} имён, по два с каждой части, "
                       + "по каждому четыре пробы."
                     : $"Проверяю {targets.Count} — по каждому четыре пробы.");
+
+            // Обстановка выясняется до проб, а не после. Мёртвый туннель
+            // обесценивает вердикты по проксируемым именам, и знать об этом
+            // надо раньше, чем они появятся на экране.
+            await ReadSetupAsync(settings, running, _work.Token);
 
             await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
             await ReprobeAloneAsync(engine, running && settings.NeedsProxy, _work.Token);
@@ -920,6 +938,18 @@ public partial class CheckView : UserControl
             }
         }
 
+        // Обстановка замера — первой строкой и прежде вердиктов.
+        //
+        // Мёртвый туннель обесценивает всё, что сказано про проксируемые
+        // имена: измерена труба, а не сайты. Случай стоил дня разбора —
+        // у пользователя разом «сломались» WhatsApp и Telegram, проверка
+        // показала на них блокировки и предложила менять маршруты, а в журнале
+        // движка лежало четыре тысячи строк «timeout: no recent network
+        // activity» и ни один из пятнадцати серверов не отвечал.
+        //
+        // Консоль говорила это с самого начала, окно — не говорило вовсе.
+        sections.Insert(0, _setup);
+
         // Что сказал сам движок. Самый прямой источник, какой есть, и в окне
         // его до сих пор не было вовсе — только в консоли. Разница видна
         // на живом случае: 16 сентября четыре имени числились «туннель
@@ -952,6 +982,35 @@ public partial class CheckView : UserControl
                     (Brush)FindResource("Muted")));
         }
 
+        // Какие из проверенных имён прибиты — и потому измерены не там,
+        // где кажется.
+        //
+        // Раздел «Файл hosts» это не заменяет и не дублирует: там показаны
+        // пины, поставленные нами, а здесь читается весь файл целиком, вместе
+        // с чужими. Чужие и опаснее: пины от редактора Zapret GUI на Canva,
+        // RuTracker и LinkedIn однажды выглядели как неисправный VPN, и разбор
+        // стоил дня.
+        //
+        // Смысл раздела не в списке, а в связи со строками таблицы. Пин бьёт
+        // любой резолв, включая наш fakeip, поэтому вердикт по такому имени
+        // описывает прибитый адрес, а не сайт. Вчера семь имён получили
+        // пометку «правило ведёт в VPN, а замер пошёл напрямую» именно
+        // поэтому — и чтобы это понять, пришлось читать hosts руками.
+        var pinned = Pinned();
+
+        if (pinned.Count > 0)
+        {
+            sections.Add(new SectionRow(
+                $"Из проверенных прибиты в hosts: {pinned.Count}",
+                string.Join("\n", pinned.Take(12).Select(p => $"{p.Key} → {p.Value}"))
+                + (pinned.Count > 12 ? $"\n… и ещё {pinned.Count - 12}" : string.Empty)
+                + "\n\nИх строки в таблице описывают прибитый адрес, а не сайт. Пин бьёт "
+                + "любой резолв, включая наш: правило «через VPN» на такое имя молча "
+                + "не работает, а десинк его не трогает вовсе.\n\nЗдесь читается весь файл, "
+                + "вместе с чужими записями — свои показывает и снимает раздел «Файл hosts».",
+                (Brush)FindResource("Muted")));
+        }
+
         if (HostsEditor.WhoReplaced() is { } who)
         {
             sections.Add(new SectionRow(
@@ -965,7 +1024,8 @@ public partial class CheckView : UserControl
         Sections.ItemsSource = sections;
 
         // Показ идёт до замера, а ожидание — после: итог на экране появляется
-        // сразу, а раздел про туннель догоняет его через несколько секунд.
+        // сразу, а разделы про туннель догоняют его через несколько секунд.
+        await AddTunnelReachAsync(sections);
         //
         // Но дождаться обязательно: отчёт пишется сразу за этим вызовом,
         // и брошенный замер не попал бы в файл — то есть в единственное,
@@ -975,6 +1035,260 @@ public partial class CheckView : UserControl
         Say(_target is null
             ? $"Готово: проверено {Collected.Count}."
             : $"Готово: «{_target.Describe}», проверено {Collected.Count}.");
+    }
+
+    /// <summary>
+    /// Проверяет через сам туннель то, что он якобы не доставил.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отвечает на вопрос, который раздел «в туннель нарочно» задать не может:
+    /// довёз бы это имя выбранный сервер. Тот ходит через служебный вход
+    /// боевого движка, то есть меряет действующую сборку целиком; этот
+    /// поднимает свой sing-box с одним сервером, без TUN и без прав
+    /// администратора, — и потому отделяет вину сервера от вины конфига.
+    /// </para>
+    /// <para>
+    /// Сервер спрашивается у движка, а не берётся из настроек. Это не придирка:
+    /// настройка — то, что просили при сборке конфига, а выбор живёт своей
+    /// жизнью, его меняет и группа по задержке, и рука через Clash API.
+    /// Проверить не тот сервер, которым идёт трафик, значит выдать успех
+    /// чужого замера за оправдание.
+    /// </para>
+    /// <para>
+    /// Тот же <see cref="TunnelReach"/>, что и в консоли, — не вторая копия.
+    /// </para>
+    /// </remarks>
+    private async Task AddTunnelReachAsync(List<SectionRow> sections)
+    {
+        var lost = _reports
+            .Where(r => r.Kind == BlockKind.TunnelFailed)
+            .Select(r => r.Host)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        if (lost.Count == 0)
+            return;
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+            return;
+
+        if (TunnelStatus.FindSingBox() is not { } singBox)
+            return;
+
+        var token = _work?.Token ?? CancellationToken.None;
+
+        try
+        {
+            Say($"Проверяю через сам туннель: {lost.Count}…");
+
+            using var client = new SubscriptionClient();
+            var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), token);
+
+            var live = await TunnelStatus.CurrentServerAsync(token);
+
+            var server = info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
+                ?? info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == settings.PreferredServer)
+                ?? info.Servers.FirstOrDefault(s => s.IsUsableOutbound);
+
+            if (server is null)
+                return;
+
+            var readings = await TunnelReach.CheckAsync(
+                singBox,
+                server,
+                lost,
+                Path.Combine("runtime", "reach"),
+
+                // Порт заведомо не тот, на котором работает боевой инбаунд:
+                // столкнуться с собственным движком значило бы проверить
+                // не то и объявить об этом уверенно.
+                listenPort: 24081,
+                token);
+
+            if (readings.Count == 0)
+                return;
+
+            var reached = readings.Where(r => r.Reached).ToList();
+
+            var body = string.Join("\n", readings.Select(r => r.Reached
+                ? $"{r.Host}: дошло, ответ {r.Status}, {r.Elapsed.TotalSeconds:0.0} с"
+                : $"{r.Host}: не дошло — {r.Detail}"));
+
+            sections.Add(new SectionRow(
+                $"Через сервер «{server.Tag}»",
+                body + "\n\n" + (reached.Count == readings.Count
+                    ? "Сервер довозит их все, а боевой туннель — нет. Значит виноват "
+                      + "не он, а то, как собран конфиг."
+                    : reached.Count > 0
+                        ? "Часть сервер довозит, часть нет. Первые — беда конфига, "
+                          + "вторые — самого сервера либо сайта."
+                        : "Сервер не довозит ни одного. Вот теперь совет сменить сервер "
+                          + "подписки обоснован замером, а не догадкой.")
+                + "\n\nЗдесь поднимался отдельный движок с этим одним сервером, без TUN "
+                + "и без прав администратора — боевой обход при этом не трогался.",
+                (Brush)FindResource(reached.Count > 0 ? "Warn" : "Danger")));
+
+            Sections.ItemsSource = null;
+            Sections.ItemsSource = sections;
+            _sections = sections;
+        }
+        catch (OperationCanceledException)
+        {
+            // Проверку прервали — догонять нечего.
+        }
+        catch (Exception)
+        {
+            // Подписка могла не ответить, сервер — не подняться. Это незнание,
+            // и раздела просто не будет: пустая проверка лучше выдуманной.
+        }
+    }
+
+    /// <summary>
+    /// Проверенные имена, прибитые в файле hosts.
+    /// </summary>
+    /// <remarks>
+    /// Сравнение по зоне: прибивают обычно поддомен, а проверяем мы апекс,
+    /// и дословное сравнение прошло бы мимо ровно тех случаев, ради которых
+    /// раздел и заведён.
+    /// </remarks>
+    private static IReadOnlyList<KeyValuePair<string, string>> Pinned()
+    {
+        try
+        {
+            var hosts = HostsFile.Read();
+
+            if (hosts.Count == 0)
+                return [];
+
+            var found = new List<KeyValuePair<string, string>>();
+
+            foreach (var report in _reports)
+            {
+                foreach (var (name, addresses) in hosts)
+                {
+                    if (addresses.Count == 0)
+                        continue;
+
+                    bool covers = string.Equals(name, report.Host, StringComparison.OrdinalIgnoreCase)
+                        || name.EndsWith("." + report.Host, StringComparison.OrdinalIgnoreCase)
+                        || report.Host.EndsWith("." + name, StringComparison.OrdinalIgnoreCase);
+
+                    if (covers)
+                        found.Add(new(name, string.Join(", ", addresses.Take(2))));
+                }
+            }
+
+            return found
+                .GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .OrderBy(f => f.Key, StringComparer.Ordinal)
+                .ToList();
+        }
+        catch (Exception)
+        {
+            // Файл системный и может быть занят. Отсутствие раздела честнее
+            // жалобы поверх готового отчёта.
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Выясняет, через что шёл замер и куда он вышел.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Тем же <see cref="TunnelStatus"/>, что и консоль: сервер спрашивается
+    /// у самого движка через Clash API, состояние — его же диагностикой,
+    /// а страна выхода отдельно от того, шёл ли сам этот запрос через туннель.
+    /// Последнее существенно: с поднятым туннелем ответ службы определения
+    /// адреса может прийти и по домашнему каналу, и тогда «страна выхода»
+    /// описывает провайдера, а не сервер подписки.
+    /// </para>
+    /// <para>
+    /// Цвет несёт смысл. Мёртвый туннель — красный, потому что он отменяет
+    /// доверие к целой половине отчёта; выход в России — жёлтый, потому что
+    /// связь при этом исправна, а вот сервисы, закрывающиеся от страны,
+    /// откажут так же, как без туннеля.
+    /// </para>
+    /// </remarks>
+    private async Task ReadSetupAsync(AppSettings settings, bool enginesRunning, CancellationToken cancellationToken)
+    {
+        _tunnel = TunnelState.Unknown;
+
+        if (!enginesRunning)
+        {
+            _setupRow = new SectionRow(
+                "Движки остановлены",
+                "Видно, что закрыто на самом деле: ни десинк, ни туннель сейчас не вмешиваются.",
+                (Brush)FindResource("Muted"));
+
+            return;
+        }
+
+        Say("Выясняю, через что пойдёт замер…");
+
+        try
+        {
+            var server = await TunnelStatus.CurrentServerAsync(cancellationToken);
+
+            _tunnel = settings.NeedsProxy
+                ? await TunnelStatus.StateAsync(server, cancellationToken)
+                : TunnelState.Off;
+
+            var exit = settings.NeedsProxy
+                ? await TunnelStatus.ReadExitAsync(cancellationToken)
+                : new ExitReading { Tunnelled = false };
+
+            var lines = new List<string>
+            {
+                $"Режим: {settings.DescribeMode()}",
+                $"Пресет: {settings.DescribePreset()}",
+                $"Сервер: {server ?? "не определён"}",
+                $"Туннель: {TunnelHealth.Describe(_tunnel)}",
+            };
+
+            if (exit.Address is { Length: > 0 })
+            {
+                lines.Add($"Выход: {exit.Address}"
+                    + (exit.Country is { Length: > 0 } c ? $", {c}" : string.Empty)
+                    + (exit.Tunnelled ? " — через туннель" : " — мимо туннеля"));
+            }
+
+            var key = _tunnel == TunnelState.Dead ? "Danger"
+                : exit.TunnelExitsDomestically ? "Warn"
+                : "Muted";
+
+            if (_tunnel == TunnelState.Dead)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Туннель поднят и не пропускает ничего. Пока это так, вердикты "
+                    + "по именам, заведённым в VPN, описывают не сайты, а его — менять "
+                    + "по ним маршруты не стоит.");
+            }
+            else if (exit.TunnelExitsDomestically)
+            {
+                lines.Add(string.Empty);
+                lines.Add("Выход туннеля в России. Связь исправна, но сервисы, закрывающиеся "
+                    + "от страны, откажут так же, как без туннеля.");
+            }
+
+            _setupRow = new SectionRow("Обстановка замера", string.Join("\n", lines), (Brush)FindResource(key));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _setupRow = new SectionRow(
+                "Обстановка не выяснена",
+                ex.GetBaseException().Message,
+                (Brush)FindResource("Muted"));
+        }
     }
 
     /// <summary>
