@@ -13,9 +13,24 @@ namespace NetZapret.Gui.Views;
 /// чужие записи ведёт кто-то ещё, и кнопка «снять» у них означала бы право,
 /// которого у нас нет.
 /// </param>
-public sealed record PinRow(string Name, string Detail, string Note, Brush Color, bool Ours = true)
+/// <param name="Line">
+/// Номер строки в файле; у наших записей не используется.
+/// </param>
+/// <remarks>
+/// Чужая строка правится по номеру, а не по содержимому: две записи могут
+/// совпадать дословно, и удалять «такую же» значило бы снять не ту.
+/// </remarks>
+public sealed record PinRow(
+    string Name,
+    string Detail,
+    string Note,
+    Brush Color,
+    bool Ours = true,
+    int Line = -1)
 {
     public Visibility UnpinShown => Ours ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ForeignShown => Ours ? Visibility.Collapsed : Visibility.Visible;
 }
 
 /// <summary>
@@ -23,10 +38,16 @@ public sealed record PinRow(string Name, string Detail, string Note, Brush Color
 /// </summary>
 /// <remarks>
 /// <para>
-/// Показываем только свой блок. Файл ведёт не одна программа — там бывают
-/// записи Zapret GUI и человека, — и снимать чужое мы не вправе: кнопка
-/// «почистить» в общем системном файле однажды сотрёт то, на чём всё
-/// держалось.
+/// Два списка: наш блок и всё остальное. Файл ведёт не одна программа —
+/// записи ставит редактор Zapret GUI, антивирус, рука, — и до 17.09 чужие
+/// не показывались вовсе. Это выходило боком: пины на Canva, RuTracker
+/// и LinkedIn выглядели как неисправный VPN, а разбор стоил дня.
+/// </para>
+/// <para>
+/// Чужую запись можно удалить — решение владельца от 17.09, взамен прежнего
+/// «не трогаем вовсе». Разом их не чистят: удаление по одной, с вопросом
+/// перед каждым и копией файла рядом. Кнопки «почистить всё» нет и не будет
+/// — она однажды сотрёт то, на чём всё держалось.
 /// </para>
 /// <para>
 /// Проверка адресов нужна оттого, что пин стареет молча: адрес сети доставки
@@ -108,15 +129,19 @@ public partial class HostsView : UserControl
     {
         try
         {
-            var foreign = HostsFile.Read()
-                .Where(e => e.Value.Count > 0 && !ours.ContainsKey(e.Key))
-                .OrderBy(e => e.Key, StringComparer.Ordinal)
-                .Select(e => new PinRow(
-                    e.Key,
-                    string.Join(", ", e.Value.Take(2)),
-                    "чужая",
-                    (Brush)FindResource("Faint"),
-                    Ours: false))
+            // Через Parse, а не Read: нужен номер строки, иначе править нечего.
+            // Read отвечает на вопрос «во что разрешится имя» и про файл
+            // как таковой не знает.
+            var foreign = HostsEditor.Parse()
+                .Where(e => !e.Names.Any(ours.ContainsKey))
+                .SelectMany(e => e.Names.Select(n => new PinRow(
+                    n,
+                    e.Address + (e.Enabled ? string.Empty : " · выключена"),
+                    e.Note is { Length: > 0 } note ? note : "чужая",
+                    (Brush)FindResource(e.Enabled ? "Faint" : "Muted"),
+                    Ours: false,
+                    Line: e.Line)))
+                .OrderBy(r => r.Name, StringComparer.Ordinal)
                 .ToList();
 
             Foreign.ItemsSource = foreign;
@@ -125,13 +150,129 @@ public partial class HostsView : UserControl
 
             ForeignSummary.Text = $"{foreign.Count} — их ведёт кто-то ещё: редактор hosts "
                 + "из Zapret GUI, антивирус либо вы сами. Показаны, потому что объясняют "
-                + "вердикты проверки; снять их отсюда нельзя.";
+                + "вердикты проверки; удалить можно по одной.";
         }
         catch (Exception)
         {
             // Файл системный и может быть занят. Свой блок при этом уже
             // показан — половина сведений лучше жалобы вместо них.
             ForeignToggle.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// Удаляет чужую строку из файла.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Спрашиваем перед правкой, и это не формальность: отменить нажатием
+    /// нельзя, файл общий, а запись могла держать чью-то работу. Копия
+    /// кладётся рядом всегда — её путь называется вслух, иначе о ней узнают
+    /// только те, кто полез в исходники.
+    /// </para>
+    /// <para>
+    /// По номеру строки: две записи могут совпадать дословно, и удалять
+    /// «такую же» значило бы снять не ту.
+    /// </para>
+    /// </remarks>
+    private void OnRemoveForeign(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: int line } || line < 0)
+            return;
+
+        if (sender is not FrameworkElement { DataContext: PinRow row })
+            return;
+
+        var answer = MessageBox.Show(
+            $"Удалить чужую запись «{row.Name} → {row.Detail}» из файла hosts?\n\n"
+            + "Её ведёт не программа: это мог быть редактор Zapret GUI, антивирус "
+            + "или вы сами. Отменить нажатием будет нельзя.\n\n"
+            + "Копия файла ляжет рядом — из неё можно вернуть всё целиком.",
+            "NetZapret",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            var backup = HostsEditor.Remove([line]);
+            HostsEditor.FlushDns();
+
+            Reload();
+            Status.Text = $"Удалено: {row.Name}. Копия прежнего файла: {backup}";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось удалить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Прибивает имя к адресу, введённым руками.</summary>
+    /// <remarks>
+    /// Отдельно от окна пина, которое подбирает живой адрес пробами: здесь
+    /// адрес уже известен, и подбирать нечего. Проверка адреса строгая —
+    /// строка, не разобравшаяся в адрес, ушла бы в файл и осталась там
+    /// молча нерабочей.
+    /// </remarks>
+    private void OnAddPin(object sender, RoutedEventArgs e) => AddPin();
+
+    private void OnNewKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            AddPin();
+    }
+
+    private void AddPin()
+    {
+        var name = NewName.Text.Trim().Trim('/').ToLowerInvariant();
+
+        // Из адреса берём только имя: люди вставляют ссылку целиком.
+        if (name.Contains("://"))
+            name = name.Split("://")[1];
+
+        name = name.Split('/')[0].TrimStart('*', '.');
+
+        if (name.Length == 0 || !name.Contains('.') || name.Contains(' '))
+        {
+            Status.Text = "Слева нужно имя вида example.com.";
+            return;
+        }
+
+        if (!System.Net.IPAddress.TryParse(NewAddress.Text.Trim(), out var address))
+        {
+            Status.Text = "Справа нужен адрес вида 93.184.216.34 — имя там не подойдёт: "
+                + "файл hosts разрешает имена в адреса, а не в другие имена.";
+
+            return;
+        }
+
+        try
+        {
+            var result = HostsEditor.Pin(
+                new Dictionary<string, string> { [name] = address.ToString() },
+                note: "вручную");
+
+            HostsEditor.FlushDns();
+
+            NewName.Clear();
+            NewAddress.Clear();
+
+            Reload();
+
+            // Про чужие записи на то же имя говорим сразу: пока они на месте,
+            // имя разрешается дважды, и предсказать исход по файлу не выйдет.
+            Status.Text = result.Shadowed.Count > 0
+                ? $"Прибито: {name} → {address}. Но на это же имя есть чужие записи "
+                  + $"({result.Shadowed.Count}) — снимите их, иначе какая сработает, "
+                  + "по файлу не скажешь."
+                : $"Прибито: {name} → {address}. Прибито нами всего: {result.Pinned}.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось прибить: " + ex.GetBaseException().Message;
         }
     }
 

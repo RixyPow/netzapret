@@ -6,8 +6,8 @@
     <!--
         Строка одна на оба списка — наш и чужой. Вид у неё один, и держать
         две копии разметки значило бы чинить каждую правку дважды.
-        Отличается только кнопка «снять»: у чужой записи её нет, потому что
-        трогать чужое мы не вправе.
+        Отличается только правая кнопка: у своей записи «снять», у чужой
+        «удалить» — разные действия и разная цена, поэтому и слова разные.
     -->
     <UserControl.Resources>
         <DataTemplate x:Key="PinItem">
@@ -37,6 +37,17 @@
                             Content="снять" Padding="14,7"
                             Visibility="{Binding UnpinShown}"
                             Tag="{Binding Name}" Click="OnUnpin" />
+
+                    <!--
+                        Чужая строка удаляется совсем — решение владельца.
+                        Отменить нажатием нельзя, поэтому спрашиваем перед
+                        правкой и всегда кладём копию файла рядом.
+                    -->
+                    <Button Grid.Column="3" Style="{StaticResource Ghost}"
+                            Content="удалить" Padding="14,7"
+                            Foreground="{DynamicResource Danger}"
+                            Visibility="{Binding ForeignShown}"
+                            Tag="{Binding Line}" Click="OnRemoveForeign" />
                 </Grid>
             </Border>
         </DataTemplate>
@@ -82,14 +93,48 @@
                     </StackPanel>
                 </Border>
 
+                <!--
+                    Своё имя руками. Отдельно от окна пина, которое подбирает
+                    живой адрес пробами: здесь адрес уже известен — его дали,
+                    подсмотрели или взяли из чужой записи, — и подбирать нечего.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Прибить вручную" FontWeight="SemiBold" />
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0" x:Name="NewName" Margin="0,0,8,0"
+                                     KeyDown="OnNewKey" />
+
+                            <TextBox Grid.Column="1" x:Name="NewAddress" Width="190" Margin="0,0,8,0"
+                                     KeyDown="OnNewKey" />
+
+                            <Button Grid.Column="2" Style="{StaticResource Primary}"
+                                    Content="Прибить" Click="OnAddPin" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Слева имя, справа адрес: example.com и 93.184.216.34. Запись ложится в наш блок в начале файла — при двух записях на одно имя Windows берёт первую, и дописанная в конец проиграла бы чужой молча." />
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Text="Пин бьёт любой резолв, включая наш: имя не получит fakeip, и правило «через VPN» на него молча не сработает. Десинк такое имя тоже не тронет." />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap" />
 
                 <!--
                     Наши и чужие врозь, тем же приёмом, что у пресетов.
                     За свои мы отвечаем и снимаем их кнопкой; чужие ведёт
                     кто-то ещё — редактор Zapret GUI, антивирус, рука, — и
-                    трогать их мы не вправе. Но видеть обязаны: именно чужой
-                    пин на Canva и RuTracker однажды выглядел как неисправный
+                    удаляются они по одной, с вопросом. Видеть их обязательно:
+                    именно чужой пин на Canva и RuTracker выглядел как неисправный
                     VPN, и разбор стоил дня.
                 -->
                 <TextBlock x:Name="OursHeader" Text="Прибито нами"
@@ -151,7 +196,7 @@
                     </ItemsControl>
 
                     <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                               Text="Снять их отсюда нельзя намеренно: файл общий, записи ведёт кто-то ещё, и кнопка «почистить» в системном файле однажды сотрёт то, на чём всё держалось. Правятся они вручную — кнопкой «Открыть файл» выше." />
+                               Text="Удаляются по одной, с вопросом перед каждым и копией файла рядом. Разом не чистятся намеренно: файл общий, записи ведёт кто-то ещё, и одна кнопка «почистить всё» однажды сотрёт то, на чём всё держалось. Правку вручную никто не отменял — кнопка «Открыть файл» выше." />
                 </StackPanel>
 
                 <TextBlock Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap"
