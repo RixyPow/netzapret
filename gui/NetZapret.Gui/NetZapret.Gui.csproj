@@ -102,6 +102,17 @@
     <Using Remove="System.Drawing" />
   </ItemGroup>
 
+  <!--
+    Тесты видят внутреннее. Сборка конфига, запуск движков и разделы окна
+    объявлены internal и останутся такими: наружу они не нужны никому,
+    а публичность — обещание, которого мы не давали. Проверять их при этом
+    нужно, и нужнее прочего: почти всё, что ломалось за вечер 16.09, лежит
+    именно здесь.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="NetZapret.Gui.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
 

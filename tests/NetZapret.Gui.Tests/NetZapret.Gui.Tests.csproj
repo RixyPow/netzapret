@@ -1,0 +1,71 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Тесты на окно. Отдельным проектом от NetZapret.Core.Tests, а не разделом
+    в нём: тем ссылаться на gui\ нельзя — они входят в NetZapret.sln, куда
+    окно намеренно не входит, — и добавить туда ссылку значило бы втянуть
+    WPF в сборку консоли и в CI.
+
+    Собирается вместе с окном, из gui\NetZapret.Gui.sln.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      WPF и WinForms — потому что разделы окна суть UserControl, а трей суть
+      NotifyIcon, и без этих сборок на них даже не сослаться.
+    -->
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!--
+      Отменяет InvariantGlobalization из корневого Directory.Build.props
+      по той же причине, что и само окно: WPF без данных о языках падает
+      на первом же тексте сложнее латиницы, а у нас в именах серверов
+      эмодзи-флаги.
+    -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!--
+      Те же неявные using сняты, что и в окне: иначе UserControl и Brush
+      двусмысленны между WinForms и WPF.
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\gui\NetZapret.Gui\NetZapret.Gui.csproj" />
+  </ItemGroup>
+
+  <!--
+    Разметка кладётся рядом с тестами текстом.
+
+    Она нужна не собранной, а исходной: создание вкладки проверяет только то,
+    что разбирается сразу, а содержимое DataTemplate разбирается в мгновение,
+    когда появится первый элемент списка, — то есть уже у человека. Проверить
+    его можно лишь по тексту, и текст для этого должен быть под рукой.
+
+    Перечислено по папкам, а не шаблоном ** — иначе приедут копии из obj\,
+    и каждая ошибка считалась бы дважды.
+  -->
+  <ItemGroup>
+    <None Include="..\..\gui\NetZapret.Gui\*.xaml" Link="Xaml\%(Filename).xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\gui\NetZapret.Gui\Views\*.xaml" Link="Xaml\%(Filename).xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\gui\NetZapret.Gui\Theme\*.xaml" Link="Xaml\%(Filename).xaml"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

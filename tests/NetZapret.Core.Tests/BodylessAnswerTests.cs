@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using NetZapret.Proxy;
 using Xunit;
@@ -24,9 +22,11 @@ namespace NetZapret.Core.Tests;
 /// мессенджер сломанным.
 /// </para>
 /// <para>
-/// Проверяется через разбор заголовков, а не живой сетью: поднимать TLS
-/// ради трёх строк текста незачем, а ломается именно разбор — в том,
-/// где считается конец ответа.
+/// Проверяется разбором заголовков, и только им. Здесь стоял ещё один
+/// тест, звавшийся живым замером: он поднимал слушателя на петле, писал
+/// в сокет те же байты, вычитывал их обратно и звал тот же разборщик.
+/// Сокеты в нём не проверяли ничего — ни строки кода пробы через них
+/// не проходило, — а название обещало обратное. Удалён 17.09.
 /// </para>
 /// </remarks>
 public sealed class BodylessAnswerTests
@@ -63,41 +63,5 @@ public sealed class BodylessAnswerTests
 
         Assert.Equal(200, BlockCheck.ParseStatus(bytes, bytes.Length));
         Assert.Equal(5000, BlockCheck.ParseContentLength(bytes, bytes.Length));
-    }
-
-    /// <summary>
-    /// Живой замер: перенаправление доходит и не зовётся обрывом.
-    /// </summary>
-    /// <remarks>
-    /// Поддельный сервер отдаёт 302 и молчит, не закрывая соединение, —
-    /// ровно то поведение, на котором проба спотыкалась. Раньше она ждала
-    /// тишину три секунды и объявляла поток замершим.
-    /// </remarks>
-    [Fact]
-    public async Task A_redirect_that_is_followed_by_silence_still_counts()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        var accepting = listener.AcceptTcpClientAsync();
-
-        using var client = new TcpClient();
-        await client.ConnectAsync(IPAddress.Loopback, port);
-
-        using var server = await accepting;
-
-        var answer = Encoding.ASCII.GetBytes(
-            "HTTP/1.1 302 Found\r\nLocation: https://www.whatsapp.com/\r\n\r\n");
-
-        await server.GetStream().WriteAsync(answer);
-
-        var buffer = new byte[1024];
-        int read = await client.GetStream().ReadAsync(buffer);
-
-        Assert.Equal(302, BlockCheck.ParseStatus(buffer, read));
-        Assert.True(BlockCheck.HeaderLength(buffer, read) > 0);
-
-        listener.Stop();
     }
 }
