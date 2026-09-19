@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using NetZapret.Core;
+using NetZapret.Supervisor;
 
 namespace NetZapret.Gui;
 
@@ -157,8 +158,17 @@ public partial class App : Application
     /// Повторы нужны из-за того, когда именно это происходит. Задача срабатывает
     /// по входу в систему, а сеть к этому моменту поднимается не всегда:
     /// адаптер ещё договаривается, DNS не отвечает, подписка не читается.
-    /// Через полминуты то же самое обычно проходит. Три попытки с растущим
-    /// ожиданием покрывают этот случай и кончаются меньше чем за две минуты.
+    /// Через полминуты то же самое обычно проходит.
+    /// </para>
+    /// <para>
+    /// <b>Успехом считается поднявшийся движок, а не запустившийся супервизор.</b>
+    /// Это исправление жалобы 19.09: «трей запускается, программа запускается,
+    /// а движки нужно поднимать кнопкой». <see cref="EngineControl.StartAsync"/>
+    /// отвечает «Движки поднимаются» сразу, как только порождён процесс
+    /// супервизора, — дальше тот может пять раз не поднять sing-box и сдаться,
+    /// а в журнале уже стоит «движки подняты с попытки 1». Ровно это и стояло
+    /// там семь раз подряд, и повторы, заведённые ради неготовой сети,
+    /// не срабатывали ни разу: первая попытка всегда «удавалась».
     /// </para>
     /// </remarks>
     private static async Task StartOnLogonAsync()
@@ -172,15 +182,34 @@ public partial class App : Application
 
             try
             {
+                // Кто-то мог успеть поднять их руками, пока мы ждали.
+                if (EngineHealth.AllHealthy(State()))
+                {
+                    Note($"автозапуск: движки уже работают (попытка {attempt + 1})");
+                    return;
+                }
+
+                // Недоподнятое надо снять: второй супервизор поверх первого
+                // дерётся с ним за TUN и WinDivert, и проигрывают оба.
+                if (State()?.IsSupervisorAlive() == true)
+                    await EngineControl.StopAsync(CancellationToken.None);
+
                 var outcome = await EngineControl.StartAsync(CancellationToken.None);
 
-                if (outcome.Ok)
+                if (!outcome.Ok)
+                {
+                    Note($"автозапуск, попытка {attempt + 1} из {waits.Length}: {outcome.Message}");
+                    continue;
+                }
+
+                if (await WaitUntilHealthyAsync())
                 {
                     Note($"автозапуск: движки подняты с попытки {attempt + 1}");
                     return;
                 }
 
-                Note($"автозапуск, попытка {attempt + 1} из {waits.Length}: {outcome.Message}");
+                Note($"автозапуск, попытка {attempt + 1} из {waits.Length}: "
+                    + EngineHealth.Complaint(State()));
             }
             catch (Exception ex)
             {
@@ -192,7 +221,47 @@ public partial class App : Application
         Note("автозапуск: движки поднять не удалось. Откройте окно и запустите руками.");
     }
 
+    /// <summary>
+    /// Сколько ждать, пока движки поднимутся, прежде чем счесть попытку неудачной.
+    /// </summary>
+    /// <remarks>
+    /// С запасом: супервизор перезапускает упавшую службу пять раз с растущим
+    /// ожиданием — 2, 4, 8, 16, 32 секунды, — и ровно такая лесенка вытянула
+    /// sing-box 19.09 в 11:17, когда первый запуск завершился кодом 1. Срок
+    /// короче этой лесенки объявлял бы неудачей то, что само чинится.
+    /// </remarks>
+    private static readonly TimeSpan HealthyWithin = TimeSpan.FromSeconds(75);
+
+    /// <summary>Ждёт, пока все службы не станут здоровыми.</summary>
+    private static async Task<bool> WaitUntilHealthyAsync()
+    {
+        var until = DateTime.UtcNow + HealthyWithin;
+
+        while (DateTime.UtcNow < until)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2));
+
+            if (EngineHealth.AllHealthy(State()))
+                return true;
+
+            // Супервизор сдался — ждать больше нечего, его лесенка кончилась.
+            if (State() is { } state && !state.IsSupervisorAlive())
+                return false;
+        }
+
+        return false;
+    }
+
+    /// <summary>Состояние, оставленное супервизором.</summary>
+    private static SupervisorState? State() => SupervisorState.Load(SupervisorState.DefaultPath);
+
     /// <summary>Строка в общий журнал: при автозапуске окна нет.</summary>
+    /// <remarks>
+    /// С датой, а не только со временем. Журнал общий, и супервизор пишет
+    /// в него полную дату; строки автозапуска без неё невозможно отнести
+    /// к дню — при разборе 19.09 пришлось искать их по соседним строкам,
+    /// чтобы узнать, сегодняшние они или недельной давности.
+    /// </remarks>
     private static void Note(string message)
     {
         try
@@ -200,7 +269,7 @@ public partial class App : Application
             using var log = Supervisor.SharedLogWriter.TryOpen(
                 Path.Combine("runtime", "supervisor.log"));
 
-            log?.WriteLine($"[{DateTime.Now:HH:mm:ss}] {message}");
+            log?.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}");
         }
         catch (Exception)
         {
