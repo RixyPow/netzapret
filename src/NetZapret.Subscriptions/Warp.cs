@@ -31,6 +31,49 @@ public static class Warp
     public const string MasqueTag = "Cloudflare WARP";
 
     /// <summary>
+    /// Домен, у которого движок заводит себе учётную запись.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Туда и только туда упирается весь WARP: пока регистрация не прошла,
+    /// выход отвечает «tunnel not initialized» на каждое соединение. Запрос
+    /// движок делает сам — <c>POST https://api.cloudflareclient.com/v0a4471/reg</c>, —
+    /// и направить его нечем: из всех настроек выход MASQUE принимает только
+    /// <c>detour</c> и <c>tls.server_name</c>. Проверено перебором схемы 19.09.2026:
+    /// <c>server</c>, <c>server_port</c>, <c>license</c>, <c>fake_packets</c> и <c>tls.utls</c>
+    /// движок объявляет незнакомыми полями и отказывается читать конфиг.
+    /// </para>
+    /// <para>
+    /// <b>Десинк этому домену нужен, а не вреден</b> — и это замер, отменяющий
+    /// прежнюю догадку. Вечером 19.09 проверены оба положения, с перезапуском
+    /// движков между ними:
+    /// </para>
+    /// <list type="table">
+    /// <item><term>секция #6 пресета применяется</term>
+    /// <description>рукопожатие проходит, тело ответа не доходит:
+    /// «context deadline exceeded … while reading body»</description></item>
+    /// <item><term>домен внесён в исключения</term>
+    /// <description>рукопожатия нет вовсе: «net/http: TLS handshake
+    /// timeout»</description></item>
+    /// </list>
+    /// <para>
+    /// То есть <c>multidisorder</c> из секции «Cloudflare WARP API» проводит
+    /// рукопожатие сквозь фильтр, но дальше поток гибнет. Наше же приветствие
+    /// — от Windows — проходит домен насквозь в ту же минуту: проба даёт
+    /// TCP ок, TLS 1.3, тело получено; <c>GET /</c> отвечает 404 за 43 мс,
+    /// <c>POST</c> на сам <c>/reg</c> — 400 за 196 мс.
+    /// </para>
+    /// <para>
+    /// Значит дело в приветствии Go, а позиции разреза в рецепте считаются
+    /// от содержимого приветствия — <c>host+2</c>, <c>sld+2</c>, <c>sniext+1</c>. То же
+    /// наблюдалось в 0.5.4 на <c>hostfakesplit</c>: открывал домен для schannel
+    /// и получал отказ у Go внутри sing-box. Лечится не исключением,
+    /// а рецептом, выверенным на приветствии Go.
+    /// </para>
+    /// </remarks>
+    public const string RegistrationHost = "api.cloudflareclient.com";
+
+    /// <summary>
     /// Выходы, которые подмешиваются к серверам действующей подписки.
     /// </summary>
     /// <remarks>
