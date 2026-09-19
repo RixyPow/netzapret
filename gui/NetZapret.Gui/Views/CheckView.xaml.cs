@@ -910,7 +910,7 @@ public partial class CheckView : UserControl
             report.Tcp.Describe(),
             report.DescribeTls(),
             report.Http.Describe(),
-            report.Data.Describe(),
+            report.DescribeData(),
             report.Describe(),
             (Brush)FindResource(key),
             why ?? string.Empty,

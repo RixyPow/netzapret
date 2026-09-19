@@ -766,7 +766,7 @@ internal static class BlockCheckCommand
             Console.WriteLine(
                 $"  {Truncate(report.Host, 28),-28} " +
                 $"{report.Tcp.Describe(),-5} {report.DescribeTls(),-5} " +
-                $"{report.Data.Describe(),-5}  {report.Describe()}");
+                $"{report.DescribeData(),-5}  {report.Describe()}");
         }
 
         Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -995,7 +995,7 @@ internal static class BlockCheckCommand
             $"  {Truncate(report.Host, 27),-27} {mark,-3}" +
             $"{report.Tcp.Describe(),-5} " +
             $"{report.DescribeTls(),-5} " +
-            $"{report.Http.Describe(),-5} {report.Data.Describe(),-5}  {report.Describe()}");
+            $"{report.Http.Describe(),-5} {report.DescribeData(),-5}  {report.Describe()}");
         Console.ForegroundColor = previous;
 
         // Причина отказа выводится всегда: вердикт без объяснения нечем
@@ -1439,6 +1439,9 @@ internal static class BlockCheckCommand
         Console.WriteLine("  TLS     рукопожатие; в ячейке — версия        DPI разбирает имя сайта → десинк");
         Console.WriteLine("  HTTP    обычный запрос на 80                  отвечает ли хост вообще");
         Console.WriteLine("  ДАННЫЕ  идёт ли поток после рукопожатия       поток убивают позже → VPN");
+        Console.WriteLine();
+        Console.WriteLine("  Ячейки: ок — прошло, нет — оборвали, н/д — отвергли приветствие,");
+        Console.WriteLine("  н/с — замер не состоялся, — — не спрашивали.");
         Console.WriteLine();
         Console.WriteLine("  Столбец ДАННЫЕ важнее прочих: соединение может встать, а сайт");
         Console.WriteLine("  не открыться — так ведёт себя обрыв потока после опознания.");
