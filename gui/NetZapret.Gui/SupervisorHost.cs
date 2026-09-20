@@ -39,7 +39,15 @@ internal static class SupervisorHost
     /// </remarks>
     public const string StopSwitch = "--stop";
 
-    private sealed record Options
+    /// <summary>
+    /// Разобранная командная строка супервизора.
+    /// </summary>
+    /// <remarks>
+    /// Видна тестам, а не наружу. Между <see cref="BuildArguments"/>
+    /// и <see cref="Parse"/> лежит шов, где строку расщепляет система,
+    /// и проверять надо ровно то, что этот шов переживает.
+    /// </remarks>
+    internal sealed record Options
     {
         public bool NoProxy { get; init; }
 
@@ -300,7 +308,8 @@ internal static class SupervisorHost
         });
     }
 
-    private static Options Parse(string[] args)
+    /// <summary>Читает то, что собрал <see cref="BuildArguments"/>.</summary>
+    internal static Options Parse(string[] args)
     {
         var options = new Options();
 
