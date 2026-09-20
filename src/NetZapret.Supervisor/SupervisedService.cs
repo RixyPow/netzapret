@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using NetZapret.Proxy;
 
@@ -346,6 +346,20 @@ public sealed class SingBoxService : SupervisedService
 
     private readonly bool _bypassWhenDead;
 
+    /// <summary>
+    /// Один клиент на все разговоры с движком.
+    /// </summary>
+    /// <remarks>
+    /// Свой <see cref="HttpClient"/> на каждый вызов — известная ловушка:
+    /// закрытое соединение остаётся в TIME_WAIT на две минуты, и порты
+    /// кончаются. Обращений тут немного, зато цикл присмотра работает
+    /// сутками, а это как раз та разница, на которой ловушка и срабатывает.
+    ///
+    /// Срок ответа короткий намеренно: движок отвечает по петле, и ждать
+    /// его сорок секунд — значит задержать весь цикл присмотра на столько же.
+    /// </remarks>
+    private static readonly HttpClient Talk = new() { Timeout = TimeSpan.FromSeconds(15) };
+
     protected override void ForgetRunState()
     {
         _bypass.Forget();
@@ -510,7 +524,7 @@ public sealed class SingBoxService : SupervisedService
         if (action == BypassAction.Keep)
             return;
 
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}");
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
 
         var target = _bypass.TargetFor(action, LatencyGroup);
 
@@ -540,7 +554,7 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     private async Task<bool> ExitsAliveAsync(CancellationToken cancellationToken)
     {
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}");
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
 
         return await api.MeasureAsync(
             LatencyGroup,
