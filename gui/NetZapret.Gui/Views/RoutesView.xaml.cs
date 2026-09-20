@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -64,6 +64,17 @@ public sealed record PartRow
 
     /// <summary>Адресную часть прибить нечем: hosts понимает только имена.</summary>
     public required bool CanPin { get; init; }
+
+    /// <summary>
+    /// Это свой домен — его можно убрать.
+    /// </summary>
+    /// <remarks>
+    /// У каталожной части убирать нечего: она не добавлена человеком
+    /// и никуда не денется. Ей меняют маршрут, а не существование.
+    /// </remarks>
+    public bool Own { get; init; }
+
+    public Visibility RemoveShown => Own ? Visibility.Visible : Visibility.Collapsed;
 
     public string PinLabel => HasPin ? "снять пин" : "пин";
 
@@ -213,8 +224,6 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 }
 
 /// <summary>Своё доменное правило.</summary>
-public sealed record OwnRow(string Value, string Mode, Brush Color);
-
 /// <summary>
 /// Сервисы и их маршруты.
 /// </summary>
@@ -333,6 +342,13 @@ public partial class RoutesView : UserControl
 
                 services.Add(new ServiceRow(service.Name, parts));
             }
+
+            // Свои домены — в общий список, наравне с каталожными.
+            // Решение владельца 20.09: им так же нужны значок, пин и рецепт,
+            // а отдельная карточка ничего этого не давала и вдобавок делила
+            // список надвое по признаку, который человеку безразличен —
+            // по тому, знали мы это имя заранее или нет.
+            services.AddRange(OwnRows(userRules));
 
             MarkPins(services, zapretRoot);
 
@@ -641,9 +657,7 @@ public partial class RoutesView : UserControl
 
         foreach (var part in services.SelectMany(s => s.Parts).Where(p => p.CanPin))
         {
-            var zones = HostListReader.Read(part.Key.Split('|', 2)[1], zapretRoot, out _)
-                .Select(d => d.TrimStart('*', '.'))
-                .ToList();
+            var zones = RouteKeys.Zones(part.Key, zapretRoot);
 
             part.HasPin = pins.Any(name => Covers(zones, name));
 
@@ -655,6 +669,71 @@ public partial class RoutesView : UserControl
                 part.Mode = "прибит в hosts";
         }
     }
+
+    /// <summary>
+    /// Свои домены — строками общего списка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Каждый своей строкой без папки: частей у него нет, разворачивать
+    /// нечего. Устроен он так же, как одиночный сервис из каталога, и это
+    /// не сходство ради сходства — от этого ему и достаются даром значок
+    /// сайта, кнопка пина, выбор маршрута и окно рецептов.
+    /// </para>
+    /// <para>
+    /// Ключ начинается с <c>own</c>: по нему обработчики и узнают, что
+    /// правило писать доменное, а зону брать саму по себе, не читая файла
+    /// списка — файла у своего домена нет.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<ServiceRow> OwnRows(UserRulesFile userRules)
+    {
+        var rows = new List<ServiceRow>();
+
+        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.Domain))
+        {
+            var domain = entry.Value.TrimStart('*', '.');
+
+            var (color, choice) = entry.Mode switch
+            {
+                RoutingMode.Direct => ("Muted", 0),
+                RoutingMode.Desync => ("Warn", 1),
+                _ => ("Accent", 2),
+            };
+
+            var part = new PartRow
+            {
+                Icon = SiteIcons.Cached(domain),
+                Key = "own|" + entry.Value,
+                Title = domain,
+                Probe = domain,
+
+                // Рецепт называется прямо в подписи: выбранный однажды,
+                // он иначе пропадал бы из виду, и понять, чем чинится имя,
+                // можно было бы только заглянув в yaml.
+                Detail = "свой домен"
+                    + (entry.Mode == RoutingMode.Desync
+                        && !string.IsNullOrWhiteSpace(entry.Recipe)
+                            ? $" · рецепт: {entry.Recipe}"
+                            : string.Empty),
+
+                Mode = Describe(entry.Mode),
+                Color = (Brush)Application.Current.FindResource(color),
+                Choice = choice,
+                Applied = choice,
+                CanRoute = true,
+                CanPin = true,
+                Own = true,
+                Letter = domain.Length > 0 ? domain[..1].ToUpperInvariant() : "·",
+                Lead = 24,
+            };
+
+            rows.Add(new ServiceRow(domain, [part]));
+        }
+
+        return rows;
+    }
+
 
     /// <summary>
     /// Покрывает ли зона части это прибитое имя.
@@ -678,42 +757,62 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnPin(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string key })
+        if (sender is not Button { Tag: string key }
+            || key.Split('|', 2) is not [var kind, var value])
+        {
             return;
+        }
 
-        var list = key.Split('|', 2) is [_, var path] ? path : null;
+        var row = _all.SelectMany(s => s.Parts).FirstOrDefault(p => p.Key == key);
 
-        if (list is null)
+        // Свой домен в каталоге не ищется — его там нет. Всё, что нужно
+        // окну, лежит в самом имени.
+        if (kind == "own")
+        {
+            if (row is { HasPin: true })
+            {
+                Unpin(key, value);
+                return;
+            }
+
+            Open(new PinWindow(value), key, value);
             return;
+        }
 
         var service = ServiceCatalog.All.FirstOrDefault(s =>
-            s.Parts.Any(p => string.Equals(p.List, list, StringComparison.OrdinalIgnoreCase)));
+            s.Parts.Any(p => string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase)));
 
         var part = service?.Parts.FirstOrDefault(p =>
-            string.Equals(p.List, list, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase));
 
         if (service is null || part is null)
             return;
 
-        var row = _all.SelectMany(s => s.Parts).FirstOrDefault(p => p.Key == key);
-
         if (row is { HasPin: true })
         {
-            Unpin(part);
+            Unpin(key, part.Name);
             return;
         }
 
-        var window = new PinWindow(service, part) { Owner = Window.GetWindow(this) };
+        Open(new PinWindow(service, part), key, part.Name);
+    }
+
+    /// <summary>Показывает окно пина и разбирается с последствиями.</summary>
+    private void Open(PinWindow window, string key, string label)
+    {
+        window.Owner = Window.GetWindow(this);
         window.ShowDialog();
 
         if (!window.Changed)
             return;
 
-        RouteDirectIfPinned(part);
+        RouteDirectIfPinned(key);
 
         Reload();
-        this.Offer($"«{part.Name}»: маршрут или пин изменены");
+        this.Offer($"«{label}»: маршрут или пин изменены");
     }
+
+
 
     /// <summary>
     /// Прибитой части проставляет маршрут «напрямую».
@@ -731,19 +830,20 @@ public partial class RoutesView : UserControl
     /// Поэтому пин сам ставит «напрямую» — единственный маршрут, при котором
     /// он работает.
     /// </remarks>
-    private void RouteDirectIfPinned(ServicePart part)
+    private void RouteDirectIfPinned(string key)
     {
         try
         {
-            var zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
-                .Select(d => d.TrimStart('*', '.'))
-                .ToList();
+            if (key.Split('|', 2) is not [var kind, var value])
+                return;
+
+            var zones = RouteKeys.Zones(key, ZapretPaths.Discover()?.Root);
 
             if (!HostsEditor.Pins().Keys.Any(name => Covers(zones, name)))
                 return;
 
             var file = UserRulesFile.Load();
-            file.Set(MatchKind.HostList, part.List, RoutingMode.Direct);
+            file.Set(RouteKeys.MatchOf(kind), value, RoutingMode.Direct);
             file.Save();
         }
         catch (Exception)
@@ -753,13 +853,11 @@ public partial class RoutesView : UserControl
         }
     }
 
-    private void Unpin(ServicePart part)
+    private void Unpin(string key, string label)
     {
         try
         {
-            var zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
-                .Select(d => d.TrimStart('*', '.'))
-                .ToList();
+            var zones = RouteKeys.Zones(key, ZapretPaths.Discover()?.Root);
 
             var ours = HostsEditor.Pins().Keys.Where(pin => Covers(zones, pin)).ToList();
 
@@ -774,7 +872,7 @@ public partial class RoutesView : UserControl
             Status.Text = $"Снято имён: {ours.Count}. Осталось прибитых: {result.Pinned}. "
                 + "Маршрут не трогали — он остался таким, каким был.";
 
-            this.Offer($"Пин снят: {part.Name}");
+            this.Offer($"Пин снят: {label}");
         }
         catch (Exception ex)
         {
@@ -967,39 +1065,27 @@ public partial class RoutesView : UserControl
             OwnDomain.Focus();
     }
 
-    /// <summary>Показывает свои доменные правила.</summary>
+    /// <summary>
+    /// Подпись карточки «Свой домен».
+    /// </summary>
+    /// <remarks>
+    /// Списка добавленных карточка больше не держит: с 0.6.3 свои домены
+    /// стоят в общем списке ниже. Подпись осталась и говорит, сколько их
+    /// и где они, — иначе человек, добавив домен, увидел бы, что карточка
+    /// не изменилась, и добавил бы второй раз.
+    /// </remarks>
     private void ShowOwn()
     {
-        var file = UserRulesFile.Load();
-
-        var own = file.Entries
+        var own = UserRulesFile.Load().Entries
             .Where(entry => entry.Match == MatchKind.Domain)
-            .Select(entry => new OwnRow(
-                entry.Value,
-
-                // Рецепт называется прямо в строке: иначе выбранный однажды,
-                // он пропадал бы из виду, и понять, чем чинится имя, можно
-                // было бы только заглянув в yaml.
-                entry.Mode == RoutingMode.Desync && !string.IsNullOrWhiteSpace(entry.Recipe)
-                    ? $"десинк: {entry.Recipe}"
-                    : Describe(entry.Mode),
-                (Brush)FindResource(entry.Mode switch
-                {
-                    RoutingMode.Direct => "Muted",
-                    RoutingMode.Desync => "Warn",
-                    _ => "Accent",
-                })))
+            .Select(entry => entry.Value)
             .ToList();
 
-        Own.ItemsSource = own;
-
-        // Сколько правил уже написано, видно и в свёрнутом виде. Иначе
-        // сворачивание прятало бы ровно то, ради чего в эту карточку
-        // заходят во второй раз, — свои же правила.
         OwnSummary.Text = own.Count == 0
             ? "Направить сайт, которого нет в каталоге."
-            : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3).Select(row => row.Value))}"
-              + (own.Count > 3 ? $" и ещё {own.Count - 3}." : ".");
+            : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
+              + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
+              + ". Они стоят в списке ниже вместе с сервисами.";
     }
 
     private void OnOwnKey(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1078,7 +1164,9 @@ public partial class RoutesView : UserControl
 
             OwnDomain.Text = string.Empty;
 
-            ShowOwn();
+            // Перечитываем целиком: добавленный домен встаёт в общий список
+            // строкой со значком и пином, а не только в подпись карточки.
+            Reload();
 
             Status.Text = string.IsNullOrEmpty(recipe)
                 ? $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков."
@@ -1136,10 +1224,22 @@ public partial class RoutesView : UserControl
         }
     }
 
+    /// <summary>
+    /// Убирает своё доменное правило.
+    /// </summary>
+    /// <remarks>
+    /// Кнопка переехала из карточки «Свой домен» в строку общего списка,
+    /// поэтому в <c>Tag</c> теперь ключ строки, а не голое имя. Разбирается
+    /// он тем же способом, что у пина и выбора маршрута: один вид ключа
+    /// на все действия над строкой.
+    /// </remarks>
     private void OnRemoveOwn(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string value })
+        if (sender is not Button { Tag: string key }
+            || key.Split('|', 2) is not ["own", var value])
+        {
             return;
+        }
 
         try
         {
@@ -1147,7 +1247,9 @@ public partial class RoutesView : UserControl
             file.Remove(MatchKind.Domain, value);
             file.Save();
 
-            ShowOwn();
+            // Перечитываем целиком: строка ушла из общего списка,
+            // а не только из карточки.
+            Reload();
             Status.Text = $"Убрано: {value}. Применится при следующем запуске движков.";
             this.Offer($"Убран маршрут: {value}");
         }
@@ -1199,10 +1301,11 @@ public partial class RoutesView : UserControl
         if (row.Probe is not { Length: > 0 } example)
             return;
 
-        var parts = key.Split('|', 2);
-
-        if (parts.Length == 2 && parts[0] == "hostlist")
-            AskLater(key, parts[1], example, MatchKind.HostList, RoutingMode.Desync);
+        // Свой домен наравне со списком: рецепт применяется по имени
+        // в приветствии TLS, и своему имени он нужен ровно так же.
+        // У правил по адресам не спрашиваем — имени в таких пакетах нет.
+        if (key.Split('|', 2) is [var kind and ("hostlist" or "own"), var value])
+            AskLater(key, value, example, RouteKeys.MatchOf(kind), RoutingMode.Desync);
     }
 
     private void OnRoute(object sender, SelectionChangedEventArgs e)
@@ -1253,7 +1356,7 @@ public partial class RoutesView : UserControl
             _ => RoutingMode.Proxy,
         };
 
-        var match = parts[0] == "ipset" ? MatchKind.IpSet : MatchKind.HostList;
+        var match = RouteKeys.MatchOf(parts[0]);
 
         // Рецепт спрашиваем и у сервисов, а не только у своих доменов.
         // Именно здесь он и нужен чаще: сервис — это список из десятков имён,
@@ -1266,7 +1369,7 @@ public partial class RoutesView : UserControl
         // «не помогает».
         var example = current.Probe;
 
-        if (mode == RoutingMode.Desync && match == MatchKind.HostList
+        if (mode == RoutingMode.Desync && match is MatchKind.HostList or MatchKind.Domain
             && !string.IsNullOrWhiteSpace(example))
         {
             // Окно выбора поднимается не отсюда, а следующим ходом очереди

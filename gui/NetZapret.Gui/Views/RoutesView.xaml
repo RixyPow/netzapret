@@ -130,35 +130,14 @@
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего. «Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts. Проверить, что применится, можно в «Проверке блокировок»." />
 
-                    <ItemsControl x:Name="Own" Margin="0,12,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{DynamicResource Raised}" CornerRadius="8"
-                                        Padding="12,8" Margin="0,0,0,5">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0" Text="{Binding Value}"
-                                                   VerticalAlignment="Center"
-                                                   TextTrimming="CharacterEllipsis" />
-
-                                        <TextBlock Grid.Column="1" Text="{Binding Mode}"
-                                                   Style="{StaticResource Mono}"
-                                                   Foreground="{Binding Color}"
-                                                   VerticalAlignment="Center" Margin="12,0,12,0" />
-
-                                        <Button Grid.Column="2" Style="{StaticResource Ghost}"
-                                                Content="убрать" Padding="12,5"
-                                                Tag="{Binding Value}" Click="OnRemoveOwn" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!--
+                        Списка добавленных здесь больше нет: с 0.6.3 свои
+                        домены стоят в общем списке сервисов ниже, наравне
+                        с каталожными. Там им достаются значок сайта, пин,
+                        выбор рецепта и поиск — всё то, чего эта карточка
+                        не давала. Осталось ровно то, ради чего её открывают:
+                        вписать имя.
+                    -->
                 </StackPanel>
 
                 <!--
@@ -378,6 +357,18 @@
                                                             Foreground="{Binding PinColor}"
                                                             Tag="{Binding Key}" Click="OnPin"
                                                             IsEnabled="{Binding CanPin}" />
+
+                                                    <!--
+                                                        Убрать можно только своё. У каталожной
+                                                        части убирать нечего: она не добавлена
+                                                        человеком и никуда не денется — ей
+                                                        меняют маршрут, а не существование.
+                                                    -->
+                                                    <Button Style="{StaticResource Ghost}"
+                                                            Content="убрать" Padding="12,7"
+                                                            Margin="8,0,0,0"
+                                                            Tag="{Binding Key}" Click="OnRemoveOwn"
+                                                            Visibility="{Binding RemoveShown}" />
                                                 </StackPanel>
                                             </Grid>
                                         </Border>

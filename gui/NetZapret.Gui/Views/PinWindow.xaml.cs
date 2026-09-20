@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using NetZapret.Core;
@@ -32,9 +32,47 @@ public sealed record SourceRow(string Id, string Name, string Note);
 /// </remarks>
 public partial class PinWindow : Window
 {
-    private readonly ServiceDefinition _service;
-    private readonly ServicePart _part;
-    private readonly IReadOnlyList<string> _zones;
+    /// <summary>
+    /// Что прибиваем и куда пишем маршрут.
+    /// </summary>
+    /// <remarks>
+    /// Заведено, когда в окно пришли свои домены. Прежде оно знало ровно
+    /// одну цель — часть сервиса из каталога, — и всё в нём было написано
+    /// через <c>ServicePart.List</c>: путь к файлу списка. У своего домена
+    /// файла нет, зона у него одна и та, что человек вписал.
+    ///
+    /// Различие собрано здесь, а не россыпью проверок «если домен» по всему
+    /// окну: таких мест вышло бы шесть, и каждое пришлось бы держать
+    /// в согласии с остальными.
+    /// </remarks>
+    private sealed record PinTarget
+    {
+        /// <summary>Заголовок окна: «Discord · Голос» либо сам домен.</summary>
+        public required string Title { get; init; }
+
+        /// <summary>Короткое имя для записок в hosts и сообщений.</summary>
+        public required string Short { get; init; }
+
+        /// <summary>Откуда взят состав — строкой для подписи.</summary>
+        public required string Source { get; init; }
+
+        /// <summary>Имена, считающиеся принадлежащими цели.</summary>
+        public required IReadOnlyList<string> Zones { get; init; }
+
+        /// <summary>Каким правилом записывается маршрут.</summary>
+        public required MatchKind Match { get; init; }
+
+        /// <summary>Значение правила: путь к списку либо домен.</summary>
+        public required string Value { get; init; }
+
+        /// <summary>Задано подсетями — прибивать нечего.</summary>
+        public required bool ByAddress { get; init; }
+
+        /// <summary>Куда идёт сейчас; читается при показе, а не при создании.</summary>
+        public required Func<string> Current { get; init; }
+    }
+
+    private readonly PinTarget _target;
 
     private ZapretCatalog? _catalog;
     private IReadOnlyList<string> _catalogServices = [];
@@ -44,51 +82,126 @@ public partial class PinWindow : Window
     public bool Changed { get; private set; }
 
     public PinWindow(ServiceDefinition service, ServicePart part)
+        : this(new PinTarget
+        {
+            Title = $"{service.Name} · {part.Name}",
+            Short = part.Name,
+            Source = $"Список: {part.List}",
+            Zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
+                .Select(d => d.TrimStart('*', '.'))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList(),
+            Match = part.ByAddress ? MatchKind.IpSet : MatchKind.HostList,
+            Value = part.List,
+            ByAddress = part.ByAddress,
+            Current = () => Describe(service, part),
+        })
+    {
+    }
+
+    /// <summary>
+    /// Пин своего домена.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Зона одна — та, что вписал человек. Поддомены она покрывает сама:
+    /// <see cref="Covers"/> считает <c>cdn.example.com</c> принадлежащим
+    /// <c>example.com</c> так же, как у списков.
+    /// </para>
+    /// <para>
+    /// Показывается имя без звёздочки, а пишется со звёздочкой. Правило
+    /// хранится как <c>*.example.com</c> — так его записал раздел, — и
+    /// написать иначе значит не найти прежнее и завести рядом второе.
+    /// Человеку же звёздочка ничего не говорит: он вводил <c>example.com</c>.
+    /// </para>
+    /// </remarks>
+    public PinWindow(string rule)
+        : this(new PinTarget
+        {
+            Title = rule.TrimStart('*', '.'),
+            Short = rule.TrimStart('*', '.'),
+            Source = "Свой домен",
+            Zones = [rule.TrimStart('*', '.')],
+            Match = MatchKind.Domain,
+            Value = rule,
+            ByAddress = false,
+            Current = () => Describe(rule),
+        })
+    {
+    }
+
+    private PinWindow(PinTarget target)
     {
         InitializeComponent();
 
-        _service = service;
-        _part = part;
+        _target = target;
 
-        _zones = HostListReader.Read(part.List, ZapretPaths.Discover()?.Root, out _)
-            .Select(d => d.TrimStart('*', '.'))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        ServiceName.Text = $"{service.Name} · {part.Name}";
+        ServiceName.Text = target.Title;
 
         Loaded += (_, _) => Fill();
     }
 
-    private void Fill()
+    /// <summary>Куда идёт часть сервиса — теми же словами, что в списке маршрутов.</summary>
+    private static string Describe(ServiceDefinition service, ServicePart part)
     {
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
-        var root = ZapretPaths.Discover()?.Root;
-
-        string mode;
-
         try
         {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var root = ZapretPaths.Discover()?.Root;
+
             var engine = RuleSetLoader.LoadLayered(
                 settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
 
             RuleSetExpander.Expand(engine.RuleSet, root);
 
-            mode = ServiceRouting.Describe(_service, engine, root, UserRulesFile.Load())
-                .FirstOrDefault(p => p.Part.List == _part.List)?.DescribeMode()
+            return ServiceRouting.Describe(service, engine, root, UserRulesFile.Load())
+                .FirstOrDefault(p => p.Part.List == part.List)?.DescribeMode()
                 ?? "неизвестно";
         }
         catch (Exception ex)
         {
-            mode = "правила не читаются: " + ex.GetBaseException().Message;
+            return "правила не читаются: " + ex.GetBaseException().Message;
         }
+    }
 
-        ServiceState.Text = $"Сейчас: {mode}. Список: {_part.List} — имён {_zones.Count}"
-            + (_zones.Count > 0 ? $", например {_zones[0]}." : ".");
+    /// <summary>
+    /// Куда идёт свой домен — по его собственному правилу.
+    /// </summary>
+    /// <remarks>
+    /// Через <c>ServiceRouting</c> не пойдёшь: тот описывает части каталога,
+    /// а своего домена в каталоге нет. Правило у него одно и читается прямо.
+    /// </remarks>
+    private static string Describe(string domain)
+    {
+        try
+        {
+            var entry = UserRulesFile.Load().Entries.FirstOrDefault(e =>
+                e.Match == MatchKind.Domain
+                && string.Equals(e.Value, domain, StringComparison.OrdinalIgnoreCase));
+
+            return entry?.Mode switch
+            {
+                RoutingMode.Direct => "напрямую",
+                RoutingMode.Desync => "десинк",
+                RoutingMode.Proxy => "через VPN",
+                _ => "правила нет",
+            };
+        }
+        catch (Exception ex)
+        {
+            return "правила не читаются: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void Fill()
+    {
+        ServiceState.Text = $"Сейчас: {_target.Current()}. {_target.Source} — "
+            + $"имён {_target.Zones.Count}"
+            + (_target.Zones.Count > 0 ? $", например {_target.Zones[0]}." : ".");
 
         ShowPins();
 
-        if (_part.ByAddress)
+        if (_target.ByAddress)
         {
             Status.Text = "Часть задана подсетями, а hosts понимает только имена — "
                 + "прибивать нечего.";
@@ -134,7 +247,7 @@ public partial class PinWindow : Window
     /// адресов» на сервисе, который каталог покрывает целиком.
     /// </remarks>
     private bool Covers(string name) =>
-        _zones.Any(zone => string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
+        _target.Zones.Any(zone => string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
             || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase));
 
     private void OnMode(object sender, RoutedEventArgs e)
@@ -145,12 +258,12 @@ public partial class PinWindow : Window
         try
         {
             var file = UserRulesFile.Load();
-            var kind = _part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
+            var kind = _target.Match;
 
             if (what == "reset")
-                file.Remove(kind, _part.List);
+                file.Remove(kind, _target.Value);
             else
-                file.Set(kind, _part.List, Mode(what));
+                file.Set(kind, _target.Value, Mode(what));
 
             file.Save();
             Changed = true;
@@ -158,7 +271,7 @@ public partial class PinWindow : Window
             Status.Text = what == "reset"
                 ? "Свой выбор убран: снова действует правило из поставки. "
                   + "Применится при следующем запуске движков."
-                : $"Записано: «{_part.Name}» → {Describe(Mode(what))}. "
+                : $"Записано: «{_target.Short}» → {Describe(Mode(what))}. "
                   + "Применится при следующем запуске движков.";
         }
         catch (Exception ex)
@@ -189,7 +302,7 @@ public partial class PinWindow : Window
         foreach (var problem in own.Problems)
             Status.Text = "Каталог NetZapret: " + problem;
 
-        _mine = own.For(_zones);
+        _mine = own.For(_target.Zones);
         _catalog = ZapretCatalog.Discover();
 
         _catalogServices = _catalog?.NamesByService()
@@ -276,13 +389,13 @@ public partial class PinWindow : Window
                 return;
             }
 
-            var result = HostsEditor.Pin(answers, note: $"{_part.Name} — {Source(id)}");
+            var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {Source(id)}");
 
             // Маршрут уводится напрямую тем же движением. Это не довесок,
             // а условие работы пина: доменное правило срабатывает поверх
             // прибитого адреса и уводит соединение мимо него.
             var file = UserRulesFile.Load();
-            file.Set(MatchKind.HostList, _part.List, RoutingMode.Direct);
+            file.Set(_target.Match, _target.Value, RoutingMode.Direct);
             file.Save();
             HostsEditor.FlushDns();
 
@@ -339,7 +452,7 @@ public partial class PinWindow : Window
 
         var known = _catalog?.Answers(_catalogServices, null).Keys.Where(Covers).ToList() ?? [];
 
-        return await HonestAsync(known.Concat(_zones)
+        return await HonestAsync(known.Concat(_target.Zones)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList());
     }
