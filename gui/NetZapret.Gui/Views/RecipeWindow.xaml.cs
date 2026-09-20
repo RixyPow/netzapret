@@ -40,6 +40,27 @@ public sealed class RecipeRow : INotifyPropertyChanged
     /// <summary>Где ещё этот набор применяется — чтобы судить по знакомому.</summary>
     public required string UsedBy { get; init; }
 
+    /// <summary>
+    /// За сколько имя открылось; <c>null</c> — не открылось или не мерили.
+    /// </summary>
+    /// <remarks>
+    /// Нужно затем, что рабочих рецептов обычно несколько, а совет был
+    /// «берите любой из отмеченных». Любой — значит гадать. Время отвечает
+    /// на это замером: рецепт, при котором рукопожатие проходит вдвое
+    /// быстрее, и в работе будет вести себя лучше.
+    /// </remarks>
+    public TimeSpan? Took { get; set; }
+
+    /// <summary>
+    /// Этот набор пресет и так применяет к этому имени.
+    /// </summary>
+    /// <remarks>
+    /// Без пометки человек выбирает вслепую то, что уже действует, и потом
+    /// не понимает, почему ничего не изменилось. Считается тем же кодом,
+    /// что решает судьбу имени в работе, — <see cref="PresetZones"/>.
+    /// </remarks>
+    public bool Current { get; init; }
+
     private string _verdict = string.Empty;
     private Brush _verdictColour = Brushes.Transparent;
     private Brush _edge = Brushes.Transparent;
@@ -61,6 +82,25 @@ public sealed class RecipeRow : INotifyPropertyChanged
         get => _edge;
         set => Set(ref _edge, value);
     }
+
+    /// <summary>
+    /// Какой рецепт советовать: быстрейший из тех, что открыли имя.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Здесь, а не в обработчике кнопки, потому что это единственная чистая
+    /// часть окна и единственная, которую можно проверить тестом. Оставь её
+    /// в обработчике — тест повторил бы выборку своими словами и проверял бы
+    /// собственную копию, а не то, что увидит человек.
+    /// </para>
+    /// <para>
+    /// Неработавшие не рассматриваются вовсе: у них время означает срок
+    /// ожидания, а не скорость. Пустить их в сравнение значило бы советовать
+    /// самый быстрый отказ.
+    /// </para>
+    /// </remarks>
+    public static RecipeRow? Best(IEnumerable<RecipeRow> rows) =>
+        rows.Where(r => r.Took is not null).OrderBy(r => r.Took!.Value).FirstOrDefault();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -127,6 +167,23 @@ public partial class RecipeWindow : Window
         if (!string.Equals(title, domain, StringComparison.OrdinalIgnoreCase))
             Head.Text += $" — проверяю на {domain}";
 
+        // Какую секцию пресет отдаёт этому имени сам. Спрашивается тем же
+        // кодом, что решает это в работе: winws2 отдаёт пакет первой
+        // совпавшей секции, и ответ здесь обязан совпадать с тем, что
+        // покажет отчёт проверки.
+        string? already = null;
+
+        try
+        {
+            already = PresetZones.Build(preset, ZapretPaths.Discover()?.Root)
+                .MatchFor(domain)?.Name;
+        }
+        catch (Exception)
+        {
+            // Списки пресета могли не прочитаться. Пометка — удобство,
+            // и её отсутствие не повод не дать выбрать рецепт.
+        }
+
         foreach (var recipe in DesyncRecipes.FromPresetFile(preset))
         {
             _rows.Add(new RecipeRow
@@ -135,8 +192,16 @@ public partial class RecipeWindow : Window
                 Title = recipe.Title,
                 Summary = recipe.Detail,
                 UsedBy = recipe.Where,
+                Current = already is not null
+                    && string.Equals(recipe.Name, already, StringComparison.OrdinalIgnoreCase),
                 Edge = (Brush)FindResource("Border"),
             });
+        }
+
+        if (_rows.FirstOrDefault(r => r.Current) is { } current)
+        {
+            current.Verdict = "сейчас применяется";
+            current.VerdictColour = (Brush)FindResource("Muted");
         }
 
         Recipes.ItemsSource = _rows;
@@ -313,10 +378,20 @@ public partial class RecipeWindow : Window
 
                 row.Verdict = "проверяю…";
                 row.VerdictColour = (Brush)FindResource("Muted");
+                row.Took = null;
 
+                var clock = Stopwatch.StartNew();
                 bool ok = await TryAsync(winws, paths!.Root, row.Name, _work.Token);
+                clock.Stop();
 
-                row.Verdict = ok ? "открывается" : "не помогает";
+                // Время — только у рабочих. У неработающего оно означает срок
+                // ожидания, а не скорость, и сравнивать его не с чем.
+                row.Took = ok ? clock.Elapsed : null;
+
+                row.Verdict = ok
+                    ? $"открывается за {clock.Elapsed.TotalSeconds:0.0} с"
+                    : "не помогает";
+
                 row.VerdictColour = (Brush)FindResource(ok ? "Accent" : "Danger");
                 row.Edge = (Brush)FindResource(ok ? "Accent" : "Border");
 
@@ -331,9 +406,19 @@ public partial class RecipeWindow : Window
             }
             else
             {
-                Say($"Открывают {worked} из {_rows.Count}. Берите любой из отмеченных — "
-                    + "если сомневаетесь, тот, что применяется к знакомому сервису.",
-                    "Accent", "✓");
+                // Советуем быстрейший, а не «любой из отмеченных». Прежний
+                // совет отправлял выбирать наугад из пяти одинаково зелёных
+                // строк; время же — замер, и оно говорит, какой рецепт
+                // проводит рукопожатие с меньшим сопротивлением.
+                var best = RecipeRow.Best(_rows)!;
+
+                var sovet = $"Открывают {worked} из {_rows.Count}. "
+                    + $"Быстрее всех «{best.Title}» — {best.Took!.Value.TotalSeconds:0.0} с.";
+
+                if (best.Current)
+                    sovet += " Его пресет и так применяет: менять нечего.";
+
+                Say(sovet, "Accent", "✓");
             }
         }
         catch (OperationCanceledException)
