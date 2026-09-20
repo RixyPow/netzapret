@@ -258,7 +258,11 @@ public partial class DnsView : UserControl
 
     private void OnThroughTunnel(object sender, RoutedEventArgs e)
     {
-        if (_filling || sender is not ComboBox box || box.SelectedIndex < 0)
+        // IsInitialized — от события, которое список поднимает прямо
+        // при разборе разметки: соседние элементы к тому мгновению ещё
+        // не созданы. На вкладке маршрутов это стоило падения при
+        // создании вкладки, и повторять его здесь незачем.
+        if (!IsInitialized || _filling || sender is not ComboBox box || box.SelectedIndex < 0)
             return;
 
         try

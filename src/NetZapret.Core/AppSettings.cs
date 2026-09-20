@@ -43,16 +43,17 @@ public sealed record AppSettings
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
     /// <remarks>
     /// <para>
-    /// По умолчанию — Universal V8: он идёт в сборке и покрывает больше всего
+    /// По умолчанию — Universal V9: он идёт в сборке и покрывает больше всего
     /// случаев. Пустое значение означало бы, что при первом запуске десинк
     /// молча не работает, а человек об этом узнаёт по неоткрывающимся сайтам.
     /// Если такого пресета нет, обзор состояния скажет об этом прямо.
     /// </para>
     /// <para>
-    /// Был V7, стал V8: тот же набор, но у discord.com и updates.discord.com
-    /// рецепт заменён на hostfakesplit_multi. Прежний их не открывал, и хуже
-    /// всего приходилось updates: туда стучится десктопный клиент при запуске
-    /// и виснет, если ответа нет, — при полностью работающем сайте.
+    /// Был V8, стал V9: тот же набор плюс семь секций с рецептами, которые
+    /// владелец подобрал вручную и проверил на живой сети — Valheim,
+    /// Instagram, Facebook, SoundCloud, Speedtest, Medium, VirusTotal.
+    /// Прежде они жили переопределениями в rules.user.yaml и терялись
+    /// при сбросе настроек; теперь это часть пресета.
     /// </para>
     /// <para>
     /// Смена касается только новых установок. Настройки переживают обновление
@@ -62,7 +63,7 @@ public sealed record AppSettings
     /// </remarks>
     public string? PresetName { get; init; } = DefaultPresetName;
 
-    public const string DefaultPresetName = "Universal V8";
+    public const string DefaultPresetName = "Universal V9";
 
     /// <summary>Тег сервера либо <c>null</c> для автоподбора по задержке.</summary>
     public string? PreferredServer { get; init; }

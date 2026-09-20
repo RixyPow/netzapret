@@ -99,9 +99,13 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Автоподбор только по зарубежным" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Text="Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой же. Через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ приходит тот же, что и без туннеля." />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Автоподбор только по зарубежным"
+                                               FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                                                    Content="Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой же. Через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ приходит тот же, что и без туннеля." />
+                                </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="ForeignButton" Style="{StaticResource Ghost}"
@@ -154,8 +158,14 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Обход туннеля, когда серверы не отвечают"
-                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Обход туннеля, когда серверы не отвечают"
+                                           FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                <ContentControl x:Name="BypassInfo" Style="{StaticResource Info}"
+                                                Margin="4,0,0,0" />
+                            </StackPanel>
+
                             <TextBlock x:Name="BypassLine" Style="{StaticResource Caption}"
                                        Margin="0,5,0,0" TextWrapping="Wrap" />
                         </StackPanel>
@@ -180,7 +190,14 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Бесплатный WARP от Cloudflare" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Бесплатный WARP от Cloudflare"
+                                               FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                                                    Content="Выходы WARP подмешиваются к серверам действующей подписки, а не заменяют их. Пока те живы, автоподбор берёт их — они быстрее; когда лягут, останется WARP.&#x0a;&#x0a;Учётную запись движок заводит себе сам: ни почты, ни оплаты, ни ключей.&#x0a;&#x0a;Выпускает трафик в ближайшей стране, и на российском подключении это Москва. От блокировок оператора спасает, от отказов по стране — нет." />
+                                </StackPanel>
+
                                 <TextBlock x:Name="WarpLine" Style="{StaticResource Caption}"
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
                             </StackPanel>

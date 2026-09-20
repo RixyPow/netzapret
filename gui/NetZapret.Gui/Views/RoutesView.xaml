@@ -57,9 +57,19 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="SortButton" Style="{StaticResource Ghost}"
-                                Content="По алфавиту" Click="OnSort" Margin="0,0,8,0"
-                                ToolTip="Порядок каталога сверху ставит то, что ломается чаще. Алфавит удобнее, когда ищешь конкретный сервис." />
+                        <!--
+                            Список, а не кнопка. Кнопка подписывалась
+                            действием — «По алфавиту», — и какой порядок
+                            стоит сейчас, по ней было не понять; с третьим
+                            вариантом стало бы вовсе не угадать.
+                        -->
+                        <ComboBox x:Name="Sort" Width="164" SelectedIndex="0" Margin="0,0,8,0"
+                                  VerticalAlignment="Center" SelectionChanged="OnSort"
+                                  ToolTip="Порядок каталога сверху ставит то, что ломается чаще. Алфавит удобнее, когда ищешь конкретный сервис. По методу — когда хочешь увидеть, что у тебя вообще идёт через VPN.">
+                            <ComboBoxItem Content="по умолчанию" />
+                            <ComboBoxItem Content="по алфавиту" />
+                            <ComboBoxItem Content="по методу" />
+                        </ComboBox>
 
                         <Button x:Name="ExpandButton" Style="{StaticResource Ghost}"
                                 Content="Раскрыть всё" Click="OnExpandAll" Margin="0,0,8,0"

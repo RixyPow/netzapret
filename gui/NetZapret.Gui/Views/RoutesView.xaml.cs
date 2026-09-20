@@ -982,33 +982,28 @@ public partial class RoutesView : UserControl
             _open.Remove(name);
     }
 
-    /// <summary>
-    /// По алфавиту или в порядке каталога.
-    /// </summary>
-    /// <remarks>
-    /// Порядок каталога не случаен: сверху то, что ломается чаще, — Discord,
-    /// YouTube, Telegram. Он хорош, пока помнишь его наизусть, и плох, когда
-    /// ищешь Zoom среди пятидесяти пяти строк. Алфавит отвечает на второй
-    /// случай, поэтому оба и оставлены.
-    /// </remarks>
-    private bool _alphabetical;
+    /// <summary>Чем раскладывать; подробности — в <see cref="RouteOrder"/>.</summary>
+    private RouteOrderBy _order;
 
-    private void OnSort(object sender, RoutedEventArgs e)
+    private void OnSort(object sender, SelectionChangedEventArgs e)
     {
-        _alphabetical = !_alphabetical;
+        // Список поднимает событие прямо при разборе разметки — когда
+        // применяется SelectedIndex="0", — а соседние элементы к этому
+        // мгновению ещё не созданы. Отсюда NullReferenceException
+        // на создании вкладки, который и поймала проверка.
+        if (!IsInitialized || Sort is null || Sort.SelectedIndex < 0)
+            return;
 
-        SortButton.Content = _alphabetical ? "По умолчанию" : "По алфавиту";
+        _order = (RouteOrderBy)Sort.SelectedIndex;
 
         // Пересобираем показ, не перечитывая правила: порядок — дело показа,
         // и лезть за ним на диск незачем.
         Filter();
     }
 
-    /// <summary>Раскладывает так, как выбрано кнопкой.</summary>
+    /// <summary>Раскладывает так, как выбрано в списке.</summary>
     private IReadOnlyList<ServiceRow> InChosenOrder(IEnumerable<ServiceRow> rows) =>
-        _alphabetical
-            ? rows.OrderBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase).ToList()
-            : rows.ToList();
+        RouteOrder.Apply(rows, _order);
 
     private void OnExpandAll(object sender, RoutedEventArgs e)
     {
