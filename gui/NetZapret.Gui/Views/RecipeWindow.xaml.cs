@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -28,8 +28,20 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public sealed class RecipeRow : INotifyPropertyChanged
 {
-    /// <summary>Что запишется в правило: имя секции пресета.</summary>
+    /// <summary>Что запишется в правило.</summary>
     public required string Name { get; init; }
+
+    /// <summary>
+    /// Шаги рецепта — те самые, что уйдут в <c>--lua-desync</c>.
+    /// </summary>
+    /// <remarks>
+    /// Несёт строка, а не ищутся по имени в пресете. Поиск по имени
+    /// работал, пока рецепты брались только оттуда, и уже тогда подводил:
+    /// имя группы — это имя её первой секции, и перестановка секций
+    /// обесценивала сохранённый выбор молча. Теперь источников два,
+    /// и второго в пресете нет вовсе.
+    /// </remarks>
+    public required IReadOnlyList<string> Steps { get; init; }
 
     /// <summary>Что показывается в заголовке: приёмы, а не сервис.</summary>
     public required string Title { get; init; }
@@ -184,16 +196,40 @@ public partial class RecipeWindow : Window
             // и её отсутствие не повод не дать выбрать рецепт.
         }
 
-        foreach (var recipe in DesyncRecipes.FromPresetFile(preset))
+        // Приёмы, которые умеет движок. Нужны затем, чтобы из каталога
+        // предлагать только то, что этот пресет потянет: рецепт с
+        // неподключённым модулем winws2 не запустит вовсе, и проверка
+        // ответила бы «не помогает» о приёме, которого не пробовали.
+        IReadOnlyDictionary<string, string> providers =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        try
+        {
+            if (ZapretPaths.Discover() is { } paths)
+                providers = LuaModules.Providers(LuaModules.Scan(paths.LuaDirectory));
+        }
+        catch (Exception)
+        {
+            // Без приёмов останутся только наборы пресета — это не отказ,
+            // а сужение выбора до заведомо рабочего.
+        }
+
+        foreach (var choice in RecipeChoices.Build(preset, providers, already))
         {
             _rows.Add(new RecipeRow
             {
-                Name = recipe.Name,
-                Title = recipe.Title,
-                Summary = recipe.Detail,
-                UsedBy = recipe.Where,
-                Current = already is not null
-                    && string.Equals(recipe.Name, already, StringComparison.OrdinalIgnoreCase),
+                Name = choice.Name,
+                Title = choice.Title,
+
+                // Шаги несёт сама строка, а не ищутся потом по имени.
+                // Поиск по имени уже стоил голоса Discord: правка пресета
+                // переставила секции, имя группы сменилось, и сохранённый
+                // выбор перестал находиться — молча.
+                Steps = choice.Steps,
+
+                Summary = string.Join("   ·   ", choice.Steps),
+                UsedBy = choice.Source,
+                Current = choice.Current,
                 Edge = (Brush)FindResource("Border"),
             });
         }
@@ -207,8 +243,8 @@ public partial class RecipeWindow : Window
         Recipes.ItemsSource = _rows;
 
         Say(_rows.Count == 0
-            ? "В пресете нет ни одного рецепта — выбирать не из чего."
-            : $"Рецептов в пресете «{preset.Name}»: {_rows.Count}. "
+            ? "Ни одного рецепта не нашлось — ни в пресете, ни в каталоге."
+            : $"Рецептов: {_rows.Count} — из пресета «{preset.Name}» и из каталога. "
               + "Проверка подбирает рабочий сама, но требует остановленных движков.");
 
         TestButton.IsEnabled = _rows.Count > 0;
@@ -381,7 +417,7 @@ public partial class RecipeWindow : Window
                 row.Took = null;
 
                 var clock = Stopwatch.StartNew();
-                bool ok = await TryAsync(winws, paths!.Root, row.Name, _work.Token);
+                bool ok = await TryAsync(winws, paths!.Root, row, _work.Token);
                 clock.Stop();
 
                 // Время — только у рабочих. У неработающего оно означает срок
@@ -448,12 +484,10 @@ public partial class RecipeWindow : Window
     private async Task<bool> TryAsync(
         string winws,
         string zapretRoot,
-        string recipeName,
+        RecipeRow row,
         CancellationToken cancellationToken)
     {
-        var recipe = DesyncRecipes.Find(_preset, recipeName);
-
-        if (recipe is null || recipe.Steps.Count == 0)
+        if (row.Steps.Count == 0)
             return false;
 
         var list = Path.GetFullPath(Path.Combine(
@@ -500,7 +534,7 @@ public partial class RecipeWindow : Window
         start.ArgumentList.Add($"--hostlist={WinwsCommandLine.Forward(list)}");
         start.ArgumentList.Add(WinwsCommandLine.ProbeOutRange);
 
-        foreach (var step in recipe.Steps)
+        foreach (var step in row.Steps)
             start.ArgumentList.Add($"--lua-desync={step}");
 
         Process? process = null;

@@ -26,6 +26,11 @@ public sealed class RecipeAdviceTests
     {
         Name = title,
         Title = title,
+
+        // Шаги строка носит сама с 21.09: прежде проверка искала их
+        // по имени в пресете, а рецепта из каталога там нет вовсе.
+        Steps = ["multidisorder:pos=1,host+2"],
+
         Summary = title,
         UsedBy = string.Empty,
         Current = current,

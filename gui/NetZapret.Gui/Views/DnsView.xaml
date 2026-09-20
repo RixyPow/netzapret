@@ -52,13 +52,32 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Апстрим туннеля" Style="{StaticResource Caption}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Апстрим туннеля" Style="{StaticResource Caption}"
+                                               VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Речь только о резолвере, которого спрашивает sing-box. Настройки DNS самой Windows не трогаются ни здесь, ни где-либо ещё.&#x0a;&#x0a;ЧЕРЕЗ ТУННЕЛЬ — запрос уходит внутри зашифрованного потока к серверу подписки. Оператору он неотличим от прочего трафика, перекрыть его отдельно нельзя. Цена: пока туннель не поднялся, имена не разрешаются вовсе — включая те, что открывались одним десинком.&#x0a;&#x0a;НАПРЯМУЮ — запрос уходит к выбранному резолверу своим соединением, по DoH. Работает независимо от туннеля, но виден оператору как обращение к известному резолверу, и его можно перекрыть. В августе 2026 несколько российских операторов так и сделали." />
+                                </StackPanel>
+
                                 <TextBlock x:Name="ChosenName" FontSize="16" FontWeight="SemiBold"
                                            Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
 
-                            <Button Grid.Column="1" x:Name="TunnelButton" Style="{StaticResource Ghost}"
-                                    Click="OnThroughTunnel" VerticalAlignment="Center" />
+                            <!--
+                                Список, а не выключатель. Кнопка подписывалась
+                                действием — «Спрашивать напрямую», — и после
+                                нажатия нужный вариант словно пропадал: владелец
+                                21.09 так и сказал, «нажал, и она пропала».
+                                У списка оба варианта на виду, и видно, какой
+                                стоит сейчас.
+                            -->
+                            <ComboBox Grid.Column="1" x:Name="TunnelMode" Width="188"
+                                      VerticalAlignment="Center"
+                                      SelectionChanged="OnThroughTunnel">
+                                <ComboBoxItem Content="спрашивать напрямую" />
+                                <ComboBoxItem Content="спрашивать через туннель" />
+                            </ComboBox>
                         </Grid>
 
                         <TextBlock x:Name="TunnelHint" Style="{StaticResource Caption}"

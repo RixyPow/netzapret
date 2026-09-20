@@ -89,9 +89,12 @@ public partial class DnsView : UserControl
             ? settings.DnsServer
             : $"{known.Name} · {known.Address}";
 
-        TunnelButton.Content = settings.DnsThroughTunnel
-            ? "Спрашивать напрямую"
-            : "Спрашивать через туннель";
+        // Заполняем, не поднимая события выбора: иначе показ состояния
+        // тут же записал бы его обратно в настройки и позвал уведомление
+        // о перезапуске — при каждом заходе на вкладку.
+        _filling = true;
+        TunnelMode.SelectedIndex = settings.DnsThroughTunnel ? 1 : 0;
+        _filling = false;
 
         // Обе стороны выбора имеют цену, и названа она честно: включённое
         // прячет запрос от оператора, но ставит разрешение имён в зависимость
@@ -243,12 +246,31 @@ public partial class DnsView : UserControl
         }
     }
 
+    /// <summary>
+    /// Идёт заполнение списка, а не выбор человека.
+    /// </summary>
+    /// <remarks>
+    /// Список пишет выбор привязкой и поднимает событие при каждом показе
+    /// вкладки. Без этой заслонки заход на вкладку записывал бы настройку
+    /// обратно и звал уведомление о перезапуске — на ровном месте.
+    /// </remarks>
+    private bool _filling;
+
     private void OnThroughTunnel(object sender, RoutedEventArgs e)
     {
+        if (_filling || sender is not ComboBox box || box.SelectedIndex < 0)
+            return;
+
         try
         {
+            bool through = box.SelectedIndex == 1;
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var next = settings with { DnsThroughTunnel = !settings.DnsThroughTunnel };
+
+            // Выбор того же самого — не выбор.
+            if (settings.DnsThroughTunnel == through)
+                return;
+
+            var next = settings with { DnsThroughTunnel = through };
 
             next.Save(AppSettings.DefaultPath);
 
