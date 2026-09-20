@@ -162,14 +162,12 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
-    /// Значок раскрытия.
+    /// Поворот значка раскрытия.
     /// </summary>
     /// <remarks>
-    /// Треугольники вместо стрелок: «►» нарисован уже своего собрата «▼»
-    /// и на мелком кегле выглядел царапиной, а не знаком. Эти два — одной
-    /// ширины и одной массы, потому и поворот читается как поворот.
+    /// Угол, а не знак: стрелка рисуется фигурой — см. <see cref="Chevrons"/>.
     /// </remarks>
-    public string Chevron => Open ? "▾" : "▸";
+    public double ChevronAngle => Chevrons.Angle(Open);
 
     public string Count => Parts.Count + " " + Ending(Parts.Count);
 
@@ -556,7 +554,7 @@ public partial class RoutesView : UserControl
         var open = OrderPanel.Visibility != Visibility.Visible;
 
         OrderPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        OrderChevron.Text = open ? "▾" : "▸";
+        Chevrons.Turn(OrderChevron, open);
     }
 
     /// <summary>
@@ -961,7 +959,7 @@ public partial class RoutesView : UserControl
         var open = OwnPanel.Visibility != Visibility.Visible;
 
         OwnPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        OwnChevron.Text = open ? "▾" : "▸";
+        Chevrons.Turn(OwnChevron, open);
 
         // Поле берёт ввод сразу: карточку раскрывают ровно затем, чтобы
         // вписать в неё домен.

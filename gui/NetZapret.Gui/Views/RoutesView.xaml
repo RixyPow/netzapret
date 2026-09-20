@@ -84,14 +84,11 @@
                         </Grid.ColumnDefinitions>
 
                         <!--
-                            Тот же знак, что у папок сервисов ниже — ▸/▾,
-                            а не ►/▼: разные символы для одного и того же
-                            жеста «свернуть/развернуть» читались бы как два
-                            разных языка на одном экране.
+                            Та же фигура, что у папок сервисов ниже: один жест
+                            «свернуть/развернуть» — один рисунок на весь экран.
                         -->
-                        <TextBlock x:Name="OwnChevron" Grid.Column="0" Text="▸" FontSize="15"
-                                   Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
-                                   VerticalAlignment="Center" />
+                        <Path x:Name="OwnChevron" Grid.Column="0"
+                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
 
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Свой домен" FontWeight="SemiBold" />
@@ -248,18 +245,16 @@
                                     </Grid.ColumnDefinitions>
 
                                     <!--
-                                        Размер и ширина заданы явно. Свёрнутая
-                                        стрелка тоньше развёрнутой по рисунку
-                                        самого знака, и на десятом кегле она
-                                        выглядела царапиной. Одинаковое поле
-                                        вдобавок держит заголовок на месте
-                                        при раскрытии.
+                                        Поле в 24 точки сохранено от прежней
+                                        надписи: на нём выверено, что заголовок
+                                        не ёрзает при раскрытии.
                                     -->
-                                    <TextBlock Grid.Column="0" Text="{Binding Chevron}"
-                                               Foreground="{DynamicResource Muted}" FontSize="17"
-                                               Width="20" TextAlignment="Left"
-                                               Margin="0,0,4,0"
-                                               VerticalAlignment="Center" />
+                                    <Path Grid.Column="0" Style="{StaticResource Chevron}"
+                                          Margin="7,0,12,0">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="{Binding ChevronAngle}" />
+                                        </Path.RenderTransform>
+                                    </Path>
 
                                     <!--
                                         Значок той же меры, что у строки части.
@@ -414,9 +409,8 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="OrderChevron" Grid.Column="0" Text="▸" FontSize="15"
-                                   Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
-                                   VerticalAlignment="Center" />
+                        <Path x:Name="OrderChevron" Grid.Column="0"
+                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
 
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Порядок вычисления" FontWeight="SemiBold" />

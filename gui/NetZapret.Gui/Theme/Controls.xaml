@@ -363,4 +363,37 @@
         </Setter>
     </Style>
 
+    <!--
+        Стрелка сворачивания — фигурой, а не знаком шрифта.
+
+        Знаками она была, и это оказалось ошибкой, которую видно глазом.
+        Замер 20.09: «▸» U+25B8 и «▾» U+25BE, которыми рисовали маршруты
+        и хосты, в Segoe UI отсутствуют — Windows подменяла их чужим
+        шрифтом. «►» U+25BA и «▼» U+25BC, которыми рисовали подписки,
+        в нём свои. Один и тот же жест выходил на двух вкладках разной
+        гарнитурой: разный размер, разный вес, разная высота над строкой.
+        Владелец назвал это «стрелочки кривые», и был прав.
+
+        Фигура ни от какого шрифта не зависит. Одна на все разделы: две
+        копии разошлись бы при первой же правке — так уже вышло с парами
+        «▸/▾» в маршрутах и «►/▼» в подписках.
+
+        Повёрнута поворотом, а не второй фигурой: угол легко связать
+        с состоянием, а две фигуры пришлось бы держать в согласии руками.
+    -->
+    <Style x:Key="Chevron" TargetType="Path">
+        <Setter Property="Data" Value="M 0,0 L 5,4 L 0,8 Z" />
+        <Setter Property="Fill" Value="{DynamicResource Muted}" />
+        <Setter Property="Width" Value="5" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Stretch" Value="Fill" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <RotateTransform Angle="0" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

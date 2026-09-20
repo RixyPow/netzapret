@@ -281,7 +281,7 @@ public partial class HostsView : UserControl
         bool open = ForeignPanel.Visibility != Visibility.Visible;
 
         ForeignPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        ForeignChevron.Text = open ? "▾" : "▸";
+        Chevrons.Turn(ForeignChevron, open);
     }
 
     private void OnOpen(object sender, RoutedEventArgs e)

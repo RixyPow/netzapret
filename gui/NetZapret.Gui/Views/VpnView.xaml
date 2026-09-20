@@ -247,9 +247,12 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBlock Grid.Column="0" Text="{Binding Chevron}"
-                                                   Foreground="{DynamicResource Muted}" FontSize="10"
-                                                   Width="16" VerticalAlignment="Center" />
+                                        <Path Grid.Column="0" Style="{StaticResource Chevron}"
+                                              Margin="5,0,6,0">
+                                            <Path.RenderTransform>
+                                                <RotateTransform Angle="{Binding ChevronAngle}" />
+                                            </Path.RenderTransform>
+                                        </Path>
 
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                                             <!--

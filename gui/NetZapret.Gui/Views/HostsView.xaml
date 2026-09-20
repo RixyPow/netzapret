@@ -160,9 +160,8 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock x:Name="ForeignChevron" Grid.Column="0" Text="▸" FontSize="15"
-                                   Foreground="{DynamicResource Muted}" Margin="0,0,12,0"
-                                   VerticalAlignment="Center" />
+                        <Path x:Name="ForeignChevron" Grid.Column="0"
+                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
 
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Чужие записи" FontWeight="SemiBold" />

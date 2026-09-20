@@ -72,7 +72,15 @@ public sealed class SubRow
 
     public Visibility ServersShown => Open && Servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    public string Chevron => Open ? "▼" : "►";
+    /// <summary>
+    /// Поворот значка раскрытия.
+    /// </summary>
+    /// <remarks>
+    /// Общий с маршрутами и хостами — см. <see cref="Chevrons"/>. Здесь до
+    /// 0.6.3 стояла своя пара знаков, «►/▼» вместо «▸/▾», и подписки
+    /// выбивались из остального окна.
+    /// </remarks>
+    public double ChevronAngle => Chevrons.Angle(Open);
 
     public Brush Edge => (Brush)Application.Current.FindResource(Active ? "Accent" : "Border");
 
