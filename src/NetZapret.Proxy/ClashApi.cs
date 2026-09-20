@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -106,10 +107,15 @@ public sealed class ClashApi : IDisposable
     {
         try
         {
-            var body = new StringContent(
-                new JsonObject { ["name"] = tag }.ToJsonString(),
-                Encoding.UTF8,
-                "application/json");
+            // Байтами, а не строкой с кодировкой. StringContent дописывает
+            // к типу «; charset=utf-8», и Clash API движка отвечал на это
+            // кодом 400 — при совершенно верном теле. Ловилось на тегах
+            // с флагами стран: «🇫🇮 Финляндия» не выбирался вовсе, а причина
+            // выглядела как «сервер не existует».
+            var body = new ByteArrayContent(Encoding.UTF8.GetBytes(
+                new JsonObject { ["name"] = tag }.ToJsonString()));
+
+            body.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
             using var response = await _http.PutAsync(
                 $"{Root}/proxies/{Uri.EscapeDataString(group)}", body, cancellationToken);

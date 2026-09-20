@@ -283,7 +283,14 @@ internal static class SupervisorHost
         // а выглядит она как неисправный движок.
         int? trafficPort = options.VerifyTraffic ? SingBoxOptions.DefaultHealthPort : null;
 
-        services.Add(new SingBoxService(singBox, options.ProxyConfig, 9090, trafficPort)
+        // Обход при мёртвых выходах читается из настроек, а не из ключей
+        // запуска: решение это не про один запуск, а про то, чем человек
+        // готов платить за работающую сеть, — и меняется оно там же, где
+        // остальные такие решения.
+        bool bypass = AppSettings.Load(AppSettings.DefaultPath).BypassWhenTunnelDead;
+
+        services.Add(new SingBoxService(
+            singBox, options.ProxyConfig, 9090, trafficPort, bypassWhenDead: bypass)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         });

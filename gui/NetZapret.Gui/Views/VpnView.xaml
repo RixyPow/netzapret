@@ -139,6 +139,33 @@
                 </Border>
 
                 <!--
+                    Обход туннеля при мёртвых выходах. Стоит здесь, а не в «Ещё»:
+                    решение это про туннель и понятно только рядом с ним.
+
+                    Цена названа в самой подписи, а не спрятана в справку.
+                    Трафик пойдёт открыто и с домашнего адреса — человек
+                    вправе знать это до того, как случится, а не после.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Обход туннеля, когда серверы не отвечают"
+                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock x:Name="BypassLine" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" x:Name="BypassButton" Style="{StaticResource Ghost}"
+                                Click="OnBypass" MinWidth="110" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <!--
                     WARP. Выключатель, а не подписка: его выходы подмешиваются
                     к серверам действующей подписки. Отдельной строкой в списке
                     он занимал её место — выбор его выхода делал действующим

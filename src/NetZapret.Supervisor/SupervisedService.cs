@@ -123,6 +123,18 @@ public abstract class SupervisedService
     /// <summary>Имена процессов движка — для поиска осиротевших экземпляров.</summary>
     public abstract IReadOnlyList<string> EngineProcessNames { get; }
 
+    /// <summary>
+    /// Забыть всё, что относилось к прежнему запуску.
+    /// </summary>
+    /// <remarks>
+    /// Базовая служба не помнит ничего; переопределяют те, кто помнит.
+    /// Вызывается перед каждым стартом — в том числе перед перезапуском,
+    /// который и есть тот случай, когда старая память вреднее всего.
+    /// </remarks>
+    protected virtual void ForgetRunState()
+    {
+    }
+
     public async Task<bool> StartAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
     {
         var problem = ValidatePrerequisites();
@@ -132,6 +144,12 @@ public abstract class SupervisedService
             LastError = problem;
             return false;
         }
+
+        // Новый процесс — новое положение. Всё, что служба помнит о прежнем
+        // запуске, к нему не относится: свежий движок поднимается с группой,
+        // указывающей на автоподбор, и память о прежнем обходе заставила бы
+        // нас считать трафик уведённым, когда он идёт в туннель.
+        ForgetRunState();
 
         try
         {
@@ -295,18 +313,53 @@ public sealed class SingBoxService : SupervisedService
     /// через прокси. Слушающий порт означает лишь, что движок поднялся;
     /// он ничего не говорит о том, доходит ли трафик до сервера.
     /// </param>
+    /// <param name="bypassWhenDead">
+    /// Уводить ли трафик мимо туннеля, когда его выходы перестали отвечать.
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
         int healthPort = 9090,
         int? trafficPort = null,
-        int trafficCheckEvery = 6)
+        int trafficCheckEvery = 6,
+        bool bypassWhenDead = true)
     {
         _executablePath = executablePath;
         _configPath = configPath;
         _healthPort = healthPort;
         _trafficPort = trafficPort;
         _trafficCheckEvery = Math.Max(1, trafficCheckEvery);
+        _bypassWhenDead = bypassWhenDead;
+    }
+
+    /// <summary>
+    /// Обход туннеля, пока его выходы мертвы.
+    /// </summary>
+    /// <remarks>
+    /// Живёт у службы, а не у супервизора: только она делает проверку
+    /// прохода трафика и только она знает, чем та кончилась. Супервизору
+    /// достаётся итог — <see cref="ServiceCheck"/>, — и по нему решение
+    /// об обходе принять уже нельзя: <c>Healthy</c> при включённом обходе
+    /// означает «сеть работает мимо туннеля», а не «туннель в порядке».
+    /// </remarks>
+    private readonly TunnelBypass _bypass = new();
+
+    private readonly bool _bypassWhenDead;
+
+    /// <summary>Трафик идёт мимо туннеля, потому что его выходы не отвечают.</summary>
+    public bool BypassEngaged => _bypass.Engaged;
+
+    protected override void ForgetRunState()
+    {
+        _bypass.Forget();
+
+        // Заодно и остальная память о прежнем запуске. Держать её врозь
+        // незачем: вся она об одном — о процессе, которого больше нет.
+        _lastTrafficOk = true;
+        _checkCounter = 0;
+        _upstreamNoted = false;
+        _trafficPortMissingSince = null;
+        _trafficPortMissingNoted = false;
     }
 
     public override string Name => "sing-box";
@@ -390,10 +443,27 @@ public sealed class SingBoxService : SupervisedService
         if (_checkCounter++ % _trafficCheckEvery != 0)
             return _lastTrafficOk ? ServiceCheck.Healthy : ServiceCheck.UpstreamDown;
 
-        _lastTrafficOk = await CheckTrafficAsync(_trafficPort.Value, cancellationToken);
+        // Пока обход включён, общая проверка отвечать на наш вопрос перестаёт:
+        // она идёт через прямой выход и удаётся всегда. Мерить надо сами
+        // выходы — иначе нас вернуло бы в мёртвый туннель на следующем же
+        // шаге, и так по кругу.
+        _lastTrafficOk = _bypass.Engaged
+            ? await ExitsAliveAsync(cancellationToken)
+            : await CheckTrafficAsync(_trafficPort.Value, cancellationToken);
+
+        await ApplyBypassAsync(_lastTrafficOk, cancellationToken);
 
         if (_lastTrafficOk)
             return ServiceCheck.Healthy;
+
+        // При включённом обходе сеть работает — мимо туннеля, но работает.
+        // Называть это здоровьем нельзя: трафик идёт не туда, куда просили,
+        // и сказать об этом должно состояние, а не только журнал.
+        if (_bypass.Engaged)
+        {
+            LastError = "выходы подписки не отвечают — трафик идёт мимо туннеля";
+            return ServiceCheck.UpstreamDown;
+        }
 
         // Движок отвечает по своему API, а наружу не доходит. Перезапуск
         // тут бесполезен и вреден: восемнадцать секунд тишины, и подъём
@@ -416,6 +486,83 @@ public sealed class SingBoxService : SupervisedService
 
         return ServiceCheck.UpstreamDown;
     }
+
+    /// <summary>
+    /// Переключает группу выбора, если положение изменилось.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Через Clash API, а не пересборкой конфига: переключение мгновенно
+    /// и не рвёт того, что ещё работало. Пересборка означала бы перезапуск
+    /// движка — полминуты тишины ради того, чтобы починить тишину.
+    /// </para>
+    /// <para>
+    /// Неудача переключения не считается бедой службы. Движок мог как раз
+    /// перезапускаться; на следующей проверке попробуем снова, а состояние
+    /// <see cref="TunnelBypass"/> при неудаче откатывается — иначе мы бы
+    /// считали трафик уведённым, когда он по-прежнему идёт в мёртвый туннель.
+    /// </para>
+    /// </remarks>
+    private async Task ApplyBypassAsync(bool tunnelWorks, CancellationToken cancellationToken)
+    {
+        if (!_bypassWhenDead)
+            return;
+
+        var action = _bypass.Observe(tunnelWorks);
+
+        if (action == BypassAction.Keep)
+            return;
+
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}");
+
+        var target = _bypass.TargetFor(action, LatencyGroup);
+
+        if (!await api.SelectAsync(SelectorGroup, target, cancellationToken))
+        {
+            // Откат: положение осталось прежним, и помнить надо прежнее.
+            _bypass.Forget();
+            return;
+        }
+
+        Note(action == BypassAction.Engage
+            ? "выходы подписки не отвечают три проверки подряд — трафик уведён мимо туннеля, "
+                + "чтобы не легла вся сеть. Он идёт открыто и с домашнего адреса. "
+                + "Вернём в туннель, как только выход оживёт; отключается настройкой."
+            : "выход подписки ожил — трафик возвращён в туннель.");
+    }
+
+    /// <summary>
+    /// Ожил ли хоть один выход.
+    /// </summary>
+    /// <remarks>
+    /// Спрашивается у самого движка: он замеряет группу автоподбора тем же
+    /// способом, каким выбирает быстрейший, и меряет то, через что пойдёт
+    /// трафик, а не его копию. Свой пробник здесь не годится — он поднял бы
+    /// второй sing-box, а учётная запись MASQUE лежит в кэше работающего,
+    /// и файл занят им же.
+    /// </remarks>
+    private async Task<bool> ExitsAliveAsync(CancellationToken cancellationToken)
+    {
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}");
+
+        return await api.MeasureAsync(
+            LatencyGroup,
+            "http://cp.cloudflare.com/generate_204",
+            TimeSpan.FromSeconds(5),
+            cancellationToken) is not null;
+    }
+
+    /// <summary>Группа выбора в конфиге — та, что переключается.</summary>
+    /// <remarks>
+    /// Совпадает с <c>SingBoxOptions.SelectorTag</c>. Держать её здесь
+    /// строкой неприятно, но тянуть сюда весь компилятор конфига ради
+    /// двух имён — хуже: супервизор о сборке конфига ничего не знает
+    /// и знать не должен.
+    /// </remarks>
+    private const string SelectorGroup = "auto";
+
+    /// <summary>Группа автоподбора — куда возвращаемся.</summary>
+    private const string LatencyGroup = "auto-latency";
 
     private static async Task<bool> CheckTrafficAsync(int proxyPort, CancellationToken cancellationToken)
     {

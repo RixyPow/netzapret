@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
@@ -209,6 +209,7 @@ public partial class VpnView : UserControl
         // перечитываем, иначе карточка покажет состояние до переноса.
         settings = AppSettings.Load(AppSettings.DefaultPath);
         ShowWarp(settings);
+        ShowBypass(settings);
 
         _rows = _book.Entries
             .Select(entry => new SubRow
@@ -411,6 +412,7 @@ public partial class VpnView : UserControl
         // их не касается — пересобираем отдельно, иначе замер по ним виден
         // только после перезахода на вкладку.
         ShowWarp(settings);
+        ShowBypass(settings);
 
         foreach (var row in _rows)
         {
@@ -595,6 +597,53 @@ public partial class VpnView : UserControl
         WarpTryButton.Visibility = on && EnginesRunning
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Показывает состояние обхода туннеля.
+    /// </summary>
+    /// <remarks>
+    /// Цена названа в подписи, а не спрятана в справку. Обход уводит трафик
+    /// мимо туннеля — открыто и с домашнего адреса, — и человек вправе знать
+    /// это до того, как случится, а не после.
+    /// </remarks>
+    private void ShowBypass(AppSettings settings)
+    {
+        bool on = settings.BypassWhenTunnelDead;
+
+        BypassButton.Content = on ? "включён" : "выключен";
+        BypassButton.Foreground = (Brush)FindResource(on ? "Accent" : "Muted");
+
+        BypassLine.Text = on
+            ? "Если выход не ответит три проверки подряд, трафик пойдёт мимо туннеля — "
+              + "открыто и с домашнего адреса, — чтобы не легла вся сеть. Вернётся в туннель "
+              + "сам, как только выход оживёт. Закрытые сайты на это время останутся закрытыми."
+            : "Выключен: при мёртвых выходах трафик так и будет уходить в туннель — "
+              + "то есть в никуда. Выбор в пользу скрытности: ничего не пойдёт мимо "
+              + "туннеля даже ценой неработающей сети.";
+    }
+
+    /// <summary>Переключает обход туннеля.</summary>
+    private void OnBypass(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings with { BypassWhenTunnelDead = !settings.BypassWhenTunnelDead };
+
+            next.Save(AppSettings.DefaultPath);
+            ShowBypass(next);
+
+            Status.Text = next.BypassWhenTunnelDead
+                ? "Обход включён. Применится при следующем запуске движков."
+                : "Обход выключен. Применится при следующем запуске движков.";
+
+            this.Offer("Обход туннеля переключён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>

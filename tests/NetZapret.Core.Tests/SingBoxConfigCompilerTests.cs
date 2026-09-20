@@ -503,8 +503,10 @@ public class SingBoxConfigCompilerTests
         Assert.Equal("auto-latency", selector.GetProperty("default").GetString());
 
         // При этом в селекторе есть и все серверы: только так их можно
-        // закрепить вручную через Clash API.
-        Assert.Equal(3, selector.GetProperty("outbounds").GetArrayLength());
+        // закрепить вручную через Clash API. Четвёртым — прямой выход:
+        // переключением на него трафик уводится мимо туннеля, когда все
+        // выходы легли. См. SelectorDirectTests.
+        Assert.Equal(4, selector.GetProperty("outbounds").GetArrayLength());
     }
 
     [Fact]
