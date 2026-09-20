@@ -109,6 +109,16 @@ public sealed record ZapretPaths
     public string ExecutablePath => Path.Combine(Root, "exe", "winws2.exe");
 
     /// <summary>
+    /// Папка модулей Lua.
+    /// </summary>
+    /// <remarks>
+    /// В них лежат приёмы десинка, и пресет подключает их строками
+    /// <c>--lua-init=@lua/…</c> — относительно <see cref="Root"/>, потому
+    /// путь и складывается отсюда, а не ищется отдельно.
+    /// </remarks>
+    public string LuaDirectory => Path.Combine(Root, "lua");
+
+    /// <summary>
     /// Находит файл пресета по названию.
     /// </summary>
     /// <remarks>

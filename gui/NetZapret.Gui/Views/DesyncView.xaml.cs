@@ -10,6 +10,54 @@ using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
 
+/// <summary>
+/// Рецепт в каталоге.
+/// </summary>
+/// <remarks>
+/// Запись, а не класс с уведомлениями: каталог перестраивается целиком —
+/// его содержимое меняется только вместе с выбранным пресетом, а это
+/// и так перезагрузка вкладки.
+/// </remarks>
+public sealed record CatalogRow
+{
+    public required string Id { get; init; }
+
+    public required string Title { get; init; }
+
+    public required string What { get; init; }
+
+    public required string Note { get; init; }
+
+    public required string Detail { get; init; }
+
+    /// <summary>Чего не хватает; пусто — рецепт годен.</summary>
+    public required string Complaint { get; init; }
+
+    /// <summary>Модуль, который предлагается подключить; <c>null</c> — нечего.</summary>
+    public required string? Missing { get; init; }
+
+    public Visibility NoteShown =>
+        Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ComplaintShown =>
+        Complaint.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Кнопка «Подключить модуль».
+    /// </summary>
+    /// <remarks>
+    /// Только когда модуль есть на диске. Если его нет и там, подключать
+    /// нечего, и кнопка обещала бы починку, которой не будет: пресету
+    /// дописали бы строку, а winws2 всё равно не поднялся бы.
+    /// </remarks>
+    public Visibility FixShown =>
+        Missing is not null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Рамка: недоступный рецепт отмечен и ею, не только словами.</summary>
+    public Brush Edge => (Brush)Application.Current.FindResource(
+        Complaint.Length > 0 ? "Warn" : "Border");
+}
+
 /// <summary>Пресет в списке выбора.</summary>
 public sealed record PresetRow(string Name, string Version, string Fake)
 {
@@ -88,6 +136,12 @@ public partial class DesyncView : UserControl
 
         ShowChosen(settings);
         ShowEngine();
+
+        // До списка пресетов, а не после: список умеет уйти по короткому
+        // пути — пустая папка, нечитаемый файл, — и каталог, собираемый
+        // следом, в этих случаях не собирался бы вовсе. А он осмыслен
+        // и без пресетов: это перечень того, что бывает.
+        ShowCatalog(settings);
 
         try
         {
@@ -263,6 +317,115 @@ public partial class DesyncView : UserControl
     {
         header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         note.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Каталог рецептов и вердикт по каждому.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Приёмы читаются с диска при каждом показе. Модули приходят вместе
+    /// с движком, обновляются с ним, а подключить их можно и прямо отсюда —
+    /// список, сложенный однажды, показывал бы вчерашнюю правду.
+    /// </para>
+    /// <para>
+    /// Ошибки чтения не срывают вкладку: без приёмов каталог остаётся
+    /// перечнем без вердиктов, и это честнее пустого места.
+    /// </para>
+    /// </remarks>
+    private void ShowCatalog(AppSettings settings)
+    {
+        ZapretPreset? preset = null;
+        IReadOnlyDictionary<string, string> providers =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        try
+        {
+            if (ZapretPaths.Discover() is { } paths)
+                providers = LuaModules.Providers(LuaModules.Scan(paths.LuaDirectory));
+
+            if (settings.PresetName is { Length: > 0 } name
+                && ZapretPaths.FindPreset(name) is { } file)
+            {
+                preset = new PresetReader().Load(file);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Пусть каталог будет без вердиктов.
+        }
+
+        var rows = CatalogRows.Build(preset, providers);
+        int ready = rows.Count(r => r.Complaint.Length == 0);
+
+        Catalog.ItemsSource = rows;
+
+        CatalogNote.Text = preset is null
+            ? $"Рецептов в каталоге: {rows.Count}. Выберите пресет, чтобы увидеть, какие из них он потянет."
+            : providers.Count == 0
+                ? $"Рецептов в каталоге: {rows.Count}. Модули движка не читаются, поэтому доступность не проверена."
+                : $"Рецептов в каталоге: {rows.Count}, из них «{settings.DescribePreset()}» "
+                    + $"потянет {ready}. Выбираются рецепты не здесь, а для отдельного имени — "
+                    + "в разделе «Маршруты».";
+    }
+
+    /// <summary>
+    /// Дописать пресету недостающий модуль.
+    /// </summary>
+    /// <remarks>
+    /// Со спросом. Правка чужого файла — не то, что делают в ответ
+    /// на нажатие, а среди пресетов есть доставшиеся от Zapret, за состав
+    /// которых мы не отвечаем.
+    /// </remarks>
+    private void OnConnectModule(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string id }
+            || Catalog.ItemsSource is not IEnumerable<CatalogRow> rows)
+        {
+            return;
+        }
+
+        if (rows.FirstOrDefault(r => r.Id == id) is not { Missing: { } module })
+            return;
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (settings.PresetName is not { Length: > 0 } name
+            || ZapretPaths.FindPreset(name) is not { } file)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"Дописать в пресет «{settings.DescribePreset()}» строку подключения модуля {module}?\n\n"
+                + "Меняется одна строка в шапке файла, остальное остаётся как есть. "
+                + "Новые рецепты станут доступны при следующем запуске движков.",
+            "Подключить модуль",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.OK)
+            return;
+
+        try
+        {
+            Status.Text = PresetModules.Connect(file, module) switch
+            {
+                PresetModules.Result.Connected =>
+                    $"Модуль {module} подключён. Рецепты из него заработают после перезапуска движков.",
+                PresetModules.Result.Already =>
+                    $"Модуль {module} и так подключён — файл не тронут.",
+                _ =>
+                    $"В пресете нет ни одной строки --lua-init, дописывать не к чему. "
+                        + "Откройте его в редакторе.",
+            };
+        }
+        catch (Exception ex)
+        {
+            Status.Text = $"Модуль {module} подключить не вышло: {ex.GetBaseException().Message}";
+        }
+
+        ShowCatalog(settings);
     }
 
     private void ShowChosen(AppSettings settings)

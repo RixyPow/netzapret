@@ -73,6 +73,62 @@
                 </Grid>
             </Button>
         </DataTemplate>
+
+        <!--
+            Строка каталога. Не кнопка: рецепт отсюда не выбирается.
+            Выбор идёт по одному имени, в окне «Рецепт» на вкладке
+            маршрутов, — а здесь читают, что вообще бывает и что из этого
+            доступно с нынешним пресетом.
+        -->
+        <DataTemplate x:Key="RecipeItem">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,10"
+                    BorderBrush="{Binding Edge}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="14"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="{Binding What}" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+
+                            <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding NoteShown}" />
+
+                            <!--
+                                Причина недоступности — цветом опасности
+                                и рядом с рецептом, а не общей строкой
+                                внизу: недоступных бывает несколько,
+                                и у каждого причина своя.
+                            -->
+                            <TextBlock Text="{Binding Complaint}" Style="{StaticResource Caption}"
+                                       Foreground="{DynamicResource Warn}"
+                                       Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding ComplaintShown}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Ghost}" Content="Подключить модуль"
+                                    Tag="{Binding Id}" Click="OnConnectModule"
+                                    Visibility="{Binding FixShown}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Background="{DynamicResource Raised}" CornerRadius="6"
+                            Padding="10,7" Margin="0,10,0,0">
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Mono}"
+                                   Foreground="{DynamicResource Muted}" FontSize="11"
+                                   TextWrapping="Wrap" />
+                    </Border>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid>
@@ -149,6 +205,18 @@
                 </Border>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
+
+                <!--
+                    Каталог стоит здесь, а не в конце вкладки, потому что
+                    отвечает на вопрос о выбранном пресете: что он умеет.
+                    Уехав под списки пресетов, он читался бы как перечень
+                    сам по себе, ни к чему не относящийся.
+                -->
+                <TextBlock Text="Каталог рецептов" FontWeight="SemiBold" FontSize="15" Margin="4,24,0,4" />
+                <TextBlock x:Name="CatalogNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
+                           TextWrapping="Wrap" />
+
+                <ItemsControl x:Name="Catalog" ItemTemplate="{StaticResource RecipeItem}" />
 
                 <!--
                     Наши и чужие врозь. Universal ведём мы: они собраны
