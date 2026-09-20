@@ -109,6 +109,12 @@ internal static class TunnelConfig
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
+            // Кто из серверов заведомо мёртв — по нашим же замерам. Сборка
+            // в сеть не ходит и судить о живости не может, поэтому список
+            // приносим ей мы.
+            var options = new SingBoxOptions();
+            var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
                 Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
@@ -126,11 +132,22 @@ internal static class TunnelConfig
                 CaptureAddresses = capture,
                 PinnedProxyAddresses = pinned,
                 AddressOverrides = addresses,
+
+                // Мёртвые — мимо автоподбора, но в селекторе остаются:
+                // закрепить такой сервер руками законное желание, он мог
+                // подняться между нашими замерами.
+                DeadServerTags = dead.ToHashSet(StringComparer.Ordinal),
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
             var note = $"Конфиг собран: {result.UsedServers.Count} серверов";
+
+            // Про мёртвых говорим вслух. Молча выведенный из автоподбора
+            // сервер — это сервер, который человек считает рабочим, а он
+            // не участвует в выборе, и почему — не видно нигде.
+            if (dead.Count > 0)
+                note += $", {dead.Count} не отвечали и выведены из автоподбора";
 
             if (result.SkippedServers.Count > 0)
                 note += $", {result.SkippedServers.Count} пропущено";

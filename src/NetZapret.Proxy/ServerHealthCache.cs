@@ -31,6 +31,24 @@ public sealed record ServerHealth
 
     public required DateTimeOffset CheckedAt { get; init; }
 
+    /// <summary>
+    /// Сколько проверок подряд не прошло; ноль — последняя удалась.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Считается затем, чтобы отличить разовый отказ от смерти. Разовый
+    /// случается и у исправного сервера — сеть моргнула, узел перегружен, —
+    /// и выводить его из автоподбора по одной неудаче значило бы
+    /// разбрасываться теми немногими, что ещё живы.
+    /// </para>
+    /// <para>
+    /// Ведётся самим кэшем, а не тем, кто пишет замер: мест записи три —
+    /// меню консоли, команда probe и раздел «VPN», — и считать streak
+    /// в каждом порознь значило бы завести три расходящихся счётчика.
+    /// </para>
+    /// </remarks>
+    public int Failures { get; init; }
+
     public TimeSpan Age => DateTimeOffset.Now - CheckedAt;
 }
 
@@ -88,7 +106,39 @@ public sealed class ServerHealthCache
 
     public ServerHealth? Find(string tag) => _entries.GetValueOrDefault(tag);
 
-    public void Set(ServerHealth health) => _entries[health.Tag] = health;
+    /// <summary>
+    /// Записывает замер, продолжая счёт неудач подряд.
+    /// </summary>
+    /// <remarks>
+    /// Счёт ведётся здесь, а не у вызывающего: мест записи три, и считать
+    /// его в каждом порознь значило бы завести три расходящихся счётчика.
+    /// Пришедшее значение <see cref="ServerHealth.Failures"/> игнорируется
+    /// намеренно — оно выводится из прежнего состояния, а не задаётся.
+    /// </remarks>
+    public void Set(ServerHealth health)
+    {
+        int before = _entries.GetValueOrDefault(health.Tag)?.Failures ?? 0;
+
+        _entries[health.Tag] = health with
+        {
+            Failures = health.Success ? 0 : before + 1,
+        };
+    }
+
+    /// <summary>
+    /// Теги, которые не отвечали <paramref name="times"/> проверок подряд.
+    /// </summary>
+    /// <remarks>
+    /// Нужны сборке конфига: мёртвый сервер в группе автоподбора не бесплатен.
+    /// Движок опрашивает его наравне с живыми, а селектор может на нём осесть
+    /// и молчать до следующего замера. У владельца 20.09 таких было семеро
+    /// из девяти — подписка работала, но еле-еле.
+    /// </remarks>
+    public IReadOnlyCollection<string> Dead(int times) =>
+        _entries.Values
+            .Where(e => !e.Success && e.Failures >= times)
+            .Select(e => e.Tag)
+            .ToList();
 
     /// <summary>Оставляет только те записи, что относятся к нынешним серверам.</summary>
     /// <remarks>
