@@ -58,6 +58,27 @@ public sealed class TunnelBypass
 
     private int _failures;
 
+    /// <summary>
+    /// Обход только что сняли, и настоящим трафиком это ещё не подтверждено.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Снимается обход по ответу выхода на замер, а замер — это запрос
+    /// на 204 байта. Выход, отвечающий на него, трафик нести не обязан,
+    /// и это не домысел: 19.09 у владельца выход «США (вход РФ)» отвечал
+    /// за 190 мс и при этом не довозил ничего — Instagram пять попыток
+    /// из пяти мимо.
+    /// </para>
+    /// <para>
+    /// Без этой памяти выходило бы качание: сняли обход по замеру, три
+    /// проверки настоящего трафика провалились, вернули обход, выход снова
+    /// ответил на замер — и по кругу, каждый раз с тремя проверками сети
+    /// вхолостую. Поэтому первый же провал после снятия возвращает обход
+    /// сразу, не дожидаясь порога.
+    /// </para>
+    /// </remarks>
+    private bool _unconfirmed;
+
     /// <summary>Включён ли обход прямо сейчас.</summary>
     public bool Engaged { get; private set; }
 
@@ -80,9 +101,16 @@ public sealed class TunnelBypass
             _failures = 0;
 
             if (!Engaged)
+            {
+                // Настоящий трафик прошёл — выход подтверждён делом,
+                // а не ответом на замер в двести байт.
+                _unconfirmed = false;
                 return BypassAction.Keep;
+            }
 
             Engaged = false;
+            _unconfirmed = true;
+
             return BypassAction.Release;
         }
 
@@ -91,6 +119,18 @@ public sealed class TunnelBypass
         // но число в журнале становится бессмысленно большим.
         if (Engaged)
             return BypassAction.Keep;
+
+        // Первый же провал после снятия возвращает обход сразу. Ждать
+        // порога тут не для чего: мы только что сняли обход по замеру,
+        // и настоящий трафик сказал, что замер соврал.
+        if (_unconfirmed)
+        {
+            _unconfirmed = false;
+            _failures = FailuresBeforeBypass;
+            Engaged = true;
+
+            return BypassAction.Engage;
+        }
 
         if (++_failures < FailuresBeforeBypass)
             return BypassAction.Keep;
@@ -111,6 +151,7 @@ public sealed class TunnelBypass
     {
         _failures = 0;
         Engaged = false;
+        _unconfirmed = false;
     }
 
     /// <summary>Куда переключить группу выбора.</summary>

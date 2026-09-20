@@ -346,9 +346,6 @@ public sealed class SingBoxService : SupervisedService
 
     private readonly bool _bypassWhenDead;
 
-    /// <summary>Трафик идёт мимо туннеля, потому что его выходы не отвечают.</summary>
-    public bool BypassEngaged => _bypass.Engaged;
-
     protected override void ForgetRunState()
     {
         _bypass.Forget();

@@ -128,6 +128,65 @@ public sealed class TunnelBypassTests
     }
 
     [Fact]
+    public void A_release_that_the_traffic_disproves_is_undone_at_once()
+    {
+        // Обход снимается по ответу выхода на замер, а замер — запрос
+        // на двести байт. Отвечающий на него выход трафик нести не обязан:
+        // 19.09 у владельца «США (вход РФ)» отвечал за 190 мс и не довозил
+        // ничего. Без этого правила выходило бы качание — снятие по замеру,
+        // три проверки сети вхолостую, возврат, и по кругу.
+        var bypass = Fresh();
+
+        bypass.Observe(false);
+        bypass.Observe(false);
+        Assert.Equal(BypassAction.Engage, bypass.Observe(false));
+
+        Assert.Equal(BypassAction.Release, bypass.Observe(true));
+
+        // Первый же провал настоящего трафика, без ожидания порога.
+        Assert.Equal(BypassAction.Engage, bypass.Observe(false));
+        Assert.True(bypass.Engaged);
+    }
+
+    [Fact]
+    public void Traffic_that_really_goes_through_confirms_the_release()
+    {
+        // Подтверждённое снятие не возвращается по первому же провалу:
+        // дальше действует обычный порог, иначе единичный сбой сети
+        // уводил бы трафик мимо туннеля навсегда.
+        var bypass = Fresh();
+
+        bypass.Observe(false);
+        bypass.Observe(false);
+        bypass.Observe(false);
+
+        bypass.Observe(true);
+
+        // Настоящий трафик прошёл — выход подтверждён делом.
+        bypass.Observe(true);
+
+        Assert.Equal(BypassAction.Keep, bypass.Observe(false));
+        Assert.Equal(BypassAction.Keep, bypass.Observe(false));
+        Assert.Equal(BypassAction.Engage, bypass.Observe(false));
+    }
+
+    [Fact]
+    public void Forgetting_clears_the_unconfirmed_release_too()
+    {
+        var bypass = Fresh();
+
+        bypass.Observe(false);
+        bypass.Observe(false);
+        bypass.Observe(false);
+        bypass.Observe(true);
+
+        bypass.Forget();
+
+        // Память о неподтверждённом снятии относилась к прежнему процессу.
+        Assert.Equal(BypassAction.Keep, bypass.Observe(false));
+    }
+
+    [Fact]
     public void Engaging_points_at_direct_and_releasing_at_the_group()
     {
         var bypass = Fresh();
