@@ -183,7 +183,11 @@ public partial class App : Application
             try
             {
                 // Кто-то мог успеть поднять их руками, пока мы ждали.
-                if (EngineHealth.AllHealthy(State()))
+                //
+                // Мерка — «работают», а не «здоровы». Дело автозапуска
+                // поднять движки, а не починить чужую подписку: служба,
+                // чей процесс жив, поднята, даже если наружу не доходит.
+                if (EngineHealth.Running(State()))
                 {
                     Note($"автозапуск: движки уже работают (попытка {attempt + 1})");
                     return;
@@ -232,7 +236,14 @@ public partial class App : Application
     /// </remarks>
     private static readonly TimeSpan HealthyWithin = TimeSpan.FromSeconds(75);
 
-    /// <summary>Ждёт, пока все службы не станут здоровыми.</summary>
+    /// <summary>
+    /// Ждёт, пока службы не поднимутся.
+    /// </summary>
+    /// <remarks>
+    /// Именно поднимутся, а не станут здоровыми. Ждать здоровья значит
+    /// ждать живой подписки — а её может не быть неделями, и всё это время
+    /// автозапуск сносил бы исправные движки и поднимал заново.
+    /// </remarks>
     private static async Task<bool> WaitUntilHealthyAsync()
     {
         var until = DateTime.UtcNow + HealthyWithin;
@@ -241,7 +252,7 @@ public partial class App : Application
         {
             await Task.Delay(TimeSpan.FromSeconds(2));
 
-            if (EngineHealth.AllHealthy(State()))
+            if (EngineHealth.Running(State()))
                 return true;
 
             // Супервизор сдался — ждать больше нечего, его лесенка кончилась.

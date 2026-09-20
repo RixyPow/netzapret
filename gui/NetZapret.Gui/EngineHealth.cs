@@ -37,6 +37,31 @@ internal static class EngineHealth
         && state.Services.All(s => s.Health == ServiceHealth.Healthy);
 
     /// <summary>
+    /// Движки подняты — пусть даже наружу не доходит.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отличается от <see cref="AllHealthy"/> тем, что <c>Degraded</c> здесь
+    /// считается успехом. Разница решающая для автозапуска: его дело —
+    /// поднять движки, а не починить чужую подписку. Служба, чей процесс
+    /// жив и которую супервизор сторожит, поднята, и снимать её незачем.
+    /// </para>
+    /// <para>
+    /// Исправление регрессии, внесённой мной же в 0.6.2. Автозапуск ждал
+    /// именно <see cref="AllHealthy"/>, а у владельца из девяти серверов
+    /// подписки отвечали двое — sing-box оставался вечно «жив, но проверку
+    /// не проходит». Автозапуск ждал семьдесят пять секунд, снимал движки,
+    /// поднимал заново, и так трижды: около четырёх минут, в течение
+    /// которых туннель рвался и вставал. До 0.6.2 запуск был один.
+    /// </para>
+    /// </remarks>
+    public static bool Running(SupervisorState? state) =>
+        state is not null
+        && state.IsSupervisorAlive()
+        && state.Services.Count > 0
+        && state.Services.All(s => s.Health is ServiceHealth.Healthy or ServiceHealth.Degraded);
+
+    /// <summary>
     /// Чем кончилось — словами самих служб.
     /// </summary>
     /// <remarks>

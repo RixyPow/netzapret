@@ -210,4 +210,54 @@ public sealed class EngineHealthTests : IDisposable
 
         Assert.True(EngineHealth.AllHealthy(SupervisorState.Load(SupervisorState.DefaultPath)));
     }
+
+    /// <summary>
+    /// «Работают» — это не то же, что «здоровы», и автозапуску нужно первое.
+    /// </summary>
+    /// <remarks>
+    /// Регрессия 0.6.2, внесённая мной же. Автозапуск ждал полного здоровья,
+    /// а у владельца из девяти серверов подписки отвечали двое — sing-box
+    /// оставался вечно «жив, но проверку не проходит». Автозапуск ждал
+    /// семьдесят пять секунд, снимал движки, поднимал заново, и так трижды:
+    /// около четырёх минут, в течение которых туннель рвался и вставал.
+    /// До 0.6.2 запуск был один.
+    /// </remarks>
+    [Fact]
+    public void A_degraded_service_is_still_running()
+    {
+        var state = State(alive: true,
+            ("sing-box", ServiceHealth.Degraded, "трафик через прокси не проходит"),
+            ("winws2", ServiceHealth.Healthy, null));
+
+        Assert.False(EngineHealth.AllHealthy(state));
+        Assert.True(EngineHealth.Running(state));
+    }
+
+    /// <summary>А мёртвая служба не работает ни по какой мерке.</summary>
+    /// <remarks>
+    /// Иначе автозапуск успокоился бы на упавшем движке — то есть вернул бы
+    /// ровно ту беду, ради которой всё и затевалось.
+    /// </remarks>
+    [Fact]
+    public void A_dead_service_is_not_running()
+    {
+        var state = State(alive: true,
+            ("sing-box", ServiceHealth.Dead, "процесс завершился с кодом 1"));
+
+        Assert.False(EngineHealth.Running(state));
+    }
+
+    /// <summary>Сдавшийся супервизор не работает, что бы ни стояло в службах.</summary>
+    [Fact]
+    public void A_supervisor_that_gave_up_is_not_running()
+    {
+        Assert.False(EngineHealth.Running(State(alive: false, ("sing-box", ServiceHealth.Healthy, null))));
+    }
+
+    /// <summary>Без служб работать нечему.</summary>
+    [Fact]
+    public void No_services_means_nothing_is_running()
+    {
+        Assert.False(EngineHealth.Running(State(alive: true)));
+    }
 }
