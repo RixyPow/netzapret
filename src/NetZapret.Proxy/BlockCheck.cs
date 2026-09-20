@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
@@ -269,6 +269,23 @@ public sealed record TargetReport
     public required ProbeOutcome Data { get; init; }
 
     public required BlockKind Kind { get; init; }
+
+    /// <summary>
+    /// Подменён ли ответ DNS.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельно от <see cref="Kind"/>, а не ещё одним его значением. Вид
+    /// блокировки отвечает на «чем лечится», а подмена — на «тому ли адресу
+    /// мы верим»; смешав их, получили бы вердикт, отменяющий сам себя:
+    /// «DPI по TLS» при том, что до настоящего сайта мы и не доходили.
+    /// </para>
+    /// <para>
+    /// Ровно так я и ошибся 19.09: мерил QUIC по адресу из подменённого
+    /// ответа и получал «QUIC не доходит» при исправном QUIC.
+    /// </para>
+    /// </remarks>
+    public DnsSpoofResult Spoof { get; init; } = DnsSpoofResult.Unknown;
 
     public IReadOnlyList<string> Addresses { get; init; } = Array.Empty<string>();
 
@@ -699,6 +716,7 @@ public static class BlockCheck
             Http = Failed(null),
             Data = walk.Data,
             Kind = Classify(walk.Tcp, walk.Tls, Failed(null), walk.Data, throughTunnel: true),
+            Spoof = walk.Spoof,
             Tunnelled = true,
             ExpectedTunnel = true,
         };
@@ -938,6 +956,14 @@ public static class BlockCheck
             Http = http,
             Data = data,
             Kind = kind,
+
+            // Через туннель вердикт о подмене не выносится, и это важно.
+            // Проксируемому имени движок выдаёт fakeip из 198.18.0.0/15,
+            // а настоящее разрешение происходит на выходе — судить по тому,
+            // что мы видим здесь, значило бы объявлять подменой собственную
+            // работу туннеля.
+            Spoof = viaTunnel ? DnsSpoofResult.Unknown : walk.Spoof,
+
             Addresses = shown,
             Tunnelled = viaTunnel,
             ExpectedTunnel = throughTunnel,
@@ -1083,8 +1109,17 @@ public static class BlockCheck
     /// отдаёт BunnyCDN, отшивая регион; второй принято отдавать блокировщикам
     /// рекламы. Различать их незачем: ни туда, ни туда идти не надо.
     /// </remarks>
-    internal static bool IsStub(IPAddress address) =>
-        IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any);
+    /// <summary>
+    /// Адрес-заглушка.
+    /// </summary>
+    /// <remarks>
+    /// Тем же правилом, что у <see cref="DnsSpoof"/>: вопрос один — может ли
+    /// по этому адресу кто-нибудь ответить, — и два ответа на него означали бы
+    /// отчёт, спорящий сам с собой. Заодно добавилось <c>0.0.0.0/8</c> целиком:
+    /// прежде ловился один лишь <c>0.0.0.0</c>, а весь диапазон одинаково
+    /// никуда не ведёт.
+    /// </remarks>
+    internal static bool IsStub(IPAddress address) => DnsSpoof.IsSinkhole(address);
 
     private static ProbeOutcome Failed(string? detail) => new()
     {
@@ -1233,6 +1268,16 @@ public static class BlockCheck
 
         /// <summary>Версия, на которой сошлись; пусто, если не сошлись.</summary>
         public string? Version { get; init; }
+
+        /// <summary>
+        /// Подменён ли ответ DNS.
+        /// </summary>
+        /// <remarks>
+        /// Выясняется попутно, без единого лишнего соединения: адреса мы
+        /// и так получили, разрешая имя, а сертификат сторона предъявила
+        /// в том самом рукопожатии, которое мы и так проводим.
+        /// </remarks>
+        public DnsSpoofResult Spoof { get; init; } = DnsSpoofResult.Unknown;
     }
 
     /// <summary>
@@ -1316,6 +1361,11 @@ public static class BlockCheck
                 Tcp = tcp,
                 Tls = Failed(null),
                 Data = Failed(null),
+
+                // Служебный адрес виден и без соединения — он-то и объясняет,
+                // почему соединения не вышло. Ровно этот случай прежде
+                // выглядел как «TCP не проходит» без всякого намёка на причину.
+                Spoof = DnsSpoof.Judge(host, real, certificate: null),
             };
         }
 
@@ -1350,8 +1400,19 @@ public static class BlockCheck
                 Tcp = tcp,
                 Tls = Refusal(ex, handshake.Elapsed, real),
                 Data = Failed(null),
+                Spoof = DnsSpoof.Judge(host, real, certificate: null),
             };
         }
+
+        // Сертификат берётся здесь, пока поток жив: после Dispose обращение
+        // к нему даёт уже освобождённый объект.
+        //
+        // Проверка рукопожатия принимает любой сертификат — ей измеряется
+        // доходимость, а не доверие, — и именно поэтому подменный сертификат
+        // до нас доходит целым, вместо того чтобы оборвать соединение.
+        using var shown = ssl.RemoteCertificate is { } raw
+            ? new System.Security.Cryptography.X509Certificates.X509Certificate2(raw)
+            : null;
 
         return new Walk
         {
@@ -1359,6 +1420,7 @@ public static class BlockCheck
             Tcp = tcp,
             Tls = new ProbeOutcome { Ok = true, Elapsed = handshake.Elapsed },
             Version = Name(ssl.SslProtocol),
+            Spoof = DnsSpoof.Judge(host, real, shown),
             Data = await ReadBodyAsync(ssl, host, real, cancellationToken),
         };
     }
