@@ -370,6 +370,22 @@ public partial class DesyncView : UserControl
     }
 
     /// <summary>
+    /// Разворачивает каталог рецептов.
+    /// </summary>
+    /// <remarks>
+    /// Тем же приёмом, что «Свой домен» и «Порядок вычисления» в маршрутах:
+    /// два разных способа свернуть на одном экране читались бы как два
+    /// разных вида карточек.
+    /// </remarks>
+    private void OnCatalogToggle(object sender, RoutedEventArgs e)
+    {
+        var open = Catalog.Visibility != Visibility.Visible;
+
+        Catalog.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        Chevrons.Turn(CatalogChevron, open);
+    }
+
+    /// <summary>
     /// Дописать пресету недостающий модуль.
     /// </summary>
     /// <remarks>

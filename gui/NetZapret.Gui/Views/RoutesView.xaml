@@ -69,36 +69,28 @@
                     а сайтов миллион: без этой строки направить seriesgraph.com
                     было нечем.
 
-                    Свёрнут по умолчанию. Развёрнутый он занимает треть полосы
-                    над списком — форма, два абзаца оговорок и перечень своих
-                    правил, — а нужен раз в неделю, когда добавляют домен.
-                    Сколько правил уже написано, видно и в свёрнутом виде:
-                    иначе сворачивание прятало бы то, ради чего сюда заходят
-                    во второй раз.
+                    Не сворачивается, и это решение владельца от 20.09.
+                    Свёрнутым он был, пока держал в себе перечень своих
+                    правил и занимал треть полосы над списком. Перечень
+                    переехал в общий список сервисов, и осталась форма
+                    в одну строку — прятать её под щелчок значит ставить
+                    щелчок между человеком и единственным тут действием.
                 -->
-                <Button Style="{StaticResource Choice}" Margin="0,20,0,0" Click="OnOwnToggle">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                <!--
+                    Поля те же, что у стиля Choice, которым карточка была
+                    кнопкой: 16,13 против 18,16 у Card. Разница в три точки
+                    заметна — карточка стоит в ряду с такими же, и смена
+                    стиля не должна двигать её относительно соседей.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="16,13">
+                    <StackPanel>
+                        <TextBlock Text="Свой домен" FontWeight="SemiBold" />
+                        <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
+                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
 
-                        <!--
-                            Та же фигура, что у папок сервисов ниже: один жест
-                            «свернуть/развернуть» — один рисунок на весь экран.
-                        -->
-                        <Path x:Name="OwnChevron" Grid.Column="0"
-                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
-
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Свой домен" FontWeight="SemiBold" />
-                            <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Grid>
-                </Button>
-
-                <StackPanel x:Name="OwnPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                <StackPanel x:Name="OwnPanel" Margin="0,10,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

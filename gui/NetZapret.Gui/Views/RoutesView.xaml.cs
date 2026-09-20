@@ -1043,29 +1043,6 @@ public partial class RoutesView : UserControl
         || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Разворачивает карточку своего домена.
-    /// </summary>
-    /// <remarks>
-    /// Свёрнута по умолчанию, потому что полоса над списком больше
-    /// не прокручивается: развёрнутая карточка занимает её треть постоянно,
-    /// а нужна, когда добавляют домен. Тем же приёмом, что и «Порядок
-    /// вычисления» ниже, — два разных способа свернуть на одном экране
-    /// читались бы как два разных вида карточек.
-    /// </remarks>
-    private void OnOwnToggle(object sender, RoutedEventArgs e)
-    {
-        var open = OwnPanel.Visibility != Visibility.Visible;
-
-        OwnPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        Chevrons.Turn(OwnChevron, open);
-
-        // Поле берёт ввод сразу: карточку раскрывают ровно затем, чтобы
-        // вписать в неё домен.
-        if (open)
-            OwnDomain.Focus();
-    }
-
-    /// <summary>
     /// Подпись карточки «Свой домен».
     /// </summary>
     /// <remarks>
@@ -1076,9 +1053,12 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void ShowOwn()
     {
+        // Без звёздочки: правило хранится как «*.example.com», но вводил
+        // человек «example.com», и показывать ему наше устройство хранения
+        // вместо его же имени незачем. В списке ниже они и так без неё.
         var own = UserRulesFile.Load().Entries
             .Where(entry => entry.Match == MatchKind.Domain)
-            .Select(entry => entry.Value)
+            .Select(entry => entry.Value.TrimStart('*', '.'))
             .ToList();
 
         OwnSummary.Text = own.Count == 0

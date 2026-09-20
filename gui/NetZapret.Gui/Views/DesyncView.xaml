@@ -211,12 +211,45 @@
                     отвечает на вопрос о выбранном пресете: что он умеет.
                     Уехав под списки пресетов, он читался бы как перечень
                     сам по себе, ни к чему не относящийся.
-                -->
-                <TextBlock Text="Каталог рецептов" FontWeight="SemiBold" FontSize="15" Margin="4,24,0,4" />
-                <TextBlock x:Name="CatalogNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
-                           TextWrapping="Wrap" />
 
-                <ItemsControl x:Name="Catalog" ItemTemplate="{StaticResource RecipeItem}" />
+                    Свёрнут по умолчанию, и это решение владельца от 20.09.
+                    Рецептов одиннадцать, каждый с объяснением и набором
+                    шагов; развёрнутый каталог отодвигает списки пресетов
+                    за нижний край, а читают его редко — когда впервые
+                    разбираются, чем вообще чинят имена.
+                -->
+                <Button Style="{StaticResource Choice}" Margin="0,24,0,0" Click="OnCatalogToggle">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!--
+                            Та же фигура, что у папок в маршрутах и хостах:
+                            один жест «свернуть/развернуть» — один рисунок
+                            на весь экран.
+                        -->
+                        <Path x:Name="CatalogChevron" Grid.Column="0"
+                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Каталог рецептов" FontWeight="SemiBold" />
+
+                            <!--
+                                Счёт годных виден и в свёрнутом виде: иначе
+                                сворачивание прятало бы ровно тот ответ,
+                                ради которого сюда заходят второй раз, —
+                                сколько из каталога потянет этот пресет.
+                            -->
+                            <TextBlock x:Name="CatalogNote" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <ItemsControl x:Name="Catalog" ItemTemplate="{StaticResource RecipeItem}"
+                              Visibility="Collapsed" Margin="0,10,0,0" />
 
                 <!--
                     Наши и чужие врозь. Universal ведём мы: они собраны
