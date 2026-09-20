@@ -112,12 +112,31 @@ internal static class SupervisorHost
             var statePath = SupervisorState.DefaultPath;
             var existing = SupervisorState.Load(statePath);
 
+            // Живой супервизор — не повод отказаться, а повод его сменить.
+            //
+            // Прежде здесь стоял отказ с кодом 2. У консоли это читалось:
+            // человек видел строку и понимал, что делать. У окна консоли нет,
+            // сообщение уходило в журнал, и снаружи выглядело так, будто
+            // «Запустить» не работает вовсе — та самая жалоба про кнопку.
+            //
+            // Снимаем именно СУПЕРВИЗОР, а не его движки. Он погасит их сам,
+            // своим же порядком: движки включены в объект задания и уходят
+            // вместе с ним. Убивать чужие движки напрямую мы однажды уже
+            // пробовали, и это гасило исправный sing-box — см. ниже.
             if (existing is not null && existing.IsSupervisorAlive())
             {
-                Console.Error.WriteLine(
-                    $"Супервизор уже запущен (PID {existing.SupervisorProcessId}).");
+                Console.WriteLine(
+                    $"Перенимаю у супервизора PID {existing.SupervisorProcessId}: "
+                    + "двум сразу нельзя, они дерутся за TUN и WinDivert.");
 
-                return 2;
+                await StopAsync(CancellationToken.None);
+
+                // Ждём, пока он вправду уйдёт: стартовать поверх умирающего
+                // значит получить обоих сразу, чего мы и избегаем.
+                for (int i = 0; i < 20 && SupervisorState.Load(statePath)?.IsSupervisorAlive() == true; i++)
+                    await Task.Delay(250, CancellationToken.None);
+
+                existing = SupervisorState.Load(statePath);
             }
 
             // Состояние от убитого процесса мешает: чистим, раз владелец мёртв.
@@ -139,25 +158,48 @@ internal static class SupervisorHost
 
             // Осиротевшие движки от прошлых запусков ломают старт неочевидно:
             // старый sing-box держит TUN-адаптер, старый winws2 — WinDivert.
-            // Сами их не убиваем: однажды именно это и гасило исправный
-            // sing-box, поэтому решение остаётся за человеком.
+            //
+            // Раньше мы тут отказывались стартовать и предлагали человеку
+            // снять их самому. Причина была уважительная: однажды мы убивали
+            // движки не глядя и погасили исправный sing-box, которым владел
+            // живой супервизор. Но отказ лечил это слишком широко — у окна
+            // консоли нет, и «остановите их и повторите» не читал никто:
+            // движки просто не поднимались.
+            //
+            // Теперь узкое лекарство. Живого супервизора мы уже сменили выше,
+            // по-хорошему, и он забрал свои движки с собой. Всё, что дожило
+            // до этой строки, не принадлежит никому: владельца нет, а TUN
+            // и WinDivert они держат. Такое снимаем — иначе не поднимется
+            // ничего, и человек опять останется с кнопкой, которая не работает.
             var orphans = ProcessSupervisor.FindOrphans(services);
 
             if (orphans.Count > 0)
             {
-                Console.Error.WriteLine($"Найдены движки от прошлого запуска: {orphans.Count}");
+                Console.WriteLine($"Движки от прошлого запуска без хозяина: {orphans.Count}, снимаю");
 
                 foreach (var orphan in orphans)
                 {
-                    Console.Error.WriteLine($"  {orphan.ProcessName} (PID {orphan.Id})");
-                    orphan.Dispose();
+                    try
+                    {
+                        Console.WriteLine($"  {orphan.ProcessName} (PID {orphan.Id})");
+                        orphan.Kill(entireProcessTree: true);
+                        orphan.WaitForExit(5000);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Мог уйти сам между поиском и снятием — обычное дело.
+                        // А мог и не даться: тогда движок не поднимется,
+                        // и супервизор скажет об этом своим порядком.
+                        Console.WriteLine($"  не снялся: {ex.GetBaseException().Message}");
+                    }
+                    finally
+                    {
+                        orphan.Dispose();
+                    }
                 }
 
-                Console.Error.WriteLine(
-                    "Они удержат TUN-адаптер и WinDivert, и новые движки не поднимутся. " +
-                    "Остановите их и повторите.");
-
-                return 2;
+                // Драйверу нужно мгновение, чтобы отпустить фильтр.
+                await Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None);
             }
 
             var supervisor = new ProcessSupervisor(services, new SupervisorOptions
