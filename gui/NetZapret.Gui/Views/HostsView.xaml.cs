@@ -84,7 +84,7 @@ public partial class HostsView : UserControl
         {
             var pins = HostsEditor.Pins();
 
-            Pins.ItemsSource = pins
+            _ours = pins
                 .OrderBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => new PinRow(
                     p.Key,
@@ -93,15 +93,12 @@ public partial class HostsView : UserControl
                     (Brush)FindResource("Faint")))
                 .ToList();
 
-            Status.Text = pins.Count == 0
-                ? "Нами ничего не прибито."
-                : $"Прибито нами: {pins.Count}. Файл: {HostsFile.DefaultPath}";
-
             OursNote.Text = pins.Count == 0
                 ? "Программа сюда ничего не ставила."
                 : "Эти записи поставила программа, и она же их снимает.";
 
             ShowForeign(pins);
+            Filter();
         }
         catch (Exception ex)
         {
@@ -144,20 +141,87 @@ public partial class HostsView : UserControl
                 .OrderBy(r => r.Name, StringComparer.Ordinal)
                 .ToList();
 
-            Foreign.ItemsSource = foreign;
-
-            ForeignToggle.Visibility = foreign.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-
-            ForeignSummary.Text = $"{foreign.Count} — их ведёт кто-то ещё: редактор hosts "
-                + "из Zapret GUI, антивирус либо вы сами. Показаны, потому что объясняют "
-                + "вердикты проверки; удалить можно по одной.";
+            _foreign = foreign;
         }
         catch (Exception)
         {
             // Файл системный и может быть занят. Свой блок при этом уже
             // показан — половина сведений лучше жалобы вместо них.
-            ForeignToggle.Visibility = Visibility.Collapsed;
+            _foreign = [];
         }
+    }
+
+    /// <summary>Наш блок целиком; показывается отобранное из него.</summary>
+    private IReadOnlyList<PinRow> _ours = [];
+
+    /// <summary>Чужие записи целиком.</summary>
+    private IReadOnlyList<PinRow> _foreign = [];
+
+    private void OnSearch(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        SearchHint.Visibility = Search.Text.Length == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+        Filter();
+    }
+
+    /// <summary>
+    /// Показывает то, что подошло под поиск.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ищет по обоим спискам разом. Разделение на своё и чужое полезно
+    /// при осмотре, но мешает, когда ищешь одно имя и не знаешь, чьё оно, —
+    /// а именно так в hosts и заглядывают: когда что-то сломалось.
+    /// </para>
+    /// <para>
+    /// Найденное среди чужих раскрывает их карточку само. Свёрнутая,
+    /// она спрятала бы ровно то, что человек искал, и поиск выглядел бы
+    /// не нашедшим ничего.
+    /// </para>
+    /// </remarks>
+    private void Filter()
+    {
+        var needle = Search.Text;
+        bool searching = HostsFilter.Searching(needle);
+
+        var ours = HostsFilter.Apply(_ours, needle);
+        var foreign = HostsFilter.Apply(_foreign, needle);
+
+        Pins.ItemsSource = ours;
+        Foreign.ItemsSource = foreign;
+
+        OursHeader.Visibility = ours.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        OursNote.Visibility = OursHeader.Visibility;
+
+        ForeignToggle.Visibility = foreign.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        ForeignSummary.Text = searching
+            ? $"{foreign.Count} подошло из {_foreign.Count}."
+            : $"{_foreign.Count} — их ведёт кто-то ещё: редактор hosts "
+                + "из Zapret GUI, антивирус либо вы сами. Показаны, потому что объясняют "
+                + "вердикты проверки; удалить можно по одной.";
+
+        // Раскрываем чужих, когда нашлось у них, и возвращаем как было,
+        // когда поиск сняли: оставить раскрытыми семьсот строк — значит
+        // отдать им весь экран после одного запроса.
+        if (searching && foreign.Count > 0)
+            ShowForeignPanel(true);
+        else if (!searching)
+            ShowForeignPanel(false);
+
+        Status.Text = searching
+            ? $"Нашлось: {ours.Count} наших и {foreign.Count} чужих."
+            : _ours.Count == 0
+                ? "Нами ничего не прибито."
+                : $"Прибито нами: {_ours.Count}. Файл: {HostsFile.DefaultPath}";
+    }
+
+    private void ShowForeignPanel(bool open)
+    {
+        ForeignPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        Chevrons.Turn(ForeignChevron, open);
     }
 
     /// <summary>
@@ -276,13 +340,8 @@ public partial class HostsView : UserControl
         }
     }
 
-    private void OnForeignToggle(object sender, RoutedEventArgs e)
-    {
-        bool open = ForeignPanel.Visibility != Visibility.Visible;
-
-        ForeignPanel.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
-        Chevrons.Turn(ForeignChevron, open);
-    }
+    private void OnForeignToggle(object sender, RoutedEventArgs e) =>
+        ShowForeignPanel(ForeignPanel.Visibility != Visibility.Visible);
 
     private void OnOpen(object sender, RoutedEventArgs e)
     {
@@ -327,7 +386,11 @@ public partial class HostsView : UserControl
                     alive ? "отвечает" : "молчит",
                     (Brush)FindResource(alive ? "Accent" : "Danger")));
 
-                Pins.ItemsSource = rows.ToList();
+                // В общий список, а не прямо в показ: иначе проверка
+                // затирала бы отбор поиска и на каждом ответе возвращала
+                // бы все сто строк поверх найденных трёх.
+                _ours = rows.ToList();
+                Filter();
             }
 
             int dead = rows.Count(r => r.Note == "молчит");
