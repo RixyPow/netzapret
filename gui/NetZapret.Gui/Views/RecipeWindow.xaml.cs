@@ -398,10 +398,10 @@ public partial class RecipeWindow : Window
             // нет, отвечала про резолвер вместо фильтра. Разные мерки в одном
             // окне вдобавок расходятся в ответах — а сравнивать предстоит
             // именно их.
-            if (await OpensAsync(_domain, _work.Token))
+            if (await OpensAsync(_domain, _work.Token) is { Passed: true } bare)
             {
-                Say($"{_domain} открывается и без десинка. Рецепт ему не нужен — "
-                    + "берите «решает пресет».", "Accent", "✓");
+                Say($"{_domain} открывается и без десинка — {Verdict(bare, TimeSpan.Zero)}. "
+                    + "Рецепт ему не нужен, берите «решает пресет».", "Accent", "✓");
 
                 return;
             }
@@ -417,18 +417,27 @@ public partial class RecipeWindow : Window
                 row.Took = null;
 
                 var clock = Stopwatch.StartNew();
-                bool ok = await TryAsync(winws, paths!.Root, row, _work.Token);
+                var flow = await TryAsync(winws, paths!.Root, row, _work.Token);
                 clock.Stop();
+
+                bool ok = flow.Passed;
 
                 // Время — только у рабочих. У неработающего оно означает срок
                 // ожидания, а не скорость, и сравнивать его не с чем.
                 row.Took = ok ? clock.Elapsed : null;
 
-                row.Verdict = ok
-                    ? $"открывается за {clock.Elapsed.TotalSeconds:0.0} с"
-                    : "не помогает";
+                // Вердикт называет, что пришло, а не только «да/нет».
+                // Прежде здесь стояло «открывается за 0,8 с» и на коротком
+                // перенаправлении на страницу входа — владелец прочёл это
+                // как «сайт работает» и был вправе.
+                row.Verdict = Verdict(flow, clock.Elapsed);
 
-                row.VerdictColour = (Brush)FindResource(ok ? "Accent" : "Danger");
+                // Три цвета, а не два. Перенаправление — это пройденный
+                // фильтр, но не пришедшая страница, и валить его в одну
+                // кучу с отказом так же неверно, как с успехом.
+                row.VerdictColour = (Brush)FindResource(
+                    flow.Page ? "Accent" : ok ? "Warn" : "Danger");
+
                 row.Edge = (Brush)FindResource(ok ? "Accent" : "Border");
 
                 if (ok)
@@ -481,14 +490,14 @@ public partial class RecipeWindow : Window
     /// Профиль ровно один, без остального пресета: иначе имя могла бы забрать
     /// чужая секция, и замер сказал бы о ней, а не о выбранном рецепте.
     /// </remarks>
-    private async Task<bool> TryAsync(
+    private async Task<Flow> TryAsync(
         string winws,
         string zapretRoot,
         RecipeRow row,
         CancellationToken cancellationToken)
     {
         if (row.Steps.Count == 0)
-            return false;
+            return Flow.Nothing("рецепт без шагов");
 
         var list = Path.GetFullPath(Path.Combine(
             WinwsCommandLine.OwnListsDirectory, "probe.txt"));
@@ -544,7 +553,7 @@ public partial class RecipeWindow : Window
             process = Process.Start(start);
 
             if (process is null)
-                return false;
+                return Flow.Nothing("winws2 не запустился");
 
             // Ждём, пока драйвер встанет в разрыв, — но по его же словам,
             // а не по часам. Раньше здесь стояли глухие две секунды на каждый
@@ -629,14 +638,14 @@ public partial class RecipeWindow : Window
     /// имени пробы его не будет никогда.
     /// </para>
     /// </remarks>
-    private async Task<bool> OpensAsync(string host, CancellationToken cancellationToken)
+    private async Task<Flow> OpensAsync(string host, CancellationToken cancellationToken)
     {
         try
         {
             var address = _address;
 
             if (address is null)
-                return false;
+                return Flow.Nothing("адрес не известен");
 
             using var client = new TcpClient();
 
@@ -657,10 +666,12 @@ public partial class RecipeWindow : Window
 
             return await FlowsAsync(tls, host, cancellationToken);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Молчание, сброс, отказ — для нас это одно: не открылось.
-            return false;
+            // Молчание, сброс, отказ — до сервера не дошли. Но чем именно
+            // кончилось, сказать стоит: «сброс» и «тишина» лечатся разным,
+            // и прежде оба выглядели одинаковым «не помогает».
+            return Flow.Nothing(Short(ex));
         }
     }
 
@@ -677,6 +688,80 @@ public partial class RecipeWindow : Window
 
     /// <summary>Сколько ждать продолжения, прежде чем счесть поток убитым.</summary>
     private static readonly TimeSpan Silence = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// Что написать в строке рецепта по итогам замера.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно и статически — единственная чистая часть этого перебора,
+    /// и единственная, которую можно проверить тестом. Слова здесь важнее
+    /// обычного: прежний вердикт «открывается за 0,8 с» читался как
+    /// утверждение о сайте, тогда как сказано им было о рукопожатии.
+    /// </remarks>
+    internal static string Verdict(Flow flow, TimeSpan took)
+    {
+        if (!flow.Passed)
+            return "не помогает — " + flow.Ending;
+
+        var seconds = $"{took.TotalSeconds:0.0} с";
+
+        if (flow.Page)
+            return $"страница {flow.Status}, {flow.Bytes} Б, {seconds}";
+
+        // Перенаправление называем перенаправлением. Фильтр пройден —
+        // сервер ответил, — но страницы мы не видели, и выдавать одно
+        // за другое незачем.
+        var where = flow.Location is { Length: > 0 } place
+            ? " на " + Trim(place)
+            : string.Empty;
+
+        return $"ответ {flow.Status}{where} — фильтр пройден, {seconds}";
+    }
+
+    /// <summary>Укорачивает длинный адрес: в строку он не влезает.</summary>
+    private static string Trim(string place) =>
+        place.Length > 44 ? place[..44] + "…" : place;
+
+    /// <summary>
+    /// Чем кончился обмен после рукопожатия.
+    /// </summary>
+    /// <remarks>
+    /// Не «да/нет», и это исправление 21.09. Прежде успехом считался любой
+    /// пришедший байт, и окно отвечало «открывается за 0,8 с» про имя,
+    /// которое в браузере не грузилось вовсе. Байты и вправду приходили —
+    /// короткое перенаправление на страницу входа, — но по такому ответу
+    /// нельзя сказать ни «работает», ни «не работает», не назвав его.
+    /// </remarks>
+    internal sealed record Flow
+    {
+        public required int Bytes { get; init; }
+
+        /// <summary>Код ответа; <c>null</c> — ответ не похож на HTTP.</summary>
+        public int? Status { get; init; }
+
+        /// <summary>Куда перенаправляют, если перенаправляют.</summary>
+        public string? Location { get; init; }
+
+        /// <summary>Чем кончилось — словами, для вердикта.</summary>
+        public required string Ending { get; init; }
+
+        /// <summary>
+        /// Рецепт провёл соединение мимо фильтра.
+        /// </summary>
+        /// <remarks>
+        /// Признак — разобранный код ответа, а не объём. Ответивший сервер
+        /// означает, что до него дошли: ни фильтр, ни заглушка внятного
+        /// HTTP по этому имени не отдадут. Перенаправление сюда входит —
+        /// апекс на www перенаправляет половина интернета, и звать это
+        /// отказом значило бы врать в другую сторону.
+        /// </remarks>
+        public bool Passed => Status is >= 200 and < 400;
+
+        /// <summary>Пришла настоящая страница, а не перенаправление.</summary>
+        public bool Page => Status is >= 200 and < 300;
+
+        public static Flow Nothing(string ending) => new() { Bytes = 0, Ending = ending };
+    }
 
     /// <summary>
     /// Идут ли данные после того, как рукопожатие состоялось.
@@ -701,7 +786,7 @@ public partial class RecipeWindow : Window
     /// Отказ — это тишина при живом соединении.
     /// </para>
     /// </remarks>
-    private static async Task<bool> FlowsAsync(
+    private static async Task<Flow> FlowsAsync(
         SslStream tls,
         string host,
         CancellationToken cancellationToken)
@@ -714,7 +799,9 @@ public partial class RecipeWindow : Window
         await tls.WriteAsync(request, cancellationToken);
 
         var buffer = new byte[16 * 1024];
+        var head = new System.Text.StringBuilder();
         int total = 0;
+        string ending = "дочитали до порога";
 
         while (total < Enough)
         {
@@ -730,16 +817,88 @@ public partial class RecipeWindow : Window
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // Тишина при живом соединении — то самое, что ищем.
-                return false;
+                return Flow.Nothing(total == 0 ? "тишина" : $"оборвалось на {total} Б");
+            }
+            catch (Exception ex)
+            {
+                return Flow.Nothing(total == 0
+                    ? Short(ex)
+                    : $"оборвалось на {total} Б: {Short(ex)}");
             }
 
             if (read == 0)
+            {
+                ending = "сервер закрыл соединение";
                 break;
+            }
+
+            // Заголовок копим до первой пустой строки: код и Location лежат
+            // в нём, а тело нам неинтересно — мы не браузер.
+            if (head.Length < 4096)
+                head.Append(System.Text.Encoding.ASCII.GetString(buffer, 0, read));
 
             total += read;
         }
 
-        return total > 0;
+        return Parse(head.ToString(), total, ending);
+    }
+
+    /// <summary>
+    /// Разбирает начало ответа: код и, если есть, куда перенаправляют.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Код ответа — единственный внятный признак того, что до сервера дошли.
+    /// Ни фильтр, ни заглушка оператора по этому имени внятного HTTP
+    /// не отдадут: для этого нужен сертификат на него, а его у них нет.
+    /// </para>
+    /// <para>
+    /// Не разобралось — считаем, что не дошли. Прежде здесь хватало любого
+    /// байта, и в успех попадало всё подряд, включая обрывки, по которым
+    /// сказать ничего нельзя.
+    /// </para>
+    /// </remarks>
+    private static Flow Parse(string head, int total, string ending)
+    {
+        var first = head.Split('\n', 2)[0].Trim();
+
+        if (!first.StartsWith("HTTP/", StringComparison.OrdinalIgnoreCase)
+            || first.Split(' ') is not [_, var code, ..]
+            || !int.TryParse(code, out int status))
+        {
+            return new Flow
+            {
+                Bytes = total,
+                Ending = total == 0 ? ending : $"{total} Б, и это не похоже на HTTP",
+            };
+        }
+
+        string? where = null;
+
+        foreach (var line in head.Split('\n'))
+        {
+            if (line.StartsWith("Location:", StringComparison.OrdinalIgnoreCase))
+            {
+                where = line["Location:".Length..].Trim();
+                break;
+            }
+        }
+
+        return new Flow
+        {
+            Bytes = total,
+            Status = status,
+            Location = where,
+            Ending = ending,
+        };
+    }
+
+    /// <summary>Короткое объяснение обрыва — длинное в строку не влезает.</summary>
+    private static string Short(Exception ex)
+    {
+        var why = ex.GetBaseException().Message;
+
+        return why.Length > 40 ? why[..40] : why;
     }
 
     /// <summary>
