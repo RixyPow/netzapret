@@ -42,11 +42,18 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Маршруты" Style="{StaticResource Title}" TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                   TextWrapping="Wrap"
-                                   Text="Куда идёт каждый сервис: напрямую, через десинк или через туннель." />
+                    <!--
+                        Пояснение под заголовком переехало в подсказку.
+                        Решение владельца 21.09: список маршрутов занимал
+                        треть полосы, а прочитывают эти строки один раз
+                        и больше к ним не возвращаются.
+                    -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Маршруты" Style="{StaticResource Title}" />
+
+                        <ContentControl Style="{StaticResource Info}" Margin="6,0,0,0"
+                                        Content="Куда идёт каждый сервис: напрямую, через десинк или через туннель. Выбор пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -82,11 +89,24 @@
                     заметна — карточка стоит в ряду с такими же, и смена
                     стиля не должна двигать её относительно соседей.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="16,13">
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="16,11">
                     <StackPanel>
-                        <TextBlock Text="Свой домен" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Свой домен" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                            <!--
+                                Два абзаца оговорок, стоявшие под формой,
+                                теперь здесь. Оба нужны — «десинк» без них
+                                обещает больше, чем делает, — но занимали
+                                они семьдесят точек высоты постоянно, ради
+                                текста, который читают однажды.
+                            -->
+                            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                                            Content="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com.&#x0a;&#x0a;«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего.&#x0a;&#x0a;«Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts.&#x0a;&#x0a;Проверить, что применится, можно в «Проверке блокировок»." />
+                        </StackPanel>
+
                         <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
-                                   Margin="0,5,0,0" TextWrapping="Wrap" />
+                                   Margin="0,4,0,0" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
@@ -111,16 +131,12 @@
                                 Content="Добавить" Click="OnAddOwn" />
                     </Grid>
 
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com. Правило пишется в config\rules.user.yaml и применяется при следующем запуске движков." />
-
                     <!--
-                        Оговорка не лишняя: «десинк» здесь обещает больше,
-                        чем делает, и без этой строки человек вправе ждать,
-                        что рецепт подберётся сам.
+                        Два абзаца пояснений отсюда ушли в подсказку
+                        у заголовка карточки — см. выше. Держать их здесь
+                        значило тратить семьдесят точек высоты постоянно
+                        ради текста, который прочитывают однажды.
                     -->
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего. «Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts. Проверить, что применится, можно в «Проверке блокировок»." />
 
                     <!--
                         Списка добавленных здесь больше нет: с 0.6.3 свои
@@ -343,12 +359,26 @@
                                                         у Discord голос лечится отдельно
                                                         от картинок.
                                                     -->
+                                                    <!--
+                                                        Значком, а не словом. Слово «пин»
+                                                        занимало девяносто две точки ширины
+                                                        в каждой из семидесяти строк, а сам
+                                                        значок — двадцать.
+
+                                                        Что именно случится, говорит подсказка:
+                                                        у значка два состояния, и «снять» от
+                                                        «поставить» по одной картинке
+                                                        не отличить.
+                                                    -->
                                                     <Button Style="{StaticResource Ghost}"
-                                                            Content="{Binding PinLabel}" Padding="12,7"
-                                                            Margin="8,0,0,0" MinWidth="92"
-                                                            Foreground="{Binding PinColor}"
+                                                            Padding="8,7" Margin="8,0,0,0"
                                                             Tag="{Binding Key}" Click="OnPin"
-                                                            IsEnabled="{Binding CanPin}" />
+                                                            IsEnabled="{Binding CanPin}"
+                                                            ToolTip="{Binding PinHint}">
+                                                        <Path Data="{StaticResource PinGlyph}"
+                                                              Fill="{Binding PinColor}"
+                                                              Stretch="Uniform" Width="14" Height="14" />
+                                                    </Button>
 
                                                     <!--
                                                         Убрать можно только своё. У каталожной
