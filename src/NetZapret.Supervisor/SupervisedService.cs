@@ -4,6 +4,35 @@ using NetZapret.Proxy;
 
 namespace NetZapret.Supervisor;
 
+/// <summary>
+/// Чем кончилась функциональная проверка службы.
+/// </summary>
+/// <remarks>
+/// Главное здесь — что <see cref="UpstreamDown"/> отделён от
+/// <see cref="Broken"/>. Снаружи оба выглядят одинаково: трафик не идёт.
+/// Но лечатся они противоположным, и перезапуск во втором случае — чистый
+/// вред: движок гаснет на восемнадцать секунд и поднимается в ту же
+/// мёртвую подписку.
+/// </remarks>
+public enum ServiceCheck
+{
+    /// <summary>Работает.</summary>
+    Healthy,
+
+    /// <summary>Сломан сам движок — перезапуск уместен.</summary>
+    Broken,
+
+    /// <summary>
+    /// Движок исправен, но наружу не доходит: выход мёртв.
+    /// </summary>
+    /// <remarks>
+    /// Распознаётся по тому, что Clash API движка отвечает. Отвечает —
+    /// значит процесс жив, слушает и обрабатывает запросы; всё, что
+    /// не доходит дальше, лежит за пределами нашей власти.
+    /// </remarks>
+    UpstreamDown,
+}
+
 public enum ServiceHealth
 {
     /// <summary>Не запускался или остановлен намеренно.</summary>
@@ -68,9 +97,17 @@ public abstract class SupervisedService
 
     /// <summary>
     /// Функциональная проверка: слушается ли порт, отвечает ли API.
-    /// Для служб без наблюдаемого признака возвращает <c>true</c>.
+    /// Для служб без наблюдаемого признака возвращает <see cref="ServiceCheck.Healthy"/>.
     /// </summary>
-    public abstract Task<bool> CheckFunctionalAsync(CancellationToken cancellationToken);
+    /// <remarks>
+    /// Исходов три, а не два, и третий добавлен по замеру 20.09: у владельца
+    /// семь из девяти серверов подписки перестали отвечать, проверка трафика
+    /// честно проваливалась, и супервизор перезапускал исправный движок.
+    /// Восемнадцать секунд тишины, потом снова — это и есть жалоба «туннель
+    /// отваливается на пару секунд». Перезапуск не чинил ничего: мёртвые
+    /// серверы подписки от него не оживают.
+    /// </remarks>
+    public abstract Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken);
 
     protected abstract ProcessStartInfo BuildStartInfo();
 
@@ -134,7 +171,10 @@ public abstract class SupervisedService
                 return false;
             }
 
-            if (await CheckFunctionalAsync(cancellationToken))
+            // На старте годится и мёртвый выход: движок поднялся, а чинить
+            // чужие серверы не его забота. Отказать здесь значило бы вовсе
+            // не дать туннелю встать, пока подписка не оживёт.
+            if (await CheckFunctionalAsync(cancellationToken) is not ServiceCheck.Broken)
             {
                 LastError = null;
                 return true;
@@ -234,6 +274,7 @@ public sealed class SingBoxService : SupervisedService
     private bool _lastTrafficOk = true;
     private DateTime? _trafficPortMissingSince;
     private bool _trafficPortMissingNoted;
+    private bool _upstreamNoted;
 
     /// <summary>
     /// Сколько ждать порт проверки, прежде чем счесть, что его нет в конфиге.
@@ -306,13 +347,16 @@ public sealed class SingBoxService : SupervisedService
         StandardErrorEncoding = new UTF8Encoding(false),
     };
 
-    public override async Task<bool> CheckFunctionalAsync(CancellationToken cancellationToken)
+    public override async Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken)
     {
+        // Clash API — единственный признак, отделяющий сломанный движок
+        // от мёртвой подписки. Не отвечает — процесс жив, но не работает:
+        // такое перезапуском и лечится.
         if (!await SingBoxRunner.IsPortAcceptingAsync(_healthPort, TimeSpan.FromSeconds(2), cancellationToken))
-            return false;
+            return ServiceCheck.Broken;
 
         if (_trafficPort is null)
-            return true;
+            return ServiceCheck.Healthy;
 
         // Порт проверки есть не во всяком конфиге: собранный прежней версией
         // или руками, он может не содержать входа вовсе. Настаивать в таком
@@ -325,7 +369,7 @@ public sealed class SingBoxService : SupervisedService
             _trafficPortMissingSince ??= DateTime.UtcNow;
 
             if (DateTime.UtcNow - _trafficPortMissingSince < TrafficPortGrace)
-                return false;
+                return ServiceCheck.Broken;
 
             if (!_trafficPortMissingNoted)
             {
@@ -336,7 +380,7 @@ public sealed class SingBoxService : SupervisedService
                     "Пересоберите конфиг командой config.");
             }
 
-            return true;
+            return ServiceCheck.Healthy;
         }
 
         _trafficPortMissingSince = null;
@@ -344,14 +388,33 @@ public sealed class SingBoxService : SupervisedService
         // Глубокая проверка делается редко: она уходит в сеть и стоит секунды.
         // Между проверками используется её последний результат.
         if (_checkCounter++ % _trafficCheckEvery != 0)
-            return _lastTrafficOk;
+            return _lastTrafficOk ? ServiceCheck.Healthy : ServiceCheck.UpstreamDown;
 
         _lastTrafficOk = await CheckTrafficAsync(_trafficPort.Value, cancellationToken);
 
-        if (!_lastTrafficOk)
-            LastError = "трафик через прокси не проходит";
+        if (_lastTrafficOk)
+            return ServiceCheck.Healthy;
 
-        return _lastTrafficOk;
+        // Движок отвечает по своему API, а наружу не доходит. Перезапуск
+        // тут бесполезен и вреден: восемнадцать секунд тишины, и подъём
+        // в ту же мёртвую подписку.
+        //
+        // Замер 20.09 у владельца: семь из девяти серверов не отвечали,
+        // в журнале движка подряд «stream error: INTERNAL_ERROR; received
+        // from peer» и «report handshake success: connection timed out».
+        // Супервизор при этом исправно гасил здоровый движок.
+        LastError = "трафик через прокси не проходит — похоже, мёртв выход подписки, а не движок";
+
+        if (!_upstreamNoted)
+        {
+            _upstreamNoted = true;
+            Note(
+                "трафик не проходит, но движок отвечает по Clash API. "
+                + "Перезапускать его незачем: скорее всего не отвечают серверы подписки. "
+                + "Проверьте их в разделе «VPN».");
+        }
+
+        return ServiceCheck.UpstreamDown;
     }
 
     private static async Task<bool> CheckTrafficAsync(int proxyPort, CancellationToken cancellationToken)
@@ -435,6 +498,6 @@ public sealed class WinwsService : SupervisedService
         return startInfo;
     }
 
-    public override Task<bool> CheckFunctionalAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(IsProcessAlive);
+    public override Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(IsProcessAlive ? ServiceCheck.Healthy : ServiceCheck.Broken);
 }

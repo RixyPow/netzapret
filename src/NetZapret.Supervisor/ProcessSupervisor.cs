@@ -194,9 +194,9 @@ public sealed class ProcessSupervisor
                 continue;
             }
 
-            bool functional = await service.CheckFunctionalAsync(cancellationToken);
+            var check = await service.CheckFunctionalAsync(cancellationToken);
 
-            if (functional)
+            if (check == ServiceCheck.Healthy)
             {
                 if (_health[service.Name] != ServiceHealth.Healthy)
                     Log($"{service.Name}: снова здоров");
@@ -206,8 +206,27 @@ public sealed class ProcessSupervisor
                 continue;
             }
 
+            // Мёртвый выход — не повод убивать движок. Состояние показываем
+            // честно: трафик не идёт, и человеку это видно. А перезапуск
+            // не чинил бы ничего — он гасит туннель на восемнадцать секунд
+            // и поднимает его в ту же мёртвую подписку. Счётчик при этом
+            // не растёт, иначе первая же затяжная беда у провайдера
+            // исчерпала бы попытки и служба сдалась бы навсегда.
+            //
+            // Замер 20.09: семь из девяти серверов подписки не отвечали,
+            // движок исправно держал Clash API, а супервизор гасил его
+            // по кругу. Это и была жалоба «отваливается на пару секунд».
+            if (!SupervisorRules.CountsTowardRestart(check))
+            {
+                if (_health[service.Name] != ServiceHealth.Degraded)
+                    Log($"{service.Name}: трафик не идёт, но движок отвечает — перезапуск не поможет");
+
+                _health[service.Name] = SupervisorRules.HealthFor(check);
+                continue;
+            }
+
             _degradedStreak[service.Name]++;
-            _health[service.Name] = ServiceHealth.Degraded;
+            _health[service.Name] = SupervisorRules.HealthFor(check);
 
             Log($"{service.Name}: проверка не прошла " +
                 $"({_degradedStreak[service.Name]} из {_options.DegradedChecksBeforeRestart})");
