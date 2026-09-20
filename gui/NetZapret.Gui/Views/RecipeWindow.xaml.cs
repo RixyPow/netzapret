@@ -420,10 +420,15 @@ public partial class RecipeWindow : Window
                 var flow = await TryAsync(winws, paths!.Root, row, _work.Token);
                 clock.Stop();
 
-                bool ok = flow.Passed;
+                // Открывшим считается тот, кто довёл до страницы, а не тот,
+                // кто прошёл фильтр. Разница вскрылась 21.09: все рецепты
+                // получали 301 на apex Instagram и числились рабочими,
+                // притом что сайт не грузился ни с одним.
+                bool ok = flow.Page;
 
-                // Время — только у рабочих. У неработающего оно означает срок
-                // ожидания, а не скорость, и сравнивать его не с чем.
+                // Время — только у дошедших до страницы. У остальных оно
+                // означает срок ожидания либо длину цепочки перенаправлений,
+                // а не скорость, и сравнивать его не с чем.
                 row.Took = ok ? clock.Elapsed : null;
 
                 // Вердикт называет, что пришло, а не только «да/нет».
@@ -570,7 +575,7 @@ public partial class RecipeWindow : Window
                 if (process is { HasExited: false })
                 {
                     process.Kill(entireProcessTree: true);
-                    process.WaitForExit(4000);
+                    process.WaitForExit(Leaves);
                 }
             }
             catch (Exception)
@@ -618,7 +623,7 @@ public partial class RecipeWindow : Window
 
         // Небольшая доводка всё же нужна: между разбором настроек и первым
         // перехваченным пакетом драйвер успевает не всегда.
-        await Task.Delay(TimeSpan.FromMilliseconds(400), cancellationToken);
+        await Task.Delay(Settle, cancellationToken);
     }
 
     /// <summary>
@@ -640,6 +645,70 @@ public partial class RecipeWindow : Window
     /// </remarks>
     private async Task<Flow> OpensAsync(string host, CancellationToken cancellationToken)
     {
+        var where = host;
+        var path = "/";
+        Flow last = Flow.Nothing("не начинали");
+
+        // Перенаправления проходим до конца, а не останавливаемся на первом.
+        //
+        // Владелец 21.09: «результат не изменился, только обёртка другая» —
+        // и был прав. Назвать 301 перенаправлением мало: это не вердикт,
+        // а недоведённый замер. Instagram отвечает 301 на apex, браузер идёт
+        // дальше и там-то и ломается, а проверка останавливалась и говорила
+        // «фильтр пройден».
+        //
+        // Три шага: больше нужно разве что кольцу, а кольцо — само по себе
+        // отказ. Каждый шаг идёт своим соединением: предыдущее закрыто
+        // по нашей же просьбе Connection: close.
+        for (int hop = 0; hop < 3; hop++)
+        {
+            last = await FetchAsync(where, path, cancellationToken);
+
+            if (!last.Passed || last.Page || last.Location is not { Length: > 0 } next)
+                return last;
+
+            if (!Uri.TryCreate(next, UriKind.Absolute, out var target))
+            {
+                // Относительный адрес — тот же хост, другой путь.
+                path = next.StartsWith('/') ? next : "/" + next;
+                continue;
+            }
+
+            // Уводит на чужую зону — дальше не наше дело: там другое имя,
+            // другой фильтр и другой разговор. Но сказать об этом надо.
+            if (!SameZone(target.Host, host))
+                return last with { Ending = $"уводит на {target.Host}" };
+
+            where = target.Host;
+            path = target.PathAndQuery;
+
+            // Имя сменилось — сменился и адрес. Список проверки покрывает
+            // зону целиком, так что десинк к нему применится тот же.
+            if (!string.Equals(where, host, StringComparison.OrdinalIgnoreCase))
+                _address = await AddressForAsync(where, cancellationToken) ?? _address;
+        }
+
+        return last with { Ending = "перенаправления не кончаются" };
+    }
+
+    /// <summary>Одно ли это дерево имён.</summary>
+    /// <remarks>
+    /// Апекс на www и обратно — самое частое перенаправление в сети,
+    /// и обрывать на нём замер значило бы не доводить его никогда.
+    /// А вот уход на чужую зону — это уже другое имя и другой разговор.
+    /// </remarks>
+    private static bool SameZone(string one, string other)
+    {
+        var a = one.TrimStart('*', '.');
+        var b = other.TrimStart('*', '.');
+
+        return a.Equals(b, StringComparison.OrdinalIgnoreCase)
+            || a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)
+            || b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<Flow> FetchAsync(string host, string path, CancellationToken cancellationToken)
+    {
         try
         {
             var address = _address;
@@ -650,7 +719,7 @@ public partial class RecipeWindow : Window
             using var client = new TcpClient();
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            deadline.CancelAfter(TimeSpan.FromSeconds(4));
+            deadline.CancelAfter(Reach);
 
             await client.ConnectAsync(address, 443, deadline.Token);
 
@@ -664,7 +733,7 @@ public partial class RecipeWindow : Window
                 TargetHost = host,
             }, deadline.Token);
 
-            return await FlowsAsync(tls, host, cancellationToken);
+            return await FlowsAsync(tls, host, path, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -690,6 +759,49 @@ public partial class RecipeWindow : Window
     private static readonly TimeSpan Silence = TimeSpan.FromSeconds(2);
 
     /// <summary>
+    /// Сколько ждать соединения и рукопожатия.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Главный расход всего перебора, и вот почему. Провальных рецептов
+    /// в списке большинство, а проваливаются они одинаково: TCP встаёт
+    /// мгновенно — фильтр его пропускает, — и висит рукопожатие, до самого
+    /// предела. То есть предел этот платится за каждый неработающий рецепт
+    /// целиком.
+    /// </para>
+    /// <para>
+    /// Было четыре секунды, стало две с половиной. Рабочее рукопожатие
+    /// на замерах владельца проходит за 0,8 с, так что запас остаётся
+    /// трёхкратный, а на одиннадцати рецептах это экономит около девяти
+    /// секунд — больше, чем все прочие сокращения вместе.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan Reach = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>
+    /// Выдержка после того, как драйвер доложил о готовности.
+    /// </summary>
+    /// <remarks>
+    /// Между разбором настроек и первым перехваченным пакетом winws2
+    /// успевает не всегда, и совсем без выдержки проба мерила бы
+    /// незащищённое соединение. Но четыреста миллисекунд брались с запасом
+    /// на глаз; двухсот пятидесяти хватает, а на одиннадцати рецептах
+    /// это ещё полторы секунды.
+    /// </remarks>
+    private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// Сколько ждать, пока снятый процесс уйдёт.
+    /// </summary>
+    /// <remarks>
+    /// Ждём не ухода как такового, а освобождения WinDivert: не дождавшись,
+    /// следующий рецепт не поднимется. Четыре секунды здесь были запасом
+    /// на случай, которого не случалось ни разу, — winws2 уходит за
+    /// сотни миллисекунд.
+    /// </remarks>
+    private const int Leaves = 1500;
+
+    /// <summary>
     /// Что написать в строке рецепта по итогам замера.
     /// </summary>
     /// <remarks>
@@ -708,14 +820,11 @@ public partial class RecipeWindow : Window
         if (flow.Page)
             return $"страница {flow.Status}, {flow.Bytes} Б, {seconds}";
 
-        // Перенаправление называем перенаправлением. Фильтр пройден —
-        // сервер ответил, — но страницы мы не видели, и выдавать одно
-        // за другое незачем.
-        var where = flow.Location is { Length: > 0 } place
-            ? " на " + Trim(place)
-            : string.Empty;
-
-        return $"ответ {flow.Status}{where} — фильтр пройден, {seconds}";
+        // Сюда попадает перенаправление, которое мы не смогли довести
+        // до конца: увело на чужую зону либо закольцевалось. Фильтр им
+        // пройден, но страницы нет, и в счёт открывших такое не идёт —
+        // иначе выходит «открывают 5 из 11» при неработающем сайте.
+        return $"фильтр пройден, страницы нет — {flow.Ending}";
     }
 
     /// <summary>Укорачивает длинный адрес: в строку он не влезает.</summary>
@@ -789,10 +898,11 @@ public partial class RecipeWindow : Window
     private static async Task<Flow> FlowsAsync(
         SslStream tls,
         string host,
+        string path,
         CancellationToken cancellationToken)
     {
         var request = System.Text.Encoding.ASCII.GetBytes(
-            $"GET / HTTP/1.1\r\nHost: {host}\r\n"
+            $"GET {path} HTTP/1.1\r\nHost: {host}\r\n"
             + "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n"
             + "Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n");
 

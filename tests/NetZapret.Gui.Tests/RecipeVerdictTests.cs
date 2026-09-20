@@ -44,21 +44,33 @@ public sealed class RecipeVerdictTests
     }
 
     [Fact]
-    public void A_redirect_is_named_a_redirect()
+    public void A_redirect_that_led_nowhere_is_not_an_opening()
     {
-        // Ровно тот случай, с которого началось. Фильтр пройден — сервер
-        // ответил, — но страницы мы не видели, и выдавать одно за другое
-        // нельзя: владелец прочёл «открывается» как «сайт работает».
-        var flow = Answer(302, 431, "https://www.instagram.com/accounts/login/");
+        // Ровно тот случай, с которого началось, и уже во второй раз.
+        // Сперва 301 звался «открывается», потом «фильтр пройден» — и
+        // владелец справедливо сказал: «результат не изменился, только
+        // обёртка другая». Теперь перенаправления проходятся до конца,
+        // а недоведённое в счёт открывших не идёт вовсе.
+        var flow = Answer(302, 431, "https://elsewhere.example/login")
+            with { Ending = "уводит на elsewhere.example" };
 
         Assert.True(flow.Passed);
         Assert.False(flow.Page);
 
         var verdict = RecipeWindow.Verdict(flow, Second);
 
-        Assert.Contains("ответ 302", verdict);
-        Assert.Contains("фильтр пройден", verdict);
-        Assert.DoesNotContain("страница", verdict);
+        Assert.Contains("страницы нет", verdict);
+        Assert.Contains("elsewhere.example", verdict);
+    }
+
+    [Fact]
+    public void A_loop_of_redirects_is_a_failure_too()
+    {
+        var flow = Answer(301, 431, "https://example.com/")
+            with { Ending = "перенаправления не кончаются" };
+
+        Assert.False(flow.Page);
+        Assert.Contains("не кончаются", RecipeWindow.Verdict(flow, Second));
     }
 
     [Fact]
@@ -117,14 +129,13 @@ public sealed class RecipeVerdictTests
     }
 
     [Fact]
-    public void A_long_redirect_target_is_shortened()
+    public void A_page_reached_through_redirects_counts()
     {
-        // Строка рецепта узкая, и адрес в половину экрана вытеснил бы
-        // из неё и код, и время.
-        var flow = Answer(302, 431,
-            "https://www.instagram.com/accounts/login/?next=%2Fsomething%2Fvery%2Flong%2Findeed");
+        // Instagram отвечает 301 на apex и 200 на www. Довести до страницы
+        // и значит ответить на вопрос, ради которого проверку и открывают.
+        var flow = Answer(200, 21756);
 
-        Assert.Contains("…", RecipeWindow.Verdict(flow, Second));
-        Assert.True(RecipeWindow.Verdict(flow, Second).Length < 120);
+        Assert.True(flow.Page);
+        Assert.Contains("страница 200", RecipeWindow.Verdict(flow, Second));
     }
 }
