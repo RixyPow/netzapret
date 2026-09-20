@@ -217,11 +217,31 @@ internal static class TunnelConfig
 
             var preset = new PresetReader().Load(presetPath);
 
+            // Приёмы, которые умеет движок, — чтобы отличить рецепт,
+            // требующий неподключённого модуля, от исправного.
+            IReadOnlyDictionary<string, string>? providers = null;
+
+            try
+            {
+                if (ZapretPaths.Discover() is { } paths)
+                    providers = LuaModules.Providers(LuaModules.Scan(paths.LuaDirectory));
+            }
+            catch (Exception)
+            {
+                // Не прочиталось — проверять нечем, и объявлять нехватку,
+                // которую не проверяли, нельзя. Останется прежнее поведение.
+            }
+
             var groups = chosen
                 .GroupBy(r => r.Recipe!, StringComparer.OrdinalIgnoreCase)
                 .Select(group =>
                 {
-                    var recipe = DesyncRecipes.Find(preset, group.Key);
+                    // По обоим источникам: рецепт мог быть выбран из каталога,
+                    // и в пресете его нет по построению. Пока искали только
+                    // там, выбранный из каталога молча не применялся вовсе —
+                    // профиль не создавался, а в маршрутах стояло
+                    // «десинк: tls-multisplit-sni — нет в пресете».
+                    var recipe = RecipeResolver.Find(preset, group.Key, providers);
 
                     var domains = (IReadOnlyList<string>)group
                         .SelectMany(Names)
@@ -232,15 +252,30 @@ internal static class TunnelConfig
                     // пустой набор шагов, профиль без шагов не выпускается,
                     // а в меню по-прежнему написано «десинк: hostfakesplit_multi».
                     // Так пропал голос Discord, и заметить это было нечем.
-                    if (recipe is null)
+                    if (!recipe.Found)
                     {
-                        Note($"рецепт «{group.Key}» не найден в пресете «{preset.Name}» — "
-                            + $"профиль не создан, имён затронуто {domains.Count}");
+                        Note($"рецепт «{group.Key}» не найден ни в пресете «{preset.Name}», "
+                            + $"ни в каталоге — профиль не создан, имён затронуто {domains.Count}");
+                    }
+
+                    // Беда особого рода, и дороже предыдущей. Шаги известны,
+                    // но приём объявлен в модуле, которого пресет не подключает:
+                    // winws2 на такое отвечает «desync function does not exist»
+                    // и не поднимается вовсе — то есть один рецепт оставляет
+                    // без десинка все имена разом.
+                    //
+                    // Поэтому профиль не выпускается, а не выпускается сломанным.
+                    else if (recipe.MissingModules.Count > 0)
+                    {
+                        Note($"рецепт «{group.Key}» требует модулей, которых пресет "
+                            + $"«{preset.Name}» не подключает: {string.Join(", ", recipe.MissingModules)}. "
+                            + "Профиль не создан — иначе winws2 не запустился бы вовсе. "
+                            + "Подключить их можно на вкладке «Десинк».");
                     }
 
                     return (
                         Name: group.Key,
-                        Steps: recipe?.Steps ?? [],
+                        Steps: recipe.MissingModules.Count > 0 ? [] : recipe.Steps,
                         Domains: domains,
 
                         // Порты берутся у секции, которую профиль подменяет.

@@ -312,6 +312,10 @@ public partial class RoutesView : UserControl
                     _preset = new PresetReader().Load(path);
 
                 _zones = _preset is null ? null : PresetZones.Build(_preset, zapretRoot);
+
+                _providers = ZapretPaths.Discover() is { } install
+                    ? LuaModules.Providers(LuaModules.Scan(install.LuaDirectory))
+                    : null;
             }
             catch (Exception)
             {
@@ -1495,6 +1499,23 @@ public partial class RoutesView : UserControl
     /// чей фильтр совпал, и дальше не смотрит.
     /// </para>
     /// </remarks>
+    /// <summary>Приёмы набора без настроек — то же, что показывает каталог.</summary>
+    private static string Technique(IReadOnlyList<string> steps) =>
+        string.Join(" + ", steps
+            .Select(s => s.IndexOf(':') is var at && at > 0 ? s[..at] : s)
+            .Distinct(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Приёмы, которые умеет движок; пусто, если прочитать не вышло.
+    /// </summary>
+    /// <remarks>
+    /// Читается раз на перезагрузку раздела, а не на каждую из восьмидесяти
+    /// частей: модули лежат в пятнадцати файлах, и перечитывать их столько
+    /// раз значило бы открывать раздел секундами — на этом уже обжигались
+    /// со списками пресета.
+    /// </remarks>
+    private IReadOnlyDictionary<string, string>? _providers;
+
     private string Describe(ServiceRouting.PartStatus part)
     {
         if (part.Mode != RoutingMode.Desync)
@@ -1504,9 +1525,27 @@ public partial class RoutesView : UserControl
         // строке. Хранится имя секции, показывается название приёма.
         if (RecipeFor(part.Part.List) is { } stored && !string.IsNullOrWhiteSpace(stored))
         {
-            return _preset is not null && DesyncRecipes.Find(_preset, stored) is { } own
-                ? $"десинк: {own.Technique}"
-                : $"десинк: {stored} — нет в пресете";
+            if (_preset is null)
+                return $"десинк: {stored} — пресет не выбран";
+
+            // По обоим источникам. Пока спрашивали один пресет, рецепт,
+            // выбранный из каталога, объявлялся отсутствующим — сразу
+            // после того, как человек его выбрал.
+            var found = RecipeResolver.Find(_preset, stored, _providers);
+
+            if (!found.Found)
+                return $"десинк: {stored} — не найден ни в пресете, ни в каталоге";
+
+            // Нехватка модуля названа отдельно и не сглажена: с таким
+            // рецептом winws2 не поднимется вовсе, и без десинка останется
+            // не одно это имя, а все.
+            if (found.MissingModules.Count > 0)
+            {
+                return $"десинк: {stored} — нужен модуль "
+                    + string.Join(", ", found.MissingModules);
+            }
+
+            return "десинк: " + Technique(found.Steps);
         }
 
         if (_preset is null)
