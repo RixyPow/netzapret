@@ -249,12 +249,19 @@ public sealed record AppSettings
         File.WriteAllText(target, JsonSerializer.Serialize(this, Options), new UTF8Encoding(false));
     }
 
+    /// <remarks>
+    /// Выборочный без выхода называется тем, чем он на деле и является.
+    /// Иначе выходит обман в одну строку: человек читает «выборочно»,
+    /// ждёт, что часть имён пойдёт через VPN, а туннеля нет вовсе — и
+    /// не понимает, почему правило «через VPN» ничего не меняет.
+    /// </remarks>
     public string DescribeMode() => Mode switch
     {
         OperatingMode.Off => "выключено",
         OperatingMode.DesyncOnly => "только десинк",
         OperatingMode.ProxyAll => "всё через VPN, кроме РФ",
         OperatingMode.ProxyStrict => "всё через VPN без исключений",
+        OperatingMode.Selective when !HasTunnelExit => "только десинк — VPN не задан",
         _ => "выборочно",
     };
 
@@ -272,9 +279,41 @@ public sealed record AppSettings
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    public bool NeedsProxy => Mode is OperatingMode.Selective
-        or OperatingMode.ProxyAll
-        or OperatingMode.ProxyStrict;
+    public bool NeedsProxy => Mode switch
+    {
+        // Выборочный без выхода — это просто десинк, и поднимать ради него
+        // TUN незачем. В этом режиме всё и так идёт мимо туннеля, кроме
+        // выведенных в него правилами; без подписки выводить некуда,
+        // и правила «через VPN» молча не срабатывают — ровно как если бы
+        // человек выбрал «только десинк» руками.
+        //
+        // Прежде здесь смотрели на один режим, и без подписки не поднималось
+        // НИЧЕГО: сборка конфига отвечала «Подписка не задана», запуск
+        // отказывался, и десинк не получал своего шанса. Программа без
+        // подписки выглядела нерабочей целиком, хотя половина её работы
+        // подписки не требует вовсе.
+        OperatingMode.Selective => HasTunnelExit,
+
+        // А вот «всё через VPN» без выхода молча превратилось бы в «ничего
+        // через VPN» — то есть в обратное обещанному, и трафик, который
+        // человек просил спрятать, пошёл бы открыто. Здесь отказ громче
+        // и честнее: пусть сборка конфига скажет, чего не хватает.
+        OperatingMode.ProxyAll or OperatingMode.ProxyStrict => true,
+
+        _ => false,
+    };
+
+    /// <summary>
+    /// Есть ли куда заворачивать трафик.
+    /// </summary>
+    /// <remarks>
+    /// WARP считается выходом наравне с подпиской: он и заведён затем, чтобы
+    /// работать, когда подписки нет. Прежде сборка конфига отказывалась
+    /// при пустой ссылке, не глядя на выключатель, и включённый WARP
+    /// в одиночку не поднимался вовсе.
+    /// </remarks>
+    [JsonIgnore]
+    public bool HasTunnelExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || WarpEnabled;
 
     /// <summary>Нужен ли в этом режиме десинк.</summary>
     [JsonIgnore]

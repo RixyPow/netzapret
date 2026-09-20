@@ -92,8 +92,13 @@ public sealed class SupervisorArgumentsTests
     [Fact]
     public void A_path_with_spaces_and_cyrillic_survives()
     {
+        // Подписка задана: с 20.09 без неё выборочный режим туннеля
+        // не просит, и в строку ушло бы --no-proxy вместо пути к конфигу.
+        // Здесь мерится, переживает ли путь расщепление, а не решение
+        // о туннеле — его проверяет NoSubscriptionTests.
         var settings = new AppSettings
         {
+            SubscriptionUrl = "https://panel.example/sub",
             ProxyConfigPath = Path.Combine("Мои документы", "конфиг движка", "singbox.json"),
         };
 
@@ -170,6 +175,7 @@ public sealed class SupervisorArgumentsTests
     {
         var settings = new AppSettings
         {
+            SubscriptionUrl = "https://panel.example/sub",
             PresetName = "Universal V8",
             ProxyConfigPath = Path.Combine("runtime", "singbox.json"),
             VerifyTraffic = true,

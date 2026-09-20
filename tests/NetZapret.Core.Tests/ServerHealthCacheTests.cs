@@ -89,8 +89,20 @@ public sealed class ServerHealthCacheTests : IDisposable
 /// </summary>
 public sealed class OperatingModeNeedsTests
 {
+    /// <remarks>
+    /// Подписка задана, и это не украшение фикстуры. С 20.09 выборочный режим
+    /// требует туннеля только там, где есть куда заворачивать: без подписки
+    /// и без WARP он равнозначен «только десинку». Проверка того случая —
+    /// в <c>NoSubscriptionTests</c>; здесь мерится зависимость от режима,
+    /// и ссылка нужна, чтобы она не смешивалась с зависимостью от выхода.
+    /// </remarks>
     private static AppSettings With(OperatingMode mode, string? preset = "Universal V6") =>
-        new() { Mode = mode, PresetName = preset };
+        new()
+        {
+            Mode = mode,
+            PresetName = preset,
+            SubscriptionUrl = "https://panel.example/sub",
+        };
 
     [Theory]
     [InlineData(OperatingMode.Off, false)]

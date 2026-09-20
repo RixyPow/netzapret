@@ -35,8 +35,20 @@ internal static class TunnelConfig
         AppSettings settings,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
-            return new BuildOutcome(false, "Подписка не задана — добавьте ссылку в разделе «VPN».");
+        // Выхода нет вовсе — ни подписки, ни WARP. Дальше идти незачем:
+        // конфиг вышел бы с пустой группой выходов, и движок держал бы TUN,
+        // не умея никуда доставить.
+        //
+        // Смотрим на оба источника, а не на одну ссылку: WARP заведён ровно
+        // затем, чтобы работать без подписки, и прежде он в одиночку
+        // не поднимался — отказ приходил раньше, чем кто-либо смотрел
+        // на выключатель.
+        if (!settings.HasTunnelExit)
+        {
+            return new BuildOutcome(false,
+                "Ни подписки, ни WARP — заворачивать трафик некуда. "
+                + "Добавьте ссылку в разделе «VPN» либо включите там же бесплатный WARP.");
+        }
 
         try
         {
@@ -47,16 +59,25 @@ internal static class TunnelConfig
             // переписывать базовый YAML, который ведётся руками.
             var ruleSet = engine.RuleSet with { Operating = settings.Mode };
 
-            using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
+            // Подписка читается, только если она есть. Без неё остаётся WARP:
+            // выше мы уже убедились, что хоть один выход да заявлен.
+            IReadOnlyList<ProxyServer> fromSubscription = [];
+
+            if (!string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+            {
+                using var client = new SubscriptionClient();
+                var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
+
+                fromSubscription = info.Servers;
+            }
 
             // WARP добавляется к серверам подписки, а не вместо них: он запасной
             // выход, и подменять им основной — ровно обратное тому, зачем он
             // заведён. Автоподбор опрашивает всех вместе и, пока живы серверы
             // подписки, оседает на них: они быстрее.
             var servers = settings.WarpEnabled
-                ? [.. info.Servers, .. Warp.Exits()]
-                : info.Servers;
+                ? [.. fromSubscription, .. Warp.Exits()]
+                : fromSubscription;
 
             var zapretRoot = ZapretPaths.Discover()?.Root;
             var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out _);
