@@ -806,6 +806,12 @@ public static class BlockCheck
                 Http = Failed(null),
                 Data = Failed(null),
                 Kind = BlockKind.Sinkhole,
+
+                // Тот же вердикт и полем: иначе отчёт знал бы о заглушке
+                // дважды и говорил бы об этом по-разному — Kind называет
+                // её, а Spoof молчал бы «не выяснено».
+                Spoof = DnsSpoof.Judge(host, real, certificate: null),
+
                 Addresses = real.Select(a => a.ToString()).Take(3).ToList(),
 
                 // Заглушка — это настоящий адрес, пусть и негодный: fakeip
