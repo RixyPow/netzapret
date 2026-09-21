@@ -227,7 +227,10 @@ public partial class RecipeWindow : Window
                 // выбор перестал находиться — молча.
                 Steps = choice.Steps,
 
-                Summary = string.Join("   ·   ", choice.Steps),
+                // С местами переноса: шаг не содержит пробелов, и WPF,
+                // не найдя где разорвать, рвал его посреди слова — в узком
+                // окне строка вставала столбцом в пять букв.
+                Summary = StepText.Of(choice.Steps),
                 UsedBy = choice.Source,
                 Current = choice.Current,
                 Edge = (Brush)FindResource("Border"),

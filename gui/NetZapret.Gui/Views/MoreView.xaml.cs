@@ -15,9 +15,16 @@ public sealed record FlagRow(string Key, string Name, string Note)
 {
     public bool On { get; set; }
 
-    public string State => On ? "включено" : "выключено";
-
-    public Brush Color => (Brush)Application.Current.FindResource(On ? "Accent" : "Muted");
+    /// <summary>
+    /// Состояние словом рядом с тумблером.
+    /// </summary>
+    /// <remarks>
+    /// Короче прежнего — «вкл.» вместо «включено», — потому что рядом
+    /// теперь стоит тумблер и слово его лишь подтверждает. Подтверждение
+    /// нужно: положение кружка и оттенок теряются при беглом взгляде
+    /// и исчезают вовсе у тех, кто плохо различает цвета.
+    /// </remarks>
+    public string State => On ? "вкл." : "выкл.";
 }
 
 /// <summary>

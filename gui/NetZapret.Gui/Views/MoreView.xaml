@@ -136,6 +136,7 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" Margin="0,0,14,0">
@@ -144,9 +145,30 @@
                                                    Margin="0,5,0,0" TextWrapping="Wrap" />
                                     </StackPanel>
 
-                                    <TextBlock Grid.Column="1" Text="{Binding State}" Style="{StaticResource Mono}"
-                                               Foreground="{Binding Color}" VerticalAlignment="Center"
-                                               MinWidth="72" TextAlignment="Right" />
+                                    <!--
+                                        Тумблер — решение владельца 21.09,
+                                        тем же движением, что в настройках
+                                        туннеля. Слово рядом оставлено:
+                                        положение кружка и оттенок теряются
+                                        при беглом взгляде и исчезают вовсе
+                                        у тех, кто плохо различает цвета.
+
+                                        Сам тумблер не нажимается: нажимается
+                                        вся строка, и он лишь показывает.
+                                        Два обработчика на одно действие
+                                        разошлись бы при первой же правке,
+                                        а попасть в строку легче, чем
+                                        в сорок точек тумблера.
+                                    -->
+                                    <TextBlock Grid.Column="1" Text="{Binding State}"
+                                               Style="{StaticResource Caption}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0" />
+
+                                    <ToggleButton Grid.Column="2" Style="{StaticResource Switch}"
+                                                  IsChecked="{Binding On, Mode=OneWay}"
+                                                  IsHitTestVisible="False" Focusable="False"
+                                                  VerticalAlignment="Center" />
                                 </Grid>
                             </Button>
                         </DataTemplate>

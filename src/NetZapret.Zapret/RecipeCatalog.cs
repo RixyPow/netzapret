@@ -52,8 +52,27 @@ public sealed record CatalogRecipe
         .Distinct(StringComparer.Ordinal)
         .ToList();
 
-    /// <summary>Набор целиком — для тех, кто читает его глазами.</summary>
-    public string Detail => string.Join("   ·   ", Steps);
+    /// <summary>
+    /// Набор целиком — для тех, кто читает его глазами.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// С невидимыми местами переноса после двоеточий и запятых. Шаг вроде
+    /// <c>hostfakesplit:host=ozon.ru:tcp_ts=-1000:repeats=4</c> не содержит
+    /// ни одного пробела, и показ, не найдя где разорвать строку, рвёт её
+    /// посреди слова: в узком окне набор вставал столбцом в пять букв.
+    /// </para>
+    /// <para>
+    /// U+200B ничего не рисует и при копировании в пресет безвреден —
+    /// winws2 отбрасывает его как пустое место. Пробел на его месте
+    /// разделил бы аргумент надвое и сломал бы рецепт молча.
+    /// </para>
+    /// </remarks>
+    public string Detail => string.Join("   ·   ", Steps.Select(Breakable));
+
+    /// <summary>Расставляет места переноса внутри шага.</summary>
+    private static string Breakable(string step) =>
+        step.Replace(":", ":​").Replace(",", ",​");
 
     private static string Before(string text, char sign)
     {
