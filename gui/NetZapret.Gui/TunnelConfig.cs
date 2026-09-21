@@ -115,10 +115,27 @@ internal static class TunnelConfig
             var options = new SingBoxOptions();
             var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
 
+            // Охват TUN следует за десинком, а не за настройкой, и это
+            // исправление 21.09.
+            //
+            // «Только прокси» заведено ради сосуществования с winws2: TUN
+            // забирает один диапазон fakeip, и WinDivert видит исходные
+            // потоки приложений, а не переоткрытые сокетом sing-box. Пока
+            // десинк работает, это необходимо.
+            //
+            // Без десинка защищать нечего, а режим «всё через туннель» такая
+            // настройка ломает начисто: route_address у TUN остаётся списком
+            // из fakeip и десятка адресов, ютуб со своим настоящим адресом
+            // Google в туннель не попадает вовсе и уходит напрямую. Владелец
+            // это и увидел: «на режиме только туннель не работает ютуб» —
+            // и был прав, назвав следствие: выключение winws2 оказалось
+            // единственным, что режим делал.
+            bool narrow = settings.Engines.Desync && settings.ProxyOnly;
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
-                Scope = settings.ProxyOnly ? TunnelScope.ProxyOnly : TunnelScope.Everything,
-                DnsServerAddresses = settings.ProxyOnly ? SystemResolvers.Discover() : Array.Empty<string>(),
+                Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
+                DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
                 DnsServer = settings.DnsServer,
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
