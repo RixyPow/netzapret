@@ -30,6 +30,15 @@
                                 Content="По задержке" Click="OnSort" Margin="0,0,8,0" />
                         <Button x:Name="RefreshButton" Style="{StaticResource Ghost}"
                                 Content="Обновить" Click="OnRefresh" Margin="0,0,8,0" />
+                        <!--
+                            Настройки — отдельным окном. То, что задают
+                            однажды, не должно занимать полосу над списком,
+                            который смотрят каждый раз.
+                        -->
+                        <Button x:Name="SettingsButton" Style="{StaticResource Ghost}"
+                                Content="Настройки" Click="OnSettings" Margin="0,0,8,0"
+                                ToolTip="Режим, автоподбор по зарубежным, обход туннеля при мёртвых выходах и WARP." />
+
                         <Button x:Name="MeasureButton" Style="{StaticResource Primary}"
                                 Content="Замерить все" Click="OnMeasure" />
                     </StackPanel>
@@ -90,27 +99,7 @@
                                     VerticalAlignment="Center" Visibility="Collapsed" />
                         </Grid>
 
-                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,14,0,14" />
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Автоподбор только по зарубежным"
-                                               FontWeight="SemiBold" VerticalAlignment="Center" />
-
-                                    <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
-                                                    Content="Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой же. Через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ приходит тот же, что и без туннеля." />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <Button Grid.Column="1" x:Name="ForeignButton" Style="{StaticResource Ghost}"
-                                    Click="OnForeign" VerticalAlignment="Center" MinWidth="96" />
-                        </Grid>
+                        
                     </StackPanel>
                 </Border>
 
@@ -143,37 +132,12 @@
                 </Border>
 
                 <!--
-                    Обход туннеля при мёртвых выходах. Стоит здесь, а не в «Ещё»:
-                    решение это про туннель и понятно только рядом с ним.
-
-                    Цена названа в самой подписи, а не спрятана в справку.
-                    Трафик пойдёт открыто и с домашнего адреса — человек
-                    вправе знать это до того, как случится, а не после.
+                    Обход туннеля, режим и автоподбор по зарубежным уехали
+                    в окно настроек — решение владельца 21.09. Задают их
+                    однажды, а места они занимали столько, что оттесняли
+                    за нижний край список подписок, ради которого на вкладку
+                    и заходят.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Обход туннеля, когда серверы не отвечают"
-                                           FontWeight="SemiBold" VerticalAlignment="Center" />
-
-                                <ContentControl x:Name="BypassInfo" Style="{StaticResource Info}"
-                                                Margin="4,0,0,0" />
-                            </StackPanel>
-
-                            <TextBlock x:Name="BypassLine" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-
-                        <Button Grid.Column="1" x:Name="BypassButton" Style="{StaticResource Ghost}"
-                                Click="OnBypass" MinWidth="110" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
 
                 <!--
                     WARP. Выключатель, а не подписка: его выходы подмешиваются
@@ -202,17 +166,20 @@
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
                             </StackPanel>
 
+                            <!--
+                                Выключатель WARP уехал в настройки, а замер
+                                и «попробовать» остались: они про выходы,
+                                то есть про то же, ради чего на вкладку
+                                и заходят.
+                            -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button x:Name="WarpTryButton" Style="{StaticResource Ghost}"
                                         Content="попробовать сейчас" Padding="12,6" Margin="0,0,8,0"
                                         Visibility="Collapsed" Click="OnTryWarp" />
 
                                 <Button x:Name="WarpCheckButton" Style="{StaticResource Ghost}"
-                                        Content="проверить" Padding="12,6" Margin="0,0,8,0"
+                                        Content="проверить" Padding="12,6"
                                         Visibility="Collapsed" Click="OnCheckWarp" />
-
-                                <Button x:Name="WarpButton" Style="{StaticResource Ghost}"
-                                        Click="OnWarp" MinWidth="110" />
                             </StackPanel>
                         </Grid>
 

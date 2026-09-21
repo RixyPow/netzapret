@@ -497,4 +497,96 @@
         </Setter>
     </Style>
 
+<!--
+        Список настроек в духе Happ: одна карточка, много строк, волосяные
+        разделители. Взято оттуда намеренно — и вот что именно.
+
+        Одна карточка на все строки вместо карточки на настройку. У нас было
+        второе, и пять настроек занимали пятьсот точек высоты, оттесняя список
+        подписок за нижний край.
+
+        Справа — состояние, а не действие. «Выкл.», «IPv4», «Отключено».
+        Кнопка с подписью-действием подводила нас дважды: переключатель DNS
+        и кнопка сортировки, — и оба раза владелец говорил, что нужный
+        вариант пропал.
+
+        Пояснений в строках нет вовсе. Тому, что не помещается в подпись,
+        место под значком «i».
+    -->
+    <Style x:Key="SettingsGroup" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <!--
+        Разделитель между строками. Волосяной и не доходящий до краёв:
+        сплошная линия во всю ширину режет карточку на отдельные, и смысл
+        их объединения теряется.
+    -->
+    <Style x:Key="RowLine" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource Border}" />
+        <Setter Property="Margin" Value="16,0,16,0" />
+    </Style>
+
+    <!--
+        Тумблер.
+
+        Состояние названо и словом рядом — в разметке, — и видом. Одного вида
+        мало: «включено» и «выключено» у тумблера различаются положением
+        кружка, а это единственный признак, который теряется при беглом
+        взгляде и исчезает вовсе у тех, кто плохо различает оттенки.
+    -->
+    <Style x:Key="Switch" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Width" Value="42" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Track" CornerRadius="12"
+                            Background="{DynamicResource Raised}"
+                            BorderBrush="{DynamicResource Border}"
+                            BorderThickness="1">
+                        <Ellipse x:Name="Knob" Width="18" Height="18"
+                                 HorizontalAlignment="Left" Margin="2,0,0,0"
+                                 Fill="{DynamicResource Muted}" />
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right" />
+                            <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0" />
+                            <Setter TargetName="Knob" Property="Fill" Value="White" />
+                        </Trigger>
+
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                        </Trigger>
+
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Заголовок группы: тихий, мелкий, над карточкой. Оттуда же —
+        он отделяет группы, не занимая карточки собой.
+    -->
+    <Style x:Key="GroupHead" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="Margin" Value="4,0,0,7" />
+    </Style>
+
 </ResourceDictionary>

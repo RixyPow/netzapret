@@ -209,8 +209,7 @@ public partial class VpnView : UserControl
         // перечитываем, иначе карточка покажет состояние до переноса.
         settings = AppSettings.Load(AppSettings.DefaultPath);
         ShowWarp(settings);
-        ShowBypass(settings);
-
+        
         _rows = _book.Entries
             .Select(entry => new SubRow
             {
@@ -412,8 +411,7 @@ public partial class VpnView : UserControl
         // их не касается — пересобираем отдельно, иначе замер по ним виден
         // только после перезахода на вкладку.
         ShowWarp(settings);
-        ShowBypass(settings);
-
+        
         foreach (var row in _rows)
         {
             row.Active = active is not null && ReferenceEquals(row.Entry, active);
@@ -553,11 +551,6 @@ public partial class VpnView : UserControl
         AutoButton.Visibility = string.IsNullOrWhiteSpace(pinned)
             ? Visibility.Collapsed
             : Visibility.Visible;
-
-        ForeignButton.Content = settings.ForeignExitsOnly ? "включено" : "выключено";
-
-        ForeignButton.Foreground = (Brush)FindResource(
-            settings.ForeignExitsOnly ? "Accent" : "Muted");
     }
 
     /// <summary>
@@ -572,13 +565,13 @@ public partial class VpnView : UserControl
     {
         bool on = settings.WarpEnabled;
 
-        WarpButton.Content = on ? "включён" : "выключен";
-        WarpButton.Foreground = (Brush)FindResource(on ? "Accent" : "Muted");
-
+        // Выключатель уехал в настройки, и строка теперь говорит не только
+        // состояние, но и где его менять: иначе выключенный WARP выглядит
+        // как показанное без всякой причины.
         WarpLine.Text = on
             ? "Добавлен к серверам действующей подписки. Учётную запись движок "
               + "заводит себе сам — от вас не требуется ничего."
-            : "Выключен. Включается одним нажатием: ни почты, ни оплаты, ни ключей.";
+            : "Выключен. Включается в «Настройках»: ни почты, ни оплаты, ни ключей.";
 
         WarpExits.ItemsSource = on ? Rows(Warp.Exits(), WarpOwner, settings) : null;
         WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
@@ -600,59 +593,22 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>
-    /// Показывает состояние обхода туннеля.
+    /// Открывает настройки туннеля.
     /// </summary>
     /// <remarks>
-    /// Цена названа в подписи, а не спрятана в справку. Обход уводит трафик
-    /// мимо туннеля — открыто и с домашнего адреса, — и человек вправе знать
-    /// это до того, как случится, а не после.
+    /// Перечитываем вкладку по закрытии, и только если там что-то меняли:
+    /// выключенный WARP убирает список выходов, смена режима меняет подпись
+    /// состояния. Без этого окно закрывалось бы, а вкладка показывала
+    /// прежнее — ровно тот разлад, из-за которого не верят показаниям.
     /// </remarks>
-    private void ShowBypass(AppSettings settings)
+    private async void OnSettings(object sender, RoutedEventArgs e)
     {
-        bool on = settings.BypassWhenTunnelDead;
+        var window = new TunnelSettingsWindow { Owner = Window.GetWindow(this) };
 
-        BypassButton.Content = on ? "включён" : "выключен";
-        BypassButton.Foreground = (Brush)FindResource(on ? "Accent" : "Muted");
+        window.ShowDialog();
 
-        // Цена остаётся на виду, подробности уходят в подсказку. Прятать
-        // целиком нельзя: обход уводит трафик открыто, и узнать об этом
-        // наведением мыши — не то же, что прочитать, не ища.
-        BypassLine.Text = on
-            ? "Включён: при мёртвых выходах трафик пойдёт открыто и с домашнего адреса."
-            : "Выключен: при мёртвых выходах сеть не работает, но мимо туннеля не идёт ничего.";
-
-        BypassInfo.Content = on
-            ? "Если выход не ответит три проверки подряд, трафик пойдёт мимо туннеля, "
-              + "чтобы не легла вся сеть. Вернётся в туннель сам, как только выход оживёт.\n\n"
-              + "Закрытые сайты на это время останутся закрытыми — десинк при этом работает "
-              + "как обычно, обход касается только того, что шло через туннель."
-            : "При мёртвых выходах трафик так и будет уходить в туннель — то есть в никуда. "
-              + "Это выбор в пользу скрытности: ничего не пойдёт мимо туннеля даже ценой "
-              + "неработающей сети.\n\nВключайте, если пользуетесь программой ради обхода "
-              + "блокировок, а не ради скрытности.";
-    }
-
-    /// <summary>Переключает обход туннеля.</summary>
-    private void OnBypass(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var next = settings with { BypassWhenTunnelDead = !settings.BypassWhenTunnelDead };
-
-            next.Save(AppSettings.DefaultPath);
-            ShowBypass(next);
-
-            Status.Text = next.BypassWhenTunnelDead
-                ? "Обход включён. Применится при следующем запуске движков."
-                : "Обход выключен. Применится при следующем запуске движков.";
-
-            this.Offer("Обход туннеля переключён");
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
-        }
+        if (window.Changed)
+            await LoadAsync();
     }
 
     /// <summary>
