@@ -233,16 +233,42 @@ public static class RouteBookFile
 
         text.AppendLine("routes:");
 
-        foreach (var entry in book.Entries)
+        // Пины — в конец, отдельной кучей. Вперемешку с маршрутами они
+        // читаются как маршруты, и файл выходит непонятным: у владельца
+        // сто двенадцать пинов на восемьдесят четыре маршрута, и сверху
+        // «chatgpt: direct», а на сотню строк ниже «chatgpt.com: pin».
+        //
+        // Противоречия тут нет — группа и отдельное имя, «мимо всего»
+        // и «адрес закреплён», — но чтобы это увидеть, надо знать
+        // устройство файла. Порядок объясняет его без слов.
+        //
+        // Раздел не заводится: разбор от этого усложнился бы, а строка
+        // «pin» и так говорит о себе всё. Разделяет примечание, которое
+        // разборщик и так отбрасывает.
+        var pins = book.Entries.Where(e => e.Choice == RouteChoice.Pin).ToList();
+
+        foreach (var entry in book.Entries.Where(e => e.Choice != RouteChoice.Pin))
+            text.AppendLine(Line(entry));
+
+        if (pins.Count > 0)
         {
-            var line = $"  {entry.Name}: {NameOf(entry.Choice)}";
+            text.AppendLine();
+            text.AppendLine("  # Прибитые адреса. Это не маршрут, а добавочное: имя");
+            text.AppendLine("  # получает закреплённый адрес, и потому идёт мимо туннеля");
+            text.AppendLine("  # и мимо десинка. С «direct» уживается — оба означают");
+            text.AppendLine("  # «мимо всего»; с «vpn» и «desync» спорит.");
 
-            if (entry.Recipe is { Length: > 0 } recipe)
-                line += " " + recipe;
-
-            text.AppendLine(line);
+            foreach (var entry in pins)
+                text.AppendLine(Line(entry));
         }
 
         return text.ToString();
+    }
+
+    private static string Line(RouteEntry entry)
+    {
+        var line = $"  {entry.Name}: {NameOf(entry.Choice)}";
+
+        return entry.Recipe is { Length: > 0 } recipe ? line + " " + recipe : line;
     }
 }
