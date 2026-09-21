@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using NetZapret.Core;
@@ -28,6 +28,7 @@ public partial class App : Application
         SupervisorHost.Switch,      // --supervisor
         SupervisorHost.StopSwitch,  // --stop
         TrayIcon.Switch,            // --tray
+        Headless.StartSwitch,       // --start
 
         // Разбираются супервизором: он получает ту же командную строку.
         "--no-proxy",
@@ -79,6 +80,21 @@ public partial class App : Application
         {
             _headless = true;
             RunStop();
+
+            return;
+        }
+
+        // Поднять движки из командной строки — тем же кодом, что и кнопкой.
+        // Нужно для разбора неисправностей: поднять и погасить, не открывая
+        // окна. Своей логики у ключа нет ни строки — см. Headless.
+        //
+        // Спросить состояние здесь нечем, и намеренно: окно требует прав
+        // администратора, и такой вопрос дёргал бы UAC каждый раз. Читать
+        // состояние прав не нужно вовсе — для этого есть tools/nz.
+        if (e.Args.Contains(Headless.StartSwitch))
+        {
+            _headless = true;
+            RunStart();
 
             return;
         }
@@ -305,6 +321,16 @@ public partial class App : Application
 
         base.OnExit(e);
     }
+
+    /// <summary>
+    /// Поднимает движки без окна — ровно как кнопка «Запустить».
+    /// </summary>
+    /// <remarks>
+    /// Через <see cref="EngineControl"/>, как и кнопка. Свой запуск
+    /// процессов отличался бы рабочим каталогом, правами или ключами,
+    /// и разбор вёлся бы не над тем, что у человека.
+    /// </remarks>
+    private async void RunStart() => Shutdown(await Headless.StartAsync(CancellationToken.None));
 
     private async void RunStop()
     {

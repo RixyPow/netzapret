@@ -1,14 +1,12 @@
-using NetZapret.Supervisor;
-
-namespace NetZapret.Gui;
+namespace NetZapret.Supervisor;
 
 /// <summary>
 /// Поднялись ли движки на самом деле.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Отдельно от <see cref="EngineControl"/> потому, что отвечает на другой
-/// вопрос. Там — «запустить», и успехом там считается порождённый процесс
+/// Отдельно от запуска движков потому, что отвечает на другой
+/// вопрос. Тот — «запустить», и успехом там считается порождённый процесс
 /// супервизора: дальше он живёт своей жизнью и может пять раз не поднять
 /// sing-box, после чего сдаться. Здесь — «работает ли обход прямо сейчас».
 /// </para>
@@ -19,7 +17,7 @@ namespace NetZapret.Gui;
 /// по той мерке, какой мерили.
 /// </para>
 /// </remarks>
-internal static class EngineHealth
+public static class EngineHealth
 {
     /// <summary>
     /// Работают ли все службы.
