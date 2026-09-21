@@ -62,17 +62,6 @@ public sealed record AppSettings
     public bool? TunnelEnabled { get; init; }
 
     /// <summary>
-    /// Туннель забирает весь трафик, а не только названное в маршрутах.
-    /// </summary>
-    /// <remarks>
-    /// «Как обычный VPN» — слова владельца. Домашняя сеть при этом остаётся
-    /// снаружи всегда: завернув <c>192.168.х.х</c> в туннель, оборвали бы
-    /// роутер, принтер и сетевой диск. Это условие работы машины,
-    /// а не смягчение строгости, и настройкой не управляется.
-    /// </remarks>
-    public bool? TunnelTakesAll { get; init; }
-
-    /// <summary>
     /// Не выводить российские сети напрямую.
     /// </summary>
     /// <remarks>
@@ -112,7 +101,6 @@ public sealed record AppSettings
             {
                 Desync = DesyncEnabled ?? fromMode.Desync,
                 Tunnel = TunnelEnabled ?? fromMode.Tunnel,
-                TunnelTakesAll = TunnelTakesAll ?? fromMode.TunnelTakesAll,
                 IgnoreRussianExclusions =
                     IgnoreRussianExclusions ?? fromMode.IgnoreRussianExclusions,
             };
@@ -132,7 +120,6 @@ public sealed record AppSettings
         Mode = choice.Mode,
         DesyncEnabled = choice.Desync,
         TunnelEnabled = choice.Tunnel,
-        TunnelTakesAll = choice.TunnelTakesAll,
         IgnoreRussianExclusions = choice.IgnoreRussianExclusions,
     };
 

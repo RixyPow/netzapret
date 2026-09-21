@@ -14,8 +14,9 @@ namespace NetZapret.Core.Tests;
 /// человек и задаёт: что у меня сейчас работает.
 /// </para>
 /// <para>
-/// Главное, что тут проверяется, — переход. У людей в настройках лежит
-/// режим, и прочитаться он должен так, чтобы ничего не поменялось само.
+/// Охват туннеля сперва был третьим выключателем и оказался лишним —
+/// поправка владельца в тот же день. Он выводится: туннель без десинка
+/// забирает всё, вместе с десинком оставляет тому работу.
 /// </para>
 /// </remarks>
 public sealed class EngineChoiceTests
@@ -45,13 +46,39 @@ public sealed class EngineChoiceTests
     }
 
     [Fact]
-    public void Everything_through_the_tunnel_turns_desync_off()
+    public void The_tunnel_alone_takes_everything()
     {
-        // TUN забирает весь трафик, до WinDivert не доходит ничего,
-        // и оставленный включённым winws2 работал бы вхолостую — а выглядел
-        // бы работающим. В таблице владельца так и записано: «винвс выключен».
-        Assert.False(EngineChoice.FromMode(OperatingMode.ProxyAll).Desync);
-        Assert.False(EngineChoice.FromMode(OperatingMode.ProxyStrict).Desync);
+        // Чинить имена больше нечем, и выпускать что-либо напрямую незачем.
+        var alone = new EngineChoice { Desync = false, Tunnel = true };
+
+        Assert.True(alone.TunnelTakesAll);
+    }
+
+    [Fact]
+    public void With_desync_it_leaves_work_to_it()
+    {
+        // Иначе winws2 крутится вхолостую: TUN забирает весь трафик,
+        // и до WinDivert не доходит ничего.
+        var both = new EngineChoice { Desync = true, Tunnel = true };
+
+        Assert.False(both.TunnelTakesAll);
+    }
+
+    [Fact]
+    public void The_bad_combination_cannot_be_assembled_at_all()
+    {
+        // Ради этого охват и перестал быть настройкой. Отдельный
+        // выключатель добавлял ровно одно сочетание — оба движка и туннель,
+        // забравший всё, — то самое, на которое приходилось жаловаться.
+        foreach (var desync in new[] { true, false })
+        {
+            foreach (var tunnel in new[] { true, false })
+            {
+                var choice = new EngineChoice { Desync = desync, Tunnel = tunnel };
+
+                Assert.False(choice.Desync && choice.TunnelTakesAll);
+            }
+        }
     }
 
     [Fact]
@@ -65,16 +92,6 @@ public sealed class EngineChoiceTests
     }
 
     [Fact]
-    public void Desync_running_for_nothing_is_named_so()
-    {
-        // Сочетание, которое выглядит двойной защитой, а на деле — лишний
-        // процесс. Сказать об этом должно окно, а не человек через неделю.
-        var both = new EngineChoice { Desync = true, Tunnel = true, TunnelTakesAll = true };
-
-        Assert.Contains("вхолостую", both.Complaint);
-    }
-
-    [Fact]
     public void Ordinary_combinations_have_nothing_to_complain_about()
     {
         // Жалоба на каждое сочетание перестала бы читаться, и настоящую
@@ -82,17 +99,10 @@ public sealed class EngineChoiceTests
         Assert.Null(new EngineChoice { Desync = true, Tunnel = true }.Complaint);
         Assert.Null(new EngineChoice { Desync = true, Tunnel = false }.Complaint);
         Assert.Null(new EngineChoice { Desync = false, Tunnel = true }.Complaint);
-
-        Assert.Null(new EngineChoice
-        {
-            Desync = false,
-            Tunnel = true,
-            TunnelTakesAll = true,
-        }.Complaint);
     }
 
     [Fact]
-    public void Ignoring_the_russian_networks_warns_about_the_price()
+    public void Sending_the_domestic_networks_abroad_warns_about_the_price()
     {
         // Банки и госуслуги через зарубежный адрес требуют подтверждений,
         // часть отказывает вовсе. Человек вправе знать это до, а не после.
@@ -100,7 +110,6 @@ public sealed class EngineChoiceTests
         {
             Desync = false,
             Tunnel = true,
-            TunnelTakesAll = true,
             IgnoreRussianExclusions = true,
         };
 
@@ -108,14 +117,13 @@ public sealed class EngineChoiceTests
     }
 
     [Theory]
-    [InlineData(true, true, false, "десинк и VPN по маршрутам")]
-    [InlineData(true, false, false, "только десинк")]
-    [InlineData(false, true, false, "только VPN, по маршрутам")]
-    [InlineData(false, true, true, "только VPN, весь трафик")]
-    [InlineData(false, false, false, "ничего не поднято")]
-    public void It_says_what_it_is(bool desync, bool tunnel, bool all, string said)
+    [InlineData(true, true, "десинк и VPN по маршрутам")]
+    [InlineData(true, false, "только десинк")]
+    [InlineData(false, true, "только VPN, весь трафик")]
+    [InlineData(false, false, "ничего не поднято")]
+    public void It_says_what_it_is(bool desync, bool tunnel, string said)
     {
-        var choice = new EngineChoice { Desync = desync, Tunnel = tunnel, TunnelTakesAll = all };
+        var choice = new EngineChoice { Desync = desync, Tunnel = tunnel };
 
         Assert.Equal(said, choice.Describe());
     }
@@ -123,23 +131,15 @@ public sealed class EngineChoiceTests
     [Fact]
     public void Every_combination_says_something()
     {
-        // Восемь сочетаний, и ни одно не должно остаться без имени:
+        // Четыре сочетания, и ни одно не должно остаться без имени:
         // безымянное состояние в окне выглядит поломкой.
         foreach (var desync in new[] { true, false })
         {
             foreach (var tunnel in new[] { true, false })
             {
-                foreach (var all in new[] { true, false })
-                {
-                    var choice = new EngineChoice
-                    {
-                        Desync = desync,
-                        Tunnel = tunnel,
-                        TunnelTakesAll = all,
-                    };
+                var choice = new EngineChoice { Desync = desync, Tunnel = tunnel };
 
-                    Assert.False(string.IsNullOrWhiteSpace(choice.Describe()));
-                }
+                Assert.False(string.IsNullOrWhiteSpace(choice.Describe()));
             }
         }
     }

@@ -165,39 +165,87 @@
                        Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
             <!--
-                Режим — самая крупная ручка во всей программе: он задаёт
-                рамку, внутри которой вообще имеют смысл маршруты. Место ему
-                рядом с кнопкой запуска, а не в разделе «Ещё», куда он попал
-                по недосмотру.
+                Два прямоугольника вместо списка режимов — решение владельца
+                21.09. Режимов было пять, они пришли по одному, каждый под
+                свой случай, и объяснить разницу между «всё через VPN»
+                и «без исключений» удавалось только примером.
+
+                Движка два, и человек думает именно о них: что у меня сейчас
+                работает. Прежние режимы из этой пары выводятся — «оба» это
+                выборочно, «только десинк» это десинк без туннеля, «туннель
+                без десинка» это всё через VPN.
+
+                В строку, а не столбцом: они равноправны, и вертикаль
+                намекала бы на порядок, которого нет.
             -->
-            <TextBlock Text="Режим работы" FontWeight="SemiBold" FontSize="15" Margin="4,26,0,10" />
+            <!--
+                «Что поднимать», а не «Движки»: выше по вкладке уже есть
+                раздел с тем же именем, и он про другое — там видно, что
+                работает прямо сейчас, здесь задают, чему работать. Два
+                одинаковых заголовка на одном экране читаются как ошибка.
+            -->
+            <TextBlock Text="Что поднимать" FontWeight="SemiBold" FontSize="15" Margin="4,26,0,10" />
 
-            <ItemsControl x:Name="Modes">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
-                                Tag="{Binding Key}" Click="OnMode">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0" Margin="0,0,14,0">
-                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14" />
-                                    <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
-                                               Margin="0,5,0,0" TextWrapping="Wrap" />
-                                </StackPanel>
+                <Border Grid.Column="0" x:Name="DesyncCard" Style="{StaticResource Card}" Padding="16,14">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Column="1" Text="сейчас" Style="{StaticResource Mono}"
-                                           Foreground="{DynamicResource Accent}" VerticalAlignment="Center"
-                                           Visibility="{Binding MarkShown}" />
-                            </Grid>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Десинк" FontWeight="SemiBold" FontSize="14"
+                                           VerticalAlignment="Center" />
 
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
+                            </StackPanel>
+
+                            <ToggleButton Grid.Column="1" x:Name="DesyncSwitch" Style="{StaticResource Switch}"
+                                          Click="OnDesync" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
+                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="2" x:Name="TunnelCard" Style="{StaticResource Card}" Padding="16,14">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Туннель" FontWeight="SemiBold" FontSize="14"
+                                           VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Без десинка забирает весь трафик — как обычный VPN. Вместе с ним уводит только названное, оставляя десинку остальное.&#x0a;&#x0a;Требует подписки: без неё поднимать нечего." />
+                            </StackPanel>
+
+                            <ToggleButton Grid.Column="1" x:Name="TunnelSwitch" Style="{StaticResource Switch}"
+                                          Click="OnTunnel" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"
+                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <TextBlock x:Name="EnginesLine" Style="{StaticResource Caption}"
+                       Margin="4,10,0,0" TextWrapping="Wrap" />
             <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
             <Border Style="{StaticResource Card}">

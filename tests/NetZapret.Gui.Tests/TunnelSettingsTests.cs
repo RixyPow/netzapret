@@ -104,7 +104,6 @@ public sealed class TunnelSettingsTests
         {
             Desync = false,
             Tunnel = true,
-            TunnelTakesAll = true,
             IgnoreRussianExclusions = true,
         };
 
@@ -112,8 +111,10 @@ public sealed class TunnelSettingsTests
 
         Assert.Equal(choice.Desync, back.Desync);
         Assert.Equal(choice.Tunnel, back.Tunnel);
-        Assert.Equal(choice.TunnelTakesAll, back.TunnelTakesAll);
         Assert.Equal(choice.IgnoreRussianExclusions, back.IgnoreRussianExclusions);
+
+        // Охват не хранится, а выводится: туннель без десинка забирает всё.
+        Assert.True(back.TunnelTakesAll);
     }
 
     [Fact]

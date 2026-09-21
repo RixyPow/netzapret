@@ -44,30 +44,19 @@ public partial class TunnelSettingsWindow : Window
     {
         var engines = settings.Engines;
 
-        Word(DesyncWord, engines.Desync);
-        Desync.IsChecked = engines.Desync;
-
-        Word(TunnelWord, engines.Tunnel);
-        Tunnel.IsChecked = engines.Tunnel;
-
-        Word(AllWord, engines.TunnelTakesAll);
-        TakesAll.IsChecked = engines.TunnelTakesAll;
-
         Word(RussianWord, engines.IgnoreRussianExclusions);
         Russian.IsChecked = engines.IgnoreRussianExclusions;
 
-        // Охват и исключения имеют смысл только при поднятом туннеле.
-        // Живой выключатель у того, чего нет, обещает действие, которого
-        // не будет, — а это ровно та молчаливая ложь, от которой мы уходим.
-        TakesAll.IsEnabled = engines.Tunnel;
-        Russian.IsEnabled = engines.Tunnel && engines.TunnelTakesAll;
+        // Имеет смысл только там, где туннель забирает весь трафик:
+        // иначе туда и так уходит лишь названное в маршрутах, и выводить
+        // оттуда нечего. Живой выключатель у того, чего нет, обещает
+        // действие, которого не будет.
+        Russian.IsEnabled = engines.TunnelTakesAll;
 
-        RussianLine.Text = engines.Tunnel && engines.TunnelTakesAll
+        RussianLine.Text = engines.TunnelTakesAll
             ? string.Empty
-            : "Действует только при «всё через туннель».";
+            : "Действует, когда туннель поднят без десинка и забирает весь трафик.";
 
-        // Жалоба на сочетание — там же, где его собирают. Сказать о ней
-        // должно окно, а не человек через неделю разбора.
         Status.Text = engines.Complaint ?? string.Empty;
 
         Word(ForeignWord, settings.ForeignExitsOnly);
@@ -125,24 +114,6 @@ public partial class TunnelSettingsWindow : Window
     {
         Save(s => s.With(change(s.Engines)), said);
     }
-
-    private void OnDesync(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { Desync = Desync.IsChecked == true },
-            Desync.IsChecked == true
-                ? "Десинк будет подниматься."
-                : "Десинк подниматься не будет.");
-
-    private void OnTunnel(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { Tunnel = Tunnel.IsChecked == true },
-            Tunnel.IsChecked == true
-                ? "Туннель будет подниматься."
-                : "Туннель подниматься не будет — останется один десинк.");
-
-    private void OnTakesAll(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { TunnelTakesAll = TakesAll.IsChecked == true },
-            TakesAll.IsChecked == true
-                ? "В туннель уйдёт весь трафик, кроме домашней сети."
-                : "В туннель уйдёт только названное в маршрутах.");
 
     private void OnRussian(object sender, RoutedEventArgs e) =>
         Choose(c => c with { IgnoreRussianExclusions = Russian.IsChecked == true },

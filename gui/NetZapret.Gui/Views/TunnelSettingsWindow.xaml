@@ -42,78 +42,9 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Десинк" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик при этом идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="DesyncWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="Desync" Style="{StaticResource Switch}"
-                                      Click="OnDesync" VerticalAlignment="Center" />
-                    </Grid>
-
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Туннель" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Требует подписки. Без неё поднимать нечего — останется один десинк." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="TunnelWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="Tunnel" Style="{StaticResource Switch}"
-                                      Click="OnTunnel" VerticalAlignment="Center" />
-                    </Grid>
-
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Всё через туннель" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="Как обычный VPN: в туннель уходит весь трафик, а не только названное в маршрутах.&#x0a;&#x0a;Домашняя сеть при этом остаётся снаружи всегда — роутер, принтер, сетевой диск. Завернув её в туннель, программа оборвала бы их, и это условие работы машины, а не настройка.&#x0a;&#x0a;Исключения на прямой проход сохраняются: российские сервисы через зарубежный адрес не работают вовсе." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="AllWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="TakesAll" Style="{StaticResource Switch}"
-                                      Click="OnTakesAll" VerticalAlignment="Center" />
-                    </Grid>
-
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Игнорировать исключения РФ" VerticalAlignment="Center" />
+                                <TextBlock Text="Отечественные сайты — тоже через туннель" VerticalAlignment="Center" TextWrapping="Wrap" />
 
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
                                                 Content="Отменяет одно правило — список российских сетей, шестьсот восемьдесят две подсети. Они уйдут в туннель и увидят зарубежный адрес.&#x0a;&#x0a;Прочие исключения остаются: те выведены напрямую потому, что так работает лучше, а не потому, что местные.&#x0a;&#x0a;Действует только при «всё через туннель»: в выборочном режиме туда и так уходит лишь названное." />

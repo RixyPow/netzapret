@@ -478,61 +478,64 @@ public partial class StatusView : UserControl
     /// </remarks>
     private void ShowModes(AppSettings settings)
     {
-        var rows = new List<ModeRow>
-        {
-            new(OperatingMode.Selective,
-                "Выборочно",
-                "Рабочий режим. По умолчанию всё лечится десинком, а через VPN уходит только "
-                + "то, что названо в маршрутах."),
+        var engines = settings.Engines;
 
-            new(OperatingMode.DesyncOnly,
-                "Только десинк",
-                "Туннель не поднимается вовсе. Для случая, когда подписка кончилась или сервер "
-                + "лёг, а десинка хватает: поднимать TUN ради ничего значит без причины путать "
-                + "поиск неисправностей."),
+        DesyncSwitch.IsChecked = engines.Desync;
+        TunnelSwitch.IsChecked = engines.Tunnel;
 
-            new(OperatingMode.ProxyAll,
-                "Всё через VPN, кроме РФ",
-                "В туннель уходит всё, кроме выведенного напрямую. Отечественные сервисы "
-                + "остаются на прямом пути: через зарубежный адрес банки и госуслуги "
-                + "не работают вовсе."),
+        DesyncLine.Text = engines.Desync
+            ? "Чинит имена в рукопожатии. Трафик идёт напрямую."
+            : "Выключен. Закрытые по имени сайты останутся закрытыми.";
 
-            new(OperatingMode.ProxyStrict,
-                "Всё через VPN без исключений",
-                "Включая отечественные сервисы, которые от этого ломаются. Режим для проверки: "
-                + "убедиться, что дело не в правилах."),
+        // Туннель говорит и про охват, потому что тот выводится из пары:
+        // без десинка он забирает всё, вместе с ним — только названное.
+        // Человек, щёлкнувший один выключатель, вправе узнать, что этим
+        // изменилось у второго.
+        TunnelLine.Text = engines.Tunnel
+            ? engines.TunnelTakesAll
+                ? "Забирает весь трафик — как обычный VPN."
+                : "Уводит то, что названо в маршрутах."
+            : "Не поднимается. Адрес остаётся домашним.";
 
-            new(OperatingMode.Off,
-                "Выключено",
-                "Ни один движок не запускается, весь трафик идёт напрямую."),
-        };
+        DesyncCard.BorderBrush = (Brush)FindResource(engines.Desync ? "Accent" : "Border");
+        TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
 
-        foreach (var row in rows)
-            row.Chosen = row.Key == settings.Mode;
-
-        Modes.ItemsSource = rows;
+        EnginesLine.Text = engines.Complaint ?? string.Empty;
     }
 
-    private void OnMode(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Переключает движок.
+    /// </summary>
+    /// <remarks>
+    /// Через <see cref="AppSettings.With(EngineChoice)"/>: тот пишет заодно
+    /// и выведенный режим, на языке которого говорят конфиг движка, отчёты
+    /// и консоль. Оставленный отставшим, режим развёл бы показания.
+    /// </remarks>
+    private void Choose(Func<EngineChoice, EngineChoice> change)
     {
-        if (sender is not Button { Tag: OperatingMode mode })
-            return;
-
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { Mode = mode };
-            settings.Save(AppSettings.DefaultPath);
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings.With(change(settings.Engines));
 
-            ShowModes(settings);
+            next.Save(AppSettings.DefaultPath);
+
+            ShowModes(next);
             Update();
 
-            this.Offer($"Режим: {settings.DescribeMode()}");
+            this.Offer("Движки: " + next.Engines.Describe());
         }
         catch (Exception ex)
         {
-            ShowProblem("Не удалось записать режим: " + ex.GetBaseException().Message);
+            ShowProblem("Не удалось записать: " + ex.GetBaseException().Message);
         }
     }
+
+    private void OnDesync(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { Desync = DesyncSwitch.IsChecked == true });
+
+    private void OnTunnel(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { Tunnel = TunnelSwitch.IsChecked == true });
 
     private void ShowAutostart()
     {

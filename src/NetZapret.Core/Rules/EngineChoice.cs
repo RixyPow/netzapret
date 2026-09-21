@@ -6,8 +6,8 @@ namespace NetZapret.Core.Rules;
 /// <remarks>
 /// <para>
 /// Задумка владельца, 21.09: вместо одного поля с пятью значениями —
-/// два выключателя движков, winws2 и туннель, плюс две настройки охвата.
-/// Прежние режимы из этого выводятся, а не задаются.
+/// два выключателя движков, winws2 и туннель. Прежние режимы из них
+/// выводятся, а не задаются.
 /// </para>
 /// <para>
 /// Разница не косметическая. Пять режимов пришли по одному, каждый
@@ -16,10 +16,12 @@ namespace NetZapret.Core.Rules;
 /// на вопрос, который человек и задаёт: что у меня сейчас работает.
 /// </para>
 /// <para>
-/// Двух выключателей всё же мало, и это выяснилось при сведении в таблицу:
-/// «всё через VPN кроме РФ» и «всё без исключений» по движкам
-/// неразличимы — в обеих поднят один туннель, а разнятся они охватом.
-/// Отсюда две настройки рядом.
+/// Охват туннеля сперва был третьей настройкой, и это оказалось лишним:
+/// он выводится из тех же двух выключателей. Туннель без десинка
+/// забирает всё — чинить имена больше нечем; вместе с десинком обязан
+/// оставлять тому работу. Единственное сочетание, которое добавлял
+/// отдельный выключатель, было тем самым, на которое приходилось
+/// жаловаться.
 /// </para>
 /// </remarks>
 public sealed record EngineChoice
@@ -34,12 +36,26 @@ public sealed record EngineChoice
     /// Туннель забирает весь трафик, а не только названное в маршрутах.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// Выводится, а не задаётся — поправка владельца 21.09, и она верна.
+    /// Туннель без десинка забирает всё по смыслу: чинить имена больше
+    /// нечем, и выпускать что-либо напрямую незачем. А вместе с десинком
+    /// он обязан оставлять тому работу — иначе winws2 крутится вхолостую.
+    /// </para>
+    /// <para>
+    /// Настройкой это было полчаса и было лишним: отдельный выключатель
+    /// позволял собрать ровно одно новое сочетание — оба движка и туннель,
+    /// забравший всё, — то самое, на которое приходилось жаловаться.
+    /// Выведенное, оно этого состояния просто не имеет.
+    /// </para>
+    /// <para>
     /// «Как обычный VPN» — слова владельца. Домашняя сеть при этом
     /// остаётся снаружи всегда: завернув <c>192.168.х.х</c> в туннель,
     /// оборвали бы роутер, принтер и сетевой диск. Это условие работы
-    /// машины, а не смягчение строгости, и настройкой не управляется.
+    /// машины, а не настройка.
+    /// </para>
     /// </remarks>
-    public bool TunnelTakesAll { get; init; }
+    public bool TunnelTakesAll => Tunnel && !Desync;
 
     /// <summary>
     /// Не выводить российские сети напрямую.
@@ -71,12 +87,12 @@ public sealed record EngineChoice
     /// на языке режимов, и переводить их все разом значило бы менять
     /// полпрограммы одной правкой.
     /// </remarks>
-    public OperatingMode Mode => (Desync, Tunnel, TunnelTakesAll) switch
+    public OperatingMode Mode => (Desync, Tunnel) switch
     {
-        (false, false, _) => OperatingMode.Off,
-        (true, false, _) => OperatingMode.DesyncOnly,
-        (_, true, false) => OperatingMode.Selective,
-        (_, true, true) => OperatingMode.ProxyAll,
+        (false, false) => OperatingMode.Off,
+        (true, false) => OperatingMode.DesyncOnly,
+        (true, true) => OperatingMode.Selective,
+        (false, true) => OperatingMode.ProxyAll,
     };
 
     /// <summary>
@@ -99,16 +115,6 @@ public sealed record EngineChoice
         {
             if (!Anything)
                 return "ничего не поднято — весь трафик идёт напрямую, как без программы";
-
-            // winws2 стоит в разрыве WinDivert, а тот видит только то,
-            // что уходит с машины обычным путём. Забрав весь трафик в TUN,
-            // туннель не оставляет ему ничего: процесс работает, память
-            // занимает, а сделать ему нечего.
-            if (Desync && Tunnel && TunnelTakesAll)
-            {
-                return "десинк работает вхолостую: туннель забирает весь трафик, "
-                    + "и до перехватчика не доходит ничего. Выключите одно из двух";
-            }
 
             if (Tunnel && TunnelTakesAll && IgnoreRussianExclusions)
             {
@@ -155,18 +161,12 @@ public sealed record EngineChoice
         OperatingMode.Off => new EngineChoice { Desync = false, Tunnel = false },
         OperatingMode.DesyncOnly => new EngineChoice { Desync = true, Tunnel = false },
 
-        OperatingMode.ProxyAll => new EngineChoice
-        {
-            Desync = false,
-            Tunnel = true,
-            TunnelTakesAll = true,
-        },
+        OperatingMode.ProxyAll => new EngineChoice { Desync = false, Tunnel = true },
 
         OperatingMode.ProxyStrict => new EngineChoice
         {
             Desync = false,
             Tunnel = true,
-            TunnelTakesAll = true,
             IgnoreRussianExclusions = true,
         },
 
