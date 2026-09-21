@@ -40,6 +40,102 @@ public sealed record AppSettings
     /// </remarks>
     public OperatingMode Mode { get; init; } = OperatingMode.Selective;
 
+    /// <summary>
+    /// Поднимать ли winws2; <c>null</c> — выводится из режима.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Допускает пустоту намеренно, и это устройство перехода. У людей
+    /// в настройках записан режим и больше ничего; прочитав пустое поле
+    /// как «выключено», мы сняли бы им десинк молча — при том, что они
+    /// ничего не просили.
+    /// </para>
+    /// <para>
+    /// Пустое значит «не задавали», и тогда ответ берётся у режима.
+    /// Заполняется оно при первом же щелчке по выключателю, и с этого
+    /// мгновения решает уже оно.
+    /// </para>
+    /// </remarks>
+    public bool? DesyncEnabled { get; init; }
+
+    /// <summary>Поднимать ли туннель; <c>null</c> — выводится из режима.</summary>
+    public bool? TunnelEnabled { get; init; }
+
+    /// <summary>
+    /// Туннель забирает весь трафик, а не только названное в маршрутах.
+    /// </summary>
+    /// <remarks>
+    /// «Как обычный VPN» — слова владельца. Домашняя сеть при этом остаётся
+    /// снаружи всегда: завернув <c>192.168.х.х</c> в туннель, оборвали бы
+    /// роутер, принтер и сетевой диск. Это условие работы машины,
+    /// а не смягчение строгости, и настройкой не управляется.
+    /// </remarks>
+    public bool? TunnelTakesAll { get; init; }
+
+    /// <summary>
+    /// Не выводить российские сети напрямую.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отменяет одно правило — на <c>ipset-ru.txt</c>, — а не все прямые
+    /// разом. Прочие исключения выведены напрямую потому, что так работает
+    /// лучше, и отменять их заодно значило бы делать не то, что написано
+    /// на настройке.
+    /// </para>
+    /// <para>
+    /// Допускает пустоту наравне с прочими тремя, и это выяснилось
+    /// проверкой. Прежний режим «без исключений» означал в точности эту
+    /// настройку, и у того, кто им пользовался, поле не записано — а
+    /// прочитанное как «выключено» вернуло бы ему российские сети
+    /// напрямую, молча изменив поведение.
+    /// </para>
+    /// </remarks>
+    public bool? IgnoreRussianExclusions { get; init; }
+
+    /// <summary>
+    /// Что поднято, двумя выключателями.
+    /// </summary>
+    /// <remarks>
+    /// Задумка владельца 21.09: вместо одного поля с пятью значениями —
+    /// два выключателя движков и охват туннеля. Прежний режим остаётся
+    /// и выводится отсюда: на его языке говорят конфиг движка, отчёты
+    /// и правила, и переводить их все разом значило бы менять полпрограммы
+    /// одной правкой.
+    /// </remarks>
+    public EngineChoice Engines
+    {
+        get
+        {
+            var fromMode = EngineChoice.FromMode(Mode);
+
+            return new EngineChoice
+            {
+                Desync = DesyncEnabled ?? fromMode.Desync,
+                Tunnel = TunnelEnabled ?? fromMode.Tunnel,
+                TunnelTakesAll = TunnelTakesAll ?? fromMode.TunnelTakesAll,
+                IgnoreRussianExclusions =
+                    IgnoreRussianExclusions ?? fromMode.IgnoreRussianExclusions,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Записывает выбор — и выключатели, и выведенный из них режим.
+    /// </summary>
+    /// <remarks>
+    /// Режим пишется тоже, а не только выключатели. Его читают конфиг
+    /// движка, отчёты и консоль, и оставленный отставшим он развёл бы
+    /// показания: окно говорило бы одно, движок делал другое.
+    /// </remarks>
+    public AppSettings With(EngineChoice choice) => this with
+    {
+        Mode = choice.Mode,
+        DesyncEnabled = choice.Desync,
+        TunnelEnabled = choice.Tunnel,
+        TunnelTakesAll = choice.TunnelTakesAll,
+        IgnoreRussianExclusions = choice.IgnoreRussianExclusions,
+    };
+
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
     /// <remarks>
     /// <para>

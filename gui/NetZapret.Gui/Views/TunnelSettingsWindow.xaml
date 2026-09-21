@@ -27,26 +27,107 @@
 
             <Border Style="{StaticResource SettingsGroup}">
                 <StackPanel>
+<!--
+                        Два выключателя вместо списка режимов. Задумка
+                        владельца 21.09: пять режимов пришли по одному,
+                        каждый под свой случай, и объяснить разницу между
+                        «всё через VPN» и «без исключений» удавалось только
+                        примером. Выключатели отвечают на вопрос, который
+                        человек и задаёт: что у меня сейчас работает.
+                    -->
                     <Grid Margin="16,13">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Режим" VerticalAlignment="Center" />
+                            <TextBlock Text="Десинк" VerticalAlignment="Center" />
 
                             <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="«Выборочно» — в туннель уходит только то, для чего он нужен; остальное идёт напрямую, и российские сервисы работают.&#x0a;&#x0a;«Только десинк» — туннель не поднимается вовсе, работает один winws2. Пригодится, когда подписка кончилась или серверы легли, а десинка на всё хватает: держать TUN ради ничего значит путать поиск неисправностей.&#x0a;&#x0a;«Всё через VPN» — в туннель уходит всё, кроме явных исключений на прямой проход. Их приходится держать: банки и госуслуги через зарубежный адрес отказывают.&#x0a;&#x0a;«Без исключений» — буквально всё, включая российские сервисы. Они при этом сломаются, и это осознанный выбор: режим для проверки, когда надо убедиться, что дело не в правилах." />
+                                            Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик при этом идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
                         </StackPanel>
 
-                        <ComboBox Grid.Column="1" x:Name="Mode" Width="188"
-                                  VerticalAlignment="Center" SelectionChanged="OnMode">
-                            <ComboBoxItem Content="выборочно" />
-                            <ComboBoxItem Content="только десинк" />
-                            <ComboBoxItem Content="всё через VPN" />
-                            <ComboBoxItem Content="без исключений" />
-                        </ComboBox>
+                        <TextBlock Grid.Column="1" x:Name="DesyncWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Desync" Style="{StaticResource Switch}"
+                                      Click="OnDesync" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Туннель" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Требует подписки. Без неё поднимать нечего — останется один десинк." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="TunnelWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Tunnel" Style="{StaticResource Switch}"
+                                      Click="OnTunnel" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Всё через туннель" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Как обычный VPN: в туннель уходит весь трафик, а не только названное в маршрутах.&#x0a;&#x0a;Домашняя сеть при этом остаётся снаружи всегда — роутер, принтер, сетевой диск. Завернув её в туннель, программа оборвала бы их, и это условие работы машины, а не настройка.&#x0a;&#x0a;Исключения на прямой проход сохраняются: российские сервисы через зарубежный адрес не работают вовсе." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="AllWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="TakesAll" Style="{StaticResource Switch}"
+                                      Click="OnTakesAll" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Игнорировать исключения РФ" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Отменяет одно правило — список российских сетей, шестьсот восемьдесят две подсети. Они уйдут в туннель и увидят зарубежный адрес.&#x0a;&#x0a;Прочие исключения остаются: те выведены напрямую потому, что так работает лучше, а не потому, что местные.&#x0a;&#x0a;Действует только при «всё через туннель»: в выборочном режиме туда и так уходит лишь названное." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="RussianLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="RussianWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Russian" Style="{StaticResource Switch}"
+                                      Click="OnRussian" VerticalAlignment="Center" />
                     </Grid>
 
                     <Border Style="{StaticResource RowLine}" />

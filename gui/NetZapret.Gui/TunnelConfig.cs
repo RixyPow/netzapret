@@ -122,6 +122,15 @@ internal static class TunnelConfig
                 DnsServer = settings.DnsServer,
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
+
+                // Российские сети: отменяется одно правило, а не все прямые
+                // разом. Прочие исключения выведены напрямую по своим
+                // причинам, и снимать их заодно — делать не то, что написано
+                // на настройке.
+                // Через Engines, а не через поле: там пустое значение
+                // добирается из режима, и переход с «без исключений»
+                // не теряет настройку.
+                IgnoreRussianExclusions = settings.Engines.IgnoreRussianExclusions,
                 ForeignExitsOnly = settings.ForeignExitsOnly,
 
                 // Вход проверки поднимается ровно тогда, когда супервизор

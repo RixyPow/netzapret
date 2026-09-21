@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 
@@ -29,15 +29,6 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class TunnelSettingsWindow : Window
 {
-    /// <summary>
-    /// Идёт заполнение, а не выбор человека.
-    /// </summary>
-    /// <remarks>
-    /// Список поднимает событие выбора при показе состояния, и без заслонки
-    /// открытие окна записывало бы настройку обратно и звало уведомление
-    /// о перезапуске — на ровном месте.
-    /// </remarks>
-    private bool _filling;
 
     /// <summary>Что-нибудь изменилось, и движки стоит перезапустить.</summary>
     public bool Changed { get; private set; }
@@ -51,9 +42,33 @@ public partial class TunnelSettingsWindow : Window
 
     private void Show(AppSettings settings)
     {
-        _filling = true;
-        Mode.SelectedIndex = IndexOf(settings.Mode);
-        _filling = false;
+        var engines = settings.Engines;
+
+        Word(DesyncWord, engines.Desync);
+        Desync.IsChecked = engines.Desync;
+
+        Word(TunnelWord, engines.Tunnel);
+        Tunnel.IsChecked = engines.Tunnel;
+
+        Word(AllWord, engines.TunnelTakesAll);
+        TakesAll.IsChecked = engines.TunnelTakesAll;
+
+        Word(RussianWord, engines.IgnoreRussianExclusions);
+        Russian.IsChecked = engines.IgnoreRussianExclusions;
+
+        // Охват и исключения имеют смысл только при поднятом туннеле.
+        // Живой выключатель у того, чего нет, обещает действие, которого
+        // не будет, — а это ровно та молчаливая ложь, от которой мы уходим.
+        TakesAll.IsEnabled = engines.Tunnel;
+        Russian.IsEnabled = engines.Tunnel && engines.TunnelTakesAll;
+
+        RussianLine.Text = engines.Tunnel && engines.TunnelTakesAll
+            ? string.Empty
+            : "Действует только при «всё через туннель».";
+
+        // Жалоба на сочетание — там же, где его собирают. Сказать о ней
+        // должно окно, а не человек через неделю разбора.
+        Status.Text = engines.Complaint ?? string.Empty;
 
         Word(ForeignWord, settings.ForeignExitsOnly);
         Foreign.IsChecked = settings.ForeignExitsOnly;
@@ -98,54 +113,42 @@ public partial class TunnelSettingsWindow : Window
     }
 
     /// <summary>
-    /// Каким пунктом списка показывается режим.
+    /// Записывает выбор движков.
     /// </summary>
     /// <remarks>
-    /// Двумя отдельными переводами — сюда и обратно, — и потому обязаны
-    /// сходиться. Разойдись они, окно показывало бы один режим, а писало
-    /// другой; заметить это можно было бы только по сломавшейся сети.
-    /// Закреплено проверкой.
+    /// Через <see cref="AppSettings.With(EngineChoice)"/>, а не правкой полей
+    /// по одному: тот пишет заодно и выведенный режим. На языке режимов
+    /// говорят конфиг движка, отчёты и консоль, и оставленный отставшим
+    /// он развёл бы показания — окно говорило бы одно, движок делал другое.
     /// </remarks>
-    internal static int IndexOf(OperatingMode mode) => mode switch
+    private void Choose(Func<EngineChoice, EngineChoice> change, string said)
     {
-        OperatingMode.DesyncOnly => 1,
-        OperatingMode.ProxyAll => 2,
-        OperatingMode.ProxyStrict => 3,
-        _ => 0,
-    };
-
-    /// <summary>
-    /// Какой режим стоит за пунктом списка.
-    /// </summary>
-    /// <remarks>
-    /// Неизвестный пункт даёт «выборочно», и это не лень, а выбор
-    /// в безопасную сторону: там в туннель уходит только нужное,
-    /// а российские сервисы работают. Ошибка в сторону «всё через VPN»
-    /// сломала бы их молча.
-    /// </remarks>
-    internal static OperatingMode ModeAt(int index) => index switch
-    {
-        1 => OperatingMode.DesyncOnly,
-        2 => OperatingMode.ProxyAll,
-        3 => OperatingMode.ProxyStrict,
-        _ => OperatingMode.Selective,
-    };
-
-    private void OnMode(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        if (!IsInitialized || _filling || Mode.SelectedIndex < 0)
-            return;
-
-        var mode = ModeAt(Mode.SelectedIndex);
-
-        Save(s => s with { Mode = mode }, mode switch
-        {
-            OperatingMode.DesyncOnly => "Туннель подниматься не будет — работает один десинк.",
-            OperatingMode.ProxyAll => "В туннель уйдёт всё, кроме исключений на прямой проход.",
-            OperatingMode.ProxyStrict => "В туннель уйдёт всё без исключений. Российские сервисы сломаются.",
-            _ => "В туннель уйдёт только то, для чего он нужен.",
-        });
+        Save(s => s.With(change(s.Engines)), said);
     }
+
+    private void OnDesync(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { Desync = Desync.IsChecked == true },
+            Desync.IsChecked == true
+                ? "Десинк будет подниматься."
+                : "Десинк подниматься не будет.");
+
+    private void OnTunnel(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { Tunnel = Tunnel.IsChecked == true },
+            Tunnel.IsChecked == true
+                ? "Туннель будет подниматься."
+                : "Туннель подниматься не будет — останется один десинк.");
+
+    private void OnTakesAll(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { TunnelTakesAll = TakesAll.IsChecked == true },
+            TakesAll.IsChecked == true
+                ? "В туннель уйдёт весь трафик, кроме домашней сети."
+                : "В туннель уйдёт только названное в маршрутах.");
+
+    private void OnRussian(object sender, RoutedEventArgs e) =>
+        Choose(c => c with { IgnoreRussianExclusions = Russian.IsChecked == true },
+            Russian.IsChecked == true
+                ? "Российские сети уйдут в туннель."
+                : "Российские сети снова идут напрямую.");
 
     private void OnForeign(object sender, RoutedEventArgs e) =>
         Save(s => s with { ForeignExitsOnly = Foreign.IsChecked == true },
