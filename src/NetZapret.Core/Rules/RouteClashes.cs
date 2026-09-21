@@ -49,6 +49,19 @@ public static class RouteClashes
             if (first.Choice == entry.Choice)
                 continue;
 
+            // Пин — не маршрут наравне с прочими, а добавочный факт:
+            // «у этого имени закреплён адрес». Строка «tmdb: direct»
+            // рядом с «tmdb: pin» противоречия не содержит — оба означают
+            // «мимо всего», и у владельца так и записано.
+            //
+            // Спорит пин только с тем, что требует видеть имя: с туннелем
+            // и с десинком. Об этом и говорим.
+            if ((first.Choice == RouteChoice.Pin || entry.Choice == RouteChoice.Pin)
+                && !Incompatible(first.Choice, entry.Choice))
+            {
+                continue;
+            }
+
             found.Add(new RouteClash
             {
                 Name = entry.Name,
