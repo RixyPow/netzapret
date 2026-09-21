@@ -501,6 +501,11 @@ public partial class StatusView : UserControl
         TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
 
         EnginesLine.Text = engines.Complaint ?? string.Empty;
+
+        // Автозапуск поднимает ровно это. Сказано здесь же, где задано:
+        // иначе про связь пришлось бы догадываться, а догадка — источник
+        // того самого «трей запускается, а движки нужно поднимать кнопкой».
+        AutostartRaises.Text = "При входе в систему поднимется: " + engines.Describe() + ".";
     }
 
     /// <summary>

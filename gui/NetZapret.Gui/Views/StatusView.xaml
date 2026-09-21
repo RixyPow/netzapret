@@ -265,7 +265,18 @@
                                 Click="OnAutostart" VerticalAlignment="Center" />
                     </Grid>
 
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                    <!--
+                        Что именно поднимется — теми же словами, какими это
+                        задано выключателями выше. Своего выбора у автозапуска
+                        нет намеренно: он был бы вторым местом, где решают одно
+                        и то же, и разошёлся бы с окном при первой же правке.
+                        Хуже того, после входа выключатели показывали бы
+                        поднятым то, чего нет.
+                    -->
+                    <TextBlock x:Name="AutostartRaises" Style="{StaticResource Caption}"
+                               Margin="0,10,0,0" TextWrapping="Wrap" />
+
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Планировщик, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается тот же netzapret.exe и с теми же ключами, что и кнопка «Запустить» выше, — иначе автозапуск поднимал бы не то, что вы проверили руками." />
                 </StackPanel>
             </Border>

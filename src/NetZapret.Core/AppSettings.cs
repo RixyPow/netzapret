@@ -388,8 +388,15 @@ public sealed record AppSettings
     /// пересчитывается заново.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// Выключатель спрашивается первым, и это исправление 21.09. Он тогда
+    /// только появился, а здесь по-прежнему спрашивался режим — и туннель
+    /// поднимался бы при погашенном выключателе, потому что режим при этом
+    /// остаётся «выборочным». Щелчок не делал ничего, и узнать об этом
+    /// можно было бы только по живому TUN.
+    /// </remarks>
     [JsonIgnore]
-    public bool NeedsProxy => Mode switch
+    public bool NeedsProxy => Engines.Tunnel && Mode switch
     {
         // Выборочный без выхода — это просто десинк, и поднимать ради него
         // TUN незачем. В этом режиме всё и так идёт мимо туннеля, кроме
@@ -425,9 +432,26 @@ public sealed record AppSettings
     [JsonIgnore]
     public bool HasTunnelExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || WarpEnabled;
 
-    /// <summary>Нужен ли в этом режиме десинк.</summary>
+    /// <summary>
+    /// Нужен ли десинк.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По выключателю, а не по режиму, и это исправление 21.09. Прежде
+    /// здесь стояло «режим не выключен и пресет задан», и выключенный
+    /// десинк поднимался бы как ни в чём не бывало: режимом «туннель
+    /// без десинка» оказывается ProxyAll, а условие пропускало его
+    /// насквозь.
+    /// </para>
+    /// <para>
+    /// Глубже причина в том, что сочетаний четыре, а режимов пять, и одно
+    /// из сочетаний режимом не выражается вовсе — «туннель по маршрутам
+    /// без десинка». Спрашивать режим о том, чего он не знает, значит
+    /// получать неверный ответ молча.
+    /// </para>
+    /// </remarks>
     [JsonIgnore]
-    public bool NeedsDesync => Mode is not OperatingMode.Off && PresetName is not null;
+    public bool NeedsDesync => Engines.Desync && PresetName is not null;
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 
