@@ -67,17 +67,40 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
-                                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                    <!--
+                                        Наименьшая ширина у описания, а не
+                                        у вердикта. Без неё столбец «звёздочка»
+                                        отдаёт соседям всё, что те попросят,
+                                        и при узком окне описание схлопывается
+                                        в полоску шириной в слово — владелец
+                                        прислал снимок 21.09.
+                                    -->
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                                MinWidth="210" Margin="0,0,12,0">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding Summary}" Style="{StaticResource Mono}"
                                                    FontSize="11" Margin="0,5,0,0" TextWrapping="Wrap" />
                                         <TextBlock Text="{Binding UsedBy}" Style="{StaticResource Caption}"
                                                    Margin="0,4,0,0" TextWrapping="Wrap" />
                                     </StackPanel>
 
+                                    <!--
+                                        Вердикт переносится. Одной строкой он
+                                        требовал всю свою ширину — «не помогает
+                                        — Удаленный хост принудительно разорвал
+                                        существующее подключение» вытесняло
+                                        описание вовсе.
+
+                                        Наибольшая ширина, а не наименьшая:
+                                        длинный вердикт обязан сложиться
+                                        в несколько строк, а не раздвинуть
+                                        карточку.
+                                    -->
                                     <TextBlock Grid.Column="1" Text="{Binding Verdict}" Style="{StaticResource Mono}"
                                                VerticalAlignment="Center" Margin="0,0,12,0"
-                                               MinWidth="104" TextAlignment="Right"
+                                               MinWidth="104" MaxWidth="240"
+                                               TextWrapping="Wrap" TextAlignment="Right"
                                                Foreground="{Binding VerdictColour}" />
 
                                     <Button Grid.Column="2" Style="{StaticResource Ghost}"

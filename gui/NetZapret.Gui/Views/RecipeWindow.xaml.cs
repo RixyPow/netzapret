@@ -1006,12 +1006,57 @@ public partial class RecipeWindow : Window
         };
     }
 
-    /// <summary>Короткое объяснение обрыва — длинное в строку не влезает.</summary>
-    private static string Short(Exception ex)
+    /// <summary>
+    /// Короткое объяснение обрыва.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Своими словами, а не обрезанное системное. Windows отвечает
+    /// «Удаленный хост принудительно разорвал существующее подключение»,
+    /// и обрезка по длине давала «…принудительно разорвал су» — оборванное
+    /// посреди слова и ничего не добавляющее к «не помогает».
+    /// </para>
+    /// <para>
+    /// Три исхода, и различать их стоит: сброс — это DPI ответил, отказ
+    /// в рукопожатии — сторона не приняла наше приветствие, тишина —
+    /// до неё не дошло вовсе. Лечатся они разным.
+    /// </para>
+    /// </remarks>
+    internal static string Short(Exception ex)
     {
-        var why = ex.GetBaseException().Message;
+        var why = ex.GetBaseException();
 
-        return why.Length > 40 ? why[..40] : why;
+        if (why is System.Security.Authentication.AuthenticationException)
+            return "отказ в рукопожатии";
+
+        if (why is OperationCanceledException or TimeoutException)
+            return "не дождались";
+
+        if (why is System.Net.Sockets.SocketException socket)
+        {
+            return socket.SocketErrorCode switch
+            {
+                System.Net.Sockets.SocketError.ConnectionReset => "соединение сброшено",
+                System.Net.Sockets.SocketError.ConnectionRefused => "в соединении отказано",
+                System.Net.Sockets.SocketError.TimedOut => "не дождались",
+                System.Net.Sockets.SocketError.HostUnreachable => "хост недостижим",
+                System.Net.Sockets.SocketError.NetworkUnreachable => "сеть недостижима",
+                _ => "обрыв связи",
+            };
+        }
+
+        // Сброс приходит и завёрнутым в IOException — от SslStream
+        // и от потока сокета. Разворачивать до конца не всегда выходит,
+        // поэтому смотрим ещё и по вложенному.
+        for (var inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner is System.Net.Sockets.SocketException nested)
+                return Short(nested);
+        }
+
+        var said = why.Message;
+
+        return said.Length > 40 ? said[..40] + "…" : said;
     }
 
     /// <summary>
