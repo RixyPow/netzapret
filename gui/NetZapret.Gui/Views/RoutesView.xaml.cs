@@ -406,6 +406,8 @@ public partial class RoutesView : UserControl
                 : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
 
             ShowOrder(engine);
+
+            ShowBook();
             StartIcons(services);
         }
         catch (Exception ex)

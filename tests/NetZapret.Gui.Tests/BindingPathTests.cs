@@ -42,19 +42,39 @@ public sealed class BindingPathTests
 
     private static string Folder => Path.Combine(AppContext.BaseDirectory, "Xaml");
 
-    /// <summary>Все свойства всех типов строк окна.</summary>
+    /// <summary>
+    /// Все свойства типов, к которым окно привязывается.
+    /// </summary>
+    /// <remarks>
+    /// Не только своих. С 21.09 разметка привязывается и к типам библиотек:
+    /// карточка книги маршрутов показывает <c>RouteClash</c> — противоречие,
+    /// найденное в правилах, — а живёт он в <c>NetZapret.Core</c>. Проверка,
+    /// знающая одну сборку окна, объявляла такую привязку опечаткой.
+    ///
+    /// Шире набор — слабее проверка, и это цена. Но выбор между «ложная
+    /// жалоба на верную привязку» и «пропущенная опечатка среди чужих
+    /// имён» решается в пользу второго: ложная жалоба заставляет обходить
+    /// проверку, а обойдённая проверка не ловит уже ничего.
+    /// </remarks>
     private static HashSet<string> Known()
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
 
-        var assembly = typeof(NetZapret.Gui.Views.PartRow).Assembly;
-
-        foreach (var type in assembly.GetTypes())
+        var assemblies = new[]
         {
-            foreach (var property in type.GetProperties(
-                BindingFlags.Public | BindingFlags.Instance))
+            typeof(NetZapret.Gui.Views.PartRow).Assembly,
+            typeof(NetZapret.Core.Rules.RouteClash).Assembly,
+        };
+
+        foreach (var assembly in assemblies)
+        {
+            foreach (var type in assembly.GetTypes())
             {
-                names.Add(property.Name);
+                foreach (var property in type.GetProperties(
+                    BindingFlags.Public | BindingFlags.Instance))
+                {
+                    names.Add(property.Name);
+                }
             }
         }
 

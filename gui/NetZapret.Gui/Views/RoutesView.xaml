@@ -415,6 +415,73 @@
             <StackPanel Grid.Row="2">
 
                 <!--
+                    Книга маршрутов: вывоз и ввоз.
+
+                    Пока только это, и намеренно. Книга ещё ничем не
+                    управляет — маршруты по-прежнему берутся из правил, —
+                    и показать её действующей значило бы соврать. А вот
+                    переносимость она даёт уже сейчас, и ради неё книга
+                    и задумывалась: файл можно отдать другому человеку,
+                    и он сработает с любым пресетом.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Книга маршрутов" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Отдельный файл «имя: маршрут» — то, как должны ходить маршруты, без привязки к пресету и туннелю. Один и тот же файл работает с Universal V9 и с любым другим пресетом, и его можно отдать другому человеку.&#x0a;&#x0a;Маршруты пока берутся не из него: он служит для вывоза и ввоза. Правила и пины при вывозе не меняются.&#x0a;&#x0a;Правила по адресам в книгу не идут — она говорит именами, а подсеть именем не назовёшь. Они остаются как были." />
+                                </StackPanel>
+
+                                <TextBlock x:Name="BookLine" Style="{StaticResource Caption}"
+                                           Margin="0,5,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Button x:Name="ExportButton" Style="{StaticResource Ghost}"
+                                        Content="Вывезти" Click="OnExportBook" Margin="0,0,8,0"
+                                        ToolTip="Записать нынешние маршруты и пины в файл книги." />
+
+                                <Button x:Name="ImportButton" Style="{StaticResource Ghost}"
+                                        Content="Ввезти" Click="OnImportBook"
+                                        ToolTip="Прочитать книгу из файла. Покажет, что изменится, и спросит перед записью." />
+                            </StackPanel>
+                        </Grid>
+
+                        <!--
+                            Противоречия — то, ради чего книга и заводилась.
+                            Показываются только когда есть: пустая строка
+                            «противоречий нет» на каждом заходе превратилась
+                            бы в шум, который перестают читать.
+                        -->
+                        <ItemsControl x:Name="Clashes" Margin="0,12,0,0" Visibility="Collapsed">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource Raised}" CornerRadius="6"
+                                            Padding="10,8" Margin="0,0,0,6">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Warn}" />
+                                            <TextBlock Text="{Binding Outcome}" Style="{StaticResource Caption}"
+                                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!--
                     Порядок вычисления. Список выше сгруппирован по сервисам —
                     так о маршрутах и думают, — но группировка прячет главное:
                     побеждает правило, до которого очередь доходит раньше.
