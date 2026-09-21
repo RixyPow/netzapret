@@ -171,6 +171,24 @@ public sealed class SingBoxOptions
     public int DeadAfterFailures { get; init; } = 3;
 
     /// <summary>
+    /// Не выводить российские сети напрямую.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Действует только при «всё через туннель»: в выборочном режиме
+    /// в туннель и так уходит лишь названное, и выводить оттуда нечего.
+    /// </para>
+    /// <para>
+    /// Цена названа и здесь, и в окне: через туннель российские адреса
+    /// увидят зарубежный выход, банки и госуслуги начнут требовать
+    /// подтверждений, часть сервисов откажет вовсе. Настройка для тех,
+    /// кому это безразлично, — и для проверок, где надо убедиться,
+    /// что дело не в исключениях.
+    /// </para>
+    /// </remarks>
+    public bool IgnoreRussianExclusions { get; init; }
+
+    /// <summary>
     /// Теги серверов, выводимых из автоподбора как заведомо мёртвые.
     /// </summary>
     /// <remarks>
@@ -429,6 +447,32 @@ public sealed class SingBoxConfigCompiler
     private const string ProbeDnsServer = "8.8.8.8";
 
     /// <summary>Тег автоподбора по задержке; спрятан за селектором.</summary>
+    /// <summary>
+    /// Это ли правило выводит напрямую российские сети.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По имени файла, и это неприятно, но честнее прочего. Правило ничем
+    /// себя не помечает: в <c>rules.yaml</c> оно выглядит как любое другое
+    /// адресное, а особенным его делает содержимое — шестьсот восемьдесят
+    /// две строки российских сетей, снимок из проекта Zapret.
+    /// </para>
+    /// <para>
+    /// Завести пометку в формате правил было бы чище, но переписало бы
+    /// файлы у всех, кто уже обновлялся, ради одной настройки. Имя файла
+    /// при этом не случайно: оно взято у первоисточника и им же и держится.
+    /// </para>
+    /// <para>
+    /// Отдельной настройкой, а не режимом «без исключений»: тот отменял все
+    /// прямые правила разом, включая десяток чужих сервисов, выведенных
+    /// напрямую потому, что так работает лучше. Отменять их заодно значило
+    /// бы делать не то, что написано на настройке.
+    /// </para>
+    /// </remarks>
+    internal static bool IsRussianNetworks(RoutingRule rule) =>
+        rule.Match == MatchKind.IpSet
+        && rule.Value.EndsWith("ipset-ru.txt", StringComparison.OrdinalIgnoreCase);
+
     private const string LatencyTag = "auto-latency";
 
     /// <summary>Резолвер для имён самих серверов подписки, всегда в обход туннеля.</summary>
@@ -1359,7 +1403,11 @@ public sealed class SingBoxConfigCompiler
         IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
             OperatingMode.Selective => ruleSet.Rules,
-            OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct).ToList(),
+
+            OperatingMode.ProxyAll => ruleSet.Rules
+                .Where(r => r.Mode == RoutingMode.Direct)
+                .Where(r => !options.IgnoreRussianExclusions || !IsRussianNetworks(r))
+                .ToList(),
 
             // ProxyStrict — «без исключений» буквально: ни одного правила,
             // включая прямые. Российские сервисы при этом сломаются, и это
