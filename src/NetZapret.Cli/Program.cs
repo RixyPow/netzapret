@@ -124,33 +124,12 @@ internal static class Program
     /// Только если в текущем каталоге его нет: запуск из своего каталога
     /// со своим набором правил — законный случай, и уводить из него нельзя.
     /// </para>
+    /// <para>
+    /// Признак — config\rules.yaml, а не папка config: та есть и в System32,
+    /// рабочем каталоге повышенного запуска (issue #3). См. <see cref="InstallRoot"/>.
+    /// </para>
     /// </remarks>
-    private static void MoveToConfigDirectory()
-    {
-        try
-        {
-            if (Directory.Exists("config"))
-                return;
-
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-            while (directory is not null)
-            {
-                if (Directory.Exists(Path.Combine(directory.FullName, "config")))
-                {
-                    Directory.SetCurrentDirectory(directory.FullName);
-                    return;
-                }
-
-                directory = directory.Parent;
-            }
-        }
-        catch (Exception)
-        {
-            // Не вышло — остаёмся где были: команда сама скажет,
-            // чего ей не хватает.
-        }
-    }
+    private static void MoveToConfigDirectory() => InstallRoot.MoveTo();
 
     /// <summary>
     /// Запуск двойным щелчком: поднимает права и открывает меню.

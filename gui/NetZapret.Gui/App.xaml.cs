@@ -426,25 +426,11 @@ public partial class App : Application
             fatal ? MessageBoxImage.Error : MessageBoxImage.Warning);
     }
 
-    private static void MoveToInstallDirectory()
-    {
-        if (Directory.Exists("config"))
-            return;
-
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            if (Directory.Exists(Path.Combine(directory.FullName, "config")))
-            {
-                Directory.SetCurrentDirectory(directory.FullName);
-                return;
-            }
-
-            directory = directory.Parent;
-        }
-
-        // Не нашли — оставляем как есть. Разделы скажут об этом сами, каждый
-        // про своё: так понятнее, чем одно окно с ошибкой при запуске.
-    }
+    /// <remarks>
+    /// Не нашли — оставляем как есть. Разделы скажут об этом сами, каждый
+    /// про своё: так понятнее, чем одно окно с ошибкой при запуске.
+    /// Признак установки — см. <see cref="InstallRoot"/>: прежний, папка
+    /// config, срабатывал в System32 и обрывал поиск (issue #3).
+    /// </remarks>
+    private static void MoveToInstallDirectory() => InstallRoot.MoveTo();
 }
