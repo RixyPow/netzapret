@@ -957,6 +957,21 @@ public partial class CheckView : UserControl
     /// которого не доходит очередь, — поломка, которая ждёт своего часа,
     /// и заметить её иначе нечем.
     /// </remarks>
+    /// <summary>
+    /// Чем лечится вид блокировки — словами самого отчёта.
+    /// </summary>
+    /// <remarks>
+    /// Раздел обещает «что закрыто и чем лечится», а до 23.09 говорил только
+    /// первое: итог перечислял вид и имена, совет не называл вовсе. Совет
+    /// был в TargetReport.Remedy и выверен тестами — «зависание стоит другого
+    /// рецепта раньше туннеля», «отказ по стране десинком не лечится», —
+    /// но звала его только консоль.
+    /// </remarks>
+    private static string Cure(string host) =>
+        _reports.FirstOrDefault(r => r.Host == host) is { } report
+            ? $". Лечится: {report.Remedy()}"
+            : string.Empty;
+
     private async Task Summarise(RuleEngine? engine)
     {
         var sections = new List<SectionRow>();
@@ -982,7 +997,8 @@ public partial class CheckView : UserControl
             : new SectionRow(
                 "Итог",
                 string.Join("\n", byKind.Select(g =>
-                    $"{g.Key}: {g.Count()} — {string.Join(", ", g.Select(r => r.Host).Take(6))}")),
+                    $"{g.Key}: {g.Count()} — {string.Join(", ", g.Select(r => r.Host).Take(6))}"
+                    + Cure(g.First().Host))),
                 (Brush)FindResource("Warn")));
 
         if (engine is not null)
@@ -999,6 +1015,39 @@ public partial class CheckView : UserControl
                     + "\n\nПобеждает правило, до которого очередь доходит раньше. "
                     + "Перекрытое не применяется вовсе, хотя в файле есть.",
                     (Brush)FindResource("Warn")));
+            }
+        }
+
+        // Системный резолвер против честного: у каких из закрытых имён
+        // адрес от системы не работает, а от DoH — работает. Лечится это
+        // сменой резолвера, а не рецептом и не туннелем, и без этой строки
+        // человек чинил бы маршрут там, где сломан ответ DNS.
+        //
+        // Умела это только консоль; окно не спрашивало вовсе (найдено 23.09
+        // при удалении консоли). Только у закрытых и не больше двенадцати —
+        // как и там: каждое имя стоит двух соединений, а у открытого
+        // спрашивать незачем.
+        var closed = byKind.SelectMany(g => g).Select(r => r.Host).Distinct().Take(12).ToList();
+
+        if (closed.Count > 0 && _work is { IsCancellationRequested: false } work)
+        {
+            try
+            {
+                var bad = await BlockCheck.FindBadSystemAddressesAsync(closed, work.Token);
+
+                if (bad.Count > 0)
+                {
+                    sections.Add(new SectionRow(
+                        "Системный резолвер даёт нерабочий адрес",
+                        string.Join(", ", bad)
+                        + "\n\nАдрес от честного резолвера (DoH) у этих имён работает, от системного — нет. "
+                        + "Лечится сменой резолвера в разделе «DNS», а не маршрутом.",
+                        (Brush)FindResource("Warn")));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Прервали — итог показываем без этой строки.
             }
         }
 
