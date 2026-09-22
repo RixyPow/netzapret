@@ -70,7 +70,14 @@ public static class XrayConfigParser
 
                 foreach (var outbound in outbounds.EnumerateArray())
                 {
-                    if (TryRead(outbound, out var server, out var problem))
+                    // Конфиг sing-box устроен так же — outbounds в корне, —
+                    // но сервер описан другими полями. Панель отдаёт его
+                    // в ответ на наш заголовок sing-box/1.14.0 (issue #3).
+                    var read = SingBoxOutboundReader.Is(outbound)
+                        ? SingBoxOutboundReader.TryRead(outbound, out var server, out var problem)
+                        : TryRead(outbound, out server, out problem);
+
+                    if (read)
                         servers.Add(server!);
                     else if (problem is not null)
                         errors.Add(problem);
