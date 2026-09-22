@@ -1,18 +1,18 @@
 @echo off
-rem Short wrapper for command-line use: "nz doctor", "nz probe --sub ...".
-rem The double-click entry point is NetZapret.cmd, which opens the menu.
+rem Short wrapper for the troubleshooting tool: "nz status", "nz where twitch.tv".
 rem
-rem Runs from build\, not from the project's bin\: see build.cmd for why.
+rem Runs nz from build\, where build.cmd deploys it. nz needs no administrator
+rem rights and finds the installation root on its own.
 rem
 rem ASCII only on purpose: cmd.exe reads batch files in the OEM code page,
 rem and UTF-8 Cyrillic here breaks apart into bogus commands.
 setlocal
-set "NETZAPRET_EXE=%~dp0build\NetZapretOld.exe"
+set "NZ_EXE=%~dp0build\nz.exe"
 
-if not exist "%NETZAPRET_EXE%" (
-    echo Not deployed yet: %NETZAPRET_EXE%
+if not exist "%NZ_EXE%" (
+    echo Not deployed yet: %NZ_EXE%
     echo Run: "%~dp0build.cmd"
     exit /b 1
 )
 
-"%NETZAPRET_EXE%" %*
+"%NZ_EXE%" %*

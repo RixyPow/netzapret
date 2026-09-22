@@ -14,11 +14,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Subscriptions", "
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Supervisor", "..\src\NetZapret.Supervisor\NetZapret.Supervisor.csproj", "{A1B2C3D4-0006-4000-9000-000000000006}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Wfp", "..\src\NetZapret.Wfp\NetZapret.Wfp.csproj", "{A1B2C3D4-0007-4000-9000-000000000007}"
-EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Etw", "..\src\NetZapret.Etw\NetZapret.Etw.csproj", "{A1B2C3D4-0008-4000-9000-000000000008}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Dns", "..\src\NetZapret.Dns\NetZapret.Dns.csproj", "{A1B2C3D4-0009-4000-9000-000000000009}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetZapret.Gui.Tests", "..\tests\NetZapret.Gui.Tests\NetZapret.Gui.Tests.csproj", "{34FA5D90-C8EB-4E17-A9E9-515F0982B0BA}"
 EndProject
@@ -52,18 +48,10 @@ Global
 		{A1B2C3D4-0006-4000-9000-000000000006}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-0006-4000-9000-000000000006}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-0006-4000-9000-000000000006}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1B2C3D4-0007-4000-9000-000000000007}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1B2C3D4-0007-4000-9000-000000000007}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1B2C3D4-0007-4000-9000-000000000007}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1B2C3D4-0007-4000-9000-000000000007}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A1B2C3D4-0008-4000-9000-000000000008}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1B2C3D4-0008-4000-9000-000000000008}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-0008-4000-9000-000000000008}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-0008-4000-9000-000000000008}.Release|Any CPU.Build.0 = Release|Any CPU
-		{A1B2C3D4-0009-4000-9000-000000000009}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1B2C3D4-0009-4000-9000-000000000009}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1B2C3D4-0009-4000-9000-000000000009}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{A1B2C3D4-0009-4000-9000-000000000009}.Release|Any CPU.Build.0 = Release|Any CPU
 		{34FA5D90-C8EB-4E17-A9E9-515F0982B0BA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{34FA5D90-C8EB-4E17-A9E9-515F0982B0BA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{34FA5D90-C8EB-4E17-A9E9-515F0982B0BA}.Release|Any CPU.ActiveCfg = Release|Any CPU

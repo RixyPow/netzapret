@@ -1,9 +1,8 @@
 @echo off
-rem Builds both parts and deploys them to build\.
+rem Builds the window and nz, and deploys both to build\.
 rem
-rem Both, because the window is the program now and the console is a developer
-rem tool beside it. Two scripts for one working copy meant remembering which
-rem of them to run after which change, and the answer was usually "both".
+rem The window is the program; nz is the troubleshooting tool beside it. The
+rem console that used to be built here was removed on 23.09.
 rem
 rem Why the extra copy: running straight out of a project's bin\ folder makes
 rem every rebuild fail while it is running, because MSBuild writes into the very
@@ -15,13 +14,16 @@ rem and UTF-8 Cyrillic here breaks apart into bogus commands.
 setlocal
 
 set "ROOT=%~dp0"
-set "CONSOLE=%ROOT%src\NetZapret.Cli\bin\Debug\net8.0-windows"
+rem nz, not the old console: the console was removed on 23.09. nz is the
+rem troubleshooting tool that needs no administrator rights and holds no
+rem logic of its own - see tools\nz\Program.cs.
+set "NZ=%ROOT%tools\nz\bin\Debug\net8.0-windows"
 set "WINDOW=%ROOT%gui\NetZapret.Gui\bin\Debug\net8.0-windows"
 set "TARGET=%ROOT%build"
 
 set "DOTNET=C:\Program Files\dotnet\dotnet.exe"
 
-echo Building the console...
+echo Building the libraries and nz...
 "%DOTNET%" build "%ROOT%NetZapret.sln" -v quiet --nologo
 if %errorlevel% neq 0 (
     echo Build failed.
@@ -141,13 +143,17 @@ if exist "%TARGET%\NetZapret.Gui.exe" (
     del /q "%TARGET%\netzapret.pdb" >nul 2>&1
 )
 
+rem The console was removed on 23.09; its files in build\ would otherwise stay
+rem forever and keep looking like part of the program.
+del /q "%TARGET%\NetZapretOld.*" >nul 2>&1
+
 echo Deploying to %TARGET%
 
 rem /R and /W are not optional here. Robocopy defaults to one million retries
 rem with a thirty second wait, so a single locked file hangs the script for
 rem what is effectively forever. Observed exactly that when a stray instance
 rem held the deployed assemblies. Two quick retries, then fail loudly.
-robocopy "%CONSOLE%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+robocopy "%NZ%" "%TARGET%" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if %errorlevel% geq 8 goto :held
 
 rem The window second, and never renamed on the way. The apphost looks for its

@@ -39,15 +39,11 @@ jobs:
       - name: Собрать окно
         run: dotnet build gui/NetZapret.Gui/NetZapret.Gui.csproj --configuration Release -warnaserror
 
-      # Проверка того, что важнее сборки: правила, которые мы поставляем,
-      # должны разбираться. Опечатка в YAML не ломает компиляцию, но делает
-      # программу неработоспособной у всех, кто её скачал.
-      - name: Проверить поставляемые правила
-        run: |
-          $exe = "src/NetZapret.Cli/bin/Release/net8.0-windows/NetZapretOld.exe"
-          foreach ($f in Get-ChildItem config/*.yaml) {
-            Write-Host "-- $($f.Name)"
-            & $exe rules --config $f.FullName
-            if ($LASTEXITCODE -ne 0) { throw "не разобрался: $($f.Name)" }
-          }
-        shell: pwsh
+      # Тесты окна — отдельно от тестов библиотек: их проект живёт в решении
+      # окна. До 23.09 CI их не гонял вовсе, и сто пятьдесят проверок
+      # запускались только на машине владельца.
+      - name: Прогнать тесты окна
+        run: dotnet test gui/NetZapret.Gui.sln --configuration Release --verbosity normal
+
+      # Поставляемые правила проверяет тест ShippedRulesTests: прежде это делал
+      # отдельный шаг через консольную команду rules, ушедшую 23.09.
