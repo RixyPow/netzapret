@@ -109,44 +109,11 @@ public static class HostsFile
         return result;
     }
 
-    /// <summary>
-    /// Ищет адреса, прибитые к домену или любому его поддомену.
-    /// </summary>
-    /// <param name="domain">Имя без ведущей звёздочки, например <c>canva.com</c>.</param>
-    /// <remarks>
-    /// Поддомены учитываются потому, что правило пишется на всю зону
-    /// (<c>*.canva.com</c>), а в hosts обычно перечислены конкретные имена
-    /// вроде <c>static.canva.com</c>. Проверять только точное совпадение
-    /// значило бы пропустить как раз то, что чаще всего и прибито.
-    /// </remarks>
-    public static IReadOnlyList<IPAddress> FindPinned(
-        IReadOnlyDictionary<string, List<IPAddress>> hosts,
-        string domain)
-    {
-        var found = new List<IPAddress>();
-
-        foreach (var (name, addresses) in hosts)
-        {
-            bool matches = string.Equals(name, domain, StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith("." + domain, StringComparison.OrdinalIgnoreCase);
-
-            if (!matches)
-                continue;
-
-            foreach (var address in addresses)
-            {
-                // Петлевые и нулевые адреса ставят, чтобы заблокировать имя,
-                // а не увести его. Заводить их в туннель бессмысленно.
-                if (IPAddress.IsLoopback(address) || address.Equals(IPAddress.Any))
-                    continue;
-
-                if (!found.Contains(address))
-                    found.Add(address);
-            }
-        }
-
-        return found;
-    }
+    /// <summary>Заглушка ли это: адрес, которым имя закрывают, а не уводят.</summary>
+    public static bool IsBlocking(IPAddress address) =>
+        IPAddress.IsLoopback(address)
+        || address.Equals(IPAddress.Any)
+        || address.Equals(IPAddress.IPv6Any);
 
     public static string ToCidr(IPAddress address) =>
         $"{address}/{(address.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32)}";
@@ -213,7 +180,17 @@ public static class HostsFile
             if (mode != Core.Rules.RoutingMode.Proxy)
                 continue;
 
-            foreach (var address in addresses)
+            // Петлевые и нулевые адреса ставят, чтобы заблокировать имя,
+            // а не увести его. В туннель их заводить бессмысленно, а петлю
+            // и вредно: маршрут 127.0.0.1 через TUN понёс бы к sing-box
+            // локальный трафик машины. Этот отсев жил в FindPinned, которую
+            // звала только консоль; сборщик окна его не делал (найдено 23.09).
+            var real = addresses.Where(a => !IsBlocking(a)).ToList();
+
+            if (real.Count == 0)
+                continue;
+
+            foreach (var address in real)
             {
                 var cidr = ToCidr(address);
 

@@ -47,31 +47,32 @@ public sealed class HostsFileTests : IDisposable
     }
 
     [Fact]
-    public void SubdomainsCountAsPinned()
-    {
-        // Правило пишется на зону (*.canva.com), а в hosts перечислены
-        // конкретные имена — точное совпадение пропустило бы главное.
-        Write("72.56.93.144 static.canva.com");
-
-        var pinned = HostsFile.FindPinned(HostsFile.Read(_path), "canva.com");
-
-        Assert.Equal(IPAddress.Parse("72.56.93.144"), Assert.Single(pinned));
-    }
-
-    [Fact]
     public void BlockingEntriesAreNotCaptured()
     {
         // 127.0.0.1 и 0.0.0.0 ставят, чтобы имя не открывалось вовсе.
-        // Заводить такое в туннель бессмысленно.
+        // Заводить такое в туннель бессмысленно, а 127.0.0.1 в маршрутах
+        // TUN и вредно: петлю машины понесло бы к sing-box.
+        //
+        // Прежде это проверялось на FindPinned, которую звала только
+        // консоль; окно собирает адреса CollectPinnedProxyAddresses, и её
+        // эта проверка не касалась вовсе.
         Write("""
             127.0.0.1 canva.com
             0.0.0.0 rutracker.org
             """);
 
-        var hosts = HostsFile.Read(_path);
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.canva.com"
+                mode: proxy
+              - match: domain
+                value: "*.rutracker.org"
+                mode: proxy
+            """);
 
-        Assert.Empty(HostsFile.FindPinned(hosts, "canva.com"));
-        Assert.Empty(HostsFile.FindPinned(hosts, "rutracker.org"));
+        Assert.Empty(HostsFile.CollectPinnedProxyAddresses(engine.RuleSet, out _, _path));
     }
 
     [Fact]
