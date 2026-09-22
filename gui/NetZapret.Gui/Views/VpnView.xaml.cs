@@ -310,13 +310,39 @@ public partial class VpnView : UserControl
                 ? $"{(until - DateTimeOffset.Now).Days} дн"
                 : "без срока");
 
+            // Пусто, а панель ответила — причина называется. Молча выходило
+            // «0 серверов · 14 дн» (issue #3), и понять, что сломан разбор,
+            // а не подписка, было нечем.
+            if (usable.Count == 0 && info.Errors.Count > 0)
+            {
+                parts.Add("не разобралась: " + info.Errors[0]);
+                Journal.Write("подписка", $"«{row.Entry.Name}» ответила, но серверов 0: "
+                    + string.Join("; ", info.Errors.Take(3)));
+            }
+
             row.Detail = string.Join(" · ", parts);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Чтение оборвали мы сами — повторным заходом в раздел. Это не
+            // сбой подписки, и в её строке ему не место: скажет цикл выше.
+            throw;
         }
         catch (Exception ex)
         {
             row.AsGiven = [];
             row.Servers = [];
-            row.Detail = "не прочиталась: " + ex.GetBaseException().Message;
+
+            // Срок HttpClient приходит той же отменой, что и наша, и прежде
+            // читался как «The operation was canceled» — неотличимо от
+            // прерванного чтения. Это медленная или мёртвая панель.
+            row.Detail = ex is OperationCanceledException
+                ? $"не прочиталась: панель не ответила за {SubscriptionClient.DefaultTimeout.TotalSeconds:0} с"
+                : "не прочиталась: " + ex.GetBaseException().Message;
+
+            // В журнал — чтобы «периодически не читалась» можно было
+            // разобрать задним числом. Без ссылки: она равносильна паролю.
+            Journal.Write("подписка", $"«{row.Entry.Name}» {row.Detail}");
         }
 
         Redraw();

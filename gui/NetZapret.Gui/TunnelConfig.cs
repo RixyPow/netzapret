@@ -365,28 +365,5 @@ internal static class TunnelConfig
         }
     }
 
-    /// <summary>
-    /// Строка в общий журнал.
-    /// </summary>
-    /// <remarks>
-    /// Тот же файл, что у супервизора, и тот же, что показывает раздел
-    /// «Журнал»: у окна консоли нет, а заводить второй журнал ради одной
-    /// строки значило бы разложить историю одного запуска по двум файлам.
-    /// Писать в него из двух процессов разом безопасно —
-    /// <see cref="SharedLogWriter"/> для того и заведён.
-    /// </remarks>
-    private static void Note(string message)
-    {
-        try
-        {
-            using var log = SharedLogWriter.TryOpen(
-                Path.Combine("runtime", "supervisor.log"));
-
-            log?.WriteLine($"[{DateTime.Now:HH:mm:ss}] конфиг: {message}");
-        }
-        catch (Exception)
-        {
-            // Потеря строки журнала не должна ронять то, о чём она.
-        }
-    }
+    private static void Note(string message) => Journal.Write("конфиг", message);
 }
