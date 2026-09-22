@@ -61,17 +61,20 @@ public partial class RoutesView
             if (made.Kept.Count > 0)
                 line += $" Ещё {made.Kept.Count} правил по адресам книгой не выражаются.";
 
-            BookLine.Text = line;
+            // В подсказку, а не строкой под карточкой: строка стоила списку
+            // маршрутов высоты, а счёт читают, когда собираются сохранять.
+            ExportButton.ToolTip = "Записать нынешние маршруты и пины в файл: " + line
+                + " Правила и пины при этом не меняются.";
 
             Clashes.ItemsSource = made.Book.Clashes;
-            Clashes.Visibility = made.Book.Clashes.Count > 0
+            ClashesBox.Visibility = made.Book.Clashes.Count > 0
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
         catch (Exception ex)
         {
-            BookLine.Text = "не собралась: " + ex.GetBaseException().Message;
-            Clashes.Visibility = Visibility.Collapsed;
+            ExportButton.ToolTip = "Книга не собралась: " + ex.GetBaseException().Message;
+            ClashesBox.Visibility = Visibility.Collapsed;
         }
     }
 

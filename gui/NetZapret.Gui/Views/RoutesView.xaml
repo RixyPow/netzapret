@@ -415,100 +415,91 @@
             <StackPanel Grid.Row="2">
 
                 <!--
-                    Книга маршрутов: вывоз и ввоз.
+                    Порядок вычисления и книга маршрутов — одной полосой,
+                    и это исправление 23.09.
 
-                    Пока только это, и намеренно. Книга ещё ничем не
-                    управляет — маршруты по-прежнему берутся из правил, —
-                    и показать её действующей значило бы соврать. А вот
-                    переносимость она даёт уже сейчас, и ради неё книга
-                    и задумывалась: файл можно отдать другому человеку,
-                    и он сработает с любым пресетом.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                    Книга стояла отдельной карточкой над порядком, и нижняя
+                    полоса выросла вдвое. Растёт она за счёт списка: тот
+                    берёт всё, что осталось от полос сверху и снизу, и у
+                    владельца на окне в 877 точек от него остались две с
+                    половиной строки — «книга ужала список маршрутов».
 
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Книга маршрутов" FontWeight="SemiBold"
-                                               VerticalAlignment="Center" />
+                    Книге строка не нужна: сохранить и загрузить — две кнопки,
+                    а счёт маршрутов и пинов читают, когда наводят на них,
+                    а не на каждом заходе.
 
-                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Отдельный файл «имя: маршрут» — то, как должны ходить маршруты, без привязки к пресету и туннелю. Один и тот же файл работает с Universal V9 и с любым другим пресетом, и его можно отдать другому человеку.&#x0a;&#x0a;Маршруты пока берутся не из него: он служит для переноса. Правила и пины при сохранении не меняются.&#x0a;&#x0a;Правила по адресам в книгу не идут — она говорит именами, а подсеть именем не назовёшь. Они остаются как были." />
-                                </StackPanel>
-
-                                <TextBlock x:Name="BookLine" Style="{StaticResource Caption}"
-                                           Margin="0,5,0,0" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <StackPanel Grid.Column="1" Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                <Button x:Name="ExportButton" Style="{StaticResource Ghost}"
-                                        Content="Сохранить в файл" Click="OnExportBook" Margin="0,0,8,0" Padding="12,7"
-                                        ToolTip="Записать нынешние маршруты и пины в файл. Сам файл потом можно отдать другому человеку." />
-
-                                <Button x:Name="ImportButton" Style="{StaticResource Ghost}"
-                                        Content="Загрузить" Click="OnImportBook" Padding="12,7"
-                                        ToolTip="Прочитать маршруты из файла. Покажет, что изменится, и спросит перед записью." />
-                            </StackPanel>
-                        </Grid>
-
-                        <!--
-                            Противоречия — то, ради чего книга и заводилась.
-                            Показываются только когда есть: пустая строка
-                            «противоречий нет» на каждом заходе превратилась
-                            бы в шум, который перестают читать.
-                        -->
-                        <ItemsControl x:Name="Clashes" Margin="0,12,0,0" Visibility="Collapsed">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="{DynamicResource Raised}" CornerRadius="6"
-                                            Padding="10,8" Margin="0,0,0,6">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource Warn}" />
-                                            <TextBlock Text="{Binding Outcome}" Style="{StaticResource Caption}"
-                                                       Margin="0,4,0,0" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!--
-                    Порядок вычисления. Список выше сгруппирован по сервисам —
+                    Порядок вычисления: список выше сгруппирован по сервисам —
                     так о маршрутах и думают, — но группировка прячет главное:
                     побеждает правило, до которого очередь доходит раньше.
-                    Перекрытое правило в файле есть, а не применяется никогда,
-                    и увидеть это можно только в этом порядке.
-
                     Свёрнут по умолчанию: правил под сотню, и разворачивают
                     их, когда правило написано, а не срабатывает.
                 -->
-                <Button Style="{StaticResource Choice}" Margin="0,22,0,0" Click="OnOrderToggle">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                        <Path x:Name="OrderChevron" Grid.Column="0"
-                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
+                    <Button Grid.Column="0" Style="{StaticResource Choice}" Click="OnOrderToggle">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Порядок вычисления" FontWeight="SemiBold" />
-                            <TextBlock x:Name="OrderSummary" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Grid>
-                </Button>
+                            <Path x:Name="OrderChevron" Grid.Column="0"
+                                  Style="{StaticResource Chevron}" Margin="0,0,12,0" />
+
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Порядок вычисления" FontWeight="SemiBold" />
+                                <TextBlock x:Name="OrderSummary" Style="{StaticResource Caption}"
+                                           Margin="0,5,0,0" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="12,0,0,0">
+                        <TextBlock Text="Книга" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                        <ContentControl Style="{StaticResource Info}" Margin="2,0,8,0"
+                                        Content="Отдельный файл «имя: маршрут» — то, как должны ходить маршруты, без привязки к пресету и туннелю. Один и тот же файл работает с Universal V9 и с любым другим пресетом, и его можно отдать другому человеку.&#x0a;&#x0a;Собирается из тех же маршрутов, что выбраны на этой вкладке, а загруженная — заменяет их.&#x0a;&#x0a;Правила по адресам в книгу не идут — она говорит именами, а подсеть именем не назовёшь. Они остаются как были." />
+
+                        <Button x:Name="ExportButton" Style="{StaticResource Ghost}"
+                                Content="Сохранить" Click="OnExportBook" Margin="0,0,8,0" Padding="12,7" />
+
+                        <Button x:Name="ImportButton" Style="{StaticResource Ghost}"
+                                Content="Загрузить" Click="OnImportBook" Padding="12,7"
+                                ToolTip="Прочитать маршруты из файла. Покажет, что изменится, и спросит перед записью." />
+                    </StackPanel>
+                </Grid>
+
+                <!--
+                    Противоречия — то, ради чего книга и заводилась.
+                    Показываются только когда есть: пустая строка
+                    «противоречий нет» на каждом заходе превратилась
+                    бы в шум, который перестают читать. Свой свиток —
+                    по той же причине, что у порядка: полоса под списком
+                    растёт за его счёт.
+                -->
+                <ScrollViewer x:Name="ClashesBox" MaxHeight="160" Margin="0,10,0,0"
+                              VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                    <ItemsControl x:Name="Clashes">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource Raised}" CornerRadius="6"
+                                        Padding="10,8" Margin="0,0,0,6">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Warn}" />
+                                        <TextBlock Text="{Binding Outcome}" Style="{StaticResource Caption}"
+                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
 
                 <StackPanel x:Name="OrderPanel" Visibility="Collapsed" Margin="0,10,0,0">
                     <Grid Margin="16,0,16,8">
