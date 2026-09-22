@@ -45,8 +45,31 @@ public sealed record SupervisorState
         // в момент обновления и получить обрезанный JSON.
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, json, new UTF8Encoding(false));
-        File.Move(temporary, path, overwrite: true);
+
+        // Замена занятого файла — не редкость, а обычное дело: окно читает
+        // состояние каждые пару секунд, и чтение держит файл без права
+        // на удаление. Windows отвечает на это «Access denied» — не IOException,
+        // а UnauthorizedAccessException. 19.09 он и уронил супервизор, а с ним
+        // движки. Чтение длится миллисекунды, так что короткий повтор
+        // закрывает почти всё; не вышло — решает вызывающий.
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(temporary, path, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (IsBusy(ex) && attempt < 5)
+            {
+                Thread.Sleep(20 * attempt);
+            }
+        }
     }
+
+    /// <summary>
+    /// Занят ли файл кем-то другим: так Windows отвечает и тем, и другим.
+    /// </summary>
+    public static bool IsBusy(Exception ex) => ex is IOException or UnauthorizedAccessException;
 
     public static SupervisorState? Load(string path)
     {
@@ -55,6 +78,10 @@ public sealed record SupervisorState
 
         try
         {
+            // Читающий держит файл, и замена в этот миг получает «Access denied».
+            // Разрешение FileShare.Delete тут не спасает — замерено 23.09:
+            // File.Move с перезаписью открытого файла отказывает и с ним.
+            // Поэтому столкновение переживает пишущий, см. Save.
             return JsonSerializer.Deserialize<SupervisorState>(File.ReadAllText(path), Options);
         }
         catch (Exception)
@@ -70,7 +97,7 @@ public sealed record SupervisorState
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch (IOException)
+        catch (Exception ex) when (IsBusy(ex))
         {
             // Файл состояния — вспомогательный; невозможность удалить не критична.
         }

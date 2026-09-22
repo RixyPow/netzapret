@@ -295,9 +295,11 @@ public sealed class ProcessSupervisor
         {
             BuildState().Save(_options.StatePath);
         }
-        catch (IOException)
+        catch (Exception ex) when (SupervisorState.IsBusy(ex))
         {
             // Файл состояния вспомогательный: не смогли записать — не повод падать.
+            // И UnauthorizedAccessException тоже: прежде ловилось одно IOException,
+            // и занятый окном файл ронял супервизор вместе с движками (19.09).
         }
     }
 
