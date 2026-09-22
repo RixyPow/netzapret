@@ -425,7 +425,7 @@ public partial class RoutesView : UserControl
         // Ключ несёт и тип, и путь: правило по адресам пишется ipset'ом,
         // по именам — hostlist'ом, и перепутать их значит записать правило,
         // которое не совпадёт ни с чем.
-        var kind = part.Part.ByAddress ? "ipset" : "hostlist";
+        var kind = part.Part.ByAddress ? RouteKeys.IpSet : RouteKeys.HostList;
 
         var detail = part.Part.ByAddress
             ? $"{part.DomainCount} подсетей"
@@ -454,7 +454,7 @@ public partial class RoutesView : UserControl
             // С диска, если в памяти пусто: после перезапуска памяти нет вовсе,
             // и список открывался буквами при полном кэше на диске.
             Icon = host.Contains('.') && !IsAddress(host) ? SiteIcons.Cached(host) : null,
-            Key = kind + "|" + part.Part.List,
+            Key = RouteKeys.Make(kind, part.Part.List),
             Title = part.Part.Name,
 
             // Обычно ровно то имя, что показано в подписи «например …»: оно
@@ -799,7 +799,7 @@ public partial class RoutesView : UserControl
 
         // Свой домен в каталоге не ищется — его там нет. Всё, что нужно
         // окну, лежит в самом имени.
-        if (kind == "own")
+        if (kind == RouteKeys.Own)
         {
             if (row is { HasPin: true })
             {
@@ -1243,7 +1243,7 @@ public partial class RoutesView : UserControl
     private void OnRemoveOwn(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string key }
-            || key.Split('|', 2) is not ["own", var value])
+            || RouteKeys.Parse(key) is not (RouteKeys.Own, var value))
         {
             return;
         }
@@ -1311,7 +1311,7 @@ public partial class RoutesView : UserControl
         // Свой домен наравне со списком: рецепт применяется по имени
         // в приветствии TLS, и своему имени он нужен ровно так же.
         // У правил по адресам не спрашиваем — имени в таких пакетах нет.
-        if (key.Split('|', 2) is [var kind and ("hostlist" or "own"), var value])
+        if (RouteKeys.Parse(key) is (var kind, var value) && RouteKeys.TakesRecipe(kind))
             AskLater(key, value, example, RouteKeys.MatchOf(kind), RoutingMode.Desync);
     }
 
