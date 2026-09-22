@@ -251,6 +251,8 @@ public partial class VpnView : UserControl
             //
             // Номер называется вслух: при зависшей панели «Читаю подписки…»
             // без номера не говорит даже того, которая из трёх не отвечает.
+            bool everyRead = true;
+
             for (int i = 0; i < _rows.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
@@ -259,7 +261,23 @@ public partial class VpnView : UserControl
                     ? $"Читаю подписку {i + 1} из {_rows.Count}…"
                     : "Читаю подписку…";
 
-                await FillAsync(_rows[i], settings, token);
+                everyRead &= await FillAsync(_rows[i], settings, token);
+            }
+
+            // Замеры исчезнувших серверов — вон, иначе файл копит их вечно,
+            // а по ним судят о свежести всего списка. Звала это только
+            // консоль; окно не звало ни разу (найдено 23.09).
+            //
+            // Только когда прочитались все подписки: не ответившая сейчас
+            // лишилась бы замеров своих серверов, которые никуда не делись.
+            // WARP в подписках не значится, и его выход сохраняется отдельно.
+            if (everyRead && _rows.Count > 0)
+            {
+                _health.KeepOnly(_rows
+                    .SelectMany(r => r.AsGiven)
+                    .Select(s => s.Tag)
+                    .Concat(Warp.Exits().Select(e => e.Tag)));
+                _health.Save();
             }
 
             int servers = _rows.Sum(r => r.Servers.Count);
@@ -280,7 +298,8 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>Читает одну подписку и заполняет её папку.</summary>
-    private async Task FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken)
+    /// <returns>Прочиталась ли: ответила и разобралась.</returns>
+    private async Task<bool> FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken)
     {
         try
         {
@@ -321,6 +340,11 @@ public partial class VpnView : UserControl
             }
 
             row.Detail = string.Join(" · ", parts);
+            Redraw();
+
+            // Ответила, но не разобралась — не прочиталась: её серверы
+            // никуда не делись, и их замеры трогать нельзя.
+            return !(usable.Count == 0 && info.Errors.Count > 0);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -346,6 +370,7 @@ public partial class VpnView : UserControl
         }
 
         Redraw();
+        return false;
     }
 
     private IReadOnlyList<ServerRow> Rows(
