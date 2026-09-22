@@ -41,8 +41,11 @@ public sealed class EngineChoiceTests
         var choice = EngineChoice.FromMode(OperatingMode.ProxyStrict);
 
         Assert.True(choice.TunnelTakesAll);
-        Assert.True(choice.IgnoreRussianExclusions);
-        Assert.Equal(OperatingMode.ProxyAll, choice.Mode);
+        Assert.True(choice.IgnoreExclusions);
+
+        // С 23.09 — обратно в тот же режим: настройка снова значит «всё
+        // в туннель», как значил он.
+        Assert.Equal(OperatingMode.ProxyStrict, choice.Mode);
     }
 
     [Fact]
@@ -76,7 +79,7 @@ public sealed class EngineChoiceTests
             {
                 var choice = new EngineChoice { Desync = desync, Tunnel = tunnel };
 
-                Assert.False(choice.Desync && choice.TunnelTakesAll);
+                Assert.False(choice.DesyncRuns && choice.TunnelTakesAll);
             }
         }
     }
@@ -110,10 +113,34 @@ public sealed class EngineChoiceTests
         {
             Desync = false,
             Tunnel = true,
-            IgnoreRussianExclusions = true,
+            IgnoreExclusions = true,
         };
 
         Assert.Contains("банки и госуслуги", choice.Complaint);
+    }
+
+    [Fact]
+    public void Ignoring_the_exclusions_with_both_switches_sends_everything_to_the_tunnel()
+    {
+        // Таблица владельца 23.09: «напрямую — VPN, десинк — VPN, VPN — VPN».
+        // Десинку чинить нечего, и он не поднимается, хоть выключатель и стоит.
+        var choice = new EngineChoice { Desync = true, Tunnel = true, IgnoreExclusions = true };
+
+        Assert.Equal(OperatingMode.ProxyStrict, choice.Mode);
+        Assert.True(choice.TunnelTakesAll);
+        Assert.False(choice.DesyncRuns);
+        Assert.Contains("не поднимется", choice.Complaint);
+    }
+
+    [Fact]
+    public void Without_the_tunnel_the_setting_changes_nothing()
+    {
+        // Везти некуда: при одном десинке настройка молчит.
+        var choice = new EngineChoice { Desync = true, Tunnel = false, IgnoreExclusions = true };
+
+        Assert.Equal(OperatingMode.DesyncOnly, choice.Mode);
+        Assert.True(choice.DesyncRuns);
+        Assert.Null(choice.Complaint);
     }
 
     [Theory]

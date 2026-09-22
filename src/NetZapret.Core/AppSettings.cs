@@ -62,14 +62,13 @@ public sealed record AppSettings
     public bool? TunnelEnabled { get; init; }
 
     /// <summary>
-    /// Не выводить российские сети напрямую.
+    /// Отправлять в туннель всё, включая «напрямую» и «десинк».
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Отменяет одно правило — на <c>ipset-ru.txt</c>, — а не все прямые
-    /// разом. Прочие исключения выведены напрямую потому, что так работает
-    /// лучше, и отменять их заодно значило бы делать не то, что написано
-    /// на настройке.
+    /// См. <see cref="EngineChoice.IgnoreExclusions"/>. До 23.09 отменяла
+    /// одно правило, на российские сети; ключ в файле остался прежним,
+    /// чтобы записанный выбор не пропал при обновлении.
     /// </para>
     /// <para>
     /// Допускает пустоту наравне с прочими тремя, и это выяснилось
@@ -79,7 +78,8 @@ public sealed record AppSettings
     /// напрямую, молча изменив поведение.
     /// </para>
     /// </remarks>
-    public bool? IgnoreRussianExclusions { get; init; }
+    [JsonPropertyName("IgnoreRussianExclusions")]
+    public bool? IgnoreExclusions { get; init; }
 
     /// <summary>
     /// Что поднято, двумя выключателями.
@@ -101,8 +101,7 @@ public sealed record AppSettings
             {
                 Desync = DesyncEnabled ?? fromMode.Desync,
                 Tunnel = TunnelEnabled ?? fromMode.Tunnel,
-                IgnoreRussianExclusions =
-                    IgnoreRussianExclusions ?? fromMode.IgnoreRussianExclusions,
+                IgnoreExclusions = IgnoreExclusions ?? fromMode.IgnoreExclusions,
             };
         }
     }
@@ -120,7 +119,7 @@ public sealed record AppSettings
         Mode = choice.Mode,
         DesyncEnabled = choice.Desync,
         TunnelEnabled = choice.Tunnel,
-        IgnoreRussianExclusions = choice.IgnoreRussianExclusions,
+        IgnoreExclusions = choice.IgnoreExclusions,
     };
 
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
@@ -337,8 +336,15 @@ public sealed record AppSettings
 
         try
         {
-            return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(target), Options)
+            var read = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(target), Options)
                 ?? new AppSettings();
+
+            // Режим сводится к выключателям при каждом чтении. 0.7.0 писала
+            // «выборочный» рядом с включённым «игнорировать исключения»:
+            // тогда настройка режима не меняла. С 23.09 меняет, и прочитанный
+            // как есть записанный режим развёл бы окно и движок — окно
+            // показывало бы «всё в туннель», а конфиг собирался бы по книге.
+            return read with { Mode = read.Engines.Mode };
         }
         catch (Exception)
         {
@@ -450,8 +456,12 @@ public sealed record AppSettings
     /// получать неверный ответ молча.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// С 23.09 — по <see cref="EngineChoice.DesyncRuns"/>: при игнорируемых
+    /// исключениях всё уходит в туннель, и у десинка работы нет.
+    /// </remarks>
     [JsonIgnore]
-    public bool NeedsDesync => Engines.Desync && PresetName is not null;
+    public bool NeedsDesync => Engines.DesyncRuns && PresetName is not null;
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 

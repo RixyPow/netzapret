@@ -483,21 +483,32 @@ public partial class StatusView : UserControl
         DesyncSwitch.IsChecked = engines.Desync;
         TunnelSwitch.IsChecked = engines.Tunnel;
 
-        DesyncLine.Text = engines.Desync
-            ? "Чинит имена в рукопожатии. Трафик идёт напрямую."
-            : "Выключен. Закрытые по имени сайты останутся закрытыми.";
+        // Третье состояние — включён, а не поднимается: при игнорируемых
+        // исключениях всё уходит в туннель. Промолчать значило бы показать
+        // включённым то, чего в диспетчере задач не будет.
+        DesyncLine.Text = !engines.Desync
+            ? "Выключен. Закрытые по имени сайты останутся закрытыми."
+            : !engines.DesyncRuns
+                ? "Не поднимается: исключения игнорируются, и всё идёт в туннель."
+                : engines.Tunnel
+                    ? "Чинит имена в рукопожатии. Трафик идёт напрямую."
+                    : "Чинит имена в рукопожатии. «Через VPN» без туннеля идёт напрямую.";
 
         // Туннель говорит и про охват, потому что тот выводится из пары:
         // без десинка он забирает всё, вместе с ним — только названное.
         // Человек, щёлкнувший один выключатель, вправе узнать, что этим
         // изменилось у второго.
-        TunnelLine.Text = engines.Tunnel
-            ? engines.TunnelTakesAll
-                ? "Забирает весь трафик — как обычный VPN."
-                : "Уводит то, что названо в маршрутах."
-            : "Не поднимается. Адрес остаётся домашним.";
+        // «Напрямую» при одном туннеле остаётся напрямую — таблица владельца
+        // 23.09; «весь трафик» без оговорки обещал бы и его.
+        TunnelLine.Text = !engines.Tunnel
+            ? "Не поднимается. Адрес остаётся домашним."
+            : engines.IgnoreExclusions
+                ? "Забирает весь трафик, исключения не действуют."
+                : engines.TunnelTakesAll
+                    ? "Забирает всё, кроме поставленного «напрямую»."
+                    : "Уводит то, что названо в маршрутах.";
 
-        DesyncCard.BorderBrush = (Brush)FindResource(engines.Desync ? "Accent" : "Border");
+        DesyncCard.BorderBrush = (Brush)FindResource(engines.DesyncRuns ? "Accent" : "Border");
         TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
 
         EnginesLine.Text = engines.Complaint ?? string.Empty;

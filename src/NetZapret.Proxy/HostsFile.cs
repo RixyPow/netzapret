@@ -20,6 +20,17 @@ public enum DesyncBypass
 
     /// <summary>Поставлено на «напрямую».</summary>
     Direct,
+
+    /// <summary>
+    /// Поставлено «через VPN», а туннель не поднят.
+    /// </summary>
+    /// <remarks>
+    /// Таблица владельца 23.09: при одном десинке «VPN идёт напрямую».
+    /// Везти такое имя некуда, и десинк к нему не применяется — ровно как
+    /// к «напрямую». Отдельной причиной, а не <see cref="Direct"/>: лечится
+    /// это не переключателем в маршрутах, а выключателем туннеля.
+    /// </remarks>
+    VpnWithoutTunnel,
 }
 
 /// <summary>
@@ -261,8 +272,9 @@ public static class HostsFile
     /// </remarks>
     public static IReadOnlyList<string> CollectDesyncExclusions(
         Core.Rules.RuleSet ruleSet,
-        string? hostsPath = null) =>
-        DescribeDesyncExclusions(ruleSet, hostsPath).Select(each => each.Name).ToList();
+        string? hostsPath = null,
+        bool tunnelUp = true) =>
+        DescribeDesyncExclusions(ruleSet, hostsPath, tunnelUp).Select(each => each.Name).ToList();
 
     /// <summary>
     /// То же самое, но с причиной у каждого имени.
@@ -281,10 +293,17 @@ public static class HostsFile
     /// поэтому имя, и прибитое в hosts, и поставленное на «напрямую», числится
     /// за пином. Так честнее — пин бьёт резолв независимо от режима.
     /// </para>
+    /// <para>
+    /// <paramref name="tunnelUp"/> — поднят ли туннель вместе с десинком.
+    /// Без туннеля «через VPN» идёт напрямую (таблица владельца 23.09),
+    /// и такие имена выводятся из-под десинка наравне с «напрямую».
+    /// Прибитые при этом выводятся все: заворачивать их адреса некуда.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<(string Name, DesyncBypass Why)> DescribeDesyncExclusions(
         Core.Rules.RuleSet ruleSet,
-        string? hostsPath = null)
+        string? hostsPath = null,
+        bool tunnelUp = true)
     {
         var found = new List<(string Name, DesyncBypass Why)>();
         var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
@@ -300,7 +319,7 @@ public static class HostsFile
             if (addresses.Count == 0)
                 continue;
 
-            if (FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
+            if (tunnelUp && FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
                 continue;
 
             Add(name, DesyncBypass.Pin);
@@ -322,6 +341,24 @@ public static class HostsFile
             {
                 if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Direct)
                     Add(domain, DesyncBypass.Direct);
+            }
+        }
+
+        if (tunnelUp)
+            return found;
+
+        // Тем же порядком и с той же оговоркой: имя достаётся тому правилу,
+        // до которого очередь доходит раньше, и «через VPN», перекрытое
+        // десинком выше, остаётся десинку.
+        foreach (var (mode, domains) in order)
+        {
+            if (mode != Core.Rules.RoutingMode.Proxy)
+                continue;
+
+            foreach (var domain in domains)
+            {
+                if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Proxy)
+                    Add(domain, DesyncBypass.VpnWithoutTunnel);
             }
         }
 
@@ -366,6 +403,7 @@ public static class HostsFile
     {
         DesyncBypass.Pin => "мимо десинка: пин в hosts",
         DesyncBypass.Direct => "мимо десинка: «напрямую»",
+        DesyncBypass.VpnWithoutTunnel => "мимо десинка: «через VPN», а туннель выключен",
         _ => string.Empty,
     };
 

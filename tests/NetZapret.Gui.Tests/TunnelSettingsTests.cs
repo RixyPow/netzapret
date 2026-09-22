@@ -104,14 +104,14 @@ public sealed class TunnelSettingsTests
         {
             Desync = false,
             Tunnel = true,
-            IgnoreRussianExclusions = true,
+            IgnoreExclusions = true,
         };
 
         var back = new AppSettings().With(choice).Engines;
 
         Assert.Equal(choice.Desync, back.Desync);
         Assert.Equal(choice.Tunnel, back.Tunnel);
-        Assert.Equal(choice.IgnoreRussianExclusions, back.IgnoreRussianExclusions);
+        Assert.Equal(choice.IgnoreExclusions, back.IgnoreExclusions);
 
         // Охват не хранится, а выводится: туннель без десинка забирает всё.
         Assert.True(back.TunnelTakesAll);
@@ -126,6 +126,6 @@ public sealed class TunnelSettingsTests
         var settings = new AppSettings { Mode = OperatingMode.ProxyStrict };
 
         Assert.True(settings.Engines.TunnelTakesAll);
-        Assert.True(settings.Engines.IgnoreRussianExclusions);
+        Assert.True(settings.Engines.IgnoreExclusions);
     }
 }

@@ -44,18 +44,19 @@ public partial class TunnelSettingsWindow : Window
     {
         var engines = settings.Engines;
 
-        Word(RussianWord, engines.IgnoreRussianExclusions);
-        Russian.IsChecked = engines.IgnoreRussianExclusions;
+        Word(RussianWord, engines.IgnoreExclusions);
+        Russian.IsChecked = engines.IgnoreExclusions;
 
-        // Имеет смысл только там, где туннель забирает весь трафик:
-        // иначе туда и так уходит лишь названное в маршрутах, и выводить
-        // оттуда нечего. Живой выключатель у того, чего нет, обещает
-        // действие, которого не будет.
-        Russian.IsEnabled = engines.TunnelTakesAll;
+        // Имеет смысл только при туннеле: без него везти некуда. Живой
+        // выключатель у того, чего нет, обещает действие, которого не будет.
+        //
+        // С 23.09 — при любом туннеле, а не только забравшем всё: настройка
+        // сама отправляет в туннель всё, в том числе при включённом десинке.
+        Russian.IsEnabled = engines.Tunnel;
 
-        RussianLine.Text = engines.TunnelTakesAll
+        RussianLine.Text = engines.Tunnel
             ? string.Empty
-            : "Действует, когда туннель поднят без десинка и забирает весь трафик.";
+            : "Действует, когда туннель включён.";
 
         Status.Text = engines.Complaint ?? string.Empty;
 
@@ -116,10 +117,10 @@ public partial class TunnelSettingsWindow : Window
     }
 
     private void OnRussian(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { IgnoreRussianExclusions = Russian.IsChecked == true },
+        Choose(c => c with { IgnoreExclusions = Russian.IsChecked == true },
             Russian.IsChecked == true
-                ? "Российские сети уйдут в туннель."
-                : "Российские сети снова идут напрямую.");
+                ? "Всё пойдёт через туннель, исключения не действуют."
+                : "Исключения снова действуют: «напрямую» и «десинк» — мимо туннеля.");
 
     private void OnForeign(object sender, RoutedEventArgs e) =>
         Save(s => s with { ForeignExitsOnly = Foreign.IsChecked == true },

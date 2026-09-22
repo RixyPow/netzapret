@@ -42,6 +42,17 @@ internal static class EngineControl
             }
         }
 
+        // Списки десинка — при каждом его запуске, с туннелем или без.
+        // Прежде они писались одной сборкой туннеля, и с выключенным
+        // туннелем winws2 брал вчерашние (issue #1).
+        if (settings.NeedsDesync)
+        {
+            var lists = TunnelConfig.WriteDesyncLists(settings);
+
+            if (!lists.Ok)
+                note += lists.Message + " ";
+        }
+
         var exe = Environment.ProcessPath;
 
         if (exe is null)

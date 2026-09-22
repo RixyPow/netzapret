@@ -699,7 +699,7 @@ public partial class CheckView : UserControl
         // не тем, что winws2 на самом деле получил.
         IReadOnlyList<(string Name, DesyncBypass Why)> bypassed = engine is null
             ? []
-            : HostsFile.DescribeDesyncExclusions(engine.RuleSet);
+            : HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelInUse);
 
         var running = targets.Select(async target =>
         {

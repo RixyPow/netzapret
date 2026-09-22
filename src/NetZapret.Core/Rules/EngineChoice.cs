@@ -55,26 +55,44 @@ public sealed record EngineChoice
     /// машины, а не настройка.
     /// </para>
     /// </remarks>
-    public bool TunnelTakesAll => Tunnel && !Desync;
+    /// <remarks>
+    /// С 23.09 забирает всё и тогда, когда исключения игнорируются: всё
+    /// идёт в туннель, и узкий охват оставил бы за бортом ровно то, что
+    /// настройка туда отправила.
+    /// </remarks>
+    public bool TunnelTakesAll => Tunnel && (!Desync || IgnoreExclusions);
 
     /// <summary>
-    /// Не выводить российские сети напрямую.
+    /// Отправлять в туннель всё, включая «напрямую» и «десинк».
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Отменяет правило на <c>ipset-ru.txt</c> — шестьсот восемьдесят две
-    /// строки российских сетей. Через туннель эти адреса увидят зарубежный
-    /// выход: банки и госуслуги начнут требовать подтверждений, часть
-    /// сервисов откажет вовсе.
+    /// Таблица владельца 23.09: «напрямую — VPN, десинк — VPN, VPN — VPN».
+    /// Прежде настройка отменяла одно правило, на российские сети, а прочие
+    /// исключения оставляла, — владелец просил другого.
     /// </para>
     /// <para>
-    /// Прочие исключения при этом остаются. У владельца их десять —
-    /// chatgpt, github, twitch, spotify и другие, — и выведены они напрямую
-    /// потому, что так работает лучше, а не потому, что местные. Отменять
-    /// их заодно значило бы делать не то, что написано на настройке.
+    /// Цена та же и названа в окне: российские сервисы увидят зарубежный
+    /// адрес, банки и госуслуги потребуют подтверждений, часть откажет.
+    /// Домашняя сеть остаётся снаружи всегда — это условие работы машины.
+    /// </para>
+    /// <para>
+    /// Действует только при поднятом туннеле: без него везти некуда.
     /// </para>
     /// </remarks>
-    public bool IgnoreRussianExclusions { get; init; }
+    public bool IgnoreExclusions { get; init; }
+
+    /// <summary>
+    /// Поднимается ли десинк на деле.
+    /// </summary>
+    /// <remarks>
+    /// Выключатель может стоять, а работы у десинка не быть: при
+    /// игнорируемых исключениях всё уходит в туннель, и winws2 видел бы
+    /// только его собственные соединения с сервером. Хуже чем вхолостую —
+    /// секция пресета, совпавшая с именем-маскировкой сервера, рвала бы
+    /// сам туннель.
+    /// </remarks>
+    public bool DesyncRuns => Desync && !(Tunnel && IgnoreExclusions);
 
     /// <summary>Работает ли хоть что-нибудь.</summary>
     public bool Anything => Desync || Tunnel;
@@ -87,10 +105,28 @@ public sealed record EngineChoice
     /// на языке режимов, и переводить их все разом значило бы менять
     /// полпрограммы одной правкой.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// Режимы и есть таблица владельца от 23.09, строка за строкой:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>десинк — напрямую, десинк, VPN идёт напрямую
+    /// (<see cref="OperatingMode.DesyncOnly"/>: туннеля нет, а «VPN»
+    /// выводится из-под десинка списком исключений);</item>
+    /// <item>десинк и туннель — всё как в книге
+    /// (<see cref="OperatingMode.Selective"/>);</item>
+    /// <item>только туннель — напрямую остаётся, десинк уходит в VPN
+    /// (<see cref="OperatingMode.ProxyAll"/>: в конфиг идут одни прямые
+    /// правила, остальное забирает final);</item>
+    /// <item>игнорировать исключения — всё в VPN
+    /// (<see cref="OperatingMode.ProxyStrict"/>: правил нет вовсе).</item>
+    /// </list>
+    /// </remarks>
     public OperatingMode Mode => (Desync, Tunnel) switch
     {
         (false, false) => OperatingMode.Off,
         (true, false) => OperatingMode.DesyncOnly,
+        (_, true) when IgnoreExclusions => OperatingMode.ProxyStrict,
         (true, true) => OperatingMode.Selective,
         (false, true) => OperatingMode.ProxyAll,
     };
@@ -116,10 +152,12 @@ public sealed record EngineChoice
             if (!Anything)
                 return "ничего не поднято — весь трафик идёт напрямую, как без программы";
 
-            if (Tunnel && TunnelTakesAll && IgnoreRussianExclusions)
+            if (Tunnel && IgnoreExclusions)
             {
-                return "российские сети уйдут в туннель и увидят зарубежный адрес: "
-                    + "банки и госуслуги потребуют подтверждений, часть откажет";
+                return "исключения не действуют: российские сервисы уйдут в туннель "
+                    + "и увидят зарубежный адрес — банки и госуслуги потребуют "
+                    + "подтверждений, часть откажет"
+                    + (Desync ? "; десинку при этом нечего чинить, и он не поднимется" : string.Empty);
             }
 
             return null;
@@ -131,8 +169,9 @@ public sealed record EngineChoice
     {
         (false, false) => "ничего не поднято",
         (true, false) => "только десинк",
-        (false, true) => TunnelTakesAll ? "только VPN, весь трафик" : "только VPN, по маршрутам",
-        (true, true) => TunnelTakesAll ? "десинк и VPN, весь трафик" : "десинк и VPN по маршрутам",
+        (_, true) when IgnoreExclusions => "только VPN, весь трафик без исключений",
+        (false, true) => "только VPN, весь трафик",
+        (true, true) => "десинк и VPN по маршрутам",
     };
 
     /// <summary>
@@ -167,7 +206,7 @@ public sealed record EngineChoice
         {
             Desync = false,
             Tunnel = true,
-            IgnoreRussianExclusions = true,
+            IgnoreExclusions = true,
         },
 
         _ => new EngineChoice(),

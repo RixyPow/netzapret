@@ -52,12 +52,7 @@ internal static class TunnelConfig
 
         try
         {
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
-
-            // Режим из настроек перекрывает файл правил: окно не должно
-            // переписывать базовый YAML, который ведётся руками.
-            var ruleSet = engine.RuleSet with { Operating = settings.Mode };
+            var (ruleSet, zapretRoot) = LoadRules(settings);
 
             // Подписка читается, только если она есть. Без неё остаётся WARP:
             // выше мы уже убедились, что хоть один выход да заявлен.
@@ -79,33 +74,12 @@ internal static class TunnelConfig
                 ? [.. fromSubscription, .. Warp.Exits()]
                 : fromSubscription;
 
-            var zapretRoot = ZapretPaths.Discover()?.Root;
             var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out _);
-
-            RuleSetExpander.Expand(ruleSet, zapretRoot);
 
             // hosts бьёт любой резолв, включая наш: прибитый там домен
             // не получит fakeip и уйдёт мимо туннеля, сколько бы правил
             // на него ни стояло.
             var pinned = HostsFile.CollectPinnedProxyAddresses(ruleSet, out _);
-
-            // Имена, которые десинку трогать нельзя: прибитые в hosts
-            // и поставленные на «напрямую». Пин — выбранный руками адрес,
-            // а десинк судит по имени и про подмену не знает: он применяет
-            // к постороннему узлу рецепт, выверенный на настоящей сети
-            // доставки, и рвёт рукопожатие. «Напрямую» же до этого означало
-            // для winws2 ровно то же, что «десинк», — то есть ничего.
-            //
-            // Домен регистрации WARP сюда НЕ добавляется, и это решение
-            // по замеру, а не недосмотр: без десинка его рукопожатие
-            // не проходит вовсе. См. Warp.RegistrationHost.
-            WinwsCommandLine.WriteExcludeList(HostsFile.CollectDesyncExclusions(ruleSet));
-
-            // Имена, которым рецепт выбран руками, уходят в свои профили
-            // winws2. Без этого «десинк» в маршрутах означал только «мимо
-            // туннеля»: что сделать с именем, решал пресет, а не попавшему
-            // ни в один его список не делалось ничего.
-            WriteOwnDesync(ruleSet, zapretRoot);
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
@@ -130,7 +104,10 @@ internal static class TunnelConfig
             // это и увидел: «на режиме только туннель не работает ютуб» —
             // и был прав, назвав следствие: выключение winws2 оказалось
             // единственным, что режим делал.
-            bool narrow = settings.Engines.Desync && settings.ProxyOnly;
+            //
+            // С 23.09 — по TunnelTakesAll: при игнорируемых исключениях
+            // туннель забирает всё и при включённом выключателе десинка.
+            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly;
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
@@ -140,14 +117,10 @@ internal static class TunnelConfig
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
 
-                // Российские сети: отменяется одно правило, а не все прямые
-                // разом. Прочие исключения выведены напрямую по своим
-                // причинам, и снимать их заодно — делать не то, что написано
-                // на настройке.
-                // Через Engines, а не через поле: там пустое значение
-                // добирается из режима, и переход с «без исключений»
-                // не теряет настройку.
-                IgnoreRussianExclusions = settings.Engines.IgnoreRussianExclusions,
+                // «Игнорировать исключения» сюда больше не передаётся:
+                // с 23.09 она отменяет все прямые правила, а не одно
+                // российское, и делает это режимом — ProxyStrict, где
+                // правил нет вовсе. См. EngineChoice.Mode.
                 ForeignExitsOnly = settings.ForeignExitsOnly,
 
                 // Вход проверки поднимается ровно тогда, когда супервизор
@@ -183,6 +156,77 @@ internal static class TunnelConfig
         catch (Exception ex)
         {
             return new BuildOutcome(false, "Конфиг не собрался: " + ex.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>
+    /// Правила с развёрнутыми списками, под режим из выключателей.
+    /// </summary>
+    /// <remarks>
+    /// Режим из настроек перекрывает файл правил: окно не должно
+    /// переписывать базовый YAML, который ведётся руками.
+    /// </remarks>
+    private static (RuleSet RuleSet, string? ZapretRoot) LoadRules(AppSettings settings)
+    {
+        var mode = settings.Engines.Mode;
+        var engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, mode);
+        var ruleSet = engine.RuleSet with { Operating = mode };
+        var zapretRoot = ZapretPaths.Discover()?.Root;
+
+        RuleSetExpander.Expand(ruleSet, zapretRoot);
+
+        return (ruleSet, zapretRoot);
+    }
+
+    /// <summary>
+    /// Пишет winws2 его списки: исключения и свои рецепты.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельно от сборки конфига туннеля, и это исправление 23.09 (issue #1).
+    /// Прежде списки писались внутри <see cref="BuildAsync"/>, а её зовут
+    /// только при поднимаемом туннеле. С одним десинком winws2 получал
+    /// вчерашний список исключений или никакого: «напрямую» у Twitch
+    /// до него не доходило, и перезапуск ничего не менял.
+    /// </para>
+    /// <para>
+    /// Имена, которые десинку трогать нельзя: прибитые в hosts и поставленные
+    /// на «напрямую», а без туннеля — ещё и «через VPN» (таблица владельца
+    /// 23.09: при одном десинке VPN идёт напрямую). Пин — выбранный руками
+    /// адрес, а десинк судит по имени и про подмену не знает: он применяет
+    /// к постороннему узлу рецепт, выверенный на настоящей сети доставки,
+    /// и рвёт рукопожатие.
+    /// </para>
+    /// <para>
+    /// Домен регистрации WARP сюда НЕ добавляется, и это решение по замеру,
+    /// а не недосмотр: без десинка его рукопожатие не проходит вовсе.
+    /// См. Warp.RegistrationHost.
+    /// </para>
+    /// </remarks>
+    public static BuildOutcome WriteDesyncLists(AppSettings settings)
+    {
+        try
+        {
+            var (ruleSet, zapretRoot) = LoadRules(settings);
+
+            // Туннель считается поднятым, только если он вправду поднимется:
+            // выключатель без выхода TUN не даёт, и «через VPN» тогда тоже
+            // идёт напрямую.
+            var excluded = HostsFile.CollectDesyncExclusions(ruleSet, tunnelUp: settings.NeedsProxy);
+
+            WinwsCommandLine.WriteExcludeList(excluded);
+
+            // Имена, которым рецепт выбран руками, уходят в свои профили
+            // winws2. Без этого «десинк» в маршрутах означал только «мимо
+            // туннеля»: что сделать с именем, решал пресет, а не попавшему
+            // ни в один его список не делалось ничего.
+            WriteOwnDesync(ruleSet, zapretRoot);
+
+            return new BuildOutcome(true, $"Десинк не тронет имён: {excluded.Count}.");
+        }
+        catch (Exception ex)
+        {
+            return new BuildOutcome(false, "Списки десинка не собрались: " + ex.GetBaseException().Message);
         }
     }
 
