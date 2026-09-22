@@ -18,16 +18,6 @@ public sealed record EngineRow(string Name, string Detail, Brush Color);
 /// <summary>Предупреждение, которое стоит прочитать до запуска.</summary>
 public sealed record WarningRow(string Title, string Body);
 
-/// <summary>Режим работы в списке выбора.</summary>
-public sealed record ModeRow(OperatingMode Key, string Name, string Note)
-{
-    public bool Chosen { get; set; }
-
-    public Brush Edge => (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
-
-    public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
-}
-
 /// <summary>
 /// Состояние настройки и движков, плюс запуск и остановка.
 /// </summary>

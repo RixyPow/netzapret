@@ -166,10 +166,6 @@ public static class AutostartTask
     public static bool IsInstalled(string taskName) =>
         RunSchtasks("/query", "/tn", taskName).Ok;
 
-    /// <summary>Запускает уже установленную задачу немедленно.</summary>
-    public static (bool Ok, string Output) RunNow(string taskName) =>
-        RunSchtasks("/run", "/tn", taskName);
-
     private static (bool Ok, string Output) RunSchtasks(params string[] arguments)
     {
         var startInfo = new ProcessStartInfo

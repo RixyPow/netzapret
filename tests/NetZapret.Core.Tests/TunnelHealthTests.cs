@@ -93,22 +93,6 @@ public class TunnelHealthTests
         Assert.False(new ExitReading { Country = country, Tunnelled = true }.TunnelExitsDomestically);
     }
 
-    /// <summary>Мёртвый туннель обесценивает вердикты, незнание — нет.</summary>
-    /// <remarks>
-    /// Разница принципиальна. Объявить вердикты недействительными потому,
-    /// что не удалось спросить у движка, — значит замолчать исправную
-    /// проверку; ровно так же нельзя и обвинять сайты, когда труба мертва.
-    /// </remarks>
-    [Theory]
-    [InlineData(TunnelState.Dead, false)]
-    [InlineData(TunnelState.Alive, true)]
-    [InlineData(TunnelState.Off, true)]
-    [InlineData(TunnelState.Unknown, true)]
-    public void Only_a_dead_tunnel_invalidates_verdicts(TunnelState state, bool expected)
-    {
-        Assert.Equal(expected, TunnelHealth.VerdictsAreMeaningful(state));
-    }
-
     [Theory]
     [MemberData(nameof(AllStates))]
     public void Every_state_is_named(TunnelState state)

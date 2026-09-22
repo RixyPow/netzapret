@@ -133,18 +133,6 @@ public static class TunnelHealth
         return (left[whole] & mask) == (right[whole] & mask);
     }
 
-    /// <summary>
-    /// Стоит ли верить вердиктам по именам, заведённым в туннель.
-    /// </summary>
-    /// <remarks>
-    /// Мёртвый туннель делает бессмысленным любой вывод о проксируемом имени:
-    /// измерена труба, а не сайт. Неизвестное состояние такого права не даёт —
-    /// молчание проверки хуже ложной тревоги, но хуже обоих утверждение,
-    /// которого никто не мерил.
-    /// </remarks>
-    public static bool VerdictsAreMeaningful(TunnelState state) =>
-        state is not TunnelState.Dead;
-
     /// <summary>Короткая строка о состоянии — для шапки отчёта.</summary>
     public static string Describe(TunnelState state) => state switch
     {

@@ -1,34 +1,6 @@
 namespace NetZapret.Zapret;
 
 /// <summary>
-/// Управляет процессом winws2.
-/// </summary>
-/// <remarks>
-/// Появился, когда задача сменилась с «ужиться с Zapret GUI» на «заменить его».
-/// По форме это тот же супервизор, что и у sing-box: запустить с аргументами,
-/// следить за живостью, остановить.
-/// </remarks>
-public interface IZapretOrchestrator : IAsyncDisposable
-{
-    ZapretState State { get; }
-
-    /// <summary>Активный пресет либо <c>null</c>, если десинк выключен.</summary>
-    ZapretPreset? ActivePreset { get; }
-
-    Task StartAsync(ZapretPreset preset, CancellationToken cancellationToken);
-
-    Task StopAsync(CancellationToken cancellationToken);
-}
-
-public enum ZapretState
-{
-    Stopped,
-    Starting,
-    Running,
-    Faulted,
-}
-
-/// <summary>
 /// Расположение установки Zapret.
 /// </summary>
 public sealed record ZapretPaths

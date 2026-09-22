@@ -58,18 +58,4 @@ public static class PresetPorts
 
         return ports.Count == 0 ? Default : string.Join(',', ports);
     }
-
-    /// <summary>
-    /// Секции пресета, покрывающие эти имена, в порядке файла.
-    /// </summary>
-    /// <remarks>
-    /// Порядок сохранён намеренно: winws2 отдаёт пакет первому профилю, чей
-    /// фильтр совпал, и дальше не смотрит. Значит первая в этом перечне —
-    /// и есть та, что решит судьбу имени, а остальные до него не дойдут.
-    /// </remarks>
-    public static IEnumerable<ZapretSection> SectionsFor(
-        ZapretPreset preset,
-        string? zapretRoot,
-        IReadOnlyList<string> domains) =>
-        PresetZones.Build(preset, zapretRoot).AllFor(domains);
 }

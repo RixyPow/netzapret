@@ -184,8 +184,8 @@ public class PresetPortsTests : IDisposable
     [Fact]
     public void SectionsComeInFileOrder()
     {
-        var names = PresetPorts
-            .SectionsFor(Load(Preset), _root, ["discord.com", "example.com"])
+        var names = PresetZones.Build(Load(Preset), _root)
+            .AllFor(["discord.com", "example.com"])
             .Select(s => s.Name)
             .ToList();
 
@@ -196,8 +196,8 @@ public class PresetPortsTests : IDisposable
     [Fact]
     public void UnknownNameMatchesNoSection()
     {
-        Assert.Empty(PresetPorts.SectionsFor(Load(Preset), _root, ["ничего-такого.example"]));
-        Assert.Empty(PresetPorts.SectionsFor(Load(Preset), _root, []));
+        Assert.Empty(PresetZones.Build(Load(Preset), _root).AllFor(["ничего-такого.example"]));
+        Assert.Empty(PresetZones.Build(Load(Preset), _root).AllFor([]));
     }
 
     /// <summary>Без портов профиль остаётся на прежнем умолчании.</summary>
