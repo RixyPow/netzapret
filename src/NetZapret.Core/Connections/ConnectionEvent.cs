@@ -80,6 +80,40 @@ public sealed record ConnectionEvent
 
         return $"{remote}:{RemotePort}";
     }
+
+    /// <summary>
+    /// Соединение из одной строки: имя программы, домен или адрес.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Для вопроса «куда пойдёт это» — человек пишет что угодно, и помнить,
+    /// каким ключом описывается его случай, он не обязан. Перенесено
+    /// из консольной where вместе с отказом от консоли: разбор нужен nz.
+    /// </para>
+    /// <para>
+    /// Порядок проверок важен: <c>discord.com</c> и <c>discord.exe</c>
+    /// различаются только расширением, а <c>1.2.3.4</c> разбирается как адрес
+    /// раньше, чем как домен.
+    /// </para>
+    /// </remarks>
+    public static ConnectionEvent Describe(string target)
+    {
+        var connection = new ConnectionEvent
+        {
+            Timestamp = DateTimeOffset.Now,
+            Protocol = ProtocolKind.Tcp,
+            RemotePort = 443,
+            Direction = ConnectionDirection.Outbound,
+        };
+
+        if (IPAddress.TryParse(target, out var address))
+            return connection with { RemoteAddress = address };
+
+        if (target.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || target.Contains('\\'))
+            return connection with { ExecutablePath = target };
+
+        return connection with { Hostname = target.TrimStart('.').TrimEnd('.') };
+    }
 }
 
 public enum ProtocolKind

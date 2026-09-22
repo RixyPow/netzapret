@@ -98,6 +98,45 @@ public sealed record EngineChoice
     public bool Anything => Desync || Tunnel;
 
     /// <summary>
+    /// Чем пойдёт маршрут книги при этих выключателях — таблица владельца
+    /// от 23.09 одной функцией.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Сама таблица исполняется в двух местах: конфигом sing-box (через
+    /// <see cref="Mode"/>) и списком исключений winws2. Здесь она названа
+    /// словами — для ответа «куда пойдёт это имя», который книга дать
+    /// не может: «через VPN» при выключенном туннеле идёт напрямую.
+    /// </para>
+    /// <para>
+    /// Совпадение с исполнением сторожит ModeTableTests: разойдись они,
+    /// ответ «куда пойдёт» стал бы враньём.
+    /// </para>
+    /// <para>
+    /// <paramref name="tunnelUp"/> — поднимется ли туннель на деле:
+    /// выключатель без выхода TUN не даёт.
+    /// </para>
+    /// </remarks>
+    public RoutingMode Effective(RoutingMode book, bool tunnelUp)
+    {
+        if (!tunnelUp)
+        {
+            // Везти некуда: VPN идёт напрямую, десинк — десинку, если поднят.
+            return book == RoutingMode.Desync && DesyncRuns ? RoutingMode.Desync : RoutingMode.Direct;
+        }
+
+        if (IgnoreExclusions)
+            return RoutingMode.Proxy;
+
+        return book switch
+        {
+            RoutingMode.Direct => RoutingMode.Direct,
+            RoutingMode.Desync => DesyncRuns ? RoutingMode.Desync : RoutingMode.Proxy,
+            _ => RoutingMode.Proxy,
+        };
+    }
+
+    /// <summary>
     /// Прежний режим — для того, что ещё понимает только его.
     /// </summary>
     /// <remarks>

@@ -47,4 +47,31 @@ public static class RuleSetExpander
 
         return problems;
     }
+
+    /// <summary>
+    /// Правила так, как их увидят движки при этих настройках: оба слоя,
+    /// режим из выключателей, списки развёрнуты.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Одно место на окно и nz. Прежде это жило внутри окна, и инструмент
+    /// разбора, отвечая «куда пойдёт имя», собирал бы правила своей копией —
+    /// ровно та беда, от которой уходили вместе с консолью.
+    /// </para>
+    /// <para>
+    /// Режим из настроек перекрывает файл правил: базовый YAML ведётся
+    /// руками, и переписывать его ради режима нельзя.
+    /// </para>
+    /// </remarks>
+    public static (RuleEngine Engine, string? ZapretRoot) LoadFor(Core.AppSettings settings)
+    {
+        var mode = settings.Engines.Mode;
+        var loaded = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, mode);
+        var ruleSet = loaded.RuleSet with { Operating = mode };
+        var zapretRoot = ZapretPaths.Discover()?.Root;
+
+        Expand(ruleSet, zapretRoot);
+
+        return (new RuleEngine(ruleSet), zapretRoot);
+    }
 }

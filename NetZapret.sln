@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -25,6 +25,10 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Cli", "src\NetZapret.Cli\NetZapret.Cli.csproj", "{97B7786E-C7E5-4C9B-AE7D-A86F34E25296}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NetZapret.Core.Tests", "tests\NetZapret.Core.Tests\NetZapret.Core.Tests.csproj", "{B7FFF7EF-7B59-403D-A270-77F281EF46A8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{0FF13F61-7DDA-4D77-BEDB-952F18C43E51}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nz", "tools\nz\nz.csproj", "{770F8BF9-7F73-4671-832E-91B9667753CD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -72,6 +76,10 @@ Global
 		{B7FFF7EF-7B59-403D-A270-77F281EF46A8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B7FFF7EF-7B59-403D-A270-77F281EF46A8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B7FFF7EF-7B59-403D-A270-77F281EF46A8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{770F8BF9-7F73-4671-832E-91B9667753CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{770F8BF9-7F73-4671-832E-91B9667753CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{770F8BF9-7F73-4671-832E-91B9667753CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{770F8BF9-7F73-4671-832E-91B9667753CD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{B56D3878-EF0A-4B22-BCEA-77BE7448A098} = {1D1F4C2A-6B23-4E51-9B7E-2C4A8F6D0011}
@@ -84,5 +92,6 @@ Global
 		{5FB3EB7B-22C1-45DB-8311-7C7826D4D901} = {1D1F4C2A-6B23-4E51-9B7E-2C4A8F6D0011}
 		{97B7786E-C7E5-4C9B-AE7D-A86F34E25296} = {1D1F4C2A-6B23-4E51-9B7E-2C4A8F6D0011}
 		{B7FFF7EF-7B59-403D-A270-77F281EF46A8} = {1D1F4C2A-6B23-4E51-9B7E-2C4A8F6D0022}
+		{770F8BF9-7F73-4671-832E-91B9667753CD} = {0FF13F61-7DDA-4D77-BEDB-952F18C43E51}
 	EndGlobalSection
 EndGlobal

@@ -159,23 +159,12 @@ internal static class TunnelConfig
         }
     }
 
-    /// <summary>
-    /// Правила с развёрнутыми списками, под режим из выключателей.
-    /// </summary>
-    /// <remarks>
-    /// Режим из настроек перекрывает файл правил: окно не должно
-    /// переписывать базовый YAML, который ведётся руками.
-    /// </remarks>
+    /// <summary>Правила так, как их увидят движки, — общим кодом с nz.</summary>
     private static (RuleSet RuleSet, string? ZapretRoot) LoadRules(AppSettings settings)
     {
-        var mode = settings.Engines.Mode;
-        var engine = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, mode);
-        var ruleSet = engine.RuleSet with { Operating = mode };
-        var zapretRoot = ZapretPaths.Discover()?.Root;
+        var (engine, zapretRoot) = RuleSetExpander.LoadFor(settings);
 
-        RuleSetExpander.Expand(ruleSet, zapretRoot);
-
-        return (ruleSet, zapretRoot);
+        return (engine.RuleSet, zapretRoot);
     }
 
     /// <summary>

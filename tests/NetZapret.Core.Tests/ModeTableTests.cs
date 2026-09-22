@@ -149,6 +149,47 @@ public sealed class ModeTableTests : IDisposable
         Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, Desync));
     }
 
+    /// <summary>
+    /// Таблица словами совпадает с таблицей в деле — при каждом сочетании.
+    /// </summary>
+    /// <remarks>
+    /// EngineChoice.Effective отвечает «куда пойдёт имя», а исполняют
+    /// таблицу конфиг sing-box и список исключений winws2. Три места,
+    /// и разойтись им легко; здесь их сверяют между собой.
+    /// </remarks>
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void The_named_table_matches_what_the_engines_get(bool desync, bool tunnel, bool ignore)
+    {
+        var choice = new EngineChoice { Desync = desync, Tunnel = tunnel, IgnoreExclusions = ignore };
+
+        var excluded = HostsFile.DescribeDesyncExclusions(Book(choice.Mode), _hosts, tunnelUp: tunnel);
+
+        foreach (var (name, book) in new[]
+        {
+            (Direct, RoutingMode.Direct),
+            (Desync, RoutingMode.Desync),
+            (Vpn, RoutingMode.Proxy),
+        })
+        {
+            var said = choice.Effective(book, tunnelUp: tunnel);
+
+            bool intoTunnel = tunnel && Outbound(choice, name) == Tunnel;
+            bool desynced = choice.DesyncRuns && !intoTunnel
+                && HostsFile.BypassFor(excluded, name) == DesyncBypass.None;
+
+            var done = intoTunnel ? RoutingMode.Proxy
+                : desynced ? RoutingMode.Desync
+                : RoutingMode.Direct;
+
+            Assert.True(said == done, $"{choice.Describe()}, {name} ({book}): сказано {said}, сделано {done}");
+        }
+    }
+
     [Fact]
     public void Without_the_tunnel_a_pin_under_vpn_is_excluded_too()
     {

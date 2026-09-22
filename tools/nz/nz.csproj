@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Лёгкий инструмент разбора. Своей логики не содержит: всё, что он
+    делает, — зовёт те же библиотеки, которыми пользуется окно.
+
+    Прав администратора не просит намеренно: чтение состояния их
+    не требует, а диагностика, дёргающая UAC, не нужна никому.
+
+    В поставку не идёт — pack.cmd публикует только окно.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>nz</AssemblyName>
+    <RootNamespace>NetZapret.Tools</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Supervisor\NetZapret.Supervisor.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+  </ItemGroup>
+
+</Project>
