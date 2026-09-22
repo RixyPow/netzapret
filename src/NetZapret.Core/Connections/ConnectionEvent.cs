@@ -67,9 +67,6 @@ public sealed record ConnectionEvent
     /// </remarks>
     public ObservedVerdict Verdict { get; init; } = ObservedVerdict.Unknown;
 
-    public ConnectionEvent WithHostname(string? hostname) =>
-        hostname is null ? this : this with { Hostname = hostname };
-
     public string DescribeEndpoint()
     {
         var remote = RemoteAddress is null

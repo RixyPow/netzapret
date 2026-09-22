@@ -168,23 +168,4 @@ public static class ServiceRouting
         }).Mode;
     }
 
-    /// <summary>
-    /// Общее описание сервиса: одинаково ли идут его части.
-    /// </summary>
-    public static string Summarize(IReadOnlyList<PartStatus> parts)
-    {
-        var known = parts.Where(p => p.DomainCount > 0).ToList();
-
-        if (known.Count == 0)
-            return "списки не найдены";
-
-        var modes = known.Select(p => p.Mode).Distinct().ToList();
-
-        if (modes.Count == 1)
-            return $"всё {known[0].DescribeMode()}";
-
-        // Разные части идут по-разному — ровно тот случай, ради которого
-        // разделение и заводилось. Перечисляем, а не прячем за «смешанно».
-        return string.Join(", ", known.Select(p => $"{p.Part.Name.ToLowerInvariant()} {p.DescribeMode()}"));
-    }
 }

@@ -168,14 +168,6 @@ public sealed class ProxyProbe
         _singBoxPath = singBoxPath;
     }
 
-    /// <summary>Определяет внешний адрес без прокси — для сравнения.</summary>
-    public static async Task<string?> GetDirectIpAsync(ProbeOptions options, CancellationToken cancellationToken)
-    {
-        using var http = new HttpClient { Timeout = options.RequestTimeout };
-        var (ip, _) = await TryServicesAsync(http, options.IpServices, cancellationToken);
-        return ip;
-    }
-
     /// <summary>
     /// Какой порт достанется проверке под этим номером.
     /// </summary>

@@ -252,12 +252,4 @@ public sealed record UserRuleEntry
         _ => "напрямую",
     };
 
-    public string DescribeMatch() => Match switch
-    {
-        MatchKind.Process => "программа",
-        MatchKind.Domain => "домен",
-        MatchKind.IpSet => "список адресов",
-        MatchKind.HostList => "список доменов",
-        _ => "адрес",
-    };
 }

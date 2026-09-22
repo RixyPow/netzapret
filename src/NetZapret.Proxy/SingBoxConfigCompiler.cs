@@ -572,25 +572,6 @@ public sealed class SingBoxConfigCompiler
     }
 
     /// <summary>
-    /// Возвращает версию, собравшую конфиг; <c>null</c> — отметки нет.
-    /// </summary>
-    public static string? ReadStamp(string configPath)
-    {
-        try
-        {
-            var stamp = StampPathFor(configPath);
-
-            return File.Exists(stamp)
-                ? File.ReadAllLines(stamp).FirstOrDefault()
-                : null;
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
     /// Теги должны быть уникальны — sing-box адресует outbound'ы по ним, а имена
     /// серверов в подписках повторяются.
     /// </summary>

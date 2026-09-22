@@ -117,8 +117,6 @@ public sealed class ServiceRoutingTests : IDisposable
 
         Assert.Equal(RoutingMode.Proxy, parts[0].Mode);
         Assert.Equal(RoutingMode.Desync, parts[1].Mode);
-        Assert.Contains("голос VPN", ServiceRouting.Summarize(parts));
-        Assert.Contains("текст десинк", ServiceRouting.Summarize(parts));
     }
 
     [Fact]
@@ -206,19 +204,6 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     [Fact]
-    public void WhenEverythingAgreesTheSummaryIsShort()
-    {
-        var engine = Load("""
-            mode: selective
-            default:
-              mode: desync
-            """);
-
-        Assert.Equal("всё десинк", ServiceRouting.Summarize(
-            ServiceRouting.Describe(Discord, engine, _root, EmptyUserRules())));
-    }
-
-    [Fact]
     public void ARuleWrittenByHandIsRecognisedInTheService()
     {
         // Иначе список начнёт врать: человек направил домен вручную,
@@ -250,7 +235,6 @@ public sealed class ServiceRoutingTests : IDisposable
         var parts = ServiceRouting.Describe(service, Load("mode: selective"), _root, EmptyUserRules());
 
         Assert.Equal(0, parts[0].DomainCount);
-        Assert.Equal("списки не найдены", ServiceRouting.Summarize(parts));
     }
 
     [Fact]
