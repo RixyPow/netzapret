@@ -68,6 +68,23 @@ public sealed record PinResult
     /// о ней, решит, что снятие не сработало.
     /// </remarks>
     public required IReadOnlyList<string> Shadowed { get; init; }
+
+    /// <summary>
+    /// Кто вернул файл к своему умолчанию сразу после записи; <c>null</c> — блок на месте.
+    /// </summary>
+    /// <remarks>
+    /// Запись удаётся, ошибки нет, а через мгновение защитник откатывает
+    /// hosts — и сообщить «прибито» значило бы сообщить об успехе того,
+    /// чего больше нет. Проверяла это только консоль; окно до 23.09
+    /// сообщало успех не глядя.
+    /// </remarks>
+    public string? RevertedBy { get; init; }
+
+    /// <summary>Что сказать человеку, если блок откатили; <c>null</c> — нечего.</summary>
+    public string? Reverted => RevertedBy is null
+        ? null
+        : $"Записал — и записи уже нет: {RevertedBy} вернул hosts к своему умолчанию. "
+          + "Пин на этой машине не живёт, пока файл hosts не внесён в доверенные.";
 }
 
 /// <summary>
@@ -155,46 +172,6 @@ public static class HostsEditor
         }
 
         return entries;
-    }
-
-    /// <summary>
-    /// Включает или выключает названные строки.
-    /// </summary>
-    /// <param name="lines">Номера строк из <see cref="HostsEntry.Line"/>.</param>
-    /// <returns>Путь к копии, сделанной перед правкой.</returns>
-    /// <remarks>
-    /// Правит ровно указанные строки и не трогает ничего вокруг: остальной
-    /// файл переписывается байт в байт, включая чужие комментарии и порядок.
-    /// Переписывание «как мы понимаем формат» стёрло бы то, чего мы не поняли.
-    /// </remarks>
-    public static string SetEnabled(IReadOnlyCollection<int> lines, bool enabled, string? path = null)
-    {
-        var target = path ?? HostsFile.DefaultPath;
-        var content = File.ReadAllLines(target);
-        var backup = Backup(target);
-
-        foreach (var index in lines)
-        {
-            if (index < 0 || index >= content.Length)
-                continue;
-
-            var line = content[index];
-
-            if (enabled)
-            {
-                var bare = line.TrimStart();
-
-                if (bare.StartsWith('#'))
-                    content[index] = bare.TrimStart('#').TrimStart();
-            }
-            else if (!line.TrimStart().StartsWith('#'))
-            {
-                content[index] = "# " + line;
-            }
-        }
-
-        Write(target, content);
-        return backup;
     }
 
     /// <summary>
@@ -409,109 +386,17 @@ public static class HostsEditor
             p => (IReadOnlyList<string>)[p.Value],
             StringComparer.OrdinalIgnoreCase);
 
-        return PinMany(many, path, note, absorb: false);
-    }
-
-    /// <summary>
-    /// Забирает записи файла в наш блок, убирая повторы.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Наводит порядок там, где его вести перестали. В живом файле оказалось
-    /// 839 записей на 796 имён — сорок три повтора, — собранных тремя разными
-    /// механизмами: каталогом Zapret, отдельным блоком Telegram и руками.
-    /// Разобрать такое глазами нельзя, а действует из повторов первый,
-    /// и какой именно — по файлу не видно.
-    /// </para>
-    /// <para>
-    /// Все адреса имени сохраняются, а не первый попавшийся: у
-    /// <c>instagram.com</c> их три, включая IPv6, у <c>openai.com</c> четыре,
-    /// и Windows перебирает их по очереди. Оставить один значило бы
-    /// собственноручно урезать запасные пути.
-    /// </para>
-    /// <para>
-    /// Выключенные строки забираются тоже, но выключенными и остаются.
-    /// Их чаще всего гасит сама программа, когда до адреса не достучаться,
-    /// и включить их заодно со сбором значило бы вернуть в дело ровно то,
-    /// что признано нерабочим. Потерять их нельзя тем более: тогда исчезнет
-    /// и след решения, и возможность его отменить.
-    /// </para>
-    /// </remarks>
-    public static PinResult Absorb(string? path = null)
-    {
-        var target = path ?? HostsFile.DefaultPath;
-
-        if (!File.Exists(target))
-            return new PinResult { Pinned = 0, Shadowed = [] };
-
-        var lines = File.ReadAllLines(target).ToList();
-        var (start, end) = FindBlock(lines);
-        var gathered = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var off = new List<string>();
-
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (start >= 0 && i >= start && i <= end)
-                continue;
-
-            if (Split(lines[i]) is { } pair)
-            {
-                if (!gathered.TryGetValue(pair.Name, out var list))
-                    gathered[pair.Name] = list = [];
-
-                if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
-                    list.Add(pair.Address);
-            }
-            else if (Disabled(lines[i]) is { } gone && !off.Contains(gone, StringComparer.OrdinalIgnoreCase))
-            {
-                off.Add(gone);
-            }
-        }
-
-        // Строки, ушедшие к нам, убираются с прежних мест — иначе повторы
-        // не исчезнут, а удвоятся.
-        for (int i = lines.Count - 1; i >= 0; i--)
-        {
-            if (start >= 0 && i >= start && i <= end)
-                continue;
-
-            if (Split(lines[i]) is not null || Disabled(lines[i]) is not null)
-                lines.RemoveAt(i);
-        }
-
-        return PinMany(
-            gathered.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value, StringComparer.OrdinalIgnoreCase),
-            path,
-            note: null,
-            absorb: true,
-            prepared: lines,
-            disabled: off);
-    }
-
-    /// <summary>Запись выключенной строки без решётки; <c>null</c> — не запись.</summary>
-    private static string? Disabled(string line)
-    {
-        var text = line.Trim().TrimStart('﻿');
-
-        if (!text.StartsWith('#'))
-            return null;
-
-        var bare = text.TrimStart('#', ' ', '\t');
-
-        return Split(bare) is null ? null : bare;
+        return PinMany(many, path, note);
     }
 
     private static PinResult PinMany(
         IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
         string? path,
-        string? note,
-        bool absorb,
-        List<string>? prepared = null,
-        IReadOnlyList<string>? disabled = null)
+        string? note)
     {
         var target = path ?? HostsFile.DefaultPath;
         var backup = File.Exists(target) ? Backup(target) : null;
-        var lines = prepared ?? (File.Exists(target) ? File.ReadAllLines(target).ToList() : []);
+        var lines = File.Exists(target) ? File.ReadAllLines(target).ToList() : [];
 
         var (start, end) = FindBlock(lines);
         var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -539,11 +424,9 @@ public static class HostsEditor
         {
             var name = rawName.TrimStart('*', '.');
 
-            // Закрепление заменяет прежний адрес имени, а сбор — дополняет:
-            // в первом случае человек выбрал новый набор взамен старого,
-            // во втором мы лишь переносим то, что уже есть.
-            if (!absorb || !kept.TryGetValue(name, out var list))
-                kept[name] = list = [];
+            // Закрепление заменяет прежний адрес имени: человек выбрал
+            // новый набор взамен старого.
+            var list = kept[name] = [];
 
             foreach (var address in addresses)
             {
@@ -557,31 +440,13 @@ public static class HostsEditor
         if (!string.IsNullOrWhiteSpace(note))
             block.Add("# " + note);
 
-        block.Add("# Записи ведёт NetZapret. Правьте их через меню: при следующей");
+        block.Add("# Записи ведёт NetZapret. Правьте их в окне, «Файл hosts»: при следующей");
         block.Add("# записи всё, что дописано сюда руками, будет потеряно.");
 
         foreach (var (name, addresses) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
             foreach (var address in addresses)
                 block.Add($"{address} {name}");
-        }
-
-        // Выключенные — под своим заголовком и по-прежнему выключенными.
-        // Гасит их обычно сама программа, когда до адреса не достучаться;
-        // включить их заодно со сбором значило бы вернуть в дело то,
-        // что признано нерабочим.
-        var silenced = (disabled ?? [])
-            .Where(line => Split(line) is { } pair && !kept.ContainsKey(pair.Name))
-            .OrderBy(line => line, StringComparer.Ordinal)
-            .ToList();
-
-        if (silenced.Count > 0)
-        {
-            block.Add(string.Empty);
-            block.Add("# Выключено — адрес не отвечал. Вернуть можно в пункте «Файл hosts».");
-
-            foreach (var line in silenced)
-                block.Add("# " + line);
         }
 
         block.Add(BlockEnd);
@@ -598,6 +463,9 @@ public static class HostsEditor
             Backup = backup,
             Pinned = kept.Count,
             Shadowed = Foreign(lines, kept.Keys),
+
+            // Перечитываем своими глазами: см. PinResult.RevertedBy.
+            RevertedBy = BlockSurvived(target) ? null : WhoReplaced(target) ?? "защитник",
         };
     }
 

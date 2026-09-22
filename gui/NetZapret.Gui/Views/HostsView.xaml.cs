@@ -328,7 +328,9 @@ public partial class HostsView : UserControl
 
             // Про чужие записи на то же имя говорим сразу: пока они на месте,
             // имя разрешается дважды, и предсказать исход по файлу не выйдет.
-            Status.Text = result.Shadowed.Count > 0
+            Status.Text = result.Reverted is { } reverted
+                ? reverted
+                : result.Shadowed.Count > 0
                 ? $"Прибито: {name} → {address}. Но на это же имя есть чужие записи "
                   + $"({result.Shadowed.Count}) — снимите их, иначе какая сработает, "
                   + "по файлу не скажешь."

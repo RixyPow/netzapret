@@ -76,42 +76,12 @@ public class HostsEditorTests : IDisposable
         Assert.Equal("netzapret", Assert.Single(HostsEditor.Parse(_path)).Note);
     }
 
-    /// <summary>Выключение — комментарий, а не удаление.</summary>
-    /// <remarks>
-    /// Запись должна возвращаться тем же движением, каким выключена. Файл
-    /// общий: часть строк ставит редактор Zapret, часть человек руками,
-    /// и удаление лишает возможности передумать.
-    /// </remarks>
-    [Fact]
-    public void DisablingCommentsOutAndKeepsTheLine()
-    {
-        Write("1.2.3.4 example.com");
-
-        var entry = Assert.Single(HostsEditor.Parse(_path));
-        HostsEditor.SetEnabled([entry.Line], enabled: false, _path);
-
-        var after = Assert.Single(HostsEditor.Parse(_path));
-
-        Assert.False(after.Enabled);
-        Assert.Equal("example.com", Assert.Single(after.Names));
-        Assert.Contains("example.com", File.ReadAllText(_path));
-    }
-
-    [Fact]
-    public void EnablingRemovesTheComment()
-    {
-        Write("# 1.2.3.4 example.com");
-
-        var entry = Assert.Single(HostsEditor.Parse(_path));
-        HostsEditor.SetEnabled([entry.Line], enabled: true, _path);
-
-        Assert.True(Assert.Single(HostsEditor.Parse(_path)).Enabled);
-    }
-
     /// <summary>Соседние строки остаются нетронутыми.</summary>
     /// <remarks>
     /// Самое важное здесь. Файл ведём не мы одни, и переписать его «как мы
-    /// понимаем формат» значит стереть то, чего мы не поняли.
+    /// понимаем формат» значит стереть то, чего мы не поняли. Прежде
+    /// проверялось на выключении строки; выключение ушло с консолью 23.09,
+    /// а запись у удаления та же.
     /// </remarks>
     [Fact]
     public void OtherLinesSurviveUntouched()
@@ -123,12 +93,13 @@ public class HostsEditorTests : IDisposable
             "");
 
         var target = HostsEditor.Parse(_path).First(e => e.Names.Contains("first.example"));
-        HostsEditor.SetEnabled([target.Line], enabled: false, _path);
+        HostsEditor.Remove([target.Line], _path);
 
         var text = File.ReadAllText(_path);
 
         Assert.Contains("# Copyright (c) 1993-2009 Microsoft Corp.", text);
         Assert.Contains("5.6.7.8 second.example   # поставлено Zapret GUI", text);
+        Assert.DoesNotContain("first.example", text);
     }
 
     /// <summary>Метка порядка байтов не накапливается.</summary>
@@ -140,19 +111,22 @@ public class HostsEditorTests : IDisposable
     [Fact]
     public void ByteOrderMarksDoNotAccumulate()
     {
-        File.WriteAllText(_path, "﻿# comment\r\n1.2.3.4 example.com\r\n", new UTF8Encoding(true));
+        File.WriteAllText(
+            _path,
+            "\uFEFF# comment\r\n1.2.3.4 a.example\r\n1.2.3.4 b.example\r\n1.2.3.4 c.example\r\n",
+            new UTF8Encoding(true));
 
-        for (int i = 0; i < 3; i++)
+        foreach (var name in new[] { "a.example", "b.example" })
         {
-            var entry = HostsEditor.Parse(_path).Single(e => e.Names.Contains("example.com"));
-            HostsEditor.SetEnabled([entry.Line], enabled: i % 2 == 0, _path);
+            var entry = HostsEditor.Parse(_path).Single(e => e.Names.Contains(name));
+            HostsEditor.Remove([entry.Line], _path);
         }
 
         var text = File.ReadAllText(_path);
-        int marks = text.TakeWhile(c => c == '﻿').Count();
+        int marks = text.TakeWhile(c => c == '\uFEFF').Count();
 
         Assert.True(marks <= 1, $"меток порядка байтов накопилось {marks}");
-        Assert.Contains("example.com", text);
+        Assert.Contains("c.example", text);
     }
 
     /// <summary>Перед правкой остаётся копия.</summary>
@@ -161,7 +135,7 @@ public class HostsEditorTests : IDisposable
     {
         Write("1.2.3.4 example.com");
 
-        var backup = HostsEditor.SetEnabled([0], enabled: false, _path);
+        var backup = HostsEditor.Remove([0], _path);
 
         Assert.True(File.Exists(backup));
         Assert.Contains("1.2.3.4 example.com", File.ReadAllText(backup));

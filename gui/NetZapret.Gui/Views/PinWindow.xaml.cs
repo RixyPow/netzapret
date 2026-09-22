@@ -402,7 +402,9 @@ public partial class PinWindow : Window
             Changed = true;
             ShowPins();
 
-            Status.Text = $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
+            // Откатили — говорим только это: «прибито» про несуществующее
+            // хуже молчания.
+            Status.Text = result.Reverted ?? $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
                 + "иначе правило сработало бы поверх адреса."
                 + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
 
