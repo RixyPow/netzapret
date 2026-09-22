@@ -129,7 +129,7 @@ internal static class Program
     /// рабочем каталоге повышенного запуска (issue #3). См. <see cref="InstallRoot"/>.
     /// </para>
     /// </remarks>
-    private static void MoveToConfigDirectory() => InstallRoot.MoveTo();
+    private static void MoveToConfigDirectory() => NetZapret.Core.InstallRoot.MoveTo();
 
     /// <summary>
     /// Запуск двойным щелчком: поднимает права и открывает меню.
