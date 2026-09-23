@@ -226,6 +226,59 @@ public class SingBoxConfigCompilerTests
         Assert.True(pinnedAt < broadAt, "прибитый адрес должен проверяться раньше общего правила");
     }
 
+    /// <summary>
+    /// Общий адрес пина уводит в туннель только имя на VPN, а не весь адрес.
+    /// </summary>
+    /// <remarks>
+    /// 23.09: все имена Claude прибиты к посреднику 87.228.47.204, на VPN
+    /// стояло одно downloads.claude.ai. Правило по одному адресу увело
+    /// в туннель весь Claude, и с поднятыми движками он не работал.
+    /// </remarks>
+    [Fact]
+    public void ASharedPinnedAddressTakesOnlyTheProxyName()
+    {
+        var root = CompileWith("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.downloads.claude.ai"
+                mode: proxy
+              - match: domain
+                value: "*.claude.ai"
+                mode: direct
+            """, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            PinnedProxyAddresses = ["87.228.47.204/32"],
+            PinnedProxyNames = ["downloads.claude.ai"],
+        });
+
+        // В перехват адрес по-прежнему заводится: иначе до туннеля не дойдёт
+        // и само имя на VPN.
+        Assert.Contains("87.228.47.204/32",
+            root.GetProperty("inbounds")[0].GetProperty("route_address")
+                .EnumerateArray().Select(e => e.GetString()));
+
+        // Правила «по одному адресу» нет — оно и увозило весь Claude.
+        Assert.DoesNotContain(Rules(root), r =>
+            r.TryGetProperty("ip_cidr", out var c) &&
+            c.EnumerateArray().Any(e => e.GetString() == "87.228.47.204/32"));
+
+        var rule = Rules(root).Single(r =>
+            r.TryGetProperty("type", out var t) && t.GetString() == "logical");
+
+        Assert.Equal("and", rule.GetProperty("mode").GetString());
+        Assert.Equal("auto", rule.GetProperty("outbound").GetString());
+
+        var parts = rule.GetProperty("rules").EnumerateArray().ToList();
+
+        Assert.Contains(parts, p => p.TryGetProperty("ip_cidr", out var c)
+            && c.EnumerateArray().Single().GetString() == "87.228.47.204/32");
+        Assert.Contains(parts, p => p.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Single().GetString() == "downloads.claude.ai");
+    }
+
     [Fact]
     public void ByDefaultNamesAreResolvedDirectly()
     {
@@ -700,7 +753,13 @@ public class SingBoxConfigCompilerTests
             Server("vl", ProxyProtocol.Vless, "tcp"),
         };
 
-        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions());
+        // С пином на общем адресе: логическое правило «адрес и имя»
+        // появилось 23.09, и формат его проверяет только сам движок.
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions
+        {
+            PinnedProxyAddresses = ["203.0.114.7/32"],
+            PinnedProxyNames = ["files.rutracker.org"],
+        });
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
 
         try

@@ -97,6 +97,43 @@ public sealed class HostsFileTests : IDisposable
         Assert.Contains("canva.com", Assert.Single(notes));
     }
 
+    /// <summary>
+    /// Общий адрес пина: имена отдаются только те, что стоят на VPN.
+    /// </summary>
+    /// <remarks>
+    /// 23.09: все имена Claude прибиты к посреднику 87.228.47.204, на VPN
+    /// из них одно downloads.claude.ai. Туннелю нужно знать именно его —
+    /// иначе он увозит по адресу весь Claude, стоящий «напрямую».
+    /// </remarks>
+    [Fact]
+    public void ASharedPinnedAddressNamesOnlyTheProxyName()
+    {
+        Write("""
+            87.228.47.204 claude.ai
+            87.228.47.204 api.anthropic.com
+            87.228.47.204 downloads.claude.ai
+            """);
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.downloads.claude.ai"
+                mode: proxy
+              - match: domain
+                value: "*.claude.ai"
+                mode: direct
+              - match: domain
+                value: "*.anthropic.com"
+                mode: direct
+            """);
+
+        var pinned = HostsFile.CollectPinnedProxy(engine.RuleSet, out _, _path);
+
+        Assert.Equal("87.228.47.204/32", Assert.Single(pinned.Addresses));
+        Assert.Equal("downloads.claude.ai", Assert.Single(pinned.Names));
+    }
+
     /// <summary>Списочное правило учитывается наравне с доменным.</summary>
     /// <remarks>
     /// Пока учитывались только доменные, это молча не работало для всего,

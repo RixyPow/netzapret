@@ -276,7 +276,7 @@ public sealed class SingBoxOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Заводятся в туннель <b>и</b> получают правило на прокси —둘 вместе,
+    /// Заводятся в туннель <b>и</b> получают правило на прокси — оба вместе,
     /// одним полем, потому что порознь получается хуже, чем ничего.
     /// </para>
     /// <para>
@@ -289,6 +289,25 @@ public sealed class SingBoxOptions
     /// </para>
     /// </remarks>
     public IReadOnlyList<string> PinnedProxyAddresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Имена, ради которых <see cref="PinnedProxyAddresses"/> заведены в туннель.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Заданы — правило на прокси берёт соединение, только если совпали
+    /// и адрес, и имя. Адрес пина часто общий: посредник XBOX DNS
+    /// 87.228.47.204 держит в hosts все имена Claude, а на VPN из них 23.09
+    /// стояло одно — downloads.claude.ai. Правило по одному адресу увело
+    /// в туннель весь Claude, стоявший «напрямую», и с поднятыми движками
+    /// он не работал. Прочие имена на том же адресе теперь идут дальше,
+    /// к своим правилам.
+    /// </para>
+    /// <para>
+    /// Пусто — правило по одному адресу, как прежде.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> PinnedProxyNames { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Дополнительные префиксы для перехвата: развёрнутая секция <c>capture</c>
@@ -1412,11 +1431,33 @@ public sealed class SingBoxConfigCompiler
             foreach (var cidr in options.PinnedProxyAddresses)
                 pinned.Add(cidr);
 
-            rules.Add(new JsonObject
+            var outbound = haveServers ? options.SelectorTag : "direct";
+
+            if (options.PinnedProxyNames.Count == 0)
             {
-                ["ip_cidr"] = pinned,
-                ["outbound"] = haveServers ? options.SelectorTag : "direct",
-            });
+                rules.Add(new JsonObject { ["ip_cidr"] = pinned, ["outbound"] = outbound });
+            }
+            else
+            {
+                // «И адрес, и имя» — логическим правилом. В простом правиле
+                // sing-box складывает ip_cidr и domain через «или», и оно
+                // забрало бы и адрес целиком, и имя на любом адресе.
+                var names = new JsonArray();
+                foreach (var name in options.PinnedProxyNames)
+                    names.Add(name);
+
+                rules.Add(new JsonObject
+                {
+                    ["type"] = "logical",
+                    ["mode"] = "and",
+                    ["rules"] = new JsonArray
+                    {
+                        new JsonObject { ["ip_cidr"] = pinned },
+                        new JsonObject { ["domain"] = names },
+                    },
+                    ["outbound"] = outbound,
+                });
+            }
         }
 
         foreach (var rule in applicable)

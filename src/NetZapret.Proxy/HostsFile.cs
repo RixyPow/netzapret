@@ -159,6 +159,23 @@ public static class HostsFile
     public static IReadOnlyList<string> CollectPinnedProxyAddresses(
         Core.Rules.RuleSet ruleSet,
         out IReadOnlyList<string> notes,
+        string? hostsPath = null) =>
+        CollectPinnedProxy(ruleSet, out notes, hostsPath).Addresses;
+
+    /// <summary>
+    /// Прибитые имена с правилом «через VPN» и их адреса — порознь.
+    /// </summary>
+    /// <remarks>
+    /// Имена нужны туннелю наравне с адресами. Посредник у многих имён один:
+    /// 23.09 все имена Claude были прибиты к 87.228.47.204, а на VPN стояло
+    /// только downloads.claude.ai. Правило по одному адресу увело в туннель
+    /// весь Claude, хотя тот стоял «напрямую»: с поднятыми движками он
+    /// не работал, без них — работал. Туннелю уходят соединения на адрес,
+    /// чьё имя здесь, — см. SingBoxOptions.PinnedProxyNames.
+    /// </remarks>
+    public static PinnedProxy CollectPinnedProxy(
+        Core.Rules.RuleSet ruleSet,
+        out IReadOnlyList<string> notes,
         string? hostsPath = null)
     {
         var found = new List<string>();
@@ -168,7 +185,7 @@ public static class HostsFile
         var hosts = Read(hostsPath);
 
         if (hosts.Count == 0)
-            return found;
+            return new PinnedProxy(found, []);
 
         // Имена собираются в набор, а не печатаются на месте. Одно имя обычно
         // покрыто несколькими правилами сразу — своим и поставляемым, — и
@@ -218,7 +235,7 @@ public static class HostsFile
         }
 
         if (names.Count == 0)
-            return found;
+            return new PinnedProxy(found, []);
 
         // Одной строкой, и это осознанный выбор. Прежде здесь печаталось
         // по строке на имя — шестнадцать подряд при каждом запуске, все
@@ -231,7 +248,7 @@ public static class HostsFile
             $"({Sample(names)}) — их адреса заведены в туннель, " +
             "иначе правила для них не сработали бы");
 
-        return found;
+        return new PinnedProxy(found, names.ToList());
     }
 
     /// <summary>
@@ -467,3 +484,6 @@ public static class HostsFile
         }
     }
 }
+
+/// <summary>Прибитые в hosts имена с правилом «через VPN» и их адреса.</summary>
+public sealed record PinnedProxy(IReadOnlyList<string> Addresses, IReadOnlyList<string> Names);

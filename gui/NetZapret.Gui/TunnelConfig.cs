@@ -77,7 +77,7 @@ internal static class TunnelConfig
             // hosts бьёт любой резолв, включая наш: прибитый там домен
             // не получит fakeip и уйдёт мимо туннеля, сколько бы правил
             // на него ни стояло.
-            var pinned = HostsFile.CollectPinnedProxyAddresses(ruleSet, out _);
+            var pinned = HostsFile.CollectPinnedProxy(ruleSet, out _);
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
 
@@ -132,7 +132,8 @@ internal static class TunnelConfig
                 HealthInbound = settings.VerifyTraffic,
 
                 CaptureAddresses = capture,
-                PinnedProxyAddresses = pinned,
+                PinnedProxyAddresses = pinned.Addresses,
+                PinnedProxyNames = pinned.Names,
                 AddressOverrides = addresses,
 
                 // Мёртвые — мимо автоподбора, но в селекторе остаются:
