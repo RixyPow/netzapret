@@ -21,7 +21,7 @@ public enum ProxyProtocol
     Wireguard,
 
     /// <summary>
-    /// MASQUE — тот же WARP, но поверх QUIC на 443 порту.
+    /// MASQUE — тот же WARP, поверх HTTP/2 на 443 порту.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -33,9 +33,10 @@ public enum ProxyProtocol
     /// </para>
     /// <para>
     /// Смысл в транспорте: WireGuard узнаётся по первому же пакету, а MASQUE
-    /// идёт внутри QUIC на 443 — оператору он неотличим от обычного веба.
-    /// Там, где WARP по WireGuard проходит рукопожатие и глохнет на данных,
-    /// у MASQUE есть шанс.
+    /// идёт внутри обычного TLS на 443 — оператору он неотличим от веба.
+    /// Сперва он шёл по QUIC, и 23.09 по QUIC узел Cloudflare молчал,
+    /// а по HTTP/2 отвечал за 173 мс; WireGuard в тот же день по-прежнему
+    /// проходил рукопожатие и глох на данных, и с маскировкой AmneziaWG тоже.
     /// </para>
     /// </remarks>
     Masque,

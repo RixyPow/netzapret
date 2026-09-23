@@ -38,6 +38,22 @@ public class WarpTests
         Assert.False(outbound.TryGetProperty("server_port", out _));
     }
 
+    /// <summary>MASQUE идёт поверх HTTP/2, а не QUIC.</summary>
+    /// <remarks>
+    /// Замер 23.09 на 1.14.1-extended-2.7.2: по QUIC узел 162.159.198.2
+    /// молчит, по HTTP/2 — warp=on за 173–204 мс, с пустым кэшем и с полным.
+    /// Сними этот ключ — и WARP снова мёртв.
+    /// </remarks>
+    [Fact]
+    public void MasqueGoesOverHttp2()
+    {
+        var outbound = Compile(Warp.MasqueServer())
+            .GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == Warp.MasqueTag);
+
+        Assert.True(outbound.GetProperty("use_http2").GetBoolean());
+    }
+
     /// <summary>
     /// Даже когда адрес выяснен заранее, в MASQUE его подставлять нельзя:
     /// поля для него нет, и конфиг пробника перестал бы читаться.

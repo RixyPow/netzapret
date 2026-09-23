@@ -38,7 +38,7 @@ GPLv3 прямо оговаривает такой случай: объедин�
 ## sing-box
 
 `engines/sing-box/sing-box.exe` — **изменённая сборка**, называющая себя
-`1.14.0-extended-2.7.1`. Берётся готовым двоичным файлом из выпусков
+`1.14.1-extended-2.7.2`. Берётся готовым двоичным файлом из выпусков
 [github.com/shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended).
 Она, в свою очередь, основана на
 [github.com/SagerNet/sing-box](https://github.com/SagerNet/sing-box)

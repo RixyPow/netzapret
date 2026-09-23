@@ -85,7 +85,7 @@ public static class Warp
     public static IReadOnlyList<ProxyServer> Exits() => [MasqueServer()];
 
     /// <summary>
-    /// Выход MASQUE: тот же WARP, но поверх QUIC на 443 порту.
+    /// Выход MASQUE: тот же WARP, поверх HTTP/2 на 443 порту (с 23.09; по QUIC не доходил).
     /// </summary>
     /// <remarks>
     /// Адрес и порт здесь условны: движок выбирает узел сам и полей для них
@@ -99,7 +99,7 @@ public static class Warp
         Host = "cloudflareclient.com",
         Port = 443,
         Credential = string.Empty,
-        Transport = "quic",
+        Transport = "h2",
         Security = "tls",
     };
 }
