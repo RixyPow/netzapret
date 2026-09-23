@@ -68,7 +68,30 @@ public static class WinwsCommandLine
         string? excludeList = null,
         IReadOnlyList<OwnDesyncProfile>? own = null)
     {
-        var arguments = new List<string>(preset.GlobalArguments);
+        var arguments = new List<string>();
+
+        // Щит «не трогать» — самым первым профилем, раньше и пресета, и своих
+        // рецептов (Shield). До первого --new у пресета лежат вперемешку
+        // глобальные ключи и его первый профиль; глобальные от места не зависят,
+        // поэтому идут вперёд, а первый профиль — после щита, своим --new.
+        // Без щита голова остаётся ровно как в файле.
+        if (HasEntries(excludeList))
+        {
+            var (globals, firstProfile) = SplitGlobals(preset.GlobalArguments);
+
+            arguments.AddRange(globals);
+            arguments.AddRange(Shield(excludeList!));
+
+            if (firstProfile.Count > 0)
+            {
+                arguments.Add("--new");
+                arguments.AddRange(firstProfile);
+            }
+        }
+        else
+        {
+            arguments.AddRange(preset.GlobalArguments);
+        }
 
         // Свои профили идут перед пресетовскими, и это единственное место,
         // где порядок решает всё: winws2 отдаёт пакет первому профилю,
@@ -134,6 +157,96 @@ public static class WinwsCommandLine
         }
 
         return arguments;
+    }
+
+    /// <summary>
+    /// Профиль-щит: имена «не трогать» проходят мимо всего десинка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прежде «напрямую» было только <c>--hostlist-exclude</c> в секциях
+    /// по именам. Секции по адресам его не видят, и трафик, выпавший из своей
+    /// секции, они подбирали. 23.09 так лёг Valorant (VAL 43): Riot поставили
+    /// «напрямую», исключение выключило щит <c>pass</c> секции Riot, а платформа
+    /// Riot стоит на Cloudflare 104.18.0.0/16 — целиком в <c>ipset-discord</c>,
+    /// и её забрала секция «discord.com (IP fallback)» с поддельными пакетами.
+    /// </para>
+    /// <para>
+    /// Теперь то же, что спасало Riot в пресете, — секция <c>pass</c>, — стоит
+    /// первой на весь список «не трогать»: пакет с таким именем забирает она,
+    /// и дальше по пресету он не идёт вовсе. Исключения в секциях остаются
+    /// запасом. Трафик без имени (игровой UDP по голым адресам) щит не узнаёт —
+    /// у него нет имени, — но его и прежде вели секции пресета по адресам.
+    /// </para>
+    /// <para>
+    /// Форма та же, что у секции Riot в пресете, под которой Valorant работал:
+    /// список имён, <c>--out-range=-d8</c>, <c>pass</c>. Шире только фильтр —
+    /// все порты TCP вместо <c>80,443-65535</c> и QUIC. По справке winws2
+    /// заданные вместе фильтры TCP и UDP пропускают оба протокола.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<string> Shield(string excludeList) =>
+    [
+        "--name=NetZapret: не трогать",
+        "--filter-tcp=*",
+        "--filter-udp=443",
+        $"--hostlist={Forward(excludeList)}",
+        OutRange,
+        "--lua-desync=pass",
+    ];
+
+    /// <summary>
+    /// Есть ли в списке хоть одно имя.
+    /// </summary>
+    /// <remarks>
+    /// Щит ставится только над непустым списком. Как winws2 обходится
+    /// с пустым <c>--hostlist</c>, не проверено, и цена ошибки несоразмерна:
+    /// прочти он пустой список как «все имена», <c>pass</c> выключил бы
+    /// десинк целиком.
+    /// </remarks>
+    private static bool HasEntries(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        try
+        {
+            return File.ReadLines(path).Any(line =>
+                line.Trim() is { Length: > 0 } text && !text.StartsWith('#'));
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Ключи winws2, общие для всех профилей, — от места в строке не зависят.</summary>
+    private static readonly string[] GlobalKeys =
+        ["--blob", "--lua-init", "--wf-", "--ipcache-", "--ctrack-", "--debug"];
+
+    /// <summary>
+    /// Делит голову пресета (всё до первого --new) на глобальные ключи и первый профиль.
+    /// </summary>
+    /// <remarks>
+    /// Во всех пятнадцати пресетах до первого --new стоят и глобальные
+    /// ключи, и первая секция (у V9 — git.zapret.moe). Незнакомый ключ
+    /// считается ключом профиля и остаётся при нём на своём месте: так
+    /// профиль заведомо не развалится, а глобальный ключ глобален где угодно.
+    /// </remarks>
+    private static (List<string> Globals, List<string> FirstProfile) SplitGlobals(IReadOnlyList<string> head)
+    {
+        var globals = new List<string>();
+        var profile = new List<string>();
+
+        foreach (var argument in head)
+        {
+            if (GlobalKeys.Any(key => argument.StartsWith(key, StringComparison.OrdinalIgnoreCase)))
+                globals.Add(argument);
+            else
+                profile.Add(argument);
+        }
+
+        return (globals, profile);
     }
 
     /// <summary>
