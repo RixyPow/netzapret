@@ -41,6 +41,7 @@ return command switch
 {
     "status" or "состояние" => Status(),
     "where" or "куда" => Where(string.Join(' ', args.Skip(1))),
+    "dns" => await Dns(),
     "routes" or "маршруты" => Routes(),
     "migrate" or "перенос" => NetZapret.Tools.Migrate.Run(args.ElementAtOrDefault(1)),
     null or "help" or "--help" or "-h" => Help(),
@@ -141,6 +142,37 @@ int Where(string target)
         RoutingMode.Desync => "десинк",
         _ => "напрямую",
     };
+}
+
+// Обзор резолверов: задержки, кто отвечает на самом деле, подмена.
+// Сокеты привязаны к физическому адаптеру — меряется сеть провайдера,
+// а не наш туннель. Своего решения здесь нет: всё в DnsSurvey.
+async Task<int> Dns()
+{
+    Console.WriteLine($"{"провайдер",-14} {"DoH",9} {"DoT",9} {"UDP",11}  {"реальный UDP-резолвер",-40} подмена");
+
+    var rows = await NetZapret.Proxy.DnsSurvey.SurveyAllAsync();
+
+    foreach (var row in rows)
+    {
+        static string Ms(double? ms, string failure) =>
+            ms is { } v ? $"{v:0.0}мс" : failure.Length > 0 ? failure : "—";
+
+        var udp = Ms(row.UdpMs, row.UdpFailure);
+
+        if (row.UdpMs is not null && row.UdpAnswered < row.Provider.Udp.Count)
+            udp += $" {row.UdpAnswered}/{row.Provider.Udp.Count}";
+
+        var real = row.RealResolver is null
+            ? "—"
+            : $"{row.RealResolver}→{row.RealNetwork ?? "?"}" + (row.Intercepted ? " (чужая сеть)" : string.Empty);
+
+        var spoof = row.SpoofChecked == 0 ? "—" : $"{row.Spoofed}/{row.SpoofChecked}";
+
+        Console.WriteLine($"{row.Provider.Name,-14} {Ms(row.DohMs, row.DohFailure),9} {Ms(row.DotMs, row.DotFailure),9} {udp,11}  {real,-40} {spoof}");
+    }
+
+    return 0;
 }
 
 // Книга маршрутов и её противоречия.

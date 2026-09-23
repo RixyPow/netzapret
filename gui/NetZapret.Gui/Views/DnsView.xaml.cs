@@ -28,6 +28,62 @@ public sealed class ResolverRow
     public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
 }
 
+/// <summary>Строка обзора резолверов.</summary>
+/// <remarks>
+/// Цвета — по смыслу, как на снимке владельца: зелёное прошло, красное
+/// перехвачено или подменено, серое не мерилось.
+/// </remarks>
+public sealed class SurveyRow
+{
+    private SurveyRow(DnsSurveyRow row) => Source = row;
+
+    public DnsSurveyRow Source { get; }
+
+    public string Name => Source.Provider.Name;
+
+    public string Doh => Ms(Source.DohMs, Source.DohFailure);
+
+    public string Dot => Ms(Source.DotMs, Source.DotFailure);
+
+    public string Udp
+    {
+        get
+        {
+            var text = Ms(Source.UdpMs, Source.UdpFailure);
+
+            return Source.UdpMs is not null && Source.UdpAnswered < Source.Provider.Udp.Count
+                ? $"{text} {Source.UdpAnswered}/{Source.Provider.Udp.Count}"
+                : text;
+        }
+    }
+
+    public string Real => Source.RealResolver is null
+        ? "—"
+        : $"{Source.RealResolver} → {Source.RealNetwork ?? "?"}";
+
+    public string Spoof => Source.SpoofChecked == 0 ? "—" : $"{Source.Spoofed}/{Source.SpoofChecked}";
+
+    public Brush DohColor => Paint(Source.DohMs, Source.DohFailure);
+
+    public Brush DotColor => Paint(Source.DotMs, Source.DotFailure);
+
+    public Brush UdpColor => Paint(Source.UdpMs, Source.UdpFailure);
+
+    public Brush RealColor => Brush(Source.RealResolver is null ? "Faint" : Source.Intercepted ? "Danger" : "Accent");
+
+    public Brush SpoofColor => Brush(Source.SpoofChecked == 0 ? "Faint" : Source.Spoofed > 0 ? "Danger" : "Accent");
+
+    public static SurveyRow From(DnsSurveyRow row) => new(row);
+
+    private static string Ms(double? ms, string failure) =>
+        ms is { } value ? $"{value:0.0} мс" : failure.Length > 0 ? failure : "—";
+
+    private static Brush Paint(double? ms, string failure) =>
+        Brush(ms is not null ? "Accent" : failure.Length > 0 ? "Danger" : "Faint");
+
+    private static Brush Brush(string key) => (Brush)Application.Current.FindResource(key);
+}
+
 /// <summary>
 /// Апстрим DNS туннеля.
 /// </summary>
@@ -291,6 +347,47 @@ public partial class DnsView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Обзор резолверов — кто отвечает на самом деле и подменяет ли.
+    /// </summary>
+    /// <remarks>
+    /// Строки появляются по мере готовности: провайдеров пятнадцать, и таблица,
+    /// молчащая до последнего, выглядела бы зависшей.
+    /// </remarks>
+    private async void OnSurvey(object sender, RoutedEventArgs e)
+    {
+        SurveyButton.IsEnabled = false;
+        SurveyHead.Visibility = Visibility.Visible;
+
+        var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>();
+        Survey.ItemsSource = rows;
+        SurveyStatus.Text = "Проверяю… Запросы идут мимо туннеля, через адаптер.";
+
+        try
+        {
+            var progress = new Progress<DnsSurveyRow>(row => rows.Add(SurveyRow.From(row)));
+            var all = await DnsSurvey.SurveyAllAsync(progress: progress);
+
+            // Порядок — как в списке провайдеров, а не как пришли ответы.
+            Survey.ItemsSource = all.Select(SurveyRow.From).ToList();
+
+            var intercepted = all.Where(r => r.Spoofed > 0).Select(r => r.Provider.Name).ToList();
+
+            SurveyStatus.Text = intercepted.Count == 0
+                ? "Подмены по UDP не найдено."
+                : $"По UDP подменяют ответы: {string.Join(", ", intercepted)}. "
+                  + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.";
+        }
+        catch (Exception ex)
+        {
+            SurveyStatus.Text = "Обзор не удался: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            SurveyButton.IsEnabled = true;
         }
     }
 }

@@ -145,6 +145,83 @@
                 <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
                            Text="Проверяется настоящим запросом DoH, а не пингом: перекрывают именно запрос, и ICMP до 8.8.8.8 при этом ходит прекрасно. Берётся лучший из двух замеров — первый платит за установку TLS." />
 
+                <!--
+                    Обзор резолверов, 23.09, по снимку владельца. Отвечает на то,
+                    чего не видно по задержке: кто на самом деле отвечает на UDP
+                    и подменяет ли он ответы. Замер в тот же день: Google,
+                    Cloudflare и OpenDNS по UDP отвечали из RIPN-NS5-RU-MSK
+                    и подменяли четыре закрытых имени из пяти, по DoH и DoT — сами.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,24,0,0">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Обзор резолверов" FontWeight="SemiBold" VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Задержка по DoH, DoT и обычному UDP — лучшая из трёх.&#x0a;&#x0a;«Кто отвечает» — адрес, с которого на самом деле ходит наружу тот, кто ответил на UDP, и его сеть. Если спрашивали 8.8.8.8, а ответил резолвер российской сети, запрос перехвачен по дороге.&#x0a;&#x0a;«Подмена» — сколько из пяти давно закрытых имён резолвер по UDP разрешил не туда: в заглушку, в пустоту или в один адрес на всех. Одно расхождение адресов подменой не считается — у сетей доставки узлов десятки.&#x0a;&#x0a;Мерится сеть провайдера: запросы идут через адаптер мимо нашего туннеля." />
+                                </StackPanel>
+
+                                <TextBlock x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
+                                           TextWrapping="Wrap"
+                                           Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" x:Name="SurveyButton" Style="{StaticResource Ghost}"
+                                    Content="Проверить" Click="OnSurvey" VerticalAlignment="Center" Padding="12,7" />
+                        </Grid>
+
+                        <Grid x:Name="SurveyHead" Margin="0,14,0,6" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="80" />
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="64" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0" Text="ПРОВАЙДЕР" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="1" Text="DoH" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="2" Text="DoT" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="3" Text="UDP" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="4" Text="КТО ОТВЕЧАЕТ НА UDP" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="5" Text="ПОДМЕНА" Style="{StaticResource Caption}" />
+                        </Grid>
+
+                        <ItemsControl x:Name="Survey">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3,0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="120" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="92" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="64" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Doh}" Style="{StaticResource Mono}" Foreground="{Binding DohColor}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Dot}" Style="{StaticResource Mono}" Foreground="{Binding DotColor}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Udp}" Style="{StaticResource Mono}" Foreground="{Binding UdpColor}" />
+                                        <TextBlock Grid.Column="4" Text="{Binding Real}" Style="{StaticResource Mono}" Foreground="{Binding RealColor}"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Real}" Margin="0,0,8,0" />
+                                        <TextBlock Grid.Column="5" Text="{Binding Spoof}" Style="{StaticResource Mono}" Foreground="{Binding SpoofColor}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </Grid>
     </ScrollViewer>
