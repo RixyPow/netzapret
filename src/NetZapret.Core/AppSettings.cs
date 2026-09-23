@@ -300,6 +300,12 @@ public sealed record AppSettings
     public bool CheckForUpdates { get; init; } = true;
 
     /// <summary>
+    /// Версия, о которой сказали «не сейчас»: карточка на «Главной» о ней
+    /// больше не напоминает, о следующей — напомнит.
+    /// </summary>
+    public string? DismissedUpdate { get; init; }
+
+    /// <summary>
     /// Сценарий первого запуска показан и закрыт.
     /// </summary>
     /// <remarks>

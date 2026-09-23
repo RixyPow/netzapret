@@ -359,14 +359,23 @@
                                 Margin="0,6" CornerRadius="2"
                                 Background="Transparent" />
                         <Border x:Name="Shape" Background="Transparent" CornerRadius="8" Margin="8,0,10,0">
-                            <TextBlock x:Name="Label"
-                                       Text="{TemplateBinding Content}"
-                                       Foreground="{DynamicResource Muted}"
-                                       FontSize="13"
-                                       Margin="14,10" />
+                            <StackPanel Orientation="Horizontal" Margin="14,10">
+                                <TextBlock x:Name="Label"
+                                           Text="{TemplateBinding Content}"
+                                           Foreground="{DynamicResource Muted}"
+                                           FontSize="13" />
+
+                                <!-- Точка «есть новое» (RailBadge.cs). -->
+                                <Ellipse x:Name="Badge" Width="7" Height="7" Margin="8,1,0,0"
+                                         VerticalAlignment="Center" Fill="{DynamicResource Accent}"
+                                         Visibility="Collapsed" />
+                            </StackPanel>
                         </Border>
                     </Grid>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="local:RailBadge.Shown" Value="True">
+                            <Setter TargetName="Badge" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Text}" />
                             <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />

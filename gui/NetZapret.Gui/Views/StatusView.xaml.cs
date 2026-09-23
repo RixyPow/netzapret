@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
+using NetZapret.Core.Updates;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
 
@@ -81,6 +82,13 @@ public partial class StatusView : UserControl
             ShowModes(AppSettings.Load(AppSettings.DefaultPath));
             ShowAutostart();
 
+            // Проверка обновлений идёт при запуске окна и может закончиться
+            // уже после того, как «Главная» показана, — поэтому и подписка.
+            // Отписка обязательна: событие статическое, а раздел пересоздаётся
+            // при каждом возврате.
+            UpdateNotice.Changed += OnUpdateChanged;
+            ShowUpdate();
+
             // Возврат на вкладку посреди запуска: сам запуск никуда не делся,
             // а анимация была снята при уходе — заводим её обратно.
             if (_startingSince is not null)
@@ -91,12 +99,77 @@ public partial class StatusView : UserControl
 
         Unloaded += (_, _) =>
         {
+            UpdateNotice.Changed -= OnUpdateChanged;
             _refresh.Stop();
 
             // Анимация на скрытом виде продолжала бы будить композитор
             // впустую. Само состояние запуска при этом сохраняется.
             StopAnimations();
         };
+    }
+
+    private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
+
+    /// <summary>Карточка «вышла новая версия» — если есть что и о нём не сказали «не сейчас».</summary>
+    private void ShowUpdate()
+    {
+        var release = UpdateNotice.Available;
+
+        if (!UpdateNotice.ShouldOffer(release, AppSettings.Load(AppSettings.DefaultPath)))
+        {
+            UpdateCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UpdateTitle.Text = $"Вышла {release!.Version}";
+
+        var highlights = UpdateNotice.Highlights(release.Notes);
+
+        UpdateWhat.Text = highlights.Count > 0
+            ? string.Join(" · ", highlights) + "."
+            : "Установлена " + UpdateCheck.Current + ".";
+
+        UpdateCard.Visibility = Visibility.Visible;
+    }
+
+    private void OnUpdateNow(object sender, RoutedEventArgs e) =>
+        (Window.GetWindow(this) as MainWindow)?.OpenUpdate(install: true);
+
+    private void OnUpdateNotes(object sender, RoutedEventArgs e)
+    {
+        if (UpdateNotice.Available is not { } release)
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = UpdateNotice.PageOf(release), UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // Нет браузера — те же примечания видны в «Ещё» при установке.
+        }
+    }
+
+    /// <summary>
+    /// «Не сейчас»: об этой версии больше не напоминать. Точка у «Ещё»
+    /// остаётся — она тихая и уходит, только когда версия поставлена.
+    /// </summary>
+    private void OnUpdateLater(object sender, RoutedEventArgs e)
+    {
+        if (UpdateNotice.Available is not { } release)
+            return;
+
+        try
+        {
+            (AppSettings.Load(AppSettings.DefaultPath) with { DismissedUpdate = release.Version })
+                .Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не сохранилось — напомним при следующем запуске, беды в том нет.
+        }
+
+        UpdateCard.Visibility = Visibility.Collapsed;
     }
 
     private void Update()

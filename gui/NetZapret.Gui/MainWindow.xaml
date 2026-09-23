@@ -56,7 +56,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />
+                        <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>

@@ -153,10 +153,35 @@ public partial class MoreView : UserControl
     {
         VersionValue.Text = UpdateCheck.Current;
 
-        UpdateValue.Text = settings.CheckForUpdates
-            ? "Проверяется при запуске консоли."
-            : "Проверка при запуске выключена.";
+        // Найденное при запуске окна (UpdateNotice) показывается сразу —
+        // вместе с кнопкой установки, без повторного вопроса GitHub.
+        // Прежде подпись обещала проверку «при запуске консоли», которой
+        // с её удалением не стало, и не было вовсе никакой.
+        if (UpdateNotice.Available is { } found)
+        {
+            _release = found;
+            InstallButton.Visibility = Visibility.Visible;
+            UpdateValue.Text = $"Есть новее: {found.Version}.";
+        }
+        else
+        {
+            UpdateValue.Text = settings.CheckForUpdates
+                ? "Проверяется при запуске программы."
+                : "Проверка при запуске выключена.";
+        }
+
+        if (InstallOnOpen && _release is not null)
+        {
+            InstallOnOpen = false;
+            Dispatcher.InvokeAsync(() => OnInstallUpdate(this, new RoutedEventArgs()));
+        }
     }
+
+    /// <summary>
+    /// Пришли с карточки «Вышла новая версия» кнопкой «Обновить»: предложить
+    /// установку сразу. Сама установка — эта же, со своим вопросом.
+    /// </summary>
+    public static bool InstallOnOpen { get; set; }
 
     private async void OnCheckUpdate(object sender, RoutedEventArgs e)
     {
@@ -169,6 +194,8 @@ public partial class MoreView : UserControl
         try
         {
             var release = await UpdateCheck.LatestAsync(_work.Token);
+
+            UpdateNotice.Remember(release);
 
             _release = release is not null && UpdateCheck.IsNewer(release.Version, UpdateCheck.Current)
                 ? release

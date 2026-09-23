@@ -25,6 +25,37 @@
                        Text="Что настроено, что из этого работает прямо сейчас и две главные ручки." />
 
             <!--
+                Вышла новая версия (UpdateNotice). Над состоянием: её видно
+                при первом взгляде на окно, а не только тем, кто дошёл до «Ещё».
+                «Не сейчас» прячет её до следующей версии. Решение владельца
+                23.09: карточка и точка у «Ещё», без уведомлений Windows.
+            -->
+            <Border x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,22,0,0"
+                    BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" FontSize="15" />
+                        <TextBlock x:Name="UpdateWhat" Style="{StaticResource Caption}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource Ghost}" Content="Что нового"
+                                Click="OnUpdateNotes" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource Ghost}" Content="Не сейчас"
+                                Click="OnUpdateLater" Margin="0,0,8,0" />
+                        <Button Style="{StaticResource Primary}" Content="Обновить"
+                                Click="OnUpdateNow" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!--
                 Карточка состояния. Крупная точка и одна строка словами:
                 первое, зачем окно открывают, — понять, идёт ли обход.
             -->

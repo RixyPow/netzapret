@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using NetZapret.Core;
+using NetZapret.Core.Updates;
 using NetZapret.Gui.Views;
 using NetZapret.Supervisor;
 
@@ -28,6 +29,46 @@ public partial class MainWindow : Window
         };
 
         _toastTimer.Tick += (_, _) => HideToast();
+
+        UpdateNotice.Changed += () => Dispatcher.InvokeAsync(ShowUpdateBadge);
+        _ = CheckForUpdateAsync();
+    }
+
+    /// <summary>
+    /// Тихо спрашивает GitHub о новой версии — если это разрешено.
+    /// </summary>
+    /// <remarks>
+    /// Из окна, а не из супервизора: тот запускается автозапуском без окна,
+    /// и сказать о находке ему некому. Неудача молчит — нет сети сейчас,
+    /// спросим при следующем запуске.
+    /// </remarks>
+    private static async Task CheckForUpdateAsync()
+    {
+        try
+        {
+            await UpdateNotice.CheckAsync(AppSettings.Load(AppSettings.DefaultPath), CancellationToken.None);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>Точка у «Ещё», пока новая версия не поставлена.</summary>
+    private void ShowUpdateBadge() =>
+        RailBadge.SetShown(RailMore, UpdateNotice.Available is not null);
+
+    /// <summary>
+    /// Открывает «Ещё» и, если просили, сразу предлагает поставить обновление.
+    /// </summary>
+    /// <remarks>
+    /// Установка одна — та, что в «Ещё», со своим вопросом «обновить?».
+    /// Карточка на «Главной» ведёт туда, а не ставит сама: двух путей
+    /// установки быть не должно.
+    /// </remarks>
+    public void OpenUpdate(bool install)
+    {
+        MoreView.InstallOnOpen = install;
+        RailMore.IsChecked = true;
     }
 
     /// <summary>
