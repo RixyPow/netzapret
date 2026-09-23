@@ -1,7 +1,7 @@
 # Preset: Universal V9
 # BuiltinVersion: 2.26
 # IconColor: #3fb950
-# Description: V8 плюс семь рецептов, выбранных вручную и проверенных на живой сети: Valheim, Instagram, Facebook, SoundCloud, Speedtest, Medium, VirusTotal. Эти секции стоят первыми и потому перекрывают заводские — winws2 отдаёт пакет первой совпавшей и дальше не смотрит. Всё остальное взято из V8 без изменений.
+# Description: V8 плюс шесть рецептов, выбранных вручную и проверенных на живой сети: Valheim, Facebook, SoundCloud, Speedtest, Medium, VirusTotal. Эти секции стоят первыми и потому перекрывают заводские — winws2 отдаёт пакет первой совпавшей и дальше не смотрит. Всё остальное взято из V8 без изменений.
 
 --lua-init=@lua/zapret-lib.lua
 --lua-init=@lua/zapret-antidpi.lua
@@ -99,13 +99,6 @@
 --hostlist-domains=valheim.com
 --out-range=-d8
 --lua-desync=hostfakesplit_multi:hosts=google.com,vimeo.com:tcp_ts=-1000:tcp_md5:repeats=2
-
---new
---name=Выбрано вручную: instagram
---filter-tcp=80,443,443-65535
---hostlist-domains=instagram.com,cdninstagram.com
---out-range=-d8
---lua-desync=hostfakesplit_stealth:host=ozon.ru:mode=soft:tcp_ts=-1000:tcp_md5
 
 --new
 --name=Выбрано вручную: facebook
