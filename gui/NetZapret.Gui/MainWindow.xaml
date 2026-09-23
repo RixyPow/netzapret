@@ -10,7 +10,12 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal">
 
-    <Grid x:Name="Root">
+    <!--
+        Масштаб окна из «Ещё» → «Шрифт и размер»: всё окно целиком, как
+        «масштаб» в Telegram. Стекло считается в координатах этой же сетки,
+        поэтому от масштаба не съезжает.
+    -->
+    <Grid x:Name="Root" LayoutTransform="{DynamicResource UiScaleTransform}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="212" />
             <ColumnDefinition Width="*" />

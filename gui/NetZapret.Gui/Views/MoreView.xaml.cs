@@ -78,6 +78,7 @@ public partial class MoreView : UserControl
             Status.Text = $"Тема «{wanted}» не применилась — стоит встроенная. Причина — в подсказке её плитки.";
 
         ShowLook(settings, loads.FirstOrDefault(l => l.Id == current)?.Theme);
+        ShowFonts(settings);
     }
 
     private bool _showingLook;
@@ -102,6 +103,68 @@ public partial class MoreView : UserControl
         _showingLook = true;
         DimChoice.SelectedIndex = Math.Clamp(settings.ThemeDimSteps, 0, 2);
         _showingLook = false;
+    }
+
+    private const string ThemeFont = "как в теме";
+
+    /// <summary>Установленные шрифты — один раз на запуск: перечень не меняется, а читается долго.</summary>
+    private static readonly Lazy<IReadOnlyList<string>> SystemFonts = new(() =>
+        Fonts.SystemFontFamilies
+            .Select(f => f.Source)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList());
+
+    /// <summary>Списки шрифтов и размеров — с выбранным сейчас.</summary>
+    private void ShowFonts(AppSettings settings)
+    {
+        _showingLook = true;
+
+        try
+        {
+            var fonts = new List<string> { ThemeFont };
+            fonts.AddRange(SystemFonts.Value);
+
+            UiFontChoice.ItemsSource = fonts;
+            DisplayFontChoice.ItemsSource = fonts;
+
+            UiFontChoice.SelectedItem = settings.UiFont is { Length: > 0 } ui && fonts.Contains(ui) ? ui : ThemeFont;
+            DisplayFontChoice.SelectedItem = settings.DisplayFont is { Length: > 0 } display && fonts.Contains(display) ? display : ThemeFont;
+
+            var scales = Appearance.Scales.Select(s => $"{s * 100:0} %").ToList();
+            ScaleChoice.ItemsSource = scales;
+
+            int nearest = Appearance.Scales
+                .Select((s, i) => (Distance: Math.Abs(s - settings.UiScale), Index: i))
+                .MinBy(x => x.Distance).Index;
+
+            ScaleChoice.SelectedIndex = nearest;
+        }
+        finally
+        {
+            _showingLook = false;
+        }
+    }
+
+    private void OnFontChoice(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showingLook)
+            return;
+
+        static string? Pick(ComboBox box) =>
+            box.SelectedItem is string name && name != ThemeFont ? name : null;
+
+        var scale = ScaleChoice.SelectedIndex is int i && i >= 0 && i < Appearance.Scales.Count
+            ? Appearance.Scales[i]
+            : 1.0;
+
+        ApplyLook(AppSettings.Load(AppSettings.DefaultPath) with
+        {
+            UiFont = Pick(UiFontChoice),
+            DisplayFont = Pick(DisplayFontChoice),
+            UiScale = scale,
+        });
     }
 
     private void OnLook(object sender, RoutedEventArgs e)

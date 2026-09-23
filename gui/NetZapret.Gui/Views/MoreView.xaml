@@ -162,6 +162,73 @@
                     </StackPanel>
                 </Border>
 
+                <!--
+                    Шрифт и размер (владелец, 24.09). Общие для всех тем:
+                    хранятся в настройках человека и перекрывают шрифты темы.
+                    Шрифт данных — адреса и задержки — не меняется: цифры
+                    в таблицах держатся столбиком только моноширинным.
+                -->
+                <TextBlock Text="Шрифт и размер" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Шрифт интерфейса" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" x:Name="UiFontChoice" Width="260" SelectionChanged="OnFontChoice">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Шрифт заголовков" VerticalAlignment="Center" />
+                            <ComboBox Grid.Column="1" x:Name="DisplayFontChoice" Width="260" SelectionChanged="OnFontChoice">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Размер" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                           Text="Всё окно целиком, как масштаб в Telegram: текст и карточки растут вместе, и ничего не вылезает за края." />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" x:Name="ScaleChoice" Width="260" VerticalAlignment="Center"
+                                      SelectionChanged="OnFontChoice" />
+                        </Grid>
+
+                        <!-- Образец: видно сразу, без поиска по разделам. -->
+                        <Border Background="{DynamicResource Raised}" CornerRadius="10" Padding="14,12">
+                            <StackPanel>
+                                <TextBlock Text="Маршруты" Style="{StaticResource Title}" />
+                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="Discord идёт через десинк, Instagram — через VPN." />
+                                <TextBlock Style="{StaticResource Mono}" Margin="0,6,0,0"
+                                           Text="104.18.32.47   42 мс   TLS 1.3" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="Первый запуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
                 <Border Style="{StaticResource Card}">

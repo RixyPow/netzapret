@@ -89,5 +89,6 @@
     <sys:Double x:Key="BackdropDim">1</sys:Double>
     <SolidColorBrush x:Key="Chrome" Color="{StaticResource BackdropColor}" />
     <SolidColorBrush x:Key="RailFill" Color="{StaticResource BackdropColor}" />
+    <ScaleTransform x:Key="UiScaleTransform" ScaleX="1" ScaleY="1" />
 
 </ResourceDictionary>

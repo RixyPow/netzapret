@@ -85,7 +85,12 @@ public static class Themes
             ? LightPath
             : DarkPath;
 
-        Swap(new ResourceDictionary { Source = new Uri(fallback, UriKind.Relative) });
+        var builtIn = new ResourceDictionary { Source = new Uri(fallback, UriKind.Relative) };
+
+        // Масштаб — настройка человека, а не темы: переживает и отказ темы.
+        builtIn["UiScaleTransform"] = Scale(look.Scale);
+
+        Swap(builtIn);
         Glass.Set(null, System.Windows.Media.Stretch.UniformToFill);
         Current = fallback == LightPath ? "light" : DefaultId;
 
@@ -107,9 +112,12 @@ public static class Themes
             dictionary[key] = Frozen(new SolidColorBrush(color));
         }
 
-        dictionary["UiFont"] = Font(theme, theme.Fonts.Ui);
+        // Шрифты человека перекрывают шрифты темы; шрифт данных — нет:
+        // цифры в таблицах держатся столбиком только моноширинным.
+        dictionary["UiFont"] = look.UiFont is { } ui ? new FontFamily(ui) : Font(theme, theme.Fonts.Ui);
         dictionary["MonoFont"] = Font(theme, theme.Fonts.Mono);
-        dictionary["DisplayFont"] = Font(theme, theme.Fonts.Display);
+        dictionary["DisplayFont"] = look.DisplayFont is { } display ? new FontFamily(display) : Font(theme, theme.Fonts.Display);
+        dictionary["UiScaleTransform"] = Scale(look.Scale);
 
         var backdrop = (Brush)dictionary["Backdrop"];
 
@@ -422,6 +430,8 @@ public static class Themes
 
     private static Color ToColor(ThemeColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);
 
+    private static ScaleTransform Scale(double scale) => Frozen(new ScaleTransform(scale, scale));
+
     private static T Frozen<T>(T freezable) where T : Freezable
     {
         freezable.Freeze();
@@ -432,13 +442,20 @@ public static class Themes
 /// <summary>
 /// Что человек хочет видеть из задуманного темой: фон, стекло, затемнение.
 /// </summary>
-public sealed record Appearance(bool Background, bool Blur, int DimSteps)
+public sealed record Appearance(bool Background, bool Blur, int DimSteps,
+    string? UiFont = null, string? DisplayFont = null, double Scale = 1.0)
 {
+    /// <summary>Ступени масштаба окна — как в Telegram.</summary>
+    public static IReadOnlyList<double> Scales { get; } = [0.9, 1.0, 1.1, 1.25, 1.5];
+
     /// <summary>На сколько темнее за одну ступень «темнее».</summary>
     public const double DimStep = 0.12;
 
     public static Appearance Default { get; } = new(true, true, 0);
 
     public static Appearance From(AppSettings settings) =>
-        new(settings.ThemeBackgroundShown, settings.ThemeBlur, Math.Clamp(settings.ThemeDimSteps, 0, 2));
+        new(settings.ThemeBackgroundShown, settings.ThemeBlur, Math.Clamp(settings.ThemeDimSteps, 0, 2),
+            Blank(settings.UiFont), Blank(settings.DisplayFont), Math.Clamp(settings.UiScale, 0.8, 1.75));
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
