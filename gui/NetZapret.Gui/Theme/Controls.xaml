@@ -639,9 +639,8 @@
     -->
     <Style x:Key="RailGroup" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Muted}" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="10" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Margin" Value="22,18,22,6" />
     </Style>
 
     <!--

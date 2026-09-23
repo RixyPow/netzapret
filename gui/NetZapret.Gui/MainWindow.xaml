@@ -58,7 +58,21 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
 
-                        <TextBlock Style="{StaticResource RailGroup}" Text="Разбор" />
+                        <!--
+                            Заголовок группы, а не пункт: прописными, мельче
+                            и с чертой до края. Строчной «Разбор» того же
+                            цвета, что пункты, выглядел ещё одной вкладкой
+                            (владелец, 23.09).
+                        -->
+                        <Grid Margin="22,20,22,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RailGroup}" Text="РАЗБОР" />
+                            <Border Grid.Column="1" Height="1" Background="{DynamicResource Border}"
+                                    VerticalAlignment="Center" Margin="10,1,0,0" />
+                        </Grid>
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
