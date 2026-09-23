@@ -10,7 +10,7 @@
         FontFamily="{DynamicResource UiFont}"
         Foreground="{DynamicResource Text}">
 
-    <Grid Margin="24">
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

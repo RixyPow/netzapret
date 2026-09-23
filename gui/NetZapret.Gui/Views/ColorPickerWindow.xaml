@@ -11,7 +11,7 @@
         и «было», поля H/S/L, R/G/B и HEX. Все поля — один цвет: правка
         любого пересчитывает остальные (ColorMath).
     -->
-    <Grid Margin="24,20,24,20">
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="24,20,24,20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

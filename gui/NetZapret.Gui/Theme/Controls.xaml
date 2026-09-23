@@ -110,6 +110,7 @@
         с невидимым текстом — ровно это и было видно в «Маршрутах».
     -->
     <Style TargetType="ComboBox">
+        <Setter Property="MaxDropDownHeight" Value="360" />
         <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{DynamicResource Text}" />
@@ -152,13 +153,27 @@
                             </ToggleButton.Template>
                         </ToggleButton>
 
+                        <!--
+                            Всплывающий список — отдельное окно, и масштаб главного
+                            на него не действует: отсюда свой LayoutTransform.
+                            Прокрутка и предел высоты обязательны: без них список
+                            из трёхсот шрифтов рос во весь экран и обрезался его
+                            краем (снимок владельца 24.09). ItemsPresenter, а не
+                            StackPanel: так списку можно задать свою панель —
+                            виртуальную для длинных.
+                        -->
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
                                AllowsTransparency="True" PopupAnimation="Fade" Focusable="False">
                             <Border Background="{DynamicResource Surface}"
                                     BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                     CornerRadius="10" Margin="0,4,0,0"
-                                    MinWidth="{TemplateBinding ActualWidth}">
-                                <StackPanel IsItemsHost="True" Margin="4" />
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    LayoutTransform="{DynamicResource UiScaleTransform}">
+                                <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                              VerticalScrollBarVisibility="Auto" Margin="4"
+                                              CanContentScroll="True">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
                             </Border>
                         </Popup>
                     </Grid>
@@ -479,7 +494,8 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToolTip">
-                    <Border Background="{TemplateBinding Background}"
+                    <Border LayoutTransform="{DynamicResource UiScaleTransform}"
+                            Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="10" Padding="{TemplateBinding Padding}">

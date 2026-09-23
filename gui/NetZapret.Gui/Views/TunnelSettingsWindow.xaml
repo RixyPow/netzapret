@@ -17,7 +17,7 @@
         Список в духе Happ: одна карточка на группу, строки с волосяными
         разделителями, справа состояние, пояснения под значком «i».
     -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="22,20,22,22">
+    <ScrollViewer LayoutTransform="{DynamicResource UiScaleTransform}" VerticalScrollBarVisibility="Auto" Padding="22,20,22,22">
         <StackPanel>
             <TextBlock Text="Настройки туннеля" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"

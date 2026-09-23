@@ -6,7 +6,7 @@
         Background="{DynamicResource Backdrop}"
         ResizeMode="CanResize">
 
-    <Grid Margin="28,24,28,24">
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

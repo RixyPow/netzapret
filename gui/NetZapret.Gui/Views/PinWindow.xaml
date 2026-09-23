@@ -10,7 +10,7 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal">
 
-    <Grid Margin="26,22,26,22">
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="26,22,26,22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
