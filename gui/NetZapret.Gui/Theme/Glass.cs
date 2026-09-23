@@ -85,6 +85,8 @@ public static class Glass
         private bool _attached;
         private Rect _last = Rect.Empty;
 
+        private bool _tracking;
+
         public void Attach(object sender, RoutedEventArgs e)
         {
             if (_attached)
@@ -92,7 +94,6 @@ public static class Glass
 
             _attached = true;
             Changed += Refresh;
-            border.LayoutUpdated += OnLayout;
             Refresh();
         }
 
@@ -103,17 +104,42 @@ public static class Glass
 
             _attached = false;
             Changed -= Refresh;
-            border.LayoutUpdated -= OnLayout;
+            Track(false);
             Restore();
+        }
+
+        /// <summary>
+        /// Следить за перекладкой окна — только пока стекло есть.
+        /// </summary>
+        /// <remarks>
+        /// LayoutUpdated зовётся на любую перекладку всего окна. Прежде
+        /// каждая карточка подписывалась на него всегда, и в любой теме,
+        /// даже без картинки, сотня карточек «Маршрутов» отвечала на каждое
+        /// движение окна (владелец, 24.09: подвисания интерфейса).
+        /// </remarks>
+        private void Track(bool on)
+        {
+            if (on == _tracking)
+                return;
+
+            _tracking = on;
+
+            if (on)
+                border.LayoutUpdated += OnLayout;
+            else
+                border.LayoutUpdated -= OnLayout;
         }
 
         private void Refresh()
         {
             if (Image is null || Root is null)
             {
+                Track(false);
                 Restore();
                 return;
             }
+
+            Track(true);
 
             if (_brush is null)
                 _own = border.ReadLocalValue(Border.BackgroundProperty);

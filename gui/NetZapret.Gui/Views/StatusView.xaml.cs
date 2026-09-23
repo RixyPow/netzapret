@@ -230,7 +230,7 @@ public partial class StatusView : UserControl
             // Движки остаются на виду и остановленными, просто серыми. Пустое
             // место на их месте читается как «их нет вовсе», тогда как раздел
             // отвечает на другой вопрос: что должно работать и работает ли.
-            Engines.ItemsSource = Planned(settings, "остановлен", "Faint");
+            SetEngines(Planned(settings, "остановлен", "Faint"));
 
             return;
         }
@@ -260,7 +260,7 @@ public partial class StatusView : UserControl
                 ? "Один из движков не запущен — обход работает не полностью. Подробности ниже."
                 : "Часть движков не в порядке — подробности ниже.";
 
-        Engines.ItemsSource = services.Select(Row).ToList();
+        SetEngines(services.Select(Row).ToList());
     }
 
     /// <summary>
@@ -303,9 +303,9 @@ public partial class StatusView : UserControl
         // и «запускается». Прежде список опустошался, и они пропадали ровно
         // на те десятки секунд, когда на них и смотрят: раздел отвечал «их
         // нет» на вопрос «поднимаются ли они».
-        Engines.ItemsSource = services.Count > 0
+        SetEngines(services.Count > 0
             ? services.Select(Row).ToList()
-            : Planned(settings, "запускается", "Warn");
+            : Planned(settings, "запускается", "Warn"));
 
         return true;
     }
@@ -484,7 +484,68 @@ public partial class StatusView : UserControl
     /// не сообщая; Kaspersky вдобавок возвращает файл hosts к своему
     /// умолчанию, стирая все пины.
     /// </remarks>
+    private IReadOnlyList<EngineRow>? _engines;
+    private IReadOnlyList<WarningRow>? _warnings;
+    private DateTimeOffset _warningsAt = DateTimeOffset.MinValue;
+    private bool _warningsBusy;
+
+    /// <summary>Сколько держать проверку антивирусов и hosts, прежде чем повторить.</summary>
+    private static readonly TimeSpan WarningsInterval = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Карточки движков — только если что-то в них изменилось.
+    /// </summary>
+    /// <remarks>
+    /// Прежде список собирался заново каждые две секунды: новый ItemsSource —
+    /// это новые элементы со всеми шаблонами, и окно дёргалось раз в два
+    /// тика даже на RTX 4060 (владелец, 24.09: «интерфейс подвисать может»).
+    /// Строки — записи, и сравниваются по значению: одинаковые не трогаем.
+    /// </remarks>
+    private void SetEngines(IReadOnlyList<EngineRow> rows)
+    {
+        if (_engines is not null && _engines.SequenceEqual(rows))
+            return;
+
+        _engines = rows;
+        Engines.ItemsSource = rows;
+    }
+
+    /// <summary>
+    /// Предупреждения — в фоне и раз в полминуты, а не в потоке окна каждые две секунды.
+    /// </summary>
+    /// <remarks>
+    /// Проверка антивирусов перебирает все процессы системы, а проверка hosts
+    /// читает почти тысячу строк файла. Ни то, ни другое за две секунды
+    /// не меняется, а делалось в потоке окна на каждом тике.
+    /// </remarks>
     private void ShowWarnings(AppSettings settings)
+    {
+        if (_warningsBusy || DateTimeOffset.Now - _warningsAt < WarningsInterval)
+            return;
+
+        _warningsBusy = true;
+        bool needsDesync = settings.NeedsDesync;
+
+        _ = Task.Run(() => CollectWarnings(needsDesync)).ContinueWith(task =>
+        {
+            _warningsBusy = false;
+            _warningsAt = DateTimeOffset.Now;
+
+            if (task.IsCompletedSuccessfully)
+                SetWarnings(task.Result);
+        }, TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private void SetWarnings(IReadOnlyList<WarningRow> rows)
+    {
+        if (_warnings is not null && _warnings.SequenceEqual(rows))
+            return;
+
+        _warnings = rows;
+        Warnings.ItemsSource = rows;
+    }
+
+    private static IReadOnlyList<WarningRow> CollectWarnings(bool needsDesync)
     {
         var rows = new List<WarningRow>();
 
@@ -499,7 +560,7 @@ public partial class StatusView : UserControl
 
         var guards = SecuritySoftware.Running();
 
-        if (guards.Count > 0 && settings.NeedsDesync)
+        if (guards.Count > 0 && needsDesync)
         {
             rows.Add(new WarningRow(
                 $"Работает {string.Join(", ", guards.Select(g => g.Name))}",
@@ -510,7 +571,7 @@ public partial class StatusView : UserControl
                 + "и повторите."));
         }
 
-        Warnings.ItemsSource = rows;
+        return rows;
     }
 
     private void ShowProblem(string text)
