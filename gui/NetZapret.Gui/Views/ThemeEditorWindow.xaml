@@ -1,0 +1,159 @@
+<Window x:Class="NetZapret.Gui.Views.ThemeEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Своя тема" Height="760" Width="720"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource Backdrop}">
+
+    <!--
+        Редактор темы (владелец, 24.09: «добавь возможность прям в программе
+        создавать свои темы и сохранять в файл»). Тема из редактора — такая
+        же папка с theme.json, как тема художника, и проходит ту же проверку.
+    -->
+    <Grid Margin="28,22,28,22">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock x:Name="Heading" Text="Своя тема" Style="{StaticResource Title}" />
+            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Text="Начинается с цветов выбранной сейчас темы. Смысл зелёного, красного и жёлтого общий для всех тем — оттенки ваши. Нечитаемая пара не даст теме примениться, и её покажут словами." />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
+            <StackPanel Margin="0,0,8,0">
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="140" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Название" VerticalAlignment="Center" />
+                        <TextBox Grid.Column="1" x:Name="NameField" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Text="Цвета" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
+
+                <ItemsControl x:Name="ColorRows" Focusable="False">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource Choice}" Tag="{Binding Slot}" Click="OnColor">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Width="40" Height="26" CornerRadius="6" Margin="0,0,14,0"
+                                            Background="{Binding Swatch}" BorderBrush="{DynamicResource Border}"
+                                            BorderThickness="1.5" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Label}" />
+                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Text="{Binding Hex}" Style="{StaticResource Mono}"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="Фон" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Картинка" />
+                                <TextBlock x:Name="ImageName" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <Button Style="{StaticResource Ghost}" Content="Выбрать…" Click="OnPickImage" Margin="0,0,8,0" />
+                                <Button x:Name="ClearImage" Style="{StaticResource Ghost}" Content="Убрать" Click="OnClearImage" />
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel x:Name="ImageSettings" Margin="0,12,0,0">
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Укладка" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="FitChoice">
+                                    <ComboBoxItem Content="на всё окно" />
+                                    <ComboBoxItem Content="целиком" />
+                                    <ComboBoxItem Content="плиткой" />
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Затемнение" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="DimChoice" />
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Размытие под карточками" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="BlurChoice">
+                                    <ComboBoxItem Content="нет" />
+                                    <ComboBoxItem Content="слабое" />
+                                    <ComboBoxItem Content="среднее" />
+                                    <ComboBoxItem Content="сильное" />
+                                </ComboBox>
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Плотность карточек" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                               Text="Чем прозрачнее, тем больше видно картинку сквозь стекло." />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1" x:Name="AlphaChoice" VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Шрифт заголовков" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <ComboBox x:Name="DisplayChoice">
+                        <ComboBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <VirtualizingStackPanel />
+                            </ItemsPanelTemplate>
+                        </ComboBox.ItemsPanel>
+                    </ComboBox>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="2" x:Name="Problems" Style="{StaticResource Caption}" Foreground="{DynamicResource Danger}"
+                   Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" Margin="0,0,8,0" IsCancel="True" />
+            <Button Style="{StaticResource Primary}" Content="Сохранить и применить" Click="OnSave" />
+        </StackPanel>
+    </Grid>
+</Window>

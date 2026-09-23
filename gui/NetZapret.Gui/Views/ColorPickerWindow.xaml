@@ -1,0 +1,155 @@
+<Window x:Class="NetZapret.Gui.Views.ColorPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Выбор цвета" SizeToContent="WidthAndHeight"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{DynamicResource Backdrop}">
+
+    <!--
+        Как выбор цвета в Telegram (снимок владельца 24.09): квадрат
+        насыщенности и яркости, полоса оттенка под ним, справа «стало»
+        и «было», поля H/S/L, R/G/B и HEX. Все поля — один цвет: правка
+        любого пересчитывает остальные (ColorMath).
+    -->
+    <Grid Margin="24,20,24,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock x:Name="Heading" Grid.ColumnSpan="2" Style="{StaticResource Title}" FontSize="18"
+                   Margin="0,0,0,16" Text="Выбор цвета" />
+
+        <StackPanel Grid.Row="1" Grid.Column="0">
+            <!-- Квадрат: слева направо — насыщенность, сверху вниз — яркость. -->
+            <Grid x:Name="Square" Width="300" Height="300" Cursor="Cross"
+                  MouseLeftButtonDown="OnSquareDown" MouseMove="OnSquareMove" MouseLeftButtonUp="OnSquareUp">
+                <Rectangle x:Name="HueFill" RadiusX="6" RadiusY="6">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="White" Offset="0" />
+                            <GradientStop x:Name="HueStop" Color="Red" Offset="1" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Rectangle RadiusX="6" RadiusY="6">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#00000000" Offset="0" />
+                            <GradientStop Color="#FF000000" Offset="1" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Canvas>
+                    <Ellipse x:Name="SquareMark" Width="16" Height="16" Stroke="White" StrokeThickness="2"
+                             IsHitTestVisible="False" />
+                </Canvas>
+            </Grid>
+
+            <!-- Полоса оттенка. -->
+            <Grid x:Name="HueBar" Width="300" Height="18" Margin="0,12,0,0" Cursor="Hand"
+                  MouseLeftButtonDown="OnHueDown" MouseMove="OnHueMove" MouseLeftButtonUp="OnHueUp">
+                <Rectangle RadiusX="4" RadiusY="4">
+                    <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                            <GradientStop Color="#FF0000" Offset="0" />
+                            <GradientStop Color="#FFFF00" Offset="0.1667" />
+                            <GradientStop Color="#00FF00" Offset="0.3333" />
+                            <GradientStop Color="#00FFFF" Offset="0.5" />
+                            <GradientStop Color="#0000FF" Offset="0.6667" />
+                            <GradientStop Color="#FF00FF" Offset="0.8333" />
+                            <GradientStop Color="#FF0000" Offset="1" />
+                        </LinearGradientBrush>
+                    </Rectangle.Fill>
+                </Rectangle>
+                <Canvas>
+                    <Border x:Name="HueMark" Width="6" Height="22" Canvas.Top="-2" CornerRadius="3"
+                            Background="White" BorderBrush="#80000000" BorderThickness="1" IsHitTestVisible="False" />
+                </Canvas>
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Grid.Column="1" Width="150" Margin="16,0,0,0">
+            <!-- «Стало» сверху, «было» снизу — как в Telegram. -->
+            <Border x:Name="NewSwatch" Height="46" CornerRadius="6,6,0,0" />
+            <Border x:Name="OldSwatch" Height="46" CornerRadius="0,0,6,6" Margin="0,0,0,14"
+                    ToolTip="Было — нажмите, чтобы вернуть" Cursor="Hand" MouseLeftButtonDown="OnRevert" />
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="20" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="H" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="HField" Tag="h" LostFocus="OnField" KeyDown="OnFieldKey" />
+                <TextBlock Grid.Column="2" Text="°" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="4,0,0,0" />
+            </Grid>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="20" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="S" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="SField" Tag="s" LostFocus="OnField" KeyDown="OnFieldKey" />
+                <TextBlock Grid.Column="2" Text="%" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="4,0,0,0" />
+            </Grid>
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="20" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="L" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="LField" Tag="l" LostFocus="OnField" KeyDown="OnFieldKey" />
+                <TextBlock Grid.Column="2" Text="%" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="4,0,0,0" />
+            </Grid>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="R" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="RField" Tag="r" LostFocus="OnField" KeyDown="OnFieldKey" />
+            </Grid>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="G" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="GField" Tag="g" LostFocus="OnField" KeyDown="OnFieldKey" />
+            </Grid>
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="B" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="BField" Tag="b" LostFocus="OnField" KeyDown="OnFieldKey" />
+            </Grid>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="#" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                <TextBox Grid.Column="1" x:Name="HexField" Tag="hex" LostFocus="OnField" KeyDown="OnFieldKey" />
+            </Grid>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" Margin="0,0,8,0" IsCancel="True" />
+            <Button Style="{StaticResource Primary}" Content="Готово" Click="OnSave" IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

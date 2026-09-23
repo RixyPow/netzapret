@@ -63,6 +63,29 @@ public sealed class ThemesTests
     }
 
     /// <summary>
+    /// Выбор цвета и редактор темы создаются без исключения — как любой
+    /// раздел окна: ошибка разметки иначе всплыла бы только у человека.
+    /// </summary>
+    [Fact]
+    public void ThemeWindowsOpen()
+    {
+        if (Themes() is not { } root)
+            return;
+
+        Sta.Run(() =>
+        {
+            var picker = new NetZapret.Gui.Views.ColorPickerWindow(ThemeColor.Parse("#A01EEC"), "Главная кнопка");
+            Assert.Equal("#A01EEC", picker.Chosen.ToString());
+
+            var editor = new NetZapret.Gui.Views.ThemeEditorWindow(ThemeLoader.Load("dark", root).Theme!, editing: null);
+            Assert.Null(editor.SavedId);
+
+            picker.Close();
+            editor.Close();
+        });
+    }
+
+    /// <summary>
     /// Стекло: есть при фоне и размытии, с плотностью карточки из темы,
     /// пропадает вместе с картинкой, а нечитаемое — называется.
     /// </summary>

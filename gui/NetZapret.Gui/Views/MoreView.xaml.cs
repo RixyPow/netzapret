@@ -78,6 +78,9 @@ public partial class MoreView : UserControl
             Status.Text = $"Тема «{wanted}» не применилась — стоит встроенная. Причина — в подсказке её плитки.";
 
         ShowLook(settings, loads.FirstOrDefault(l => l.Id == current)?.Theme);
+
+        // У встроенной «Изменить» создаёт новую — подпись говорит это заранее.
+        EditThemeButton.Content = ThemeLoader.Shipped.Contains(current) ? "Изменить копию" : "Изменить";
         ShowFonts(settings);
     }
 
@@ -245,6 +248,100 @@ public partial class MoreView : UserControl
         {
             Status.Text = "Не удалось сменить тему: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>Тема, выбранная сейчас, — с чего начинает редактор.</summary>
+    private static Theme? CurrentTheme()
+    {
+        var load = ThemeLoader.Load(Themes.Current);
+
+        return load.Theme ?? ThemeLoader.Load(Themes.DefaultId).Theme;
+    }
+
+    private void OnCreateTheme(object sender, RoutedEventArgs e) => OpenEditor(editing: false);
+
+    private void OnEditTheme(object sender, RoutedEventArgs e) => OpenEditor(editing: true);
+
+    /// <summary>
+    /// Редактор темы. «Изменить» у встроенной ведёт себя как «Создать»:
+    /// встроенные не перезаписываются, и сказать это лучше заранее.
+    /// </summary>
+    private void OpenEditor(bool editing)
+    {
+        if (CurrentTheme() is not { } theme)
+        {
+            Status.Text = "Не нашлось темы, с которой начать: папки themes нет рядом с программой.";
+            return;
+        }
+
+        bool shipped = ThemeLoader.Shipped.Contains(theme.Id);
+
+        var window = new ThemeEditorWindow(theme, editing && !shipped ? theme.Id : null)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (window.ShowDialog() == true && window.SavedId is { } id)
+        {
+            Status.Text = editing && shipped
+                ? $"Встроенная тема не меняется — правка сохранена новой: themes\\{id}."
+                : $"Сохранено в themes\\{id} и применено.";
+        }
+
+        ShowTheme(AppSettings.Load(AppSettings.DefaultPath));
+    }
+
+    private void OnExportTheme(object sender, RoutedEventArgs e)
+    {
+        var id = Themes.Current;
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Выгрузить тему",
+            FileName = $"netzapret-{id}.zip",
+            Filter = "Тема NetZapret (*.zip)|*.zip",
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true)
+            return;
+
+        try
+        {
+            ThemeWriter.Export(id, dialog.FileName);
+            Status.Text = $"Тема выгружена: {dialog.FileName}. Её можно передать — загружается кнопкой «Загрузить из файла…».";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось выгрузить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnImportTheme(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Загрузить тему",
+            Filter = "Тема NetZapret (*.zip)|*.zip",
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) != true)
+            return;
+
+        try
+        {
+            var id = ThemeWriter.Import(dialog.FileName);
+            var load = ThemeLoader.Load(id);
+
+            Status.Text = load.Ok
+                ? $"Загружена «{load.Theme!.Name}» — выберите её плиткой."
+                : $"Загружена в themes\\{id}, но не применится: {string.Join("; ", load.Problems.Take(2))}.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
+        }
+
+        ShowTheme(AppSettings.Load(AppSettings.DefaultPath));
     }
 
     private void OnThemesFolder(object sender, RoutedEventArgs e)

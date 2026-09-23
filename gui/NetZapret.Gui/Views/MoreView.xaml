@@ -95,6 +95,19 @@
                         </ItemsControl>
 
                         <!--
+                            Своя тема прямо в программе (владелец, 24.09).
+                            «Изменить» у встроенной создаёт новую: встроенные
+                            не перезаписываются, иначе обновление программы
+                            молча вернуло бы свой файл.
+                        -->
+                        <WrapPanel Margin="0,4,0,4">
+                            <Button Style="{StaticResource Primary}" Content="Создать тему" Click="OnCreateTheme" Margin="0,0,8,8" />
+                            <Button x:Name="EditThemeButton" Style="{StaticResource Ghost}" Content="Изменить" Click="OnEditTheme" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Выгрузить в файл…" Click="OnExportTheme" Margin="0,0,8,8" />
+                            <Button Style="{StaticResource Ghost}" Content="Загрузить из файла…" Click="OnImportTheme" Margin="0,0,8,8" />
+                        </WrapPanel>
+
+                        <!--
                             Настройки оформления (владелец, 23.09: «добавь
                             настройки оформления, по типу размытие вкл/выкл»).
                             Хранятся у человека, а не в теме; видны, когда
