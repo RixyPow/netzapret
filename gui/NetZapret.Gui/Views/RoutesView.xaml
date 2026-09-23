@@ -130,7 +130,7 @@
                         </Grid.ColumnDefinitions>
 
                         <TextBox Grid.Column="0" x:Name="OwnDomain" Margin="0,0,8,0"
-                                 KeyDown="OnOwnKey" />
+                                 KeyDown="OnOwnKey" gui:Hint.Text="Сайт, например example.com" />
 
                         <ComboBox Grid.Column="1" x:Name="OwnMode" Width="146" SelectedIndex="2" Margin="0,0,8,0">
                             <ComboBoxItem Content="напрямую" />

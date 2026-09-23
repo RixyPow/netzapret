@@ -111,10 +111,10 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBox Grid.Column="0" x:Name="NewName" Margin="0,0,8,0"
-                                     KeyDown="OnNewKey" />
+                                     KeyDown="OnNewKey" gui:Hint.Text="Имя, например example.com" />
 
                             <TextBox Grid.Column="1" x:Name="NewAddress" Width="190" Margin="0,0,8,0"
-                                     KeyDown="OnNewKey" />
+                                     KeyDown="OnNewKey" gui:Hint.Text="Адрес, 93.184.216.34" />
 
                             <Button Grid.Column="2" Style="{StaticResource Primary}"
                                     Content="Прибить" Click="OnAddPin" />

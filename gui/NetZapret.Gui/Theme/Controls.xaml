@@ -261,11 +261,25 @@
                     <Border x:Name="Shape" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                             CornerRadius="8" Padding="{TemplateBinding Padding}">
-                        <ScrollViewer x:Name="PART_ContentHost" />
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost" />
+
+                            <!-- Подсказка, как у TextBox; пустоту отмечает Hint.Empty. -->
+                            <TextBlock x:Name="HintText" IsHitTestVisible="False"
+                                       Margin="4,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Muted}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Text="{TemplateBinding local:Hint.Text}"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="local:Hint.Empty" Value="True">
+                            <Setter TargetName="HintText" Property="Visibility" Value="Visible" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

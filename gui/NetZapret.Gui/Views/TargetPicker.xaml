@@ -1,6 +1,7 @@
 <Window x:Class="NetZapret.Gui.Views.TargetPicker"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
         Title="Что проверить"
         Width="460" Height="560"
         WindowStartupLocation="CenterOwner"
@@ -35,7 +36,8 @@
                      BorderBrush="{DynamicResource Border}"
                      CaretBrush="{DynamicResource Text}"
                      FontFamily="{DynamicResource MonoFont}"
-                     TextChanged="OnOwnChanged" />
+                     TextChanged="OnOwnChanged"
+                     gui:Hint.Text="example.com" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Например example.com. Проверяется ровно это имя, четырьмя пробами." />
         </StackPanel>
