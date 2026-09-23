@@ -37,6 +37,19 @@ public static class TunnelStatus
     /// </remarks>
     public static async Task<string?> CurrentServerAsync(
         CancellationToken cancellationToken,
+        int clashPort = DefaultClashPort) =>
+        (await CurrentExitAsync(cancellationToken, clashPort)).Server;
+
+    /// <summary>
+    /// Сервер прямо сейчас и выбран ли он автоподбором, а не закреплён.
+    /// </summary>
+    /// <remarks>
+    /// Второе важно не меньше первого. 23.09 в настройках стояло «авто»,
+    /// а движок держался WARP из своего кэша, и Telegram висел; заметить это
+    /// можно было, только спросив движок, — теперь это видно в <c>nz status</c>.
+    /// </remarks>
+    public static async Task<(string? Server, bool Automatic)> CurrentExitAsync(
+        CancellationToken cancellationToken,
         int clashPort = DefaultClashPort)
     {
         try
@@ -49,7 +62,7 @@ public static class TunnelStatus
             using var document = JsonDocument.Parse(json);
 
             if (!document.RootElement.TryGetProperty("now", out var now))
-                return null;
+                return (null, false);
 
             var name = Named(now);
 
@@ -68,18 +81,18 @@ public static class TunnelStatus
                 // из тех, что меряют задержку, и до первого замера ей выбирать
                 // не из чего. Возвращаем имя самой группы, а не пустоту —
                 // по нему хотя бы можно спросить состояние.
-                return group.RootElement.TryGetProperty("now", out var chosen)
+                return (group.RootElement.TryGetProperty("now", out var chosen)
                     ? Named(chosen) ?? name
-                    : name;
+                    : name, true);
             }
 
-            return name;
+            return (name, false);
         }
         catch (Exception)
         {
             // Движок мог не поднять Clash API либо ещё не успеть. Незнание
             // честнее выдуманного имени сервера.
-            return null;
+            return (null, false);
         }
     }
 

@@ -86,6 +86,19 @@ int Status()
             Console.WriteLine($"             {error}");
     }
 
+    // Через какой сервер туннель ходит прямо сейчас — у самого движка,
+    // а не из настроек: они говорят «авто», а движок мог держаться другого.
+    if (state.Services.Any(s => s.Name == "sing-box"))
+    {
+        var (server, automatic) = NetZapret.Proxy.TunnelStatus.CurrentExitAsync(CancellationToken.None)
+            .GetAwaiter().GetResult();
+
+        Console.WriteLine();
+        Console.WriteLine(server is null
+            ? "выход:   движок не ответил"
+            : $"выход:   {server} ({(automatic ? "автоподбор" : "закреплён")})");
+    }
+
     Console.WriteLine();
     Console.WriteLine(EngineHealth.Running(state)
         ? "итог: движки подняты"
