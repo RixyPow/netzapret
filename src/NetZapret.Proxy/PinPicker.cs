@@ -265,10 +265,17 @@ public static class PinPicker
 
         var missing = picks.Where(p => p.Chosen is null).Select(p => p.Host).ToList();
 
+        // Совет — по замеру, а не по имени сайта. 23.09 я сам объявил, что
+        // crunchyroll пином не взять, по ответу 502 на корень API, — а API
+        // через посредника отвечал; не хватало лишь прибитых имён.
         lines.Add(missing.Count == 0
             ? $"Подобрано для всех имён: {found.Count}."
             : $"Подобрано {found.Count} из {picks.Count}; без адреса и не прибиты: "
-              + string.Join(", ", missing.Take(4)) + (missing.Count > 4 ? " и ещё…" : "."));
+              + string.Join(", ", missing.Take(4)) + (missing.Count > 4 ? " и ещё…" : ".")
+              + " Если сайту нужны именно они, пином он целиком не заработает — надёжнее туннель.");
+
+        lines.Add("Если сайт откроется пустым или без картинок — откройте его ещё раз и подберите "
+            + "снова: имена, которые он запросил, подтянутся из кэша DNS.");
 
         return string.Join("\n", lines);
 

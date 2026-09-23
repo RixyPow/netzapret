@@ -86,3 +86,18 @@ services:
       - tg.dev
     addresses:
       - 149.154.167.220
+
+  # Crunchyroll — служебные имена. Сайт закрывается от России сам (1009),
+  # и пин нужен на каждое имя, которое трогает страница: hosts зон не знает.
+  # Замер 23.09 через посредника XBOX DNS: страница www — 200, sso/login — 200,
+  # beta-api/index/v2 — 401 «invalid token», то есть ответил сам API; напрямую
+  # и sso, и beta-api — 403. Прибиты были только голое имя и www, и страница
+  # вставала пустой. static.crunchyroll.com здесь нет намеренно: это CloudFront,
+  # напрямую он отдаёт скрипты (200), а посредники его не пропускают.
+  #
+  # Адрес не назван: автоподбор найдёт живого посредника в момент закрепления.
+  - name: Crunchyroll — вход и API
+    names:
+      - sso.crunchyroll.com
+      - beta-api.crunchyroll.com
+    resolve: honest

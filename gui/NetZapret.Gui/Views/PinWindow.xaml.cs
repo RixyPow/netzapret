@@ -625,9 +625,22 @@ public partial class PinWindow : Window
         // К голой зоне — её www: hosts зон не знает, и прибитое голое имя
         // www не покрывает, а сайты сплошь переадресуют именно туда. Прочие
         // переадресации подбор находит сам.
+        //
+        // И имена из кэша DNS под теми же зонами: открытый и не загрузившийся
+        // сайт оставляет там всё, что ему было нужно, — sso, api, static, —
+        // а из списка сервиса этого не видно (DnsCache).
+        var cached = DnsCache.Under(DnsCache.Names(), zones);
+
+        // И имена своего каталога под этими зонами: там записано то, что сайту
+        // нужно заведомо, — у crunchyroll sso и beta-api, без которых страница
+        // встаёт пустой, а браузер до них и не доходит.
+        var listed = DnsCache.Under(own.Services.SelectMany(s => s.Names), zones);
+
         var names = (_catalog?.NamesByService().Values.SelectMany(v => v).Where(Covers) ?? [])
             .Concat(zones)
             .Concat(zones.Where(z => z.Count(c => c == '.') == 1).Select(z => "www." + z))
+            .Concat(cached)
+            .Concat(listed)
             .Select(n => n.TrimStart('*', '.'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();

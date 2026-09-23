@@ -83,6 +83,29 @@ public sealed class PinPickerTests
         Assert.Equal(same, PinPicker.SameSite(from, to));
     }
 
+    /// <summary>
+    /// Из кэша DNS берутся только имена под зонами сервиса — не всё,
+    /// что машина спрашивала.
+    /// </summary>
+    [Fact]
+    public void CachedNamesAreTakenUnderServiceZones()
+    {
+        var names = DnsCache.Under(
+            ["sso.crunchyroll.com", "beta-api.crunchyroll.com", "Crunchyroll.com", "notcrunchyroll.com", "www.google.com"],
+            ["crunchyroll.com", "*.vrv.co"]);
+
+        Assert.Equal(["beta-api.crunchyroll.com", "crunchyroll.com", "sso.crunchyroll.com"], names);
+    }
+
+    /// <summary>Чтение кэша не падает: функция недокументированная.</summary>
+    [Fact]
+    public void ReadingTheCacheDoesNotThrow()
+    {
+        var names = DnsCache.Names();
+
+        Assert.NotNull(names);
+    }
+
     [Fact]
     public void NothingFoundSaysTunnel()
     {

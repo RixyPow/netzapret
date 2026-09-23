@@ -64,18 +64,30 @@
                                                                  Margin="0,2,0,0" Cursor="Hand">
                                                         <RadioButton.Template>
                                                             <ControlTemplate TargetType="RadioButton">
+                                                                <!--
+                                                                    Выбор — рамкой и полосой слева, подложка
+                                                                    нейтральная. Зелёная заливка съедала
+                                                                    зелёный текст рабочих адресов (владелец
+                                                                    23.09: «зелёное на зелёном не очень»).
+                                                                -->
                                                                 <Border x:Name="Row" CornerRadius="6" Padding="8,4"
                                                                         BorderThickness="1" BorderBrush="Transparent"
                                                                         Background="Transparent">
-                                                                    <ContentPresenter />
+                                                                    <Grid>
+                                                                        <Border x:Name="Bar" Width="3" CornerRadius="1.5"
+                                                                                HorizontalAlignment="Left" Margin="-6,0,0,0"
+                                                                                Background="{DynamicResource Accent}" Visibility="Collapsed" />
+                                                                        <ContentPresenter />
+                                                                    </Grid>
                                                                 </Border>
                                                                 <ControlTemplate.Triggers>
                                                                     <Trigger Property="IsMouseOver" Value="True">
                                                                         <Setter TargetName="Row" Property="Background" Value="{DynamicResource Raised}" />
                                                                     </Trigger>
                                                                     <Trigger Property="IsChecked" Value="True">
-                                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentDim}" />
+                                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Raised}" />
                                                                         <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                                        <Setter TargetName="Bar" Property="Visibility" Value="Visible" />
                                                                     </Trigger>
                                                                     <Trigger Property="IsEnabled" Value="False">
                                                                         <Setter TargetName="Row" Property="Opacity" Value="0.5" />
