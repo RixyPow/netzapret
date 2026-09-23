@@ -7,7 +7,24 @@
 Заменяет собой связку Zapret + VPN-клиент и делает то, чего не делает ни одна
 из них по отдельности: **применяет VPN точечно, не ломая десинк для всего остального.**
 
-# Телеграм канал NZ: https://t.me/netzapret23
+## О программе
+
+Автор — [RixyPow](https://github.com/RixyPow). Идеи и отчёты об ошибках
+приносят участники [обсуждений](https://github.com/RixyPow/netzapret/discussions)
+и [issues](https://github.com/RixyPow/netzapret/issues) — туда же с новыми.
+Новости — в [телеграм-канале](https://t.me/netzapret23).
+
+Что едет в архиве, кроме самой программы:
+
+| Компонент | Зачем | Лицензия | Исходники |
+| --- | --- | --- | --- |
+| sing-box extended | туннель: серверы подписки и WARP | GPL v3 | [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) |
+| Zapret 2 | десинк: winws2, списки, пресеты | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
+| WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
+| Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
+| Cygwin | среда, в которой работает winws2 | LGPL v3 | [cygwin.com](https://cygwin.com/) |
+
+То же самое показывает окно: «Ещё» → «О программе».
 
 ## Установка
 
@@ -564,24 +581,6 @@ sing-box удерживает TUN-адаптер, осиротевший winws2 
   умеет пустить в него нарочно — через служебный вход, если включена
   «Проверять проход трафика».
 
-## О программе
-
-Автор — [RixyPow](https://github.com/RixyPow). Идеи и отчёты об ошибках
-приносят участники [обсуждений](https://github.com/RixyPow/netzapret/discussions)
-и [issues](https://github.com/RixyPow/netzapret/issues) — туда же с новыми.
-Новости — в [телеграм-канале](https://t.me/netzapret23).
-
-Что едет в архиве, кроме самой программы:
-
-| Компонент | Зачем | Лицензия | Исходники |
-| --- | --- | --- | --- |
-| sing-box extended | туннель: серверы подписки и WARP | GPL v3 | [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) |
-| Zapret 2 | десинк: winws2, списки, пресеты | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
-| WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
-| Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
-| Cygwin | среда, в которой работает winws2 | LGPL v3 | [cygwin.com](https://cygwin.com/) |
-
-То же самое показывает окно: «Ещё» → «О программе».
 
 ## Поддержать
 
