@@ -1,0 +1,28 @@
+{
+  // Тёмная, встроенная. Основа для чужих тем: "base": "dark".
+  // Значения — те же, что в gui/NetZapret.Gui/Theme/Palette.xaml;
+  // расхождение ловит тест ThemeFilesMatchXamlTests.
+  "name": "Тёмная",
+  "author": "NetZapret",
+  "colors": {
+    "backdrop": "#0D1117",
+    "surface": "#161B22",
+    "raised": "#1C2128",
+    "border": "#30363D",
+    "text": "#E6EDF3",
+    "muted": "#8B949E",
+    "faint": "#6E7681",
+    "accent": "#3FB950",
+    "accent-dim": "#2EA043",
+    "danger": "#F85149",
+    "warn": "#D29922",
+    "accent-fill": "#2EA043",
+    "on-accent": "#06110A",
+    "warn-fill": "#D29922"
+  },
+  "fonts": {
+    "ui": "Segoe UI",
+    "mono": "Cascadia Mono, Consolas",
+    "display": "Segoe UI"
+  }
+}

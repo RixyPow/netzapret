@@ -1,0 +1,27 @@
+{
+  // Светлая, встроенная. Основа для чужих тем: "base": "light".
+  // Значения — те же, что в gui/NetZapret.Gui/Theme/Light.xaml.
+  "name": "Светлая",
+  "author": "NetZapret",
+  "colors": {
+    "backdrop": "#F6F8FA",
+    "surface": "#FFFFFF",
+    "raised": "#F0F3F6",
+    "border": "#D0D7DE",
+    "text": "#1F2328",
+    "muted": "#636C76",
+    "faint": "#8C959F",
+    "accent": "#1A7F37",
+    "accent-dim": "#116329",
+    "danger": "#CF222E",
+    "warn": "#8A5C00",
+    "accent-fill": "#1A7F37",
+    "on-accent": "#FFFFFF",
+    "warn-fill": "#B08800"
+  },
+  "fonts": {
+    "ui": "Segoe UI",
+    "mono": "Cascadia Mono, Consolas",
+    "display": "Segoe UI"
+  }
+}

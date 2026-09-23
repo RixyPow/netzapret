@@ -31,7 +31,7 @@
     <Color x:Key="AccentColor">#FF1A7F37</Color>
     <Color x:Key="AccentDimColor">#FF116329</Color>
     <Color x:Key="DangerColor">#FFCF222E</Color>
-    <Color x:Key="WarnColor">#FF9A6700</Color>
+    <Color x:Key="WarnColor">#FF8A5C00</Color>
 
     <!--
         Заливки отдельно от текста, и это не украшательство. На светлом фоне
@@ -41,15 +41,22 @@
         ключа совпадают — но ключи есть в обеих палитрах, иначе стиль кнопки
         пришлось бы писать дважды.
     -->
-    <Color x:Key="AccentFillColor">#FF2DA44E</Color>
+    <Color x:Key="AccentFillColor">#FF1A7F37</Color>
     <Color x:Key="OnAccentColor">#FFFFFFFF</Color>
 
     <!--
-        Жёлтый для точек и полос — насыщенный. Текстовый #9A6700 на них
-        выглядел не предупреждением, а выцветшей серостью: у мелкой метки
-        нет площади, чтобы донести приглушённый оттенок.
+        Жёлтый для точек и полос — насыщенный. Текстовый на них выглядел
+        не предупреждением, а выцветшей серостью: у мелкой метки нет
+        площади, чтобы донести приглушённый оттенок.
+
+        23.09 три цвета светлой темы поправлены по проверке контраста
+        (ThemeContrast), которой потом проверяются и темы художников:
+        подпись на главной кнопке была 3.22:1 при пороге 4.5 — заливка
+        #2DA44E стала #1A7F37 (5.08); «внимание» на кнопке 4.37 — #9A6700
+        стал #8A5C00 (5.22); эти точки на карточке 2.38 при пороге 3 —
+        #D4A017 стал #B08800 (3.30).
     -->
-    <Color x:Key="WarnFillColor">#FFD4A017</Color>
+    <Color x:Key="WarnFillColor">#FFB08800</Color>
 
     <SolidColorBrush x:Key="Backdrop" Color="{StaticResource BackdropColor}" />
     <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />

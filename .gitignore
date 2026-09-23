@@ -79,3 +79,10 @@ docs/rollback-todo.md
 
 # Номер сборки: пишет build.cmd, в поставку не попадает
 build/build-number.txt
+
+# Темы: в репозитории только встроенные и описание формата.
+# Свои темы художников и владельца живут рядом и сюда не попадают.
+themes/*
+!themes/dark/
+!themes/light/
+!themes/README.md
