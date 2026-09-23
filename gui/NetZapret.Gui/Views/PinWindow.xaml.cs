@@ -499,10 +499,12 @@ public partial class PinWindow : Window
 
         var progress = new Progress<int>(n => Status.Text = $"Подбираю адрес: готово {n} из {names.Count}…");
 
+        // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
+        // который едет с программой: без Zapret остался бы только второй.
         var picks = await PinPicker.PickAsync(
             names,
             host => [.. own.PinCandidates(host), .. _catalog?.AnswersFor(host) ?? []],
-            _catalog?.Intermediaries() ?? [],
+            [.. _catalog?.Intermediaries() ?? [], .. own.Intermediaries],
             progress,
             CancellationToken.None);
 

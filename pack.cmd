@@ -95,6 +95,11 @@ rem channel, which the Zapret sets do not carry. Hand-edited, so it ships as
 rem readable text beside the rules.
 copy /y "%ROOT%config\catalog.yaml" "%STAGE%\config\" >nul
 
+rem Snapshot of the Zapret catalogue entries that answered when it was taken
+rem (nz catalog). Separate from catalog.yaml because that one is preserved
+rem on update and this one must be replaced, or its addresses go stale.
+copy /y "%ROOT%config\catalog.zapret.yaml" "%STAGE%\config\" >nul
+
 rem Our domain and address lists - all of them now, not just the handful
 rem Zapret has no entry for. Rules reference them by path, so leaving them out
 rem gives rules that resolve to nothing: an absent list loads as empty, matches

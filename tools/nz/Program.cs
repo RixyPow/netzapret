@@ -44,6 +44,7 @@ return command switch
     "dns" => await Dns(),
     "routes" or "маршруты" => Routes(),
     "migrate" or "перенос" => NetZapret.Tools.Migrate.Run(args.ElementAtOrDefault(1)),
+    "catalog" or "каталог" => await Catalog(),
     null or "help" or "--help" or "-h" => Help(),
     _ => Unknown(command),
 };
@@ -221,6 +222,38 @@ int Routes()
     return 1;
 }
 
+// Снимок рабочих записей каталога Zapret в config\catalog.zapret.yaml.
+// Проверяет каждую запись живым запросом — минуты, а не секунды.
+async Task<int> Catalog()
+{
+    var zapret = NetZapret.Zapret.ZapretCatalog.Discover();
+
+    if (zapret is null)
+    {
+        Console.Error.WriteLine("каталог Zapret не найден — снимать не с чего");
+        return 1;
+    }
+
+    var records = zapret.AllRecords();
+    Console.WriteLine($"записей в каталоге Zapret: {records.Count}; проверяю каждую…");
+
+    var result = await NetZapret.Proxy.CatalogSnapshot.BuildAsync(
+        records, new Progress<string>(Console.WriteLine), CancellationToken.None);
+
+    OwnCatalog.WriteSnapshot(
+        OwnCatalog.SnapshotPath,
+        result.Services,
+        result.Intermediaries,
+        NetZapret.Proxy.CatalogSnapshot.Header(result, DateTime.Now));
+
+    Console.WriteLine();
+    Console.WriteLine($"имён {result.Hosts}, рабочих {result.Working}; записей в снимке {result.Services.Count}, "
+        + $"посредников {result.Intermediaries.Count}");
+    Console.WriteLine($"записано: {Path.GetFullPath(OwnCatalog.SnapshotPath)}");
+
+    return result.Working > 0 ? 0 : 1;
+}
+
 int Help()
 {
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
@@ -231,6 +264,9 @@ int Help()
     Console.WriteLine("  nz routes    книга маршрутов и противоречия в ней");
     Console.WriteLine("  nz migrate [файл]   черновик переноса прежних правил;");
     Console.WriteLine("               без имени файла — только сверка, ничего не пишется");
+    Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
+    Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
+    Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
     Console.WriteLine();
     Console.WriteLine("Поднять и погасить движки можно самой программой:");
     Console.WriteLine("  NetZapret.exe --start");

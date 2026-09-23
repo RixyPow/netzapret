@@ -54,10 +54,12 @@ public sealed record CatalogService
 /// ни туннель тут не помогают; помогает только адрес посредника.
 /// </para>
 /// <para>
-/// Читаем, но не копируем. Восемьсот доменов и семь наборов адресов
-/// обновляются вместе с Zapret, а адреса эти живут ровно столько, сколько
-/// живёт узел за ними, — копия у нас устарела бы за недели и врала бы
-/// молча.
+/// Читаем живьём, где он стоит, а копируем только проверенное. Восемьсот
+/// доменов и семь наборов обновляются вместе с Zapret, и адреса живут, пока
+/// живёт узел за ними, — слепая копия устарела бы за недели и врала бы
+/// молча. С 23.09 рабочие записи снимаются в config/catalog.zapret.yaml
+/// командой <c>nz catalog</c>, каждая — после живой проверки: без Zapret
+/// автоподбору пина иначе не с чем работать.
 /// </para>
 /// <para>
 /// И не пишем в hosts. Те же ответы мы отдаём своим резолвером: правка
@@ -378,6 +380,54 @@ public sealed class ZapretCatalog
     /// десятки и сотни: Comss — 814, XBOX 87.228.47.195 — 95.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Все записи каталога: ответы каждого набора и зашитые адреса.
+    /// </summary>
+    /// <remarks>
+    /// Для снимка (CatalogSnapshot): его собирают целиком и проверяют
+    /// каждую запись, а не только выбранный набор.
+    /// </remarks>
+    public IReadOnlyList<Core.CatalogRecord> AllRecords()
+    {
+        var result = new List<Core.CatalogRecord>();
+
+        try
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+
+            command.CommandText = """
+                select s.name, d.hostname, a.ip_address, p.name
+                from dns_answers a
+                join domains d on d.domain_id = a.domain_id
+                join services s on s.service_id = d.service_id
+                join dns_profiles p on p.profile_id = a.profile_id
+                union all
+                select s.name, h.hostname, h.ip_address, 'каталог Zapret'
+                from hosts_entries h
+                join services s on s.service_id = h.service_id
+                """;
+
+            using var reader = command.ExecuteReader();
+
+            var raw = new List<(string Service, string Host, string Address, string Source)>();
+
+            while (reader.Read())
+                raw.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+
+            var names = raw
+                .GroupBy(r => r.Address)
+                .ToDictionary(g => g.Key, g => g.Select(r => r.Host).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+            result.AddRange(raw.Select(r => new Core.CatalogRecord(r.Service, r.Host, r.Address, r.Source, names[r.Address])));
+        }
+        catch (Exception)
+        {
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<Core.PinCandidate> Intermediaries(int minNames = 20)
     {
         var result = new List<Core.PinCandidate>();

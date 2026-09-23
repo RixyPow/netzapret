@@ -62,24 +62,79 @@ public sealed class OwnCatalog
 {
     public static string DefaultPath => System.IO.Path.Combine("config", "catalog.yaml");
 
+    /// <summary>
+    /// Снимок рабочих записей каталога Zapret — рядом с основным файлом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Отдельным файлом, а не в catalog.yaml, по двум причинам. Основной
+    /// файл правит человек, и при обновлении программы он сохраняется —
+    /// снимок же обязан обновляться вместе с ней, иначе посредники в нём
+    /// состарятся у всех, кто однажды обновился. И тысяча импортированных
+    /// строк не должна топить десяток написанных руками с разбором.
+    /// </para>
+    /// <para>
+    /// Собирается командой <c>nz catalog</c> (CatalogSnapshot): в него идёт
+    /// только то, что в момент сборки ответило. Руками не правится —
+    /// следующая сборка перепишет.
+    /// </para>
+    /// </remarks>
+    public const string SnapshotFile = "catalog.zapret.yaml";
+
+    public static string SnapshotPath => System.IO.Path.Combine("config", SnapshotFile);
+
     public IReadOnlyList<OwnCatalogEntry> Services { get; }
+
+    /// <summary>
+    /// Посредники — адреса, пробуемые автоподбором для любого имени.
+    /// </summary>
+    public IReadOnlyList<PinCandidate> Intermediaries { get; }
 
     /// <summary>Что не разобралось; для показа, а не для падения.</summary>
     public IReadOnlyList<string> Problems { get; }
 
-    private OwnCatalog(IReadOnlyList<OwnCatalogEntry> services, IReadOnlyList<string> problems)
+    private OwnCatalog(
+        IReadOnlyList<OwnCatalogEntry> services,
+        IReadOnlyList<PinCandidate> intermediaries,
+        IReadOnlyList<string> problems)
     {
         Services = services;
+        Intermediaries = intermediaries;
         Problems = problems;
     }
 
+    /// <summary>
+    /// Читает каталог и снимок рядом с ним.
+    /// </summary>
+    /// <remarks>
+    /// Свой файл идёт первым: записи, написанные руками, при совпадении имён
+    /// важнее снятых автоматически.
+    /// </remarks>
     public static OwnCatalog Load(string? path = null)
     {
         var target = path ?? DefaultPath;
+        var services = new List<OwnCatalogEntry>();
+        var intermediaries = new List<PinCandidate>();
         var problems = new List<string>();
 
+        Read(target, services, intermediaries, problems);
+
+        var snapshot = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(target) ?? ".", SnapshotFile);
+
+        if (!string.Equals(System.IO.Path.GetFullPath(snapshot), System.IO.Path.GetFullPath(target), StringComparison.OrdinalIgnoreCase))
+            Read(snapshot, services, intermediaries, problems);
+
+        return new OwnCatalog(services, intermediaries, problems);
+    }
+
+    private static void Read(
+        string target,
+        List<OwnCatalogEntry> services,
+        List<PinCandidate> intermediaries,
+        List<string> problems)
+    {
         if (!File.Exists(target))
-            return new OwnCatalog([], problems);
+            return;
 
         try
         {
@@ -91,7 +146,11 @@ public sealed class OwnCatalog
                 .Build()
                 .Deserialize<Document>(text);
 
-            var services = new List<OwnCatalogEntry>();
+            foreach (var raw in document?.Intermediaries ?? [])
+            {
+                if (!string.IsNullOrWhiteSpace(raw.Address))
+                    intermediaries.Add(new PinCandidate(raw.Address, PinSource.Pool, raw.Source ?? "каталог NetZapret"));
+            }
 
             foreach (var raw in document?.Services ?? [])
             {
@@ -120,15 +179,58 @@ public sealed class OwnCatalog
                     Resolve = resolve,
                 });
             }
-
-            return new OwnCatalog(services, problems);
         }
         catch (Exception ex)
         {
             // Свой файл правит человек, и опечатка в нём не повод не запуститься.
-            problems.Add($"каталог не разобран: {ex.GetBaseException().Message}");
-            return new OwnCatalog([], problems);
+            problems.Add($"{System.IO.Path.GetFileName(target)} не разобран: {ex.GetBaseException().Message}");
         }
+    }
+
+    /// <summary>Записывает снимок каталога Zapret.</summary>
+    /// <param name="header">Строки шапки: откуда и когда снято, сколько ответило.</param>
+    public static void WriteSnapshot(
+        string path,
+        IEnumerable<OwnCatalogEntry> services,
+        IEnumerable<PinCandidate> intermediaries,
+        IEnumerable<string> header)
+    {
+        var text = new System.Text.StringBuilder();
+
+        foreach (var line in header)
+            text.AppendLine(line.Length == 0 ? "#" : "# " + line);
+
+        text.AppendLine();
+        text.AppendLine("intermediaries:");
+
+        foreach (var pool in intermediaries)
+            text.AppendLine($"  - address: {pool.Address}").AppendLine($"    source: {Quote(pool.Label)}");
+
+        text.AppendLine();
+        text.AppendLine("services:");
+
+        foreach (var entry in services)
+        {
+            text.AppendLine($"  - name: {Quote(entry.Name)}");
+            text.AppendLine("    names:");
+
+            foreach (var name in entry.Names)
+                text.AppendLine($"      - {name}");
+
+            text.AppendLine("    addresses:");
+
+            foreach (var address in entry.Addresses)
+                text.AppendLine($"      - {address}");
+        }
+
+        var directory = System.IO.Path.GetDirectoryName(path);
+
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        File.WriteAllText(path, text.ToString().Replace("\r\n", "\n"), new System.Text.UTF8Encoding(false));
+
+        static string Quote(string value) => "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 
     /// <summary>Записи, покрывающие хоть одно из имён.</summary>
@@ -155,6 +257,14 @@ public sealed class OwnCatalog
     private sealed class Document
     {
         public List<Entry>? Services { get; set; }
+
+        public List<Intermediary>? Intermediaries { get; set; }
+    }
+
+    private sealed class Intermediary
+    {
+        public string? Address { get; set; }
+        public string? Source { get; set; }
     }
 
     private sealed class Entry
