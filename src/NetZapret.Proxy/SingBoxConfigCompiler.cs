@@ -350,8 +350,9 @@ public enum TunnelScope
 /// такой трафик мимо TUN целиком.</item>
 /// </list>
 /// <para>
-/// Серверы с транспортом xhttp пропускаются: sing-box его не реализует.
-/// Их список возвращается в <see cref="CompilationResult.SkippedServers"/>.
+/// Серверы, которые движок обслужить не может, пропускаются; их список
+/// возвращается в <see cref="CompilationResult.SkippedServers"/>. Xhttp
+/// в их число больше не входит — сборка extended его знает.
 /// </para>
 /// </remarks>
 public sealed class SingBoxConfigCompiler
@@ -1321,11 +1322,26 @@ public sealed class SingBoxConfigCompiler
                 if (!string.IsNullOrEmpty(server.HostHeader))
                     transport["host"] = server.HostHeader;
 
+                if (server.XhttpMode is { } mode)
+                    transport["mode"] = mode;
+
+                // Настройки поставщика — набивка, мультиплексирование,
+                // заголовки. Их сервер сверяет: чужая длина набивки означает
+                // отказ на каждый запрос (замер 23.09, XhttpSettings).
+                if (server.XhttpOptions is { } options
+                    && JsonNode.Parse(options) is JsonObject extra)
+                {
+                    foreach (var (key, value) in extra)
+                        transport[key] = value?.DeepClone();
+                }
+
                 // Набивка обязательна: без неё движок отказывается разбирать
                 // конфиг со словами «x_padding_bytes cannot be disabled».
-                // Значение взято по умолчанию из самого XHTTP — оно и прячет
-                // длину запроса, ради чего транспорт и придуман.
-                transport["x_padding_bytes"] = "100-1000";
+                // Когда поставщик своей не назвал — значение по умолчанию
+                // из самого XHTTP; с сервером, настроенным иначе, оно
+                // не договорится.
+                if (!transport.ContainsKey("x_padding_bytes"))
+                    transport["x_padding_bytes"] = "100-1000";
 
                 return transport;
             }

@@ -109,6 +109,8 @@ internal static class SingBoxOutboundReader
             Path = Empty(Text(transportSection, "path")),
             HostHeader = HostHeader(transportSection),
             ServiceName = Empty(Text(transportSection, "service_name")),
+            XhttpMode = transport == "xhttp" ? XhttpSettings.Mode(Empty(Text(transportSection, "mode"))) : null,
+            XhttpOptions = transport == "xhttp" ? XhttpSettings.FromSingBox(transportSection) : null,
 
             // У vmess поле security — шифр, у shadowsocks шифр зовётся method.
             Method = kind == ProxyProtocol.Shadowsocks

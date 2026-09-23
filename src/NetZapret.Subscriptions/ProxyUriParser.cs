@@ -90,6 +90,8 @@ public static class ProxyUriParser
             Path = Get(q, "path"),
             HostHeader = Get(q, "host"),
             ServiceName = Get(q, "serviceName") ?? Get(q, "servicename"),
+            XhttpMode = XhttpSettings.Mode(Get(q, "mode")),
+            XhttpOptions = XhttpSettings.FromXrayText(Get(q, "extra")),
             AllowInsecure = IsTruthy(Get(q, "allowInsecure")),
             Extra = q,
         };

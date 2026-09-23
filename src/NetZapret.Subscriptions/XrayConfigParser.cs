@@ -183,6 +183,8 @@ public static class XrayConfigParser
 
         var (path, hostHeader, serviceName) = Stream(stream, transport);
 
+        var xhttp = transport == "xhttp" ? Section(stream, "xhttpSettings") : default;
+
         server = new ProxyServer
         {
             Protocol = kind.Value,
@@ -205,6 +207,8 @@ public static class XrayConfigParser
             Path = path,
             HostHeader = hostHeader,
             ServiceName = serviceName,
+            XhttpMode = XhttpSettings.Mode(Empty(Text(xhttp, "mode"))),
+            XhttpOptions = XhttpSettings.FromXraySection(xhttp),
             Method = method,
         };
 

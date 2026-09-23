@@ -95,6 +95,19 @@ public sealed record ProxyServer
     /// <summary>Имя сервиса для grpc.</summary>
     public string? ServiceName { get; init; }
 
+    /// <summary>Режим XHTTP: auto, packet-up, stream-up, stream-one.</summary>
+    public string? XhttpMode { get; init; }
+
+    /// <summary>
+    /// Прочие настройки XHTTP — объектом JSON, уже в именах sing-box.
+    /// </summary>
+    /// <remarks>
+    /// Строкой, а не словарём: сервер служит ключом при сборке конфига,
+    /// и сравниваться он должен по содержимому. Что сюда попадает и почему
+    /// без этого XHTTP молчит — см. <see cref="XhttpSettings"/>.
+    /// </remarks>
+    public string? XhttpOptions { get; init; }
+
     /// <summary>Метод шифрования Shadowsocks.</summary>
     public string? Method { get; init; }
 
