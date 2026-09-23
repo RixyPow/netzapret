@@ -95,6 +95,33 @@
                 </Border>
 
                 <!--
+                    Повторы: имя прибито не в первый раз. Windows берёт первую
+                    запись, так что повтор ничего не делает, но в списке ниже
+                    выглядит рабочим. Замер 23.09: 68 повторов, из них 29 —
+                    тот же адрес в блоке ZapretGUI, 39 — ChatGPT на старом
+                    адресе под нашим пином.
+                -->
+                <Border x:Name="RepeatsCard" Style="{StaticResource Card}" Margin="0,20,0,0"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock x:Name="RepeatsTitle" FontWeight="SemiBold" />
+                            <TextBlock x:Name="RepeatsText" Style="{StaticResource Caption}"
+                                       TextWrapping="Wrap" Margin="0,6,0,0" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" x:Name="RepeatsButton" Style="{StaticResource Ghost}"
+                                Content="Убрать повторы" Click="OnRemoveRepeats"
+                                Margin="12,0,0,0" VerticalAlignment="Top" />
+                    </Grid>
+                </Border>
+
+                <!--
                     Своё имя руками. Отдельно от окна пина, которое подбирает
                     живой адрес пробами: здесь адрес уже известен — его дали,
                     подсмотрели или взяли из чужой записи, — и подбирать нечего.

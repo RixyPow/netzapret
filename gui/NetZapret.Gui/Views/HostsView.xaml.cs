@@ -80,6 +80,8 @@ public partial class HostsView : UserControl
             ReplacedCard.Visibility = Visibility.Collapsed;
         }
 
+        ShowRepeats();
+
         try
         {
             var pins = HostsEditor.Pins();
@@ -235,6 +237,94 @@ public partial class HostsView : UserControl
     /// «такую же» значило бы снять не ту.
     /// </para>
     /// </remarks>
+    private HostsDuplicateReport? _repeats;
+
+    /// <summary>
+    /// Карточка повторов: сколько, каких и что из них можно убрать.
+    /// </summary>
+    /// <remarks>
+    /// Спорящие адреса называются отдельно и не убираются кнопкой. Сейчас
+    /// они не действуют — выше то же имя прибито к другому, — но снявший
+    /// верхний пин получит нижний, и это решение человека, а не наше.
+    /// </remarks>
+    private void ShowRepeats()
+    {
+        try
+        {
+            _repeats = HostsDuplicates.Find();
+        }
+        catch (Exception)
+        {
+            _repeats = null;
+        }
+
+        if (_repeats is not { Any: true } report)
+        {
+            RepeatsCard.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        RepeatsCard.Visibility = Visibility.Visible;
+        RepeatsTitle.Text = $"Имена прибиты повторно: {report.Repeats.Count}";
+
+        var parts = new List<string>();
+
+        if (report.Same > 0)
+            parts.Add($"{report.Same} — тот же адрес ещё раз. Windows берёт первую запись имени, "
+                + "так что повтор ничего не делает, а убрать его можно без последствий.");
+
+        if (report.Conflicting > 0 && report.Repeats.First(r => r.Conflicts) is var sample)
+            parts.Add($"{report.Conflicting} — другой адрес, например {sample.Name} → {sample.Address} "
+                + $"в строке {sample.Line + 1}, а действует {sample.FirstAddress} строкой {sample.FirstLine + 1}. "
+                + "Сейчас они не действуют, но всплывут, если снять запись выше. "
+                + "Кнопкой не убираются — удалите их в «Чужих записях», если не нужны.");
+
+        if (report.ForeignBlocks.Count > 0)
+            parts.Add($"Часть повторов лежит в блоке другой программы ({string.Join(", ", report.ForeignBlocks)}): "
+                + "она может вернуть их при своей следующей записи.");
+
+        RepeatsText.Text = string.Join("\n\n", parts);
+
+        RepeatsButton.Visibility = report.Removable.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RepeatsButton.Content = $"Убрать повторы ({report.Removable.Count})";
+    }
+
+    private void OnRemoveRepeats(object sender, RoutedEventArgs e)
+    {
+        if (_repeats is not { Removable.Count: > 0 } report)
+            return;
+
+        var answer = MessageBox.Show(
+            $"Удалить из файла hosts {report.Removable.Count} строк-повторов?\n\n"
+            + "Каждая из них повторяет запись выше с тем же адресом, так что работать "
+            + "всё будет как сейчас. Отменить нажатием будет нельзя.\n\n"
+            + "Копия файла ляжет рядом — из неё можно вернуть всё целиком.",
+            "NetZapret",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question,
+            MessageBoxResult.No);
+
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        try
+        {
+            // Файл перечитывается перед удалением: номера строк взяты при
+            // показе карточки, а между показом и нажатием его мог переписать
+            // кто угодно. Удалять по устаревшим номерам значило бы снять не то.
+            var fresh = HostsDuplicates.Find();
+            var backup = HostsEditor.Remove(fresh.Removable);
+            HostsEditor.FlushDns();
+
+            Reload();
+            Status.Text = $"Убрано повторов: {fresh.Removable.Count}. Копия прежнего файла: {backup}";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
+        }
+    }
+
     private void OnRemoveForeign(object sender, RoutedEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button { Tag: int line } || line < 0)
