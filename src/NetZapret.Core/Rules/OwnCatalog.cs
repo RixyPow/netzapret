@@ -139,6 +139,19 @@ public sealed class OwnCatalog
         return Services.Where(s => names.Any(s.Covers)).ToList();
     }
 
+    /// <summary>
+    /// Адреса, вписанные для этого имени, — кандидаты автоподбора пина.
+    /// </summary>
+    /// <remarks>
+    /// Записи с <c>resolve</c> сюда не попадают: их адрес спрашивается
+    /// у честного резолвера, а его автоподбор спрашивает и так.
+    /// </remarks>
+    public IReadOnlyList<PinCandidate> PinCandidates(string host) =>
+        Services
+            .Where(s => !s.Resolve && s.Covers(host))
+            .SelectMany(s => s.Addresses.Select(a => new PinCandidate(a, PinSource.Own, s.Name)))
+            .ToList();
+
     private sealed class Document
     {
         public List<Entry>? Services { get; set; }

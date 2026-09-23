@@ -1830,7 +1830,7 @@ public static class BlockCheck
     internal static bool IsBotChallenge(byte[] buffer, int length) =>
         string.Equals(HeaderValue(buffer, length, "cf-mitigated"), "challenge", StringComparison.OrdinalIgnoreCase);
 
-    private static string? HeaderValue(byte[] buffer, int length, string name)
+    internal static string? HeaderValue(byte[] buffer, int length, string name)
     {
         var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 4096));
 

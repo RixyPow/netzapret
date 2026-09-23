@@ -318,4 +318,95 @@ public sealed class ZapretCatalog
             }
         }
     }
+
+    /// <summary>
+    /// Все ответы каталога на имя: каждого набора и зашитые, с названием источника.
+    /// </summary>
+    /// <remarks>
+    /// Для автоподбора пина: он проверяет всех, а не того, кого выбрали.
+    /// Имя сравнивается и с зоной — каталог хранит <c>api.openai.com</c>,
+    /// а спрашивают, бывает, <c>openai.com</c>.
+    /// </remarks>
+    public IReadOnlyList<Core.PinCandidate> AnswersFor(string host)
+    {
+        var result = new List<Core.PinCandidate>();
+
+        try
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+
+            command.CommandText = """
+                select p.name, a.ip_address
+                from dns_answers a
+                join domains d on d.domain_id = a.domain_id
+                join dns_profiles p on p.profile_id = a.profile_id
+                where d.hostname = $h
+                union all
+                select 'каталог Zapret', h.ip_address
+                from hosts_entries h
+                where h.hostname = $h
+                """;
+
+            command.Parameters.AddWithValue("$h", host);
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+                result.Add(new Core.PinCandidate(reader.GetString(1), Core.PinSource.Catalog, reader.GetString(0)));
+        }
+        catch (Exception)
+        {
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Посредники каталога — адреса, стоящие за многими именами сразу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Такой адрес — не сайт, а прокси по имени в приветствии TLS: он сам идёт
+    /// к тому, кого спросили, и потому годится и для имён, которых в каталоге
+    /// нет. Замер 23.09: 87.228.47.195 из набора XBOX DNS отдал crunchyroll.com
+    /// из Стокгольма, хотя crunchyroll в каталоге нет вовсе.
+    /// </para>
+    /// <para>
+    /// Порог по числу имён отсекает настоящие адреса сетей доставки, которых
+    /// в наборе XBOX DNS тоже хватает: у тех по несколько имён. У посредников —
+    /// десятки и сотни: Comss — 814, XBOX 87.228.47.195 — 95.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<Core.PinCandidate> Intermediaries(int minNames = 20)
+    {
+        var result = new List<Core.PinCandidate>();
+
+        try
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+
+            command.CommandText = """
+                select min(p.name), a.ip_address, count(*) n
+                from dns_answers a
+                join dns_profiles p on p.profile_id = a.profile_id
+                group by a.ip_address
+                having n >= $min
+                order by n desc
+                """;
+
+            command.Parameters.AddWithValue("$min", minNames);
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+                result.Add(new Core.PinCandidate(reader.GetString(1), Core.PinSource.Pool, reader.GetString(0)));
+        }
+        catch (Exception)
+        {
+        }
+
+        return result;
+    }
 }

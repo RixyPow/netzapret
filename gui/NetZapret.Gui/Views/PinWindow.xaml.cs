@@ -17,11 +17,6 @@ public sealed record SourceRow(string Id, string Name, string Note);
 /// </summary>
 /// <remarks>
 /// <para>
-/// Повторяет пункт меню консоли «Сервисы и маршруты» → сервис. Логика
-/// дублируется намеренно: так решено про весь интерфейс, чтобы не править
-/// проверенный код консоли ради окна.
-/// </para>
-/// <para>
 /// Пин и маршрут вместе, а не порознь, потому что порознь они не работают.
 /// Пин задаёт адрес, но не дорогу: TUN вынюхивает имя из рукопожатия,
 /// и доменное правило срабатывает поверх прибитого адреса. Пин при маршруте
@@ -312,6 +307,15 @@ public partial class PinWindow : Window
 
         var rows = new List<SourceRow>
         {
+            // Первой — подбор: он проверяет всех остальных сам и отвечает
+            // на вопрос, который прежде задавался человеку, — какой из
+            // источников сейчас жив и не отказывает по стране.
+            new("auto",
+                "Подобрать автоматически",
+                "Проверяет настоящий адрес, свой каталог и посредников Zapret живым запросом "
+                + "и берёт для каждого имени того, кто отвечает сам и не отказывает по стране. "
+                + "Настоящий адрес — первым, если он работает."),
+
             new("honest",
                 "Спросить честный резолвер сейчас",
                 "Настоящий адрес по DoH, взятый на этой машине в момент закрепления, "
@@ -368,10 +372,18 @@ public partial class PinWindow : Window
 
         IsEnabled = false;
         Status.Text = "Спрашиваю адреса и проверяю каждый…";
+        _autoReport = null;
 
         try
         {
             var answers = await AnswersAsync(id);
+
+            if (answers.Count == 0 && _autoReport is not null)
+            {
+                Status.Text = _autoReport;
+                OnBack(sender, e);
+                return;
+            }
 
             if (answers.Count == 0)
             {
@@ -404,7 +416,8 @@ public partial class PinWindow : Window
 
             // Откатили — говорим только это: «прибито» про несуществующее
             // хуже молчания.
-            Status.Text = result.Reverted ?? $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
+            Status.Text = result.Reverted ?? (_autoReport is null ? string.Empty : _autoReport + "\n\n")
+                + $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
                 + "иначе правило сработало бы поверх адреса."
                 + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
 
@@ -429,12 +442,16 @@ public partial class PinWindow : Window
     }
 
     private string Source(string id) =>
-        id == "honest" ? "честный резолвер"
+        id == "auto" ? "автоподбор"
+        : id == "honest" ? "честный резолвер"
         : id.StartsWith("own:", StringComparison.Ordinal) ? _mine[int.Parse(id[4..])].Name
         : "набор " + id[4..];
 
     private async Task<Dictionary<string, string>> AnswersAsync(string id)
     {
+        if (id == "auto")
+            return await AutoAsync();
+
         if (id.StartsWith("set:", StringComparison.Ordinal))
         {
             return _catalog!.Answers(_catalogServices, id[4..])
@@ -457,6 +474,51 @@ public partial class PinWindow : Window
         return await HonestAsync(known.Concat(_target.Zones)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList());
+    }
+
+    /// <summary>Что сказал последний автоподбор — дописывается к итогу закрепления.</summary>
+    private string? _autoReport;
+
+    /// <summary>
+    /// Подбирает адрес каждому имени сервиса (PinPicker).
+    /// </summary>
+    /// <remarks>
+    /// Имена те же, что у прочих источников: зоны сервиса и имена каталога
+    /// внутри них. Подробности по каждому имени — в журнал: в окне место
+    /// только главному.
+    /// </remarks>
+    private async Task<Dictionary<string, string>> AutoAsync()
+    {
+        var own = OwnCatalog.Load();
+
+        var names = (_catalog?.NamesByService().Values.SelectMany(v => v).Where(Covers) ?? [])
+            .Concat(_target.Zones)
+            .Select(n => n.TrimStart('*', '.'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var progress = new Progress<int>(n => Status.Text = $"Подбираю адрес: готово {n} из {names.Count}…");
+
+        var picks = await PinPicker.PickAsync(
+            names,
+            host => [.. own.PinCandidates(host), .. _catalog?.AnswersFor(host) ?? []],
+            _catalog?.Intermediaries() ?? [],
+            progress,
+            CancellationToken.None);
+
+        foreach (var pick in picks)
+        {
+            Journal.Write("пин", pick.Chosen is { } chosen
+                ? $"{pick.Host}: {chosen.Candidate.Address} ({chosen.Candidate.Label}, {chosen.Detail}); "
+                  + $"отвергнуто {pick.Rejected.Count}"
+                : $"{pick.Host}: адрес не подобран, проверено {pick.Rejected.Count}");
+        }
+
+        _autoReport = PinPicker.Summarize(picks, _target.Zones.FirstOrDefault()?.TrimStart('*', '.'));
+
+        return picks
+            .Where(p => p.Chosen is not null)
+            .ToDictionary(p => p.Host, p => p.Chosen!.Candidate.Address, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
