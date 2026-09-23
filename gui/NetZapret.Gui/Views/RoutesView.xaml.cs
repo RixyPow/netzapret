@@ -1043,6 +1043,7 @@ public partial class RoutesView : UserControl
 
         if (needle.Length == 0)
         {
+            AddOffer.Visibility = Visibility.Collapsed;
             Services.ItemsSource = InChosenOrder(_all);
             return;
         }
@@ -1064,9 +1065,28 @@ public partial class RoutesView : UserControl
 
         Services.ItemsSource = InChosenOrder(found);
 
-        Status.Text = found.Count == 0
-            ? $"По «{needle}» ничего нет. Свой домен можно добавить строкой выше."
-            : $"Найдено частей: {found.Sum(s => s.Parts.Count)}.";
+        // Добавить предлагается, только когда искать больше нечего: вписанное
+        // похоже на имя сайта, а в списке оно не нашлось ни частью, ни доменом.
+        // Нашлось — значит, такое уже есть, и второе правило на него было бы
+        // двойником, спорящим с первым.
+        var domain = found.Count == 0 ? DomainInput.Normalize(needle) : null;
+
+        AddOffer.Visibility = domain is null ? Visibility.Collapsed : Visibility.Visible;
+
+        if (domain is not null)
+            AddOfferText.Text = $"«{domain}» в списке нет. Добавить своим доменом — сперва «напрямую», дальше правится в его строке.";
+
+        Status.Text = found.Count > 0
+            ? $"Найдено частей: {found.Sum(s => s.Parts.Count)}."
+            : domain is null
+                ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com."
+                : string.Empty;
+    }
+
+    private void OnSearchKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter && AddOffer.Visibility == Visibility.Visible)
+            AddOwn();
     }
 
     private static bool Matches(string service, PartRow part, string needle) =>
@@ -1094,101 +1114,56 @@ public partial class RoutesView : UserControl
             .ToList();
 
         OwnSummary.Text = own.Count == 0
-            ? "Направить сайт, которого нет в каталоге."
+            ? "Впишите сайт в поле ниже: если его нет в списке, программа предложит добавить."
             : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
               + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
               + ". Они стоят в списке ниже вместе с сервисами.";
     }
 
-    private void OnOwnKey(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == System.Windows.Input.Key.Enter)
-            AddOwn();
-    }
-
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
 
     /// <summary>
-    /// Записывает правило на свой домен.
+    /// Записывает свой домен из поля поиска — «напрямую».
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Звёздочка ставится сама: имя означает зону, и <c>example.com</c> должен
     /// покрывать поддомены — иначе человек напишет корень, а картинки с
     /// <c>cdn.example.com</c> пойдут мимо правила, и понять это по виду
     /// не выйдет.
+    /// </para>
+    /// <para>
+    /// «Напрямую», а не выбранное заранее (владелец, 23.09). Режим, рецепт
+    /// и пин правятся в строке, которая появится в списке, — там же, где
+    /// у всех остальных частей; второй набор тех же выборов у поля был бы
+    /// ещё одним местом, где они расходятся.
+    /// </para>
     /// </remarks>
     private void AddOwn()
     {
-        var raw = OwnDomain.Text.Trim().Trim('/').ToLowerInvariant();
+        var name = DomainInput.Normalize(Search.Text);
 
-        // Из адреса берём только имя: люди вставляют ссылку целиком, и правило
-        // на «https://example.com/page» не совпало бы ни с чем.
-        if (raw.Contains("://"))
-            raw = raw.Split("://")[1];
-
-        raw = raw.Split('/')[0].TrimStart('*', '.');
-
-        if (raw.Length == 0 || !raw.Contains('.') || raw.Contains(' '))
+        if (name is null)
         {
             Status.Text = "Это не похоже на имя сайта. Нужно что-то вроде example.com.";
             return;
         }
 
-        var mode = OwnMode.SelectedIndex switch
-        {
-            0 => RoutingMode.Direct,
-            1 => RoutingMode.Desync,
-            _ => RoutingMode.Proxy,
-        };
-
-        // Для десинка спрашиваем, чем именно чинить. Без этого вопроса режим
-        // означал лишь «мимо туннеля»: что сделать с именем, решал пресет,
-        // а не попавшему ни в один его список не делалось ничего.
-        string? recipe = null;
-
-        // У своего домена заголовок и проверяемое имя — одно и то же.
-        // Защита от второго окна нужна и здесь: кнопку успевают нажать
-        // дважды, а второе модальное окно поверх первого делает первое
-        // недоступным — «выбрать» в нём просто не отзывается.
-        if (mode == RoutingMode.Desync)
-        {
-            if (_asking)
-                return;
-
-            _asking = true;
-
-            try
-            {
-                if (!AskRecipe(raw, raw, out recipe))
-                    return;
-            }
-            finally
-            {
-                _asking = false;
-            }
-        }
-
         try
         {
             var file = UserRulesFile.Load();
-            file.Set(MatchKind.Domain, "*." + raw, mode, recipe);
+            file.Set(MatchKind.Domain, "*." + name, RoutingMode.Direct, recipe: null);
             file.Save();
 
-            OwnDomain.Text = string.Empty;
-
-            // Перечитываем целиком: добавленный домен встаёт в общий список
-            // строкой со значком и пином, а не только в подпись карточки.
+            // Поле не очищается: по нему же отфильтрован список, и добавленный
+            // домен остаётся на экране одной строкой — ровно той, где его
+            // дальше править.
             Reload();
 
-            Status.Text = string.IsNullOrEmpty(recipe)
-                ? $"Записано: {raw} → {Describe(mode)}. Применится при следующем запуске движков."
-                : $"Записано: {raw} → десинк рецептом «{recipe}». "
-                  + "Применится при следующем запуске движков.";
+            Status.Text = $"Записано: {name} → напрямую. Режим меняется в его строке ниже. "
+                + "Применится при следующем запуске движков.";
 
-            if (mode == RoutingMode.Proxy && PinConflict.Offer(Window.GetWindow(this), ["*." + raw]) is { } pinNote)
-                Status.Text += "  " + pinNote;
-
-            this.Offer($"Добавлен маршрут: {raw}");
+            this.Offer($"Добавлен маршрут: {name}");
         }
         catch (Exception ex)
         {

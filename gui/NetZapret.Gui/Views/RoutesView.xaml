@@ -121,51 +121,33 @@
                     </StackPanel>
                 </Border>
 
-                <StackPanel x:Name="OwnPanel" Margin="0,10,0,0">
+                <!--
+                    Одно поле на поиск и на свой домен (владелец, 23.09).
+                    Прежде их было два, и вписать имя значило сперва решить,
+                    ищешь ты его или добавляешь. Теперь вписанное ищется,
+                    а если такого нет и это похоже на имя сайта, под полем
+                    появляется предложение добавить. Добавленное встаёт
+                    «напрямую» — самым безобидным — и правится в своей строке
+                    списка, как любая часть: режим, рецепт, пин.
+                -->
+                <TextBox x:Name="Search" Margin="0,10,0,0" TextChanged="OnSearch"
+                         KeyDown="OnSearchKey"
+                         gui:Hint.Text="Сервис, часть или домен — найти или добавить свой" />
+
+                <Border x:Name="AddOffer" Style="{StaticResource Card}" Margin="0,10,0,0"
+                        Padding="16,11" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBox Grid.Column="0" x:Name="OwnDomain" Margin="0,0,8,0"
-                                 KeyDown="OnOwnKey" gui:Hint.Text="Сайт, например example.com" />
+                        <TextBlock x:Name="AddOfferText" VerticalAlignment="Center" TextWrapping="Wrap" />
 
-                        <ComboBox Grid.Column="1" x:Name="OwnMode" Width="146" SelectedIndex="2" Margin="0,0,8,0">
-                            <ComboBoxItem Content="напрямую" />
-                            <ComboBoxItem Content="десинк" />
-                            <ComboBoxItem Content="через VPN" />
-                        </ComboBox>
-
-                        <Button Grid.Column="2" Style="{StaticResource Primary}"
+                        <Button Grid.Column="1" Style="{StaticResource Primary}" Margin="12,0,0,0"
                                 Content="Добавить" Click="OnAddOwn" />
                     </Grid>
-
-                    <!--
-                        Два абзаца пояснений отсюда ушли в подсказку
-                        у заголовка карточки — см. выше. Держать их здесь
-                        значило тратить семьдесят точек высоты постоянно
-                        ради текста, который прочитывают однажды.
-                    -->
-
-                    <!--
-                        Списка добавленных здесь больше нет: с 0.6.3 свои
-                        домены стоят в общем списке сервисов ниже, наравне
-                        с каталожными. Там им достаются значок сайта, пин,
-                        выбор рецепта и поиск — всё то, чего эта карточка
-                        не давала. Осталось ровно то, ради чего её открывают:
-                        вписать имя.
-                    -->
-                </StackPanel>
-
-                <!--
-                    Поиск: частей под семьдесят, и глазами их не перебрать.
-                    С подсказкой внутри: пустое поле без неё читается как
-                    пустая карточка, поставленная по ошибке.
-                -->
-                <TextBox x:Name="Search" Margin="0,18,0,0" TextChanged="OnSearch"
-                         gui:Hint.Text="Поиск по сервису, части или домену" />
+                </Border>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
             </StackPanel>
