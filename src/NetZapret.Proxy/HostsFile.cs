@@ -31,6 +31,22 @@ public enum DesyncBypass
     /// это не переключателем в маршрутах, а выключателем туннеля.
     /// </remarks>
     VpnWithoutTunnel,
+
+    /// <summary>
+    /// Поставлено «через VPN», и туннель поднят.
+    /// </summary>
+    /// <remarks>
+    /// Считалось, что такое имя десинку не видно: трафик уходит в туннель.
+    /// Замер 23.09 опроверг. Фильтр перехвата winws2 (<c>--wf-tcp-out</c>)
+    /// не ограничен интерфейсом и видит пакеты, которые приложение шлёт
+    /// в TUN, — и секция пресета «Выбрано вручную: instagram» с поддельными
+    /// пакетами (<c>tcp_md5</c>, <c>tcp_ts=-1000</c>) портила рукопожатие
+    /// уже внутри туннеля. Настоящий сервер такие подделки отбрасывает,
+    /// стек TUN в sing-box — нет. Instagram не открывался через туннель,
+    /// хотя все пять выходов доставали его сами за 150–470 мс, а LinkedIn
+    /// и WhatsApp через тот же туннель открывались.
+    /// </remarks>
+    Tunnel,
 }
 
 /// <summary>
@@ -242,9 +258,11 @@ public static class HostsFile
     /// <c>send + syndata</c> из пресета.
     /// </para>
     /// <para>
-    /// Проксируемые сюда не идут ни из того источника, ни из другого: их
-    /// трафик уходит в туннель, и десинк его не видит вовсе. Берутся ровно
-    /// те, что доходят до WinDivert.
+    /// Третий — «через VPN». Долго считалось, что такие имена сюда не идут:
+    /// трафик уходит в туннель, и десинк его не видит. Замер 23.09 это
+    /// опроверг — winws2 видит пакеты, которые приложение шлёт в TUN,
+    /// и рецепт на поддельных пакетах портил рукопожатие внутри туннеля.
+    /// См. <see cref="DesyncBypass.Tunnel"/>.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<string> CollectDesyncExclusions(
@@ -272,9 +290,9 @@ public static class HostsFile
     /// </para>
     /// <para>
     /// <paramref name="tunnelUp"/> — поднят ли туннель вместе с десинком.
-    /// Без туннеля «через VPN» идёт напрямую (таблица владельца 23.09),
-    /// и такие имена выводятся из-под десинка наравне с «напрямую».
-    /// Прибитые при этом выводятся все: заворачивать их адреса некуда.
+    /// «Через VPN» выводится из-под десинка в обоих случаях, меняется лишь
+    /// причина: без туннеля имя идёт напрямую (таблица владельца 23.09),
+    /// с туннелем — в туннель, где десинк его только портит.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<(string Name, DesyncBypass Why)> DescribeDesyncExclusions(
@@ -296,9 +314,8 @@ public static class HostsFile
             if (addresses.Count == 0)
                 continue;
 
-            if (tunnelUp && FirstMatch(order, name) == Core.Rules.RoutingMode.Proxy)
-                continue;
-
+            // Все прибитые, и под VPN тоже: адрес такого пина заведён
+            // в туннель маршрутом, а winws2 видит и то, что идёт в TUN.
             Add(name, DesyncBypass.Pin);
         }
 
@@ -321,8 +338,6 @@ public static class HostsFile
             }
         }
 
-        if (tunnelUp)
-            return found;
 
         // Тем же порядком и с той же оговоркой: имя достаётся тому правилу,
         // до которого очередь доходит раньше, и «через VPN», перекрытое
@@ -335,7 +350,7 @@ public static class HostsFile
             foreach (var domain in domains)
             {
                 if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Proxy)
-                    Add(domain, DesyncBypass.VpnWithoutTunnel);
+                    Add(domain, tunnelUp ? DesyncBypass.Tunnel : DesyncBypass.VpnWithoutTunnel);
             }
         }
 
@@ -381,6 +396,7 @@ public static class HostsFile
         DesyncBypass.Pin => "мимо десинка: пин в hosts",
         DesyncBypass.Direct => "мимо десинка: «напрямую»",
         DesyncBypass.VpnWithoutTunnel => "мимо десинка: «через VPN», а туннель выключен",
+        DesyncBypass.Tunnel => "мимо десинка: идёт в туннель",
         _ => string.Empty,
     };
 

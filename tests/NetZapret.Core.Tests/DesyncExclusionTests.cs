@@ -101,11 +101,16 @@ public sealed class DesyncExclusionTests : IDisposable
     }
 
     /// <summary>
-    /// Проксируемые не идут ни из того источника, ни из другого: их трафик
-    /// уходит в туннель, и десинк его не видит вовсе.
+    /// Проксируемые выводятся из-под десинка — и прибитые, и нет.
     /// </summary>
+    /// <remarks>
+    /// Прежде эта проверка утверждала обратное: «их трафик уходит в туннель,
+    /// и десинк его не видит вовсе». Замер 23.09 опроверг — winws2 видит
+    /// пакеты, которые приложение шлёт в TUN, и рецепт на поддельных пакетах
+    /// рвал Instagram внутри туннеля. См. DesyncBypass.Tunnel.
+    /// </remarks>
     [Fact]
-    public void ProxiedNamesStayOut()
+    public void ProxiedNamesAreExcludedToo()
     {
         Write("72.56.93.144 canva.com");
 
@@ -115,9 +120,15 @@ public sealed class DesyncExclusionTests : IDisposable
               - match: domain
                 value: "*.canva.com"
                 mode: proxy
+              - match: domain
+                value: "*.instagram.com"
+                mode: proxy
             """);
 
-        Assert.Empty(HostsFile.CollectDesyncExclusions(engine.RuleSet, _hosts));
+        var found = HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts);
+
+        Assert.Equal(DesyncBypass.Pin, HostsFile.BypassFor(found, "canva.com"));
+        Assert.Equal(DesyncBypass.Tunnel, HostsFile.BypassFor(found, "www.instagram.com"));
     }
 
     /// <summary>«Десинк» исключением не является — им как раз чинят.</summary>

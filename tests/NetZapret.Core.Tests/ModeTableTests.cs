@@ -138,14 +138,16 @@ public sealed class ModeTableTests : IDisposable
     }
 
     [Fact]
-    public void With_the_tunnel_vpn_names_are_not_excluded()
+    public void With_the_tunnel_vpn_names_are_excluded_as_tunnelled()
     {
-        // Их трафик уходит в туннель, и до WinDivert не доходит вовсе.
+        // Прежде здесь стояло «до WinDivert не доходит вовсе» — и было
+        // неверно: winws2 видит пакеты, идущие в TUN (замер 23.09,
+        // Instagram). Десинку в туннеле делать нечего, кроме как портить.
         var found = HostsFile.DescribeDesyncExclusions(
             Book(OperatingMode.Selective), _hosts, tunnelUp: true);
 
         Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(found, Direct));
-        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, Vpn));
+        Assert.Equal(DesyncBypass.Tunnel, HostsFile.BypassFor(found, Vpn));
         Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, Desync));
     }
 
@@ -191,17 +193,17 @@ public sealed class ModeTableTests : IDisposable
     }
 
     [Fact]
-    public void Without_the_tunnel_a_pin_under_vpn_is_excluded_too()
+    public void A_pin_under_vpn_is_excluded_either_way()
     {
-        // С туннелем адрес такого пина заводится в туннель; без него
-        // соединение идёт на прибитый адрес напрямую, и рецепт, выверенный
-        // на настоящей сети доставки, его только порвёт.
+        // Без туннеля соединение идёт на прибитый адрес напрямую, и рецепт,
+        // выверенный на настоящей сети доставки, его только порвёт. С туннелем
+        // адрес заводится в TUN — а winws2 видит и то, что идёт туда.
         File.WriteAllText(_hosts, "157.240.0.35 " + Vpn);
 
         var down = HostsFile.DescribeDesyncExclusions(Book(OperatingMode.DesyncOnly), _hosts, tunnelUp: false);
         var up = HostsFile.DescribeDesyncExclusions(Book(OperatingMode.Selective), _hosts, tunnelUp: true);
 
         Assert.Equal(DesyncBypass.Pin, HostsFile.BypassFor(down, Vpn));
-        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(up, Vpn));
+        Assert.Equal(DesyncBypass.Pin, HostsFile.BypassFor(up, Vpn));
     }
 }
