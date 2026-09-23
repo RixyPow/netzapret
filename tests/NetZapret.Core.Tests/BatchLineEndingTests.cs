@@ -63,6 +63,40 @@ public sealed class BatchLineEndingTests
             + ". Выписать заново: удалить и git checkout -- <файл>.");
     }
 
+    /// <summary>
+    /// Батники — только ASCII.
+    /// </summary>
+    /// <remarks>
+    /// cmd.exe читает их в кодовой странице OEM, и кириллица в UTF-8
+    /// распадается на мусор, а внутри команды — на ложные команды: так
+    /// однажды лёг release.cmd. Правило стояло в шапках скриптов словами,
+    /// и 23.09 в build.cmd всё равно нашлись два русских блока сообщений.
+    /// </remarks>
+    [Fact]
+    public void Every_batch_file_is_ascii()
+    {
+        var root = Root();
+        if (root is null)
+            return;
+
+        var skip = new[] { "tools", "build", "dist", "bin", "obj", ".git" };
+
+        var broken = Directory
+            .EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+            .Where(f => f.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+                || f.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            .Where(f => !Path.GetRelativePath(root, f)
+                .Split(Path.DirectorySeparatorChar)
+                .Any(part => skip.Contains(part, StringComparer.OrdinalIgnoreCase)))
+            .Where(f => File.ReadAllBytes(f).Any(b => b > 0x7F))
+            .Select(f => Path.GetRelativePath(root, f))
+            .ToList();
+
+        Assert.True(broken.Count == 0,
+            "Не ASCII (cmd прочтёт в OEM и рассыплет): " + string.Join(", ", broken)
+            + ". Русский текст для сообщений — в отдельный файл UTF-8, как docs\\release-notes.footer.md.");
+    }
+
     private static bool HasBareLf(string path)
     {
         var bytes = File.ReadAllBytes(path);

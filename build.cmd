@@ -111,17 +111,18 @@ goto :deploy
 :open
 echo.
 echo ============================================================
-echo  СБОРКА НЕ ВЫПОЛНЕНА: NetZapret ещё работает.
+echo  BUILD NOT DONE: NetZapret is still running.
 echo ============================================================
 echo.
-echo  Скорее всего окно свёрнуто в трей. Крестик его прячет,
-echo  а не закрывает - процесс остаётся жив и держит файлы.
+echo  Most likely the window is hidden in the tray. The close
+echo  button hides it rather than exits - the process lives on
+echo  and holds the files.
 echo.
-echo  Выйдите через значок в трее: правой кнопкой - "Выйти".
-echo  Затем запустите сборку заново.
+echo  Exit from the tray icon: right-click - the exit item.
+echo  Then run the build again.
 echo.
-echo  Если в трее пусто, остался запущенный от администратора
-echo  экземпляр - его снимет только консоль с теми же правами.
+echo  If the tray is empty, an elevated instance is left over -
+echo  only a console with the same rights can stop it.
 echo.
 exit /b 1
 
@@ -303,17 +304,17 @@ exit /b 0
 :held
 echo.
 echo ============================================================
-echo  СБОРКА НЕ ВЫПОЛНЕНА: файлы в %TARGET% заняты.
+echo  BUILD NOT DONE: files in %TARGET% are in use.
 echo ============================================================
 echo.
-echo  Движки остановлены выше, значит держит их кто-то другой.
-echo  Чаще всего это само окно, свёрнутое в трей: крестик его
-echo  прячет, а не закрывает.
+echo  The engines were stopped above, so something else holds them.
+echo  Most often it is the window itself, hidden in the tray: the
+echo  close button hides it rather than exits.
 echo.
-echo  Кто держит:
+echo  Who holds them:
 echo    tasklist ^| findstr /i "netzapret sing-box winws2"
 echo.
-echo  Экземпляр, запущенный от администратора, снимет только
-echo  консоль с теми же правами.
+echo  An instance started as administrator can only be stopped
+echo  from a console with the same rights.
 echo.
 exit /b 1
