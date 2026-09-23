@@ -56,9 +56,22 @@ public sealed class SupervisorStateBusyTests : IDisposable
         State().Save(_path);
 
         var reader = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        _ = Task.Delay(30).ContinueWith(_ => reader.Dispose());
+
+        // Отпускает свой поток, а не пул. Прежде здесь стояло
+        // Task.Delay(30).ContinueWith: под нагрузкой всего прогона пул
+        // был занят, продолжение запаздывало дольше, чем повтор ждёт
+        // (200 мс на все попытки), и тест падал — 23.09 дважды за день,
+        // при исправном Save.
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(30);
+            reader.Dispose();
+        });
+
+        release.Start();
 
         State().Save(_path);
+        release.Join();
     }
 
     [Fact]
