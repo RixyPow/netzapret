@@ -1,0 +1,6 @@
+# VirusTotal.
+#
+# Нужен пресету: секции «Выбрано вручную: *.virustotal» в Universal V10.
+# Там имя прежде стояло строкой --hostlist-domains, а она поддоменов
+# не покрывает — www.virustotal.com мимо секции проходил.
+virustotal.com

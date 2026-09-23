@@ -132,7 +132,7 @@ public sealed record AppSettings
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
     /// <remarks>
     /// <para>
-    /// По умолчанию — Universal V9: он идёт в сборке и покрывает больше всего
+    /// По умолчанию — Universal V10: он идёт в сборке и покрывает больше всего
     /// случаев. Пустое значение означало бы, что при первом запуске десинк
     /// молча не работает, а человек об этом узнаёт по неоткрывающимся сайтам.
     /// Если такого пресета нет, обзор состояния скажет об этом прямо.
@@ -145,6 +145,12 @@ public sealed record AppSettings
     /// при сбросе настроек; теперь это часть пресета.
     /// </para>
     /// <para>
+    /// Был V9, стал V10: те же секции, но имена в них идут списками.
+    /// В V9 они стояли строкой <c>--hostlist-domains</c>, а она поддоменов
+    /// не покрывает, и www.facebook.com проходил мимо своей секции.
+    /// Плюс GitHub и приложение Bluesky, которым рецепт выбран после V9.
+    /// </para>
+    /// <para>
     /// Смена касается только новых установок. Настройки переживают обновление
     /// намеренно — в них работа человека, — поэтому у тех, кто уже запускался,
     /// останется прежний выбор, и меняется он в меню.
@@ -152,7 +158,7 @@ public sealed record AppSettings
     /// </remarks>
     public string? PresetName { get; init; } = DefaultPresetName;
 
-    public const string DefaultPresetName = "Universal V9";
+    public const string DefaultPresetName = "Universal V10";
 
     /// <summary>Тег сервера либо <c>null</c> для автоподбора по задержке.</summary>
     public string? PreferredServer { get; init; }
