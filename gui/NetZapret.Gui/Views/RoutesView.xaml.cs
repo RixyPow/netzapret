@@ -1185,6 +1185,9 @@ public partial class RoutesView : UserControl
                 : $"Записано: {raw} → десинк рецептом «{recipe}». "
                   + "Применится при следующем запуске движков.";
 
+            if (mode == RoutingMode.Proxy && PinConflict.Offer(Window.GetWindow(this), ["*." + raw]) is { } pinNote)
+                Status.Text += "  " + pinNote;
+
             this.Offer($"Добавлен маршрут: {raw}");
         }
         catch (Exception ex)
@@ -1458,6 +1461,13 @@ public partial class RoutesView : UserControl
                 : $"Записано: {parts[1]} → десинк рецептом «{recipe}». "
                   + "Применится при следующем запуске движков.";
 
+            // VPN выбран, а имена прибиты — пин перебьёт маршрут (PinConflict).
+            if (mode == RoutingMode.Proxy
+                && PinConflict.Offer(Window.GetWindow(this), ZonesOf(match, parts[1])) is { } pinNote)
+            {
+                Status.Text += "  " + pinNote;
+            }
+
             this.Offer("Маршрут изменён");
         }
         catch (Exception ex)
@@ -1465,6 +1475,15 @@ public partial class RoutesView : UserControl
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
         }
     }
+
+    /// <summary>Имена, которые покрывает правило: список раскрывается, домен — как есть.</summary>
+    /// <remarks>У правил по адресам имён нет — и пинов под ними быть не может.</remarks>
+    private IReadOnlyList<string> ZonesOf(MatchKind match, string value) => match switch
+    {
+        MatchKind.HostList => HostListReader.Read(value, _zapretRoot, out _),
+        MatchKind.Domain => [value],
+        _ => [],
+    };
 
     /// <summary>
     /// Рецепт, выбранный для этого списка; <c>null</c> — решает пресет.

@@ -248,4 +248,33 @@ public class HostsPinTests : IDisposable
 
         Assert.Contains(Read(), l => l.Trim() == "1.2.3.4 chatgpt.com");
     }
+
+    /// <summary>
+    /// Какие наши пины перебьют маршрут «через VPN» для зон сервиса.
+    /// </summary>
+    /// <remarks>
+    /// 23.09: crunchyroll поставили «через VPN», а crunchyroll.com, www и sso
+    /// оставались прибиты с прошлой попытки — и 1009 оставался. Окно теперь
+    /// спрашивает о них в миг выбора VPN; найти их — дело этой функции.
+    /// Чужие строки hosts снять нельзя, и в ответ они не попадают.
+    /// </remarks>
+    [Fact]
+    public void Pins_under_zones_are_found_and_foreign_lines_are_not()
+    {
+        Write("9.9.9.9 static.crunchyroll.com");
+
+        HostsEditor.Pin(new Dictionary<string, string>
+        {
+            ["crunchyroll.com"] = "87.228.47.195",
+            ["www.crunchyroll.com"] = "87.228.47.195",
+            ["sso.crunchyroll.com"] = "87.228.47.195",
+            ["chatgpt.com"] = "87.228.47.204",
+        }, _path);
+
+        Assert.Equal(
+            ["crunchyroll.com", "sso.crunchyroll.com", "www.crunchyroll.com"],
+            HostsEditor.PinnedUnder(["*.crunchyroll.com"], _path));
+
+        Assert.Empty(HostsEditor.PinnedUnder(["notcrunchyroll.com"], _path));
+    }
 }

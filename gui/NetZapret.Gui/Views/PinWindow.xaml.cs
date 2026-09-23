@@ -338,6 +338,13 @@ public partial class PinWindow : Window
                   + "Применится при следующем запуске движков."
                 : $"Записано: «{_target.Short}» → {Describe(Mode(what))}. "
                   + "Применится при следующем запуске движков.";
+
+            // Здесь чаще всего и прибито: окно пина то же самое.
+            if (what == "proxy" && PinConflict.Offer(this, _target.Zones) is { } pinNote)
+            {
+                Status.Text += " " + pinNote;
+                ShowPins();
+            }
         }
         catch (Exception ex)
         {

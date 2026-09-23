@@ -635,6 +635,30 @@ public static class HostsEditor
         return result;
     }
 
+    /// <summary>
+    /// Наши прибитые имена, лежащие под зонами, — те, что перебьют маршрут.
+    /// </summary>
+    /// <remarks>
+    /// Пин бьёт любое разрешение имени, в том числе наше: прибитое имя
+    /// не получает адрес туннеля и уходит мимо VPN, какой маршрут ни выбери.
+    /// 23.09 так и выходило с crunchyroll: «через VPN» выбран, а имена
+    /// прибиты с прошлой попытки, и 1009 оставался. Окно спрашивает об этом
+    /// в миг выбора VPN — отсюда оно узнаёт, о каких именах спрашивать.
+    /// </remarks>
+    public static IReadOnlyList<string> PinnedUnder(IEnumerable<string> zones, string? path = null)
+    {
+        var bare = zones.Select(z => z.Trim().TrimStart('*', '.')).Where(z => z.Length > 0).ToList();
+
+        if (bare.Count == 0)
+            return [];
+
+        return Pins(path).Keys
+            .Where(name => bare.Any(zone => string.Equals(name, zone, StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     /// <summary>Границы нашего блока; <c>(-1, -1)</c> — блока нет.</summary>
     private static (int Start, int End) FindBlock(IReadOnlyList<string> lines)
     {
