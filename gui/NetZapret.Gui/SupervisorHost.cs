@@ -287,10 +287,12 @@ internal static class SupervisorHost
         // запуска: решение это не про один запуск, а про то, чем человек
         // готов платить за работающую сеть, — и меняется оно там же, где
         // остальные такие решения.
-        bool bypass = AppSettings.Load(AppSettings.DefaultPath).BypassWhenTunnelDead;
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
 
         services.Add(new SingBoxService(
-            singBox, options.ProxyConfig, 9090, trafficPort, bypassWhenDead: bypass)
+            singBox, options.ProxyConfig, 9090, trafficPort,
+            bypassWhenDead: settings.BypassWhenTunnelDead,
+            preferredExit: settings.PreferredServer)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         });

@@ -135,6 +135,16 @@ public abstract class SupervisedService
     {
     }
 
+    /// <summary>
+    /// Движок поднялся и отвечает — можно сказать ему то, чего он не помнит
+    /// или помнит неверно.
+    /// </summary>
+    /// <remarks>
+    /// Зовётся при каждом удачном старте, и перезапуск после сбоя — тоже
+    /// старт. Неудача здесь старта не отменяет: движок уже работает.
+    /// </remarks>
+    protected virtual Task OnReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     public async Task<bool> StartAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
     {
         var problem = ValidatePrerequisites();
@@ -146,9 +156,10 @@ public abstract class SupervisedService
         }
 
         // Новый процесс — новое положение. Всё, что служба помнит о прежнем
-        // запуске, к нему не относится: свежий движок поднимается с группой,
-        // указывающей на автоподбор, и память о прежнем обходе заставила бы
-        // нас считать трафик уведённым, когда он идёт в туннель.
+        // запуске, к нему не относится: память о прежнем обходе заставила бы
+        // нас считать трафик уведённым, когда он идёт в туннель. Группу
+        // выбора свежий движок берёт из своего кэша, а не из конфига, —
+        // её на место ставит OnReadyAsync.
         ForgetRunState();
 
         try
@@ -195,6 +206,7 @@ public abstract class SupervisedService
             if (await CheckFunctionalAsync(cancellationToken) is not ServiceCheck.Broken)
             {
                 LastError = null;
+                await OnReadyAsync(cancellationToken);
                 return true;
             }
 
@@ -316,13 +328,17 @@ public sealed class SingBoxService : SupervisedService
     /// <param name="bypassWhenDead">
     /// Уводить ли трафик мимо туннеля, когда его выходы перестали отвечать.
     /// </param>
+    /// <param name="preferredExit">
+    /// Закреплённый в настройках выход; <c>null</c> — автоподбор.
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
         int healthPort = 9090,
         int? trafficPort = null,
         int trafficCheckEvery = 6,
-        bool bypassWhenDead = true)
+        bool bypassWhenDead = true,
+        string? preferredExit = null)
     {
         _executablePath = executablePath;
         _configPath = configPath;
@@ -330,6 +346,56 @@ public sealed class SingBoxService : SupervisedService
         _trafficPort = trafficPort;
         _trafficCheckEvery = Math.Max(1, trafficCheckEvery);
         _bypassWhenDead = bypassWhenDead;
+        _preferredExit = string.IsNullOrWhiteSpace(preferredExit) ? null : preferredExit;
+    }
+
+    private readonly string? _preferredExit;
+
+    /// <summary>
+    /// Куда ставить группу выбора на старте, по порядку попыток.
+    /// </summary>
+    /// <remarks>
+    /// Закреплённый выход мог пропасть из подписки — тогда автоподбор,
+    /// а не то, что движок помнил.
+    /// </remarks>
+    public static IReadOnlyList<string> StartExits(string? preferredExit) =>
+        string.IsNullOrWhiteSpace(preferredExit) || preferredExit == LatencyGroup
+            ? [LatencyGroup]
+            : [preferredExit, LatencyGroup];
+
+    /// <summary>
+    /// Ставит группу выбора туда, куда велят настройки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// У селектора в конфиге есть <c>default</c>, но движок его перебивает:
+    /// кэш, заведённый ради учётной записи MASQUE, хранит заодно и выбор
+    /// в группах и переживает и перезапуск, и пересборку конфига. Отключить
+    /// это нечем — поля <c>store_selected</c> сборка 1.14 не знает
+    /// и отвергает конфиг целиком.
+    /// </para>
+    /// <para>
+    /// Прежде выбор подтверждало окно, и только закреплённый: при «авто»
+    /// оно молчало. Замер 23.09: в настройках «авто», в кэше движка —
+    /// Cloudflare WARP, и Instagram, WhatsApp и Telegram шли через WARP,
+    /// который под нагрузкой держит одно-два соединения; в журнале движка
+    /// 3762 обрыва за запуск. Раньше так же залипал и прямой выход — в нём
+    /// Instagram уходил на заглушку провайдера. Окно к тому же не видело
+    /// ни автозапуска, ни перезапуска после сбоя, а супервизор видит всё.
+    /// </para>
+    /// </remarks>
+    protected override async Task OnReadyAsync(CancellationToken cancellationToken)
+    {
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
+
+        foreach (var exit in StartExits(_preferredExit))
+        {
+            if (await api.SelectAsync(SelectorGroup, exit, cancellationToken))
+                return;
+        }
+
+        Note("не удалось поставить группу выбора на место — движок остался на том, "
+            + "что помнит в своём кэше.");
     }
 
     /// <summary>
