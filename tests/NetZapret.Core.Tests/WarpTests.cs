@@ -99,26 +99,57 @@ public class WarpTests
     }
 
     /// <summary>
-    /// WARP встаёт в группы наравне с серверами подписки: пока те живы,
-    /// автоподбор берёт их — они быстрее, — а когда лягут, останется он.
+    /// WARP — запасной выход: в селекторе он есть всегда, а в автоподборе —
+    /// только когда живых серверов подписки нет.
     /// </summary>
+    /// <remarks>
+    /// Прежде он стоял в автоподборе наравне с ними, в расчёте, что они
+    /// быстрее. Замер 23.09: одиночный запрос через WARP — 147 мс, через
+    /// серверы подписки — 220–265, и автоподбор брал его. А под нагрузкой
+    /// он держит одно-два соединения: Telegram висел на бесконечном
+    /// подключении.
+    /// </remarks>
     [Fact]
-    public void WarpJoinsTheSelectorBesideSubscriptionServers()
+    public void WarpIsOnlyAReserveInAutoLatency()
     {
         var root = Compile(Ordinary(), Warp.MasqueServer());
 
-        foreach (var group in new[] { "auto-latency", "auto" })
-        {
-            var members = root.GetProperty("outbounds").EnumerateArray()
-                .First(o => o.GetProperty("tag").GetString() == group)
-                .GetProperty("outbounds").EnumerateArray()
-                .Select(m => m.GetString())
-                .ToList();
+        Assert.Contains(Warp.MasqueTag, Members(root, "auto"));
+        Assert.Contains("NL", Members(root, "auto"));
 
-            Assert.Contains(Warp.MasqueTag, members);
-            Assert.Contains("NL", members);
-        }
+        Assert.Equal(["NL"], Members(root, "auto-latency"));
     }
+
+    /// <summary>
+    /// Все серверы подписки отмечены мёртвыми — движок перебирает их сам
+    /// вместе с WARP. Отметки бывают устаревшими: 23.09 девять серверов
+    /// числились мёртвыми по замерам, сделанным с неверной набивкой XHTTP,
+    /// и в автоподборе оставался один WARP.
+    /// </summary>
+    [Fact]
+    public void AllSubscriptionServersDeadBringsWarpIn()
+    {
+        var root = Compile(new SingBoxOptions { DeadServerTags = new HashSet<string> { "NL" } },
+            Ordinary(), Warp.MasqueServer());
+
+        Assert.Equal(["NL", Warp.MasqueTag], Members(root, "auto-latency"));
+    }
+
+    /// <summary>Без подписки WARP и есть автоподбор.</summary>
+    [Fact]
+    public void WarpAloneFillsAutoLatency()
+    {
+        var root = Compile(Warp.MasqueServer());
+
+        Assert.Equal([Warp.MasqueTag], Members(root, "auto-latency"));
+    }
+
+    private static List<string?> Members(JsonElement root, string group) =>
+        root.GetProperty("outbounds").EnumerateArray()
+            .First(o => o.GetProperty("tag").GetString() == group)
+            .GetProperty("outbounds").EnumerateArray()
+            .Select(m => m.GetString())
+            .ToList();
 
     /// <summary>
     /// MASQUE не замеряется отдельным пробником, и это его свойство, а не
@@ -203,7 +234,10 @@ public class WarpTests
         Security = "tls",
     };
 
-    private static JsonElement Compile(params ProxyServer[] servers)
+    private static JsonElement Compile(params ProxyServer[] servers) =>
+        Compile(new SingBoxOptions(), servers);
+
+    private static JsonElement Compile(SingBoxOptions options, params ProxyServer[] servers)
     {
         var engine = RuleSetLoader.Load("""
             mode: selective
@@ -214,7 +248,7 @@ public class WarpTests
                 server: "auto"
             """);
 
-        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions());
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, options);
 
         return JsonDocument.Parse(result.Json).RootElement.Clone();
     }
