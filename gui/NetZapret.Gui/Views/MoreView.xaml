@@ -199,6 +199,61 @@
                 </Border>
 
                 <!--
+                    Просьба из обсуждения #2. Список компонентов приходит
+                    из About в библиотеке, а не пишется здесь: его сверяет
+                    с THIRD-PARTY.md тест, и окно не должно знать больше.
+                -->
+                <TextBlock Text="О программе" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock x:Name="AuthorValue" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+
+                        <WrapPanel Margin="0,10,0,0">
+                            <Button x:Name="RepositoryLink" Style="{StaticResource Ghost}" Content="Репозиторий"
+                                    Click="OnLink" Margin="0,0,8,8" />
+                            <Button x:Name="IssuesLink" Style="{StaticResource Ghost}" Content="Сообщить о проблеме"
+                                    Click="OnLink" Margin="0,0,8,8" />
+                            <Button x:Name="DiscussionsLink" Style="{StaticResource Ghost}" Content="Обсуждения"
+                                    Click="OnLink" Margin="0,0,8,8" />
+                            <Button x:Name="TelegramLink" Style="{StaticResource Ghost}" Content="Телеграм-канал"
+                                    Click="OnLink" Margin="0,0,8,8" />
+                            <Button x:Name="SupportLink" Style="{StaticResource Ghost}" Content="Поддержать"
+                                    Click="OnLink" Margin="0,0,8,8" />
+                        </WrapPanel>
+
+                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,8,0,14" />
+
+                        <TextBlock Text="В составе" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,4" TextWrapping="Wrap"
+                                   Text="Чужие движки едут в архиве как есть и запускаются отдельными процессами. Условия каждого — в docs/THIRD-PARTY.md в репозитории." />
+
+                        <ItemsControl x:Name="Components">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                            <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap">
+                                                <Run Text="{Binding Role, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding License, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Исходники"
+                                                Tag="{Binding Source}" Click="OnLink" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!--
                     Обслуживание идёт последним намеренно: это разовые действия,
                     и три из четырёх необратимы. Соседство с переключателями,
                     которые нажимают мимоходом, им противопоказано.

@@ -84,7 +84,8 @@ Red Hat.
 ## WinDivert
 
 `engines/zapret/exe/WinDivert.dll` и драйвер `engines/zapret/exe/Monkey64.sys` —
-[reqrypt.org/windivert.html](https://reqrypt.org/windivert.html).
+[reqrypt.org/windivert.html](https://reqrypt.org/windivert.html), исходники —
+[github.com/basil00/WinDivert](https://github.com/basil00/WinDivert).
 
 **LGPL v3 или GPL v3 на выбор**, есть и коммерческая лицензия. Метаданных
 в файлах нет; версию следует уточнять по установке Zapret.
@@ -108,7 +109,8 @@ Red Hat.
 
 `engines/zapret/exe/winws2.exe`, а также `lists/`, `lua/`, `bin/`, `presets/`.
 
-**MIT License, Copyright (c) 2016–2024 bol-van.** «Zapret 2» — форк проекта
+**MIT License, Copyright (c) 2016–2024 bol-van.** «Zapret 2»
+([github.com/bol-van/zapret2](https://github.com/bol-van/zapret2)) — форк проекта
 [bol-van/zapret](https://github.com/bol-van/zapret), и условия наследуются
 от него. Текст лежит в `engines/zapret/LICENSE.txt`.
 

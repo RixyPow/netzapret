@@ -44,6 +44,8 @@ public partial class MoreView : UserControl
     {
         InitializeComponent();
 
+        ShowAbout();
+
         Loaded += (_, _) => Reload();
         Unloaded += (_, _) => _work?.Cancel();
     }
@@ -675,6 +677,36 @@ public partial class MoreView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Карточка «О программе»: неизменна, заполняется один раз.</summary>
+    private void ShowAbout()
+    {
+        AuthorValue.Text = $"NetZapret {UpdateCheck.Current}. Автор — {About.Author}; идеи и отчёты об ошибках "
+            + "приносят участники обсуждений и issues на GitHub. Лицензия MIT, программа бесплатна.";
+
+        RepositoryLink.Tag = About.Repository;
+        IssuesLink.Tag = About.Issues;
+        DiscussionsLink.Tag = About.Discussions;
+        TelegramLink.Tag = About.Telegram;
+        SupportLink.Tag = About.Support;
+
+        Components.ItemsSource = About.Components;
+    }
+
+    private void OnLink(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string url })
+            return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть ссылку: " + ex.GetBaseException().Message;
         }
     }
 
