@@ -243,7 +243,11 @@ internal static class SupervisorHost
         if (state is null || !state.IsSupervisorAlive())
         {
             SupervisorState.Clear(statePath);
-            return "Супервизор не запущен.";
+
+            // Драйвер выгружается и здесь: супервизора нет, а WinDivert
+            // от прошлого запуска может держать файл до перезагрузки.
+            // Замер 23.09: движки опущены, служба Monkey — RUNNING.
+            return "Супервизор не запущен. " + await WinDivertDriver.TryUnloadAsync(cancellationToken);
         }
 
         try
@@ -259,7 +263,10 @@ internal static class SupervisorHost
         }
 
         SupervisorState.Clear(statePath);
-        return "Остановлено.";
+
+        // Без этого остановка оставляла драйвер в ядре, а его файл — занятым:
+        // папку программы нельзя было удалить до перезагрузки (жалоба 23.09).
+        return "Остановлено. " + await WinDivertDriver.TryUnloadAsync(cancellationToken);
     }
 
     private static bool TryAddSingBox(Options options, List<SupervisedService> services)

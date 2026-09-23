@@ -59,13 +59,13 @@ taskkill /f /im sing-box.exe >nul 2>&1
 echo   Removing the autostart task...
 schtasks /delete /tn "NetZapret" /f >nul 2>&1
 
-rem The driver is registered under the name WinDivert regardless of what the
-rem file on disk is called - this build ships it as Monkey64.sys.
+rem Service names: WinDivert for a stock build, Monkey for the one Zapret
+rem ships (Monkey64.sys). Measured 23.09: Monkey, not Monkey64 - the old line missed it.
 echo   Removing the driver service...
 sc stop WinDivert >nul 2>&1
 sc delete WinDivert >nul 2>&1
-sc stop Monkey64 >nul 2>&1
-sc delete Monkey64 >nul 2>&1
+sc stop Monkey >nul 2>&1
+sc delete Monkey >nul 2>&1
 
 echo   Removing the Defender exclusion...
 powershell -NoProfile -Command "Remove-MpPreference -ExclusionPath '%ROOT:~0,-1%' -ErrorAction SilentlyContinue" >nul 2>&1
