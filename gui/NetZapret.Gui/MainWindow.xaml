@@ -17,11 +17,21 @@
         </Grid.ColumnDefinitions>
 
         <!--
+            Фон темы: картинка и затемнение цветом подложки, под меню и под
+            содержимым. У встроенных тем картинки нет, и оба слоя сливаются
+            с подложкой окна. Не ловят мышь: под ними ничего нет, а над ними
+            всё окно.
+        -->
+        <Rectangle Grid.ColumnSpan="2" IsHitTestVisible="False" Fill="{DynamicResource BackdropImage}" />
+        <Rectangle Grid.ColumnSpan="2" IsHitTestVisible="False" Fill="{DynamicResource Backdrop}"
+                   Opacity="{DynamicResource BackdropDim}" />
+
+        <!--
             Боковое меню. Полоса, а не вкладки: разделов девять, и все они
             равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
-        <Border Grid.Column="0" Background="{DynamicResource Backdrop}"
+        <Border Grid.Column="0" Background="{DynamicResource Chrome}"
                 BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
             <DockPanel LastChildFill="True">
 

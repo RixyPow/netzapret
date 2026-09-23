@@ -192,6 +192,15 @@ rem the working directory, which stays the installation root when winws2 runs.
 robocopy "%ROOT%presets" "%STAGE%\presets" *.txt /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if errorlevel 8 exit /b 1
 
+rem Themes: only the two built-in ones and the format description. Named one
+rem by one on purpose - themes\ in a working copy also holds the owner's and
+rem artists' own themes (git ignores them), and a folder copy would ship them.
+for %%T in (dark light) do (
+    robocopy "%ROOT%themes\%%T" "%STAGE%\themes\%%T" theme.json /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 exit /b 1
+)
+copy /y "%ROOT%themes\README.md" "%STAGE%\themes\" >nul
+
 rem The service catalogue: seven sets of proxy addresses for services that
 rem shut Russia out themselves. Without it that whole section is missing for
 rem anyone who has no separate Zapret installation - and those are exactly

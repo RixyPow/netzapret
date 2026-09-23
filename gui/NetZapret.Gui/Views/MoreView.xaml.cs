@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
+using NetZapret.Core.Themes;
 using NetZapret.Core.Updates;
 using NetZapret.Supervisor;
 
@@ -50,39 +51,85 @@ public partial class MoreView : UserControl
         Unloaded += (_, _) => _work?.Cancel();
     }
 
-    /// <summary>Отмечает выбранную тему.</summary>
+    /// <summary>
+    /// Плитки тем: встроенные первыми, затем из папки themes\.
+    /// </summary>
     private void ShowTheme(AppSettings settings)
     {
-        var current = Themes.Parse(settings.Theme);
-        bool light = current == ThemeKind.Light;
+        var loads = ThemeLoader.LoadAll();
+        var current = Themes.Current;
 
-        // Обводка, а не только цвет подписи: у двух кнопок рядом разница
-        // в оттенке текста читается как «одна поярче», а не как выбор.
-        Mark(DarkButton, !light);
-        Mark(LightButton, light);
+        ThemeList.ItemsSource = loads
+            .Select(load => ThemeTile.From(load, load.Id == current, key => (Brush)FindResource(key)))
+            .ToList();
 
-        ThemeHint.Text = light
-            ? "Светлая. Цвета состояния те же по смыслу: зелёный «работает», "
-              + "красный «закрыто», жёлтый «требует внимания»."
-            : "Тёмная. Программу держат открытой минуту в день, и тёмная здесь "
-              + "по умолчанию — но выбор ваш.";
-    }
+        var bad = loads.Where(l => !l.Ok).ToList();
 
-    /// <summary>Отмечает кнопку выбранной: обводка и цвет подписи.</summary>
-    private void Mark(Button button, bool chosen)
-    {
-        button.BorderBrush = (Brush)FindResource(chosen ? "Accent" : "Border");
-        button.Foreground = (Brush)FindResource(chosen ? "Accent" : "Muted");
+        ThemeHint.Text = @"Своя тема — папка в themes\ рядом с программой: цвета, шрифты и фон. "
+            + @"Формат описан в themes\README.md."
+            + (bad.Count == 0
+                ? string.Empty
+                : $" Не применяются: {string.Join(", ", bad.Select(b => b.Theme?.Name ?? b.Id))} — "
+                  + "наведите на плитку, чтобы увидеть почему.");
+
+        // Настройка просила одну тему, а применилась другая — сказать сразу,
+        // иначе человек решит, что выбор не сохранился.
+        if (settings.Theme is { Length: > 0 } wanted && wanted != current)
+            Status.Text = $"Тема «{wanted}» не применилась — стоит встроенная. Причина — в подсказке её плитки.";
     }
 
     /// <summary>
-    /// Переключает тему.
+    /// Применяет тему сразу, без перезапуска.
     /// </summary>
     /// <remarks>
-    /// Применяется сразу, без перезапуска: подменяется один словарь ресурсов
-    /// из двух, а стили элементов опираются только на его ключи и про тему
-    /// не знают вовсе.
+    /// Подменяется один словарь ресурсов, а стили опираются только на его
+    /// ключи. Записывается в настройки только применившаяся тема: иначе
+    /// следующий запуск молча открылся бы встроенной, а в настройках
+    /// значилась бы та, что не прошла проверку.
     /// </remarks>
+    private void OnTheme(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string id })
+            return;
+
+        try
+        {
+            var result = Themes.Apply(id);
+
+            if (result.Ok)
+            {
+                (AppSettings.Load(AppSettings.DefaultPath) with { Theme = id })
+                    .Save(AppSettings.DefaultPath);
+
+                Status.Text = string.Empty;
+            }
+            else
+            {
+                Status.Text = $"Тема «{id}» не применена: {string.Join("; ", result.Problems.Take(3))}"
+                    + (result.Problems.Count > 3 ? $" и ещё {result.Problems.Count - 3}." : ".");
+            }
+
+            ShowTheme(AppSettings.Load(AppSettings.DefaultPath));
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сменить тему: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnThemesFolder(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Directory.CreateDirectory(ThemeLoader.DefaultRoot);
+            Process.Start(new ProcessStartInfo { FileName = ThemeLoader.DefaultRoot, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть папку тем: " + ex.GetBaseException().Message;
+        }
+    }
+
     /// <summary>
     /// Открывает мастер первого запуска заново.
     /// </summary>
@@ -106,29 +153,6 @@ public partial class MoreView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось открыть мастер: " + ex.GetBaseException().Message;
-        }
-    }
-
-    private void OnTheme(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string value })
-            return;
-
-        try
-        {
-            var kind = Themes.Parse(value);
-
-            (AppSettings.Load(AppSettings.DefaultPath) with { Theme = Themes.Describe(kind) })
-                .Save(AppSettings.DefaultPath);
-
-            Themes.Apply(kind);
-            ShowTheme(AppSettings.Load(AppSettings.DefaultPath));
-
-            Status.Text = kind == ThemeKind.Light ? "Тема светлая." : "Тема тёмная.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось сменить тему: " + ex.GetBaseException().Message;
         }
     }
 

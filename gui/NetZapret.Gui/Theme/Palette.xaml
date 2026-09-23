@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
 
     <!--
         Тёмная и одна. Светлой темы нет намеренно: это средство обхода,
@@ -62,5 +63,14 @@
     -->
     <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
+    <FontFamily x:Key="DisplayFont">Segoe UI</FontFamily>
+
+    <!--
+        Фон окна для тем с картинкой (Themes.cs). У встроенных картинки нет:
+        слой прозрачен, затемнение сплошное, меню — цвета подложки.
+    -->
+    <SolidColorBrush x:Key="BackdropImage" Color="Transparent" />
+    <sys:Double x:Key="BackdropDim">1</sys:Double>
+    <SolidColorBrush x:Key="Chrome" Color="{StaticResource BackdropColor}" />
 
 </ResourceDictionary>

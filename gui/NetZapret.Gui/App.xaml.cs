@@ -162,7 +162,7 @@ public partial class App : Application
         }
 
         // До создания окна: иначе оно мигнёт тёмным и перекрасится на глазах.
-        Themes.Apply(Themes.Parse(AppSettings.Load(AppSettings.DefaultPath).Theme));
+        Themes.Apply(AppSettings.Load(AppSettings.DefaultPath).Theme);
 
         new MainWindow().Show();
     }
