@@ -1,0 +1,51 @@
+<UserControl x:Class="NetZapret.Gui.Views.UpdatePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Обновление — на «Главной» (владелец, 23.09). Прежде жило в «Ещё»,
+        а карточка «Вышла новая версия» на «Главной» уводила туда ради
+        одной кнопки. Установка по-прежнему одна — эта.
+    -->
+    <StackPanel>
+        <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Установлено" Style="{StaticResource Caption}" />
+                        <TextBlock x:Name="VersionValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
+                        <TextBlock x:Name="UpdateValue" Style="{StaticResource Caption}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
+                                Content="Проверить" Click="OnCheckUpdate" Margin="0,0,8,0" />
+
+                        <!--
+                            Появляется только когда есть что ставить:
+                            кнопка установки при последней версии
+                            предлагала бы действие без смысла.
+                        -->
+                        <Button x:Name="InstallButton" Style="{StaticResource Primary}"
+                                Content="Обновить" Click="OnInstallUpdate"
+                                Visibility="Collapsed" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock x:Name="UpdateStatus" Style="{StaticResource Caption}" Margin="0,10,0,0"
+                           TextWrapping="Wrap" Visibility="Collapsed" />
+
+                <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                           Text="Обновление останавливает движки: с 0.5.0 супервизор — это та же программа, и заменить её файл, пока он запущен, Windows не даёт. Соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса переживают обновление." />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

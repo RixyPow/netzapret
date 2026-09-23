@@ -132,8 +132,9 @@ public partial class StatusView : UserControl
         UpdateCard.Visibility = Visibility.Visible;
     }
 
-    private void OnUpdateNow(object sender, RoutedEventArgs e) =>
-        (Window.GetWindow(this) as MainWindow)?.OpenUpdate(install: true);
+    // Установка та же, что в блоке «Обновление» ниже, и на той же странице:
+    // прежде кнопка уводила в «Ещё» ради одного вопроса «обновить?».
+    private void OnUpdateNow(object sender, RoutedEventArgs e) => Updates.Install();
 
     private void OnUpdateNotes(object sender, RoutedEventArgs e)
     {

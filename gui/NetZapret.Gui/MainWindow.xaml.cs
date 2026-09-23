@@ -53,23 +53,9 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Точка у «Ещё», пока новая версия не поставлена.</summary>
+    /// <summary>Точка у «Главной», пока новая версия не поставлена: обновление живёт там.</summary>
     private void ShowUpdateBadge() =>
-        RailBadge.SetShown(RailMore, UpdateNotice.Available is not null);
-
-    /// <summary>
-    /// Открывает «Ещё» и, если просили, сразу предлагает поставить обновление.
-    /// </summary>
-    /// <remarks>
-    /// Установка одна — та, что в «Ещё», со своим вопросом «обновить?».
-    /// Карточка на «Главной» ведёт туда, а не ставит сама: двух путей
-    /// установки быть не должно.
-    /// </remarks>
-    public void OpenUpdate(bool install)
-    {
-        MoreView.InstallOnOpen = install;
-        RailMore.IsChecked = true;
-    }
+        RailBadge.SetShown(RailStatus, UpdateNotice.Available is not null);
 
     /// <summary>
     /// Подменяет «Главную» мастером первого запуска, пока он не пройден.
