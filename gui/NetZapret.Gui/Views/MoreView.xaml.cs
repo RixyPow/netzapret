@@ -39,8 +39,6 @@ public sealed record FlagRow(string Key, string Name, string Note)
 /// </remarks>
 public partial class MoreView : UserControl
 {
-    private CancellationTokenSource? _work;
-
     public MoreView()
     {
         InitializeComponent();
@@ -48,7 +46,6 @@ public partial class MoreView : UserControl
         ShowAbout();
 
         Loaded += (_, _) => Reload();
-        Unloaded += (_, _) => _work?.Cancel();
     }
 
     /// <summary>
