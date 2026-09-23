@@ -13,18 +13,24 @@ namespace NetZapret.Proxy;
 /// <param name="TlsName">Имя в SNI и сертификате.</param>
 /// <param name="DohPath">Путь DoH; <c>null</c> — только DoT.</param>
 /// <param name="Note">Чем он отличается от прочих — для списка выбора.</param>
+/// <param name="ForTunnel">
+/// Предлагать ли в DNS туннеля. Нет — у посредников вроде XBOX DNS: они
+/// отдают на закрытые сайты адреса своих прокси в России, а туннелю, чей
+/// выход и так за границей, такой ответ только вредит.
+/// </param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
     string? TlsAddress = null,
     string? TlsName = null,
     string? DohPath = "/dns-query",
-    string? Note = null)
+    string? Note = null,
+    bool ForTunnel = true)
 {
     /// <summary>
     /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
     /// </summary>
-    public bool Choosable => TlsAddress is not null && TlsName is not null && DohPath is not null;
+    public bool Choosable => ForTunnel && TlsAddress is not null && TlsName is not null && DohPath is not null;
 }
 
 /// <summary>Что выяснилось про одного провайдера.</summary>
@@ -129,8 +135,22 @@ public static class DnsSurvey
             Note: "российский, отвечает честно — для обхода подмены"),
         new("Mullvad", [], "194.242.2.2", "dns.mullvad.net",
             Note: "без логов и фильтрации"),
-        new("NextDNS", ["45.90.28.0", "45.90.30.0"]),
-        new("ControlD", ["76.76.2.0", "76.76.10.0"]),
+        // Замер 23.09 с этой машины, по запросу владельца «добавь ещё DNS»:
+        // NextDNS — DoT 44 мс, DoH 88; ControlD — DoH 41 мс, DoT закрыт
+        // (туннелю нужен только DoH); Quad9 без фильтра — DoT 23, DoH 48;
+        // Cloudflare Security — DoT 5, DoH 14; XBOX DNS — DoT 3, DoH 9.
+        // AdGuard без фильтра (94.140.14.140) не ответил ничем — не взят.
+        new("NextDNS", ["45.90.28.0", "45.90.30.0"], "45.90.28.0", "dns.nextdns.io",
+            Note: "без фильтрации, пока не заведён свой профиль"),
+        new("ControlD", ["76.76.2.0", "76.76.10.0"], "76.76.2.0", "freedns.controld.com", "/p0",
+            Note: "без фильтрации"),
+        new("Quad9 без фильтра", ["9.9.9.10", "149.112.112.10"], "9.9.9.10", "dns10.quad9.net",
+            Note: "как Quad9, но ничего не отсекает"),
+        new("Cloudflare Security", ["1.1.1.2", "1.0.0.2"], "1.1.1.2", "security.cloudflare-dns.com",
+            Note: "как Cloudflare, отсекает вредоносные"),
+        new("XBOX DNS", ["111.88.96.50", "111.88.96.51"], "111.88.96.50", "xbox-dns.ru",
+            Note: "российский посредник: закрытые сайты — через свои прокси",
+            ForTunnel: false),
         new("MSK-IX", ["62.76.76.62", "62.76.62.76"]),
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];
