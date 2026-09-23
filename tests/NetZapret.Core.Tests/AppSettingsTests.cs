@@ -45,6 +45,24 @@ public sealed class AppSettingsTests : IDisposable
     /// Настройки старше выбора тем поля вовсе не содержат, и падать на этом
     /// нельзя: тёмная была единственной, она же и остаётся умолчанием.
     /// </remarks>
+    /// <summary>
+    /// Выключатели пишутся один раз — своими полями. Вычисляемый блок
+    /// «Engines» ложился рядом вторым местом тех же настроек, спорящим
+    /// с первым; при чтении он и так выводится заново.
+    /// </summary>
+    [Fact]
+    public void EnginesAreNotWrittenButSurviveRoundTrip()
+    {
+        new AppSettings().With(new Rules.EngineChoice { Desync = false, Tunnel = true }).Save(_path);
+
+        Assert.DoesNotContain("\"Engines\"", File.ReadAllText(_path));
+
+        var read = AppSettings.Load(_path).Engines;
+
+        Assert.False(read.Desync);
+        Assert.True(read.Tunnel);
+    }
+
     [Fact]
     public void ThemeSurvivesAndDefaultsToDark()
     {
