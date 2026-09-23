@@ -47,32 +47,70 @@
                                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
                                                    Foreground="{Binding TitleBrush}" TextWrapping="Wrap" />
 
+                                        <!--
+                                            Строка — переключатель в группе своего
+                                            имени: щелчок выбирает адрес для пина.
+                                            Выбранная залита и обведена, с галочкой:
+                                            просьба владельца 23.09 — прежде выбор
+                                            отличался одним цветом текста.
+                                        -->
                                         <ItemsControl ItemsSource="{Binding Lines}" Margin="0,6,0,0">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid Margin="0,3,0,0">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="118" />
-                                                            <ColumnDefinition Width="130" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
+                                                    <RadioButton GroupName="{Binding Host}"
+                                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                 IsEnabled="{Binding Selectable}"
+                                                                 Checked="OnPickChanged"
+                                                                 Margin="0,2,0,0" Cursor="Hand">
+                                                        <RadioButton.Template>
+                                                            <ControlTemplate TargetType="RadioButton">
+                                                                <Border x:Name="Row" CornerRadius="6" Padding="8,4"
+                                                                        BorderThickness="1" BorderBrush="Transparent"
+                                                                        Background="Transparent">
+                                                                    <ContentPresenter />
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Raised}" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsChecked" Value="True">
+                                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource AccentDim}" />
+                                                                        <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                                                    </Trigger>
+                                                                    <Trigger Property="IsEnabled" Value="False">
+                                                                        <Setter TargetName="Row" Property="Opacity" Value="0.5" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </RadioButton.Template>
 
-                                                        <Ellipse Grid.Column="0" Width="7" Height="7" Margin="0,0,10,0"
-                                                                 VerticalAlignment="Center" Fill="{Binding Brush}" />
-                                                        <TextBlock Grid.Column="1" Text="{Binding Address}"
-                                                                   Style="{StaticResource Mono}" VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Column="2" Text="{Binding Source}"
-                                                                   Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                                                   TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
-                                                        <TextBlock Grid.Column="3" Text="{Binding Detail}"
-                                                                   Style="{StaticResource Caption}" VerticalAlignment="Center"
-                                                                   Foreground="{Binding Brush}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Grid.Column="4" Text="{Binding Time}"
-                                                                   Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
-                                                                   VerticalAlignment="Center" Margin="10,0,0,0" />
-                                                    </Grid>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="20" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="128" />
+                                                                <ColumnDefinition Width="140" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <TextBlock Grid.Column="0" Text="{Binding Mark}" FontWeight="Bold"
+                                                                       Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
+                                                            <Ellipse Grid.Column="1" Width="7" Height="7" Margin="0,0,10,0"
+                                                                     VerticalAlignment="Center" Fill="{Binding Brush}" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding Shown}"
+                                                                       Style="{StaticResource Mono}" VerticalAlignment="Center" />
+                                                            <TextBlock Grid.Column="3" Text="{Binding Source}"
+                                                                       Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                                                            <TextBlock Grid.Column="4" Text="{Binding Detail}"
+                                                                       Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                                       Foreground="{Binding Brush}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Grid.Column="5" Text="{Binding Time}"
+                                                                       Style="{StaticResource Mono}" Foreground="{DynamicResource Muted}"
+                                                                       VerticalAlignment="Center" Margin="10,0,0,0" />
+                                                        </Grid>
+                                                    </RadioButton>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -163,6 +201,8 @@
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button x:Name="BackButton" Style="{StaticResource Ghost}" Content="Назад"
                     Click="OnBack" Margin="0,0,8,0" Visibility="Collapsed" />
+            <Button x:Name="PinChosenButton" Style="{StaticResource Primary}" Content="Прибить выбранное"
+                    Click="OnPinChosen" Margin="0,0,8,0" Visibility="Collapsed" />
             <Button Style="{StaticResource Ghost}" Content="Закрыть" Click="OnClose" />
         </StackPanel>
     </Grid>

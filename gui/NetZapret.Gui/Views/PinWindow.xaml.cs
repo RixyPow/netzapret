@@ -15,8 +15,40 @@ namespace NetZapret.Gui.Views;
 /// <summary>Откуда взять адрес для пина.</summary>
 public sealed record SourceRow(string Id, string Name, string Note);
 
-/// <summary>Одна проверка кандидата в таблице автоподбора.</summary>
-public sealed record CheckLine(string Address, string Source, string Detail, string Time, Brush Brush);
+/// <summary>Одна проверка кандидата в таблице автоподбора — и выбор для пина.</summary>
+/// <remarks>
+/// Адрес <c>null</c> — строка «не прибивать это имя»: подбор решает за
+/// человека, но последнее слово за ним, и оставить имя как есть тоже выбор.
+/// </remarks>
+public sealed class CheckLine(string host, string? address, string source, string detail, string time, Brush brush, bool selectable)
+    : INotifyPropertyChanged
+{
+    private bool _selected;
+
+    public string Host { get; } = host;
+    public string? Address { get; } = address;
+    public string Shown => Address ?? "—";
+    public string Source { get; } = source;
+    public string Detail { get; set; } = detail;
+    public string Time { get; } = time;
+    public Brush Brush { get; } = brush;
+    public bool Selectable { get; } = selectable;
+
+    public bool IsSelected
+    {
+        get => _selected;
+        set
+        {
+            _selected = value;
+            PropertyChanged?.Invoke(this, new(nameof(IsSelected)));
+            PropertyChanged?.Invoke(this, new(nameof(Mark)));
+        }
+    }
+
+    public string Mark => _selected ? "✓" : string.Empty;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 /// <summary>Имя и проверки его кандидатов; заголовок меняется, когда подбор решил.</summary>
 public sealed class CheckBlock : INotifyPropertyChanged
@@ -415,14 +447,26 @@ public partial class PinWindow : Window
 
         try
         {
-            var answers = await AnswersAsync(id);
-
-            if (answers.Count == 0 && _autoReport is not null)
+            // Подбор не прибивает сам: он показывает проверку и отмечает
+            // лучших, а прибивает кнопка — после того, как человек посмотрел
+            // и, может быть, выбрал иначе. Просьба владельца 23.09.
+            if (id == "auto")
             {
-                Status.Text = _autoReport;
-                OnBack(sender, e);
+                await AutoAsync();
+
+                bool any = _blocks.Any(b => b.Lines.Any(l => l.IsSelected && l.Address is not null));
+
+                Status.Text = _autoReport
+                    + (any
+                        ? "\n\nВыбранные отмечены ✓ — щелчок по строке выбирает другой адрес. "
+                          + "Записывает «Прибить выбранное»."
+                        : string.Empty);
+
+                PinChosenButton.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
                 return;
             }
+
+            var answers = await AnswersAsync(id);
 
             if (answers.Count == 0)
             {
@@ -440,33 +484,7 @@ public partial class PinWindow : Window
                 return;
             }
 
-            var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {Source(id)}");
-
-            // Маршрут уводится напрямую тем же движением. Это не довесок,
-            // а условие работы пина: доменное правило срабатывает поверх
-            // прибитого адреса и уводит соединение мимо него.
-            var file = UserRulesFile.Load();
-            file.Set(_target.Match, _target.Value, RoutingMode.Direct);
-            file.Save();
-            HostsEditor.FlushDns();
-
-            Changed = true;
-            ShowPins();
-
-            // Откатили — говорим только это: «прибито» про несуществующее
-            // хуже молчания.
-            Status.Text = result.Reverted ?? (_autoReport is null ? string.Empty : _autoReport + "\n\n")
-                + $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
-                + "иначе правило сработало бы поверх адреса."
-                + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
-
-                // Чужая строка на то же имя никуда не делась: наш блок стоит
-                // выше и разбирается первым, но человек, снявший наш пин,
-                // получит её и решит, что снятие не сработало.
-                + (result.Shadowed.Count == 0
-                    ? string.Empty
-                    : $" Ниже в файле есть чужие строки на те же имена: {string.Join(", ", result.Shadowed.Take(3))}.");
-
+            Pin(answers, Source(id));
             OnBack(sender, e);
         }
         catch (Exception ex)
@@ -480,6 +498,81 @@ public partial class PinWindow : Window
         }
     }
 
+    /// <summary>Прибивает выбранное в таблице автоподбора.</summary>
+    private void OnPinChosen(object sender, RoutedEventArgs e)
+    {
+        var answers = _blocks
+            .Select(b => b.Lines.FirstOrDefault(l => l.IsSelected))
+            .Where(l => l?.Address is not null)
+            .ToDictionary(l => l!.Host, l => l!.Address!, StringComparer.OrdinalIgnoreCase);
+
+        if (answers.Count == 0)
+        {
+            Status.Text = "Ни для одного имени не выбран адрес — прибивать нечего.";
+            return;
+        }
+
+        try
+        {
+            Pin(answers, "автоподбор");
+            PinChosenButton.Visibility = Visibility.Collapsed;
+            OnBack(sender, e);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось закрепить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Выбор в таблице сменился — заголовок блока говорит о новом.</summary>
+    private void OnPickChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CheckLine line })
+            return;
+
+        var block = _blocks.FirstOrDefault(b => b.Host == line.Host);
+
+        if (block is null)
+            return;
+
+        block.Title = line.Address is null
+            ? $"{line.Host} — не прибивать"
+            : $"{line.Host} → {line.Address}  ·  {line.Source}";
+
+        block.TitleBrush = line.Address is null ? (Brush)FindResource("Muted") : line.Brush;
+    }
+
+    /// <summary>Пишет пин и уводит маршрут части напрямую.</summary>
+    private void Pin(Dictionary<string, string> answers, string source)
+    {
+        var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {source}");
+
+        // Маршрут уводится напрямую тем же движением. Это не довесок,
+        // а условие работы пина: доменное правило срабатывает поверх
+        // прибитого адреса и уводит соединение мимо него.
+        var file = UserRulesFile.Load();
+        file.Set(_target.Match, _target.Value, RoutingMode.Direct);
+        file.Save();
+        HostsEditor.FlushDns();
+
+        Changed = true;
+        ShowPins();
+
+        // Откатили — говорим только это: «прибито» про несуществующее
+        // хуже молчания.
+        Status.Text = result.Reverted
+            ?? $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
+            + "иначе правило сработало бы поверх адреса."
+            + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
+
+            // Чужая строка на то же имя никуда не делась: наш блок стоит
+            // выше и разбирается первым, но человек, снявший наш пин,
+            // получит её и решит, что снятие не сработало.
+            + (result.Shadowed.Count == 0
+                ? string.Empty
+                : $" Ниже в файле есть чужие строки на те же имена: {string.Join(", ", result.Shadowed.Take(3))}.");
+    }
+
     private string Source(string id) =>
         id == "auto" ? "автоподбор"
         : id == "honest" ? "честный резолвер"
@@ -488,9 +581,6 @@ public partial class PinWindow : Window
 
     private async Task<Dictionary<string, string>> AnswersAsync(string id)
     {
-        if (id == "auto")
-            return await AutoAsync();
-
         if (id.StartsWith("set:", StringComparison.Ordinal))
         {
             return _catalog!.Answers(_catalogServices, id[4..])
@@ -526,7 +616,7 @@ public partial class PinWindow : Window
     /// внутри них. Подробности по каждому имени — в журнал: в окне место
     /// только главному.
     /// </remarks>
-    private async Task<Dictionary<string, string>> AutoAsync()
+    private async Task AutoAsync()
     {
         var own = OwnCatalog.Load();
 
@@ -543,11 +633,12 @@ public partial class PinWindow : Window
             .ToList();
 
         var blocks = new Dictionary<string, CheckBlock>(StringComparer.OrdinalIgnoreCase);
-        var shown = new ObservableCollection<CheckBlock>();
 
-        CheckList.ItemsSource = shown;
+        _blocks = [];
+        CheckList.ItemsSource = _blocks;
         Checks.Visibility = Visibility.Visible;
         Sources.Visibility = Visibility.Collapsed;
+        PinChosenButton.Visibility = Visibility.Collapsed;
 
         CheckBlock Block(string host)
         {
@@ -555,7 +646,7 @@ public partial class PinWindow : Window
             {
                 block = new CheckBlock(host, (Brush)FindResource("Muted"));
                 blocks[host] = block;
-                shown.Add(block);
+                _blocks.Add(block);
             }
 
             return block;
@@ -569,7 +660,7 @@ public partial class PinWindow : Window
         var progress = new Progress<int>(n =>
             Status.Text = $"Подбираю адрес: готово {n} из {Math.Max(n, blocks.Count)}…");
 
-        var probes = new Progress<(string Host, PinProbe Probe)>(p => Block(p.Host).Lines.Add(Line(p.Probe)));
+        var probes = new Progress<(string Host, PinProbe Probe)>(p => Block(p.Host).Lines.Add(Line(p.Host, p.Probe)));
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
         // который едет с программой: без Zapret остался бы только второй.
@@ -581,8 +672,9 @@ public partial class PinWindow : Window
             CancellationToken.None,
             probes);
 
-        // Итог: выбранный — первым и с пометкой, остальные — в порядке,
-        // в каком подбор их оценил.
+        // Итог: выбранный подбором — первым и отмеченным, остальные —
+        // в порядке, в каком подбор их оценил, последней — «не прибивать».
+        // Выбрать можно любого, кто ответил; отказавших и молчащих — нет.
         foreach (var pick in picks)
         {
             var block = Block(pick.Host);
@@ -590,19 +682,25 @@ public partial class PinWindow : Window
             block.Lines.Clear();
 
             if (pick.Chosen is { } best)
-            {
-                block.Title = $"{pick.Host} → {best.Candidate.Address}  ·  {best.Candidate.Label}";
-                block.TitleBrush = (Brush)FindResource(best.Verdict == PinVerdict.Works ? "Accent" : "Warn");
-                block.Lines.Add(Line(best) with { Detail = "выбран: " + best.Detail });
-            }
-            else
-            {
-                block.Title = $"{pick.Host} — рабочего адреса нет, не прибито";
-                block.TitleBrush = (Brush)FindResource("Danger");
-            }
+                block.Lines.Add(Line(pick.Host, best));
 
             foreach (var probe in pick.Rejected)
-                block.Lines.Add(Line(probe));
+                block.Lines.Add(Line(pick.Host, probe));
+
+            var skip = new CheckLine(pick.Host, null, string.Empty, "не прибивать это имя", string.Empty,
+                (Brush)FindResource("Muted"), selectable: true);
+
+            block.Lines.Add(skip);
+
+            // Отметка ставится после наполнения: переключатель, отмеченный
+            // до появления в дереве, группы ещё не знает.
+            (pick.Chosen is null ? skip : block.Lines[0]).IsSelected = true;
+
+            block.Title = pick.Chosen is { } chosen
+                ? $"{pick.Host} → {chosen.Candidate.Address}  ·  {chosen.Candidate.Label}"
+                : $"{pick.Host} — рабочего адреса нет, не прибивать";
+
+            block.TitleBrush = pick.Chosen is null ? (Brush)FindResource("Danger") : block.Lines[0].Brush;
         }
 
         foreach (var pick in picks)
@@ -614,14 +712,14 @@ public partial class PinWindow : Window
         }
 
         _autoReport = PinPicker.Summarize(picks, _target.Zones.FirstOrDefault()?.TrimStart('*', '.'));
-
-        return picks
-            .Where(p => p.Chosen is not null)
-            .ToDictionary(p => p.Host, p => p.Chosen!.Candidate.Address, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Строка таблицы проверки: цвет по исходу.</summary>
-    private CheckLine Line(PinProbe probe) => new(
+    /// <summary>Блоки таблицы проверки — по одному на имя.</summary>
+    private ObservableCollection<CheckBlock> _blocks = [];
+
+    /// <summary>Строка таблицы проверки: цвет по исходу, выбрать можно ответившего.</summary>
+    private CheckLine Line(string host, PinProbe probe) => new(
+        host,
         probe.Candidate.Address,
         probe.Candidate.Label,
         probe.Detail,
@@ -632,7 +730,8 @@ public partial class PinWindow : Window
             PinVerdict.Challenge => "Warn",
             PinVerdict.Refused => "Danger",
             _ => "Muted",
-        }));
+        }),
+        selectable: probe.Usable);
 
     /// <summary>
     /// Спрашивает адрес у честного резолвера и проверяет каждый ответ.
