@@ -198,11 +198,11 @@ public sealed class UserRulesFile
             foreach (var entry in _entries)
             {
                 builder.AppendLine($"  - match: {Describe(entry.Match)}");
-                builder.AppendLine($"    value: \"{entry.Value.Replace("\"", "\\\"")}\"");
+                builder.AppendLine($"    value: {Quote(entry.Value)}");
                 builder.AppendLine($"    mode: {Describe(entry.Mode)}");
 
                 if (!string.IsNullOrWhiteSpace(entry.Recipe))
-                    builder.AppendLine($"    recipe: \"{entry.Recipe.Replace("\"", "\\\"")}\"");
+                    builder.AppendLine($"    recipe: {Quote(entry.Recipe)}");
 
                 if (!entry.Enabled)
                     builder.AppendLine("    enabled: false");
@@ -220,6 +220,17 @@ public sealed class UserRulesFile
         MatchKind.HostList => "hostlist",
         _ => "ip",
     };
+
+    /// <summary>Строка YAML в двойных кавычках — с экранированием и косой черты.</summary>
+    /// <remarks>
+    /// Прежде экранировалась одна кавычка. Путь программы вида
+    /// <c>C:\Program Files\App\app.exe</c> YAML читает как управляющие
+    /// последовательности <c>\P</c>, <c>\A</c> — и отвергает файл целиком:
+    /// одно правило по программе стоило бы всех своих маршрутов. Нашлось
+    /// 23.09 на тесте, где список лёг путём Windows.
+    /// </remarks>
+    private static string Quote(string value) =>
+        "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     private static string Describe(RoutingMode mode) => mode switch
     {
