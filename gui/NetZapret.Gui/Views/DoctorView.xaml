@@ -79,7 +79,7 @@
                                      gui:Hint.Text="443" />
                         </Grid>
 
-                        <Border x:Name="AnswerCard" Background="{DynamicResource Raised}" CornerRadius="8"
+                        <Border x:Name="AnswerCard" Background="{DynamicResource Raised}" CornerRadius="10"
                                 Padding="14,12" Margin="0,12,0,0" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock x:Name="AnswerMode" FontSize="15" FontWeight="SemiBold" />

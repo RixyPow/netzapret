@@ -29,7 +29,7 @@
             было так, что не читалось.
         -->
         <Border Grid.Row="1" x:Name="StatusCard" Margin="0,16,0,0" Padding="14,10"
-                CornerRadius="8" Visibility="Collapsed"
+                CornerRadius="10" Visibility="Collapsed"
                 Background="{DynamicResource Raised}" BorderThickness="1"
                 BorderBrush="{DynamicResource Border}">
             <!--
@@ -57,7 +57,7 @@
                 <ItemsControl x:Name="Recipes">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{DynamicResource Raised}" CornerRadius="8"
+                            <Border Background="{DynamicResource Raised}" CornerRadius="10"
                                     BorderBrush="{Binding Edge}" BorderThickness="1"
                                     Padding="14,11" Margin="0,0,0,7">
                                 <Grid>
