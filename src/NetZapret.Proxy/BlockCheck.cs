@@ -1654,6 +1654,7 @@ public static class BlockCheck
             var buffer = new byte[16 * 1024];
             int? status = null;
             long? promised = null;
+            bool challenged = false;
 
             // Длина заголовков считается отдельно: Content-Length обещает
             // только тело, а total растёт с первого байта ответа. Без поправки
@@ -1705,6 +1706,7 @@ public static class BlockCheck
                     status = ParseStatus(buffer, read);
                     promised = ParseContentLength(buffer, read);
                     header = HeaderLength(buffer, read);
+                    challenged = IsBotChallenge(buffer, read);
                 }
 
                 total += read;
@@ -1736,14 +1738,23 @@ public static class BlockCheck
                     break;
             }
 
+            // Проверка на робота — не отказ. Cloudflare отвечает на неё тем же
+            // 403, но с меткой cf-mitigated: challenge, и браузер её проходит
+            // сам, а проба — нет. Замер 23.09: openai.com и claude.ai через
+            // пин в hosts отвечали именно так, с узла во Франкфурте, и числились
+            // «отказывает по стране», пока ChatGPT в браузере работал.
+            bool refused = status is 403 or 451 && !challenged;
+
             return new ProbeOutcome
             {
                 Ok = true,
-                Refused = status is 403 or 451,
+                Refused = refused,
                 Elapsed = stopwatch.Elapsed,
-                Detail = status is 403 or 451
+                Detail = refused
                     ? $"сайт ответил {status} — связь исправна, отказывает он сам"
-                    : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
+                    : challenged
+                        ? "Cloudflare проверяет на робота — связь исправна, браузер проверку пройдёт"
+                        : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
             };
         }
         catch (Exception ex)
@@ -1803,7 +1814,23 @@ public static class BlockCheck
     /// нужна ровно затем, чтобы отличить убитый поток от медленного, а без
     /// обещанного остаётся просто «пришло», как и было.
     /// </remarks>
-    internal static long? ParseContentLength(byte[] buffer, int length)
+    internal static long? ParseContentLength(byte[] buffer, int length) =>
+        HeaderValue(buffer, length, "Content-Length") is { } text && long.TryParse(text, out var size)
+            ? size
+            : null;
+
+    /// <summary>
+    /// Ответ — проверка Cloudflare «не робот ли вы», а не отказ сайта.
+    /// </summary>
+    /// <remarks>
+    /// Код у неё тот же 403, что у отказа по стране, и по коду их
+    /// не различить. Различает заголовок <c>cf-mitigated: challenge</c>:
+    /// Cloudflare ставит его именно на проверку.
+    /// </remarks>
+    internal static bool IsBotChallenge(byte[] buffer, int length) =>
+        string.Equals(HeaderValue(buffer, length, "cf-mitigated"), "challenge", StringComparison.OrdinalIgnoreCase);
+
+    private static string? HeaderValue(byte[] buffer, int length, string name)
     {
         var head = System.Text.Encoding.ASCII.GetString(buffer, 0, Math.Min(length, 4096));
 
@@ -1814,10 +1841,11 @@ public static class BlockCheck
             if (line.Length == 0)
                 break;
 
-            if (!line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            return long.TryParse(line[15..].Trim(), out var size) ? size : null;
+            if (line.Length > name.Length && line[name.Length] == ':'
+                && line.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return line[(name.Length + 1)..].Trim();
+            }
         }
 
         return null;
