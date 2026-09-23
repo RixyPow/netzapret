@@ -106,6 +106,85 @@ public sealed class DnsSurveyTests
         Assert.True(DnsSurvey.IsSpoofed(Ips("127.0.0.1"), Ips("104.21.1.1"), new HashSet<IPAddress>()));
     }
 
+    /// <summary>
+    /// Каждый провайдер из списка выбора собирается в конфиг, который
+    /// принимает сам sing-box.
+    /// </summary>
+    /// <remarks>
+    /// Апстрим DNS с незнакомым полем движок отвергает целиком, вместе
+    /// с туннелем, — так уже было со store_selected. Проверять тут можно
+    /// только самим движком.
+    /// </remarks>
+    [Fact]
+    public void Every_choosable_provider_passes_sing_box_check()
+    {
+        string? singBox = null;
+
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null && singBox is null; dir = dir.Parent)
+        {
+            var tools = Path.Combine(dir.FullName, "tools");
+
+            if (Directory.Exists(tools))
+                singBox = Directory.EnumerateFiles(tools, "sing-box.exe", SearchOption.AllDirectories).FirstOrDefault();
+        }
+
+        if (singBox is null)
+            return;
+
+        var engine = NetZapret.Core.Rules.RuleSetLoader.Load("mode: selective\nrules: []\n");
+
+        foreach (var provider in DnsSurvey.Providers.Where(p => p.Choosable))
+        {
+            var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [], new SingBoxOptions
+            {
+                DnsServer = provider.TlsAddress!,
+                DnsServerName = provider.TlsName,
+                DnsServerPath = provider.DohPath,
+            }).Json;
+
+            var path = Path.Combine(Path.GetTempPath(), $"netzapret-dns-{Guid.NewGuid():N}.json");
+
+            try
+            {
+                SingBoxConfigCompiler.WriteToFile(path, json);
+
+                using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = singBox,
+                    ArgumentList = { "check", "-c", path },
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                })!;
+
+                var said = process.StandardError.ReadToEnd() + process.StandardOutput.ReadToEnd();
+                process.WaitForExit();
+
+                Assert.True(process.ExitCode == 0, $"{provider.Name}: {said}");
+            }
+            finally
+            {
+                File.Delete(path);
+                File.Delete(SingBoxConfigCompiler.StampPathFor(path));
+            }
+        }
+    }
+
+    [Fact]
+    public void A_name_only_certificate_gets_its_name_in_the_config()
+    {
+        var engine = NetZapret.Core.Rules.RuleSetLoader.Load("mode: selective\nrules: []\n");
+        var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [], new SingBoxOptions
+        {
+            DnsServer = "83.220.169.155",
+            DnsServerName = "dns.comss.one",
+            DnsServerPath = "/doh/x/",
+        }).Json;
+
+        Assert.Contains("\"server_name\": \"dns.comss.one\"", json);
+        Assert.Contains("\"path\": \"/doh/x/\"", json);
+    }
+
     [Fact]
     public void Without_an_honest_answer_nothing_is_claimed()
     {

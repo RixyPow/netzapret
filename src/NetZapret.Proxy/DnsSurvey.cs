@@ -12,12 +12,20 @@ namespace NetZapret.Proxy;
 /// <param name="TlsAddress">Адрес для DoT и DoH; <c>null</c> — шифрованного нет.</param>
 /// <param name="TlsName">Имя в SNI и сертификате.</param>
 /// <param name="DohPath">Путь DoH; <c>null</c> — только DoT.</param>
+/// <param name="Note">Чем он отличается от прочих — для списка выбора.</param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
     string? TlsAddress = null,
     string? TlsName = null,
-    string? DohPath = "/dns-query");
+    string? DohPath = "/dns-query",
+    string? Note = null)
+{
+    /// <summary>
+    /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
+    /// </summary>
+    public bool Choosable => TlsAddress is not null && TlsName is not null && DohPath is not null;
+}
 
 /// <summary>Что выяснилось про одного провайдера.</summary>
 public sealed record DnsSurveyRow
@@ -98,23 +106,38 @@ public static class DnsSurvey
     /// </remarks>
     public static readonly IReadOnlyList<DnsProvider> Providers =
     [
-        new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.8.8", "dns.google"),
-        new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com"),
-        new("Quad9", ["9.9.9.9", "149.112.112.112"], "9.9.9.9", "dns.quad9.net"),
-        new("AdGuard", ["94.140.14.14", "94.140.15.15"], "94.140.14.14", "dns.adguard-dns.com"),
-        new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com"),
+        new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.8.8", "dns.google",
+            Note: "надёжный, без фильтрации"),
+        new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com",
+            Note: "быстрый, без фильтрации"),
+        new("Quad9", ["9.9.9.9", "149.112.112.112"], "9.9.9.9", "dns.quad9.net",
+            Note: "отсекает вредоносные домены"),
+        new("AdGuard", ["94.140.14.14", "94.140.15.15"], "94.140.14.14", "dns.adguard-dns.com",
+            Note: "отсекает рекламу и слежку"),
+        new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com",
+            Note: "китайский, без фильтрации"),
         new("CleanBrowsing", ["185.228.168.9", "185.228.169.9"], "185.228.168.9",
-            "security-filter-dns.cleanbrowsing.org", "/doh/security-filter/"),
-        new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "dns.sb"),
-        new("OpenDNS", ["208.67.222.222", "208.67.220.220"], "208.67.222.222", "doh.opendns.com"),
-        new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net"),
-        new("Comss.one", ["83.220.169.155", "212.109.195.93"], "83.220.169.155", "dns.comss.one"),
-        new("Mullvad", [], "194.242.2.2", "dns.mullvad.net"),
+            "security-filter-dns.cleanbrowsing.org", "/doh/security-filter/",
+            Note: "отсекает вредоносные и фишинговые"),
+        new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "dns.sb",
+            Note: "без цензуры"),
+        new("OpenDNS", ["208.67.222.222", "208.67.220.220"], "208.67.222.222", "doh.opendns.com",
+            Note: "фильтрация по категориям"),
+        new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
+            Note: "российский, быстрый"),
+        new("Comss.one", ["83.220.169.155", "212.109.195.93"], "83.220.169.155", "dns.comss.one",
+            Note: "российский, отвечает честно — для обхода подмены"),
+        new("Mullvad", [], "194.242.2.2", "dns.mullvad.net",
+            Note: "без логов и фильтрации"),
         new("NextDNS", ["45.90.28.0", "45.90.30.0"]),
         new("ControlD", ["76.76.2.0", "76.76.10.0"]),
         new("MSK-IX", ["62.76.76.62", "62.76.62.76"]),
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];
+
+    /// <summary>Провайдер по адресу DoH из настроек; <c>null</c> — не наш.</summary>
+    public static DnsProvider? ByAddress(string? address) =>
+        Providers.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal));
 
     /// <summary>
     /// Имена для проверки подмены: закрыты в России давно и адрес у них

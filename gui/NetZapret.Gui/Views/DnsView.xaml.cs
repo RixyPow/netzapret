@@ -95,16 +95,14 @@ public sealed class SurveyRow
 /// сетевые диски, — и переживает удаление программы.
 /// </para>
 /// <para>
-/// Проверяется тем же <see cref="DnsProbe"/>, что и в консоли: настоящим
-/// запросом DoH в проводном формате. Перекрывают именно запрос, и проверка
-/// пингом отвечала бы на вопрос «жив ли хост» вместо «разрешится ли имя».
+/// Замер — один, обзор резолверов (<see cref="DnsSurvey"/>): настоящими
+/// запросами DoH, DoT и UDP через адаптер, мимо туннеля. Прежде рядом
+/// стояла вторая кнопка «Проверить» с замером одного DoH по шести
+/// резолверам — обзор меряет то же и больше, и две кнопки только путали.
 /// </para>
 /// </remarks>
 public partial class DnsView : UserControl
 {
-    /// <summary>Сколько ждать один запрос.</summary>
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-
     private CancellationTokenSource? _work;
 
     public DnsView()
@@ -121,29 +119,32 @@ public partial class DnsView : UserControl
 
         ShowChosen(settings);
         ShowSystem();
-        ShowTunnelWarning();
 
-        Resolvers.ItemsSource = DnsProbe.Known
-            .Select(r => new ResolverRow
+        // Те же провайдеры, что в обзоре, — все, кого sing-box может
+        // спрашивать по DoH. Прежде список был своим, из шести, и мерился
+        // своей кнопкой: две «Проверить» на одной вкладке, и чем они
+        // отличаются, было не понять.
+        Resolvers.ItemsSource = DnsSurvey.Providers
+            .Where(p => p.Choosable)
+            .Select(p => new ResolverRow
             {
-                Name = r.Name,
-                Address = r.Address,
-                Note = r.Note ?? string.Empty,
-                Chosen = string.Equals(r.Address, settings.DnsServer, StringComparison.Ordinal),
+                Name = p.Name,
+                Address = p.TlsAddress!,
+                Note = p.Note ?? string.Empty,
+                Chosen = string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
             })
             .ToList();
 
-        Status.Text = "Замер не делался. Нажмите «Проверить» — шесть запросов, несколько секунд.";
+        Status.Text = "Задержку покажет обзор выше.";
     }
 
     private void ShowChosen(AppSettings settings)
     {
-        var known = DnsProbe.Known.FirstOrDefault(r =>
-            string.Equals(r.Address, settings.DnsServer, StringComparison.Ordinal));
+        var known = DnsSurvey.ByAddress(settings.DnsServer);
 
         ChosenName.Text = known is null
             ? settings.DnsServer
-            : $"{known.Name} · {known.Address}";
+            : $"{known.Name} · {known.TlsAddress}";
 
         // Заполняем, не поднимая события выбора: иначе показ состояния
         // тут же записал бы его обратно в настройки и позвал уведомление
@@ -180,91 +181,29 @@ public partial class DnsView : UserControl
         }
     }
 
-    private void ShowTunnelWarning()
+    /// <summary>Задержка DoH из обзора — в строку списка выбора.</summary>
+    private static void Fill(IReadOnlyList<ResolverRow> rows, DnsSurveyRow result)
     {
-        var state = SupervisorState.Load(SupervisorState.DefaultPath);
-        bool running = state is not null && state.IsSupervisorAlive();
-
-        TunnelCard.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private async void OnRun(object sender, RoutedEventArgs e)
-    {
-        if (Resolvers.ItemsSource is not IReadOnlyList<ResolverRow> rows)
-            return;
-
-        ShowTunnelWarning();
-
-        _work?.Cancel();
-        _work = new CancellationTokenSource();
-
-        RunButton.IsEnabled = false;
-        Status.Text = "Спрашиваю каждого по имени example.com…";
-
-        foreach (var row in rows)
-        {
-            row.Latency = "…";
-            row.Key = "Faint";
-        }
-
-        Redraw();
-
-        try
-        {
-            var results = await DnsProbe.CheckAllAsync(
-                DnsProbe.Known,
-                Timeout,
-                result => Dispatcher.Invoke(() =>
-                {
-                    Fill(rows, result);
-                    Redraw();
-                }),
-                _work.Token);
-
-            int working = results.Count(r => r.Works);
-
-            Status.Text = working == 0
-                ? "Не ответил ни один. Если туннель поднят — это его правило; если нет — "
-                  + "оператор перекрыл DoH, и стоит включить «через туннель»."
-                : $"Ответили {working} из {results.Count}. Нажмите на строку, чтобы выбрать.";
-        }
-        catch (OperationCanceledException)
-        {
-            Status.Text = "Замер прерван.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Замер сорвался: " + ex.GetBaseException().Message;
-        }
-        finally
-        {
-            RunButton.IsEnabled = true;
-        }
-    }
-
-    private static void Fill(IReadOnlyList<ResolverRow> rows, DnsProbeResult result)
-    {
-        var row = rows.FirstOrDefault(r => r.Address == result.Resolver.Address);
+        var row = rows.FirstOrDefault(r => r.Address == result.Provider.TlsAddress);
 
         if (row is null)
             return;
 
-        if (result.Works && result.Latency is { } latency)
+        if (result.DohMs is { } ms)
         {
-            row.Latency = $"{latency.TotalMilliseconds:0} мс";
+            row.Latency = $"{ms:0} мс";
 
             // Порог не про качество связи, а про ощущение: до полусекунды
             // задержка резолвера теряется в открытии страницы, дальше уже
             // заметна на каждом новом имени.
-            row.Key = latency.TotalMilliseconds < 500 ? "Accent" : "Warn";
+            row.Key = ms < 500 ? "Accent" : "Warn";
 
             return;
         }
 
-        row.Latency = "не отвечает";
+        row.Latency = result.DohFailure.Length > 0 ? result.DohFailure : "не отвечает";
         row.Key = "Danger";
     }
-
     private void Redraw()
     {
         var shown = Resolvers.ItemsSource;
@@ -362,14 +301,33 @@ public partial class DnsView : UserControl
         SurveyButton.IsEnabled = false;
         SurveyHead.Visibility = Visibility.Visible;
 
+        _work?.Cancel();
+        _work = new CancellationTokenSource();
+
         var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>();
         Survey.ItemsSource = rows;
         SurveyStatus.Text = "Проверяю… Запросы идут мимо туннеля, через адаптер.";
 
+        var choices = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+
+        foreach (var choice in choices)
+        {
+            choice.Latency = "…";
+            choice.Key = "Faint";
+        }
+
+        Redraw();
+
         try
         {
-            var progress = new Progress<DnsSurveyRow>(row => rows.Add(SurveyRow.From(row)));
-            var all = await DnsSurvey.SurveyAllAsync(progress: progress);
+            var progress = new Progress<DnsSurveyRow>(row =>
+            {
+                rows.Add(SurveyRow.From(row));
+                Fill(choices, row);
+                Redraw();
+            });
+
+            var all = await DnsSurvey.SurveyAllAsync(progress: progress, cancellationToken: _work.Token);
 
             // Порядок — как в списке провайдеров, а не как пришли ответы.
             Survey.ItemsSource = all.Select(SurveyRow.From).ToList();
@@ -380,6 +338,10 @@ public partial class DnsView : UserControl
                 ? "Подмены по UDP не найдено."
                 : $"По UDP подменяют ответы: {string.Join(", ", intercepted)}. "
                   + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.";
+        }
+        catch (OperationCanceledException)
+        {
+            SurveyStatus.Text = "Обзор прерван.";
         }
         catch (Exception ex)
         {

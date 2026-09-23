@@ -159,34 +159,6 @@ public static class DnsProbe
         }
     }
 
-    /// <summary>
-    /// Проверяет все резолверы разом.
-    /// </summary>
-    public static async Task<IReadOnlyList<DnsProbeResult>> CheckAllAsync(
-        IReadOnlyList<DnsResolver> resolvers,
-        TimeSpan timeout,
-        Action<DnsProbeResult>? onResult,
-        CancellationToken cancellationToken)
-    {
-        var results = new List<DnsProbeResult>();
-        var sync = new object();
-
-        var tasks = resolvers.Select(async resolver =>
-        {
-            var result = await CheckAsync(resolver, timeout, cancellationToken);
-
-            lock (sync)
-            {
-                results.Add(result);
-                onResult?.Invoke(result);
-            }
-        });
-
-        await Task.WhenAll(tasks).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-
-        return results;
-    }
-
     private static DnsProbeResult Failure(DnsResolver resolver, string error) => new()
     {
         Resolver = resolver,

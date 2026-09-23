@@ -83,6 +83,20 @@ public sealed class SingBoxOptions
     public string DnsServerType { get; init; } = "https";
 
     /// <summary>
+    /// Имя в сертификате апстрима; <c>null</c> — сертификат выписан на сам адрес.
+    /// </summary>
+    /// <remarks>
+    /// Обращение идёт по адресу, а сертификат у части резолверов выписан
+    /// только на имя: у Яндекса — common.dot.dns.yandex.net, у Comss.one —
+    /// dns.comss.one. Без имени проверка сертификата по адресу не пройдёт,
+    /// и разрешение имён умрёт целиком.
+    /// </remarks>
+    public string? DnsServerName { get; init; }
+
+    /// <summary>Путь DoH; <c>null</c> — умолчание движка, /dns-query.</summary>
+    public string? DnsServerPath { get; init; }
+
+    /// <summary>
     /// Разрешать имена через туннель, а не напрямую.
     /// </summary>
     /// <remarks>
@@ -650,6 +664,15 @@ public sealed class SingBoxConfigCompiler
             ["type"] = options.DnsServerType,
             ["server"] = options.DnsServer,
         };
+
+        if (options.DnsServerType == "https")
+        {
+            if (!string.IsNullOrEmpty(options.DnsServerName))
+                remote["tls"] = new JsonObject { ["server_name"] = options.DnsServerName };
+
+            if (!string.IsNullOrEmpty(options.DnsServerPath) && options.DnsServerPath != "/dns-query")
+                remote["path"] = options.DnsServerPath;
+        }
 
         // Через туннель — только если ему есть куда вести. Иначе detour
         // указывал бы на селектор без единого сервера, и разрешение имён

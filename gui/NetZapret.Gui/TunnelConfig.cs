@@ -112,6 +112,11 @@ internal static class TunnelConfig
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
                 DnsServer = settings.DnsServer,
+
+                // Имя сертификата и путь — у провайдера из списка выбора.
+                // Адрес, вписанный руками, идёт как прежде: без имени.
+                DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
+                DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
                 DnsThroughTunnel = settings.DnsThroughTunnel,
                 PreferredServerTag = settings.PreferredServer,
 
