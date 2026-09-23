@@ -46,6 +46,12 @@ public sealed class SubscriptionClient : IDisposable
 
         if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent))
             _http.DefaultRequestHeaders.Add("User-Agent", userAgent);
+
+        // Номер устройства — всем панелям, а не только тем, что его просят:
+        // заранее не узнать, какая с привязкой к устройству, а лишний заголовок
+        // обычной панели ничего не стоит (DeviceIdentity).
+        foreach (var (name, value) in DeviceIdentity.Headers())
+            _http.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
     }
 
     /// <summary>
