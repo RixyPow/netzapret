@@ -103,7 +103,7 @@
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
                     Margin="0,0,28,24" MaxWidth="460"
                     Background="{DynamicResource Surface}"
-                    BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                    BorderBrush="{DynamicResource Accent}" BorderThickness="1.5"
                     CornerRadius="14" Padding="18,15">
                 <StackPanel>
                     <TextBlock x:Name="ToastTitle" FontWeight="SemiBold" TextWrapping="Wrap" />

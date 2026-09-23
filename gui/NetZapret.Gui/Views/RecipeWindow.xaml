@@ -30,7 +30,7 @@
         -->
         <Border Grid.Row="1" x:Name="StatusCard" Margin="0,16,0,0" Padding="14,10"
                 CornerRadius="10" Visibility="Collapsed"
-                Background="{DynamicResource Raised}" BorderThickness="1"
+                Background="{DynamicResource Raised}" BorderThickness="1.5"
                 BorderBrush="{DynamicResource Border}">
             <!--
                 Сеткой, а не стопкой. В горизонтальной стопке ребёнок получает
@@ -58,7 +58,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Background="{DynamicResource Raised}" CornerRadius="10"
-                                    BorderBrush="{Binding Edge}" BorderThickness="1"
+                                    BorderBrush="{Binding Edge}" BorderThickness="1.5"
                                     Padding="14,11" Margin="0,0,0,7">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
