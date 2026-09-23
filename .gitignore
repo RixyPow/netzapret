@@ -86,3 +86,5 @@ themes/*
 !themes/dark/
 !themes/light/
 !themes/README.md
+!themes/grey/
+!themes/tinted/

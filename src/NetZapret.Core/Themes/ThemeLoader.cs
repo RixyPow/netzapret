@@ -32,6 +32,16 @@ public static class ThemeLoader
     /// <summary>Встроенные темы — они же основы для чужих.</summary>
     public static IReadOnlyList<string> BuiltIn { get; } = ["dark", "light"];
 
+    /// <summary>
+    /// Темы, которые едут с программой, — в этом порядке в списке выбора.
+    /// </summary>
+    /// <remarks>
+    /// Серая и тёмно-синяя добавлены 24.09 по просьбе владельца. Основами
+    /// они не служат: основа — только тёмная и светлая, чтобы чужая тема
+    /// не зависела от темы, которую мы однажды поправим.
+    /// </remarks>
+    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted"];
+
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;
 
@@ -52,7 +62,7 @@ public static class ThemeLoader
         return Directory.GetDirectories(folder)
             .Where(d => File.Exists(Path.Combine(d, FileName)))
             .Select(d => LoadFolder(d, folder))
-            .OrderBy(t => BuiltIn.Contains(t.Id) ? BuiltIn.ToList().IndexOf(t.Id) : int.MaxValue)
+            .OrderBy(t => Shipped.Contains(t.Id) ? Shipped.ToList().IndexOf(t.Id) : int.MaxValue)
             .ThenBy(t => t.Theme?.Name ?? t.Id, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
     }

@@ -18,7 +18,7 @@ public sealed class ThemeLoaderTests : IDisposable
         // Основы берутся из репозитория — те самые файлы, что уедут в поставку.
         if (Repository() is { } repo)
         {
-            foreach (var id in ThemeLoader.BuiltIn)
+            foreach (var id in ThemeLoader.Shipped)
                 Copy(Path.Combine(repo, "themes", id), Path.Combine(_root, id));
         }
     }
@@ -50,7 +50,7 @@ public sealed class ThemeLoaderTests : IDisposable
     [Fact]
     public void BuiltInThemesLoadAndReadWell()
     {
-        foreach (var id in ThemeLoader.BuiltIn)
+        foreach (var id in ThemeLoader.Shipped)
         {
             var load = ThemeLoader.Load(id, _root);
 
@@ -92,7 +92,7 @@ public sealed class ThemeLoaderTests : IDisposable
 
         var all = ThemeLoader.LoadAll(_root);
 
-        Assert.Equal(["dark", "light", "zzz"], all.Select(t => t.Id));
+        Assert.Equal(["dark", "light", "grey", "tinted", "zzz"], all.Select(t => t.Id));
     }
 
     /// <summary>Основа даёт недостающее: три своих цвета, остальное — от тёмной.</summary>
@@ -171,7 +171,7 @@ public sealed class ThemeLoaderTests : IDisposable
     [Fact]
     public void AnUnreadableThemeNamesThePair()
     {
-        var load = Write("grey", """{ "base": "dark", "colors": { "text": "#20252B" } }""");
+        var load = Write("unreadable", """{ "base": "dark", "colors": { "text": "#20252B" } }""");
 
         Assert.False(load.Ok);
         Assert.Contains(load.Problems, p => p.Contains("text на backdrop"));
