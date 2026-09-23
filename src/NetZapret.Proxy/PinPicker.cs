@@ -26,13 +26,15 @@ public enum PinVerdict
 }
 
 /// <summary>Исход проверки одного кандидата.</summary>
+/// <param name="Redirect">Куда сайт отправил, если ответил переадресацией: имя из Location.</param>
 public sealed record PinProbe(
     PinCandidate Candidate,
     PinVerdict Verdict,
     int? Status,
     string? Colo,
     TimeSpan Elapsed,
-    string Detail)
+    string Detail,
+    string? Redirect = null)
 {
     /// <summary>
     /// Выход в России — по узлу Cloudflare, ответившему на запрос.
@@ -103,12 +105,21 @@ public static class PinPicker
     /// <param name="known">Кандидаты, известные для имени заранее: свой каталог, ответы наборов.</param>
     /// <param name="pool">Посредники, пробуемые для любого имени, в порядке доверия.</param>
     /// <param name="progress">Сколько имён готово.</param>
+    /// <param name="probes">Каждая проверка по мере готовности — для живой таблицы в окне.</param>
+    /// <remarks>
+    /// Имена, на которые сайт переадресует, подбираются тоже. Замер 23.09:
+    /// crunchyroll.com прибили к посреднику, он ответил 301 на
+    /// www.crunchyroll.com — а тот прибит не был, браузер пошёл туда
+    /// по обычному адресу и получил 1009. Список сервиса называл одну зону,
+    /// а hosts зон не знает: каждое имя прибивается отдельно.
+    /// </remarks>
     public static async Task<IReadOnlyList<PinPick>> PickAsync(
         IReadOnlyList<string> hosts,
         Func<string, IReadOnlyList<PinCandidate>> known,
         IReadOnlyList<PinCandidate> pool,
         IProgress<int>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<(string Host, PinProbe Probe)>? probes = null)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         using var names = new SemaphoreSlim(4);
@@ -118,22 +129,54 @@ public static class PinPicker
         var proven = new List<PinCandidate>();
         int done = 0;
 
-        var work = hosts.Select(async host =>
+        var seen = new HashSet<string>(hosts, StringComparer.OrdinalIgnoreCase);
+        var picks = new List<PinPick>();
+        IReadOnlyList<string> round = hosts;
+
+        // Два круга переадресаций хватает: голое имя → www, изредка ещё
+        // региональное. Больше — уже не тот сайт, а чужая цепочка.
+        for (int depth = 0; depth < 3 && round.Count > 0; depth++)
         {
-            await names.WaitAsync(cancellationToken);
-
-            try
+            var work = round.Select(async host =>
             {
-                return await PickOneAsync(host, known(host), pool, proven, http, cancellationToken);
-            }
-            finally
-            {
-                names.Release();
-                progress?.Report(Interlocked.Increment(ref done));
-            }
-        });
+                await names.WaitAsync(cancellationToken);
 
-        return await Task.WhenAll(work);
+                try
+                {
+                    return await PickOneAsync(host, known(host), pool, proven, http, probes, cancellationToken);
+                }
+                finally
+                {
+                    names.Release();
+                    progress?.Report(Interlocked.Increment(ref done));
+                }
+            });
+
+            var found = await Task.WhenAll(work);
+            picks.AddRange(found);
+
+            round = found
+                .Where(p => p.Chosen?.Redirect is { } next && SameSite(p.Host, next))
+                .Select(p => p.Chosen!.Redirect!)
+                .Where(seen.Add)
+                .ToList();
+        }
+
+        return picks;
+    }
+
+    /// <summary>
+    /// Один ли это сайт: совпадают два последних уровня имени.
+    /// </summary>
+    /// <remarks>
+    /// Грубо — у co.uk ошибётся, — но цена ошибки мала: лишнее имя будет
+    /// проверено и прибито, только если отвечает сертификатом своего сайта.
+    /// </remarks>
+    internal static bool SameSite(string a, string b)
+    {
+        static string Tail(string host) => string.Join('.', host.ToLowerInvariant().Split('.').TakeLast(2));
+
+        return Tail(a) == Tail(b);
     }
 
     private static async Task<PinPick> PickOneAsync(
@@ -142,6 +185,7 @@ public static class PinPicker
         IReadOnlyList<PinCandidate> pool,
         List<PinCandidate> proven,
         HttpClient http,
+        IProgress<(string Host, PinProbe Probe)>? probes,
         CancellationToken cancellationToken)
     {
         var tried = new List<PinProbe>();
@@ -151,7 +195,7 @@ public static class PinPicker
 
         // Сначала то, что про это имя известно, — дёшево и без посредника,
         // если сайт закрыт не по стране. Сайт ответил сам — дальше не ищем.
-        tried.AddRange(await ProbeAllAsync(host, Distinct(honest.Concat(known)), cancellationToken));
+        tried.AddRange(await ProbeAllAsync(host, Distinct(honest.Concat(known)), probes, cancellationToken));
 
         if (!tried.Any(p => p.Verdict == PinVerdict.Works))
         {
@@ -164,7 +208,7 @@ public static class PinPicker
                 .Where(c => tried.All(t => t.Candidate.Address != c.Address))
                 .ToList();
 
-            tried.AddRange(await ProbeAllAsync(host, fresh, cancellationToken));
+            tried.AddRange(await ProbeAllAsync(host, fresh, probes, cancellationToken));
         }
 
         var chosen = tried.Where(p => p.Usable).OrderBy(p => p.Rank).FirstOrDefault();
@@ -245,6 +289,7 @@ public static class PinPicker
     private static async Task<PinProbe[]> ProbeAllAsync(
         string host,
         IReadOnlyList<PinCandidate> candidates,
+        IProgress<(string Host, PinProbe Probe)>? probes,
         CancellationToken cancellationToken)
     {
         using var slots = new SemaphoreSlim(8);
@@ -255,7 +300,9 @@ public static class PinPicker
 
             try
             {
-                return await ProbeAsync(candidate, host, cancellationToken);
+                var probe = await ProbeAsync(candidate, host, cancellationToken);
+                probes?.Report((host, probe));
+                return probe;
             }
             finally
             {
@@ -320,14 +367,20 @@ public static class PinPicker
                 ? BlockCheck.IsBotChallenge(buffer, read) ? PinVerdict.Challenge : PinVerdict.Refused
                 : PinVerdict.Works;
 
+            var redirect = status is >= 300 and < 400
+                && Uri.TryCreate(BlockCheck.HeaderValue(buffer, read, "Location"), UriKind.Absolute, out var location)
+                    ? location.Host.ToLowerInvariant()
+                    : null;
+
             var detail = verdict switch
             {
                 PinVerdict.Refused => $"ответ {status} — сайт отказывает",
                 PinVerdict.Challenge => $"проверка на робота, {status}",
+                _ when redirect is not null && redirect != host => $"ответ {status} → {redirect}",
                 _ => $"ответ {status}",
             } + (colo is null ? string.Empty : $", узел {colo}");
 
-            return new PinProbe(candidate, verdict, status, colo, clock.Elapsed, detail);
+            return new PinProbe(candidate, verdict, status, colo, clock.Elapsed, detail, redirect);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

@@ -69,6 +69,20 @@ public sealed class PinPickerTests
         Assert.False(Probe("9.9.9.9", PinSource.Pool, PinVerdict.Dead).Usable);
     }
 
+    /// <summary>
+    /// Переадресация подбирается, только если ведёт на тот же сайт:
+    /// crunchyroll.com → www.crunchyroll.com — да; vrv.co → crunchyroll — нет,
+    /// это уже чужое имя, и прибивать его без спроса не нам.
+    /// </summary>
+    [Theory]
+    [InlineData("crunchyroll.com", "www.crunchyroll.com", true)]
+    [InlineData("www.crunchyroll.com", "crunchyroll.com", true)]
+    [InlineData("vrv.co", "www.crunchyroll.com", false)]
+    public void RedirectIsFollowedWithinTheSite(string from, string to, bool same)
+    {
+        Assert.Equal(same, PinPicker.SameSite(from, to));
+    }
+
     [Fact]
     public void NothingFoundSaysTunnel()
     {

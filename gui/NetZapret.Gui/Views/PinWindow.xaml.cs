@@ -1,6 +1,9 @@
-﻿using System.Net.Http;
+﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
@@ -11,6 +14,41 @@ namespace NetZapret.Gui.Views;
 
 /// <summary>Откуда взять адрес для пина.</summary>
 public sealed record SourceRow(string Id, string Name, string Note);
+
+/// <summary>Одна проверка кандидата в таблице автоподбора.</summary>
+public sealed record CheckLine(string Address, string Source, string Detail, string Time, Brush Brush);
+
+/// <summary>Имя и проверки его кандидатов; заголовок меняется, когда подбор решил.</summary>
+public sealed class CheckBlock : INotifyPropertyChanged
+{
+    private string _title;
+    private Brush _titleBrush;
+
+    public CheckBlock(string host, Brush brush)
+    {
+        Host = host;
+        _title = host + " — проверяю…";
+        _titleBrush = brush;
+    }
+
+    public string Host { get; }
+
+    public ObservableCollection<CheckLine> Lines { get; } = [];
+
+    public string Title
+    {
+        get => _title;
+        set { _title = value; PropertyChanged?.Invoke(this, new(nameof(Title))); }
+    }
+
+    public Brush TitleBrush
+    {
+        get => _titleBrush;
+        set { _titleBrush = value; PropertyChanged?.Invoke(this, new(nameof(TitleBrush))); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 /// <summary>
 /// Пин в hosts и маршрут сервиса — в одном окне.
@@ -353,6 +391,7 @@ public partial class PinWindow : Window
 
         SourceList.ItemsSource = rows;
 
+        Checks.Visibility = Visibility.Collapsed;
         Actions.Visibility = Visibility.Collapsed;
         Sources.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Visible;
@@ -491,13 +530,46 @@ public partial class PinWindow : Window
     {
         var own = OwnCatalog.Load();
 
+        var zones = _target.Zones.Select(n => n.TrimStart('*', '.')).ToList();
+
+        // К голой зоне — её www: hosts зон не знает, и прибитое голое имя
+        // www не покрывает, а сайты сплошь переадресуют именно туда. Прочие
+        // переадресации подбор находит сам.
         var names = (_catalog?.NamesByService().Values.SelectMany(v => v).Where(Covers) ?? [])
-            .Concat(_target.Zones)
+            .Concat(zones)
+            .Concat(zones.Where(z => z.Count(c => c == '.') == 1).Select(z => "www." + z))
             .Select(n => n.TrimStart('*', '.'))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var progress = new Progress<int>(n => Status.Text = $"Подбираю адрес: готово {n} из {names.Count}…");
+        var blocks = new Dictionary<string, CheckBlock>(StringComparer.OrdinalIgnoreCase);
+        var shown = new ObservableCollection<CheckBlock>();
+
+        CheckList.ItemsSource = shown;
+        Checks.Visibility = Visibility.Visible;
+        Sources.Visibility = Visibility.Collapsed;
+
+        CheckBlock Block(string host)
+        {
+            if (!blocks.TryGetValue(host, out var block))
+            {
+                block = new CheckBlock(host, (Brush)FindResource("Muted"));
+                blocks[host] = block;
+                shown.Add(block);
+            }
+
+            return block;
+        }
+
+        foreach (var name in names)
+            Block(name);
+
+        // Счёт растёт на ходу: переадресации добавляют имена, которых
+        // в начале не было.
+        var progress = new Progress<int>(n =>
+            Status.Text = $"Подбираю адрес: готово {n} из {Math.Max(n, blocks.Count)}…");
+
+        var probes = new Progress<(string Host, PinProbe Probe)>(p => Block(p.Host).Lines.Add(Line(p.Probe)));
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
         // который едет с программой: без Zapret остался бы только второй.
@@ -506,7 +578,32 @@ public partial class PinWindow : Window
             host => [.. own.PinCandidates(host), .. _catalog?.AnswersFor(host) ?? []],
             [.. _catalog?.Intermediaries() ?? [], .. own.Intermediaries],
             progress,
-            CancellationToken.None);
+            CancellationToken.None,
+            probes);
+
+        // Итог: выбранный — первым и с пометкой, остальные — в порядке,
+        // в каком подбор их оценил.
+        foreach (var pick in picks)
+        {
+            var block = Block(pick.Host);
+
+            block.Lines.Clear();
+
+            if (pick.Chosen is { } best)
+            {
+                block.Title = $"{pick.Host} → {best.Candidate.Address}  ·  {best.Candidate.Label}";
+                block.TitleBrush = (Brush)FindResource(best.Verdict == PinVerdict.Works ? "Accent" : "Warn");
+                block.Lines.Add(Line(best) with { Detail = "выбран: " + best.Detail });
+            }
+            else
+            {
+                block.Title = $"{pick.Host} — рабочего адреса нет, не прибито";
+                block.TitleBrush = (Brush)FindResource("Danger");
+            }
+
+            foreach (var probe in pick.Rejected)
+                block.Lines.Add(Line(probe));
+        }
 
         foreach (var pick in picks)
         {
@@ -522,6 +619,20 @@ public partial class PinWindow : Window
             .Where(p => p.Chosen is not null)
             .ToDictionary(p => p.Host, p => p.Chosen!.Candidate.Address, StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>Строка таблицы проверки: цвет по исходу.</summary>
+    private CheckLine Line(PinProbe probe) => new(
+        probe.Candidate.Address,
+        probe.Candidate.Label,
+        probe.Detail,
+        $"{probe.Elapsed.TotalMilliseconds:0} мс",
+        (Brush)FindResource(probe.Verdict switch
+        {
+            PinVerdict.Works => "Accent",
+            PinVerdict.Challenge => "Warn",
+            PinVerdict.Refused => "Danger",
+            _ => "Muted",
+        }));
 
     /// <summary>
     /// Спрашивает адрес у честного резолвера и проверяет каждый ответ.
