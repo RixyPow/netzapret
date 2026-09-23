@@ -446,6 +446,13 @@ public partial class RoutesView : UserControl
 
         var host = (part.Example ?? part.Part.Name).TrimStart('*', '.');
 
+        var mode = Describe(part);
+
+        // «По факту напрямую» — серым, как напрямую: оранжевый цвет десинка
+        // обещал работу, которой пресет не делает.
+        if (mode.StartsWith(IdleDesync, StringComparison.Ordinal))
+            color = "Muted";
+
         return new PartRow
         {
             // Уже загруженный значок ставится сразу. Раздел пересоздаётся при
@@ -469,7 +476,7 @@ public partial class RoutesView : UserControl
             // Чем именно пойдёт часть — прямо в подписи маршрута. «Десинк»
             // сам по себе не говорит ничего: решает пресет, и решить он может
             // в том числе «не знаю такого имени».
-            Mode = Describe(part),
+            Mode = mode,
 
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
@@ -1564,12 +1571,15 @@ public partial class RoutesView : UserControl
         // книга. Не врёт — выбор «десинк» значит «мимо туннеля, чинит
         // пресет», — но чинить тут нечему, и это надо видеть сразу.
         if (section is null)
-            return "по факту напрямую: пресет не чинит";
+            return IdleDesync + "пресет не чинит";
 
         return section.IsPassThrough
-            ? "по факту напрямую: пресет пропускает"
+            ? IdleDesync + "пресет пропускает"
             : $"десинк: {Technique(section)}";
     }
+
+    /// <summary>Начало подписи «десинк, которого нет» — по нему же и цвет.</summary>
+    private const string IdleDesync = "по факту напрямую: ";
 
     /// <summary>Приёмы секции по порядку, без настроек.</summary>
     private static string Technique(ZapretSection section) =>
