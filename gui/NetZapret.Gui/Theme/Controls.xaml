@@ -45,6 +45,8 @@
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="CornerRadius" Value="14" />
         <Setter Property="Padding" Value="18,16" />
+        <!-- Стекло под карточкой, если у темы фон и размытие включено (Glass.cs). -->
+        <Setter Property="local:Glass.IsOn" Value="True" />
     </Style>
 
     <!--
@@ -561,6 +563,21 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="local:Glass.IsOn" Value="True" />
+    </Style>
+
+    <!--
+        Боковое меню. Фон — стилем, а не в разметке окна: стекло (Glass.cs)
+        при выключении сбрасывает фон, и стиль после сброса возвращается сам.
+        RailFill — подложка цвета подложки у встроенных тем и плотная
+        плашка у тем с картинкой (владелец, 23.09: «шрифт становится
+        слишком незаметен, стоит сделать подложку»).
+    -->
+    <Style x:Key="RailPanel" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource RailFill}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderThickness" Value="0,0,1.5,0" />
+        <Setter Property="local:Glass.IsOn" Value="True" />
     </Style>
 
     <!--

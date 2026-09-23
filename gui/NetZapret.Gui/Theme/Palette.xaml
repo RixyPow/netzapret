@@ -72,5 +72,6 @@
     <SolidColorBrush x:Key="BackdropImage" Color="Transparent" />
     <sys:Double x:Key="BackdropDim">1</sys:Double>
     <SolidColorBrush x:Key="Chrome" Color="{StaticResource BackdropColor}" />
+    <SolidColorBrush x:Key="RailFill" Color="{StaticResource BackdropColor}" />
 
 </ResourceDictionary>

@@ -19,6 +19,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Стекло карточек берёт кусок размытого фона по месту в этой сетке:
+        // на ней лежит сам фон, и координаты у них общие.
+        Glass.Root = Root;
+
         VersionLabel.Text = "версия " + Version();
         ShowOnboardingIfNeeded();
 

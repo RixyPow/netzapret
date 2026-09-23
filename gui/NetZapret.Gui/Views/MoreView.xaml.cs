@@ -76,6 +76,73 @@ public partial class MoreView : UserControl
         // иначе человек решит, что выбор не сохранился.
         if (settings.Theme is { Length: > 0 } wanted && wanted != current)
             Status.Text = $"Тема «{wanted}» не применилась — стоит встроенная. Причина — в подсказке её плитки.";
+
+        ShowLook(settings, loads.FirstOrDefault(l => l.Id == current)?.Theme);
+    }
+
+    private bool _showingLook;
+
+    /// <summary>Настройки оформления — только если у темы есть картинка фона.</summary>
+    private void ShowLook(AppSettings settings, Theme? theme)
+    {
+        bool hasBackground = theme?.Background is not null;
+
+        LookPanel.Visibility = hasBackground ? Visibility.Visible : Visibility.Collapsed;
+        LookNone.Visibility = hasBackground ? Visibility.Collapsed : Visibility.Visible;
+
+        BackgroundSwitch.IsChecked = settings.ThemeBackgroundShown;
+        BlurSwitch.IsChecked = settings.ThemeBlur;
+
+        // Размытию и затемнению без картинки делать нечего — видны,
+        // но приглушены, чтобы было понятно, от чего они зависят.
+        BlurRow.IsEnabled = settings.ThemeBackgroundShown;
+        DimRow.IsEnabled = settings.ThemeBackgroundShown;
+        DimRow.Opacity = settings.ThemeBackgroundShown ? 1 : 0.5;
+
+        _showingLook = true;
+        DimChoice.SelectedIndex = Math.Clamp(settings.ThemeDimSteps, 0, 2);
+        _showingLook = false;
+    }
+
+    private void OnLook(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string key })
+            return;
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        ApplyLook(key == "blur"
+            ? settings with { ThemeBlur = !settings.ThemeBlur }
+            : settings with { ThemeBackgroundShown = !settings.ThemeBackgroundShown });
+    }
+
+    private void OnDim(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showingLook || DimChoice.SelectedIndex < 0)
+            return;
+
+        ApplyLook(AppSettings.Load(AppSettings.DefaultPath) with { ThemeDimSteps = DimChoice.SelectedIndex });
+    }
+
+    /// <summary>Записывает и сразу применяет: тема пересобирается с новыми настройками.</summary>
+    private void ApplyLook(AppSettings settings)
+    {
+        try
+        {
+            settings.Save(AppSettings.DefaultPath);
+
+            var result = Themes.Apply(Themes.Current, settings);
+
+            Status.Text = result.Ok
+                ? string.Empty
+                : "Тема не применилась с этими настройками: " + string.Join("; ", result.Problems.Take(2));
+
+            ShowTheme(settings);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось применить: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>

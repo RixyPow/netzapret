@@ -10,7 +10,7 @@
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal">
 
-    <Grid>
+    <Grid x:Name="Root">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="212" />
             <ColumnDefinition Width="*" />
@@ -31,8 +31,7 @@
             равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
-        <Border Grid.Column="0" Background="{DynamicResource Chrome}"
-                BorderBrush="{DynamicResource Border}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Style="{StaticResource RailPanel}">
             <DockPanel LastChildFill="True">
 
                 <StackPanel DockPanel.Dock="Top" Margin="22,26,22,22">
