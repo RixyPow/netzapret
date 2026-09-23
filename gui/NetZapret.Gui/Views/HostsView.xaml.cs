@@ -159,10 +159,6 @@ public partial class HostsView : UserControl
 
     private void OnSearch(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
-        SearchHint.Visibility = Search.Text.Length == 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
         Filter();
     }
 

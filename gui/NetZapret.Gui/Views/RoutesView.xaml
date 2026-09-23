@@ -1,6 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.RoutesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Backdrop}">
 
     <!--
@@ -163,14 +164,8 @@
                     С подсказкой внутри: пустое поле без неё читается как
                     пустая карточка, поставленная по ошибке.
                 -->
-                <Grid Margin="0,18,0,0">
-                    <TextBox x:Name="Search" TextChanged="OnSearch" />
-
-                    <TextBlock x:Name="SearchHint" IsHitTestVisible="False"
-                               Style="{StaticResource Caption}"
-                               VerticalAlignment="Center" Margin="13,0,0,0"
-                               Text="Поиск по сервису, части или домену" />
-                </Grid>
+                <TextBox x:Name="Search" Margin="0,18,0,0" TextChanged="OnSearch"
+                         gui:Hint.Text="Поиск по сервису, части или домену" />
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
             </StackPanel>

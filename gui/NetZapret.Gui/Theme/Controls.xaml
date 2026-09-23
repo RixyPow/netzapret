@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:NetZapret.Gui">
 
     <!--
         Стили без ключа — то есть по умолчанию для всего окна. Иначе каждый
@@ -210,11 +211,30 @@
                     <Border x:Name="Shape" Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
                             CornerRadius="8" Padding="{TemplateBinding Padding}">
-                        <ScrollViewer x:Name="PART_ContentHost" />
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost" />
+
+                            <!--
+                                Подсказка (Hint.cs). Отступ 4: строка ввода
+                                начинает текст на 2 правее своего края, и ещё 2 —
+                                зазор под курсор, чтобы тот стоял перед первой
+                                буквой, а не на ней.
+                            -->
+                            <TextBlock x:Name="HintText" IsHitTestVisible="False"
+                                       Margin="4,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Muted}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Text="{TemplateBinding local:Hint.Text}"
+                                       Visibility="Collapsed" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="HintText" Property="Visibility" Value="Visible" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

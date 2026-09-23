@@ -1034,8 +1034,6 @@ public partial class RoutesView : UserControl
     {
         var needle = Search.Text.Trim();
 
-        SearchHint.Visibility = needle.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-
         if (needle.Length == 0)
         {
             Services.ItemsSource = InChosenOrder(_all);

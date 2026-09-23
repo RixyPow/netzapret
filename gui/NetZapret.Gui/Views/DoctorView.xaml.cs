@@ -418,26 +418,6 @@ public partial class DoctorView : UserControl
             Ask();
     }
 
-    /// <summary>
-    /// Прячет подсказку в поле, как только в нём что-то есть.
-    /// </summary>
-    /// <remarks>
-    /// По вводу, а не по нажатию «Спросить». Прежде подсказки снимались
-    /// внутри самого запроса, и всё время набора текст лежал поверх серой
-    /// подписи: «Программа, discord.exe» и введённое имя читались друг
-    /// сквозь друга. Нажатие клавиши для этого тоже не годится — вставка
-    /// мышью его не поднимает.
-    /// </remarks>
-    private void OnAskChanged(object sender, TextChangedEventArgs e) => ShowHints();
-
-    private void ShowHints()
-    {
-        HostHint.Visibility = Host.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-        ExeHint.Visibility = Exe.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-        AddressHint.Visibility = Address.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-        PortHint.Visibility = Port.Text.Length > 0 ? Visibility.Collapsed : Visibility.Visible;
-    }
-
     private void OnAsk(object sender, RoutedEventArgs e) => Ask();
 
     /// <summary>
@@ -456,8 +436,6 @@ public partial class DoctorView : UserControl
             host = host.Split("://")[1];
 
         host = host.Split('/')[0].TrimStart('*', '.');
-
-        ShowHints();
 
         var exe = Exe.Text.Trim();
         var addressText = Address.Text.Trim();
