@@ -75,6 +75,55 @@ public sealed class LayeredRulesTests : IDisposable
         Assert.Equal(RuleSource.User, decision.Rule!.Source);
     }
 
+    /// <summary>
+    /// Свой домен побеждает список сервиса, даже записанный ниже него.
+    /// </summary>
+    /// <remarks>
+    /// 23.09: «*.downloads.claude.ai → через VPN» молча проигрывал списку
+    /// Claude «напрямую» — тот стоял в файле выше. Решение владельца: своё
+    /// правило побеждает.
+    /// </remarks>
+    [Fact]
+    public void OwnDomainBeatsServiceListWrittenAboveIt()
+    {
+        var list = Path.Combine(_directory, "claude.txt");
+        File.WriteAllText(list, "claude.ai\n");
+
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.HostList, list, RoutingMode.Direct);
+        file.Set(MatchKind.Domain, "*.downloads.claude.ai", RoutingMode.Proxy);
+        file.Save();
+
+        var engine = RuleSetLoader.LoadLayered(_basePath, _userPath);
+
+        // Без раскрытия список не совпадает ни с чем, и тест прошёл бы
+        // и при прежнем порядке — ничего не доказав.
+        Assert.Empty(Zapret.RuleSetExpander.Expand(engine.RuleSet, null));
+
+        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(Connection("downloads.claude.ai")).Mode);
+
+        // Остальной Claude по-прежнему идёт по своему списку.
+        Assert.Equal(RoutingMode.Direct, engine.Evaluate(Connection("claude.ai")).Mode);
+    }
+
+    /// <summary>
+    /// Правило по программе с путём Windows переживает запись и чтение.
+    /// Обратная косая черта не экранировалась, и файл с таким правилом
+    /// не разбирался вовсе — вместе со всеми прочими своими маршрутами.
+    /// </summary>
+    [Fact]
+    public void ProcessPathWithBackslashesSurvivesTheFile()
+    {
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Process, @"C:\Program Files\App\app.exe", RoutingMode.Direct);
+        file.Save();
+
+        var reread = UserRulesFile.Load(_userPath);
+
+        Assert.Equal(@"C:\Program Files\App\app.exe", Assert.Single(reread.Entries).Value);
+        _ = RuleSetLoader.LoadLayered(_basePath, _userPath);
+    }
+
     [Fact]
     public void DisabledUserRuleFallsBackToTheBase()
     {
