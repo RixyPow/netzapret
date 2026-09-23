@@ -138,6 +138,23 @@ public partial class CheckView : UserControl
 
     private static CancellationTokenSource? _work;
     private static bool _running;
+
+    /// <summary>
+    /// Раздел, что сейчас на экране; прогон пишет в него, а не в себя.
+    /// </summary>
+    /// <remarks>
+    /// Уход на другую вкладку пересоздаёт раздел, а прогон живёт дальше
+    /// и продолжал обновлять тот экземпляр, что его начал, — уже невидимый.
+    /// Строки таблицы общие и доходили, а строка состояния и кнопки — нет:
+    /// 23.09 после «Прервать» раздел навсегда остался на «Прерываю — жду…»
+    /// с обеими кнопками выключенными, хотя прогон давно закончился.
+    /// </remarks>
+    private static CheckView? _shown;
+
+    /// <summary>Работали ли движки, когда начинался замер на экране.</summary>
+    private static bool _measuredWithEngines;
+
+    private CheckView View => _shown ?? this;
     private static IReadOnlyList<SectionRow> _sections = [];
     private static string _status = "Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа.";
 
@@ -160,9 +177,17 @@ public partial class CheckView : UserControl
 
         Rows.ItemsSource = Collected;
 
+        Unloaded += (_, _) =>
+        {
+            if (_shown == this)
+                _shown = null;
+        };
+
         Loaded += (_, _) =>
         {
-            ShowSetup();
+            _shown = this;
+
+            ShowSetup(Collected.Count > 0 ? _measuredWithEngines : null);
             ShowScopes();
 
             // Возвращаемся к тому, что успело набраться, и к своему состоянию
@@ -266,10 +291,21 @@ public partial class CheckView : UserControl
     /// При работающем обходе видно сеть уже вылеченной. Умолчать об этом
     /// значит выдать «доступно благодаря десинку» за «доступно и так».
     /// </remarks>
-    private bool ShowSetup()
+    /// <param name="measured">
+    /// Работали ли движки при замере, что сейчас на экране; <c>null</c> —
+    /// замера нет, и говорить надо о нынешних.
+    /// </param>
+    /// <remarks>
+    /// Раздел пересоздаётся при каждом возврате на вкладку, и прежде
+    /// плашка решала по нынешнему состоянию. 23.09 проверка шла при
+    /// остановленных движках, а посреди неё их подняли на «Главной» —
+    /// вернувшись, раздел написал «видно сеть уже с обходом» над строками,
+    /// снятыми без обхода. Отчёт при этом честно записал «остановлены».
+    /// </remarks>
+    private bool ShowSetup(bool? measured = null)
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
-        bool running = state is not null && state.IsSupervisorAlive();
+        bool running = measured ?? (state is not null && state.IsSupervisorAlive());
 
         SetupCard.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
 
@@ -287,6 +323,7 @@ public partial class CheckView : UserControl
     private async void OnRun(object sender, RoutedEventArgs e)
     {
         bool running = ShowSetup();
+        _measuredWithEngines = running;
 
         Collected.Clear();
         _markers.Clear();
@@ -297,15 +334,15 @@ public partial class CheckView : UserControl
         // после неё, относится к этому прогону, а всё, что было раньше, —
         // к прошлым запускам и к делу не относится.
         _logMark = EngineLog.Position();
-        Sections.ItemsSource = null;
-        Header.Visibility = Visibility.Visible;
+        View.Sections.ItemsSource = null;
+        View.Header.Visibility = Visibility.Visible;
 
         _work?.Cancel();
         _work = new CancellationTokenSource();
         _running = true;
 
-        RunButton.IsEnabled = false;
-        StopButton.IsEnabled = true;
+        View.RunButton.IsEnabled = false;
+        View.StopButton.IsEnabled = true;
 
         bool interrupted = false;
 
@@ -351,7 +388,7 @@ public partial class CheckView : UserControl
                     : $"У «{_target.Describe}» нет доменных частей — проверять нечего. "
                       + "Такой сервис задан подсетями, и стучаться в подсеть наугад не проверка.");
 
-                Header.Visibility = Visibility.Collapsed;
+                View.Header.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -389,8 +426,8 @@ public partial class CheckView : UserControl
             // проверка давно закончилась, а «Проверить» больше не нажималась.
             _running = false;
 
-            RunButton.IsEnabled = true;
-            StopButton.IsEnabled = false;
+            View.RunButton.IsEnabled = true;
+            View.StopButton.IsEnabled = false;
 
             // Прерванная проверка тоже пишется: набранное до остановки —
             // такой же замер, а переделывать его ради файла значит потратить
@@ -568,7 +605,7 @@ public partial class CheckView : UserControl
     private void Say(string text)
     {
         _status = text;
-        Status.Text = text;
+        View.Status.Text = text;
     }
 
     /// <summary>
@@ -1134,7 +1171,7 @@ public partial class CheckView : UserControl
         }
 
         _sections = sections;
-        Sections.ItemsSource = sections;
+        View.Sections.ItemsSource = sections;
 
         // Показ идёт до замера, а ожидание — после: итог на экране появляется
         // сразу, а разделы про туннель догоняют его через несколько секунд.
@@ -1245,8 +1282,8 @@ public partial class CheckView : UserControl
                 + "и без прав администратора — боевой обход при этом не трогался.",
                 (Brush)FindResource(reached.Count > 0 ? "Warn" : "Danger")));
 
-            Sections.ItemsSource = null;
-            Sections.ItemsSource = sections;
+            View.Sections.ItemsSource = null;
+            View.Sections.ItemsSource = sections;
             _sections = sections;
         }
         catch (OperationCanceledException)
@@ -1448,8 +1485,8 @@ public partial class CheckView : UserControl
                     + "с ближайшего перезапуска движков.",
                     (Brush)FindResource("Muted")));
 
-                Sections.ItemsSource = null;
-                Sections.ItemsSource = sections;
+                View.Sections.ItemsSource = null;
+                View.Sections.ItemsSource = sections;
                 _sections = sections;
 
                 return;
@@ -1493,8 +1530,8 @@ public partial class CheckView : UserControl
                 + conclusion,
                 (Brush)FindResource("Warn")));
 
-            Sections.ItemsSource = null;
-            Sections.ItemsSource = sections;
+            View.Sections.ItemsSource = null;
+            View.Sections.ItemsSource = sections;
             _sections = sections;
         }
         catch (OperationCanceledException)
@@ -1508,8 +1545,8 @@ public partial class CheckView : UserControl
                 ex.GetBaseException().Message,
                 (Brush)FindResource("Muted")));
 
-            Sections.ItemsSource = null;
-            Sections.ItemsSource = sections;
+            View.Sections.ItemsSource = null;
+            View.Sections.ItemsSource = sections;
             _sections = sections;
         }
     }
