@@ -135,7 +135,7 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" MaxWidth="1240" />
+                <ColumnDefinition Width="*" MinWidth="470" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 

@@ -108,7 +108,10 @@ public partial class MoreView : UserControl
     private const string ThemeFont = "как в теме";
 
     /// <summary>Шрифт в списке: имя и само начертание — выбирают глазами.</summary>
-    public sealed record FontItem(string Name, FontFamily Family);
+    public sealed record FontItem(string Name, FontFamily Family)
+    {
+        public override string ToString() => Name;
+    }
 
     /// <summary>Установленные шрифты — один раз на запуск: перечень не меняется, а читается долго.</summary>
     private static readonly Lazy<IReadOnlyList<FontItem>> SystemFonts = new(() =>

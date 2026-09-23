@@ -149,7 +149,7 @@ public static class ThemeLoader
         string Font(string key, string fallback) =>
             (fontsJson.ValueKind == JsonValueKind.Object ? Text(fontsJson, key) : null) ?? fallback;
 
-        var ui = Font("ui", basis?.Fonts.Ui ?? "Segoe UI");
+        var ui = Font("ui", basis?.Fonts.Ui ?? "Bahnschrift, Segoe UI");
 
         var files = new List<string>();
 

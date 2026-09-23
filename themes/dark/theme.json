@@ -21,8 +21,8 @@
     "warn-fill": "#D29922"
   },
   "fonts": {
-    "ui": "Segoe UI",
+    "ui": "Bahnschrift, Segoe UI",
     "mono": "Cascadia Mono, Consolas",
-    "display": "Segoe UI"
+    "display": "Bahnschrift, Segoe UI"
   }
 }

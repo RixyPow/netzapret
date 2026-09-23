@@ -77,9 +77,11 @@
     <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
     <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
-    <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
+    <!-- Bahnschrift — основной (владелец, 24.09: «мне очень понравился Bahnschrift,
+         пускай он будет основным»); Segoe UI — запас, если его нет в системе. -->
+    <FontFamily x:Key="UiFont">Bahnschrift, Segoe UI</FontFamily>
     <FontFamily x:Key="MonoFont">Cascadia Mono, Consolas</FontFamily>
-    <FontFamily x:Key="DisplayFont">Segoe UI</FontFamily>
+    <FontFamily x:Key="DisplayFont">Bahnschrift, Segoe UI</FontFamily>
 
     <!--
         Фон окна для тем с картинкой (Themes.cs). У встроенных картинки нет:

@@ -135,9 +135,17 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
+                                            <!--
+                                                Выбранное рисуется шаблоном элемента, как
+                                                в раскрытом списке. Без ContentTemplate
+                                                строки выглядели как надо, а запись со
+                                                шрифтом показывалась служебным видом
+                                                «FontItem { Name = … }» (снимок 24.09).
+                                            -->
                                             <ContentPresenter Grid.Column="0" Margin="12,7"
                                                               VerticalAlignment="Center"
-                                                              Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                              Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                              ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
 
                                             <Path Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center"
                                                   Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource Muted}"
