@@ -1,6 +1,6 @@
 name: Сервис не работает
 description: Сайт или приложение не открывается, хотя обход включён
-labels: ["не работает"]
+labels: ["Баг"]
 body:
   - type: markdown
     attributes:

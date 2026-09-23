@@ -1,6 +1,6 @@
 name: Ошибка в программе
 description: Программа падает, не запускается, ведёт себя не так, как написано
-labels: ["ошибка"]
+labels: ["Баг"]
 body:
   - type: markdown
     attributes:
