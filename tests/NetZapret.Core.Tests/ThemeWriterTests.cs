@@ -52,7 +52,7 @@ public sealed class ThemeWriterTests : IDisposable
         {
             Name = "Фиолетовая ночь",
             Colors = Dark(),
-            DisplayFont = "Bahnschrift",
+            Font = "Bahnschrift",
             BackgroundSource = image,
             Fit = BackgroundFit.Contain,
             Dim = 0.65,
@@ -68,6 +68,7 @@ public sealed class ThemeWriterTests : IDisposable
         Assert.Equal("#A01EEC", theme[ThemeSlots.AccentFill].ToString());
         Assert.Equal("#99161B22", theme[ThemeSlots.Surface].ToString());
         Assert.Equal("Bahnschrift", theme.Fonts.Display);
+        Assert.Equal("Bahnschrift", theme.Fonts.Ui);
         Assert.Equal(BackgroundFit.Contain, theme.Background!.Fit);
         Assert.Equal(0.65, theme.Background.Dim);
         Assert.EndsWith("background.jpg", theme.Background.Image);
@@ -139,6 +140,25 @@ public sealed class ThemeWriterTests : IDisposable
 
         var (hv, sv, v) = ColorMath.ToHsv(color);
         Assert.Equal(color, ColorMath.FromHsv(hv, sv, v));
+    }
+
+    /// <summary>
+    /// Случай владельца 24.09: «Фон окна» красный #DC0000 — пояснения,
+    /// «работает» и «закрыто» на нём не читались, и тема не применилась.
+    /// «Поправить нечитаемое» сдвигает их светлоту, фон не трогает.
+    /// </summary>
+    [Fact]
+    public void UnreadableColorsAreFixedAndTheChosenBackgroundStays()
+    {
+        var colors = new Dictionary<string, ThemeColor>(Dark()) { ["backdrop"] = ThemeColor.Parse("#DC0000") };
+
+        Assert.Contains("muted", ThemeFixer.Failing(colors).Keys);
+
+        var fixedColors = ThemeFixer.Fix(colors);
+
+        Assert.Equal("#DC0000", fixedColors["backdrop"].ToString());
+        Assert.Empty(ThemeFixer.Failing(fixedColors));
+        Assert.Equal(colors["raised"], fixedColors["raised"]);
     }
 
     [Fact]

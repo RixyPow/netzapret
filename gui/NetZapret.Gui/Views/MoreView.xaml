@@ -172,73 +172,51 @@
                         <TextBlock x:Name="LookNone" Style="{StaticResource Caption}" Margin="0,8,0,0"
                                    TextWrapping="Wrap" Visibility="Collapsed"
                                    Text="У этой темы нет картинки фона — размытию и затемнению нечего делать." />
-                    </StackPanel>
-                </Border>
 
-                <!--
-                    Шрифт и размер (владелец, 24.09). Общие для всех тем:
-                    хранятся в настройках человека и перекрывают шрифты темы.
-                    Шрифт данных — адреса и задержки — не меняется: цифры
-                    в таблицах держатся столбиком только моноширинным.
-                -->
-                <TextBlock Text="Шрифт и размер" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
-
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <Grid Margin="0,0,0,10">
+                        <!--
+                            Шрифт и размер — здесь же, в оформлении (владелец,
+                            24.09). Шрифт один на всю программу; в списке каждый
+                            написан собой — выбирают глазами, а не по имени.
+                            Применяется сразу: образец — само окно.
+                        -->
+                        <Grid Margin="0,14,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Шрифт интерфейса" VerticalAlignment="Center" />
-                            <ComboBox Grid.Column="1" x:Name="UiFontChoice" Width="260" SelectionChanged="OnFontChoice">
-                                <ComboBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <VirtualizingStackPanel />
-                                    </ItemsPanelTemplate>
-                                </ComboBox.ItemsPanel>
-                            </ComboBox>
-                        </Grid>
-
-                        <Grid Margin="0,0,0,10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Шрифт заголовков" VerticalAlignment="Center" />
-                            <ComboBox Grid.Column="1" x:Name="DisplayFontChoice" Width="260" SelectionChanged="OnFontChoice">
-                                <ComboBox.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <VirtualizingStackPanel />
-                                    </ItemsPanelTemplate>
-                                </ComboBox.ItemsPanel>
-                            </ComboBox>
-                        </Grid>
-
-                        <Grid Margin="0,0,0,12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="280" />
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Размер" />
+                                <TextBlock Text="Шрифт" FontWeight="SemiBold" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                           Text="Всё окно целиком, как масштаб в Telegram: текст и карточки растут вместе, и ничего не вылезает за края." />
+                                           Text="Один на всю программу. Не моноширинный держит цифры в таблицах чуть менее ровно." />
                             </StackPanel>
-                            <ComboBox Grid.Column="1" x:Name="ScaleChoice" Width="260" VerticalAlignment="Center"
-                                      SelectionChanged="OnFontChoice" />
+                            <ComboBox Grid.Column="1" x:Name="UiFontChoice" VerticalAlignment="Center"
+                                      SelectionChanged="OnFontChoice">
+                                <ComboBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel />
+                                    </ItemsPanelTemplate>
+                                </ComboBox.ItemsPanel>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}" FontFamily="{Binding Family}" FontSize="14" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                         </Grid>
 
-                        <!-- Образец: видно сразу, без поиска по разделам. -->
-                        <Border Background="{DynamicResource Raised}" CornerRadius="10" Padding="14,12">
-                            <StackPanel>
-                                <TextBlock Text="Маршруты" Style="{StaticResource Title}" />
-                                <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
-                                           Text="Discord идёт через десинк, Instagram — через VPN." />
-                                <TextBlock Style="{StaticResource Mono}" Margin="0,6,0,0"
-                                           Text="104.18.32.47   42 мс   TLS 1.3" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="280" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Размер" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                           Text="Всё окно целиком, как масштаб в Telegram, — вместе со списками, подсказками и окнами." />
                             </StackPanel>
-                        </Border>
+                            <ComboBox Grid.Column="1" x:Name="ScaleChoice" VerticalAlignment="Center"
+                                      SelectionChanged="OnFontChoice" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 

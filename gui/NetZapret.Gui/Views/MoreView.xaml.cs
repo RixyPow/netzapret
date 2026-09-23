@@ -107,13 +107,16 @@ public partial class MoreView : UserControl
 
     private const string ThemeFont = "как в теме";
 
+    /// <summary>Шрифт в списке: имя и само начертание — выбирают глазами.</summary>
+    public sealed record FontItem(string Name, FontFamily Family);
+
     /// <summary>Установленные шрифты — один раз на запуск: перечень не меняется, а читается долго.</summary>
-    private static readonly Lazy<IReadOnlyList<string>> SystemFonts = new(() =>
+    private static readonly Lazy<IReadOnlyList<FontItem>> SystemFonts = new(() =>
         Fonts.SystemFontFamilies
-            .Select(f => f.Source)
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
+            .Where(f => !string.IsNullOrWhiteSpace(f.Source))
+            .GroupBy(f => f.Source, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new FontItem(g.Key, g.First()))
+            .OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList());
 
     /// <summary>Списки шрифтов и размеров — с выбранным сейчас.</summary>
@@ -123,14 +126,12 @@ public partial class MoreView : UserControl
 
         try
         {
-            var fonts = new List<string> { ThemeFont };
+            var fonts = new List<FontItem> { new(ThemeFont, (FontFamily)FindResource("UiFont")) };
             fonts.AddRange(SystemFonts.Value);
 
             UiFontChoice.ItemsSource = fonts;
-            DisplayFontChoice.ItemsSource = fonts;
-
-            UiFontChoice.SelectedItem = settings.UiFont is { Length: > 0 } ui && fonts.Contains(ui) ? ui : ThemeFont;
-            DisplayFontChoice.SelectedItem = settings.DisplayFont is { Length: > 0 } display && fonts.Contains(display) ? display : ThemeFont;
+            UiFontChoice.SelectedItem = fonts.FirstOrDefault(f =>
+                string.Equals(f.Name, settings.UiFont, StringComparison.OrdinalIgnoreCase)) ?? fonts[0];
 
             var scales = Appearance.Scales.Select(s => $"{s * 100:0} %").ToList();
             ScaleChoice.ItemsSource = scales;
@@ -153,7 +154,7 @@ public partial class MoreView : UserControl
             return;
 
         static string? Pick(ComboBox box) =>
-            box.SelectedItem is string name && name != ThemeFont ? name : null;
+            box.SelectedItem is FontItem { Name: var name } && name != ThemeFont ? name : null;
 
         var scale = ScaleChoice.SelectedIndex is int i && i >= 0 && i < Appearance.Scales.Count
             ? Appearance.Scales[i]
@@ -162,7 +163,6 @@ public partial class MoreView : UserControl
         ApplyLook(AppSettings.Load(AppSettings.DefaultPath) with
         {
             UiFont = Pick(UiFontChoice),
-            DisplayFont = Pick(DisplayFontChoice),
             UiScale = scale,
         });
     }
@@ -280,9 +280,11 @@ public partial class MoreView : UserControl
 
         if (window.ShowDialog() == true && window.SavedId is { } id)
         {
-            Status.Text = editing && shipped
-                ? $"Встроенная тема не меняется — правка сохранена новой: themes\\{id}."
-                : $"Сохранено в themes\\{id} и применено.";
+            Status.Text = window.SavedAsCopy
+                ? $"Правка не читается — сохранена черновиком в themes\\{id}, рабочая тема не тронута."
+                : editing && shipped
+                    ? $"Встроенная тема не меняется — правка сохранена новой: themes\\{id}."
+                    : $"Сохранено в themes\\{id} и применено.";
         }
 
         ShowTheme(AppSettings.Load(AppSettings.DefaultPath));

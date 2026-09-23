@@ -16,7 +16,11 @@ public sealed record ThemeDraft
     /// <summary>Все цвета явно: тема из редактора не зависит от основы.</summary>
     public required IReadOnlyDictionary<string, ThemeColor> Colors { get; init; }
 
-    public string? DisplayFont { get; init; }
+    /// <summary>
+    /// Шрифт темы — один на интерфейс и заголовки (владелец, 24.09: «лучше
+    /// был бы на всю программу один шрифт»); <c>null</c> — системный.
+    /// </summary>
+    public string? Font { get; init; }
 
     /// <summary>Картинка фона — любой путь на диске; в тему кладётся копия.</summary>
     public string? BackgroundSource { get; init; }
@@ -80,8 +84,8 @@ public static class ThemeWriter
 
         json["colors"] = colors;
 
-        if (!string.IsNullOrWhiteSpace(draft.DisplayFont))
-            json["fonts"] = new JsonObject { ["display"] = draft.DisplayFont.Trim() };
+        if (!string.IsNullOrWhiteSpace(draft.Font))
+            json["fonts"] = new JsonObject { ["ui"] = draft.Font.Trim(), ["display"] = draft.Font.Trim() };
 
         if (draft.BackgroundSource is { } source)
         {

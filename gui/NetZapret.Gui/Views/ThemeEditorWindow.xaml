@@ -10,7 +10,7 @@
         создавать свои темы и сохранять в файл»). Тема из редактора — такая
         же папка с theme.json, как тема художника, и проходит ту же проверку.
     -->
-    <Grid Margin="28,22,28,22">
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,22,28,22">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -21,7 +21,7 @@
         <StackPanel>
             <TextBlock x:Name="Heading" Text="Своя тема" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Начинается с цветов выбранной сейчас темы. Смысл зелёного, красного и жёлтого общий для всех тем — оттенки ваши. Нечитаемая пара не даст теме примениться, и её покажут словами." />
+                       Text="Начинается с цветов выбранной сейчас темы, и каждая правка сразу видна на окне. Смысл зелёного, красного и жёлтого общий для всех тем — оттенки ваши. Нечитаемый цвет отмечен в своей строке, а «Поправить нечитаемое» подстроит его светлоту, не трогая выбранное." />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
@@ -55,6 +55,8 @@
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Label}" />
                                         <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                        <TextBlock Text="{Binding Warning}" Style="{StaticResource Caption}" Margin="0,2,0,0"
+                                                   Foreground="{DynamicResource Danger}" Visibility="{Binding WarningShown}" />
                                     </StackPanel>
                                     <TextBlock Grid.Column="2" Text="{Binding Hex}" Style="{StaticResource Mono}"
                                                VerticalAlignment="Center" />
@@ -91,7 +93,7 @@
                                     <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Укладка" VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1" x:Name="FitChoice">
+                                <ComboBox Grid.Column="1" x:Name="FitChoice" SelectionChanged="OnChanged">
                                     <ComboBoxItem Content="на всё окно" />
                                     <ComboBoxItem Content="целиком" />
                                     <ComboBoxItem Content="плиткой" />
@@ -103,7 +105,7 @@
                                     <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Затемнение" VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1" x:Name="DimChoice" />
+                                <ComboBox Grid.Column="1" x:Name="DimChoice" SelectionChanged="OnChanged" />
                             </Grid>
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -111,7 +113,7 @@
                                     <ColumnDefinition Width="200" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Text="Размытие под карточками" VerticalAlignment="Center" />
-                                <ComboBox Grid.Column="1" x:Name="BlurChoice">
+                                <ComboBox Grid.Column="1" x:Name="BlurChoice" SelectionChanged="OnChanged">
                                     <ComboBoxItem Content="нет" />
                                     <ComboBoxItem Content="слабое" />
                                     <ComboBoxItem Content="среднее" />
@@ -128,21 +130,27 @@
                                     <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
                                                Text="Чем прозрачнее, тем больше видно картинку сквозь стекло." />
                                 </StackPanel>
-                                <ComboBox Grid.Column="1" x:Name="AlphaChoice" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="AlphaChoice" VerticalAlignment="Center" SelectionChanged="OnChanged" />
                             </Grid>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="Шрифт заголовков" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
+                <TextBlock Text="Шрифт" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
 
+                <!-- Один на всю тему; каждый в списке написан собой. -->
                 <Border Style="{StaticResource Card}">
-                    <ComboBox x:Name="DisplayChoice">
+                    <ComboBox x:Name="FontChoice" SelectionChanged="OnChanged">
                         <ComboBox.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <VirtualizingStackPanel />
                             </ItemsPanelTemplate>
                         </ComboBox.ItemsPanel>
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" FontFamily="{Binding Family}" FontSize="14" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
                     </ComboBox>
                 </Border>
             </StackPanel>
@@ -152,6 +160,8 @@
                    Margin="0,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="FixButton" Style="{StaticResource Ghost}" Content="Поправить нечитаемое" Click="OnFix"
+                    Margin="0,0,8,0" Visibility="Collapsed" />
             <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" Margin="0,0,8,0" IsCancel="True" />
             <Button Style="{StaticResource Primary}" Content="Сохранить и применить" Click="OnSave" />
         </StackPanel>

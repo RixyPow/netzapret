@@ -27,8 +27,11 @@ public sealed record ThemeApplied(string Id, bool Ok, IReadOnlyList<string> Prob
 /// </remarks>
 public static class Themes
 {
-    private const string DarkPath = "Theme/Palette.xaml";
-    private const string LightPath = "Theme/Light.xaml";
+    // Полным адресом ресурса, а не относительным путём: относительный
+    // находится только из самой программы, а из тестов и чужих сборок —
+    // нет (найдено 24.09 тестом окон редактора).
+    private const string DarkPath = "pack://application:,,,/NetZapret;component/Theme/Palette.xaml";
+    private const string LightPath = "pack://application:,,,/NetZapret;component/Theme/Light.xaml";
 
     public const string DefaultId = "dark";
 
@@ -85,7 +88,7 @@ public static class Themes
             ? LightPath
             : DarkPath;
 
-        var builtIn = new ResourceDictionary { Source = new Uri(fallback, UriKind.Relative) };
+        var builtIn = new ResourceDictionary { Source = new Uri(fallback, UriKind.Absolute) };
 
         // Масштаб — настройка человека, а не темы: переживает и отказ темы.
         builtIn["UiScaleTransform"] = Scale(look.Scale);
@@ -95,6 +98,41 @@ public static class Themes
         Current = fallback == LightPath ? "light" : DefaultId;
 
         return new ThemeApplied(wanted, false, problems);
+    }
+
+    /// <summary>
+    /// Показывает тему, которой ещё нет на диске, — для редактора.
+    /// </summary>
+    /// <remarks>
+    /// Правка в редакторе видна сразу (владелец, 24.09: «изменения должны
+    /// сразу применяться»). Нечитаемую не показываем: окно редактора красится
+    /// теми же ресурсами, и нечитаемая тема сделала бы нечитаемым и его —
+    /// вместе с кнопкой, которой её чинить. Остаётся последняя читаемая,
+    /// а причина возвращается словами.
+    /// </remarks>
+    public static IReadOnlyList<string> Preview(Theme theme, AppSettings? settings = null)
+    {
+        var problems = ThemeContrast.Check(theme).Select(f => "не читается: " + f).ToList();
+
+        if (problems.Count > 0)
+            return problems;
+
+        try
+        {
+            var dictionary = Build(theme, problems, Appearance.From(settings ?? AppSettings.Load(AppSettings.DefaultPath)));
+
+            if (problems.Count == 0)
+            {
+                Swap(dictionary);
+                Glass.Set(dictionary["GlassImage"] as ImageSource, System.Windows.Media.Stretch.UniformToFill);
+            }
+        }
+        catch (Exception ex)
+        {
+            problems.Add("не собралась: " + ex.GetBaseException().Message);
+        }
+
+        return problems;
     }
 
     /// <summary>Словарь с теми же ключами, что в Palette.xaml.</summary>
@@ -112,11 +150,22 @@ public static class Themes
             dictionary[key] = Frozen(new SolidColorBrush(color));
         }
 
-        // Шрифты человека перекрывают шрифты темы; шрифт данных — нет:
-        // цифры в таблицах держатся столбиком только моноширинным.
-        dictionary["UiFont"] = look.UiFont is { } ui ? new FontFamily(ui) : Font(theme, theme.Fonts.Ui);
-        dictionary["MonoFont"] = Font(theme, theme.Fonts.Mono);
-        dictionary["DisplayFont"] = look.DisplayFont is { } display ? new FontFamily(display) : Font(theme, theme.Fonts.Display);
+        // Шрифт человека — один на всю программу (владелец, 24.09: «лучше
+        // было бы, если бы на всю программу был один шрифт»): интерфейс,
+        // заголовки и данные. «Как в теме» — шрифты темы, как задумано.
+        if (look.Font is { } font)
+        {
+            var family = new FontFamily(font);
+            dictionary["UiFont"] = family;
+            dictionary["MonoFont"] = family;
+            dictionary["DisplayFont"] = family;
+        }
+        else
+        {
+            dictionary["UiFont"] = Font(theme, theme.Fonts.Ui);
+            dictionary["MonoFont"] = Font(theme, theme.Fonts.Mono);
+            dictionary["DisplayFont"] = Font(theme, theme.Fonts.Display);
+        }
         dictionary["UiScaleTransform"] = Scale(look.Scale);
 
         var backdrop = (Brush)dictionary["Backdrop"];
@@ -443,7 +492,7 @@ public static class Themes
 /// Что человек хочет видеть из задуманного темой: фон, стекло, затемнение.
 /// </summary>
 public sealed record Appearance(bool Background, bool Blur, int DimSteps,
-    string? UiFont = null, string? DisplayFont = null, double Scale = 1.0)
+    string? Font = null, double Scale = 1.0)
 {
     /// <summary>Ступени масштаба окна — как в Telegram.</summary>
     public static IReadOnlyList<double> Scales { get; } = [0.9, 1.0, 1.1, 1.25, 1.5];
@@ -455,7 +504,7 @@ public sealed record Appearance(bool Background, bool Blur, int DimSteps,
 
     public static Appearance From(AppSettings settings) =>
         new(settings.ThemeBackgroundShown, settings.ThemeBlur, Math.Clamp(settings.ThemeDimSteps, 0, 2),
-            Blank(settings.UiFont), Blank(settings.DisplayFont), Math.Clamp(settings.UiScale, 0.8, 1.75));
+            Blank(settings.UiFont), Math.Clamp(settings.UiScale, 0.8, 1.75));
 
     private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
