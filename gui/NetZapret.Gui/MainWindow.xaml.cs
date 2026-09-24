@@ -218,6 +218,10 @@ public partial class MainWindow : Window
         if (Section is null || sender is not RadioButton { Tag: string name })
             return;
 
+        // Для сторожа подвисаний: к разделу, который открывают, и привязывается
+        // задержка — создание раздела и есть частая её причина.
+        UiStallWatch.Section = (sender as RadioButton)?.Content as string ?? name;
+
         Section.Content = name switch
         {
             "vpn" => new VpnView(),

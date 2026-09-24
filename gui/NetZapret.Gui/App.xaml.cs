@@ -159,6 +159,7 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         _tray = new TrayIcon();
+        UiStallWatch.Start(Dispatcher);
         SingleInstance.OnShowRequested(TrayIcon.Show);
 
         // Выход по просьбе --quit — тем же путём, что пункт меню трея:
