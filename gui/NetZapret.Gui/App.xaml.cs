@@ -169,6 +169,14 @@ public partial class App : Application
             Shutdown(0);
         }));
 
+        // До создания окна: иначе оно мигнёт тёмным и перекрасится на глазах.
+        //
+        // И до ветки трея, а не после. Прежде тема ставилась ниже неё, и при
+        // автозапуске (--tray) её не ставил никто: окно, открытое из трея,
+        // выходило в палитре по умолчанию, какую бы тему человек ни выбрал.
+        // Найдено 24.09, когда меню трея стало брать цвета темы.
+        Themes.Apply(AppSettings.Load(AppSettings.DefaultPath).Theme);
+
         if (e.Args.Contains(TrayIcon.Switch))
         {
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
@@ -178,9 +186,6 @@ public partial class App : Application
 
             return;
         }
-
-        // До создания окна: иначе оно мигнёт тёмным и перекрасится на глазах.
-        Themes.Apply(AppSettings.Load(AppSettings.DefaultPath).Theme);
 
         new MainWindow().Show();
     }
