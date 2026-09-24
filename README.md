@@ -31,6 +31,11 @@
 
 То же самое показывает окно: «Ещё» → «О программе».
 
+## Скриншот главного меню
+
+<img width="1328" height="898" alt="image" src="https://github.com/user-attachments/assets/6746e9ae-88c0-4adf-90cb-2a0a4c47a9a2" />
+
+
 ## Установка
 
 1. Скачать архив со страницы [релизов](https://github.com/RixyPow/netzapret/releases/latest).
