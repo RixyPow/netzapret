@@ -27,31 +27,6 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>Ключ, по которому программа запускается сразу в трей.</summary>
     public const string Switch = "--tray";
 
-    // Те же цвета, что в Theme/Palette.xaml. Второй раз названы потому, что
-    // меню трея рисует WinForms, а он словаря ресурсов WPF не видит; расходиться
-    // им нельзя — это одно и то же меню в глазах человека.
-    private static readonly Color Surface = ColorTranslator.FromHtml("#161B22");
-    private static readonly Color Raised = ColorTranslator.FromHtml("#1C2128");
-    private static readonly Color Edge = ColorTranslator.FromHtml("#30363D");
-    private static readonly Color Text = ColorTranslator.FromHtml("#E6EDF3");
-    private static readonly Color Muted = ColorTranslator.FromHtml("#8B949E");
-
-    /// <summary>Тёмное меню: WinForms по умолчанию рисует светлое, системное.</summary>
-    private sealed class DarkMenu : ProfessionalColorTable
-    {
-        public override Color ToolStripDropDownBackground => Surface;
-        public override Color MenuBorder => Edge;
-        public override Color MenuItemBorder => Edge;
-        public override Color MenuItemSelected => Raised;
-        public override Color MenuItemSelectedGradientBegin => Raised;
-        public override Color MenuItemSelectedGradientEnd => Raised;
-        public override Color ImageMarginGradientBegin => Surface;
-        public override Color ImageMarginGradientMiddle => Surface;
-        public override Color ImageMarginGradientEnd => Surface;
-        public override Color SeparatorDark => Edge;
-        public override Color SeparatorLight => Edge;
-    }
-
     /// <summary>
     /// Сообщение, которым оболочка объявляет, что область уведомлений создана.
     /// </summary>
@@ -91,8 +66,7 @@ internal sealed class TrayIcon : IDisposable
     }
 
     private readonly NotifyIcon _icon;
-    private readonly ToolStripLabel _state;
-    private readonly ToolStripMenuItem _toggle;
+    private TrayMenu? _menu;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(2) };
     private ShellWatcher? _shell;
 
@@ -107,44 +81,23 @@ internal sealed class TrayIcon : IDisposable
 
     public TrayIcon()
     {
-        // Подписью, а не выключенным пунктом: выключенный рисуется системным
-        // серым, который на тёмном фоне почти не читается, и подсвечивается
-        // при наведении, обещая нажатие, которого не будет.
-        _state = new ToolStripLabel("Проверяю…") { ForeColor = Muted };
-
-        _toggle = new ToolStripMenuItem("Запустить", null, (_, _) => Toggle());
-
-        var menu = new ContextMenuStrip
-        {
-            BackColor = Surface,
-            ForeColor = Text,
-            ShowImageMargin = false,
-            Renderer = new ToolStripProfessionalRenderer(new DarkMenu()) { RoundedEdges = false },
-        };
-
-        menu.Items.Add(_state);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Показать окно", null, (_, _) => Show()));
-        menu.Items.Add(_toggle);
-        menu.Items.Add(new ToolStripSeparator());
-
-        // Два выхода, а не один с оговоркой. Одним пунктом пришлось бы
-        // угадывать намерение: «убрать значок с глаз» и «выключить обход» —
-        // разные желания, и ошибка в любую сторону дорогая. Либо человек
-        // уверен, что выключил, а трафик идёт через туннель; либо он терял
-        // связь посреди работы, всего лишь закрыв интерфейс.
-        menu.Items.Add(new ToolStripMenuItem(
-            "Выйти, оставить движки работать", null, (_, _) => Quit(stopEngines: false)));
-
-        menu.Items.Add(new ToolStripMenuItem(
-            "Выйти и остановить движки", null, (_, _) => Quit(stopEngines: true)));
-
+        // Меню — своё окно WPF (TrayMenu), а не ContextMenuStrip. Системное
+        // меню WinForms не видит словаря ресурсов, и цвета ему приходилось
+        // зашивать второй раз — первой тёмной палитрой, так что при любой
+        // другой теме меню оставалось чужим (владелец 24.09).
         _icon = new NotifyIcon
         {
             Icon = OwnIcon(),
             Text = "NetZapret",
             Visible = true,
-            ContextMenuStrip = menu,
+        };
+
+        // Любой кнопкой — меню: в нём и состояние, и путь к окну. Двойной
+        // щелчок по-прежнему открывает окно сразу.
+        _icon.MouseUp += (_, e) =>
+        {
+            if (e.Button is MouseButtons.Left or MouseButtons.Right)
+                OpenMenu();
         };
 
         _icon.DoubleClick += (_, _) => Show();
@@ -233,22 +186,23 @@ internal sealed class TrayIcon : IDisposable
             Readd();
         }
 
-        var state = SupervisorState.Load(SupervisorState.DefaultPath);
-        var running = state is not null && state.IsSupervisorAlive();
+        var status = TrayStatus.Read(_busy);
 
-        var text = !running
-            ? "Остановлено"
-            : state!.Services.All(s => s.Health == ServiceHealth.Healthy)
-                ? "Работает"
-                : "Работает с оговорками";
-
-        _state.Text = text;
-        _toggle.Text = running ? "Остановить" : "Запустить";
-        _toggle.Enabled = !_busy;
+        // Меню перерисовывается, только пока его видно: спрятанному
+        // незачем, а открытое обязано показывать живое состояние.
+        if (_menu is { IsVisible: true })
+            _menu.Render(status);
 
         // Подсказка ограничена шестьюдесятью тремя знаками: Windows режет
         // длиннее молча, поэтому здесь коротко и по делу.
-        _icon.Text = "NetZapret — " + text;
+        _icon.Text = "NetZapret — " + status.Headline;
+    }
+
+    private void OpenMenu()
+    {
+        _menu ??= new TrayMenu(Toggle, Show, Quit);
+        _menu.Render(TrayStatus.Read(_busy));
+        _menu.PopUp();
     }
 
     private async void Toggle()
@@ -257,7 +211,7 @@ internal sealed class TrayIcon : IDisposable
             return;
 
         _busy = true;
-        _toggle.Enabled = false;
+        Update();
 
         try
         {
@@ -282,7 +236,11 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>Показывает окно, создавая его, если программа поднялась в трей.</summary>
     public static void Show() => Application.Current.Dispatcher.Invoke(() =>
     {
-        var window = Application.Current.MainWindow ??= new MainWindow();
+        // По типу, а не по MainWindow: в режиме --tray первым окном создаётся
+        // меню трея, и WPF сам назначает главным его. Тогда «Открыть окно»
+        // показывало бы то же меню.
+        var window = Application.Current.Windows.OfType<MainWindow>().FirstOrDefault() ?? new MainWindow();
+        Application.Current.MainWindow = window;
 
         window.Show();
 
@@ -304,7 +262,8 @@ internal sealed class TrayIcon : IDisposable
     {
         if (stopEngines)
         {
-            _state.Text = "Останавливаю…";
+            _busy = true;
+            Update();
 
             try
             {
@@ -325,6 +284,7 @@ internal sealed class TrayIcon : IDisposable
     public void Dispose()
     {
         _refresh.Stop();
+        _menu?.Close();
 
         // Скрыть до удаления обязательно: иначе значок остаётся висеть
         // в панели до наведения мышью, и программа выглядит незакрытой.

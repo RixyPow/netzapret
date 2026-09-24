@@ -313,7 +313,7 @@ public partial class MainWindow : Window
         HideToast();
     }
 
-    private static string Version()
+    internal static string Version()
     {
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
