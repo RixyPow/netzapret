@@ -63,6 +63,58 @@ public sealed class ThemesTests
     }
 
     /// <summary>
+    /// Подпись главной кнопки — цвета OnAccent, а не общего цвета текста.
+    /// </summary>
+    /// <remarks>
+    /// Стиль TextBlock без ключа красил весь текст в Text и перебивал цвет
+    /// кнопки. В светлой теме SB с графитовой кнопкой подпись пропала вовсе
+    /// (снимок владельца 24.09), а проверка читаемости сверяла OnAccent,
+    /// которого окно не рисовало.
+    /// </remarks>
+    [Fact]
+    public void APrimaryButtonCaptionUsesOnAccent()
+    {
+        Sta.Run(() =>
+        {
+            var button = new System.Windows.Controls.Button
+            {
+                Style = (Style)Application.Current.FindResource("Primary"),
+                Content = "Создать тему",
+            };
+
+            button.Measure(new Size(400, 100));
+            button.Arrange(new Rect(0, 0, 400, 100));
+
+            // Привязка к предку досчитывается в очереди окна — дождаться
+            // её, как это происходит в живом окне до первой отрисовки.
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
+                () => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+
+            var caption = Find<System.Windows.Controls.TextBlock>(button);
+            var onAccent = (SolidColorBrush)Application.Current.FindResource("OnAccent");
+
+            Assert.NotNull(caption);
+            Assert.Equal(onAccent.Color, ((SolidColorBrush)caption!.Foreground).Color);
+        });
+    }
+
+    private static T? Find<T>(DependencyObject root) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+
+            if (child is T found)
+                return found;
+
+            if (Find<T>(child) is { } deeper)
+                return deeper;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Выбор цвета и редактор темы создаются без исключения — как любой
     /// раздел окна: ошибка разметки иначе всплыла бы только у человека.
     /// </summary>

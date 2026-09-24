@@ -70,7 +70,33 @@
                             BorderThickness="1.5"
                             CornerRadius="10"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!--
+                            Подпись — цветом кнопки, а не общим цветом текста.
+                            Стиль TextBlock без ключа выше красит весь текст
+                            в Text и перебивает цвет, унаследованный от кнопки:
+                            у главной кнопки подпись никогда не была OnAccent.
+                            На тёмных темах это не было видно — светлый текст
+                            на зелёном читается, — а в светлой теме с графитовой
+                            кнопкой подпись пропала вовсе (владелец, 24.09),
+                            и на жёлтой кнопке Nirvana была белой вместо тёмной.
+                            Проверка читаемости смотрела на OnAccent, которого
+                            окно не рисовало.
+
+                            Своим шаблоном подписи, а не стилем в ресурсах:
+                            стиль, положенный внутрь кнопки, до подписи не
+                            доходил — это поймал тест, — а цвет, заданный самой
+                            надписи, общий стиль перебить не может. Кнопки
+                            с разметкой внутри шаблон не трогает: элемент
+                            показывается как есть.
+                        -->
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <ContentPresenter.ContentTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </DataTemplate>
+                            </ContentPresenter.ContentTemplate>
+                        </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
