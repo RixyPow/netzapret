@@ -634,6 +634,46 @@ public partial class MoreView : UserControl
     /// действующий конфиг остаётся. Без него не запуститься, а собрать заново
     /// можно лишь с подпиской под рукой.
     /// </remarks>
+    /// <summary>
+    /// Собирает отчёт для разбора и показывает его в проводнике.
+    /// </summary>
+    /// <remarks>
+    /// Сборка и вычистка — в библиотеке (<see cref="SupportReport"/>), ссылки
+    /// подписок она находит сама. Окно только открывает папку с готовым файлом,
+    /// чтобы его сразу можно было перетащить в чат.
+    /// </remarks>
+    private async void OnReport(object sender, RoutedEventArgs e)
+    {
+        ReportButton.IsEnabled = false;
+        ReportValue.Visibility = Visibility.Visible;
+        ReportValue.Text = "Собираю…";
+
+        try
+        {
+            var result = await Task.Run(() => SupportReport.Create(MainWindow.Version()));
+
+            ReportValue.Text = $"Готово: {Path.GetFileName(result.Path)} — в папке reports. "
+                + $"Внутри: {string.Join(", ", result.Files)}.";
+
+            try
+            {
+                Process.Start("explorer.exe", $"/select,\"{result.Path}\"");
+            }
+            catch (Exception)
+            {
+                // Проводник не открылся — путь назван выше, файл на месте.
+            }
+        }
+        catch (Exception ex)
+        {
+            ReportValue.Text = "Не собрался: " + ex.Message;
+        }
+        finally
+        {
+            ReportButton.IsEnabled = true;
+        }
+    }
+
     private void OnClean(object sender, RoutedEventArgs e)
     {
         if (EnginesRunning())

@@ -45,6 +45,7 @@ return command switch
     "routes" or "маршруты" => Routes(),
     "migrate" or "перенос" => NetZapret.Tools.Migrate.Run(args.ElementAtOrDefault(1)),
     "catalog" or "каталог" => await Catalog(),
+    "report" or "отчёт" => Report(),
     null or "help" or "--help" or "-h" => Help(),
     _ => Unknown(command),
 };
@@ -267,6 +268,22 @@ async Task<int> Catalog()
     return result.Working > 0 ? 0 : 1;
 }
 
+// Тот же отчёт, что кнопка «Собрать» в «Ещё»: сборка и вычистка — в библиотеке.
+int Report()
+{
+    var version = typeof(SupportReport).Assembly
+        .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+        .FirstOrDefault()?.InformationalVersion.Split('+')[0] ?? "—";
+
+    var result = SupportReport.Create(version + " (nz)");
+
+    Console.WriteLine($"записано: {result.Path}");
+    Console.WriteLine($"внутри: {string.Join(", ", result.Files)}");
+
+    return 0;
+}
+
 int Help()
 {
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
@@ -280,6 +297,8 @@ int Help()
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
+    Console.WriteLine("  nz report    отчёт для разбора: журналы и настройки архивом в reports\\,");
+    Console.WriteLine("               без ссылок подписок и ключей");
     Console.WriteLine();
     Console.WriteLine("Поднять и погасить движки можно самой программой:");
     Console.WriteLine("  NetZapret.exe --start");
