@@ -63,6 +63,28 @@ public sealed class AppSettingsTests : IDisposable
         Assert.True(read.Tunnel);
     }
 
+    /// <summary>
+    /// Вид меню трея: у старых настроек, где полей ещё нет, — размытие
+    /// и плотность 60 %, то, что владелец видел 24.09. Выбор человека
+    /// переживает сохранение.
+    /// </summary>
+    [Fact]
+    public void TrayLookDefaultsToBlurAndSurvivesRoundTrip()
+    {
+        File.WriteAllText(_path, "{ \"DnsServer\": \"8.8.8.8\" }");
+
+        var old = AppSettings.Load(_path);
+
+        Assert.True(old.TrayBlur);
+        Assert.Equal(60, old.TrayDensity);
+
+        (old with { TrayBlur = false, TrayDensity = 90 }).Save(_path);
+        var read = AppSettings.Load(_path);
+
+        Assert.False(read.TrayBlur);
+        Assert.Equal(90, read.TrayDensity);
+    }
+
     [Fact]
     public void ThemeSurvivesAndDefaultsToDark()
     {

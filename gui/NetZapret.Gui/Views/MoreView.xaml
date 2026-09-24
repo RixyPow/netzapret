@@ -217,6 +217,45 @@
                             <ComboBox Grid.Column="1" x:Name="ScaleChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnFontChoice" />
                         </Grid>
+
+                        <!--
+                            Меню трея (владелец, 24.09: «добавь в настройки
+                            оформления ещё и вид трея»). Не внутри блока фона:
+                            тот виден только у тем с картинкой, а меню есть всегда.
+                            Меню читает настройки при каждом открытии — сохранить
+                            и есть применить.
+                        -->
+                        <TextBlock Text="Меню в трее" FontWeight="SemiBold" Margin="0,18,0,8" />
+
+                        <Button Style="{StaticResource Choice}" Click="OnTrayBlur" Margin="0,0,0,7">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Размытие под меню" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                               Text="Под меню — размытое то, что было на экране. Выключенное — меню прозрачно по плотности ниже, и сквозь него видно окна." />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1" x:Name="TrayBlurSwitch" Style="{StaticResource Switch}"
+                                              IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="280" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Плотность подложки" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                           Text="Сколько цвета темы лежит под текстом меню. Меньше — виднее фон, но текст на пёстром читается хуже." />
+                            </StackPanel>
+                            <ComboBox Grid.Column="1" x:Name="TrayDensityChoice" VerticalAlignment="Center"
+                                      SelectionChanged="OnTrayDensity" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 

@@ -79,6 +79,60 @@ public partial class MoreView : UserControl
         // У встроенной «Изменить» создаёт новую — подпись говорит это заранее.
         EditThemeButton.Content = ThemeLoader.Shipped.Contains(current) ? "Изменить копию" : "Изменить";
         ShowFonts(settings);
+        ShowTray(settings);
+    }
+
+    /// <summary>Ступени плотности подложки меню трея, в процентах.</summary>
+    private static readonly int[] TrayDensities = [100, 90, 80, 70, 60, 50, 40, 30];
+
+    private void ShowTray(AppSettings settings)
+    {
+        _showingLook = true;
+
+        try
+        {
+            TrayBlurSwitch.IsChecked = settings.TrayBlur;
+
+            TrayDensityChoice.ItemsSource = TrayDensities
+                .Select(d => d == 100 ? "сплошная" : $"{d} %")
+                .ToList();
+
+            TrayDensityChoice.SelectedIndex = TrayDensities
+                .Select((d, i) => (Distance: Math.Abs(d - settings.TrayDensity), Index: i))
+                .MinBy(x => x.Distance).Index;
+        }
+        finally
+        {
+            _showingLook = false;
+        }
+    }
+
+    // Тему не пересобираем: меню читает настройки само при каждом открытии.
+    private void OnTrayBlur(object sender, RoutedEventArgs e)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        SaveTray(settings with { TrayBlur = !settings.TrayBlur });
+    }
+
+    private void OnTrayDensity(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showingLook || TrayDensityChoice.SelectedIndex is not (>= 0 and var i) || i >= TrayDensities.Length)
+            return;
+
+        SaveTray(AppSettings.Load(AppSettings.DefaultPath) with { TrayDensity = TrayDensities[i] });
+    }
+
+    private void SaveTray(AppSettings settings)
+    {
+        try
+        {
+            settings.Save(AppSettings.DefaultPath);
+            ShowTray(settings);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
+        }
     }
 
     private bool _showingLook;

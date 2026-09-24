@@ -7,6 +7,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using NetZapret.Core;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui;
@@ -125,27 +126,44 @@ public partial class TrayMenu : Window
         Left = Math.Clamp(x - size.Width, left, Math.Max(left, right - size.Width));
         Top = Math.Clamp(y - size.Height, top, Math.Max(top, bottom - size.Height));
 
+        // Вид — по настройкам «Меню в трее» в оформлении, читаются при каждом
+        // открытии: сохранить там и есть применить здесь.
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
         var margin = Card.Margin;
 
-        var backdrop = Blurred(
-            (int)Math.Round((Left + margin.Left) * dpi.DpiScaleX),
-            (int)Math.Round((Top + margin.Top) * dpi.DpiScaleY),
-            (int)Math.Round((size.Width - margin.Left - margin.Right) * dpi.DpiScaleX),
-            (int)Math.Round((size.Height - margin.Top - margin.Bottom) * dpi.DpiScaleY));
+        var backdrop = settings.TrayBlur
+            ? Blurred(
+                (int)Math.Round((Left + margin.Left) * dpi.DpiScaleX),
+                (int)Math.Round((Top + margin.Top) * dpi.DpiScaleY),
+                (int)Math.Round((size.Width - margin.Left - margin.Right) * dpi.DpiScaleX),
+                (int)Math.Round((size.Height - margin.Top - margin.Bottom) * dpi.DpiScaleY))
+            : null;
 
-        // Без снимка — сплошная карточка: полупрозрачный оттенок без размытия
-        // и дал бы ту кашу, из-за которой всё и переделывалось.
-        if (backdrop is not null)
-        {
-            Card.Background = backdrop;
-        }
-        else if (TryFindResource("SurfaceColor") is Color surface)
-        {
-            Card.Background = new SolidColorBrush(Color.FromRgb(surface.R, surface.G, surface.B));
-        }
+        // Размытие просили, а снимок не вышел — сплошная карточка, а не
+        // прозрачная: прозрачности человек не выбирал.
+        double density = settings.TrayBlur && backdrop is null
+            ? 1
+            : Math.Clamp(settings.TrayDensity, 0, 100) / 100.0;
+
+        Card.Background = backdrop ?? (Brush)Brushes.Transparent;
+        Plate.Background = Tint(density);
 
         Show();
         Activate();
+    }
+
+    /// <summary>
+    /// Оттенок темы под текстом меню заданной плотности.
+    /// </summary>
+    /// <remarks>
+    /// Цвет карточки берётся без его собственной прозрачности: у тем со стеклом
+    /// она своя, и плотность тогда значила бы разное в разных темах.
+    /// </remarks>
+    private Brush Tint(double density)
+    {
+        var surface = TryFindResource("SurfaceColor") is Color c ? c : Colors.Black;
+
+        return new SolidColorBrush(Color.FromRgb(surface.R, surface.G, surface.B)) { Opacity = density };
     }
 
     /// <summary>Радиус размытия в точках экрана — как у стекла под карточками окна.</summary>

@@ -49,8 +49,8 @@
 
     <!--
         Поля под тень: у окна без рамки она иначе обрезается по краю.
-        Подложку карточки (Card.Background) ставит код при каждом показе —
-        размытый снимок экрана под ней, — поверх лежит оттенок темы.
+        Подложку карточки (Card.Background) и оттенок (Plate.Background) ставит
+        код при каждом показе — по настройкам «Меню в трее» в оформлении.
     -->
     <Border x:Name="Card" Margin="14" CornerRadius="12" BorderThickness="1.5"
             BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}"
@@ -69,9 +69,6 @@
             <Border.BorderBrush>
                 <SolidColorBrush Color="{DynamicResource TextColor}" Opacity="0.12" />
             </Border.BorderBrush>
-            <Border.Background>
-                <SolidColorBrush Color="{DynamicResource SurfaceColor}" Opacity="0.78" />
-            </Border.Background>
 
             <StackPanel Margin="14,12,14,8" TextElement.FontSize="12.5">
                 <DockPanel>
