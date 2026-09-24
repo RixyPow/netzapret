@@ -95,6 +95,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" Checked="OnSection" />
 
                         <Border Height="1" Background="{DynamicResource Border}" Margin="22,12,22,10" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Оформление" Tag="look" Checked="OnSection" />
                         <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />
                     </StackPanel>
                 </ScrollViewer>

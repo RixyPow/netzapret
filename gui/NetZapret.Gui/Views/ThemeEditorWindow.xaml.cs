@@ -105,11 +105,11 @@ public partial class ThemeEditorWindow : Window
         BlurChoice.SelectedIndex = Nearest(Blurs, background?.Blur ?? 24);
         AlphaChoice.SelectedIndex = Nearest(Alphas, from[ThemeSlots.Surface].A / 255.0);
 
-        var fonts = new List<MoreView.FontItem> { new(BaseFont, new FontFamily(from.Fonts.Ui)) };
+        var fonts = new List<AppearanceView.FontItem> { new(BaseFont, new FontFamily(from.Fonts.Ui)) };
         fonts.AddRange(Fonts.SystemFontFamilies
             .Where(f => !string.IsNullOrWhiteSpace(f.Source))
             .GroupBy(f => f.Source, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new MoreView.FontItem(g.Key, g.First()))
+            .Select(g => new AppearanceView.FontItem(g.Key, g.First()))
             .OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase));
 
         FontChoice.ItemsSource = fonts;
@@ -126,7 +126,7 @@ public partial class ThemeEditorWindow : Window
     private static int Nearest(double[] steps, double value) =>
         steps.Select((s, i) => (Distance: Math.Abs(s - value), Index: i)).MinBy(x => x.Distance).Index;
 
-    private string? ChosenFont => FontChoice.SelectedItem is MoreView.FontItem { Name: var name } && name != BaseFont ? name : null;
+    private string? ChosenFont => FontChoice.SelectedItem is AppearanceView.FontItem { Name: var name } && name != BaseFont ? name : null;
 
     /// <summary>Цвета с плотностью карточек из выбора — как они запишутся.</summary>
     private Dictionary<string, ThemeColor> Draft()

@@ -233,6 +233,7 @@ public partial class MainWindow : Window
             "watch" => new WatchView(),
             "log" => new LogView(),
             "doctor" => new DoctorView(),
+            "look" => new AppearanceView(),
             "more" => new MoreView(),
             _ => new StatusView(),
         };
