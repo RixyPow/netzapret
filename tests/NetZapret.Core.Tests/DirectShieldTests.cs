@@ -150,6 +150,43 @@ public sealed class DirectShieldTests : IDisposable
         Assert.Contains("--name=discord.com (IP fallback)", profiles[^1]);
     }
 
+    /// <summary>
+    /// Рецепт «не трогать» — щит для одного имени: фильтры щита, а не портов
+    /// подменяемой секции. Прочие рецепты своих портов не теряют.
+    /// </summary>
+    [Fact]
+    public void PassRecipeIsFilteredLikeTheShield()
+    {
+        var arguments = WinwsCommandLine.Build(
+            Load(),
+            excludeList: null,
+            own:
+            [
+                new OwnDesyncProfile
+                {
+                    Name = RecipeCatalog.Pass,
+                    Steps = [RecipeCatalog.Pass],
+                    HostListPath = Path.Combine(_root, "pass.txt"),
+                    Ports = "443",
+                },
+                new OwnDesyncProfile
+                {
+                    Name = "Свой",
+                    Steps = ["split:pos=2"],
+                    HostListPath = Path.Combine(_root, "own.txt"),
+                    Ports = "443,2053",
+                },
+            ]);
+
+        var profiles = Profiles(arguments);
+        var pass = profiles.Single(p => p.Contains("--name=NetZapret: pass"));
+        var own = profiles.Single(p => p.Contains("--name=NetZapret: Свой"));
+
+        Assert.Equal("--lua-desync=pass", Assert.Single(pass, a => a.StartsWith("--lua-desync=")));
+        Assert.Equal(["--filter-tcp=*", "--filter-udp=443"], pass.Where(a => a.StartsWith("--filter-")));
+        Assert.Equal(["--filter-tcp=443,2053"], own.Where(a => a.StartsWith("--filter-")));
+    }
+
     /// <summary>Пресет без профиля в голове: щит занимает её место, лишнего --new нет.</summary>
     [Fact]
     public void HeadWithoutProfileGetsNoExtraSeparator()

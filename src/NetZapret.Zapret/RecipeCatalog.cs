@@ -152,8 +152,30 @@ public static class RecipeCatalog
     /// </remarks>
     public const string Base = "zapret-antidpi.lua";
 
+    /// <summary>Имя рецепта «не трогать» — он же приём движка.</summary>
+    public const string Pass = "pass";
+
+    /// <summary>Рецепт «не трогать»: профиль с ним собирается как щит.</summary>
+    public static bool IsPass(IReadOnlyList<string> steps) =>
+        steps is [var only] && only.Equals(Pass, StringComparison.OrdinalIgnoreCase);
+
     public static IReadOnlyList<CatalogRecipe> All { get; } =
     [
+        // Первым: это отправная точка любого подбора — работает ли имя вовсе
+        // без десинка. Просьба владельца 24.09: щит для одного имени, не уводя
+        // его с «десинка». В отличие от «напрямую», выбор рецепта проверяется
+        // рукопожатием и сравнивается с остальными в том же окне.
+        new CatalogRecipe
+        {
+            Id = Pass,
+            Title = "Не трогать (pass)",
+            What = "Пакеты с этим именем проходят мимо всего десинка: ни секции "
+                + "пресета, ни свои рецепты их не трогают.",
+            Steps = [Pass],
+            Note = "То же, что щит у «напрямую», но для одного имени. Трафик "
+                + "без имени — игровой UDP по голым адресам — щит не узнаёт, "
+                + "его по-прежнему ведут секции пресета по адресам.",
+        },
         new CatalogRecipe
         {
             Id = "multidisorder",

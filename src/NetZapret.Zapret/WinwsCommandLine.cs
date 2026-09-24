@@ -112,8 +112,22 @@ public static class WinwsCommandLine
             // из них — запасные HTTPS у Cloudflare, куда клиент уходит сам,
             // когда сеть ведёт себя плохо. Профиль забирал имя себе, а его
             // трафик на 2053 или 8443 не видел вовсе.
-            arguments.Add("--filter-tcp="
-                + (string.IsNullOrWhiteSpace(profile.Ports) ? PresetPorts.Default : profile.Ports));
+            //
+            // Кроме «не трогать»: у него фильтры щита, весь TCP и QUIC. Рецепт
+            // чинит то, что чинила бы секция, и её портов ему довольно; pass
+            // обещает, что имя не тронет никто, — а соединение на порт вне
+            // списка секции и QUIC прошли бы мимо него к пресету.
+            if (RecipeCatalog.IsPass(profile.Steps))
+            {
+                arguments.Add("--filter-tcp=*");
+                arguments.Add("--filter-udp=443");
+            }
+            else
+            {
+                arguments.Add("--filter-tcp="
+                    + (string.IsNullOrWhiteSpace(profile.Ports) ? PresetPorts.Default : profile.Ports));
+            }
+
             // Прямые слэши, а не обратные. winws2 собран под Cygwin, и обратный
             // слэш проходит у него как знак экранирования: путь доезжал
             // без разделителей вовсе. Прямые понимают и Windows, и Cygwin.
