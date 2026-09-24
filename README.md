@@ -1,5 +1,8 @@
 # NetZapret
 
+[![Скачиваний](https://img.shields.io/github/downloads/RixyPow/netzapret/total?label=%D1%81%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)](https://github.com/RixyPow/netzapret/releases)
+[![Последний выпуск](https://img.shields.io/github/v/release/RixyPow/netzapret?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA)](https://github.com/RixyPow/netzapret/releases/latest)
+
 Диспетчер трафика для Windows. Для каждого приложения, домена или подсети решает,
 куда пустить трафик: **через десинк** (Zapret / winws2), **через VPN** (sing-box)
 или **напрямую** — и запускает оба движка под одним присмотром.

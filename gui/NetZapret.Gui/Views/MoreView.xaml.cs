@@ -829,6 +829,24 @@ public partial class MoreView : UserControl
         SupportLink.Tag = About.Support;
 
         Components.ItemsSource = About.Components;
+
+        _ = ShowDownloadsAsync();
+    }
+
+    /// <summary>Скачиваний на GitHub — спрашиваем один раз за запуск окна.</summary>
+    private static long? _downloads;
+
+    private async Task ShowDownloadsAsync()
+    {
+        _downloads ??= await DownloadStats.TotalAsync(CancellationToken.None);
+
+        if (_downloads is not { } total)
+            return;
+
+        DownloadsValue.Text = $"Скачано с GitHub: {total:N0} раз. Это скачивания, а не установки: "
+            + "обновление из программы тоже засчитывается. Своего счётчика у программы нет — "
+            + "она не сообщает о вас никуда.";
+        DownloadsValue.Visibility = Visibility.Visible;
     }
 
     private void OnLink(object sender, RoutedEventArgs e)
