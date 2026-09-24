@@ -69,21 +69,46 @@ rem From %ROOT%, not from wherever this was invoked: the state file lives at
 rem runtime\supervisor.state.json relative to the working directory. Called from
 rem elsewhere, --stop reports "not running" and leaves the engines holding the
 rem very files we are about to overwrite.
-rem Nothing to stop is the common case, and it is answered by a file rather
-rem than by launching anything. The program asks for administrator rights
-rem through its manifest, so starting it from an ordinary shell just to learn
-rem there was no supervisor cost a minute of waiting on elevation that was
-rem never going to be granted.
-if not exist "%ROOT%runtime\supervisor.state.json" goto :stopped
+rem Nothing to stop is the common case, and it is answered by a file and a
+rem process name rather than by launching anything. The program asks for
+rem administrator rights through its manifest, so starting it from an ordinary
+rem shell just to learn there was nothing running cost a minute of waiting on
+rem elevation that was never going to be granted.
+rem
+rem Both, not the state file alone: the window hidden in the tray holds the
+rem deployed files with no engines up at all, and until 24.09 that meant
+rem closing the tray by hand before every build.
+set "RUNNING="
+if exist "%ROOT%runtime\supervisor.state.json" set "RUNNING=1"
+tasklist /fi "imagename eq NetZapret.exe" 2>nul | find /i "NetZapret.exe" >nul
+if not errorlevel 1 set "RUNNING=1"
+if not defined RUNNING goto :stopped
 
-echo Stopping the engines...
+echo Stopping the engines and closing the window...
 
 pushd "%ROOT%"
 
-if exist "%TARGET%\NetZapret.exe" "%TARGET%\NetZapret.exe" --stop >nul 2>&1
+rem --quit stops the engines and closes the window together with its tray
+rem icon. A build deployed before 24.09 does not know the switch and exits
+rem without doing anything, so if the engines are still up afterwards the old
+rem --stop takes care of them; its window then has to be closed by hand once.
+if exist "%TARGET%\NetZapret.exe" "%TARGET%\NetZapret.exe" --quit >nul 2>&1
+if exist "%ROOT%runtime\supervisor.state.json" if exist "%TARGET%\NetZapret.exe" "%TARGET%\NetZapret.exe" --stop >nul 2>&1
 if exist "%TARGET%\NetZapret.Gui.exe" "%TARGET%\NetZapret.Gui.exe" --stop >nul 2>&1
 
 popd
+
+rem The window takes a moment to go after it is asked to. Wait for the process
+rem itself, up to fifteen seconds, instead of guessing a fixed delay.
+set /a WAITED=0
+
+:waitexit
+tasklist /fi "imagename eq NetZapret.exe" 2>nul | find /i "NetZapret.exe" >nul
+if errorlevel 1 goto :stopped
+if %WAITED% geq 15 goto :stopped
+ping -n 2 127.0.0.1 >nul 2>&1
+set /a WAITED+=1
+goto :waitexit
 
 :stopped
 
@@ -93,8 +118,9 @@ rem runs with redirected input, which is how it runs from other tools.
 ping -n 3 127.0.0.1 >nul 2>&1
 
 rem The open window holds the deployed assemblies just as firmly as the
-rem supervisor does, and --stop does not close it. Say so plainly, because
-rem robocopy's failure alone does not point at the open window.
+rem supervisor does. --quit closes it, but an older build or an instance that
+rem did not answer can still be there. Say so plainly, because robocopy's
+rem failure alone does not point at the open window.
 rem Both names, because a working copy updated across the rename still runs the
 rem old one. tasklist filters by exact image name, so NetZapret.Gui.exe is not
 rem covered by asking about NetZapret.exe - and the deploy then failed with

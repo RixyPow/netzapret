@@ -27,6 +27,7 @@ public partial class App : Application
     {
         SupervisorHost.Switch,      // --supervisor
         SupervisorHost.StopSwitch,  // --stop
+        SingleInstance.QuitSwitch,  // --quit
         TrayIcon.Switch,            // --tray
         Headless.StartSwitch,       // --start
 
@@ -80,6 +81,15 @@ public partial class App : Application
         {
             _headless = true;
             RunStop();
+
+            return;
+        }
+
+        // Всё целиком: движки и интерфейс с треем. Для build.cmd — см. QuitSwitch.
+        if (e.Args.Contains(SingleInstance.QuitSwitch))
+        {
+            _headless = true;
+            RunQuit();
 
             return;
         }
@@ -150,6 +160,14 @@ public partial class App : Application
 
         _tray = new TrayIcon();
         SingleInstance.OnShowRequested(TrayIcon.Show);
+
+        // Выход по просьбе --quit — тем же путём, что пункт меню трея:
+        // признак Exiting, иначе крестик окна отменил бы закрытие.
+        SingleInstance.OnQuitRequested(() => Dispatcher.Invoke(() =>
+        {
+            Exiting = true;
+            Shutdown(0);
+        }));
 
         if (e.Args.Contains(TrayIcon.Switch))
         {
@@ -345,6 +363,23 @@ public partial class App : Application
         await SupervisorHost.StopAsync(CancellationToken.None);
 
         Shutdown(0);
+    }
+
+    /// <summary>
+    /// Гасит движки и закрывает работающий интерфейс.
+    /// </summary>
+    /// <remarks>
+    /// Движки первыми: интерфейс, ушедший раньше, ничего не решает, а движки,
+    /// оставшиеся без него, держат TUN и WinDivert. Код 1 — интерфейс
+    /// не вышел за десять секунд, и build.cmd скажет об этом сам.
+    /// </remarks>
+    private async void RunQuit()
+    {
+        await SupervisorHost.StopAsync(CancellationToken.None);
+
+        bool gone = await Task.Run(() => SingleInstance.RequestQuit(TimeSpan.FromSeconds(10)));
+
+        Shutdown(gone ? 0 : 1);
     }
 
     /// <summary>
