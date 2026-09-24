@@ -38,7 +38,7 @@ public sealed class DeviceIdentityTests
     {
         var handler = new Capture();
 
-        using var client = new SubscriptionClient(new HttpClient(handler));
+        using var client = new SubscriptionClient(new HttpClient(handler), memoryPath: Memory());
         await client.FetchAsync(new Uri("https://panel.example/sub/abc"), CancellationToken.None);
 
         var request = handler.Request!;
@@ -62,7 +62,7 @@ public sealed class DeviceIdentityTests
     {
         var handler = new HappOnly();
 
-        using var client = new SubscriptionClient(new HttpClient(handler));
+        using var client = new SubscriptionClient(new HttpClient(handler), memoryPath: Memory());
         var info = await client.FetchAsync(new Uri("https://panel.example/cart/abc"), CancellationToken.None);
 
         Assert.Equal(["sing-box/1.14.0", "Happ/3.4.0"], handler.Agents);
@@ -75,7 +75,7 @@ public sealed class DeviceIdentityTests
     {
         var handler = new HappOnly { Status = HttpStatusCode.BadGateway };
 
-        using var client = new SubscriptionClient(new HttpClient(handler));
+        using var client = new SubscriptionClient(new HttpClient(handler), memoryPath: Memory());
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
             client.FetchAsync(new Uri("https://panel.example/cart/abc"), CancellationToken.None));
@@ -103,6 +103,86 @@ public sealed class DeviceIdentityTests
                     Content = new StringContent("vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls&type=tcp#Test"),
                 }
                 : new HttpResponseMessage(Status) { Content = new StringContent("<html>404</html>") });
+        }
+    }
+
+    private static string Memory() => Path.Combine(Path.GetTempPath(), $"netzapret-agents-{Guid.NewGuid():N}.json");
+
+    /// <summary>
+    /// Заработало под именем Happ — запомнено, и следующее чтение идёт
+    /// сразу под ним, без заведомого 404 (владелец, 24.09).
+    /// </summary>
+    [Fact]
+    public async Task TheWorkingNameIsRemembered()
+    {
+        var memory = Memory();
+        var url = new Uri("https://panel.example/cart/abc");
+
+        try
+        {
+            var first = new HappOnly();
+            using (var client = new SubscriptionClient(new HttpClient(first), memoryPath: memory))
+                await client.FetchAsync(url, CancellationToken.None);
+
+            Assert.Equal("Happ/3.4.0", AgentMemory.Get(url, memory));
+
+            var second = new HappOnly();
+            using (var client = new SubscriptionClient(new HttpClient(second), memoryPath: memory))
+                await client.FetchAsync(url, CancellationToken.None);
+
+            Assert.Equal(["Happ/3.4.0"], second.Agents);
+
+            // Файл памяти не хранит саму ссылку — она равносильна паролю.
+            Assert.DoesNotContain("cart/abc", File.ReadAllText(memory));
+        }
+        finally
+        {
+            File.Delete(memory);
+        }
+    }
+
+    /// <summary>
+    /// Запомненный Happ перестал отвечать, а имени по умолчанию панель снова
+    /// отвечает — подписка читается, и память забывается.
+    /// </summary>
+    [Fact]
+    public async Task TheMemoryIsForgottenWhenTheDefaultWorksAgain()
+    {
+        var memory = Memory();
+        var url = new Uri("https://panel.example/sub/xyz");
+
+        try
+        {
+            AgentMemory.Set(url, "Happ/3.4.0", memory);
+
+            var handler = new NotHapp();
+            using (var client = new SubscriptionClient(new HttpClient(handler), memoryPath: memory))
+                await client.FetchAsync(url, CancellationToken.None);
+
+            Assert.Equal(["Happ/3.4.0", "sing-box/1.14.0"], handler.Agents);
+            Assert.Null(AgentMemory.Get(url, memory));
+        }
+        finally
+        {
+            File.Delete(memory);
+        }
+    }
+
+    private sealed class NotHapp : HttpMessageHandler
+    {
+        public List<string> Agents { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var agent = request.Headers.UserAgent.ToString();
+            Agents.Add(agent);
+
+            return Task.FromResult(agent.StartsWith("Happ/", StringComparison.Ordinal)
+                ? new HttpResponseMessage(HttpStatusCode.NotFound)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls&type=tcp#Test"),
+                });
         }
     }
 

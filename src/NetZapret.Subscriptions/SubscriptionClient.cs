@@ -53,9 +53,13 @@ public sealed class SubscriptionClient : IDisposable
     public const string FallbackUserAgent = "Happ/3.4.0";
 
     private readonly string[] _userAgents;
+    private readonly string _memory;
 
-    public SubscriptionClient(HttpClient? http = null, string userAgent = "sing-box/1.14.0")
+    /// <param name="memoryPath">Файл памяти имён (<see cref="AgentMemory"/>); <c>null</c> — обычный.</param>
+    public SubscriptionClient(HttpClient? http = null, string userAgent = "sing-box/1.14.0", string? memoryPath = null)
     {
+        _memory = memoryPath ?? AgentMemory.DefaultPath;
+
         _ownsClient = http is null;
         _http = http ?? new HttpClient { Timeout = DefaultTimeout };
 
@@ -85,8 +89,19 @@ public sealed class SubscriptionClient : IDisposable
 
         try
         {
-            foreach (var agent in _userAgents)
+            // Запомненное имя — первым: подписка «только для Happ» иначе
+            // начинала каждое чтение с заведомого 404 под именем sing-box.
+            var remembered = AgentMemory.Get(target, _memory);
+            var agents = remembered is not null && _userAgents.Contains(remembered)
+                ? _userAgents.Where(a => a == remembered).Concat(_userAgents.Where(a => a != remembered)).ToArray()
+                : _userAgents;
+
+            string? used = null;
+
+            foreach (var agent in agents)
             {
+                used = agent;
+
                 response?.Dispose();
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, target);
@@ -103,6 +118,10 @@ public sealed class SubscriptionClient : IDisposable
             }
 
             response!.EnsureSuccessStatusCode();
+
+            // Сработало не имя по умолчанию — запомнить; сработало оно —
+            // забыть: панель могла снова начать отвечать обоим.
+            AgentMemory.Set(target, used == _userAgents[0] ? null : used, _memory);
             return await ParseAsync(response, cancellationToken);
         }
         finally
