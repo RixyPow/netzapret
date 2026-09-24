@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace NetZapret.Subscriptions;
 
 /// <summary>
@@ -20,6 +22,14 @@ namespace NetZapret.Subscriptions;
 /// Своё имя пробовать нельзя: на NetZapret/0.5.3 первая панель ответила
 /// отказом. Незнакомых там не любят.
 /// </para>
+/// <para>
+/// Отказ под именем sing-box — повод спросить ещё раз под именем Happ.
+/// Замер 24.09 на подписке пользователя, которую поддержка провайдера
+/// назвала «работает только в Happ»: sing-box с номером устройства — 404,
+/// Happ без номера — 404, Happ с номером — 200 и подписка на 175 КБ.
+/// Первым остаётся sing-box: панели, что отвечают обоим, под ним отдают
+/// список лучше (замер 11.09 выше).
+/// </para>
 /// </remarks>
 public sealed class SubscriptionClient : IDisposable
 {
@@ -39,13 +49,21 @@ public sealed class SubscriptionClient : IDisposable
     /// </remarks>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(12);
 
+    /// <summary>Каким именем назваться панели, если первым она отказала.</summary>
+    public const string FallbackUserAgent = "Happ/3.4.0";
+
+    private readonly string[] _userAgents;
+
     public SubscriptionClient(HttpClient? http = null, string userAgent = "sing-box/1.14.0")
     {
         _ownsClient = http is null;
         _http = http ?? new HttpClient { Timeout = DefaultTimeout };
 
-        if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd(userAgent))
-            _http.DefaultRequestHeaders.Add("User-Agent", userAgent);
+        // Имя — на каждый запрос, а не в заголовки клиента: при отказе
+        // спрашиваем ещё раз под другим.
+        _userAgents = string.Equals(userAgent, FallbackUserAgent, StringComparison.OrdinalIgnoreCase)
+            ? [userAgent]
+            : [userAgent, FallbackUserAgent];
 
         // Номер устройства — всем панелям, а не только тем, что его просят:
         // заранее не узнать, какая с привязкой к устройству, а лишний заголовок
@@ -63,9 +81,38 @@ public sealed class SubscriptionClient : IDisposable
         // Ссылки вида happ://add/https://... — обёртка клиента вокруг обычного URL.
         var target = Unwrap(subscriptionUrl);
 
-        using var response = await _http.GetAsync(target, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        HttpResponseMessage? response = null;
 
+        try
+        {
+            foreach (var agent in _userAgents)
+            {
+                response?.Dispose();
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, target);
+
+                if (!request.Headers.UserAgent.TryParseAdd(agent))
+                    request.Headers.TryAddWithoutValidation("User-Agent", agent);
+
+                response = await _http.SendAsync(request, cancellationToken);
+
+                // Отказ «такого нет» или «не для тебя» — пробуем другое имя;
+                // сбой самой панели (5xx) другим именем не лечится.
+                if (response.StatusCode is not (HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized))
+                    break;
+            }
+
+            response!.EnsureSuccessStatusCode();
+            return await ParseAsync(response, cancellationToken);
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+    }
+
+    private static async Task<SubscriptionInfo> ParseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         var (servers, errors) = SubscriptionParser.ParseBody(body);
 

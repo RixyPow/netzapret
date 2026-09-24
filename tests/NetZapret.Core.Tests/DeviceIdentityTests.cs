@@ -52,6 +52,60 @@ public sealed class DeviceIdentityTests
         Assert.StartsWith("sing-box/", request.Headers.UserAgent.ToString());
     }
 
+    /// <summary>
+    /// Панель, что пускает только Happ с номером устройства, — как у
+    /// пользователя 24.09: sing-box получает 404, и программа спрашивает
+    /// ещё раз под именем Happ.
+    /// </summary>
+    [Fact]
+    public async Task APanelThatOnlyTalksToHappStillGivesTheSubscription()
+    {
+        var handler = new HappOnly();
+
+        using var client = new SubscriptionClient(new HttpClient(handler));
+        var info = await client.FetchAsync(new Uri("https://panel.example/cart/abc"), CancellationToken.None);
+
+        Assert.Equal(["sing-box/1.14.0", "Happ/3.4.0"], handler.Agents);
+        Assert.Single(info.Servers);
+    }
+
+    /// <summary>Сбой самой панели другим именем не лечится — второй раз не спрашиваем.</summary>
+    [Fact]
+    public async Task APanelFailureIsNotRetriedUnderAnotherName()
+    {
+        var handler = new HappOnly { Status = HttpStatusCode.BadGateway };
+
+        using var client = new SubscriptionClient(new HttpClient(handler));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.FetchAsync(new Uri("https://panel.example/cart/abc"), CancellationToken.None));
+
+        Assert.Single(handler.Agents);
+    }
+
+    private sealed class HappOnly : HttpMessageHandler
+    {
+        public List<string> Agents { get; } = [];
+
+        public HttpStatusCode Status { get; init; } = HttpStatusCode.NotFound;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var agent = request.Headers.UserAgent.ToString();
+            Agents.Add(agent);
+
+            bool happ = agent.StartsWith("Happ/", StringComparison.Ordinal)
+                && request.Headers.Contains("x-hwid");
+
+            return Task.FromResult(happ
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls&type=tcp#Test"),
+                }
+                : new HttpResponseMessage(Status) { Content = new StringContent("<html>404</html>") });
+        }
+    }
+
     private sealed class Capture : HttpMessageHandler
     {
         public HttpRequestMessage? Request { get; private set; }
