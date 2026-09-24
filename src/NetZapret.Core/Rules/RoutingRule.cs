@@ -89,6 +89,9 @@ public sealed class RoutingRule
 
     private IReadOnlyList<GlobMatcher>? _hostGlobs;
 
+    /// <summary>Зоны списка без звёздочек внутри — для поиска по множеству.</summary>
+    private HashSet<string>? _hostZones;
+
     /// <summary>
     /// Готовит правило к использованию и валидирует <see cref="Value"/>.
     /// Бросает <see cref="RuleConfigurationException"/> на неразбираемом значении.
@@ -184,6 +187,12 @@ public sealed class RoutingRule
                 if (host is null || _hostGlobs is null)
                     return false;
 
+                if (_hostZones is not null && InZones(_hostZones, host))
+                {
+                    reason = $"domain {host} в списке {Value}";
+                    return true;
+                }
+
                 for (int i = 0; i < _hostGlobs.Count; i++)
                 {
                     if (!_hostGlobs[i].IsMatch(host))
@@ -247,9 +256,49 @@ public sealed class RoutingRule
 
         HostListDomains = domains;
 
-        _hostGlobs = domains
-            .Select(d => GlobMatcher.Compile(d.StartsWith("*.", StringComparison.Ordinal) ? d : "*." + d))
-            .ToList();
+        // Обычная запись — зона без звёздочек внутри — ищется по множеству,
+        // а не своим выражением. Прежде у каждой записи было своё Regex,
+        // и имя прогонялось через все подряд: замер 24.09 — открытие
+        // «Маршрутов» стоило 650 мс в потоке окна, из них около 370 мс
+        // уходило на сотню таких оценок, то есть 3,7 мс на одно имя.
+        // Смысл тот же: «*.зона» покрывает и саму зону, и любой поддомен,
+        // без учёта регистра. Записи со звёздочкой или «?» внутри остаются
+        // выражениями — множеством их не выразить.
+        var zones = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var globs = new List<GlobMatcher>();
+
+        foreach (var entry in domains)
+        {
+            var trimmed = entry.Trim();
+
+            if (trimmed.Length == 0)
+                continue;
+
+            var zone = trimmed.StartsWith("*.", StringComparison.Ordinal) ? trimmed[2..] : trimmed;
+
+            if (zone.Length > 0 && zone.IndexOfAny(['*', '?']) < 0)
+                zones.Add(zone);
+            else
+                globs.Add(GlobMatcher.Compile(trimmed.StartsWith("*.", StringComparison.Ordinal) ? trimmed : "*." + trimmed));
+        }
+
+        _hostZones = zones;
+        _hostGlobs = globs;
+    }
+
+    /// <summary>Само имя или любой его хвост после точки — в множестве зон.</summary>
+    private static bool InZones(HashSet<string> zones, string host)
+    {
+        if (zones.Contains(host))
+            return true;
+
+        for (int dot = host.IndexOf('.'); dot >= 0; dot = host.IndexOf('.', dot + 1))
+        {
+            if (zones.Contains(host[(dot + 1)..]))
+                return true;
+        }
+
+        return false;
     }
 
     public override string ToString() => $"#{Ordinal} {Match.ToString().ToLowerInvariant()}:{Value} -> {Mode.ToString().ToLowerInvariant()}";
