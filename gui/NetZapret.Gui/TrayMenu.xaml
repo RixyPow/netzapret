@@ -52,15 +52,23 @@
         Подложку карточки (Card.Background) ставит код при каждом показе —
         размытый снимок экрана под ней, — поверх лежит оттенок темы.
     -->
-    <Border x:Name="Card" Margin="12" CornerRadius="12" BorderThickness="1"
+    <Border x:Name="Card" Margin="14" CornerRadius="12" BorderThickness="1.5"
             BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}"
             LayoutTransform="{DynamicResource UiScaleTransform}">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.35" Color="Black" />
+            <DropShadowEffect BlurRadius="22" ShadowDepth="3" Opacity="0.5" Color="Black" />
         </Border.Effect>
 
-        <!-- Оттенок темы над размытым: сквозь него видно, текст на нём читается. -->
-        <Border x:Name="Plate" Width="256" CornerRadius="11">
+        <!--
+            Оттенок темы над размытым: сквозь него видно, текст на нём читается.
+            Внутренняя кромка — цвет текста темы, едва заметный: на размытом
+            фоне одна рамка терялась (владелец 24.09: «более выраженные края»),
+            а кромка отделяет карточку и на тёмной теме, и на светлой.
+        -->
+        <Border x:Name="Plate" Width="256" CornerRadius="10.5" BorderThickness="1">
+            <Border.BorderBrush>
+                <SolidColorBrush Color="{DynamicResource TextColor}" Opacity="0.12" />
+            </Border.BorderBrush>
             <Border.Background>
                 <SolidColorBrush Color="{DynamicResource SurfaceColor}" Opacity="0.78" />
             </Border.Background>
