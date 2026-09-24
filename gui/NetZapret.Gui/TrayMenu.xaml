@@ -1,16 +1,22 @@
 <Window x:Class="NetZapret.Gui.TrayMenu"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="NetZapret" WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize" SizeToContent="WidthAndHeight"
-        ShowActivated="True" Deactivated="OnDeactivated" KeyDown="OnKeyDown">
+        Title="NetZapret" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="True" SizeToContent="WidthAndHeight"
+        ShowActivated="True" Deactivated="OnDeactivated" KeyDown="OnKeyDown"
+>
 
     <!--
         Меню значка в трее — карточкой в стиле окна, а не системным меню
-        WinForms. Прежнее рисовалось зашитыми цветами первой тёмной палитры
-        и не видело ни темы, ни шрифта, ни масштаба (владелец 24.09: «дать
-        ему нашего стиля»). Здесь всё на DynamicResource — ровно те же ключи,
-        что у карточек окна.
+        WinForms (владелец 24.09: «дать ему нашего стиля»). Всё на
+        DynamicResource — те же ключи, что у карточек окна.
+
+        Подложка — размытый снимок того, что под меню, а не прозрачность
+        (владелец 24.09: «сделай в трее размытость, а не прозрачность»).
+        Системное размытие Windows (подложка DWM и политика акцента) под этим
+        окном давало сплошной тёмный слой — снято на экране поверх ярких
+        полос, — поэтому размытие своё: снимок в миг открытия, как у стекла
+        под карточками окна (Themes.RenderLayer). Подробности — TrayMenu.Blurred.
     -->
     <Window.Resources>
         <!-- Строка выхода: плоская, подсветка при наведении, как пункт меню. -->
@@ -18,13 +24,12 @@
             <Setter Property="Foreground" Value="{DynamicResource Text}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Padding" Value="10,6" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Plate" Background="{TemplateBinding Background}"
-                                CornerRadius="8" Padding="{TemplateBinding Padding}">
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
                             <TextBlock Text="{TemplateBinding Content}"
                                        Foreground="{TemplateBinding Foreground}" />
                         </Border>
@@ -42,69 +47,80 @@
         </Style>
     </Window.Resources>
 
-    <!-- Поля под тень: у окна без рамки она иначе обрезается по краю. -->
-    <Border Margin="12" Width="300" Background="{DynamicResource Surface}"
-            BorderBrush="{DynamicResource Border}" BorderThickness="1.5" CornerRadius="14"
+    <!--
+        Поля под тень: у окна без рамки она иначе обрезается по краю.
+        Подложку карточки (Card.Background) ставит код при каждом показе —
+        размытый снимок экрана под ней, — поверх лежит оттенок темы.
+    -->
+    <Border x:Name="Card" Margin="12" CornerRadius="12" BorderThickness="1"
+            BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}"
             LayoutTransform="{DynamicResource UiScaleTransform}">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="18" ShadowDepth="3" Opacity="0.35" Color="Black" />
+            <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.35" Color="Black" />
         </Border.Effect>
 
-        <StackPanel Margin="16,14,16,10">
-            <DockPanel>
-                <TextBlock x:Name="Version" DockPanel.Dock="Right" VerticalAlignment="Bottom"
-                           Foreground="{DynamicResource Faint}" FontSize="11" />
-                <TextBlock Text="NetZapret" FontFamily="{DynamicResource DisplayFont}"
-                           FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource Text}" />
-            </DockPanel>
+        <!-- Оттенок темы над размытым: сквозь него видно, текст на нём читается. -->
+        <Border x:Name="Plate" Width="256" CornerRadius="11">
+            <Border.Background>
+                <SolidColorBrush Color="{DynamicResource SurfaceColor}" Opacity="0.78" />
+            </Border.Background>
 
-            <!-- Главное — идёт ли обход; ради этого меню и открывают. -->
-            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                <Ellipse x:Name="Dot" Width="9" Height="9" VerticalAlignment="Center"
-                         Fill="{DynamicResource Faint}" />
-                <TextBlock x:Name="State" Margin="8,0,0,0" FontWeight="SemiBold"
-                           Foreground="{DynamicResource Text}" Text="Проверяю…" />
+            <StackPanel Margin="14,12,14,8" TextElement.FontSize="12.5">
+                <DockPanel>
+                    <TextBlock x:Name="Version" DockPanel.Dock="Right" VerticalAlignment="Bottom"
+                               Foreground="{DynamicResource Faint}" FontSize="10.5" />
+                    <TextBlock Text="NetZapret" FontFamily="{DynamicResource DisplayFont}"
+                               FontSize="14.5" FontWeight="SemiBold" Foreground="{DynamicResource Text}" />
+                </DockPanel>
+
+                <!-- Главное — идёт ли обход; ради этого меню и открывают. -->
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Ellipse x:Name="Dot" Width="8" Height="8" VerticalAlignment="Center"
+                             Fill="{DynamicResource Faint}" />
+                    <TextBlock x:Name="State" Margin="7,0,0,0" FontWeight="SemiBold"
+                               Foreground="{DynamicResource Text}" Text="Проверяю…" />
+                </StackPanel>
+
+                <Grid Margin="15,4,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Туннель" Foreground="{DynamicResource Muted}" FontSize="11.5" />
+                    <TextBlock x:Name="Tunnel" Grid.Column="1" Margin="10,0,0,0" FontSize="11.5"
+                               Foreground="{DynamicResource Muted}" Text="—" />
+                    <TextBlock Grid.Row="1" Text="Десинк" Foreground="{DynamicResource Muted}" FontSize="11.5" />
+                    <TextBlock x:Name="Desync" Grid.Row="1" Grid.Column="1" Margin="10,0,0,0" FontSize="11.5"
+                               Foreground="{DynamicResource Muted}" Text="—" />
+                </Grid>
+
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="6" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="Toggle" Style="{StaticResource Primary}" Content="Запустить"
+                            Padding="10,6" Click="OnToggle" />
+                    <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Открыть окно"
+                            Padding="10,6" Click="OnShowWindow" />
+                </Grid>
+
+                <Border Height="1" Margin="-4,10,-4,4" Background="{DynamicResource Border}" />
+
+                <!--
+                    Два выхода, а не один с оговоркой: «убрать значок» и «выключить
+                    обход» — разные желания, и ошибка в любую сторону дорогая.
+                -->
+                <Button Style="{StaticResource MenuRow}" Margin="-6,0" Click="OnQuitKeep"
+                        Content="Выйти, движки остаются работать" />
+                <Button Style="{StaticResource MenuRow}" Margin="-6,0" Click="OnQuitStop"
+                        Foreground="{DynamicResource Danger}" Content="Выйти и остановить движки" />
             </StackPanel>
-
-            <Grid Margin="17,6,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock Text="Туннель" Foreground="{DynamicResource Muted}" FontSize="12" />
-                <TextBlock x:Name="Tunnel" Grid.Column="1" Margin="12,0,0,0" FontSize="12"
-                           Foreground="{DynamicResource Muted}" Text="—" />
-                <TextBlock Grid.Row="1" Text="Десинк" Foreground="{DynamicResource Muted}" FontSize="12" />
-                <TextBlock x:Name="Desync" Grid.Row="1" Grid.Column="1" Margin="12,0,0,0" FontSize="12"
-                           Foreground="{DynamicResource Muted}" Text="—" />
-            </Grid>
-
-            <Grid Margin="0,14,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button x:Name="Toggle" Style="{StaticResource Primary}" Content="Запустить"
-                        Padding="14,8" Click="OnToggle" />
-                <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Открыть окно"
-                        Padding="14,8" Click="OnShowWindow" />
-            </Grid>
-
-            <Border Height="1.5" Margin="-4,12,-4,6" Background="{DynamicResource Border}" />
-
-            <!--
-                Два выхода, а не один с оговоркой: «убрать значок» и «выключить
-                обход» — разные желания, и ошибка в любую сторону дорогая.
-            -->
-            <Button Style="{StaticResource MenuRow}" Margin="-8,0" Click="OnQuitKeep"
-                    Content="Выйти, движки остаются работать" />
-            <Button Style="{StaticResource MenuRow}" Margin="-8,0" Click="OnQuitStop"
-                    Foreground="{DynamicResource Danger}" Content="Выйти и остановить движки" />
-        </StackPanel>
+        </Border>
     </Border>
 </Window>

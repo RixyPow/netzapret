@@ -1,7 +1,12 @@
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Shapes;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui;
@@ -97,13 +102,11 @@ public partial class TrayMenu : Window
     /// <summary>Показывает меню у указателя, в пределах рабочей области его экрана.</summary>
     internal void PopUp()
     {
-        // Сперва за краем экрана: размер известен только после показа,
-        // а показанное в углу по умолчанию мигнуло бы там на глазах.
-        Left = -10000;
-        Top = -10000;
-
-        Show();
-        UpdateLayout();
+        // Размер — до показа: снимок под меню снимается раньше, чем меню
+        // его закроет, а для снимка надо знать, где оно встанет.
+        var content = (FrameworkElement)Content;
+        content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = content.DesiredSize;
 
         var cursor = System.Windows.Forms.Cursor.Position;
         var area = System.Windows.Forms.Screen.FromPoint(cursor).WorkingArea;
@@ -119,11 +122,123 @@ public partial class TrayMenu : Window
 
         // Правым нижним углом к указателю — трей обычно внизу справа, — но
         // не за пределы рабочей области: панель задач бывает и слева, и сверху.
-        Left = Math.Clamp(x - ActualWidth, left, Math.Max(left, right - ActualWidth));
-        Top = Math.Clamp(y - ActualHeight, top, Math.Max(top, bottom - ActualHeight));
+        Left = Math.Clamp(x - size.Width, left, Math.Max(left, right - size.Width));
+        Top = Math.Clamp(y - size.Height, top, Math.Max(top, bottom - size.Height));
 
+        var margin = Card.Margin;
+
+        var backdrop = Blurred(
+            (int)Math.Round((Left + margin.Left) * dpi.DpiScaleX),
+            (int)Math.Round((Top + margin.Top) * dpi.DpiScaleY),
+            (int)Math.Round((size.Width - margin.Left - margin.Right) * dpi.DpiScaleX),
+            (int)Math.Round((size.Height - margin.Top - margin.Bottom) * dpi.DpiScaleY));
+
+        // Без снимка — сплошная карточка: полупрозрачный оттенок без размытия
+        // и дал бы ту кашу, из-за которой всё и переделывалось.
+        if (backdrop is not null)
+        {
+            Card.Background = backdrop;
+        }
+        else if (TryFindResource("SurfaceColor") is Color surface)
+        {
+            Card.Background = new SolidColorBrush(Color.FromRgb(surface.R, surface.G, surface.B));
+        }
+
+        Show();
         Activate();
     }
+
+    /// <summary>Радиус размытия в точках экрана — как у стекла под карточками окна.</summary>
+    private const double BlurRadius = 28;
+
+    /// <summary>
+    /// Размытый снимок участка экрана — подложка карточки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Снимок, а не живое размытие. Системное размытие Windows — подложка DWM
+    /// и политика акцента — под этим окном рисовало сплошной тёмный слой:
+    /// снято 24.09 поверх ярких полос, в трёх вариантах окна. Меню живёт
+    /// секунды и прячется при щелчке мимо, так что снимка на это время
+    /// хватает, и на Windows 10 он работает так же.
+    /// </para>
+    /// <para>
+    /// Снимается шире карточки на радиус и обрезается после размытия: края
+    /// размытия иначе тянут к прозрачному и дают тёмную рамку — ровно так
+    /// сделано и у стекла в окне (Themes.RenderLayer). У края экрана запас
+    /// берётся, сколько есть: за краем снимать нечего.
+    /// </para>
+    /// </remarks>
+    private static ImageBrush? Blurred(int x, int y, int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+            return null;
+
+        try
+        {
+            var screen = System.Windows.Forms.SystemInformation.VirtualScreen;
+            int pad = (int)Math.Ceiling(BlurRadius * 1.5);
+
+            int left = Math.Max(screen.Left, x - pad);
+            int top = Math.Max(screen.Top, y - pad);
+            int right = Math.Min(screen.Right, x + width + pad);
+            int bottom = Math.Min(screen.Bottom, y + height + pad);
+
+            if (right - left < width || bottom - top < height)
+                return null;
+
+            using var shot = new System.Drawing.Bitmap(right - left, bottom - top);
+
+            using (var graphics = System.Drawing.Graphics.FromImage(shot))
+                graphics.CopyFromScreen(left, top, 0, 0, shot.Size);
+
+            var handle = shot.GetHbitmap();
+            BitmapSource source;
+
+            try
+            {
+                source = Imaging.CreateBitmapSourceFromHBitmap(
+                    handle, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            }
+            finally
+            {
+                DeleteObject(handle);
+            }
+
+            var image = new Image
+            {
+                Source = source,
+                Width = shot.Width,
+                Height = shot.Height,
+                Effect = new BlurEffect
+                {
+                    Radius = BlurRadius,
+                    KernelType = KernelType.Gaussian,
+                    RenderingBias = RenderingBias.Quality,
+                },
+            };
+
+            var whole = new Size(shot.Width, shot.Height);
+            image.Measure(whole);
+            image.Arrange(new Rect(whole));
+
+            var rendered = new RenderTargetBitmap(shot.Width, shot.Height, 96, 96, PixelFormats.Pbgra32);
+            rendered.Render(image);
+
+            var cropped = new CroppedBitmap(rendered, new Int32Rect(x - left, y - top, width, height));
+            cropped.Freeze();
+
+            return new ImageBrush(cropped) { Stretch = Stretch.Fill };
+        }
+        catch (Exception)
+        {
+            // Снимок — украшение. Не вышел — карточка будет сплошной.
+            return null;
+        }
+    }
+
+    [DllImport("gdi32.dll")]
+    private static extern bool DeleteObject(IntPtr handle);
 
     private void OnDeactivated(object? sender, EventArgs e) => Hide();
 
