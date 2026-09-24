@@ -324,6 +324,49 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void ThroughTunnelPanelHostnamesResolveOutsideIt()
+    {
+        // Жалоба 24.09: выход лёг, и подписка не читалась с «Этот хост
+        // неизвестен» — адрес панели спрашивался через тот же мёртвый выход.
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsThroughTunnel = true,
+            PanelHosts = ["panel.example.net"],
+        });
+
+        var rules = root.GetProperty("dns").GetProperty("rules").EnumerateArray().ToList();
+        int panel = rules.FindIndex(r =>
+            r.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "panel.example.net"));
+        int fake = rules.FindIndex(r => r.GetProperty("server").GetString() == "fake");
+
+        Assert.True(panel >= 0, "правила для панели нет");
+        Assert.Equal("bootstrap", rules[panel].GetProperty("server").GetString());
+
+        // После fakeip: панель, которую человек сам отправил в VPN, остаётся в VPN.
+        Assert.True(fake >= 0 && fake < panel, "правило панели стоит раньше fakeip");
+    }
+
+    [Fact]
+    public void WithoutTunnelDnsPanelHostnamesNeedNoRule()
+    {
+        // Напрямую remote и так мимо туннеля, а bootstrap-резолвера
+        // в таком конфиге нет вовсе — ссылаться было бы не на что.
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            PanelHosts = ["panel.example.net"],
+        });
+
+        Assert.DoesNotContain(
+            root.GetProperty("dns").GetProperty("rules").EnumerateArray(),
+            r => r.GetProperty("server").GetString() == "bootstrap");
+    }
+
+    [Fact]
     public void WithoutServersTheTunnelDetourIsNotUsed()
     {
         // Detour на селектор без единого сервера убил бы разрешение имён
@@ -760,6 +803,55 @@ public class SingBoxConfigCompilerTests
             PinnedProxyAddresses = ["203.0.114.7/32"],
             PinnedProxyNames = ["files.rutracker.org"],
         });
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, result.Json);
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, $"sing-box check не пройден: {stderr}");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// DNS через туннель с панелями в обход — тем же настоящим sing-box:
+    /// правило DNS ссылается на bootstrap, и формат его проверяет только движок.
+    /// </summary>
+    [Fact]
+    public void TunnelDnsWithPanelBypassPassesSingBoxCheck()
+    {
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server("vl", ProxyProtocol.Vless, "tcp")],
+            new SingBoxOptions
+            {
+                Scope = TunnelScope.ProxyOnly,
+                DnsServerAddresses = ["8.8.8.8/32"],
+                DnsThroughTunnel = true,
+                PanelHosts = ["panel.example.net", "sub.example.org"],
+            });
+
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
 
         try

@@ -121,6 +121,18 @@ public sealed class SingBoxOptions
     /// </remarks>
     public bool DnsThroughTunnel { get; init; }
 
+    /// <summary>
+    /// Имена панелей подписок: при <see cref="DnsThroughTunnel"/> они
+    /// разрешаются через <c>bootstrap</c>, в обход туннеля.
+    /// </summary>
+    /// <remarks>
+    /// Имена серверов bootstrap обходил и прежде — через
+    /// <c>default_domain_resolver</c>, которым sing-box разрешает адреса своих
+    /// исходящих. Панель же спрашивает программа, её запрос приходит в DNS
+    /// sing-box снаружи и шёл в туннель. См. <c>SubscriptionHosts</c>.
+    /// </remarks>
+    public IReadOnlyList<string> PanelHosts { get; init; } = [];
+
     /// <summary>Тег селектора, к которому обращаются правила с <c>server: auto</c>.</summary>
     public string SelectorTag { get; init; } = "auto";
 
@@ -796,6 +808,27 @@ public sealed class SingBoxConfigCompiler
             {
                 ["query_type"] = new JsonArray { "A", "AAAA" },
                 ["server"] = "fake",
+            });
+        }
+
+        // Панели подписок — мимо туннеля, иначе при мёртвом выходе за новыми
+        // серверами не сходить: «Этот хост неизвестен» (жалоба 24.09).
+        //
+        // После fakeip, а не раньше. Панель, которую человек сам отправил
+        // в VPN, — а часть панелей в РФ закрыта, — должна получить fakeip
+        // и уйти в туннель, как он решил; иначе мы молча отменили бы его
+        // выбор ради случая, когда этот выбор и так не работает.
+        if (throughTunnel && options.PanelHosts.Count > 0)
+        {
+            var panels = new JsonArray();
+
+            foreach (var host in options.PanelHosts)
+                panels.Add(host);
+
+            rules.Add(new JsonObject
+            {
+                ["domain"] = panels,
+                ["server"] = BootstrapTag,
             });
         }
 

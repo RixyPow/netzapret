@@ -118,6 +118,11 @@ internal static class TunnelConfig
                 DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
                 DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
                 DnsThroughTunnel = settings.DnsThroughTunnel,
+
+                // Все подписки из книги, а не одна действующая: переключаются
+                // на другую как раз тогда, когда выход текущей лёг.
+                PanelHosts = SubscriptionHosts.From(
+                    [settings.SubscriptionUrl, .. SubscriptionBook.Load().Entries.Select(e => e.Url)]),
                 PreferredServerTag = settings.PreferredServer,
 
                 // «Игнорировать исключения» сюда больше не передаётся:
