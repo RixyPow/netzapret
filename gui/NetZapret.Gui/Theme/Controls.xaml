@@ -85,17 +85,24 @@
                             Своим шаблоном подписи, а не стилем в ресурсах:
                             стиль, положенный внутрь кнопки, до подписи не
                             доходил — это поймал тест, — а цвет, заданный самой
-                            надписи, общий стиль перебить не может. Кнопки
-                            с разметкой внутри шаблон не трогает: элемент
-                            показывается как есть.
+                            надписи, общий стиль перебить не может.
+
+                            Только для текста — через выбор шаблона, а не
+                            шаблоном напрямую: прямой применялся и к значку
+                            пина, и тот показывался строкой
+                            «System.Windows.Shapes.Path» (CaptionSelector).
                         -->
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <ContentPresenter.ContentTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding}"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                </DataTemplate>
-                            </ContentPresenter.ContentTemplate>
+                            <ContentPresenter.ContentTemplateSelector>
+                                <local:CaptionSelector>
+                                    <local:CaptionSelector.Text>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        </DataTemplate>
+                                    </local:CaptionSelector.Text>
+                                </local:CaptionSelector>
+                            </ContentPresenter.ContentTemplateSelector>
                         </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>

@@ -98,6 +98,36 @@ public sealed class ThemesTests
         });
     }
 
+    /// <summary>
+    /// Значок внутри кнопки показывается значком. Шаблон подписи из fc45186
+    /// применялся к любому содержимому, и пин в «Маршрутах» выводил строку
+    /// «System.Windows.Shapes.Path» (снимок владельца, 24.09).
+    /// </summary>
+    [Theory]
+    [InlineData("Ghost")]
+    [InlineData("Primary")]
+    public void AnIconButtonShowsTheIcon(string style)
+    {
+        Sta.Run(() =>
+        {
+            var icon = new System.Windows.Shapes.Path { Data = Geometry.Parse("M0,0 L10,10") };
+            var button = new System.Windows.Controls.Button
+            {
+                Style = (Style)Application.Current.FindResource(style),
+                Content = icon,
+            };
+
+            button.Measure(new Size(400, 100));
+            button.Arrange(new Rect(0, 0, 400, 100));
+
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.Invoke(
+                () => { }, System.Windows.Threading.DispatcherPriority.ContextIdle);
+
+            Assert.Same(icon, Find<System.Windows.Shapes.Path>(button));
+            Assert.Null(Find<System.Windows.Controls.TextBlock>(button));
+        });
+    }
+
     private static T? Find<T>(DependencyObject root) where T : DependencyObject
     {
         for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
