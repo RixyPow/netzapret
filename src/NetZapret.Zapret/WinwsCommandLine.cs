@@ -63,10 +63,28 @@ public static class WinwsCommandLine
     /// <param name="own">
     /// Свои профили: имена, которым человек выбрал рецепт руками.
     /// </param>
+    /// <param name="gameFilter">
+    /// Дописать секции game filter (см. <see cref="GameFilter"/>). Выключенный
+    /// не меняет в строке ничего — ни секций, ни перехвата.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
-        IReadOnlyList<OwnDesyncProfile>? own = null)
+        IReadOnlyList<OwnDesyncProfile>? own = null,
+        bool gameFilter = false)
+    {
+        var arguments = BuildPreset(preset, excludeList, own);
+
+        if (gameFilter)
+            GameFilter.Apply(arguments);
+
+        return arguments;
+    }
+
+    private static List<string> BuildPreset(
+        ZapretPreset preset,
+        string? excludeList,
+        IReadOnlyList<OwnDesyncProfile>? own)
     {
         var arguments = new List<string>();
 

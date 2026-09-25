@@ -341,7 +341,12 @@ internal static class SupervisorHost
         // потому что правила читаются там, а запуск живёт тут.
         var own = OwnDesyncLists.Read();
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own);
+        bool gameFilter = AppSettings.Load(AppSettings.DefaultPath).GameFilter;
+
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter);
+
+        if (gameFilter)
+            Console.WriteLine($"Game filter: секции игр по ipset-all на портах {GameFilter.Ports}");
 
         if (exclude is not null)
             Console.WriteLine($"Десинк не трогает прибитые имена: {exclude}");

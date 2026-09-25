@@ -207,6 +207,31 @@
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
                 <!--
+                    Game filter (владелец, 25.09: «делай тумблер на вкладке
+                    десинк»). Поверх любого пресета, выключен по умолчанию:
+                    экспериментальный, помогает ли играм — не проверено.
+                -->
+                <Button Style="{StaticResource Choice}" Margin="0,12,0,0" Click="OnGameFilter">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Game filter" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Как у Flowseal: к любому пресету дописываются две секции для игр — порты 1024–65535, адреса облаков и хостингов из ipset-all. Трогаются только первые четыре пакета соединения: подделки сбивают фильтр провайдера, дальше игра идёт нетронутой.&#x0a;&#x0a;Секции стоят последними и берут только то, что не взяли секции пресета, щит «напрямую» и свои рецепты.&#x0a;&#x0a;Выключенный не меняет в запуске движка ничего." />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                       Text="Экспериментальный: может помочь играм, которые не подключаются или тормозят, и может помешать тем, что работали. Действует со следующего запуска движков." />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1" x:Name="GameFilterSwitch" Style="{StaticResource Switch}"
+                                      IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <!--
                     Каталог стоит здесь, а не в конце вкладки, потому что
                     отвечает на вопрос о выбранном пресете: что он умеет.
                     Уехав под списки пресетов, он читался бы как перечень

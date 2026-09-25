@@ -205,6 +205,16 @@ public sealed record AppSettings
     public bool DnsAuto { get; init; }
 
     /// <summary>
+    /// Game filter поверх пресета: десинк начала соединений игр.
+    /// </summary>
+    /// <remarks>
+    /// Выключен по умолчанию: экспериментальный, перенесён с Flowseal
+    /// по просьбе пользователя 25.09. Выключенный не меняет в запуске
+    /// winws2 ничего. См. NetZapret.Zapret.GameFilter.
+    /// </remarks>
+    public bool GameFilter { get; init; }
+
+    /// <summary>
     /// Вести журнал супервизора.
     /// </summary>
     /// <remarks>

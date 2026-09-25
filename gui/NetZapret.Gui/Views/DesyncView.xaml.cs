@@ -130,10 +130,33 @@ public partial class DesyncView : UserControl
         Unloaded += (_, _) => _counting?.Cancel();
     }
 
+    private void OnGameFilter(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings with { GameFilter = !settings.GameFilter };
+
+            next.Save(AppSettings.DefaultPath);
+            GameFilterSwitch.IsChecked = next.GameFilter;
+
+            Status.Text = next.GameFilter
+                ? "Game filter включён. Проверьте игру на клиенте, открытом после перезапуска движков."
+                : "Game filter выключен.";
+
+            this.Offer(next.GameFilter ? "Game filter включён" : "Game filter выключен");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
     private void Reload()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
+        GameFilterSwitch.IsChecked = settings.GameFilter;
         ShowChosen(settings);
         ShowEngine();
 
