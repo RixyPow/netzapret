@@ -217,3 +217,20 @@ public sealed class DnsSurveyTests
         Assert.False(DnsSurvey.IsSpoofed([], [], new HashSet<IPAddress>()));
     }
 }
+
+/// <summary>
+/// Системный резолвер префиксом: у link-local IPv6 без номера адаптера.
+/// </summary>
+/// <remarks>
+/// Обсуждение #5, 25.09: «fe80::…%6/128» в route_address — и sing-box
+/// отвергал весь конфиг, туннель не поднимался.
+/// </remarks>
+public sealed class SystemResolversTests
+{
+    [Theory]
+    [InlineData("fe80::f2b4:d2ff:fec8:b5e6%6", "fe80::f2b4:d2ff:fec8:b5e6/128")]
+    [InlineData("2001:4860:4860::8888", "2001:4860:4860::8888/128")]
+    [InlineData("192.168.1.1", "192.168.1.1/32")]
+    public void APrefixCarriesNoZone(string address, string expected) =>
+        Assert.Equal(expected, SystemResolvers.ToPrefix(System.Net.IPAddress.Parse(address)));
+}

@@ -847,7 +847,13 @@ public class SingBoxConfigCompilerTests
             new SingBoxOptions
             {
                 Scope = TunnelScope.ProxyOnly,
-                DnsServerAddresses = ["8.8.8.8/32"],
+                DnsServerAddresses = [
+                    "8.8.8.8/32",
+
+                    // Резолвер роутера link-local: с номером адаптера sing-box
+                    // отвергал весь конфиг (обсуждение #5, 25.09).
+                    SystemResolvers.ToPrefix(System.Net.IPAddress.Parse("fe80::f2b4:d2ff:fec8:b5e6%6")),
+                ],
                 DnsThroughTunnel = true,
                 PanelHosts = ["panel.example.net", "sub.example.org"],
             });

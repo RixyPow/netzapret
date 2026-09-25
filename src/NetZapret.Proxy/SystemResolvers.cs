@@ -52,8 +52,7 @@ public static class SystemResolvers
                 if (IPAddress.IsLoopback(address))
                     continue;
 
-                int bits = address.AddressFamily == AddressFamily.InterNetworkV6 ? 128 : 32;
-                var cidr = $"{address}/{bits}";
+                var cidr = ToPrefix(address);
 
                 if (seen.Add(cidr))
                     result.Add(cidr);
@@ -61,6 +60,26 @@ public static class SystemResolvers
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Адрес резолвера префиксом — без номера адаптера.
+    /// </summary>
+    /// <remarks>
+    /// У link-local IPv6 (резолвер роутера, <c>fe80::…</c>) <c>ToString</c>
+    /// дописывает номер адаптера: <c>fe80::f2b4:d2ff:fec8:b5e6%6</c>. sing-box
+    /// такой префикс не принимает — «IPv6 zones cannot be present in a
+    /// prefix» — и отвергает весь конфиг: туннель не поднимался вовсе
+    /// (обсуждение #5, 25.09). Номер отрезается, адрес остаётся: запросы
+    /// к этому резолверу по-прежнему заводятся в туннель, иначе домены
+    /// «через VPN» не получили бы fakeip.
+    /// </remarks>
+    public static string ToPrefix(IPAddress address)
+    {
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            return $"{new IPAddress(address.GetAddressBytes())}/128";
+
+        return $"{address}/32";
     }
 
     private static bool IsOwnTunnel(NetworkInterface adapter)
