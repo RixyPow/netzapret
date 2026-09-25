@@ -853,7 +853,7 @@ public partial class StatusView : UserControl
         StateLine.Text = "Собираю конфиг…";
         StateHint.Text = "Читаю подписку и правила.";
 
-        var outcome = await EngineControl.StartAsync(CancellationToken.None);
+        var outcome = await EngineControl.StartAsync("кнопка «Запустить» на «Главной»", CancellationToken.None);
 
         StartButton.IsEnabled = true;
 
@@ -878,7 +878,7 @@ public partial class StatusView : UserControl
         StopButton.IsEnabled = false;
         StateLine.Text = "Останавливаю…";
 
-        await EngineControl.StopAsync(CancellationToken.None);
+        await EngineControl.StopAsync("кнопка «Остановить» на «Главной»", CancellationToken.None);
 
         StopButton.IsEnabled = true;
         Update();

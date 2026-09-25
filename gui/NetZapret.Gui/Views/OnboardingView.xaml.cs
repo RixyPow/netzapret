@@ -256,7 +256,7 @@ public partial class OnboardingView : UserControl
         Step2Start.IsEnabled = false;
         Step2Status.Text = "Собираю конфиг…";
 
-        var outcome = await EngineControl.StartAsync(CancellationToken.None);
+        var outcome = await EngineControl.StartAsync("мастер первого запуска", CancellationToken.None);
 
         if (!outcome.Ok)
         {

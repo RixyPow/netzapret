@@ -304,7 +304,7 @@ public partial class MainWindow : Window
         ToastTitle.Text = "Перезапускаю движки…";
         _toastTimer.Stop();
 
-        var outcome = await EngineControl.RestartAsync(CancellationToken.None);
+        var outcome = await EngineControl.RestartAsync("«Перезапустить» во всплывающем сообщении", CancellationToken.None);
 
         if (!outcome.Ok)
         {

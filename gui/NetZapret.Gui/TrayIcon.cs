@@ -218,9 +218,9 @@ internal sealed class TrayIcon : IDisposable
             var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
             if (state is not null && state.IsSupervisorAlive())
-                await EngineControl.StopAsync(CancellationToken.None);
+                await EngineControl.StopAsync("меню трея", CancellationToken.None);
             else
-                await EngineControl.StartAsync(CancellationToken.None);
+                await EngineControl.StartAsync("меню трея", CancellationToken.None);
         }
         catch (Exception)
         {
@@ -267,7 +267,7 @@ internal sealed class TrayIcon : IDisposable
 
             try
             {
-                await EngineControl.StopAsync(CancellationToken.None);
+                await EngineControl.StopAsync("меню трея: выход с остановкой", CancellationToken.None);
             }
             catch (Exception)
             {

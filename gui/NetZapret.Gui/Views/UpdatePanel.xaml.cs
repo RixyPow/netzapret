@@ -161,7 +161,7 @@ public partial class UpdatePanel : UserControl
         try
         {
             Say("Останавливаю движки…");
-            await EngineControl.StopAsync(CancellationToken.None);
+            await EngineControl.StopAsync("обновление программы", CancellationToken.None);
 
             var progress = new Progress<double>(fraction => 
             {

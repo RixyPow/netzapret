@@ -244,9 +244,9 @@ public partial class App : Application
                 // Недоподнятое надо снять: второй супервизор поверх первого
                 // дерётся с ним за TUN и WinDivert, и проигрывают оба.
                 if (State()?.IsSupervisorAlive() == true)
-                    await EngineControl.StopAsync(CancellationToken.None);
+                    await EngineControl.StopAsync("автозапуск при входе: прежние движки", CancellationToken.None);
 
-                var outcome = await EngineControl.StartAsync(CancellationToken.None);
+                var outcome = await EngineControl.StartAsync("автозапуск при входе", CancellationToken.None);
 
                 if (!outcome.Ok)
                 {
@@ -366,6 +366,7 @@ public partial class App : Application
 
     private async void RunStop()
     {
+        Journal.Write("движки", "остановка — ключ --stop");
         await SupervisorHost.StopAsync(CancellationToken.None);
 
         Shutdown(0);
@@ -381,6 +382,7 @@ public partial class App : Application
     /// </remarks>
     private async void RunQuit()
     {
+        Journal.Write("движки", "остановка и выход окна — ключ --quit (build.cmd)");
         await SupervisorHost.StopAsync(CancellationToken.None);
 
         bool gone = await Task.Run(() => SingleInstance.RequestQuit(TimeSpan.FromSeconds(10)));

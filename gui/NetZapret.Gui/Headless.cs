@@ -47,7 +47,7 @@ internal static class Headless
     /// </remarks>
     public static async Task<int> StartAsync(CancellationToken cancellationToken)
     {
-        var outcome = await EngineControl.StartAsync(cancellationToken);
+        var outcome = await EngineControl.StartAsync("ключ --start", cancellationToken);
 
         Say(outcome.Message);
 

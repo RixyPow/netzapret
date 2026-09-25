@@ -19,8 +19,15 @@ internal sealed record EngineOutcome(bool Ok, string Message);
 /// </remarks>
 internal static class EngineControl
 {
-    public static async Task<EngineOutcome> StartAsync(CancellationToken cancellationToken)
+    /// <param name="who">
+    /// Кто позвал — пишется в журнал. Обязательный: 22:16 25.09 поднялись два
+    /// супервизора подряд, и по журналу не понять было, откуда второй — кнопка,
+    /// трей, всплывающее сообщение или автозапуск (26.09).
+    /// </param>
+    public static async Task<EngineOutcome> StartAsync(string who, CancellationToken cancellationToken)
     {
+        Journal.Write("движки", $"запуск — {who}");
+
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var note = string.Empty;
 
@@ -81,11 +88,15 @@ internal static class EngineControl
         }
     }
 
-    public static Task<string> StopAsync(CancellationToken cancellationToken) =>
-        SupervisorHost.StopAsync(cancellationToken);
-
-    public static async Task<EngineOutcome> RestartAsync(CancellationToken cancellationToken)
+    public static Task<string> StopAsync(string who, CancellationToken cancellationToken)
     {
+        Journal.Write("движки", $"остановка — {who}");
+        return SupervisorHost.StopAsync(cancellationToken);
+    }
+
+    public static async Task<EngineOutcome> RestartAsync(string who, CancellationToken cancellationToken)
+    {
+        Journal.Write("движки", $"перезапуск — {who}");
         await SupervisorHost.StopAsync(cancellationToken);
 
         // Пауза, а не гонка: супервизор освобождает TUN и снимает фильтр
@@ -94,6 +105,6 @@ internal static class EngineControl
         // already exists» и не поднимается ни разу из трёх попыток.
         await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
 
-        return await StartAsync(cancellationToken);
+        return await StartAsync(who, cancellationToken);
     }
 }
