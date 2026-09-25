@@ -200,7 +200,7 @@ public partial class VpnView : UserControl
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        ShowPower(settings);
+        ShowPick(settings);
 
         _book = SubscriptionBook.Load();
         var active = _book.Active(settings);
@@ -555,31 +555,6 @@ public partial class VpnView : UserControl
     };
 
     /// <summary>
-    /// Показывает, поднимается ли туннель в нынешнем режиме.
-    /// </summary>
-    /// <remarks>
-    /// Отдельного признака «VPN включён» в настройках нет — он выводится
-    /// из режима, и заводить второй источник правды ради кнопки нельзя:
-    /// они разошлись бы в первый же день.
-    /// </remarks>
-    private void ShowPower(AppSettings settings)
-    {
-        bool on = settings.NeedsProxy;
-
-        Dot.Fill = (Brush)FindResource(on ? "Accent" : "Faint");
-        PowerLine.Text = on ? "VPN включён" : "VPN выключен";
-        PowerButton.Content = on ? "Выключить VPN" : "Включить VPN";
-
-        PowerHint.Text = on
-            ? $"Режим «{settings.DescribeMode()}»: туннель поднимается."
-            : settings.Mode == OperatingMode.Off
-                ? "Режим «выключено»: не поднимается ничего, включая десинк."
-                : "Режим «только десинк»: туннель не поднимается, пакеты правятся на лету.";
-
-        ShowPick(settings);
-    }
-
-    /// <summary>
     /// Показывает, как выбирается выход, и обе ручки к этому выбору.
     /// </summary>
     /// <remarks>
@@ -593,15 +568,13 @@ public partial class VpnView : UserControl
     {
         var pinned = settings.PreferredServer;
 
-        PickLine.Text = string.IsNullOrWhiteSpace(pinned)
-            ? "Автоподбор: движок сам опрашивает серверы и берёт быстрейший из живых. "
-              + "Мёртвый выход не выбирается — этим автоподбор и отличается от «первого по списку»."
-            : $"Закреплён вручную: {pinned}. Автоподбор не применяется, "
-              + "даже если этот сервер перестанет отвечать.";
+        bool auto = string.IsNullOrWhiteSpace(pinned);
 
-        AutoButton.Visibility = string.IsNullOrWhiteSpace(pinned)
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        PickLine.Text = auto
+            ? "Включён: трафик идёт через быстрейший из живых серверов."
+            : $"Выключен: закреплён {pinned}. Нажмите, чтобы вернуть автоподбор.";
+
+        AutoSwitch.IsChecked = auto;
     }
 
     /// <summary>
@@ -704,6 +677,14 @@ public partial class VpnView : UserControl
 
     private void OnAuto(object sender, RoutedEventArgs e)
     {
+        // Выключить тумблером нечем: чтобы закрепить сервер, надо знать
+        // какой. Говорим, где это делается, а не делаем вид, что выключили.
+        if (string.IsNullOrWhiteSpace(AppSettings.Load(AppSettings.DefaultPath).PreferredServer))
+        {
+            Status.Text = "Автоподбор выключается выбором сервера: нажмите «выбрать» у нужного в списке ниже.";
+            return;
+        }
+
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = null };
@@ -741,73 +722,6 @@ public partial class VpnView : UserControl
         {
             Status.Text = "Не удалось: " + ex.GetBaseException().Message;
         }
-    }
-
-    /// <summary>
-    /// Включает и выключает туннель.
-    /// </summary>
-    /// <remarks>
-    /// Переключает режим между «выборочно» и «только десинк» — и, если движки
-    /// работают, перезапускает их. Здесь это уместно, в отличие от выбора
-    /// в списке: кнопка называется «выключить VPN», и оставить её без действия
-    /// до следующего запуска значило бы соврать надписью.
-    /// </remarks>
-    private void OnPower(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            var next = settings with
-            {
-                Mode = settings.NeedsProxy ? OperatingMode.DesyncOnly : OperatingMode.Selective,
-            };
-
-            next.Save(AppSettings.DefaultPath);
-            ShowPower(next);
-
-            var state = SupervisorState.Load(SupervisorState.DefaultPath);
-
-            if (state is null || !state.IsSupervisorAlive())
-            {
-                Status.Text = next.NeedsProxy
-                    ? "VPN включён. Поднимется вместе с движками на «Главной»."
-                    : "VPN выключен. Десинк остаётся.";
-
-                return;
-            }
-
-            Restart(next);
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
-        }
-    }
-
-    /// <summary>Останавливает движки и поднимает их заново.</summary>
-    /// <remarks>
-    /// Конфиг при этом пересобирается: смена сервера ради того и делается,
-    /// чтобы туда пошёл трафик, а не только чтобы поменялась подпись.
-    /// </remarks>
-    private async void Restart(AppSettings settings)
-    {
-        PowerButton.IsEnabled = false;
-        Status.Text = "Перезапускаю движки…";
-
-        var outcome = await EngineControl.RestartAsync(CancellationToken.None);
-
-        PowerButton.IsEnabled = true;
-
-        if (!outcome.Ok)
-        {
-            Status.Text = outcome.Message;
-            return;
-        }
-
-        Status.Text = settings.NeedsProxy
-            ? "VPN включён, движки перезапущены."
-            : "VPN выключен, движки перезапущены. Десинк работает.";
     }
 
     private void OnFolder(object sender, RoutedEventArgs e)

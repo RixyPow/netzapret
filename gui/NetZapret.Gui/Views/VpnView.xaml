@@ -46,63 +46,39 @@
                 </Grid>
 
                 <!--
-                    Выключатель туннеля. За ним стоит режим работы: «выключить»
-                    означает «только десинк», потому что отдельного признака
-                    «VPN включён» в настройках нет и заводить второй источник
-                    правды ради кнопки нельзя.
+                    Автоподбор (владелец, 25.09: «переименовать в автоподбор,
+                    сделать подсказку и вместо кнопки вернуть тумблер»). Выше
+                    стояла карточка «VPN включён / Выключить VPN» — она убрана:
+                    туннель включается выключателем на «Главной», и два места
+                    для одного выключателя только путали.
+
+                    Тумблер показывает, включён ли автоподбор. Нажатие строки
+                    включает его — снимает закреплённый сервер. Выключить
+                    тумблером нельзя: надо знать, какой сервер закрепить, —
+                    это делает «выбрать» у сервера в списке, и строка так
+                    и говорит.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
+                <Button Style="{StaticResource Choice}" Margin="0,22,0,0" Click="OnAuto">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Ellipse x:Name="Dot" Grid.Column="0" Width="12" Height="12"
-                                 VerticalAlignment="Center" Margin="2,0,16,0"
-                                 Fill="{DynamicResource Faint}" />
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock x:Name="PowerLine" FontSize="16" FontWeight="SemiBold" Text="—" />
-                            <TextBlock x:Name="PowerHint" Style="{StaticResource Caption}"
-                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Автоподбор" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Движок сам опрашивает серверы и берёт быстрейший из живых. Мёртвый выход не выбирается — этим автоподбор и отличается от «первого по списку».&#x0a;&#x0a;Чтобы закрепить определённый сервер, нажмите «выбрать» у него в списке ниже — автоподбор выключится. Закреплённый сервер держится, даже если перестанет отвечать.&#x0a;&#x0a;Брать только зарубежные выходы и обходить туннель при мёртвых — в «Настройках» наверху." />
+                            </StackPanel>
+                            <TextBlock x:Name="PickLine" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <Button Grid.Column="2" x:Name="PowerButton" Style="{StaticResource Ghost}"
-                                Click="OnPower" VerticalAlignment="Center" />
+                        <ToggleButton Grid.Column="1" x:Name="AutoSwitch" Style="{StaticResource Switch}"
+                                      IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                     </Grid>
-                </Border>
-
-                <!--
-                    Выбор выхода. Обе ручки живут здесь, рядом со списком
-                    серверов, которого они и касаются: настройка про отбор
-                    кандидатов стояла в «Ещё», среди выключателей журнала
-                    и обновлений, и найти её мог только тот, кто знал,
-                    что она есть.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Через какой сервер идёт трафик" FontWeight="SemiBold" />
-                                <TextBlock x:Name="PickLine" Style="{StaticResource Caption}"
-                                           Margin="0,5,0,0" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <Button Grid.Column="1" x:Name="AutoButton" Style="{StaticResource Ghost}"
-                                    Content="Вернуть автоподбор" Click="OnAuto"
-                                    VerticalAlignment="Center" Visibility="Collapsed" />
-                        </Grid>
-
-                        
-                    </StackPanel>
-                </Border>
+                </Button>
 
                 <!--
                     Новая подписка. Поле скрытое: по ссылке выдаются серверы
