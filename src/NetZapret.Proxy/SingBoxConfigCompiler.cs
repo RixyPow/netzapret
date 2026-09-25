@@ -1515,6 +1515,13 @@ public sealed class SingBoxConfigCompiler
             ["default_domain_resolver"] = new JsonObject
             {
                 ["server"] = options.DnsThroughTunnel && haveServers ? BootstrapTag : "remote",
+
+                // Сперва IPv4, IPv6 — запасным. Журнал владельца 25.09: сотни
+                // «dial tcp [2001:4860:…]:443: unreachable network» за 1 мс —
+                // у машины нет IPv6, а движок, узнав имя из соединения, брал
+                // первым его адрес AAAA. У кого IPv6 есть, он остаётся запасным
+                // путём; у кого нет — движок не тратит попытку впустую.
+                ["strategy"] = "prefer_ipv4",
             },
         };
     }
