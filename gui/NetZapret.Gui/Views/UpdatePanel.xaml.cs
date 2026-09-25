@@ -59,10 +59,26 @@ public partial class UpdatePanel : UserControl
         OnInstallUpdate(this, new RoutedEventArgs());
     }
 
-    private void Say(string text)
+    /// <summary>
+    /// Ход обновления — строкой под номером версии, рядом с кнопками.
+    /// </summary>
+    /// <remarks>
+    /// Прежде писался отдельной строкой внизу карточки, а карточка — внизу
+    /// «Главной»: человек нажимал «Обновить», и загрузка шла там, куда он
+    /// не смотрел, вместе с ошибками вроде 404 и 503 (отзыв пользователя
+    /// на 0.8.1, 25.09). Теперь и строка у кнопок, и карточка прокручивается
+    /// в видимое.
+    /// </remarks>
+    private void Say(string text, bool failed = false)
     {
-        UpdateStatus.Text = text;
-        UpdateStatus.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+        UpdateValue.Text = text;
+
+        if (failed)
+            UpdateValue.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
+        else
+            UpdateValue.ClearValue(TextBlock.ForegroundProperty);
+
+        BringIntoView();
     }
 
     private async void OnCheckUpdate(object sender, RoutedEventArgs e)
@@ -71,7 +87,7 @@ public partial class UpdatePanel : UserControl
         _work = new CancellationTokenSource();
 
         UpdateButton.IsEnabled = false;
-        UpdateValue.Text = "Спрашиваю GitHub…";
+        Say("Спрашиваю GitHub…");
 
         try
         {
@@ -97,7 +113,7 @@ public partial class UpdatePanel : UserControl
         }
         catch (Exception ex)
         {
-            UpdateValue.Text = "Не удалось узнать: " + ex.GetBaseException().Message;
+            Say("Не удалось узнать: " + ex.GetBaseException().Message, failed: true);
         }
         finally
         {
@@ -147,7 +163,11 @@ public partial class UpdatePanel : UserControl
             Say("Останавливаю движки…");
             await EngineControl.StopAsync(CancellationToken.None);
 
-            var progress = new Progress<double>(fraction => Say($"Скачиваю… {fraction * 100:0}%"));
+            var progress = new Progress<double>(fraction => 
+            {
+                Say($"Скачиваю {_release.Version}… {fraction * 100:0} %");
+                InstallButton.Content = $"{fraction * 100:0} %";
+            });
 
             var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None);
             var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
@@ -166,7 +186,8 @@ public partial class UpdatePanel : UserControl
         }
         catch (Exception ex)
         {
-            Say("Обновиться не вышло: " + ex.GetBaseException().Message);
+            Say("Обновиться не вышло: " + ex.GetBaseException().Message, failed: true);
+            InstallButton.Content = "Обновить";
 
             InstallButton.IsEnabled = true;
             UpdateButton.IsEnabled = true;
