@@ -88,6 +88,36 @@ public static class EngineHealth
             : string.Join("; ", sick);
     }
 
+    /// <summary>
+    /// Состояние службы словами — для окна, трея и nz status одинаково.
+    /// </summary>
+    /// <remarks>
+    /// Причина — словами надзора, а не «запущен, но не отвечает»: у sing-box
+    /// это почти всегда мёртвые выходы подписки, и сказать это надо прямо.
+    /// Время начала — у всего, что не «работает» (26.09): «с 23:30» отличает
+    /// затяжную беду от минутной.
+    /// </remarks>
+    public static string Status(ServiceState service)
+    {
+        if (service.Health == ServiceHealth.Healthy)
+            return service.ProcessId is { } pid ? $"работает, процесс {pid}" : "работает";
+
+        var text = service.Health switch
+        {
+            ServiceHealth.Degraded => service.LastError is { Length: > 0 } error ? error : "запущен, но не отвечает",
+            ServiceHealth.Dead => service.LastError is { Length: > 0 } died ? $"процесс умер: {died}" : "процесс умер",
+            ServiceHealth.Faulted => service.LastError is { Length: > 0 } last
+                ? $"не поднимается, попытки исчерпаны: {last}"
+                : "не поднимается: попытки перезапуска исчерпаны",
+            _ => "остановлен",
+        };
+
+        if (service.Health != ServiceHealth.Stopped && service.HealthSince is { } since)
+            text += $" · с {since.ToLocalTime():HH:mm}";
+
+        return text;
+    }
+
     private static string Describe(ServiceState service) =>
         service.LastError is { Length: > 0 } error
             ? $"{service.Name}: {error}"

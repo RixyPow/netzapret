@@ -22,7 +22,9 @@ internal sealed record TrayStatus(
 {
     public string Headline => !Running
         ? "Остановлено"
-        : AllHealthy ? "Работает" : "Работает с оговорками";
+        : AllHealthy
+            ? "Работает"
+            : Tunnel == ServiceHealth.Degraded ? "Выходы VPN не отвечают" : "Работает с оговорками";
 
     /// <summary>Из файла состояния надзора — того же, что читает «Главная».</summary>
     public static TrayStatus Read(bool busy)
@@ -42,11 +44,16 @@ internal sealed record TrayStatus(
             busy);
     }
 
-    public static string Describe(ServiceHealth? health) => health switch
+    /// <param name="tunnel">
+    /// Это sing-box: у него «не отвечает» почти всегда значит мёртвые выходы
+    /// подписки, и так и говорится (26.09), — «с оговорками» не говорило ничего.
+    /// </param>
+    public static string Describe(ServiceHealth? health, bool tunnel = false) => health switch
     {
         ServiceHealth.Healthy => "работает",
-        ServiceHealth.Degraded => "с оговорками",
+        ServiceHealth.Degraded => tunnel ? "выходы VPN не отвечают" : "не отвечает",
         ServiceHealth.Dead => "упал",
+        ServiceHealth.Faulted => "не поднимается",
         ServiceHealth.Stopped => "остановлен",
 
         // Службы нет в состоянии — её и не поднимали: выключена выключателем
@@ -91,7 +98,7 @@ public partial class TrayMenu : Window
             Shape.FillProperty,
             !status.Running ? "Faint" : status.AllHealthy ? "Accent" : "Warn");
 
-        Tunnel.Text = status.Running ? TrayStatus.Describe(status.Tunnel) : "—";
+        Tunnel.Text = status.Running ? TrayStatus.Describe(status.Tunnel, tunnel: true) : "—";
         Desync.Text = status.Running ? TrayStatus.Describe(status.Desync) : "—";
 
         Toggle.Content = status.Busy

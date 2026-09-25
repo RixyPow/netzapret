@@ -56,6 +56,9 @@ public sealed class ProcessSupervisor
     private readonly SupervisorOptions _options;
     private readonly Dictionary<string, int> _degradedStreak = new();
     private readonly Dictionary<string, ServiceHealth> _health = new();
+
+    /// <summary>С какого момента держится нынешнее состояние службы.</summary>
+    private readonly Dictionary<string, DateTimeOffset> _since = new();
     private readonly RollingLog _log;
 
     public ProcessSupervisor(IReadOnlyList<SupervisedService> services, SupervisorOptions? options = null)
@@ -67,7 +70,7 @@ public sealed class ProcessSupervisor
         foreach (var service in services)
         {
             _degradedStreak[service.Name] = 0;
-            _health[service.Name] = ServiceHealth.Stopped;
+            SetHealth(service, ServiceHealth.Stopped);
         }
     }
 
@@ -140,7 +143,7 @@ public sealed class ProcessSupervisor
             foreach (var service in _services)
             {
                 await service.StopAsync(CancellationToken.None);
-                _health[service.Name] = ServiceHealth.Stopped;
+                SetHealth(service, ServiceHealth.Stopped);
             }
 
             SupervisorState.Clear(_options.StatePath);
@@ -157,7 +160,7 @@ public sealed class ProcessSupervisor
 
         if (ok)
         {
-            _health[service.Name] = ServiceHealth.Healthy;
+            SetHealth(service, ServiceHealth.Healthy);
             _degradedStreak[service.Name] = 0;
             Log($"{service.Name}: работает, PID {service.ProcessId}");
             return;
@@ -176,7 +179,7 @@ public sealed class ProcessSupervisor
         // 9090 держал PID 35440, о котором он не знал.
         await service.StopAsync(CancellationToken.None);
 
-        _health[service.Name] = ServiceHealth.Dead;
+        SetHealth(service, ServiceHealth.Dead);
         Log($"{service.Name}: не запустился — {service.LastError}");
     }
 
@@ -201,7 +204,7 @@ public sealed class ProcessSupervisor
                 if (_health[service.Name] != ServiceHealth.Healthy)
                     Log($"{service.Name}: снова здоров");
 
-                _health[service.Name] = ServiceHealth.Healthy;
+                SetHealth(service, ServiceHealth.Healthy);
                 _degradedStreak[service.Name] = 0;
                 continue;
             }
@@ -221,12 +224,12 @@ public sealed class ProcessSupervisor
                 if (_health[service.Name] != ServiceHealth.Degraded)
                     Log($"{service.Name}: трафик не идёт, но движок отвечает — перезапуск не поможет");
 
-                _health[service.Name] = SupervisorRules.HealthFor(check);
+                SetHealth(service, SupervisorRules.HealthFor(check));
                 continue;
             }
 
             _degradedStreak[service.Name]++;
-            _health[service.Name] = SupervisorRules.HealthFor(check);
+            SetHealth(service, SupervisorRules.HealthFor(check));
 
             Log($"{service.Name}: проверка не прошла " +
                 $"({_degradedStreak[service.Name]} из {_options.DegradedChecksBeforeRestart})");
@@ -240,7 +243,7 @@ public sealed class ProcessSupervisor
     {
         if (service.RestartCount >= _options.MaxRestarts)
         {
-            _health[service.Name] = ServiceHealth.Faulted;
+            SetHealth(service, ServiceHealth.Faulted);
             Log($"{service.Name}: исчерпаны попытки перезапуска ({_options.MaxRestarts}), сдаюсь");
             return;
         }
@@ -265,6 +268,27 @@ public sealed class ProcessSupervisor
         await StartServiceAsync(service, cancellationToken);
     }
 
+    /// <summary>
+    /// Меняет состояние службы и помнит, с какого момента оно держится.
+    /// </summary>
+    /// <remarks>
+    /// Время — только при смене: «выходы не отвечают с 23:30» говорит больше,
+    /// чем «не отвечают», и отличает затяжную беду от минутной (26.09).
+    /// </remarks>
+    private void SetHealth(SupervisedService service, ServiceHealth health)
+    {
+        if (!_health.TryGetValue(service.Name, out var was) || was != health)
+            _since[service.Name] = DateTimeOffset.Now;
+
+        _health[service.Name] = health;
+
+        // Здорова — значит прежней причины больше нет. Прежде она оставалась,
+        // и состояние «работает» шло вместе с «выходы подписки не отвечают»:
+        // 25.09 я на этой устаревшей строке объявил мёртвым живой VPN.
+        if (health == ServiceHealth.Healthy)
+            service.Recovered();
+    }
+
     private TimeSpan ComputeBackoff(int restartCount)
     {
         // Удвоение при каждой попытке: если служба падает из-за постоянной
@@ -282,6 +306,7 @@ public sealed class ProcessSupervisor
         {
             Name = s.Name,
             Health = _health[s.Name],
+            HealthSince = _since.TryGetValue(s.Name, out var since) ? since : null,
             ProcessId = s.ProcessId,
             StartedAt = s.StartedAt,
             RestartCount = s.RestartCount,

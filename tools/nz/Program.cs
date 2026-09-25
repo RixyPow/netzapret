@@ -73,18 +73,13 @@ int Status()
 
     foreach (var service in state.Services)
     {
-        var line = $"  {service.Name,-10} {service.Health}";
-
-        if (service.ProcessId is { } pid)
-            line += $", pid {pid}";
+        // Те же слова, что в окне и трее (EngineHealth.Status).
+        var line = $"  {service.Name,-10} {EngineHealth.Status(service)}";
 
         if (service.RestartCount > 0)
             line += $", перезапусков {service.RestartCount}";
 
         Console.WriteLine(line);
-
-        if (service.LastError is { Length: > 0 } error)
-            Console.WriteLine($"             {error}");
     }
 
     // Через какой сервер туннель ходит прямо сейчас — у самого движка,

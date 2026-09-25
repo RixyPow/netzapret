@@ -66,6 +66,11 @@ public sealed class ProcessSupervisorTests : IDisposable
         public override Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref Checks);
+
+            // Как sing-box: при мёртвом выходе называет причину.
+            if (Answer == ServiceCheck.UpstreamDown)
+                LastError = "выходы подписки не отвечают";
+
             return Task.FromResult(Answer);
         }
 
@@ -234,6 +239,39 @@ public sealed class ProcessSupervisorTests : IDisposable
         await Stop(cts, run);
     }
 
+    /// <summary>
+    /// Причина уходит вместе с бедой, а время начала меняется вместе с состоянием.
+    /// </summary>
+    /// <remarks>
+    /// 25.09 состояние «работает» шло вместе с «выходы подписки не отвечают»:
+    /// причина оставалась от прошлой беды, и на ней я объявил живой VPN мёртвым.
+    /// </remarks>
+    [Fact]
+    public async Task RecoveryClearsTheReasonAndStampsTheTime()
+    {
+        var service = new FakeService();
+        var options = Options(degraded: 2);
+        using var cts = new CancellationTokenSource();
+
+        var run = new ProcessSupervisor([service], options).RunAsync(cts.Token);
+        var healthy = await WaitFor(options, s => s.Health == ServiceHealth.Healthy, "служба поднялась");
+
+        service.Answer = ServiceCheck.UpstreamDown;
+        var down = await WaitFor(options, s => s.Health == ServiceHealth.Degraded, "мёртвый выход");
+
+        Assert.Equal("выходы подписки не отвечают", down.LastError);
+        Assert.NotNull(down.HealthSince);
+        Assert.True(down.HealthSince >= healthy.HealthSince);
+
+        service.Answer = ServiceCheck.Healthy;
+        var back = await WaitFor(options, s => s.Health == ServiceHealth.Healthy, "выход ожил");
+
+        Assert.Null(back.LastError);
+        Assert.True(back.HealthSince >= down.HealthSince);
+
+        await Stop(cts, run);
+    }
+
     [Fact]
     public async Task AfterTheRestartLimitTheServiceGivesUp()
     {
@@ -308,4 +346,35 @@ public sealed class ProcessSupervisorTests : IDisposable
 
         await Stop(cts, run);
     }
+}
+
+/// <summary>Состояние службы словами — одно для окна, трея и nz status.</summary>
+public sealed class EngineStatusTests
+{
+    private static ServiceState State(ServiceHealth health, string? error = null, int? pid = null) => new()
+    {
+        Name = "sing-box",
+        Health = health,
+        ProcessId = pid,
+        LastError = error,
+        HealthSince = new DateTimeOffset(2026, 9, 26, 23, 30, 0, DateTimeOffset.Now.Offset),
+    };
+
+    [Fact]
+    public void AHealthyEngineShowsItsProcess() =>
+        Assert.Equal("работает, процесс 6784", EngineHealth.Status(State(ServiceHealth.Healthy, pid: 6784)));
+
+    [Fact]
+    public void ADegradedEngineSaysWhyAndSince() =>
+        Assert.Equal(
+            "выходы подписки не отвечают — трафик идёт мимо туннеля · с 23:30",
+            EngineHealth.Status(State(ServiceHealth.Degraded, "выходы подписки не отвечают — трафик идёт мимо туннеля")));
+
+    [Fact]
+    public void WithoutAReasonDegradedStillSaysSomething() =>
+        Assert.Equal("запущен, но не отвечает · с 23:30", EngineHealth.Status(State(ServiceHealth.Degraded)));
+
+    [Fact]
+    public void AStoppedEngineHasNoTime() =>
+        Assert.Equal("остановлен", EngineHealth.Status(State(ServiceHealth.Stopped)));
 }

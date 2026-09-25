@@ -245,6 +245,9 @@ public abstract class SupervisedService
 
     internal void NoteRestart() => RestartCount++;
 
+    /// <summary>Служба снова здорова: прежняя причина больше не действует.</summary>
+    internal void Recovered() => LastError = null;
+
     private void StartOutputPump(StreamReader reader)
     {
         _ = Task.Run(async () =>

@@ -75,3 +75,22 @@ public sealed class TrayMenuTests
         });
     }
 }
+
+/// <summary>Мёртвые выходы VPN трей называет прямо, а не «с оговорками» (26.09).</summary>
+public sealed class TrayDeadExitsTests
+{
+    [Fact]
+    public void DeadExitsAreNamed()
+    {
+        var status = new TrayStatus(
+            Running: true,
+            AllHealthy: false,
+            Tunnel: ServiceHealth.Degraded,
+            Desync: ServiceHealth.Healthy,
+            Busy: false);
+
+        Assert.Equal("Выходы VPN не отвечают", status.Headline);
+        Assert.Equal("выходы VPN не отвечают", TrayStatus.Describe(status.Tunnel, tunnel: true));
+        Assert.Equal("не отвечает", TrayStatus.Describe(ServiceHealth.Degraded));
+    }
+}

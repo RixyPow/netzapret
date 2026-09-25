@@ -131,4 +131,7 @@ public sealed record ServiceState
     public int RestartCount { get; init; }
 
     public string? LastError { get; init; }
+
+    /// <summary>С какого момента держится нынешнее <see cref="Health"/>; <c>null</c> — неизвестно.</summary>
+    public DateTimeOffset? HealthSince { get; init; }
 }

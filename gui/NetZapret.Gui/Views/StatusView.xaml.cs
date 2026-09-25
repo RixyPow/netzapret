@@ -461,16 +461,17 @@ public partial class StatusView : UserControl
         // Слова те же, что в консоли. Degraded — это «процесс жив, а проверка
         // не проходит»: самый коварный случай, и называть его «работает»
         // нельзя, иначе окно будет уверять в исправности молчащей трубы.
-        var (detail, key) = service.Health switch
+        // Слова — общие с треем и nz status (EngineHealth.Status): причина
+        // надзора и время начала, а не «запущен, но не отвечает» (26.09).
+        var key = service.Health switch
         {
-            ServiceHealth.Healthy => ("работает", "Accent"),
-            ServiceHealth.Degraded => ("запущен, но не отвечает", "Warn"),
-            ServiceHealth.Dead => ("процесс умер", "Danger"),
-            _ => ("остановлен", "Faint"),
+            ServiceHealth.Healthy => "Accent",
+            ServiceHealth.Degraded => "Warn",
+            ServiceHealth.Dead or ServiceHealth.Faulted => "Danger",
+            _ => "Faint",
         };
 
-        if (service.ProcessId is { } pid && service.Health == ServiceHealth.Healthy)
-            detail += $", процесс {pid}";
+        var detail = EngineHealth.Status(service);
 
         return new EngineRow(service.Name, detail, (Brush)FindResource(key));
     }
