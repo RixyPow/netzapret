@@ -147,36 +147,6 @@
                 </Grid>
             </Border>
 
-            <!--
-                Движки по одному. Супервизор держит их отдельно, и «работает»
-                у каждого своё: sing-box может подняться, а winws2 упасть, —
-                одна общая лампочка это скрыла бы.
-            -->
-            <TextBlock Text="Движки" Style="{StaticResource Caption}" Margin="4,22,0,8" />
-            <ItemsControl x:Name="Engines">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="16,13">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,14,0"
-                                         VerticalAlignment="Center" Fill="{Binding Color}" />
-
-                                <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" />
-
-                                <TextBlock Grid.Column="2" Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                           VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
             <!-- Предупреждения: защитник в стеке, стёртый hosts. Пусто — не показываем. -->
             <ItemsControl x:Name="Warnings" Margin="0,10,0,0">
                 <ItemsControl.ItemTemplate>
@@ -211,12 +181,15 @@
                 намекала бы на порядок, которого нет.
             -->
             <!--
-                «Что поднимать», а не «Движки»: выше по вкладке уже есть
-                раздел с тем же именем, и он про другое — там видно, что
-                работает прямо сейчас, здесь задают, чему работать. Два
-                одинаковых заголовка на одном экране читаются как ошибка.
+                «Движки»: состояние каждого — прямо в его карточке, рядом
+                с выключателем (владелец 26.09: «засунем движки прям в нижние
+                прямоугольники с номером процесса и статусом»). Прежде был
+                отдельный список «Движки» выше и «Что поднимать» здесь: одно
+                и то же разнесено по двум местам. Состояние у каждого своё —
+                sing-box может подняться, а winws2 упасть, — поэтому и строка
+                у каждого своя, а не одна лампочка на двоих.
             -->
-            <TextBlock Text="Что поднимать" FontWeight="SemiBold" FontSize="15" Margin="4,26,0,10" />
+            <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="15" Margin="4,26,0,10" />
 
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -245,6 +218,13 @@
                                           Click="OnDesync" VerticalAlignment="Center" />
                         </Grid>
 
+                        <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                            <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{DynamicResource Faint}" />
+                            <TextBlock x:Name="DesyncState" Margin="8,0,0,0" FontSize="12.5"
+                                       Foreground="{DynamicResource Muted}" Text="—" />
+                        </StackPanel>
+
                         <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
                                    Margin="0,8,0,0" TextWrapping="Wrap" />
                     </StackPanel>
@@ -269,6 +249,13 @@
                             <ToggleButton Grid.Column="1" x:Name="TunnelSwitch" Style="{StaticResource Switch}"
                                           Click="OnTunnel" VerticalAlignment="Center" />
                         </Grid>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
+                            <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center"
+                                     Fill="{DynamicResource Faint}" />
+                            <TextBlock x:Name="TunnelState" Margin="8,0,0,0" FontSize="12.5"
+                                       Foreground="{DynamicResource Muted}" Text="—" />
+                        </StackPanel>
 
                         <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"
                                    Margin="0,8,0,0" TextWrapping="Wrap" />

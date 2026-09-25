@@ -507,7 +507,28 @@ public partial class StatusView : UserControl
             return;
 
         _engines = rows;
-        Engines.ItemsSource = rows;
+
+        // Каждый движок — в своей карточке, рядом с выключателем (26.09).
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState);
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState);
+    }
+
+    /// <summary>Строка состояния движка в его карточке.</summary>
+    /// <remarks>
+    /// Нет строки — движок в этот запуск не поднимали: выключен или нет
+    /// подписки. «Остановлен» здесь соврало бы, что он был.
+    /// </remarks>
+    private void ShowEngine(EngineRow? row, System.Windows.Shapes.Ellipse dot, TextBlock state)
+    {
+        if (row is null)
+        {
+            dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
+            state.Text = "не поднимается";
+            return;
+        }
+
+        dot.Fill = row.Color;
+        state.Text = row.Detail;
     }
 
     /// <summary>
