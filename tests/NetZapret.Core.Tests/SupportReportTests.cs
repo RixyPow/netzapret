@@ -60,6 +60,14 @@ public sealed class SupportReportTests : IDisposable
             $"{{ \"Entries\": [ {{ \"Name\": \"вторая\", \"Url\": \"{BookOnly}\" }} ] }}");
         File.AppendAllText(Path.Combine(_root, "runtime", "supervisor.log"), $"вторая: {BookOnly}\n");
 
+        // Две проверки блокировок: в отчёт идёт свежая, и о ней сказано в сводке.
+        Directory.CreateDirectory(Path.Combine(_root, "reports"));
+        var old = Path.Combine(_root, "reports", "blockcheck-2026-09-20-1000.txt");
+        File.WriteAllText(old, "старая проверка");
+        File.SetLastWriteTime(old, DateTime.Now.AddDays(-5));
+        File.WriteAllText(Path.Combine(_root, "reports", "blockcheck-2026-09-25-2327.txt"),
+            $"Проверка блокировок\nyoutube.com ок\nссылка {Subscription}\n");
+
         var result = SupportReport.Create("0.8.3 (1)", root: _root);
         var text = ReadAll(result.Path);
 
@@ -87,6 +95,9 @@ public sealed class SupportReportTests : IDisposable
         Assert.Contains("DNS: 8.8.8.8, через туннель", text);
         Assert.Contains("*.example.org", text);
         Assert.Contains("ERROR", text);
+        Assert.Contains("youtube.com ок", text);
+        Assert.DoesNotContain("старая проверка", text);
+        Assert.Contains("Проверка блокировок: blockcheck-2026-09-25-2327.txt", text);
     }
 
     [Fact]

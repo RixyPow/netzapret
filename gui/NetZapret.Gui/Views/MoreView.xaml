@@ -18,6 +18,33 @@
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
+                <!--
+                    Первым в разделе (владелец 26.09: «подними разбор неисправностей
+                    выше») и отдельно от «Обслуживания»: там необратимое, а отчёт
+                    ничего не меняет и нажимается по первой просьбе.
+                -->
+                <TextBlock Text="Разбор неисправностей" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Собрать отчёт для разбора" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его и прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" x:Name="ReportButton" Style="{StaticResource Ghost}"
+                                Content="Собрать" Click="OnReport" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
                 <TextBlock Text="Первый запуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
                 <Border Style="{StaticResource Card}">
@@ -196,32 +223,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
-                </Border>
-
-                <!--
-                    Отдельно от «Обслуживания»: там необратимое, а отчёт
-                    ничего не меняет и нажимается по первой просьбе.
-                -->
-                <TextBlock Text="Разбор неисправностей" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
-
-                <Border Style="{StaticResource Card}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Собрать отчёт для разбора" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Журналы движков, настройки и свои маршруты одним архивом — его и прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
-                            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                       TextWrapping="Wrap" Visibility="Collapsed" />
-                        </StackPanel>
-
-                        <Button Grid.Column="1" x:Name="ReportButton" Style="{StaticResource Ghost}"
-                                Content="Собрать" Click="OnReport" VerticalAlignment="Center" />
-                    </Grid>
                 </Border>
 
                 <!--

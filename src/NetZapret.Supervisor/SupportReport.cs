@@ -60,6 +60,11 @@ public static class SupportReport
 
         var book = BookUrls(At(root, Path.Combine("config", "subscriptions.json")));
 
+        // Последняя проверка блокировок: для разбора «не открывается» — первое,
+        // что хочется увидеть (владелец 26.09 спросил, входит ли она). Одна,
+        // самая свежая: прошлые описывают сеть, которой уже нет.
+        var blockcheck = LatestBlockcheck(At(root, DefaultDirectory));
+
         var hidden = (secrets ?? [])
             .Append(settings.SubscriptionUrl)
             .Concat(book)
@@ -73,7 +78,7 @@ public static class SupportReport
             // Имена файлов — латиницей. Русские в архиве у части распаковщиков
             // выходят кракозябрами — так показал unzip из Git 25.09. Отчёт уходит
             // к чужим людям с чужими распаковщиками.
-            ("summary.txt", Summary(version, settings, state, book.Count, when)),
+            ("summary.txt", Summary(version, settings, state, book.Count, blockcheck, when)),
 
             // Ссылку из настроек убираем до сериализации, а не надеемся
             // на вычистку: поле ради того и названо.
@@ -87,6 +92,9 @@ public static class SupportReport
         AddLog(parts, "winws2.log", At(root, Path.Combine("runtime", "winws2.log")));
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
+
+        if (blockcheck is not null)
+            AddFile(parts, blockcheck.Name, blockcheck.FullName);
 
         var folder = directory ?? At(root, DefaultDirectory);
         Directory.CreateDirectory(folder);
@@ -112,6 +120,7 @@ public static class SupportReport
         AppSettings settings,
         SupervisorState? state,
         int subscriptions,
+        FileInfo? blockcheck,
         DateTime when)
     {
         var text = new StringBuilder();
@@ -127,6 +136,9 @@ public static class SupportReport
         text.AppendLine($"WARP: {YesNo(settings.WarpEnabled)}");
         text.AppendLine($"Подписок: {subscriptions} (ссылки в отчёт не входят)");
         text.AppendLine($"Проверка прохода трафика: {YesNo(settings.VerifyTraffic)}");
+        text.AppendLine(blockcheck is null
+            ? "Проверка блокировок: не проводилась"
+            : $"Проверка блокировок: {blockcheck.Name}, снята {blockcheck.LastWriteTime:dd.MM.yyyy HH:mm}");
         text.AppendLine();
 
         if (state is null)
@@ -158,6 +170,25 @@ public static class SupportReport
     }
 
     private static string YesNo(bool value) => value ? "да" : "нет";
+
+    /// <summary>Самый свежий отчёт проверки блокировок; <c>null</c> — проверок не было.</summary>
+    private static FileInfo? LatestBlockcheck(string folder)
+    {
+        try
+        {
+            if (!Directory.Exists(folder))
+                return null;
+
+            return new DirectoryInfo(folder)
+                .GetFiles("blockcheck-*.txt")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Ссылки из книги подписок — все строки полей <c>Url</c>.
