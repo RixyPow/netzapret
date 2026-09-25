@@ -738,6 +738,23 @@ public static class DnsSurvey
         return result;
     }
 
+    /// <summary>
+    /// Быстрейший резолвер, годный в апстрим туннеля; <c>null</c> — таких не ответило.
+    /// </summary>
+    /// <remarks>
+    /// Меряется по DoH, потому что апстрим sing-box — DoH: быстрый UDP
+    /// здесь ничего не говорит, а у части операторов UDP к тому же подменяют.
+    /// Берутся только те, что годятся в туннель (<see cref="DnsProvider.Choosable"/>):
+    /// посредники вроде XBOX DNS отдают адреса своих прокси, и быстрота их
+    /// ответа — не достоинство.
+    /// </remarks>
+    public static DnsProvider? Fastest(IEnumerable<DnsSurveyRow> rows) =>
+        rows
+            .Where(r => r.Provider.Choosable && r.DohMs is not null)
+            .OrderBy(r => r.DohMs)
+            .Select(r => r.Provider)
+            .FirstOrDefault();
+
     /// <summary>Обзор всех провайдеров, по нескольку разом.</summary>
     public static async Task<IReadOnlyList<DnsSurveyRow>> SurveyAllAsync(
         IReadOnlyList<DnsProvider>? providers = null,

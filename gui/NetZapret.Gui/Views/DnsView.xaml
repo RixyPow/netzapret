@@ -162,7 +162,30 @@
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
-                <ItemsControl x:Name="Resolvers" Margin="0,12,0,0">
+                <!--
+                    Автовыбор (отзыв пользователя и решение владельца, 25.09):
+                    программа сама ставит быстрейший по DoH из тех, что годятся
+                    в туннель, — после каждого обзора. Выбор строкой ниже
+                    автовыбор выключает.
+                -->
+                <Button Style="{StaticResource Choice}" Margin="0,12,0,0" Click="OnAutoDns">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="Автовыбор по задержке" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AutoDnsLine" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                       TextWrapping="Wrap"
+                                       Text="Программа сама замерит резолверы из вашего места и поставит самый быстрый по DoH. Замер повторяется при каждой проверке выше; выбор строкой ниже автовыбор выключает." />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1" x:Name="AutoDnsSwitch" Style="{StaticResource Switch}"
+                                      IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <ItemsControl x:Name="Resolvers" Margin="0,8,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"

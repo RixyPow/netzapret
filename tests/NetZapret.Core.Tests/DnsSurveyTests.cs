@@ -14,6 +14,32 @@ namespace NetZapret.Core.Tests;
 /// </remarks>
 public sealed class DnsSurveyTests
 {
+    /// <summary>
+    /// Автовыбор (25.09): быстрейший по DoH среди годных в туннель.
+    /// Посредник с быстрым ответом и молчащий по DoH не берутся.
+    /// </summary>
+    [Fact]
+    public void TheFastestTunnelResolverByDohIsPicked()
+    {
+        static DnsSurveyRow Row(DnsProvider provider, double? doh) => new() { Provider = provider, DohMs = doh };
+
+        var slow = new DnsProvider("Медленный", ["1.1.1.1"], "1.1.1.1", "one.one.one.one");
+        var fast = new DnsProvider("Быстрый", ["8.8.8.8"], "8.8.8.8", "dns.google");
+        var silent = new DnsProvider("Молчит", ["9.9.9.9"], "9.9.9.9", "dns.quad9.net");
+        var middleman = new DnsProvider("Посредник", ["45.155.204.190"], "45.155.204.190", "xbox.dns", ForTunnel: false);
+
+        var picked = DnsSurvey.Fastest(
+        [
+            Row(slow, 80),
+            Row(fast, 30),
+            Row(silent, null),
+            Row(middleman, 5),
+        ]);
+
+        Assert.Same(fast, picked);
+        Assert.Null(DnsSurvey.Fastest([Row(silent, null), Row(middleman, 5)]));
+    }
+
     /// <summary>Ответ с одной A и сжатым именем, как отдаёт любой резолвер.</summary>
     private static byte[] AnswerA(byte[] query, IPAddress address)
     {

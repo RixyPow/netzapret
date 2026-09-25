@@ -146,6 +146,11 @@ public partial class DnsView : UserControl
             ? settings.DnsServer
             : $"{known.Name} · {known.TlsAddress}";
 
+        if (settings.DnsAuto)
+            ChosenName.Text += " · автовыбор";
+
+        AutoDnsSwitch.IsChecked = settings.DnsAuto;
+
         // Заполняем, не поднимая события выбора: иначе показ состояния
         // тут же записал бы его обратно в настройки и позвал уведомление
         // о перезапуске — при каждом заходе на вкладку.
@@ -219,7 +224,7 @@ public partial class DnsView : UserControl
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address };
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address, DnsAuto = false };
             settings.Save(AppSettings.DefaultPath);
 
             ShowChosen(settings);
@@ -239,6 +244,75 @@ public partial class DnsView : UserControl
         {
             Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>
+    /// Включает и выключает автовыбор; включённый сразу запускает обзор.
+    /// </summary>
+    private void OnAutoDns(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings with { DnsAuto = !settings.DnsAuto };
+
+            next.Save(AppSettings.DefaultPath);
+            ShowChosen(next);
+
+            if (next.DnsAuto)
+            {
+                Status.Text = "Автовыбор включён — замеряю резолверы…";
+                OnSurvey(sender, e);
+            }
+            else
+            {
+                Status.Text = "Автовыбор выключен: остаётся " + ChosenName.Text + ".";
+            }
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// После обзора, при включённом автовыборе, ставит быстрейший резолвер.
+    /// </summary>
+    /// <remarks>
+    /// Решает библиотека (<see cref="DnsSurvey.Fastest"/>): окно только
+    /// записывает выбор и отмечает строку. Тот же — не выбор: без смены
+    /// не зовём и перезапуск.
+    /// </remarks>
+    private void PickFastest(IReadOnlyList<DnsSurveyRow> all, IReadOnlyList<ResolverRow> choices)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (!settings.DnsAuto)
+            return;
+
+        if (DnsSurvey.Fastest(all) is not { TlsAddress: { } address } best)
+        {
+            Status.Text = "Автовыбор: ни один резолвер для туннеля не ответил по DoH — выбор не менялся.";
+            return;
+        }
+
+        if (settings.DnsServer == address)
+        {
+            Status.Text = $"Автовыбор: быстрейший и так стоит — {best.Name}.";
+            return;
+        }
+
+        var next = settings with { DnsServer = address };
+        next.Save(AppSettings.DefaultPath);
+
+        foreach (var row in choices)
+            row.Chosen = row.Address == address;
+
+        Redraw();
+        ShowChosen(next);
+
+        Status.Text = $"Автовыбор: {best.Name} · {address}. Применится при следующем запуске движков.";
+        this.Offer($"Резолвер сменён на {best.Name}");
     }
 
     /// <summary>
@@ -331,6 +405,8 @@ public partial class DnsView : UserControl
 
             // Порядок — как в списке провайдеров, а не как пришли ответы.
             Survey.ItemsSource = all.Select(SurveyRow.From).ToList();
+
+            PickFastest(all, choices);
 
             var intercepted = all.Where(r => r.Spoofed > 0).Select(r => r.Provider.Name).ToList();
 
