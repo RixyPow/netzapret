@@ -3,7 +3,7 @@
 ## Чем это собрано и как сверить
 
 ```
-NetZapret.zip   {ZIP}
+NetZapret-{VERSION}.zip   {ZIP}
 NetZapret.exe   {EXE}
 ```
 
@@ -12,7 +12,7 @@ NetZapret.exe   {EXE}
 Проверить скачанное:
 
 ```
-Get-FileHash NetZapret.zip -Algorithm SHA256
+Get-FileHash NetZapret-{VERSION}.zip -Algorithm SHA256
 ```
 
 Собрать самому и сравнить:

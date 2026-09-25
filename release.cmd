@@ -82,6 +82,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+rem The version goes into the file name, not only the release title. A downloaded
+rem NetZapret.zip says nothing about what is inside until it is unpacked, and
+rem people keep several of them in Downloads (user feedback on 0.8.1, 25.09).
+rem The in-app updater takes any .zip attached to the release, so the name is
+rem free to change. pack.cmd keeps producing NetZapret.zip; only the published
+rem copy is renamed.
+set "ZIP=%ROOT%dist\NetZapret-%VERSION%.zip"
+move /y "%ROOT%dist\NetZapret.zip" "%ZIP%" >nul
+if not exist "%ZIP%" (
+    echo Could not name the archive %ZIP%
+    exit /b 1
+)
+
 rem Checksums go into the notes. Telling people to build it themselves and
 rem compare is empty advice while there is nothing to compare against: the
 rem archive is unsigned, SmartScreen calls it suspicious, and the only honest
@@ -98,7 +111,7 @@ rem and holds every Russian word; the line below only substitutes numbers.
 set "NOTES=%ROOT%dist\notes.md"
 copy /y "%ROOT%docs\release-notes.md" "%NOTES%" >nul
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=[IO.File]::ReadAllText('%ROOT%docs\release-notes.footer.md',[Text.Encoding]::UTF8); $f=$f.Replace('{ZIP}',(Get-FileHash '%ROOT%dist\NetZapret.zip' -Algorithm SHA256).Hash).Replace('{EXE}',(Get-FileHash '%ROOT%dist\NetZapret\NetZapret.exe' -Algorithm SHA256).Hash).Replace('{SDK}',(& 'C:\Program Files\dotnet\dotnet.exe' --version)).Replace('{VERSION}','%VERSION%'); [IO.File]::AppendAllText('%NOTES%',$f,(New-Object Text.UTF8Encoding($false)))"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=[IO.File]::ReadAllText('%ROOT%docs\release-notes.footer.md',[Text.Encoding]::UTF8); $f=$f.Replace('{ZIP}',(Get-FileHash '%ZIP%' -Algorithm SHA256).Hash).Replace('{EXE}',(Get-FileHash '%ROOT%dist\NetZapret\NetZapret.exe' -Algorithm SHA256).Hash).Replace('{SDK}',(& 'C:\Program Files\dotnet\dotnet.exe' --version)).Replace('{VERSION}','%VERSION%'); [IO.File]::AppendAllText('%NOTES%',$f,(New-Object Text.UTF8Encoding($false)))"
 
 if not exist "%NOTES%" (
     echo Could not prepare the notes.
@@ -112,7 +125,7 @@ rem fails with "not a git repository" after the archive is already built.
 echo Publishing release v%VERSION%
 pushd "%ROOT%"
 
-"%GH%" release create "v%VERSION%" "%ROOT%dist\NetZapret.zip" ^
+"%GH%" release create "v%VERSION%" "%ZIP%" ^
     --title "NetZapret %VERSION%" ^
     --notes-file "%NOTES%"
 
