@@ -70,16 +70,19 @@ public static class SupportReport
 
         var parts = new List<(string Name, string Text)>
         {
-            ("сводка.txt", Summary(version, settings, state, book.Count, when)),
+            // Имена файлов — латиницей. Русские в архиве у части распаковщиков
+            // выходят кракозябрами — так показал unzip из Git 25.09. Отчёт уходит
+            // к чужим людям с чужими распаковщиками.
+            ("summary.txt", Summary(version, settings, state, book.Count, when)),
 
             // Ссылку из настроек убираем до сериализации, а не надеемся
             // на вычистку: поле ради того и названо.
-            ("настройки.json", JsonSerializer.Serialize(
+            ("settings.json", JsonSerializer.Serialize(
                 settings with { SubscriptionUrl = null },
                 new JsonSerializerOptions { WriteIndented = true })),
         };
 
-        AddLog(parts, "журнал.log", At(root, Path.Combine("runtime", "supervisor.log")));
+        AddLog(parts, "supervisor.log", At(root, Path.Combine("runtime", "supervisor.log")));
         AddLog(parts, "sing-box.log", At(root, Path.Combine("runtime", "sing-box.log")));
         AddLog(parts, "winws2.log", At(root, Path.Combine("runtime", "winws2.log")));
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));

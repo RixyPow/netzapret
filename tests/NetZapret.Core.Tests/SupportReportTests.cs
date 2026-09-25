@@ -63,6 +63,11 @@ public sealed class SupportReportTests : IDisposable
         var result = SupportReport.Create("0.8.3 (1)", root: _root);
         var text = ReadAll(result.Path);
 
+        // Имена внутри архива — латиницей: русские у части распаковщиков
+        // превращаются в кракозябры.
+        using (var archive = ZipFile.OpenRead(result.Path))
+            Assert.All(archive.Entries, e => Assert.True(e.FullName.All(char.IsAscii), $"не латиницей: {e.FullName}"));
+
         Assert.DoesNotContain("Zx9TOKEN", text);
         Assert.DoesNotContain("BOOKTOKEN", text);
         Assert.DoesNotContain("sub2.example.org", text);
