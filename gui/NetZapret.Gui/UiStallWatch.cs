@@ -53,12 +53,19 @@ internal static class UiStallWatch
     {
         using var answered = new ManualResetEventSlim();
 
+        using var self = Process.GetCurrentProcess();
+
         while (!dispatcher.HasShutdownStarted)
         {
             Thread.Sleep(Period);
 
             answered.Reset();
             var clock = Stopwatch.StartNew();
+
+            self.Refresh();
+            var cpuBefore = self.TotalProcessorTime;
+            var sectionBefore = Section;
+            var ownLate = TimeSpan.Zero;
 
             try
             {
@@ -74,8 +81,21 @@ internal static class UiStallWatch
 
             // Ждём сколько угодно: подвисание на десять секунд тоже надо
             // записать, а не бросить на пороге.
+            //
+            // Каждое ожидание — секунда; если оно длилось дольше, опоздал уже
+            // сам сторож. Его поток окном не занят, и опоздать он может, только
+            // если стояла вся машина.
+            var tick = Stopwatch.StartNew();
+
             while (!answered.Wait(TimeSpan.FromSeconds(1)))
             {
+                var over = tick.Elapsed - TimeSpan.FromSeconds(1);
+
+                if (over > ownLate)
+                    ownLate = over;
+
+                tick.Restart();
+
                 if (dispatcher.HasShutdownStarted)
                     return;
             }
@@ -86,8 +106,28 @@ internal static class UiStallWatch
             // само открытие раздела, и записать надо тот, что открывали.
             var section = Section;
 
-            if (late >= Threshold)
-                Journal.Write("окно", $"поток окна был занят {late.TotalMilliseconds:0} мс, раздел «{section}»");
+            if (late < Threshold)
+                continue;
+
+            // Сколько процессора окно съело за время подвисания. 26.09 «Десинк»
+            // простоял 8765 мс, и владелец видел замерший курсор — а по одной
+            // длительности не понять, считало окно, ждало или стояла вся
+            // машина. Замер того же открытия вне окна дал 50 мс.
+            self.Refresh();
+            var cpu = self.TotalProcessorTime - cpuBefore;
+
+            var where = sectionBefore == section ? $"раздел «{section}»" : $"раздел «{sectionBefore}» → «{section}»";
+
+            var why = late.TotalMilliseconds >= 1000
+                ? ownLate.TotalMilliseconds >= 300
+                    ? $"; стояла вся машина — сторож сам опоздал на {ownLate.TotalMilliseconds:0} мс"
+                    : cpu.TotalMilliseconds >= late.TotalMilliseconds * 0.5
+                        ? "; окно считало"
+                        : "; окно ждало — не процессор"
+                : string.Empty;
+
+            Journal.Write("окно", $"поток окна был занят {late.TotalMilliseconds:0} мс, {where}; "
+                + $"процессора окна за это время {cpu.TotalMilliseconds:0} мс{why}");
         }
     }
 }
