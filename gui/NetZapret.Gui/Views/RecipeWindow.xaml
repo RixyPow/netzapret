@@ -120,7 +120,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBlock Grid.Column="0" Style="{StaticResource Caption}" VerticalAlignment="Center"
+            <TextBlock x:Name="PresetNote" Grid.Column="0" Style="{StaticResource Caption}" VerticalAlignment="Center"
                        TextWrapping="Wrap" Margin="0,0,16,0"
                        Text="«Решает пресет» — прежнее поведение: имя выпускается напрямую, а что с ним делать, решают его списки. Если имя в них не попало, не делается ничего." />
 
@@ -137,7 +137,7 @@
                         Content="Остановить" Click="OnStop" Margin="0,0,8,0"
                         IsEnabled="False" />
 
-                <Button Style="{StaticResource Ghost}" Content="Решает пресет"
+                <Button x:Name="PresetButton" Style="{StaticResource Ghost}" Content="Решает пресет"
                         Click="OnPreset" Margin="0,0,8,0" />
                 <Button Style="{StaticResource Ghost}" Content="Отмена" Click="OnCancel" />
             </StackPanel>

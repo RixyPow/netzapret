@@ -167,7 +167,13 @@ public partial class RecipeWindow : Window
     /// оно не разрешается, и каждый рецепт отвечал «не помогает» — все
     /// одиннадцать, включая заведомо рабочие.
     /// </remarks>
-    public RecipeWindow(string title, string domain, ZapretPreset preset)
+    /// <param name="presetOnlyIfKnown">
+    /// Предлагать «решает пресет», только когда в пресете есть секция под это
+    /// имя. Для своих доменов (владелец, 26.09): свой домен почти никогда
+    /// не стоит ни в одном списке пресета, и «десинк» без рецепта оставлял
+    /// его без обхода вовсе — а в строке стояло «десинк», как будто работает.
+    /// </param>
+    public RecipeWindow(string title, string domain, ZapretPreset preset, bool presetOnlyIfKnown = false)
     {
         InitializeComponent();
 
@@ -251,6 +257,22 @@ public partial class RecipeWindow : Window
               + "Проверка подбирает рабочий сама, но требует остановленных движков.");
 
         TestButton.IsEnabled = _rows.Count > 0;
+
+        if (presetOnlyIfKnown)
+        {
+            if (already is null)
+            {
+                PresetButton.Visibility = Visibility.Collapsed;
+                PresetNote.Text = $"Пресет «{preset.Name}» не знает {domain}: ни одна его секция это имя "
+                    + "не берёт, и без рецепта десинк не сделал бы с ним ничего. Выберите рецепт — "
+                    + "или «Отмена», и маршрут останется прежним.";
+            }
+            else
+            {
+                PresetNote.Text = $"«Решает пресет» — имя возьмёт его секция «{already}».";
+            }
+        }
+
         Closed += (_, _) => _work?.Cancel();
     }
 

@@ -1521,7 +1521,11 @@ public partial class RoutesView : UserControl
     /// </remarks>
     /// <param name="title">Что писать в заголовке окна.</param>
     /// <param name="domain">На чём проверять рецепты — настоящее имя.</param>
-    private bool AskRecipe(string title, string domain, out string? recipe)
+    /// <param name="own">
+    /// Свой домен: «решает пресет» предлагается, только если пресет это имя
+    /// знает. Иначе «десинк» без рецепта оставил бы его без обхода вовсе.
+    /// </param>
+    private bool AskRecipe(string title, string domain, bool own, out string? recipe)
     {
         recipe = null;
 
@@ -1535,7 +1539,7 @@ public partial class RoutesView : UserControl
                 return true;
             }
 
-            var window = new RecipeWindow(title, domain, new PresetReader().Load(presetPath))
+            var window = new RecipeWindow(title, domain, new PresetReader().Load(presetPath), presetOnlyIfKnown: own)
             {
                 Owner = Window.GetWindow(this),
             };
@@ -1743,7 +1747,7 @@ public partial class RoutesView : UserControl
         {
             try
             {
-                if (!AskRecipe(ServiceName(list), example, out var recipe))
+                if (!AskRecipe(ServiceName(list), example, key.StartsWith(RouteKeys.Own + "|", StringComparison.Ordinal), out var recipe))
                 {
                     // Отказ от выбора — отказ от всего действия. Список при
                     // этом остался на новом значении, и его надо вернуть.
