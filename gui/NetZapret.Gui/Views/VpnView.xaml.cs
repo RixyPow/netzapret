@@ -187,13 +187,76 @@ public partial class VpnView : UserControl
     {
         InitializeComponent();
 
-        Loaded += async (_, _) => await LoadAsync();
+        Loaded += async (_, _) =>
+        {
+            await LoadAsync();
+            _exitTimer.Start();
+        };
 
         Unloaded += (_, _) =>
         {
             _work?.Cancel();
             _reading?.Cancel();
+            _exitTimer.Stop();
         };
+
+        _exitTimer.Tick += async (_, _) => await ShowExitAsync();
+    }
+
+    /// <summary>
+    /// Раз в четверть минуты — какой выход держит движок.
+    /// </summary>
+    /// <remarks>
+    /// Автоподбор переключает выходы сам, по задержке и живости, и показанный
+    /// однажды сервер к следующей минуте мог смениться. Опрос — к движку
+    /// на localhost, он дешёвый.
+    /// </remarks>
+    private readonly System.Windows.Threading.DispatcherTimer _exitTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+
+    /// <summary>Строка автоподбора без текущего выхода — к ней дописывается выход.</summary>
+    private string _pickBase = string.Empty;
+
+    /// <summary>
+    /// Дописывает в строку автоподбора сервер, через который трафик идёт сейчас.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Просьба владельца 26.09. Строка говорила «через быстрейший из живых», но
+    /// какой это сервер, было видно только в <c>nz status</c>: тот же вечер
+    /// через «Польшу» висело каждое третье соединение, и понять, с каким
+    /// выходом беда, из окна было нельзя.
+    /// </para>
+    /// <para>
+    /// Спрашиваем сам движок, а не настройки: 23.09 в настройках стояло
+    /// «авто», а движок держался WARP из своего кэша. Если движок держит не то,
+    /// что сказано в настройках, строка это называет.
+    /// </para>
+    /// </remarks>
+    private async Task ShowExitAsync()
+    {
+        if (!IsLoaded || _pickBase.Length == 0)
+            return;
+
+        if (!EnginesRunning)
+        {
+            PickLine.Text = _pickBase + " Движки не запущены — выхода сейчас нет.";
+            return;
+        }
+
+        var (server, automatic) = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+
+        if (!IsLoaded)
+            return;
+
+        bool auto = AutoSwitch.IsChecked == true;
+
+        PickLine.Text = server is null
+            ? _pickBase + " Движок не ответил, какой выход держит."
+            : auto == automatic
+                ? $"{_pickBase} Сейчас: {server}."
+                : auto
+                    ? $"{_pickBase} Но движок держит закреплённый {server} — перезапустите движки, чтобы выбор применился."
+                    : $"{_pickBase} Но движок выбирает сам и сейчас держит {server} — перезапустите движки, чтобы закрепление применилось.";
     }
 
     private async Task LoadAsync()
@@ -570,11 +633,16 @@ public partial class VpnView : UserControl
 
         bool auto = string.IsNullOrWhiteSpace(pinned);
 
-        PickLine.Text = auto
+        _pickBase = auto
             ? "Включён: трафик идёт через быстрейший из живых серверов."
             : $"Выключен: закреплён {pinned}. Нажмите, чтобы вернуть автоподбор.";
 
+        PickLine.Text = _pickBase;
         AutoSwitch.IsChecked = auto;
+
+        // Выход — следом, не дожидаясь таймера: иначе первые четверть минуты
+        // на вкладке строка была бы без него.
+        _ = ShowExitAsync();
     }
 
     /// <summary>
