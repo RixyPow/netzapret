@@ -94,6 +94,46 @@ public sealed class OwnDomainListsTests : IDisposable
     }
 
     /// <summary>
+    /// Всё своё идёт в проверку блокировок: домен одним именем, список — первыми.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 26.09: «всё, что мы добавляем, должно быть и в блокчеке».
+    /// Свой список «harambaby» в отчёт не попал — проверка знала только каталог.
+    /// </remarks>
+    [Fact]
+    public void Own_domains_and_lists_go_to_the_check()
+    {
+        var list = OwnLists.Create("harambaby", ["*.one.example", "two.example", "three.example"], _root);
+
+        var file = UserRulesFile.Load(Full("rules.user.yaml"));
+        file.Set(MatchKind.Domain, "*.own.example", RoutingMode.Proxy);
+        file.Set(MatchKind.HostList, list, RoutingMode.Proxy);
+        file.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Desync);
+        file.Set(MatchKind.Domain, "*.off.example", RoutingMode.Proxy);
+        file.Toggle(3);
+
+        var targets = OwnLists.CheckTargets(file, perList: 2, _root);
+
+        Assert.Equal(
+            [
+                ("own.example", "свой домен"),
+                ("one.example", "свой · harambaby"),
+                ("two.example", "свой · harambaby"),
+            ],
+            targets);
+    }
+
+    /// <summary>Комментарии и пустые строки своего списка — не имена.</summary>
+    [Fact]
+    public void Comments_are_not_names()
+    {
+        var list = OwnLists.Create("site", ["example.com"], _root);
+        File.AppendAllText(Full(list), "\r\n# заметка\r\ncdn.example.net # хвост\r\n");
+
+        Assert.Equal(["example.com", "cdn.example.net"], OwnLists.Names(list, _root));
+    }
+
+    /// <summary>
     /// Свой список проверяется раньше списка сервиса — как прежде своё имя.
     /// </summary>
     /// <remarks>

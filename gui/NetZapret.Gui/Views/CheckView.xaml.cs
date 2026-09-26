@@ -717,6 +717,26 @@ public partial class CheckView : UserControl
             }
         }
 
+        // Своё — в общей проверке, не при выборе одного сервиса. Владелец
+        // 26.09: всё, что добавлено в маршруты, обязано быть в проверке;
+        // прежде она знала только каталог, и свой список в отчёт не попадал.
+        if (only is null)
+        {
+            try
+            {
+                foreach (var (host, label) in OwnLists.CheckTargets(UserRulesFile.Load(), perPart))
+                {
+                    if (!NotWorthChecking.Contains(host) && seen.Add(host))
+                        targets.Add((host, label));
+                }
+            }
+            catch (Exception)
+            {
+                // Свои правила не прочитались — проверка каталога от этого
+                // не теряет смысла.
+            }
+        }
+
         return targets;
     }
 

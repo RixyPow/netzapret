@@ -109,6 +109,83 @@ public static class OwnLists
         return value;
     }
 
+    /// <summary>
+    /// Имена из своего списка — строки без комментариев и звёздочек.
+    /// </summary>
+    /// <remarks>
+    /// Свой формат, свой разбор: файл заводит программа, и читать его
+    /// через разбор списков Zapret незачем — ссылок на чужую установку
+    /// в нём не бывает.
+    /// </remarks>
+    public static IReadOnlyList<string> Names(string value, string? root = null)
+    {
+        try
+        {
+            var full = Full(value, root);
+
+            if (!File.Exists(full))
+                return [];
+
+            return File.ReadAllLines(full)
+                .Select(line => line.Split('#')[0].Trim().TrimStart('*', '.'))
+                .Where(line => line.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (IOException)
+        {
+            return [];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Что из своего проверять в «Проверке блокировок»: имя и подпись строки.
+    /// </summary>
+    /// <param name="perList">Сколько имён брать со своего списка — как с части сервиса.</param>
+    /// <remarks>
+    /// <para>
+    /// Владелец 26.09: «всё, что мы добавляем, должно быть и в блокчеке, на то
+    /// и смысл». Проверка брала имена только из каталога сервисов, и свой
+    /// список «harambaby» в отчёте не появился — хотя маршрут на него был.
+    /// </para>
+    /// <para>
+    /// Свой домен — одним именем. Свой список — первыми <paramref name="perList"/>
+    /// именами, как часть сервиса: быстрая берёт одно, полная — два.
+    /// Выключенные записи не проверяются: маршрута у них нет.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<(string Host, string Label)> CheckTargets(
+        UserRulesFile file,
+        int perList,
+        string? root = null)
+    {
+        var targets = new List<(string, string)>();
+
+        foreach (var entry in file.Entries.Where(e => e.Enabled))
+        {
+            if (entry.Match == MatchKind.Domain)
+            {
+                var host = entry.Value.Trim().TrimStart('*', '.');
+
+                if (host.Contains('.'))
+                    targets.Add((host, "свой домен"));
+            }
+            else if (entry.Match == MatchKind.HostList && IsOwn(entry.Value))
+            {
+                var label = $"свой · {NameOf(entry.Value)}";
+
+                foreach (var host in Names(entry.Value, root).Where(n => n.Contains('.')).Take(perList))
+                    targets.Add((host, label));
+            }
+        }
+
+        return targets;
+    }
+
     /// <summary>Удаляет файл своего списка; чужой путь не трогает.</summary>
     public static void Delete(string value, string? root = null)
     {
