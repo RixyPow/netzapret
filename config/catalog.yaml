@@ -101,3 +101,28 @@ services:
       - sso.crunchyroll.com
       - beta-api.crunchyroll.com
     resolve: honest
+
+  # VirusTotal — API Google для входа и файлов документации. На своих
+  # адресах 172.217.112–119.x все четыре молчат под любым именем; на
+  # фронтенде Google (туда же ведёт www.google.com) отвечают за 0,2 с —
+  # замер 26.09. Туннель не годится: браузер не пускает страницу к его
+  # внутренним адресам. Адрес стареет: при отказе взять тот, в который
+  # сейчас разрешается www.google.com.
+  - name: VirusTotal — API Google
+    names:
+      - identitytoolkit.googleapis.com
+      - securetoken.googleapis.com
+      - www.googleapis.com
+      - storage.googleapis.com
+    addresses:
+      - 142.251.150.119
+
+  # VirusTotal — оформление документации. cdn.readme.io на 104.16.241.118
+  # и .242.118 молчит, на соседних узлах Cloudflare отвечает 302 за 0,7 с —
+  # замер 26.09.
+  - name: VirusTotal — документация
+    names:
+      - cdn.readme.io
+    addresses:
+      - 104.18.168.110
+      - 104.18.167.110

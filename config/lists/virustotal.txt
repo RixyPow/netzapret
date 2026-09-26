@@ -1,4 +1,5 @@
-# VirusTotal.
+# VirusTotal — сайт. С 26.09 и часть «Сайт» сервиса VirusTotal в каталоге;
+# вход и документация — в virustotal-login/-google-api/-docs.txt.
 #
 # Нужен пресету: секции «Выбрано вручную: *.virustotal» в Universal V10.
 # Там имя прежде стояло строкой --hostlist-domains, а она поддоменов

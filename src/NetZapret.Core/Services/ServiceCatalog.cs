@@ -425,6 +425,40 @@ public static class ServiceCatalog
             Parts = [new ServicePart { Name = "Всё", List = "config/lists/github.txt" }],
         },
 
+        // Владелец 26.09: вход через GitHub падал с auth/network-request-failed,
+        // документация открывалась пустой. Сайт закрыт по имени и лечится
+        // десинком — его берёт секция «Выбрано вручную: *.virustotal»
+        // в Universal V10. Три прочие части закрыты по адресу, и каждая
+        // лечится своим способом: окно входа только туннелем, API Google
+        // и CDN документации только пином. Замеры — в самих списках.
+        new ServiceDefinition
+        {
+            Name = "VirusTotal",
+            Parts =
+            [
+                new ServicePart { Name = "Сайт", List = "config/lists/virustotal.txt" },
+                new ServicePart
+                {
+                    Name = "Документация",
+                    List = "config/lists/virustotal-docs.txt",
+                    Probe = "cdn.readme.io",
+                    Note = "Закрыта по адресу — лечится пином, адрес подберёт автоподбор.",
+                },
+                new ServicePart
+                {
+                    Name = "Вход",
+                    List = "config/lists/virustotal-login.txt",
+                    Note = "Окно входа Firebase: живого адреса нет, только VPN.",
+                },
+                new ServicePart
+                {
+                    Name = "Вход — API Google",
+                    List = "config/lists/virustotal-google-api.txt",
+                    Note = "Только пин, не VPN: браузер не пускает страницу к адресам туннеля.",
+                },
+            ],
+        },
+
         new ServiceDefinition
         {
             Name = "Нейросети",

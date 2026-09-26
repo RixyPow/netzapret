@@ -1,0 +1,16 @@
+# VirusTotal — API Google, без которых не завершается вход.
+#
+# После GitHub или Google страница virustotal.com сама идёт сюда
+# за токеном; docs.virustotal.com берёт файлы из storage.
+#
+# Замер 26.09: на своих адресах 172.217.112–119.x все молчат под любым
+# именем, а на фронтенде Google 142.251.150.119 отвечают за 0,2 с.
+# Лечится пином (адрес — в config/catalog.yaml), НЕ туннелем: имя в VPN
+# получает внутренний адрес туннеля (fc00::, 198.18.x), и браузер
+# не пускает к нему публичную страницу — ERR_BLOCKED_BY_CLIENT за 2–15 мс,
+# Chrome ещё и спрашивает про «доступ к локальной сети». Так вход падал
+# с auth/network-request-failed при исправном туннеле.
+identitytoolkit.googleapis.com
+securetoken.googleapis.com
+www.googleapis.com
+storage.googleapis.com

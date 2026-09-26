@@ -82,6 +82,14 @@ rules:
     value: "*.canvausercontent.com"
     mode: proxy
 
+  # Окно входа VirusTotal (Firebase): адрес 199.36.158.100 закрыт, живого
+  # для пина нет — замер 26.09 в config/lists/virustotal-login.txt.
+  # API Google для того же входа сюда НЕ ставятся: в туннеле браузер
+  # не пускает к ним страницу, им нужен пин.
+  - match: hostlist
+    value: config/lists/virustotal-login.txt
+    mode: proxy
+
   # ChatGPT отказывает по стране, а не по каналу: десинк отрабатывает
   # безупречно — рукопожатие за семь сотых секунды, — и приходит 403
   # от Cloudflare. Помогает только зарубежный выход.

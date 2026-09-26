@@ -1,0 +1,8 @@
+# VirusTotal — вход через Google, GitHub, Microsoft (Firebase).
+#
+# Окно входа живёт на домене Firebase проекта VirusTotal, а не на
+# virustotal.com. Замер 26.09: 199.36.158.100 молчит под любым именем,
+# старые адреса хостинга Firebase (151.101.x.195) тоже, фронтенд Google
+# его сертификат не отдаёт — живого адреса для пина нет. Только VPN;
+# через туннель окно открывается (200 за 0,7 с).
+virustotalcloud.firebaseapp.com
