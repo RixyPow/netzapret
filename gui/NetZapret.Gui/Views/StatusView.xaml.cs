@@ -190,7 +190,7 @@ public partial class StatusView : UserControl
         Problem.Visibility = Visibility.Collapsed;
 
         PresetValue.Text = settings.DescribePreset();
-        ServerValue.Text = settings.DescribeServer();
+        ServerValue.Text = _exit is null ? settings.DescribeServer() : $"{settings.DescribeServer()} · сейчас {_exit}";
         DnsValue.Text = settings.DnsServer;
 
         // Ссылки на подписки — пароли, и в окне им не место. Показываем лишь
@@ -202,6 +202,52 @@ public partial class StatusView : UserControl
 
         ShowState(settings, state, running);
         ShowWarnings(settings);
+
+        _ = ReadExitAsync(settings, running && state!.Services.Any(s => s.Name == "sing-box"));
+    }
+
+    /// <summary>Выход, который держит движок; <c>null</c> — не знаем или туннеля нет.</summary>
+    private string? _exit;
+
+    private bool _readingExit;
+
+    /// <summary>
+    /// Спрашивает у движка, через какой сервер идёт трафик, — для строки «Сервер».
+    /// </summary>
+    /// <remarks>
+    /// Владелец 26.09: «нигде так и не написано, какой сервер активен». Строка
+    /// говорила «авто (по задержке)» — то, что в настройках, а не то, чем идёт
+    /// трафик. Спрашиваем движок, как nz status: 23.09 настройки говорили
+    /// «авто», а движок держался WARP из кэша. Прежний ответ держится до нового,
+    /// чтобы строка не мигала на каждом тике.
+    /// </remarks>
+    private async Task ReadExitAsync(AppSettings settings, bool tunnel)
+    {
+        if (!tunnel)
+        {
+            _exit = null;
+            return;
+        }
+
+        if (_readingExit)
+            return;
+
+        _readingExit = true;
+
+        try
+        {
+            var (server, _) = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+
+            if (server is null || server == _exit)
+                return;
+
+            _exit = server;
+            ServerValue.Text = $"{settings.DescribeServer()} · сейчас {server}";
+        }
+        finally
+        {
+            _readingExit = false;
+        }
     }
 
     private void ShowState(AppSettings settings, SupervisorState? state, bool running)
