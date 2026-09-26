@@ -5,9 +5,9 @@
 и переводит его в HTML, который понимает Bot API: Telegram не читает
 Markdown GitHub (## заголовки, **жирный**).
 
-Хвост «Чем это собрано и как сверить» в пост не идёт: команды сборки
-в канале ни к чему. Из него берётся только хэш архива — строкой, чтобы
-скачавший мог сверить файл.
+Пост короткий (владелец, 26.09): разделы и заголовки пунктов, без пояснений,
+и ссылка на выпуск, где полный текст, хэши и архив. Хвост «Чем это собрано
+и как сверить» в пост не идёт вовсе.
 
 Запуск руками, без отправки:
     RELEASE_BODY="$(cat notes.md)" RELEASE_TAG=v0.8.7 python post_release.py --dry-run
@@ -40,9 +40,22 @@ def inline(text: str) -> str:
 
 
 def convert(body: str) -> list[str]:
-    """Примечания выпуска — абзацами в разметке Telegram, без подвала."""
+    """
+    Примечания выпуска — коротко: разделы и заголовки пунктов, без пояснений.
+
+    Владелец 26.09: пост с полным текстом в канале выглядел громадой. От
+    пункта «**Свои DNS.** В разделе «DNS» можно…» остаётся «• Свои DNS»,
+    а всё остальное — по ссылке на выпуск. Абзацы без жирного начала —
+    пояснения, в пост не идут.
+    """
     notes = body.split(FOOTER, 1)[0]
     blocks = []
+    items = []
+
+    def flush() -> None:
+        if items:
+            blocks.append("\n".join(items))
+            items.clear()
 
     for raw in re.split(r"\n\s*\n", notes.replace("\r\n", "\n")):
         block = raw.strip()
@@ -56,32 +69,35 @@ def convert(body: str) -> list[str]:
             continue
 
         if block.startswith("## "):
-            blocks.append(f"<b>{inline(block[3:].strip())}</b>")
+            flush()
+            blocks.append(f"<b>{inline(block[3:].strip().rstrip(':'))}</b>")
             continue
 
-        # Абзац с жирным началом — пункт списка: «**Свои DNS.** В разделе…».
-        text = inline(" ".join(line.strip() for line in block.splitlines()))
-        blocks.append(("• " + text) if block.startswith("**") else text)
+        lead = re.match(r"\*\*(.+?)\*\*", block)
 
-    return blocks
+        if lead:
+            items.append("• " + inline(lead.group(1).strip().rstrip(".")))
 
+    flush()
 
-def zip_hash(body: str) -> str | None:
-    match = re.search(r"NetZapret-\S+\.zip\s+([0-9A-Fa-f]{64})", body)
-    return match.group(1).lower() if match else None
+    # Раздел и его пункты — одним абзацем: заголовок сразу над списком.
+    merged = []
+
+    for block in blocks:
+        if merged and merged[-1].startswith("<b>") and "\n" not in merged[-1] and block.startswith("• "):
+            merged[-1] += "\n" + block
+        else:
+            merged.append(block)
+
+    return merged
 
 
 def compose(body: str, tag: str, url: str) -> str:
     version = tag.lstrip("v")
     head = f"<b>NetZapret {html.escape(version)}</b>"
 
-    tail = []
-    digest = zip_hash(body)
-
-    if digest:
-        tail.append(f"SHA-256 архива: <code>{digest}</code>")
-
-    tail.append(f'<a href="{html.escape(url, quote=True)}">Скачать на GitHub</a>')
+    # Хэш архива — на странице выпуска, в канале он только добавлял длины.
+    tail = [f'<a href="{html.escape(url, quote=True)}">Полный список изменений и скачивание — на GitHub</a>']
 
     blocks = convert(body)
     ending = "\n\n".join(tail)
