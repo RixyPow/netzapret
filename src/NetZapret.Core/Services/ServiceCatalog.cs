@@ -466,7 +466,6 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
-                new ServicePart { Name = "Claude", List = "config/lists/claude.txt" },
                 new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
                 new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
                 new ServicePart { Name = "Perplexity", List = "config/lists/perplexity.txt" },
@@ -477,6 +476,30 @@ public static class ServiceCatalog
                     Name = "Hugging Face",
                     List = "config/lists/huggingface.txt",
                     Note = "туда же ходят библиотеки при загрузке моделей",
+                },
+            ],
+        },
+
+        // Claude — своей папкой, а не строкой на полке «Нейросети» (владелец,
+        // 26.09): у него две части, которые ломаются врозь. Содержимое —
+        // артефакты и превью файлов — живёт на отдельном домене, и при своём
+        // правиле «через VPN» браузер не пускал к нему страницу claude.ai,
+        // открытую через пин (отказ за 14 мс). Список «Сайта» — прежний
+        // claude.txt, так что выбранный маршрут и пины сохраняются.
+        // downloads.claude.ai отдельной частью не вынесен: он под зоной
+        // claude.ai, и два списка спорили бы об одном имени.
+        new ServiceDefinition
+        {
+            Name = "Claude",
+            Parts =
+            [
+                new ServicePart { Name = "Сайт", List = "config/lists/claude.txt" },
+                new ServicePart
+                {
+                    Name = "Содержимое",
+                    List = "config/lists/claude-content.txt",
+                    Probe = "www.claudeusercontent.com",
+                    Note = "артефакты и превью файлов; тем же способом, что сайт — не VPN, если сайт на пине",
                 },
             ],
         },
