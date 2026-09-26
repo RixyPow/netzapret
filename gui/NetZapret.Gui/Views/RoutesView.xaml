@@ -320,8 +320,22 @@
 
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                               Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
+                                                    <!--
+                                                        Ссылка на сам список вместо «например …»
+                                                        (владелец, 26.09): открывает файл
+                                                        в Блокноте, посмотреть и поправить.
+                                                    -->
+                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Style="{StaticResource Caption}"
+                                                                   Visibility="{Binding ListShown}">
+                                                            <Run Text=" · " />
+                                                            <Hyperlink Click="OnOpenList"
+                                                                       Foreground="{DynamicResource Accent}"
+                                                                       ToolTip="{Binding ListPath}">список</Hyperlink>
+                                                        </TextBlock>
+                                                    </StackPanel>
                                                 </StackPanel>
 
                                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">

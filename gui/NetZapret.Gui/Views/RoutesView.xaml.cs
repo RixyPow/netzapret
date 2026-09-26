@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -17,6 +17,14 @@ public sealed record PartRow
     public required string Key { get; init; }
     public required string Title { get; init; }
     public required string Detail { get; init; }
+
+    /// <summary>Имя из списка: по нему берётся значок и ищет поиск.</summary>
+    public string? Example { get; init; }
+
+    /// <summary>Полный путь к файлу списка; <c>null</c> — ссылки «список» нет.</summary>
+    public string? ListPath { get; init; }
+
+    public Visibility ListShown => ListPath is null ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
     /// Настоящее имя из списка — на нём проверяются рецепты.
@@ -438,12 +446,13 @@ public partial class RoutesView : UserControl
         // которое не совпадёт ни с чем.
         var kind = part.Part.ByAddress ? RouteKeys.IpSet : RouteKeys.HostList;
 
+        // Без «например …»: вместо примера — ссылка на сам список (владелец,
+        // 26.09). Одно имя из списка ничего не говорит о том, что в нём,
+        // а у Notion пример «notion.so» и вовсе увёл в сторону: сайт давно
+        // живёт на notion.com, которого в списке не было.
         var detail = part.Part.ByAddress
-            ? $"{part.DomainCount} подсетей"
-            : $"{part.DomainCount} доменов";
-
-        if (part.Example is { } example)
-            detail += $" · например {example}";
+            ? Count(part.DomainCount, "подсеть", "подсети", "подсетей")
+            : Count(part.DomainCount, "домен", "домена", "доменов");
 
         if (!part.Explicit)
             detail += " · по умолчанию";
@@ -470,7 +479,7 @@ public partial class RoutesView : UserControl
             Key = RouteKeys.Make(kind, part.Part.List),
             Title = part.Part.Name,
 
-            // Обычно ровно то имя, что показано в подписи «например …»: оно
+            // Обычно ровно то имя, что лежит в Example: оно
             // взято из самого списка и потому заведомо им покрыто. Каталог
             // может назвать другое, и тогда верить надо ему: запись списка —
             // это зона, а фильтр стоит на имени, и у голоса Discord апекс
@@ -478,6 +487,8 @@ public partial class RoutesView : UserControl
             Probe = part.Part.ByAddress ? null : (part.Part.Probe ?? host),
 
             Detail = detail,
+            Example = part.Example?.TrimStart('*', '.'),
+            ListPath = ListFile(part.Part.List),
 
             // Чем именно пойдёт часть — прямо в подписи маршрута. «Десинк»
             // сам по себе не говорит ничего: решает пресет, и решить он может
@@ -768,15 +779,9 @@ public partial class RoutesView : UserControl
 
     private static string? Host(PartRow part)
     {
-        int at = part.Detail.IndexOf("например ", StringComparison.Ordinal);
-
-        if (at < 0)
-            return null;
-
-        var rest = part.Detail[(at + "например ".Length)..];
-        var host = rest.Split(' ', '·')[0].TrimStart('*', '.');
-
-        if (!host.Contains('.'))
+        // Из поля, а не разбором подписи: «например …» из подписи ушло,
+        // и разбор молча оставил бы все части без значков.
+        if (part.Example is not { } host || !host.Contains('.'))
             return null;
 
         // У подсети значка нет и быть не может: значок берут у сайта, а сайт
@@ -1218,7 +1223,79 @@ public partial class RoutesView : UserControl
     private static bool Matches(string service, PartRow part, string needle) =>
         service.Contains(needle, StringComparison.OrdinalIgnoreCase)
         || part.Title.Contains(needle, StringComparison.OrdinalIgnoreCase)
-        || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase);
+        || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase)
+        || (part.Example?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false);
+
+    /// <summary>«1 домен», «3 домена», «12 доменов».</summary>
+    private static string Count(int n, string one, string few, string many)
+    {
+        int tens = n % 100;
+        int last = n % 10;
+
+        var word = tens is >= 11 and <= 14 ? many
+            : last == 1 ? one
+            : last is >= 2 and <= 4 ? few
+            : many;
+
+        return $"{n} {word}";
+    }
+
+    /// <summary>Файл списка, если он лежит на диске; <c>null</c> — открывать нечего.</summary>
+    /// <remarks>
+    /// Относительный путь считается от корня установки: окно при запуске
+    /// уходит туда (InstallRoot), и так же его читает загрузчик правил.
+    /// </remarks>
+    private static string? ListFile(string? list)
+    {
+        if (string.IsNullOrWhiteSpace(list))
+            return null;
+
+        try
+        {
+            var full = System.IO.Path.GetFullPath(list);
+            return System.IO.File.Exists(full) ? full : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Открывает список части в Блокноте — посмотреть и поправить.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Просьба владельца 26.09: вместо «например notion.so» — ссылка
+    /// на сам файл. Правка вручную здесь законна: config\lists — наши
+    /// списки, текстом, по имени в строке, и программа их не переписывает.
+    /// </para>
+    /// <para>
+    /// Блокнотом, как файл hosts: свой редактор ради текстового списка —
+    /// лишнее место, где что-то может разойтись. Правка вступает в силу
+    /// при следующем запуске движков: списки читаются при сборке конфига.
+    /// </para>
+    /// </remarks>
+    private void OnOpenList(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Documents.Hyperlink { DataContext: PartRow { ListPath: { } path } })
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{path}\"")
+            {
+                UseShellExecute = true,
+            })?.Dispose();
+
+            Status.Text = $"Открыт {System.IO.Path.GetFileName(path)}. Правка применится при следующем запуске движков; "
+                + "раздел покажет её, когда откроете его заново.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть список: " + ex.GetBaseException().Message;
+        }
+    }
 
     /// <summary>
     /// Подпись карточки «Свой домен».
