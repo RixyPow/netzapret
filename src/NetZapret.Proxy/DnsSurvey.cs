@@ -18,6 +18,7 @@ namespace NetZapret.Proxy;
 /// отдают на закрытые сайты адреса своих прокси в России, а туннелю, чей
 /// выход и так за границей, такой ответ только вредит.
 /// </param>
+/// <param name="Own">Добавлен человеком (<see cref="CustomDns"/>), а не вписан в код.</param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
@@ -25,7 +26,8 @@ public sealed record DnsProvider(
     string? TlsName = null,
     string? DohPath = "/dns-query",
     string? Note = null,
-    bool ForTunnel = true)
+    bool ForTunnel = true,
+    bool Own = false)
 {
     /// <summary>
     /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
@@ -155,9 +157,23 @@ public static class DnsSurvey
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];
 
+    /// <summary>
+    /// Встроенные и свои (<see cref="CustomDns"/>) — всё, что меряет обзор
+    /// и из чего выбирают апстрим.
+    /// </summary>
+    /// <remarks>
+    /// Свои — в конце: встроенный с тем же адресом DoH находится первым,
+    /// и выбор, записанный до появления своего, читается как прежде.
+    /// </remarks>
+    public static IReadOnlyList<DnsProvider> All => [.. Providers, .. CustomDns.Load()];
+
     /// <summary>Провайдер по адресу DoH из настроек; <c>null</c> — не наш.</summary>
+    /// <remarks>
+    /// По всему списку, со своими: иначе выбранный свой резолвер туннель
+    /// получал бы без имени для сертификата — и DoH к нему не поднимался.
+    /// </remarks>
     public static DnsProvider? ByAddress(string? address) =>
-        Providers.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal));
+        All.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal));
 
     /// <summary>
     /// Имена для проверки подмены: закрыты в России давно и адрес у них
@@ -761,7 +777,7 @@ public static class DnsSurvey
         IProgress<DnsSurveyRow>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        var list = providers ?? Providers;
+        var list = providers ?? All;
         var nic = PhysicalInterface();
         var honest = await HonestAnswersAsync(nic, cancellationToken);
 

@@ -65,6 +65,7 @@
 - В репозиторий не попадают: `config/netzapret.json`,
   `config/subscriptions.json`, `config/rules.user.yaml`,
   `config/preset-order.json`, `config/lists/own/` (свои домены файлами),
+  `config/dns.user.json` (свои резолверы),
   `reports/`, `runtime/`, `logs/`.
   Это же проверяет `pack.cmd` перед сборкой архива.
 

@@ -1,6 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.DnsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="32,28,32,28">
@@ -196,6 +197,7 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"
@@ -219,6 +221,13 @@
                                                Margin="14,0,0,0" MinWidth="48"
                                                VerticalAlignment="Center"
                                                Visibility="{Binding MarkShown}" />
+
+                                    <!-- Только у своих: встроенные убирать нечем и незачем. -->
+                                    <Button Grid.Column="4" Style="{StaticResource Ghost}"
+                                            Content="убрать" Padding="12,5" Margin="12,0,0,0"
+                                            Foreground="{DynamicResource Danger}"
+                                            Visibility="{Binding RemoveShown}"
+                                            Tag="{Binding Udp}" Click="OnRemoveOwn" />
                                 </Grid>
                             </Button>
                         </DataTemplate>
@@ -227,6 +236,49 @@
 
                 <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
                            Text="Задержка — по DoH из обзора выше. Нажмите на строку, чтобы туннель спрашивал этого резолвера." />
+
+                <!--
+                    Свой резолвер (владелец, 26.09, после отзыва в обсуждении #7).
+                    Перед записью меряется тем же обзором: не ответивший
+                    не записывается, подменяющий — записывается с предупреждением.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Свой резолвер" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="Адрес цифрами. Имя для DoH — если резолвер его умеет: без него туннелю такой резолвер не выбрать, его можно только измерить в обзоре." />
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0" x:Name="OwnName" Margin="0,0,8,0"
+                                     gui:Hint.Text="Название, например XBOX DNS" />
+                            <TextBox Grid.Column="1" x:Name="OwnAddress"
+                                     gui:Hint.Text="Адрес, 111.88.96.50" />
+                        </Grid>
+
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0" x:Name="OwnSecondary" Margin="0,0,8,0"
+                                     gui:Hint.Text="Второй адрес — необязательно" />
+                            <TextBox Grid.Column="1" x:Name="OwnDoh" Margin="0,0,8,0"
+                                     gui:Hint.Text="Имя DoH, dns.example.com — необязательно" />
+                            <Button Grid.Column="2" x:Name="OwnAddButton" Style="{StaticResource Primary}"
+                                    Content="Проверить и добавить" Click="OnAddOwn" />
+                        </Grid>
+
+                        <TextBlock x:Name="OwnStatus" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                                   TextWrapping="Wrap" Visibility="Collapsed" />
+                    </StackPanel>
+                </Border>
 
             </StackPanel>
         </Grid>

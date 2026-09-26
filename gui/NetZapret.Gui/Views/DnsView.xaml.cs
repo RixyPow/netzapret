@@ -21,6 +21,17 @@ public sealed class ResolverRow
 
     public bool Chosen { get; set; }
 
+    /// <summary>Свой резолвер (<see cref="CustomDns"/>) — его можно убрать.</summary>
+    public bool Own { get; init; }
+
+    /// <summary>Годится ли в апстрим туннеля: у своего без DoH — нет.</summary>
+    public bool Choosable { get; init; } = true;
+
+    /// <summary>Адрес обычного DNS — по нему свой резолвер и убирается.</summary>
+    public string Udp { get; init; } = string.Empty;
+
+    public Visibility RemoveShown => Own ? Visibility.Visible : Visibility.Collapsed;
+
     public Brush Color => (Brush)Application.Current.FindResource(Key);
 
     public Brush Edge => (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
@@ -124,14 +135,20 @@ public partial class DnsView : UserControl
         // спрашивать по DoH. Прежде список был своим, из шести, и мерился
         // своей кнопкой: две «Проверить» на одной вкладке, и чем они
         // отличаются, было не понять.
-        Resolvers.ItemsSource = DnsSurvey.Providers
-            .Where(p => p.Choosable)
+        //
+        // Свои — и без DoH тоже: выбрать такой туннелю нельзя, но убрать
+        // надо где-то уметь, а спрятанный он остался бы в файле навсегда.
+        Resolvers.ItemsSource = DnsSurvey.All
+            .Where(p => p.Choosable || p.Own)
             .Select(p => new ResolverRow
             {
                 Name = p.Name,
-                Address = p.TlsAddress!,
+                Address = p.TlsAddress ?? p.Udp[0],
                 Note = p.Note ?? string.Empty,
-                Chosen = string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
+                Chosen = p.Choosable && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
+                Own = p.Own,
+                Choosable = p.Choosable,
+                Udp = p.Udp.Count > 0 ? p.Udp[0] : string.Empty,
             })
             .ToList();
 
@@ -222,6 +239,13 @@ public partial class DnsView : UserControl
         if (sender is not Button { Tag: string address })
             return;
 
+        if (sender is FrameworkElement { DataContext: ResolverRow { Choosable: false } refused })
+        {
+            Status.Text = $"{refused.Name} без DoH, а туннель спрашивает только по DoH — выбрать его нельзя. "
+                + "Уберите и добавьте заново с именем DoH, если резолвер его умеет.";
+            return;
+        }
+
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address, DnsAuto = false };
@@ -243,6 +267,121 @@ public partial class DnsView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Проверяет введённый резолвер обзором и, если он ответил, записывает.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Меряется до записи, а не после: резолвер, не ответивший ничем, в списке
+    /// выглядел бы исправным, пока его не выберут и туннель не встанет.
+    /// Ответил хоть чем-то — пишется, с тем, что показал замер.
+    /// </para>
+    /// <para>
+    /// Подменяющий по UDP не отвергается: подмену делает оператор по дороге,
+    /// а не сам резолвер, и по DoH он может отвечать честно. Но сказано
+    /// об этом прямо.
+    /// </para>
+    /// </remarks>
+    private async void OnAddOwn(object sender, RoutedEventArgs e)
+    {
+        var (provider, problem) = CustomDns.Build(
+            OwnName.Text, OwnAddress.Text, OwnDoh.Text, dohPath: null, OwnSecondary.Text);
+
+        OwnStatus.Visibility = Visibility.Visible;
+
+        if (provider is null)
+        {
+            OwnStatus.Text = problem;
+            return;
+        }
+
+        OwnAddButton.IsEnabled = false;
+        OwnStatus.Text = $"Проверяю {provider.Name}: UDP{(provider.TlsName is null ? string.Empty : ", DoT и DoH")}…";
+
+        try
+        {
+            var row = (await DnsSurvey.SurveyAllAsync([provider])).Single();
+
+            bool doh = row.DohMs is not null;
+            bool udp = row.UdpMs is not null;
+
+            if (!doh && !udp && row.DotMs is null)
+            {
+                OwnStatus.Text = $"{provider.Name} не ответил ничем: UDP — {Why(row.UdpFailure)}"
+                    + (provider.TlsName is null ? string.Empty : $", DoH — {Why(row.DohFailure)}")
+                    + ". Не добавлен.";
+                return;
+            }
+
+            CustomDns.Save(provider);
+
+            var parts = new List<string>();
+
+            if (udp)
+                parts.Add($"UDP {row.UdpMs:0} мс");
+
+            if (provider.TlsName is not null)
+                parts.Add(doh ? $"DoH {row.DohMs:0} мс" : $"DoH не ответил ({Why(row.DohFailure)})");
+
+            var verdict = provider.TlsName is null
+                ? "Для туннеля не годится — нет DoH; в обзоре будет."
+                : doh
+                    ? "Можно выбрать строкой в списке выше."
+                    : "В список попал, но DoH не ответил — туннель через него не заработает, пока DoH молчит.";
+
+            if (row.Spoofed > 0)
+                verdict += $" По UDP ответы подменены ({row.Spoofed}/{row.SpoofChecked}) — это оператор по дороге; пользуйтесь DoH.";
+
+            OwnStatus.Text = $"Добавлен {provider.Name}: {string.Join(", ", parts)}. {verdict}";
+
+            OwnName.Clear();
+            OwnAddress.Clear();
+            OwnSecondary.Clear();
+            OwnDoh.Clear();
+
+            Reload();
+        }
+        catch (Exception ex)
+        {
+            OwnStatus.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            OwnAddButton.IsEnabled = true;
+        }
+    }
+
+    private static string Why(string failure) => failure.Length > 0 ? failure : "нет ответа";
+
+    private void OnRemoveOwn(object sender, RoutedEventArgs e)
+    {
+        // Кнопка внутри строки-кнопки: без этого нажатие дошло бы до строки
+        // и выбрало бы убираемый резолвер апстримом.
+        e.Handled = true;
+
+        if (sender is not Button { Tag: string udp, DataContext: ResolverRow row } || udp.Length == 0)
+            return;
+
+        try
+        {
+            CustomDns.Remove(udp);
+
+            // Выбранный туннелю — остаётся в настройках адресом без имени,
+            // и DoH к нему не поднимется. Сказать, а не молчать.
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            Reload();
+
+            Status.Text = row.Chosen || settings.DnsServer == row.Address
+                ? $"Убран {row.Name}. Он был выбран туннелю — выберите другой, иначе DoH не поднимется."
+                : $"Убран {row.Name}.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
         }
     }
 
