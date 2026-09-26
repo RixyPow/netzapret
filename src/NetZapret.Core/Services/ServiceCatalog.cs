@@ -467,18 +467,6 @@ public static class ServiceCatalog
             [
                 new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
                 new ServicePart { Name = "Claude", List = "config/lists/claude.txt" },
-
-                // Артефакты и превью файлов — с отдельного домена (владелец, 26.09).
-                // Маршрут у него обязан совпадать со способом, каким открыт
-                // claude.ai: страница на публичном адресе к внутреннему адресу
-                // туннеля не достучится — браузер отказывает сам.
-                new ServicePart
-                {
-                    Name = "Claude — содержимое",
-                    List = "config/lists/claude-content.txt",
-                    Probe = "www.claudeusercontent.com",
-                    Note = "Тем же способом, что Claude: пин и «напрямую», не VPN.",
-                },
                 new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
                 new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
                 new ServicePart { Name = "Perplexity", List = "config/lists/perplexity.txt" },
