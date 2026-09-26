@@ -28,6 +28,7 @@ public sealed class NotWorthCheckingTests
     [InlineData("riotgames.es")]
     [InlineData("itch.zone")]
     [InlineData("rutor.info")]
+    [InlineData("nflxvideo.net")]
     public void A_mirror_is_dropped_from_the_check(string host)
     {
         Assert.True(NotWorthChecking.Contains(host));
@@ -48,6 +49,7 @@ public sealed class NotWorthCheckingTests
     [InlineData("itch.io")]
     [InlineData("rutracker.org")]
     [InlineData("speedtest.net")]
+    [InlineData("netflix.com")]
     public void The_name_it_mirrors_is_still_checked(string host)
     {
         Assert.False(NotWorthChecking.Contains(host));
