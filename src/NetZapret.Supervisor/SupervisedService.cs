@@ -145,6 +145,11 @@ public abstract class SupervisedService
     /// </remarks>
     protected virtual Task OnReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+    /// <summary>Движок остановлен — прибрать то, что после него осталось снаружи.</summary>
+    protected virtual void OnStopped()
+    {
+    }
+
     public async Task<bool> StartAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
     {
         var problem = ValidatePrerequisites();
@@ -240,6 +245,7 @@ public abstract class SupervisedService
             Process?.Dispose();
             Process = null;
             StartedAt = null;
+            OnStopped();
         }
     }
 
@@ -389,6 +395,8 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     protected override async Task OnReadyAsync(CancellationToken cancellationToken)
     {
+        ForgetFakeAddresses();
+
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
 
         foreach (var exit in StartExits(_preferredExit))
@@ -428,6 +436,44 @@ public sealed class SingBoxService : SupervisedService
     /// его сорок секунд — значит задержать весь цикл присмотра на столько же.
     /// </remarks>
     private static readonly HttpClient Talk = new() { Timeout = TimeSpan.FromSeconds(15) };
+
+    protected override void OnStopped() => ForgetFakeAddresses();
+
+    /// <summary>
+    /// Сбрасывает кэш DNS Windows — после подъёма движка и после остановки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Именам, уведённым в VPN, движок раздаёт подменные адреса по порядку —
+    /// 198.18.0.2, .3 и дальше, fc00::2 и дальше, — и после перезапуска
+    /// раздаёт заново: своего кэша у него нет (его файл хранит и выбор
+    /// в селекторе, из-за чего 23.09 залипал WARP, и заводится только
+    /// ради MASQUE). А Windows держит ответ десять минут: замер 26.09 —
+    /// www.cometapi.com → 198.18.0.3, TTL 600.
+    /// </para>
+    /// <para>
+    /// Вот и выходило: после перезапуска браузер ещё до десяти минут ходил
+    /// по старому адресу, который движок уже отдал другому имени. Только
+    /// за 26.09 fc00::2 побывал virustotalcloud.firebaseapp.com,
+    /// claudeusercontent.com и www.cometapi.com. Соединение уходило не туда —
+    /// сброс, чужой сертификат, пустая страница: cometapi дал
+    /// ERR_CONNECTION_RESET через минуту после перезапуска, у Claude «иногда
+    /// не работает при поднятых движках». После остановки то же: подменный
+    /// адрес ведёт в туннель, которого уже нет.
+    /// </para>
+    /// <para>
+    /// Сброс кэша — не правка настроек DNS: его делает и ipconfig /flushdns,
+    /// и программа после каждой правки hosts. У Chrome кэш имён свой, короткий;
+    /// что он сбрасывает его сам при смене адаптеров — по его устройству
+    /// ожидаемо, но не проверено.
+    /// </para>
+    /// </remarks>
+    private void ForgetFakeAddresses()
+    {
+        if (!NetZapret.Proxy.HostsEditor.FlushDns())
+            Note("кэш DNS Windows не сброшен — до десяти минут после перезапуска "
+                + "имена в VPN могут вести по старым подменным адресам.");
+    }
 
     protected override void ForgetRunState()
     {
