@@ -25,6 +25,10 @@ tools/*
 # от консоли оставил бы разбор неисправностей на честном слове.
 !tools/nz/
 tools/nz/bin/
+
+# Пост о выпуске в Telegram — наш скрипт, его зовёт workflow telegram-release.
+# 26.09 правило tools/* спрятало его, и workflow ушёл в коммит без скрипта.
+!tools/telegram/
 tools/nz/obj/
 
 # Рантайм-артефакты диспетчера
