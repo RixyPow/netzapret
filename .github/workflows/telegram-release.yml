@@ -1,0 +1,55 @@
+# Пост о выпуске в Telegram-канал.
+#
+# Просьба владельца 26.09: чейнджлог — в канал сам, при каждом выпуске.
+# Срабатывает, когда GitHub принял выпуск, — не важно, откуда он опубликован.
+# Текст — примечания выпуска (docs/release-notes.md плюс подвал с хэшами,
+# их собирает release.cmd), переведённые в разметку Telegram скриптом
+# tools/telegram/post_release.py: Markdown GitHub Telegram не понимает.
+#
+# Нужны секреты репозитория TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID; бот —
+# администратор канала с правом публиковать. Нет секретов — шаг падает
+# с объяснением, а не отправляет в никуда.
+#
+# Кнопкой в Actions можно отправить уже вышедший выпуск — по тегу.
+name: telegram-release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Тег выпуска, например v0.8.7
+        required: true
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+
+    # Черновики и предварительные выпуски в канал не идут: их видят не все.
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Взять текст выпуска
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body,url,tagName > release.json
+
+      - name: Отправить в канал
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "Нет секретов TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID — заведите их в Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          export RELEASE_BODY="$(jq -r .body release.json)"
+          export RELEASE_TAG="$(jq -r .tagName release.json)"
+          export RELEASE_URL="$(jq -r .url release.json)"
+          python3 tools/telegram/post_release.py
