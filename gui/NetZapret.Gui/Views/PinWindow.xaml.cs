@@ -729,10 +729,31 @@ public partial class PinWindow : Window
             Journal.Write("пин", pick.Chosen is { } chosen
                 ? $"{pick.Host}: {chosen.Candidate.Address} ({chosen.Candidate.Label}, {chosen.Detail}); "
                   + $"отвергнуто {pick.Rejected.Count}"
-                : $"{pick.Host}: адрес не подобран, проверено {pick.Rejected.Count}");
+                : $"{pick.Host}: адрес не подобран, проверено {pick.Rejected.Count} — {PinPicker.Rejections(pick)}"
+                  + (Engines() is { } engines ? $"; движки {engines}" : string.Empty));
         }
 
         _autoReport = PinPicker.Summarize(picks, _target.Zones.FirstOrDefault()?.TrimStart('*', '.'));
+    }
+
+    /// <summary>Подняты ли движки — для журнала; <c>null</c> — не прочиталось.</summary>
+    /// <remarks>
+    /// Пробы идут через них, если они подняты: имя, уведённое в VPN, пробуется
+    /// с зарубежного выхода. 26.09 я списал неудачный подбор на движки —
+    /// а журнал показал, что во второй раз они были остановлены. С этой
+    /// пометкой такая догадка проверяется по строке, а не по памяти.
+    /// </remarks>
+    private static string? Engines()
+    {
+        try
+        {
+            var state = NetZapret.Supervisor.SupervisorState.Load(NetZapret.Supervisor.SupervisorState.DefaultPath);
+            return state is not null && state.IsSupervisorAlive() ? "подняты" : "не подняты";
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>Блоки таблицы проверки — по одному на имя.</summary>

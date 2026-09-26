@@ -190,4 +190,29 @@ public sealed class PinPickerTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    /// <summary>
+    /// Неудачный подбор объясняет себя в журнале: кто и чем отказал.
+    /// </summary>
+    /// <remarks>
+    /// 26.09 журнал писал «адрес не подобран, проверено 12» — и выяснить
+    /// задним числом, почему не нашёлся рабочий прежде адрес Crunchyroll,
+    /// было нечем.
+    /// </remarks>
+    [Fact]
+    public void A_failed_pick_says_why_grouped_by_source()
+    {
+        var pick = new PinPick("www.crunchyroll.com", null,
+        [
+            Probe("1.1.1.1", PinSource.Honest, PinVerdict.Dead),
+            Probe("1.1.1.2", PinSource.Honest, PinVerdict.Dead),
+            Probe("45.155.204.190", PinSource.Pool, PinVerdict.Refused),
+        ]);
+
+        var text = PinPicker.Rejections(pick);
+
+        Assert.Contains("Honest — Dead (2 адр.)", text);
+        Assert.Contains("Pool — отказ 403", text);
+        Assert.Equal("кандидатов не было", PinPicker.Rejections(new PinPick("x.example", null, [])));
+    }
 }

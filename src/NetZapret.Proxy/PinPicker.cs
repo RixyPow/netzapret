@@ -252,13 +252,7 @@ public static class PinPicker
                     : string.Empty),
         };
 
-        // Отвергнутых — по источнику и причине, а не по адресу: четыре адреса
-        // честного резолвера с одним и тем же отказом — одна строка, не четыре.
-        var rejected = main.Rejected
-            .GroupBy(r => (r.Candidate.Label, Reason: Reason(r)))
-            .Select(g => g.Count() > 1 ? $"{g.Key.Label} — {g.Key.Reason} ({g.Count()} адр.)" : $"{g.Key.Label} — {g.Key.Reason}")
-            .Take(6)
-            .ToList();
+        var rejected = Grouped(main.Rejected).Take(6).ToList();
 
         if (rejected.Count > 0)
             lines.Add("Отвергнуты: " + string.Join("; ", rejected) + ".");
@@ -278,17 +272,39 @@ public static class PinPicker
             + "снова: имена, которые он запросил, подтянутся из кэша DNS.");
 
         return string.Join("\n", lines);
-
-        static string Reason(PinProbe probe) => probe.Verdict switch
-        {
-            PinVerdict.Refused => $"отказ {probe.Status}",
-            PinVerdict.Challenge => probe.Candidate.Source == PinSource.Honest || probe.ExitsInRussia
-                ? "проверка на робота с российского адреса"
-                : "проверка на робота, выбран другой",
-            PinVerdict.Works => "работает, выбран другой",
-            _ => probe.Detail,
-        };
     }
+
+    /// <summary>
+    /// Почему отвергнуты кандидаты — строкой для журнала.
+    /// </summary>
+    /// <remarks>
+    /// Прежде журнал писал «адрес не подобран, проверено 12» — и только.
+    /// 26.09 так дважды подряд не нашёлся адрес Crunchyroll, который
+    /// минутой раньше и десятью минутами позже отвечал исправно, и понять
+    /// задним числом, кто и чем отказал, было нечем.
+    /// </remarks>
+    public static string Rejections(PinPick pick) =>
+        pick.Rejected.Count == 0 ? "кандидатов не было" : string.Join("; ", Grouped(pick.Rejected));
+
+    /// <summary>Отвергнутые — по источнику и причине, а не по адресу.</summary>
+    /// <remarks>
+    /// Четыре адреса честного резолвера с одним и тем же отказом — одна
+    /// строка, не четыре.
+    /// </remarks>
+    private static IEnumerable<string> Grouped(IEnumerable<PinProbe> rejected) =>
+        rejected
+            .GroupBy(r => (r.Candidate.Label, Reason: Reason(r)))
+            .Select(g => g.Count() > 1 ? $"{g.Key.Label} — {g.Key.Reason} ({g.Count()} адр.)" : $"{g.Key.Label} — {g.Key.Reason}");
+
+    private static string Reason(PinProbe probe) => probe.Verdict switch
+    {
+        PinVerdict.Refused => $"отказ {probe.Status}",
+        PinVerdict.Challenge => probe.Candidate.Source == PinSource.Honest || probe.ExitsInRussia
+            ? "проверка на робота с российского адреса"
+            : "проверка на робота, выбран другой",
+        PinVerdict.Works => "работает, выбран другой",
+        _ => probe.Detail,
+    };
 
     private static IReadOnlyList<PinCandidate> Distinct(IEnumerable<PinCandidate> candidates) =>
         candidates.GroupBy(c => c.Address).Select(g => g.OrderBy(c => c.Source).First()).ToList();
