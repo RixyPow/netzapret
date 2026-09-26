@@ -46,10 +46,17 @@ internal static class RouteKeys
             : null;
 
     /// <summary>Каким правилом записывается маршрут строки.</summary>
-    public static MatchKind MatchOf(string kind) => kind switch
+    /// <remarks>
+    /// Свой домен с 26.09 — файл списка (<see cref="OwnLists"/>), и правило
+    /// на него hostlist, как у части сервиса. Но только когда значение и
+    /// вправду путь своего списка: голое имя прежнего вида остаётся
+    /// domain-правилом. Hostlist на «*.example.com» ссылался бы на файл,
+    /// которого нет, и не совпал бы ни с чем — молча.
+    /// </remarks>
+    public static MatchKind MatchOf(string kind, string value) => kind switch
     {
         IpSet => MatchKind.IpSet,
-        Own => MatchKind.Domain,
+        Own when !OwnLists.IsOwn(value) => MatchKind.Domain,
         _ => MatchKind.HostList,
     };
 
@@ -78,7 +85,10 @@ internal static class RouteKeys
         if (Parse(key) is not var (kind, value))
             return [];
 
-        if (kind == Own)
+        // Свой домен прежнего вида — само правило, файла у него нет.
+        // Такие переводятся в списки при открытии «Маршрутов», но ключ
+        // мог прийти раньше.
+        if (kind == Own && !OwnLists.IsOwn(value))
             return [value.TrimStart('*', '.')];
 
         try

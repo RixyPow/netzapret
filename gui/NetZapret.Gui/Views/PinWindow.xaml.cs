@@ -169,25 +169,26 @@ public partial class PinWindow : Window
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Зона одна — та, что вписал человек. Поддомены она покрывает сама:
-    /// <see cref="Covers"/> считает <c>cdn.example.com</c> принадлежащим
-    /// <c>example.com</c> так же, как у списков.
+    /// С 26.09 свой домен — файл списка (<see cref="OwnLists"/>): значение —
+    /// путь к нему, зоны — его строки, правило — hostlist, как у части
+    /// сервиса. Поддомены зоны покрывают сами: <see cref="Covers"/> считает
+    /// <c>cdn.example.com</c> принадлежащим <c>example.com</c>.
     /// </para>
     /// <para>
-    /// Показывается имя без звёздочки, а пишется со звёздочкой. Правило
-    /// хранится как <c>*.example.com</c> — так его записал раздел, — и
-    /// написать иначе значит не найти прежнее и завести рядом второе.
-    /// Человеку же звёздочка ничего не говорит: он вводил <c>example.com</c>.
+    /// Прежний вид — голое правило <c>*.example.com</c> — ещё понимается:
+    /// в список его переводит открытие «Маршрутов», а до того ключ мог
+    /// прийти и старым. Показывается имя без звёздочки: человек вводил
+    /// <c>example.com</c>.
     /// </para>
     /// </remarks>
-    public PinWindow(string rule)
+    public PinWindow(string rule, IReadOnlyList<string> zones)
         : this(new PinTarget
         {
-            Title = rule.TrimStart('*', '.'),
-            Short = rule.TrimStart('*', '.'),
+            Title = OwnLists.IsOwn(rule) ? OwnLists.DomainOf(rule) : rule.TrimStart('*', '.'),
+            Short = OwnLists.IsOwn(rule) ? OwnLists.DomainOf(rule) : rule.TrimStart('*', '.'),
             Source = "Свой домен",
-            Zones = [rule.TrimStart('*', '.')],
-            Match = MatchKind.Domain,
+            Zones = zones,
+            Match = OwnLists.IsOwn(rule) ? MatchKind.HostList : MatchKind.Domain,
             Value = rule,
             ByAddress = false,
             Current = () => Describe(rule),
@@ -241,7 +242,7 @@ public partial class PinWindow : Window
         try
         {
             var entry = UserRulesFile.Load().Entries.FirstOrDefault(e =>
-                e.Match == MatchKind.Domain
+                e.Match is MatchKind.Domain or MatchKind.HostList
                 && string.Equals(e.Value, domain, StringComparison.OrdinalIgnoreCase));
 
             return entry?.Mode switch

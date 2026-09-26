@@ -32,10 +32,11 @@ public sealed class OwnDomainRowTests
     /// </remarks>
     private const string Rule = "*.example.com";
 
+    /// <summary>Свой домен прежнего вида — голое имя — остаётся domain-правилом.</summary>
     [Fact]
-    public void A_custom_domain_writes_a_domain_rule()
+    public void An_old_custom_domain_writes_a_domain_rule()
     {
-        // Не HostList. Списка у своего домена нет, и правило со ссылкой
+        // Не HostList. Файла у такого домена нет, и правило со ссылкой
         // на несуществующий файл не совпало бы ни с чем — молча.
         var key = RouteKeys.Make(RouteKeys.Own, Rule);
         var parsed = RouteKeys.Parse(key);
@@ -43,14 +44,24 @@ public sealed class OwnDomainRowTests
         Assert.NotNull(parsed);
         Assert.Equal(RouteKeys.Own, parsed.Value.Kind);
         Assert.Equal(Rule, parsed.Value.Value);
-        Assert.Equal(MatchKind.Domain, RouteKeys.MatchOf(parsed.Value.Kind));
+        Assert.Equal(MatchKind.Domain, RouteKeys.MatchOf(parsed.Value.Kind, parsed.Value.Value));
+    }
+
+    /// <summary>
+    /// Свой домен с 26.09 — файл списка, и правило на него hostlist.
+    /// </summary>
+    [Fact]
+    public void A_custom_domain_with_its_list_writes_a_hostlist_rule()
+    {
+        Assert.Equal(MatchKind.HostList,
+            RouteKeys.MatchOf(RouteKeys.Own, "config/lists/own/example.com.txt"));
     }
 
     [Fact]
     public void Catalogue_parts_keep_their_own_kinds()
     {
-        Assert.Equal(MatchKind.HostList, RouteKeys.MatchOf(RouteKeys.HostList));
-        Assert.Equal(MatchKind.IpSet, RouteKeys.MatchOf(RouteKeys.IpSet));
+        Assert.Equal(MatchKind.HostList, RouteKeys.MatchOf(RouteKeys.HostList, "config/lists/discord.txt"));
+        Assert.Equal(MatchKind.IpSet, RouteKeys.MatchOf(RouteKeys.IpSet, "config/lists/ipset-discord.txt"));
     }
 
     [Fact]

@@ -187,6 +187,9 @@ public sealed class UserRulesFile
         return true;
     }
 
+    /// <summary>Заменяет запись на её же месте.</summary>
+    public void ReplaceAt(int index, UserRuleEntry entry) => _entries[index] = entry;
+
     public bool Toggle(int index)
     {
         if (index < 0 || index >= _entries.Count)

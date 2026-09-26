@@ -63,7 +63,7 @@ public sealed class RuleEngine
         // Решение владельца 23.09: своё правило побеждает. Имя, названное
         // человеком поимённо, — это и есть его выбор для этого имени.
         var sorted = ordered
-            .OrderBy(r => Tier(r.Match, r.Source))
+            .OrderBy(r => Tier(r.Match, r.Source, r.Value))
             .ToList();
 
         return new RuleEngine(new RuleSet
@@ -86,14 +86,22 @@ public sealed class RuleEngine
     /// движок. Своя копия условия в окне разошлась бы с этой молча —
     /// и окно разрешало бы перетаскивать туда, где порядок ничего не решает.
     /// </para>
+    /// <para>
+    /// Свой список (<see cref="OwnLists"/>) идёт наравне со своим именем.
+    /// С 26.09 свой домен — это файл, а не domain-правило, и без этой
+    /// оговорки он встал бы в одну группу со списками сервисов и мог бы им
+    /// проиграть — вопреки решению владельца от 23.09.
+    /// </para>
     /// </remarks>
-    public static int Tier(MatchKind match, RuleSource source)
+    public static int Tier(MatchKind match, RuleSource source, string? value = null)
     {
         bool user = source == RuleSource.User;
+        bool ownName = match == MatchKind.Domain
+            || (match == MatchKind.HostList && OwnLists.IsOwn(value));
 
         return MatchKindPriority.Of(match) * 4
             + (user ? 0 : 2)
-            + (user && match == MatchKind.Domain ? 0 : 1);
+            + (user && ownName ? 0 : 1);
     }
 
     /// <summary>

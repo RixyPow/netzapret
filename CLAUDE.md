@@ -58,7 +58,8 @@
   попал в историю коммитов, и её переписывали целиком.
 - В репозиторий не попадают: `config/netzapret.json`,
   `config/subscriptions.json`, `config/rules.user.yaml`,
-  `config/preset-order.json`, `reports/`, `runtime/`, `logs/`.
+  `config/preset-order.json`, `config/lists/own/` (свои домены файлами),
+  `reports/`, `runtime/`, `logs/`.
   Это же проверяет `pack.cmd` перед сборкой архива.
 
 ## Что нельзя трогать

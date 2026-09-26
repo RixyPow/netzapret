@@ -316,6 +316,20 @@ public partial class RoutesView : UserControl
             var zapretRoot = ZapretPaths.Discover()?.Root;
             var userRules = UserRulesFile.Load();
 
+            // Свои домены прежнего вида — domain-правила без файла —
+            // переводятся в списки здесь, при первом открытии раздела после
+            // обновления (OwnLists, 26.09). Порядок, режим и рецепт остаются.
+            try
+            {
+                if (OwnLists.Migrate(userRules) > 0)
+                    userRules.Save();
+            }
+            catch (Exception)
+            {
+                // Не вышло — строки просто покажутся по-старому, без файла;
+                // движок понимает оба вида.
+            }
+
             // Те же правила держим под рукой при сборке строк: по ним
             // подписывается выбранный рецепт.
             _own = userRules;
@@ -600,7 +614,7 @@ public partial class RoutesView : UserControl
             UserIndex = rule.Source == RuleSource.User
                 ? own.FindIndex(e => e.Match == rule.Match && e.Matches(rule.Value))
                 : -1,
-            Tier = RuleEngine.Tier(rule.Match, rule.Source),
+            Tier = RuleEngine.Tier(rule.Match, rule.Source, rule.Value),
         }).ToList();
 
         // Умолчание — последней строкой: это тоже решение, и без него таблица
@@ -851,18 +865,19 @@ public partial class RoutesView : UserControl
     /// сайта, кнопка пина, выбор маршрута и окно рецептов.
     /// </para>
     /// <para>
-    /// Ключ начинается с <c>own</c>: по нему обработчики и узнают, что
-    /// правило писать доменное, а зону брать саму по себе, не читая файла
-    /// списка — файла у своего домена нет.
+    /// Ключ начинается с <c>own</c>, значение — путь своего списка
+    /// (<see cref="OwnLists"/>, с 26.09): по ключу обработчики узнают,
+    /// что строка своя — её можно убрать, и убирается она вместе с файлом.
     /// </para>
     /// </remarks>
     private IReadOnlyList<ServiceRow> OwnRows(UserRulesFile userRules)
     {
         var rows = new List<ServiceRow>();
 
-        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.Domain))
+        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value)))
         {
-            var domain = entry.Value.TrimStart('*', '.');
+            var domain = OwnLists.DomainOf(entry.Value);
+            var count = RouteKeys.Zones("own|" + entry.Value, _zapretRoot).Count;
 
             var (color, choice) = entry.Mode switch
             {
@@ -882,10 +897,14 @@ public partial class RoutesView : UserControl
                 // он иначе пропадал бы из виду, и понять, чем чинится имя,
                 // можно было бы только заглянув в yaml.
                 Detail = "свой домен"
+                    + (count > 1 ? " · " + Count(count, "имя", "имени", "имён") : string.Empty)
                     + (entry.Mode == RoutingMode.Desync
                         && !string.IsNullOrWhiteSpace(entry.Recipe)
                             ? $" · рецепт: {entry.Recipe}"
                             : string.Empty),
+
+                Example = domain,
+                ListPath = ListFile(entry.Value),
 
                 Mode = Describe(entry.Mode),
                 Color = (Brush)Application.Current.FindResource(color),
@@ -945,7 +964,7 @@ public partial class RoutesView : UserControl
                 return;
             }
 
-            Open(new PinWindow(value), key, value);
+            Open(new PinWindow(value, RouteKeys.Zones(key, _zapretRoot)), key, OwnLists.DomainOf(value));
             return;
         }
 
@@ -1013,7 +1032,7 @@ public partial class RoutesView : UserControl
                 return;
 
             var file = UserRulesFile.Load();
-            file.Set(RouteKeys.MatchOf(kind), value, RoutingMode.Direct);
+            file.Set(RouteKeys.MatchOf(kind, value), value, RoutingMode.Direct);
             file.Save();
         }
         catch (Exception)
@@ -1312,8 +1331,8 @@ public partial class RoutesView : UserControl
         // человек «example.com», и показывать ему наше устройство хранения
         // вместо его же имени незачем. В списке ниже они и так без неё.
         var own = UserRulesFile.Load().Entries
-            .Where(entry => entry.Match == MatchKind.Domain)
-            .Select(entry => entry.Value.TrimStart('*', '.'))
+            .Where(entry => entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value))
+            .Select(entry => OwnLists.DomainOf(entry.Value))
             .ToList();
 
         OwnSummary.Text = own.Count == 0
@@ -1355,7 +1374,9 @@ public partial class RoutesView : UserControl
         try
         {
             var file = UserRulesFile.Load();
-            file.Set(MatchKind.Domain, "*." + name, RoutingMode.Direct, recipe: null);
+            // Файлом, а не одной строкой в yaml (владелец, 26.09): к нему
+            // можно дописать другие имена того же сайта — ссылка «список».
+            file.Set(MatchKind.HostList, OwnLists.Create(name), RoutingMode.Direct, recipe: null);
             file.Save();
 
             // Поле не очищается: по нему же отфильтрован список, и добавленный
@@ -1437,14 +1458,19 @@ public partial class RoutesView : UserControl
         try
         {
             var file = UserRulesFile.Load();
-            file.Remove(MatchKind.Domain, value);
+            // И правило, и файл: свой список без правила — мусор, который
+            // никто не читает и никто не увидит.
+            file.Remove(RouteKeys.MatchOf(RouteKeys.Own, value), value);
             file.Save();
+            OwnLists.Delete(value);
 
             // Перечитываем целиком: строка ушла из общего списка,
             // а не только из карточки.
             Reload();
-            Status.Text = $"Убрано: {value}. Применится при следующем запуске движков.";
-            this.Offer($"Убран маршрут: {value}");
+            var name = OwnLists.IsOwn(value) ? OwnLists.DomainOf(value) : value.TrimStart('*', '.');
+
+            Status.Text = $"Убрано: {name} вместе с его списком. Применится при следующем запуске движков.";
+            this.Offer($"Убран маршрут: {name}");
         }
         catch (Exception ex)
         {
@@ -1498,7 +1524,7 @@ public partial class RoutesView : UserControl
         // в приветствии TLS, и своему имени он нужен ровно так же.
         // У правил по адресам не спрашиваем — имени в таких пакетах нет.
         if (RouteKeys.Parse(key) is (var kind, var value) && RouteKeys.TakesRecipe(kind))
-            AskLater(key, value, example, RouteKeys.MatchOf(kind), RoutingMode.Desync);
+            AskLater(key, value, example, RouteKeys.MatchOf(kind, value), RoutingMode.Desync);
     }
 
     private void OnRoute(object sender, SelectionChangedEventArgs e)
@@ -1549,7 +1575,7 @@ public partial class RoutesView : UserControl
             _ => RoutingMode.Proxy,
         };
 
-        var match = RouteKeys.MatchOf(parts[0]);
+        var match = RouteKeys.MatchOf(parts[0], parts[1]);
 
         // Рецепт спрашиваем и у сервисов, а не только у своих доменов.
         // Именно здесь он и нужен чаще: сервис — это список из десятков имён,
