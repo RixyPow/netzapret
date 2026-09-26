@@ -131,7 +131,18 @@ public sealed record RuleRow(
     string Value,
     string Mode,
     string Server,
-    Brush Color);
+    Brush Color)
+{
+    /// <summary>Номер в rules.user.yaml; -1 — правило не наше, не таскается.</summary>
+    public int UserIndex { get; init; } = -1;
+
+    /// <summary>Группа движка: переставлять имеет смысл только внутри неё.</summary>
+    public int Tier { get; init; }
+
+    public bool Movable => UserIndex >= 0;
+
+    public Visibility GripShown => Movable ? Visibility.Visible : Visibility.Hidden;
+}
 
 /// <summary>
 /// Сервис со своими частями — папка.
@@ -561,13 +572,25 @@ public partial class RoutesView : UserControl
     {
         var ruleSet = engine.RuleSet;
 
+        // Свои правила узнаются в файле по паре «тип + значение» — тем же
+        // ключом, каким их находит Set. Номер из движка не годится: он
+        // считается без выключенных записей, и после первой выключенной
+        // перестановка сдвигала бы не ту строку.
+        var own = UserRulesFile.Load().Entries.ToList();
+
         var rows = ruleSet.Rules.Select(rule => new RuleRow(
             rule.Ordinal.ToString(),
             rule.Match.ToString().ToLowerInvariant(),
             rule.Value,
             rule.Mode.ToString().ToLowerInvariant(),
             rule.Mode == RoutingMode.Proxy ? rule.Server ?? ruleSet.DefaultServer ?? "auto" : "—",
-            (Brush)FindResource(ColorOf(rule.Mode)))).ToList();
+            (Brush)FindResource(ColorOf(rule.Mode)))
+        {
+            UserIndex = rule.Source == RuleSource.User
+                ? own.FindIndex(e => e.Match == rule.Match && e.Matches(rule.Value))
+                : -1,
+            Tier = RuleEngine.Tier(rule.Match, rule.Source),
+        }).ToList();
 
         // Умолчание — последней строкой: это тоже решение, и без него таблица
         // обрывается там, где ответ ещё не дан.
@@ -582,7 +605,8 @@ public partial class RoutesView : UserControl
         Order.ItemsSource = rows;
 
         OrderSummary.Text = $"{ruleSet.Rules.Count} правил, порядок: process → domain → ip → default. "
-            + "Побеждает то, до которого очередь доходит раньше.";
+            + "Побеждает то, до которого очередь доходит раньше. Свои правила с ручкой ⠿ "
+            + "перетаскиваются внутри своей группы.";
 
         OrderNote.Text = ruleSet.Operating != OperatingMode.Selective
             ? "В этом режиме правила не вычисляются — они показаны для справки."
@@ -598,6 +622,113 @@ public partial class RoutesView : UserControl
         RoutingMode.Desync => "Warn",
         _ => "Accent",
     };
+
+    /// <summary>Где нажали на строку порядка — чтобы отличить перетаскивание от щелчка.</summary>
+    private Point? _dragFrom;
+
+    private void OnRulePress(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _dragFrom = sender is FrameworkElement { DataContext: RuleRow { Movable: true } }
+            ? e.GetPosition(this)
+            : null;
+    }
+
+    /// <summary>
+    /// Начинает перетаскивание своего правила.
+    /// </summary>
+    /// <remarks>
+    /// Только когда мышь ушла дальше системного порога: иначе всякое
+    /// нажатие с дрожью руки становилось бы перестановкой.
+    /// </remarks>
+    private void OnRuleDrag(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_dragFrom is not { } from || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+            return;
+
+        var moved = e.GetPosition(this) - from;
+
+        if (Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance
+            && Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance)
+        {
+            return;
+        }
+
+        _dragFrom = null;
+
+        if (sender is FrameworkElement { DataContext: RuleRow row } element)
+            DragDrop.DoDragDrop(element, row, DragDropEffects.Move);
+    }
+
+    private void OnRuleDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = CanDrop(e, out _, out _) ? DragDropEffects.Move : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Переставляет своё правило и сохраняет порядок в rules.user.yaml.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Просьба владельца 26.09. Внутри группы движок проверяет правила
+    /// в порядке файла, а файл ведёт программа — менять порядок было нечем.
+    /// </para>
+    /// <para>
+    /// Только свои и только внутри группы (<see cref="RuleEngine.Tier"/>).
+    /// Правило по процессу всё равно проверится раньше любого доменного,
+    /// а своё — раньше заводского, куда бы его ни уронили; разрешить такую
+    /// перестановку значило бы показать порядок, которого у движка нет.
+    /// </para>
+    /// </remarks>
+    private void OnRuleDrop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        if (!CanDrop(e, out var source, out var target))
+        {
+            if (source is not null && target is not null && source != target)
+                Status.Text = "Переставить можно только внутри своей группы: правило по процессу "
+                    + "проверяется раньше доменного, доменное — раньше адресного, а ваше — раньше "
+                    + "заводского, куда бы его ни поставить.";
+
+            return;
+        }
+
+        try
+        {
+            var file = UserRulesFile.Load();
+
+            if (!file.Move(source!.UserIndex, target!.UserIndex))
+                return;
+
+            file.Save();
+            Reload();
+
+            // Раскрытым: перестановку делали, глядя в него, и свёрнутый после
+            // сохранения список заставил бы искать, куда встало правило.
+            OrderPanel.Visibility = Visibility.Visible;
+            Chevrons.Turn(OrderChevron, true);
+
+            Status.Text = $"Порядок сохранён: {source.Value} встал на место {target.Value}. "
+                + "Применится при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить порядок: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private static bool CanDrop(DragEventArgs e, out RuleRow? source, out RuleRow? target)
+    {
+        source = e.Data.GetData(typeof(RuleRow)) as RuleRow;
+        target = (e.OriginalSource as FrameworkElement)?.DataContext as RuleRow
+            ?? (e.Source as FrameworkElement)?.DataContext as RuleRow;
+
+        return source is { Movable: true }
+            && target is { Movable: true }
+            && source != target
+            && source.Tier == target.Tier;
+    }
 
     private void OnOrderToggle(object sender, RoutedEventArgs e)
     {

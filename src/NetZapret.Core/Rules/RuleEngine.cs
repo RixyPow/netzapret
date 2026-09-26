@@ -63,9 +63,7 @@ public sealed class RuleEngine
         // Решение владельца 23.09: своё правило побеждает. Имя, названное
         // человеком поимённо, — это и есть его выбор для этого имени.
         var sorted = ordered
-            .OrderBy(r => MatchKindPriority.Of(r.Match))
-            .ThenBy(r => r.Source == RuleSource.User ? 0 : 1)
-            .ThenBy(r => r.Source == RuleSource.User && r.Match == MatchKind.Domain ? 0 : 1)
+            .OrderBy(r => Tier(r.Match, r.Source))
             .ToList();
 
         return new RuleEngine(new RuleSet
@@ -75,6 +73,27 @@ public sealed class RuleEngine
             DefaultServer = defaultServer,
             Operating = operating,
         });
+    }
+
+    /// <summary>
+    /// Группа, внутри которой решает порядок в файле; меньше — раньше.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Три уровня сортировки из <see cref="Build"/> одним числом: класс
+    /// совпадения, слой, своё имя раньше списка. Вынесено затем, чтобы
+    /// перестановка в «Порядке вычисления» спрашивала то же, чем сортирует
+    /// движок. Своя копия условия в окне разошлась бы с этой молча —
+    /// и окно разрешало бы перетаскивать туда, где порядок ничего не решает.
+    /// </para>
+    /// </remarks>
+    public static int Tier(MatchKind match, RuleSource source)
+    {
+        bool user = source == RuleSource.User;
+
+        return MatchKindPriority.Of(match) * 4
+            + (user ? 0 : 2)
+            + (user && match == MatchKind.Domain ? 0 : 1);
     }
 
     /// <summary>

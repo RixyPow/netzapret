@@ -158,6 +158,35 @@ public sealed class UserRulesFile
         return removed;
     }
 
+    /// <summary>
+    /// Переставляет запись: вынимает с места <paramref name="from"/>
+    /// и ставит на место <paramref name="to"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Для перетаскивания в «Порядке вычисления» (владелец, 26.09). Внутри
+    /// своей группы движок проверяет правила в порядке файла, и прежде
+    /// поменять его можно было только руками — а файл ведёт программа.
+    /// </para>
+    /// <para>
+    /// Порядок переживает дальнейшие правки: <see cref="Set"/> заменяет
+    /// запись на её же месте, а новая встаёт в конец.
+    /// </para>
+    /// </remarks>
+    public bool Move(int from, int to)
+    {
+        if (from < 0 || from >= _entries.Count || to < 0 || to >= _entries.Count)
+            return false;
+
+        if (from == to)
+            return true;
+
+        var entry = _entries[from];
+        _entries.RemoveAt(from);
+        _entries.Insert(to, entry);
+        return true;
+    }
+
     public bool Toggle(int index)
     {
         if (index < 0 || index >= _entries.Count)

@@ -287,4 +287,80 @@ public sealed class LayeredRulesTests : IDisposable
 
         Assert.Equal("Телеграм.exe", reloaded.Entries[0].Value);
     }
+
+    /// <summary>
+    /// Перестановка в «Порядке вычисления» меняет, какое правило побеждает.
+    /// </summary>
+    /// <remarks>
+    /// Два своих правила на одно имя: внутри группы решает порядок файла.
+    /// Переставили — победило другое, и после перезагрузки тоже.
+    /// </remarks>
+    [Fact]
+    public void Moving_an_own_rule_changes_which_one_wins()
+    {
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "*.example.com", RoutingMode.Direct);
+        file.Set(MatchKind.Domain, "www.example.com", RoutingMode.Proxy);
+        file.Save();
+
+        Assert.Equal(RoutingMode.Direct,
+            RuleSetLoader.LoadLayered(_basePath, _userPath).Evaluate(Connection("www.example.com")).Mode);
+
+        file = UserRulesFile.Load(_userPath);
+        Assert.True(file.Move(1, 0));
+        file.Save();
+
+        Assert.Equal("www.example.com", UserRulesFile.Load(_userPath).Entries[0].Value);
+        Assert.Equal(RoutingMode.Proxy,
+            RuleSetLoader.LoadLayered(_basePath, _userPath).Evaluate(Connection("www.example.com")).Mode);
+    }
+
+    /// <summary>Правка режима оставляет правило на его месте.</summary>
+    /// <remarks>Иначе всякая смена режима сбрасывала бы выставленный порядок.</remarks>
+    [Fact]
+    public void Changing_a_mode_keeps_the_place()
+    {
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "*.a.example", RoutingMode.Direct);
+        file.Set(MatchKind.Domain, "*.b.example", RoutingMode.Direct);
+        file.Move(1, 0);
+        file.Set(MatchKind.Domain, "*.b.example", RoutingMode.Proxy);
+
+        Assert.Equal("*.b.example", file.Entries[0].Value);
+        Assert.Equal(RoutingMode.Proxy, file.Entries[0].Mode);
+    }
+
+    [Fact]
+    public void An_impossible_move_changes_nothing()
+    {
+        var file = UserRulesFile.Load(_userPath);
+        file.Set(MatchKind.Domain, "*.a.example", RoutingMode.Direct);
+
+        Assert.False(file.Move(0, 5));
+        Assert.False(file.Move(-1, 0));
+        Assert.Single(file.Entries);
+    }
+
+    /// <summary>
+    /// Группы движка: окно разрешает перестановку только внутри одной.
+    /// </summary>
+    /// <remarks>
+    /// Своё имя раньше своего списка, свои раньше заводских, процесс
+    /// раньше домена, домен раньше адреса — ровно порядок сортировки Build.
+    /// </remarks>
+    [Fact]
+    public void Tiers_follow_the_engine_order()
+    {
+        int process = RuleEngine.Tier(MatchKind.Process, RuleSource.User);
+        int ownName = RuleEngine.Tier(MatchKind.Domain, RuleSource.User);
+        int ownList = RuleEngine.Tier(MatchKind.HostList, RuleSource.User);
+        int baseName = RuleEngine.Tier(MatchKind.Domain, RuleSource.Base);
+        int ip = RuleEngine.Tier(MatchKind.IpSet, RuleSource.User);
+
+        Assert.True(process < ownName);
+        Assert.True(ownName < ownList);
+        Assert.True(ownList < baseName);
+        Assert.True(baseName < ip);
+        Assert.Equal(baseName, RuleEngine.Tier(MatchKind.HostList, RuleSource.Base));
+    }
 }

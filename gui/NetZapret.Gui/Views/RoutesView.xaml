@@ -523,8 +523,19 @@
                         </ItemsControl.ItemsPanel>
 
                         <ItemsControl.ItemTemplate>
+                            <!--
+                                Свои правила таскаются за строку — в пределах
+                                своей группы движка (RuleEngine.Tier). Ручка
+                                слева видна только у них: заводские стоят
+                                в rules.yaml, и переставлять их отсюда нечем.
+                            -->
                             <DataTemplate>
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,4" Padding="16,9">
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,4" Padding="16,9"
+                                        AllowDrop="True"
+                                        PreviewMouseLeftButtonDown="OnRulePress"
+                                        MouseMove="OnRuleDrag"
+                                        DragOver="OnRuleDragOver"
+                                        Drop="OnRuleDrop">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="44" />
@@ -534,9 +545,15 @@
                                             <ColumnDefinition Width="96" />
                                         </Grid.ColumnDefinitions>
 
-                                        <TextBlock Grid.Column="0" Text="{Binding Ordinal}"
-                                                   Style="{StaticResource Mono}"
-                                                   Foreground="{DynamicResource Muted}" />
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                            <TextBlock Text="⠿" Foreground="{DynamicResource Faint}"
+                                                       Margin="-10,0,4,0" Cursor="SizeNS"
+                                                       Visibility="{Binding GripShown}"
+                                                       ToolTip="Перетащите, чтобы поменять порядок" />
+                                            <TextBlock Text="{Binding Ordinal}"
+                                                       Style="{StaticResource Mono}"
+                                                       Foreground="{DynamicResource Muted}" />
+                                        </StackPanel>
 
                                         <TextBlock Grid.Column="1" Text="{Binding Kind}"
                                                    Style="{StaticResource Mono}"
