@@ -37,17 +37,6 @@ public sealed record CheckRow(
     Visibility BypassShown,
 
     /// <summary>
-    /// Цвет пометки: предупреждение у провалившихся, серый у доступных.
-    /// </summary>
-    /// <remarks>
-    /// Подмена DNS помечается и у открывшегося имени, и там оранжевый
-    /// кричал о беде рядом со словом «доступен» (jetbrains.com, 26.09).
-    /// Сведения верные, но дела по ним нет — они для того, кто станет
-    /// разбираться, а не сигнал.
-    /// </remarks>
-    Brush BypassColor,
-
-    /// <summary>
     /// Есть ли по этой строке что делать.
     /// </summary>
     /// <remarks>
@@ -986,7 +975,6 @@ public partial class CheckView : UserControl
             report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
             note,
             note.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
-            (Brush)FindResource(report.Actionable ? "Warn" : "Muted"),
             report.Actionable);
     }
 

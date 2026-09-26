@@ -145,10 +145,9 @@
                                         из колонки вердикта. Слитая с «почему»,
                                         она читалась бы как ещё одна подробность
                                         и пропускалась бы ровно теми, кому нужна.
-                                        У доступного имени — серым: дела по ней нет.
                                     -->
                                     <TextBlock Text="{Binding Bypass}" Style="{StaticResource Caption}"
-                                               Foreground="{Binding BypassColor}"
+                                               Foreground="{DynamicResource Warn}"
                                                Margin="0,4,0,0" TextWrapping="Wrap"
                                                Visibility="{Binding BypassShown}" />
                                 </StackPanel>
