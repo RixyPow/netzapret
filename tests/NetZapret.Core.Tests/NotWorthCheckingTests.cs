@@ -29,6 +29,7 @@ public sealed class NotWorthCheckingTests
     [InlineData("itch.zone")]
     [InlineData("rutor.info")]
     [InlineData("nflxvideo.net")]
+    [InlineData("sndcdn.com")]
     public void A_mirror_is_dropped_from_the_check(string host)
     {
         Assert.True(NotWorthChecking.Contains(host));
