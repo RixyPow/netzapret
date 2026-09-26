@@ -194,10 +194,9 @@ public sealed class ProcessSupervisorTests : IDisposable
         // Разовый промах перезапуском не лечится: сетевая икота бывает.
         int before = service.Checks;
         service.Answer = ServiceCheck.Broken;
-        await WaitFor(options, s => s.Health == ServiceHealth.Degraded, "служба помечена нездоровой");
-
-        // Первая неудача — только пометка, не перезапуск.
-        var early = SupervisorState.Load(options.StatePath)!.Services[0];
+        // Первая неудача — только пометка, не перезапуск. Состояние — из
+        // ожидания, а не перечитанное: чтение на занятом файле даёт null.
+        var early = await WaitFor(options, s => s.Health == ServiceHealth.Degraded, "служба помечена нездоровой");
         Assert.Equal(0, early.RestartCount);
 
         var restarted = await WaitFor(options, s => s.RestartCount >= 1, "перезапуск после трёх неудач");
@@ -228,10 +227,12 @@ public sealed class ProcessSupervisorTests : IDisposable
         service.Answer = ServiceCheck.UpstreamDown;
         int before = service.Checks;
 
-        await WaitFor(options, s => s.Health == ServiceHealth.Degraded && service.Checks - before >= 8,
+        // Состояние — то, что вернуло ожидание, а не перечитанное следом:
+        // супервизор пишет файл в своём цикле, и чтение на занятом файле
+        // отвечает «состояния нет». В CI 26.09 тест дважды упал на этом
+        // NullReferenceException при исправном супервизоре.
+        var state = await WaitFor(options, s => s.Health == ServiceHealth.Degraded && service.Checks - before >= 8,
             "восемь проверок при мёртвом выходе");
-
-        var state = SupervisorState.Load(options.StatePath)!.Services[0];
 
         Assert.Equal(0, state.RestartCount);
         Assert.Equal(first.ProcessId, state.ProcessId);
