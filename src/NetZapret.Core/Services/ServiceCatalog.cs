@@ -583,7 +583,30 @@ public static class ServiceCatalog
                     List = "config/lists/reddit.txt",
                     Note = "без redd.it страница открывается голой, и это выглядит поломкой самого Reddit",
                 },
-                new ServicePart { Name = "Bluesky", List = "config/lists/bluesky.txt" },
+            ],
+        },
+
+        // Bluesky — своей папкой, а не строкой полки «Соцсети» (владелец,
+        // 26.09): картинки, скрипты и видео идут через сеть доставки Bunny,
+        // а она ломается отдельно от самого приложения. DNS отдаёт случайный
+        // узел, и 79.127.134.x в сети владельца мертвы для всех имён —
+        // страница висела на заставке, фото не грузились. Лечится пином
+        // на живой узел (кандидаты в config/catalog.yaml).
+        //
+        // Имена сети доставки лежат и под зоной bsky.app «Приложения»: маршрут
+        // у обеих частей держать одинаковым, иначе они заспорят.
+        new ServiceDefinition
+        {
+            Name = "Bluesky",
+            Parts =
+            [
+                new ServicePart { Name = "Приложение", List = "config/lists/bluesky.txt" },
+                new ServicePart
+                {
+                    Name = "Картинки и видео",
+                    List = "config/lists/bluesky-cdn.txt",
+                    Note = "узлы 79.127.134.x мертвы — прибейте живой; маршрут — как у «Приложения»",
+                },
             ],
         },
 
