@@ -493,10 +493,15 @@ addresses:
 
 ## Антивирусы
 
-Сборка даёт 3 срабатывания из 66 на VirusTotal, и все три — на **WinDivert**,
-драйвер перехвата пакетов. Помечается как `RiskTool` и `PUA`, Kaspersky пишет
-прямо: `Not-a-virus`. Без него обход DPI невозможен, и та же картина у Zapret
-и GoodbyeDPI.
+Архив 0.8.6 даёт на VirusTotal 2 срабатывания из 64, и оба — на средства
+обхода, а не на вредоносный код:
+
+- **Elastic** — `Windows.Rootkit.WinDivert`: это **WinDivert**, драйвер
+  перехвата пакетов. Без него обход DPI невозможен, и та же картина у Zapret
+  и GoodbyeDPI.
+- **Kaspersky** — `Not-a-virus:UDS:NetTool…`: сам Kaspersky пишет «не вирус»
+  и относит находку к сетевым инструментам — так он помечает программы,
+  которые строят туннели.
 
 Отчёт VirusTotal по архиву выпуска —
 [NetZapret-0.8.6.zip](https://www.virustotal.com/gui/file/aab93eccdeb3e266acff91ec596e804481d556720019d2b452d61f7ad96cf204),
