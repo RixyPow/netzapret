@@ -3,16 +3,21 @@ using System.Text;
 namespace NetZapret.Core.Rules;
 
 /// <summary>
-/// Свои домены — файлами списков, как у сервисов.
+/// Свои списки имён — файлы в <c>config/lists/own/</c>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Просьба владельца 26.09. Прежде свой домен был одной строкой
-/// <c>domain: "*.example.com"</c> в rules.user.yaml: файла у него не было,
-/// и дописать к нему второе имя того же сайта можно было только вторым
-/// своим доменом. Теперь у каждого свой файл в <c>config/lists/own/</c>,
-/// правило на него — hostlist, как у частей сервисов, и файл открывается
-/// ссылкой «список» и правится руками. Убрали домен — убрался и файл.
+/// Свой домен — одна строка <c>domain: "*.example.com"</c> в rules.user.yaml,
+/// и так остаётся, пока человек сам не попросит файл: ссылка «список»
+/// у своего домена предлагает его завести, с названием на выбор. Тогда
+/// правило переходит на hostlist этого файла, как у части сервиса, и к нему
+/// можно дописать другие имена того же сайта. Убрали — убрался и файл.
+/// </para>
+/// <para>
+/// Сам файл не заводится (владелец, 26.09): одно и то же имя в двух
+/// файлах — два правила, спорящих о нём, и заводить второе без спроса
+/// значит плодить спор, о котором человек не знает. Поэтому только
+/// по просьбе, и окно создания называет список, с которым будет спор.
 /// </para>
 /// <para>
 /// Папка отдельная, и это не порядок ради порядка. Файлы личные — в git
@@ -27,49 +32,80 @@ public static class OwnLists
     /// <summary>Папка своих списков, в том виде, в каком путь пишется в правило.</summary>
     public const string Folder = "config/lists/own/";
 
-    /// <summary>Путь списка для домена — значение правила.</summary>
-    public static string PathFor(string domain) => Folder + domain.Trim().TrimStart('*', '.').ToLowerInvariant() + ".txt";
+    /// <summary>Путь списка с этим названием — значение правила.</summary>
+    public static string PathFor(string name) => Folder + name + ".txt";
 
     /// <summary>Свой ли это список.</summary>
     public static bool IsOwn(string? value) =>
         value is not null
         && value.Replace('\\', '/').StartsWith(Folder, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Домен, ради которого список заведён, — по имени файла.</summary>
-    public static string DomainOf(string value) =>
+    /// <summary>Название списка — имя файла без расширения.</summary>
+    public static string NameOf(string value) =>
         System.IO.Path.GetFileNameWithoutExtension(value.Replace('\\', '/'));
 
     /// <summary>
-    /// Заводит файл списка с одним именем; существующий не трогает.
+    /// Название, годное для файла; <c>null</c> — не годится.
     /// </summary>
     /// <remarks>
-    /// Имя пишется без звёздочки: файловый список сам покрывает поддомены —
-    /// у winws2 это «subdomains auto apply», у нашего сопоставления то же.
-    /// Прежнее правило «*.example.com» означало ровно это.
+    /// Буквы, цифры, точка, дефис и подчёркивание — чтобы имя файла читалось
+    /// одинаково в Проводнике, в yaml и в командной строке. Пробелы
+    /// становятся дефисами: «мои сайты» — законное желание, а не ошибка.
     /// </remarks>
-    /// <param name="root">Корень установки; <c>null</c> — текущий каталог.</param>
-    public static string Create(string domain, string? root = null)
+    public static string? Normalize(string? name)
     {
-        var value = PathFor(domain);
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var trimmed = name.Trim().ToLowerInvariant().Replace(' ', '-');
+
+        if (trimmed.EndsWith(".txt", StringComparison.Ordinal))
+            trimmed = trimmed[..^4];
+
+        if (trimmed.Length == 0 || trimmed.Length > 64 || trimmed.Trim('.').Length == 0)
+            return null;
+
+        return trimmed.All(c => char.IsLetterOrDigit(c) || c is '.' or '-' or '_')
+            ? trimmed
+            : null;
+    }
+
+    /// <summary>Есть ли уже список с таким названием.</summary>
+    public static bool Exists(string name, string? root = null) =>
+        File.Exists(Full(PathFor(name), root));
+
+    /// <summary>
+    /// Заводит список с названием <paramref name="name"/> и именами в нём.
+    /// </summary>
+    /// <returns>Значение правила — путь к списку.</returns>
+    /// <exception cref="IOException">Список с таким названием уже есть.</exception>
+    /// <remarks>
+    /// Существующий не переписывается: в нём могут быть имена, дописанные
+    /// руками. Имена пишутся без звёздочки — файловый список сам покрывает
+    /// поддомены, у winws2 это «subdomains auto apply», у нашего
+    /// сопоставления то же; прежнее «*.example.com» означало ровно это.
+    /// </remarks>
+    public static string Create(string name, IEnumerable<string> domains, string? root = null)
+    {
+        var value = PathFor(name);
         var full = Full(value, root);
+
+        if (File.Exists(full))
+            throw new IOException($"Список «{name}» уже есть.");
 
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
 
-        if (!File.Exists(full))
-        {
-            var name = DomainOf(value);
+        var body = new StringBuilder()
+            .Append($"# Свой список: {name}.\r\n")
+            .Append("#\r\n")
+            .Append("# Имена по одному в строке, поддомены покрываются сами.\r\n")
+            .Append("# Правка действует со следующего запуска движков. Уберёте\r\n")
+            .Append("# его в «Маршрутах» — удалится и этот файл.\r\n");
 
-            File.WriteAllText(full,
-                $"# Свой домен: {name}.\r\n"
-                + "#\r\n"
-                + "# Файл завела программа, когда вы добавили домен в «Маршрутах».\r\n"
-                + "# Допишите сюда другие имена того же сайта — по одному в строке,\r\n"
-                + "# поддомены покрываются сами. Удалите домен в «Маршрутах» —\r\n"
-                + "# удалится и этот файл.\r\n"
-                + name + "\r\n",
-                new UTF8Encoding(false));
-        }
+        foreach (var domain in domains)
+            body.Append(domain.Trim().TrimStart('*', '.')).Append("\r\n");
 
+        File.WriteAllText(full, body.ToString(), new UTF8Encoding(false));
         return value;
     }
 
@@ -92,41 +128,6 @@ public static class OwnLists
         catch (UnauthorizedAccessException)
         {
         }
-    }
-
-    /// <summary>
-    /// Переводит свои домены прежнего вида в списки.
-    /// </summary>
-    /// <returns>Сколько записей переведено; 0 — файл не менялся.</returns>
-    /// <remarks>
-    /// <para>
-    /// Каждая <c>domain</c>-запись становится hostlist-записью на своё место:
-    /// режим, рецепт и выключенность сохраняются, порядок тоже — внутри
-    /// группы он решает, какое правило побеждает.
-    /// </para>
-    /// <para>
-    /// Файл уже есть — запись переводится на него, файл не переписывается:
-    /// его могли дополнить руками. Сохранять — дело вызывающего.
-    /// </para>
-    /// </remarks>
-    public static int Migrate(UserRulesFile file, string? root = null)
-    {
-        int moved = 0;
-
-        for (int i = 0; i < file.Entries.Count; i++)
-        {
-            var entry = file.Entries[i];
-
-            if (entry.Match != MatchKind.Domain)
-                continue;
-
-            var path = Create(entry.Value, root);
-
-            file.ReplaceAt(i, entry with { Match = MatchKind.HostList, Value = path });
-            moved++;
-        }
-
-        return moved;
     }
 
     private static string Full(string value, string? root) =>

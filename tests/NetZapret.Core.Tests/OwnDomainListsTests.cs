@@ -1,17 +1,16 @@
-using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using Xunit;
 
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Свои домены файлами списков.
+/// Свои списки: файл своему домену — по просьбе, с названием на выбор.
 /// </summary>
 /// <remarks>
-/// Просьба владельца 26.09: у своего домена — свой файл, как у части
-/// сервиса, и удаляется он вместе с доменом. Здесь проверено и то, ради
-/// чего это нельзя было сделать просто сменой типа правила: свой список
-/// обязан побеждать список сервиса, как прежде побеждало своё имя.
+/// Владелец 26.09: файл не заводится сам — одно имя в двух файлах даёт два
+/// спорящих правила. Здесь же проверено то, ради чего это нельзя было сделать
+/// просто сменой типа правила: свой список обязан побеждать список сервиса,
+/// как прежде побеждало своё имя.
 /// </remarks>
 public sealed class OwnDomainListsTests : IDisposable
 {
@@ -28,32 +27,53 @@ public sealed class OwnDomainListsTests : IDisposable
     private string Full(string value) => Path.Combine(_root, value);
 
     [Fact]
-    public void A_domain_gets_its_own_file_with_its_name()
+    public void A_list_is_created_under_the_chosen_name_with_the_domain_inside()
     {
-        var value = OwnLists.Create("Example.com", _root);
+        var value = OwnLists.Create("мой-сайт", ["*.example.com"], _root);
 
-        Assert.Equal("config/lists/own/example.com.txt", value);
+        Assert.Equal("config/lists/own/мой-сайт.txt", value);
         Assert.True(OwnLists.IsOwn(value));
-        Assert.Equal("example.com", OwnLists.DomainOf(value));
+        Assert.Equal("мой-сайт", OwnLists.NameOf(value));
         Assert.Contains("example.com", File.ReadAllLines(Full(value)));
     }
 
-    /// <summary>Существующий файл не переписывается: его могли дополнить руками.</summary>
+    /// <summary>Список с тем же названием не переписывается: в нём могут быть свои имена.</summary>
     [Fact]
-    public void An_existing_file_is_kept()
+    public void An_existing_list_is_not_overwritten()
     {
-        var value = OwnLists.Create("example.com", _root);
+        var value = OwnLists.Create("site", ["example.com"], _root);
         File.AppendAllText(Full(value), "cdn-example.net\r\n");
 
-        OwnLists.Create("example.com", _root);
-
+        Assert.True(OwnLists.Exists("site", _root));
+        Assert.Throws<IOException>(() => OwnLists.Create("site", ["other.org"], _root));
         Assert.Contains("cdn-example.net", File.ReadAllLines(Full(value)));
+    }
+
+    [Theory]
+    [InlineData("Мои сайты", "мои-сайты")]
+    [InlineData("example.com", "example.com")]
+    [InlineData("list.txt", "list")]
+    public void A_name_is_brought_to_a_file_name(string typed, string expected)
+    {
+        Assert.Equal(expected, OwnLists.Normalize(typed));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("..")]
+    [InlineData("a/b")]
+    [InlineData("a\\b")]
+    [InlineData("con:")]
+    public void A_bad_name_is_refused(string typed)
+    {
+        Assert.Null(OwnLists.Normalize(typed));
     }
 
     [Fact]
     public void Removing_deletes_the_file()
     {
-        var value = OwnLists.Create("example.com", _root);
+        var value = OwnLists.Create("site", ["example.com"], _root);
 
         OwnLists.Delete(value, _root);
 
@@ -74,32 +94,6 @@ public sealed class OwnDomainListsTests : IDisposable
     }
 
     /// <summary>
-    /// Прежние свои домены переводятся в списки на своём месте, с режимом и рецептом.
-    /// </summary>
-    [Fact]
-    public void Old_domains_move_to_lists_in_place()
-    {
-        var path = Full("rules.user.yaml");
-        var file = UserRulesFile.Load(path);
-        file.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Desync);
-        file.Set(MatchKind.Domain, "*.example.com", RoutingMode.Desync, recipe: "fake");
-        file.Set(MatchKind.Domain, "*.other.org", RoutingMode.Proxy);
-
-        Assert.Equal(2, OwnLists.Migrate(file, _root));
-        file.Save();
-
-        var entries = UserRulesFile.Load(path).Entries;
-
-        Assert.Equal("config/lists/discord.txt", entries[0].Value);
-        Assert.Equal(MatchKind.HostList, entries[1].Match);
-        Assert.Equal("config/lists/own/example.com.txt", entries[1].Value);
-        Assert.Equal("fake", entries[1].Recipe);
-        Assert.Equal(RoutingMode.Proxy, entries[2].Mode);
-        Assert.True(File.Exists(Full(entries[2].Value)));
-        Assert.Equal(0, OwnLists.Migrate(UserRulesFile.Load(path), _root));
-    }
-
-    /// <summary>
     /// Свой список проверяется раньше списка сервиса — как прежде своё имя.
     /// </summary>
     /// <remarks>
@@ -112,19 +106,19 @@ public sealed class OwnDomainListsTests : IDisposable
     {
         Assert.Equal(
             RuleEngine.Tier(MatchKind.Domain, RuleSource.User),
-            RuleEngine.Tier(MatchKind.HostList, RuleSource.User, "config/lists/own/example.com.txt"));
+            RuleEngine.Tier(MatchKind.HostList, RuleSource.User, "config/lists/own/site.txt"));
 
         Assert.True(
-            RuleEngine.Tier(MatchKind.HostList, RuleSource.User, "config/lists/own/example.com.txt")
+            RuleEngine.Tier(MatchKind.HostList, RuleSource.User, "config/lists/own/site.txt")
             < RuleEngine.Tier(MatchKind.HostList, RuleSource.User, "config/lists/discord.txt"));
 
         var engine = RuleEngine.Build(
             [
                 new RoutingRule { Match = MatchKind.HostList, Value = "config/lists/service.txt", Mode = RoutingMode.Direct, Source = RuleSource.User },
-                new RoutingRule { Match = MatchKind.HostList, Value = "config/lists/own/example.com.txt", Mode = RoutingMode.Proxy, Source = RuleSource.User },
+                new RoutingRule { Match = MatchKind.HostList, Value = "config/lists/own/site.txt", Mode = RoutingMode.Proxy, Source = RuleSource.User },
             ],
             RoutingMode.Desync);
 
-        Assert.Equal("config/lists/own/example.com.txt", engine.RuleSet.Rules[0].Value);
+        Assert.Equal("config/lists/own/site.txt", engine.RuleSet.Rules[0].Value);
     }
 }

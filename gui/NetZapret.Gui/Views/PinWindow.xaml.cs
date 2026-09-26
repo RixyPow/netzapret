@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Net.Http;
 using System.Windows;
@@ -184,8 +184,8 @@ public partial class PinWindow : Window
     public PinWindow(string rule, IReadOnlyList<string> zones)
         : this(new PinTarget
         {
-            Title = OwnLists.IsOwn(rule) ? OwnLists.DomainOf(rule) : rule.TrimStart('*', '.'),
-            Short = OwnLists.IsOwn(rule) ? OwnLists.DomainOf(rule) : rule.TrimStart('*', '.'),
+            Title = OwnLists.IsOwn(rule) ? OwnLists.NameOf(rule) : rule.TrimStart('*', '.'),
+            Short = OwnLists.IsOwn(rule) ? OwnLists.NameOf(rule) : rule.TrimStart('*', '.'),
             Source = "Свой домен",
             Zones = zones,
             Match = OwnLists.IsOwn(rule) ? MatchKind.HostList : MatchKind.Domain,

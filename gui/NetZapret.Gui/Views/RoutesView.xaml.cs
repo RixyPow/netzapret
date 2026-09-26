@@ -24,7 +24,11 @@ public sealed record PartRow
     /// <summary>Полный путь к файлу списка; <c>null</c> — ссылки «список» нет.</summary>
     public string? ListPath { get; init; }
 
-    public Visibility ListShown => ListPath is null ? Visibility.Collapsed : Visibility.Visible;
+    /// <remarks>
+    /// У своего домена ссылка есть и без файла: нажатие предлагает его
+    /// завести. Сам файл не заводится (владелец, 26.09) — см. OwnLists.
+    /// </remarks>
+    public Visibility ListShown => ListPath is not null || Own ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Настоящее имя из списка — на нём проверяются рецепты.
@@ -315,20 +319,6 @@ public partial class RoutesView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             var zapretRoot = ZapretPaths.Discover()?.Root;
             var userRules = UserRulesFile.Load();
-
-            // Свои домены прежнего вида — domain-правила без файла —
-            // переводятся в списки здесь, при первом открытии раздела после
-            // обновления (OwnLists, 26.09). Порядок, режим и рецепт остаются.
-            try
-            {
-                if (OwnLists.Migrate(userRules) > 0)
-                    userRules.Save();
-            }
-            catch (Exception)
-            {
-                // Не вышло — строки просто покажутся по-старому, без файла;
-                // движок понимает оба вида.
-            }
 
             // Те же правила держим под рукой при сборке строк: по ним
             // подписывается выбранный рецепт.
@@ -865,19 +855,29 @@ public partial class RoutesView : UserControl
     /// сайта, кнопка пина, выбор маршрута и окно рецептов.
     /// </para>
     /// <para>
-    /// Ключ начинается с <c>own</c>, значение — путь своего списка
-    /// (<see cref="OwnLists"/>, с 26.09): по ключу обработчики узнают,
-    /// что строка своя — её можно убрать, и убирается она вместе с файлом.
+    /// Ключ начинается с <c>own</c>. Значение — само правило
+    /// <c>*.example.com</c>, либо путь своего списка, если человек его завёл
+    /// ссылкой «список» (<see cref="OwnLists"/>, 26.09). По ключу
+    /// обработчики узнают, что строка своя: её можно убрать, и убирается
+    /// она вместе с файлом.
     /// </para>
     /// </remarks>
     private IReadOnlyList<ServiceRow> OwnRows(UserRulesFile userRules)
     {
         var rows = new List<ServiceRow>();
 
-        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value)))
+        foreach (var entry in userRules.Entries.Where(e =>
+            e.Match == MatchKind.Domain || (e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value))))
         {
-            var domain = OwnLists.DomainOf(entry.Value);
-            var count = RouteKeys.Zones("own|" + entry.Value, _zapretRoot).Count;
+            var listed = entry.Match == MatchKind.HostList;
+            var zones = RouteKeys.Zones("own|" + entry.Value, _zapretRoot);
+            var count = zones.Count;
+
+            // У списка заголовок — его название, а имя для значка и проб —
+            // первое из файла: название человек выбирал сам, и сайтом оно
+            // быть не обязано.
+            var title = listed ? OwnLists.NameOf(entry.Value) : entry.Value.TrimStart('*', '.');
+            var domain = listed ? zones.FirstOrDefault() ?? title : title;
 
             var (color, choice) = entry.Mode switch
             {
@@ -890,21 +890,23 @@ public partial class RoutesView : UserControl
             {
                 Icon = SiteIcons.Cached(domain),
                 Key = "own|" + entry.Value,
-                Title = domain,
+                Title = title,
                 Probe = domain,
 
                 // Рецепт называется прямо в подписи: выбранный однажды,
                 // он иначе пропадал бы из виду, и понять, чем чинится имя,
                 // можно было бы только заглянув в yaml.
-                Detail = "свой домен"
-                    + (count > 1 ? " · " + Count(count, "имя", "имени", "имён") : string.Empty)
+                Detail = (listed ? "свой список · " + Count(count, "домен", "домена", "доменов") : "свой домен")
                     + (entry.Mode == RoutingMode.Desync
                         && !string.IsNullOrWhiteSpace(entry.Recipe)
                             ? $" · рецепт: {entry.Recipe}"
                             : string.Empty),
 
                 Example = domain,
-                ListPath = ListFile(entry.Value),
+
+                // У домена без файла ссылка тоже есть — она предлагает файл
+                // завести (OnOpenList); у списка — открывает его.
+                ListPath = listed ? ListFile(entry.Value) : null,
 
                 Mode = Describe(entry.Mode),
                 Color = (Brush)Application.Current.FindResource(color),
@@ -917,7 +919,7 @@ public partial class RoutesView : UserControl
                 Lead = 24,
             };
 
-            rows.Add(new ServiceRow(domain, [part]));
+            rows.Add(new ServiceRow(title, [part]));
         }
 
         return rows;
@@ -964,7 +966,7 @@ public partial class RoutesView : UserControl
                 return;
             }
 
-            Open(new PinWindow(value, RouteKeys.Zones(key, _zapretRoot)), key, OwnLists.DomainOf(value));
+            Open(new PinWindow(value, RouteKeys.Zones(key, _zapretRoot)), key, OwnLists.NameOf(value));
             return;
         }
 
@@ -1245,6 +1247,109 @@ public partial class RoutesView : UserControl
         || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase)
         || (part.Example?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false);
 
+    /// <summary>
+    /// Предлагает своему домену завести файл списка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Только по нажатию, не сам (владелец, 26.09): одно имя в двух файлах —
+    /// два правила, спорящих о нём. Окно называет списки, где домен уже есть,
+    /// до создания.
+    /// </para>
+    /// <para>
+    /// Создав, переводим правило на список на его же месте — с режимом
+    /// и рецептом, — и открываем файл: за ним и нажимали.
+    /// </para>
+    /// </remarks>
+    private void OfferList(PartRow row)
+    {
+        if (RouteKeys.Parse(row.Key) is not (RouteKeys.Own, var value) || OwnLists.IsOwn(value))
+            return;
+
+        var domain = value.TrimStart('*', '.');
+
+        var window = new ListNameWindow(domain, ListsCovering(domain))
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (window.ShowDialog() != true || window.Chosen is not { } name)
+            return;
+
+        try
+        {
+            var file = UserRulesFile.Load();
+            int index = file.Entries.ToList().FindIndex(en => en.Match == MatchKind.Domain && en.Matches(value));
+
+            if (index < 0)
+            {
+                Status.Text = $"Правила для {domain} уже нет — перечитываю раздел.";
+                Reload();
+                return;
+            }
+
+            var path = OwnLists.Create(name, [domain]);
+            file.ReplaceAt(index, file.Entries[index] with { Match = MatchKind.HostList, Value = path });
+            file.Save();
+
+            Reload();
+
+            if (ListFile(path) is { } full)
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{full}\"")
+                {
+                    UseShellExecute = true,
+                })?.Dispose();
+            }
+
+            Status.Text = $"Заведён список «{name}» с {domain}. Допишите имена и сохраните — "
+                + "применится при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось завести список: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Списки, где имя уже есть: части сервисов и свои.
+    /// </summary>
+    /// <remarks>
+    /// По зоне, как у пина: список хранит <c>example.com</c>, а спрашивают
+    /// и про <c>www.example.com</c>. Совпадение — это будущий спор правил.
+    /// </remarks>
+    private IReadOnlyList<string> ListsCovering(string domain)
+    {
+        var found = new List<string>();
+
+        try
+        {
+            foreach (var service in ServiceCatalog.All)
+            {
+                foreach (var part in service.Parts.Where(p => !p.ByAddress))
+                {
+                    var zones = RouteKeys.Zones(RouteKeys.Make(RouteKeys.HostList, part.List), _zapretRoot);
+
+                    if (RouteKeys.Covers(zones, domain))
+                        found.Add(service.Parts.Count > 1 ? $"{service.Name} · {part.Name}" : service.Name);
+                }
+            }
+
+            foreach (var entry in UserRulesFile.Load().Entries.Where(en =>
+                en.Match == MatchKind.HostList && OwnLists.IsOwn(en.Value)))
+            {
+                if (RouteKeys.Covers(RouteKeys.Zones("own|" + entry.Value, _zapretRoot), domain))
+                    found.Add($"свой «{OwnLists.NameOf(entry.Value)}»");
+            }
+        }
+        catch (Exception)
+        {
+            // Не прочиталось — предупреждения не будет, создать всё равно можно.
+        }
+
+        return found.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     /// <summary>«1 домен», «3 домена», «12 доменов».</summary>
     private static string Count(int n, string one, string few, string many)
     {
@@ -1297,8 +1402,16 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnOpenList(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Documents.Hyperlink { DataContext: PartRow { ListPath: { } path } })
+        if (sender is not System.Windows.Documents.Hyperlink { DataContext: PartRow row })
             return;
+
+        if (row.ListPath is not { } path)
+        {
+            if (row.Own)
+                OfferList(row);
+
+            return;
+        }
 
         try
         {
@@ -1331,8 +1444,11 @@ public partial class RoutesView : UserControl
         // человек «example.com», и показывать ему наше устройство хранения
         // вместо его же имени незачем. В списке ниже они и так без неё.
         var own = UserRulesFile.Load().Entries
-            .Where(entry => entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value))
-            .Select(entry => OwnLists.DomainOf(entry.Value))
+            .Where(entry => entry.Match == MatchKind.Domain
+                || (entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value)))
+            .Select(entry => entry.Match == MatchKind.Domain
+                ? entry.Value.TrimStart('*', '.')
+                : OwnLists.NameOf(entry.Value))
             .ToList();
 
         OwnSummary.Text = own.Count == 0
@@ -1374,9 +1490,9 @@ public partial class RoutesView : UserControl
         try
         {
             var file = UserRulesFile.Load();
-            // Файлом, а не одной строкой в yaml (владелец, 26.09): к нему
-            // можно дописать другие имена того же сайта — ссылка «список».
-            file.Set(MatchKind.HostList, OwnLists.Create(name), RoutingMode.Direct, recipe: null);
+            // Одной строкой, без файла: файл заводится только по просьбе —
+            // ссылкой «список» в строке домена (владелец, 26.09).
+            file.Set(MatchKind.Domain, "*." + name, RoutingMode.Direct, recipe: null);
             file.Save();
 
             // Поле не очищается: по нему же отфильтрован список, и добавленный
@@ -1467,7 +1583,7 @@ public partial class RoutesView : UserControl
             // Перечитываем целиком: строка ушла из общего списка,
             // а не только из карточки.
             Reload();
-            var name = OwnLists.IsOwn(value) ? OwnLists.DomainOf(value) : value.TrimStart('*', '.');
+            var name = OwnLists.IsOwn(value) ? OwnLists.NameOf(value) : value.TrimStart('*', '.');
 
             Status.Text = $"Убрано: {name} вместе с его списком. Применится при следующем запуске движков.";
             this.Offer($"Убран маршрут: {name}");
