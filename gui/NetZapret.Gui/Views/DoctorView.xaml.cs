@@ -332,7 +332,12 @@ public partial class DoctorView : UserControl
 
             if (strays.Count == 0)
             {
-                var ghost = Ghost();
+                // Адаптер при живом sing-box — его собственный, а не брошенный.
+                // Без этой оговорки строка звала «сиротой» рабочий netzapret0
+                // рядом с «sing-box: работает» (владелец, 26.09): чужих движков
+                // здесь уже нет, значит живой — наш.
+                bool ownTun = System.Diagnostics.Process.GetProcessesByName("sing-box").Length > 0;
+                var ghost = ownTun ? null : Ghost();
 
                 return ghost is null
                     ? [Ok("Движков и адаптеров от прошлых запусков нет.")]
