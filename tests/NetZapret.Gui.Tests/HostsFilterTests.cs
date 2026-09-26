@@ -95,4 +95,41 @@ public sealed class HostsFilterTests
     {
         Assert.Empty(HostsFilter.Apply(Rows, "такого-имени-нет"));
     }
+
+    private static NetZapret.Proxy.HostsEntry Entry(int line, string address, params string[] names) =>
+        new() { Line = line, Address = address, Names = names, Enabled = true };
+
+    private static readonly NetZapret.Proxy.HostsEntry[] Entries =
+    [
+        Entry(3, "72.56.93.144", "jetbrains.com", "academy.jetbrains.com"),
+        Entry(4, "149.154.167.220", "t.me", "api.telegram.org"),
+        Entry(5, "72.56.93.144", "notion.so"),
+    ];
+
+    /// <summary>Совпало имя — уходит только оно, сосед по строке остаётся.</summary>
+    [Fact]
+    public void Removal_by_name_takes_only_that_name()
+    {
+        Assert.Equal([(4, "t.me")], HostsFilter.Targets(Entries, "t.me"));
+    }
+
+    /// <summary>Совпал адрес — уходят все имена на нём.</summary>
+    [Fact]
+    public void Removal_by_address_takes_every_name_on_it()
+    {
+        var found = HostsFilter.Targets(Entries, "72.56.93.144");
+
+        Assert.Equal(3, found.Count);
+        Assert.Contains((5, "notion.so"), found);
+    }
+
+    /// <summary>
+    /// Пустой запрос не отбирает ничего — иначе это «почистить всё».
+    /// </summary>
+    [Fact]
+    public void An_empty_query_removes_nothing()
+    {
+        Assert.Empty(HostsFilter.Targets(Entries, null));
+        Assert.Empty(HostsFilter.Targets(Entries, "   "));
+    }
 }

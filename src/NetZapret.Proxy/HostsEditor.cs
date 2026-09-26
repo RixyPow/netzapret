@@ -224,6 +224,84 @@ public static class HostsEditor
     }
 
     /// <summary>
+    /// Убирает названные имена из названных строк — и наших, и чужих.
+    /// </summary>
+    /// <param name="targets">Номер строки из <see cref="HostsEntry.Line"/> и имя в ней.</param>
+    /// <returns>Путь к копии и сколько имён ушло на деле.</returns>
+    /// <remarks>
+    /// <para>
+    /// Заведено по просьбе владельца 26.09: поиск по «jetbrains» нашёл
+    /// сто двадцать две чужие записи, и все они вели на мёртвый прокси —
+    /// удалять такое по одной с вопросом на каждую нельзя. Прежде здесь
+    /// стояло «разом не чистим»; то правило писалось против кнопки
+    /// «почистить всё», а удаляется только отобранное поиском.
+    /// </para>
+    /// <para>
+    /// Имя, а не строка, потому что в строке их бывает несколько:
+    /// «149.154.167.220 t.me api.telegram.org». Поиск по «t.me» снял бы
+    /// заодно api.telegram.org, которого человек не выбирал. Строка уходит
+    /// целиком, только когда в ней не осталось имён; иначе переписывается
+    /// с оставшимися — с тем же адресом, выключенностью и подписью.
+    /// </para>
+    /// <para>
+    /// Одним проходом и одной копией, наши и чужие вместе. Двумя вызовами
+    /// не выйдет: копия названа с точностью до секунды, и вторая затёрла
+    /// бы первую уже правленым файлом — прежний пропал бы молча.
+    /// </para>
+    /// <para>
+    /// Имя, которого в строке уже нет, пропускается: между показом и нажатием
+    /// файл мог переписать кто угодно, и номер строки стал бы чужим.
+    /// </para>
+    /// </remarks>
+    public static (string Backup, int Removed) RemoveNames(
+        IReadOnlyCollection<(int Line, string Name)> targets,
+        string? path = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+        var content = File.ReadAllLines(target).ToList();
+        var backup = Backup(target);
+
+        var entries = Parse(target).ToDictionary(e => e.Line);
+        int removed = 0;
+
+        // С конца, чтобы удалённая строка не сдвигала номера ещё не тронутых.
+        foreach (var group in targets.GroupBy(t => t.Line).OrderByDescending(g => g.Key))
+        {
+            if (!entries.TryGetValue(group.Key, out var entry))
+                continue;
+
+            var drop = group.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var left = entry.Names.Where(n => !drop.Contains(n)).ToList();
+            int gone = entry.Names.Count - left.Count;
+
+            if (gone == 0)
+                continue;
+
+            removed += gone;
+
+            if (left.Count == 0)
+            {
+                content.RemoveAt(group.Key);
+                continue;
+            }
+
+            content[group.Key] = (entry.Enabled ? string.Empty : "# ")
+                + entry.Address + " " + string.Join(' ', left)
+                + (entry.Note is { } note ? " # " + note : string.Empty);
+        }
+
+        // Опустевший наш блок уходит вместе с отметками — как и у Unpin:
+        // иначе в файле копятся следы от сервисов, которых давно нет.
+        var (start, end) = FindBlock(content);
+
+        if (start >= 0 && !content.Skip(start + 1).Take(end - start - 1).Any(l => Split(l) is not null))
+            content.RemoveRange(start, end - start + 1);
+
+        Write(target, content);
+        return (backup, removed);
+    }
+
+    /// <summary>
     /// Проверяет, отвечают ли адреса, к которым прибиты имена.
     /// </summary>
     /// <remarks>

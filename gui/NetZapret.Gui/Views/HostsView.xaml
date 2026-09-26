@@ -165,8 +165,24 @@
                     С подсказкой внутри поля, как в маршрутах: пустое поле
                     без неё читается как карточка, поставленная по ошибке.
                 -->
-                <TextBox x:Name="Search" Margin="0,18,0,0" TextChanged="OnSearch"
-                         gui:Hint.Text="Поиск по имени или адресу" />
+                <!--
+                    «Удалить найденные» — только при поиске и только отобранное
+                    им. Заведено 26.09: пин на мёртвый прокси стоял на сто двадцать
+                    две записи jetbrains, и снимать их по одной было нельзя.
+                -->
+                <Grid Margin="0,18,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox x:Name="Search" TextChanged="OnSearch"
+                             gui:Hint.Text="Поиск по имени или адресу" />
+
+                    <Button Grid.Column="1" x:Name="RemoveFoundButton" Style="{StaticResource Ghost}"
+                            Foreground="{DynamicResource Danger}" Margin="8,0,0,0"
+                            Visibility="Collapsed" Click="OnRemoveFound" />
+                </Grid>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
 
@@ -236,7 +252,7 @@
                     </ItemsControl>
 
                     <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                               Text="Удаляются по одной, с вопросом перед каждым и копией файла рядом. Разом не чистятся намеренно: файл общий, записи ведёт кто-то ещё, и одна кнопка «почистить всё» однажды сотрёт то, на чём всё держалось. Правку вручную никто не отменял — кнопка «Открыть файл» выше." />
+                               Text="Удаляются по одной либо разом — всё, что нашёл поиск, кнопкой рядом с ним. Перед удалением вопрос, копия файла ложится рядом. Кнопки «почистить всё» нет намеренно: файл общий, записи ведёт кто-то ещё, и она однажды сотрёт то, на чём всё держалось. Правку вручную никто не отменял — кнопка «Открыть файл» выше." />
                 </StackPanel>
 
                 <TextBlock Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap"

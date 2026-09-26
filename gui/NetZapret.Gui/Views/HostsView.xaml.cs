@@ -45,9 +45,10 @@ public sealed record PinRow(
 /// </para>
 /// <para>
 /// Чужую запись можно удалить — решение владельца от 17.09, взамен прежнего
-/// «не трогаем вовсе». Разом их не чистят: удаление по одной, с вопросом
-/// перед каждым и копией файла рядом. Кнопки «почистить всё» нет и не будет
-/// — она однажды сотрёт то, на чём всё держалось.
+/// «не трогаем вовсе». По одной либо разом всё найденное поиском (владелец,
+/// 26.09: сто двадцать две записи jetbrains на мёртвом прокси). Кнопки
+/// «почистить всё» нет и не будет — она однажды сотрёт то, на чём всё
+/// держалось; поиск же называет, что именно уйдёт.
 /// </para>
 /// <para>
 /// Проверка адресов нужна оттого, что пин стареет молча: адрес сети доставки
@@ -199,7 +200,12 @@ public partial class HostsView : UserControl
             ? $"{foreign.Count} подошло из {_foreign.Count}."
             : $"{_foreign.Count} — их ведёт кто-то ещё: редактор hosts "
                 + "из Zapret GUI, антивирус либо вы сами. Показаны, потому что объясняют "
-                + "вердикты проверки; удалить можно по одной.";
+                + "вердикты проверки; удалить можно по одной или найденные поиском.";
+
+        int found = ours.Count + foreign.Count;
+
+        RemoveFoundButton.Visibility = searching && found > 0 ? Visibility.Visible : Visibility.Collapsed;
+        RemoveFoundButton.Content = $"Удалить найденные ({found})";
 
         // Раскрываем чужих, когда нашлось у них, и возвращаем как было,
         // когда поиск сняли: оставить раскрытыми семьсот строк — значит
@@ -322,6 +328,65 @@ public partial class HostsView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Удаляет всё, что нашёл поиск, — наше и чужое, одной правкой.
+    /// </summary>
+    /// <remarks>
+    /// Заведено 26.09 по просьбе владельца: tiktok и jetbrains не открывались,
+    /// а на jetbrains в файле стояло сто двадцать две чужие записи на один
+    /// мёртвый адрес. Вопрос один на всё, с числом и примерами: число без
+    /// имён не даёт заметить, что поиск зацепил лишнее.
+    /// </remarks>
+    private void OnRemoveFound(object sender, RoutedEventArgs e)
+    {
+        var needle = Search.Text;
+
+        try
+        {
+            // Номера строк — из файла, каким он стал к нажатию.
+            var targets = HostsFilter.Targets(HostsEditor.Parse(), needle);
+
+            if (targets.Count == 0)
+            {
+                Reload();
+                // Так бывает и при живом списке: слова окна вроде «чужая»
+                // или «молчит» в файле не лежат, и разом по ним не удаляется —
+                // иначе «чужая» и стала бы кнопкой «почистить всё».
+                Status.Text = "Разом удаляется найденное по имени, адресу или подписи в самом файле. "
+                    + "По этому запросу там ничего нет.";
+                return;
+            }
+
+            var names = targets.Select(t => t.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            var sample = string.Join("\n", names.Take(5).Select(n => "  " + n))
+                + (names.Count > 5 ? $"\n  … и ещё {names.Count - 5}" : string.Empty);
+
+            var answer = MessageBox.Show(
+                $"Удалить из файла hosts всё, что нашлось по «{needle.Trim()}»: "
+                + $"{targets.Count} записей?\n\n{sample}\n\n"
+                + "Уйдут и наши пины, и чужие записи. Соседние имена в тех же строках "
+                + "останутся. Отменить нажатием будет нельзя.\n\n"
+                + "Копия файла ляжет рядом — из неё можно вернуть всё целиком.",
+                "NetZapret",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+            if (answer != MessageBoxResult.Yes)
+                return;
+
+            var (backup, removed) = HostsEditor.RemoveNames(targets);
+            HostsEditor.FlushDns();
+
+            Reload();
+            Status.Text = $"Удалено записей: {removed}. Копия прежнего файла: {backup}";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось удалить: " + ex.GetBaseException().Message;
         }
     }
 

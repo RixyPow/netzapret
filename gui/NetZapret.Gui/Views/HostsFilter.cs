@@ -42,6 +42,39 @@ internal static class HostsFilter
         rows.Where(row => Matches(row, needle)).ToList();
 
     /// <summary>
+    /// Что удалит «Удалить найденные»: строка файла и имя в ней.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По свежему разбору файла, а не по строкам на экране: те собраны
+    /// при показе, и номера в них могли устареть.
+    /// </para>
+    /// <para>
+    /// Тем же правилом, что и показ, — по имени, адресу и подписи. Совпал
+    /// адрес — уходят все имена строки: искали «кто прибит на этот адрес».
+    /// Совпало имя — только оно: соседи по строке не искались.
+    /// </para>
+    /// <para>
+    /// Пустой запрос не отбирает ничего. У показа он значит «все», но здесь
+    /// это была бы та самая кнопка «почистить всё», которой быть не должно.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<(int Line, string Name)> Targets(
+        IEnumerable<NetZapret.Proxy.HostsEntry> entries, string? needle)
+    {
+        if (!Searching(needle))
+            return [];
+
+        var wanted = needle!.Trim();
+
+        return entries
+            .SelectMany(e => e.Names
+                .Where(n => Has(n, wanted) || Has(e.Address, wanted) || Has(e.Note, wanted))
+                .Select(n => (e.Line, n)))
+            .ToList();
+    }
+
+    /// <summary>
     /// Ищем ли мы вообще.
     /// </summary>
     /// <remarks>

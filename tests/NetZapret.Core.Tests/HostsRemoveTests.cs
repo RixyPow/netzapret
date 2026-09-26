@@ -128,4 +128,103 @@ public sealed class HostsRemoveTests : IDisposable
 
         Assert.Equal(Sample.ReplaceLineEndings(), File.ReadAllText(_file).ReplaceLineEndings());
     }
+
+    /// <summary>
+    /// Найденное поиском уходит по имени, а соседнее имя в той же строке остаётся.
+    /// </summary>
+    /// <remarks>
+    /// Поиск по «t.me» не выбирал api.telegram.org, и удалить его заодно
+    /// значило бы снять то, о чём человек не просил.
+    /// </remarks>
+    [Fact]
+    public void A_found_name_goes_and_its_neighbour_stays()
+    {
+        var before = Write();
+        var telegram = before.Single(e => e.Names.Contains("t.me"));
+
+        var (_, removed) = HostsEditor.RemoveNames([(telegram.Line, "t.me")], _file);
+
+        var after = File.ReadAllLines(_file);
+
+        Assert.Equal(1, removed);
+        Assert.Contains(after, l => l == "149.154.167.220 api.telegram.org");
+        Assert.DoesNotContain(after, l => l.Split(' ').Contains("t.me"));
+    }
+
+    /// <summary>Выключенная запись остаётся выключенной, подпись — на месте.</summary>
+    [Fact]
+    public void A_disabled_line_keeps_its_hash_and_note()
+    {
+        File.WriteAllText(_file, "# 1.2.3.4 a.example b.example # от кого-то\r\n");
+        var entry = HostsEditor.Parse(_file).Single();
+
+        HostsEditor.RemoveNames([(entry.Line, "a.example")], _file);
+
+        Assert.Equal("# 1.2.3.4 b.example # от кого-то", File.ReadAllLines(_file).Single());
+    }
+
+    /// <summary>Строка без оставшихся имён уходит, прочий файл — дословно.</summary>
+    [Fact]
+    public void Many_lines_go_in_one_pass_with_one_copy()
+    {
+        var before = Write();
+        var targets = before
+            .Where(e => e.Names.Contains("canva.com") || e.Names.Contains("t.me"))
+            .SelectMany(e => e.Names.Select(n => (e.Line, n)))
+            .ToList();
+
+        var (backup, removed) = HostsEditor.RemoveNames(targets, _file);
+
+        Assert.Equal(3, removed);
+        Assert.Equal(
+            """
+            # Чужой комментарий, который трогать нельзя
+            127.0.0.1 localhost
+
+            # 1.2.3.4 disabled.example   # выключено кем-то
+            """.ReplaceLineEndings() + Environment.NewLine,
+            File.ReadAllText(_file).ReplaceLineEndings());
+
+        Assert.Equal(Sample.ReplaceLineEndings(), File.ReadAllText(backup).ReplaceLineEndings());
+    }
+
+    /// <summary>
+    /// Номер, под которым имени уже нет, не трогает строку.
+    /// </summary>
+    /// <remarks>
+    /// Между показом и нажатием файл мог переписать кто угодно; по старому
+    /// номеру лежит чужая строка, и снимать её нельзя.
+    /// </remarks>
+    [Fact]
+    public void A_stale_line_number_is_skipped()
+    {
+        var before = Write();
+        var canva = before.Single(e => e.Names.Contains("canva.com"));
+
+        var (_, removed) = HostsEditor.RemoveNames([(canva.Line, "notion.so")], _file);
+
+        Assert.Equal(0, removed);
+        Assert.Contains("canva.com", File.ReadAllText(_file));
+    }
+
+    /// <summary>Наш блок, опустев, уходит вместе с отметками.</summary>
+    [Fact]
+    public void An_emptied_block_of_ours_goes_whole()
+    {
+        File.WriteAllText(_file, string.Join("\r\n",
+            "127.0.0.1 localhost",
+            HostsEditor.BlockBegin,
+            "72.56.93.144 jetbrains.com",
+            HostsEditor.BlockEnd,
+            "72.56.93.144 academy.jetbrains.com") + "\r\n");
+
+        var targets = HostsEditor.Parse(_file)
+            .Where(e => e.Names.Any(n => n.Contains("jetbrains")))
+            .SelectMany(e => e.Names.Select(n => (e.Line, n)))
+            .ToList();
+
+        HostsEditor.RemoveNames(targets, _file);
+
+        Assert.Equal(["127.0.0.1 localhost"], File.ReadAllLines(_file));
+    }
 }
