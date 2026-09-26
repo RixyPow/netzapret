@@ -929,9 +929,7 @@ public partial class CheckView : UserControl
             // когда настоящего адреса взять негде — на выходе имя разрешают
             // уже не из России. Чего здесь точно не надо, так это рецепта:
             // он судит по имени в приветствии, а подменён адрес.
-            note = report.Spoof.Detail
-                + " — рецептом десинка не лечится: прибейте настоящий адрес "
-                + "во вкладке «Файл hosts» либо уведите имя в VPN";
+            note = report.Spoof.Advice;
         }
         else if (report.Actionable && note.Length == 0 && _zones is { } zones)
         {

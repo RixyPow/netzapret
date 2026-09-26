@@ -30,6 +30,30 @@ public sealed record DnsSpoofResult
 
     public bool Spoofed => Verdict is DnsVerdict.Sinkhole or DnsVerdict.ForeignCertificate;
 
+    /// <summary>
+    /// Адрес, к которому имя прибито в файле hosts; <c>null</c> — не прибито.
+    /// </summary>
+    /// <remarks>
+    /// Подмену делает не только оператор. 26.09 у jetbrains.com, notion.so
+    /// и tiktok.com её устроили чужие записи hosts на 72.56.93.144 — прокси,
+    /// который больше не обслуживает эти имена. Совет «прибейте настоящий
+    /// адрес» там вёл в сторону: прибито было, и именно это и мешало.
+    /// </remarks>
+    public string? PinnedTo { get; init; }
+
+    /// <summary>Адрес от честного резолвера, отвечающий верным сертификатом.</summary>
+    public string? Honest { get; init; }
+
+    /// <summary>
+    /// Что с этим делать — одной строкой, общей для окна и консоли.
+    /// </summary>
+    public string Advice => PinnedTo is { } pin
+        ? $"{Detail} — имя прибито в hosts к {pin}; удалите эту запись во вкладке «Файл hosts»"
+            + (Honest is { } honest ? $", настоящий адрес — {honest}" : string.Empty)
+        : Detail + " — рецептом десинка не лечится: прибейте настоящий адрес "
+            + (Honest is { } found ? $"({found}) " : string.Empty)
+            + "во вкладке «Файл hosts» либо уведите имя в VPN";
+
     public static DnsSpoofResult Clean { get; } = new() { Verdict = DnsVerdict.Clean };
 
     public static DnsSpoofResult Unknown { get; } = new() { Verdict = DnsVerdict.Unknown };

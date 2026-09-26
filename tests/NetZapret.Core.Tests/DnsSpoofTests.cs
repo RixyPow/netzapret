@@ -200,4 +200,44 @@ public sealed class DnsSpoofTests
             Assert.Equal(DnsSpoof.IsSinkhole(ip), BlockCheck.IsStub(ip));
         }
     }
+
+    /// <summary>
+    /// Подмену устроил пин в hosts — совет называет его, а не зовёт прибивать.
+    /// </summary>
+    /// <remarks>
+    /// 26.09: jetbrains.com был прибит чужой записью к 72.56.93.144, где
+    /// отвечает чужой сервер. Совет «прибейте настоящий адрес» уводил
+    /// в сторону — прибито было, и именно это и мешало.
+    /// </remarks>
+    [Fact]
+    public void A_pinned_spoof_points_at_the_pin()
+    {
+        var result = new DnsSpoofResult
+        {
+            Verdict = DnsVerdict.ForeignCertificate,
+            Detail = "по адресу отвечает не «jetbrains.com», а «instaposts.halahala.ru»",
+            PinnedTo = "72.56.93.144",
+            Honest = "63.33.88.220",
+        };
+
+        Assert.Contains("прибито в hosts к 72.56.93.144", result.Advice);
+        Assert.Contains("удалите эту запись", result.Advice);
+        Assert.Contains("63.33.88.220", result.Advice);
+        Assert.DoesNotContain("прибейте", result.Advice);
+    }
+
+    /// <summary>Без пина — прежний совет, с честным адресом, если он найден.</summary>
+    [Fact]
+    public void An_unpinned_spoof_suggests_pinning_the_honest_address()
+    {
+        var result = new DnsSpoofResult
+        {
+            Verdict = DnsVerdict.ForeignCertificate,
+            Detail = "по адресу отвечает не «a.example», а «b.example»",
+            Honest = "1.2.3.4",
+        };
+
+        Assert.Contains("прибейте настоящий адрес (1.2.3.4)", result.Advice);
+        Assert.Contains("VPN", result.Advice);
+    }
 }

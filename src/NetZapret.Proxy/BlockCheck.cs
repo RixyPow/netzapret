@@ -968,12 +968,139 @@ public static class BlockCheck
             // а настоящее разрешение происходит на выходе — судить по тому,
             // что мы видим здесь, значило бы объявлять подменой собственную
             // работу туннеля.
-            Spoof = viaTunnel ? DnsSpoofResult.Unknown : walk.Spoof,
+            Spoof = viaTunnel ? DnsSpoofResult.Unknown : await SettleSpoofAsync(host, real, walk.Spoof, cancellationToken),
 
             Addresses = shown,
             Tunnelled = viaTunnel,
             ExpectedTunnel = throughTunnel,
         };
+    }
+
+    /// <summary>
+    /// Сверяет чужой сертификат с тем, что даёт честный адрес.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Чужой сертификат — признак подмены, только если настоящий сайт
+    /// предъявляет свой. У googlevideo.com голое имя не обслуживается вовсе:
+    /// честные адреса Google отдают на него сертификат www.google.com
+    /// (замер 26.09, 108.177.14.x через 1.1.1.1 — SEC_E_WRONG_PRINCIPAL).
+    /// Без сверки это звалось подменой, и жёлтая строка ставила её в один
+    /// ряд с настоящей — jetbrains.com на чужом прокси.
+    /// </para>
+    /// <para>
+    /// Та же точка отсчёта, что у <see cref="FindBadSystemAddressesAsync"/>:
+    /// сперва выясняется, что честный адрес сертификат на это имя
+    /// предъявляет, и лишь тогда чужой у нашего адреса что-то значит.
+    /// </para>
+    /// <para>
+    /// Не дошли до честного адреса — вердикт остаётся: опровергнуть его
+    /// нечем, а пропущенная подмена здесь дороже лишней строки. Лишнее
+    /// соединение стоит только подозреваемым, их в прогоне единицы.
+    /// </para>
+    /// </remarks>
+    private static async Task<DnsSpoofResult> SettleSpoofAsync(
+        string host,
+        IReadOnlyList<IPAddress> real,
+        DnsSpoofResult spoof,
+        CancellationToken cancellationToken)
+    {
+        if (spoof.Verdict != DnsVerdict.ForeignCertificate)
+            return spoof;
+
+        var pinned = PinnedTo(host, real);
+        var honest = await DohResolveAsync(host, cancellationToken);
+
+        // Тот же адрес дал и честный резолвер — значит, так отвечает
+        // сам сайт, и подменять тут нечего. Пин на честный адрес не в счёт
+        // тем более.
+        if (honest.Overlaps(real.Select(a => a.ToString())))
+            return DnsSpoofResult.Clean;
+
+        foreach (var address in honest.Take(2))
+        {
+            switch (await NameMatchesAtAsync(host, address, cancellationToken))
+            {
+                case false:
+                    return DnsSpoofResult.Clean;
+
+                case true:
+                    return new DnsSpoofResult
+                    {
+                        Verdict = spoof.Verdict,
+                        Detail = spoof.Detail,
+                        PinnedTo = pinned,
+                        Honest = address,
+                    };
+            }
+        }
+
+        return new DnsSpoofResult { Verdict = spoof.Verdict, Detail = spoof.Detail, PinnedTo = pinned };
+    }
+
+    /// <summary>К какому из наших адресов имя прибито в hosts; <c>null</c> — не прибито.</summary>
+    private static string? PinnedTo(string host, IReadOnlyList<IPAddress> real)
+    {
+        try
+        {
+            return HostsFile.Read().TryGetValue(host, out var pins)
+                ? pins.FirstOrDefault(real.Contains)?.ToString() ?? pins.FirstOrDefault()?.ToString()
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Выписан ли на имя сертификат, который предъявляет адрес.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> — да, <c>false</c> — адрес ответил сертификатом на другое
+    /// имя, <c>null</c> — рукопожатия не было, судить не по чему.
+    /// </returns>
+    /// <remarks>
+    /// Три ответа, а не два, как у <see cref="CertificateMatchesAsync"/>.
+    /// Там провал рукопожатия и чужое имя слиты в одно «нет», а здесь они
+    /// значат противоположное: чужое имя на честном адресе снимает подозрение,
+    /// а несостоявшееся рукопожатие не значит ничего. Доверие не проверяется —
+    /// вопрос, как и у <see cref="DnsSpoof.MatchesHost"/>, только в имени.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA5359:Do not disable certificate validation",
+        Justification = "Сверяется имя в сертификате, а не доверие к нему; соединение сразу закрывается.")]
+    private static async Task<bool?> NameMatchesAtAsync(
+        string host,
+        string address,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var client = new TcpClient(AddressFamily.InterNetwork);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(Timeout);
+
+            await client.ConnectAsync(IPAddress.Parse(address), 443, timeout.Token);
+
+            using var ssl = new SslStream(client.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
+
+            await ssl.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions { TargetHost = host },
+                timeout.Token);
+
+            if (ssl.RemoteCertificate is not { } raw)
+                return null;
+
+            using var certificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(raw);
+
+            return DnsSpoof.MatchesHost(certificate, host);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>Встаёт ли соединение на 443 к конкретному адресу.</summary>
