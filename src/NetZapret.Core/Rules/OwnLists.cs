@@ -142,6 +142,30 @@ public static class OwnLists
         }
     }
 
+    /// <summary>Подпись строки проверки у своего домена.</summary>
+    public const string DomainLabel = "свой домен";
+
+    /// <summary>Подпись строки, когда проверяют одно имя, вписанное руками.</summary>
+    public const string NameLabel = "своё имя";
+
+    /// <summary>Начало подписи строки проверки у своего списка.</summary>
+    public const string ListLabelPrefix = "свой · ";
+
+    /// <summary>
+    /// Добавлено ли имя человеком, судя по подписи строки проверки.
+    /// </summary>
+    /// <remarks>
+    /// Нужно проверке, чтобы не прятать такое имя в «маркеры зон». У имени
+    /// из каталога нет записи A — значит, оно покрывает зону (scdn.co).
+    /// У своего — значит, опечатка или сайт закрылся, и сказать об этом надо
+    /// строкой в таблице. 26.09 так пропали из отчёта haram.baby и haram.bitch.
+    /// </remarks>
+    public static bool IsOwnTarget(string? label) =>
+        label is not null
+        && (label == DomainLabel
+            || label.StartsWith(ListLabelPrefix, StringComparison.Ordinal)
+            || label == NameLabel);
+
     /// <summary>
     /// Что из своего проверять в «Проверке блокировок»: имя и подпись строки.
     /// </summary>
@@ -172,11 +196,11 @@ public static class OwnLists
                 var host = entry.Value.Trim().TrimStart('*', '.');
 
                 if (host.Contains('.'))
-                    targets.Add((host, "свой домен"));
+                    targets.Add((host, DomainLabel));
             }
             else if (entry.Match == MatchKind.HostList && IsOwn(entry.Value))
             {
-                var label = $"свой · {NameOf(entry.Value)}";
+                var label = ListLabelPrefix + NameOf(entry.Value);
 
                 foreach (var host in Names(entry.Value, root).Where(n => n.Contains('.')).Take(perList))
                     targets.Add((host, label));

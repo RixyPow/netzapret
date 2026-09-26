@@ -123,6 +123,28 @@ public sealed class OwnDomainListsTests : IDisposable
             targets);
     }
 
+    /// <summary>
+    /// Своё имя узнаётся по подписи — чтобы проверка не прятала его в маркеры зон.
+    /// </summary>
+    [Fact]
+    public void Own_targets_are_recognised_by_their_label()
+    {
+        foreach (var (_, label) in OwnLists.CheckTargets(OwnFile(), perList: 2, _root))
+            Assert.True(OwnLists.IsOwnTarget(label));
+
+        Assert.True(OwnLists.IsOwnTarget("своё имя"));
+        Assert.False(OwnLists.IsOwnTarget("Spotify · Обложки"));
+        Assert.False(OwnLists.IsOwnTarget(null));
+    }
+
+    private UserRulesFile OwnFile()
+    {
+        var file = UserRulesFile.Load(Full("rules.user.yaml"));
+        file.Set(MatchKind.Domain, "*.own.example", RoutingMode.Proxy);
+        file.Set(MatchKind.HostList, OwnLists.Create("list", ["a.example"], _root), RoutingMode.Proxy);
+        return file;
+    }
+
     /// <summary>Комментарии и пустые строки своего списка — не имена.</summary>
     [Fact]
     public void Comments_are_not_names()

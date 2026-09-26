@@ -668,7 +668,7 @@ public partial class CheckView : UserControl
         // Своё имя проверяется как есть: справочник о нём ничего не знает,
         // раскладывать его по частям не на что, а спросили именно про него.
         if (target?.Host is { } own)
-            return [(own.TrimStart('*', '.'), "своё имя")];
+            return [(own.TrimStart('*', '.'), OwnLists.NameLabel)];
 
         var only = target?.Service;
 
@@ -781,7 +781,12 @@ public partial class CheckView : UserControl
                     // Из списков такие имена убирать нельзя: они там несут
                     // работу, а не показ. Пропущенные считаются и называются
                     // под таблицей, чтобы их отсутствие не было тихим.
-                    if (report.Kind == BlockKind.NoAddress)
+                    //
+                    // Только имена каталога. Своё имя без адреса — не маркер
+                    // зоны, а опечатка или закрывшийся сайт, и ему место
+                    // в таблице: 26.09 так спрятались haram.baby и haram.bitch
+                    // из своего списка владельца.
+                    if (report.Kind == BlockKind.NoAddress && !OwnLists.IsOwnTarget(target.Service))
                     {
                         _markers.Add(report.Host);
                         Say($"Проверено {Collected.Count} из {targets.Count}…");
