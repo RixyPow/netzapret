@@ -1055,6 +1055,25 @@ public partial class RoutesView : UserControl
             if (ours.Count == 0)
                 return;
 
+            // Спрашиваем (владелец, 26.09). Прежде повторное нажатие снимало
+            // молча — снятие казалось дешёвым, «вернуть как было». Но вернуть
+            // не выходит: 26.09 шесть пинов Crunchyroll ушли одним нажатием,
+            // а автоподбор следом не нашёл адреса ни одному из четырёх имён.
+            // Снятое заново может и не подобраться.
+            var sample = string.Join("\n", ours.Take(6).Select(n => "  " + n))
+                + (ours.Count > 6 ? $"\n  … и ещё {ours.Count - 6}" : string.Empty);
+
+            var answer = MessageBox.Show(
+                $"Снять пины с «{label}» — {Count(ours.Count, "имя", "имени", "имён")}?\n\n{sample}\n\n"
+                + "Адрес для них потом придётся подбирать заново, и найдётся он не всегда.",
+                "NetZapret",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+
+            if (answer != MessageBoxResult.Yes)
+                return;
+
             var result = HostsEditor.Unpin(ours);
             HostsEditor.FlushDns();
 
