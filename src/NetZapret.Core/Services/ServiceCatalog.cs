@@ -261,6 +261,14 @@ public static class ServiceCatalog
             Parts = [new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" }],
         },
 
+        // Донаты и виджеты для стримов. Не заблокирован — по умолчанию
+        // «напрямую» (config/rules.yaml): десинку здесь чинить нечего.
+        new ServiceDefinition
+        {
+            Name = "DonationAlerts",
+            Parts = [new ServicePart { Name = "Всё", List = "config/lists/donationalerts.txt" }],
+        },
+
         new ServiceDefinition
         {
             Name = "Roblox",
