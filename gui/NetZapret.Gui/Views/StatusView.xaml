@@ -267,22 +267,24 @@
                        Margin="4,10,0,0" TextWrapping="Wrap" />
             <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
+            <!--
+                Кнопка — по центру всей карточки, а не её первой строки
+                (владелец, 28.09: «почему прямоугольники не посередине»):
+                пояснения внизу лежали вне сетки, и кнопка висела у верха.
+            -->
             <Border Style="{StaticResource Card}">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Задача планировщика" Style="{StaticResource Caption}" />
-                            <TextBlock x:Name="AutostartValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
-                        </StackPanel>
+                    <Button Grid.Column="1" x:Name="AutostartButton" Style="{StaticResource Ghost}"
+                            Click="OnAutostart" VerticalAlignment="Center" />
 
-                        <Button Grid.Column="1" x:Name="AutostartButton" Style="{StaticResource Ghost}"
-                                Click="OnAutostart" VerticalAlignment="Center" />
-                    </Grid>
+                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                    <TextBlock Text="Задача планировщика" Style="{StaticResource Caption}" />
+                    <TextBlock x:Name="AutostartValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
 
                     <!--
                         Что именно поднимется — теми же словами, какими это
@@ -298,6 +300,7 @@
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Планировщик, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается тот же netzapret.exe и с теми же ключами, что и кнопка «Запустить» выше, — иначе автозапуск поднимал бы не то, что вы проверили руками." />
                 </StackPanel>
+                </Grid>
             </Border>
 
             <views:UpdatePanel x:Name="Updates" />
