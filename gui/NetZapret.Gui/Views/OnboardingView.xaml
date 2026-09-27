@@ -4,8 +4,9 @@
              Background="{DynamicResource Chrome}">
 
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid HorizontalAlignment="Left" MaxWidth="640">
+        <Grid HorizontalAlignment="Left" MaxWidth="680">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
@@ -30,10 +31,124 @@
                         Content="Пропустить" Click="OnHeaderSkip" VerticalAlignment="Top" />
             </Grid>
 
-            <StackPanel Grid.Row="1" Margin="0,24,0,0">
+            <!-- Полоса шагов: пройденные и текущий — цветом акцента. -->
+            <UniformGrid Grid.Row="1" x:Name="Progress" Rows="1" Margin="0,16,0,0" Height="4" />
 
-                <!-- Шаг 1: подписка на VPN -->
+            <Grid Grid.Row="2" Margin="0,26,0,0">
+
+                <!-- Шаг 1: знакомство -->
                 <StackPanel x:Name="Step1">
+                    <TextBlock Text="Что делает NetZapret" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Каждому сайту — свой путь. Где хватает десинка, трафик идёт напрямую и неузнанным; где сайт закрыт по стране — через ваш VPN; остальное не трогается вовсе." />
+
+                    <!--
+                        Схема пути, живая. Рисуется в коде (StartHero): точки
+                        бегут по двум дорогам — нижней, сквозь ТСПУ, и верхней,
+                        через туннель, — и так объясняют разницу без слов.
+                    -->
+                    <Border Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0">
+                        <Viewbox Stretch="Uniform" MaxHeight="220">
+                            <Canvas x:Name="Hero" Width="620" Height="210" ClipToBounds="True" />
+                        </Viewbox>
+                    </Border>
+
+                    <UniformGrid x:Name="Features" Columns="3" Margin="-5,14,-5,0">
+                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                            <StackPanel>
+                                <TextBlock Text="Десинк" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="Режет и переставляет первые пакеты, чтобы ТСПУ не узнал сайт. Работает без подписки." />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                            <StackPanel>
+                                <TextBlock Text="VPN по маршрутам" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="В туннель уходит только то, что назвали. Банки, игры и российские сайты идут как шли." />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                            <StackPanel>
+                                <TextBlock Text="Разбор" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                           Text="Проверка блокировок и диагностика говорят, что сломалось и чем лечится, а не «не работает»." />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                        <Button Style="{StaticResource Primary}" Content="Начать" Click="OnIntroNext" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Шаг 2: оформление -->
+                <StackPanel x:Name="Step2" Visibility="Collapsed">
+                    <TextBlock Text="Как будет выглядеть" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Тема применяется сразу — щёлкните и посмотрите. Сменить её, настроить фон и шрифты или собрать свою можно потом в «Оформлении»." />
+
+                    <ItemsControl x:Name="ThemeList" Margin="0,18,0,0" Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+
+                        <!-- Та же плитка, что в «Оформлении» (ThemeTile). -->
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Tag="{Binding Id}" Click="OnTheme" Margin="0,0,14,10" Cursor="Hand"
+                                        ToolTip="{Binding Tip}" Opacity="{Binding Fade}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <ContentPresenter />
+                                        </ControlTemplate>
+                                    </Button.Template>
+
+                                    <StackPanel Width="112">
+                                        <Border Height="84" CornerRadius="12" BorderThickness="2"
+                                                Background="{Binding Backdrop}" BorderBrush="{Binding Edge}">
+                                            <Grid>
+                                                <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Image}" />
+                                                <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Backdrop}"
+                                                           Opacity="{Binding Dim}" />
+
+                                                <Border Background="{Binding Surface}" CornerRadius="5"
+                                                        Width="52" Height="14" Margin="10,10,0,0"
+                                                        HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                                <Border Background="{Binding Fill}" CornerRadius="5"
+                                                        Width="44" Height="14" Margin="0,30,10,0"
+                                                        HorizontalAlignment="Right" VerticalAlignment="Top" />
+
+                                                <Grid Width="18" Height="18" Margin="0,0,0,9"
+                                                      HorizontalAlignment="Center" VerticalAlignment="Bottom">
+                                                    <Ellipse Stroke="{Binding Ring}" StrokeThickness="1.5" />
+                                                    <Ellipse Width="10" Height="10" Fill="{Binding Dot}"
+                                                             Visibility="{Binding DotShown}" />
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+
+                                        <TextBlock Text="{Binding Name}" Foreground="{Binding NameColor}"
+                                                   HorizontalAlignment="Center" Margin="0,7,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock x:Name="ThemeStatus" Style="{StaticResource Caption}" Margin="4,6,0,0" TextWrapping="Wrap" />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                        <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+                        <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnThemeNext" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Шаг 3: подписка на VPN -->
+                <StackPanel x:Name="Step3" Visibility="Collapsed">
                     <TextBlock Text="Есть подписка на VPN?" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Своя подписка — та же ссылка, что вставляют в Happ или другой клиент. Программа её не выдаёт: десинк работает и без неё, но открывает не всё — то, что закрывается по стране (например ChatGPT), лечится только через VPN." />
@@ -46,37 +161,39 @@
                     -->
                     <PasswordBox x:Name="SubLink" Padding="10,8" />
 
-                    <TextBlock x:Name="Step1Status" Style="{StaticResource Caption}"
+                    <TextBlock x:Name="Step3Status" Style="{StaticResource Caption}"
                                Margin="4,10,0,0" TextWrapping="Wrap" />
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button x:Name="Step1Next" Style="{StaticResource Primary}"
+                        <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+                        <Button Style="{StaticResource Ghost}" Content="Нет подписки" Margin="0,0,8,0" Click="OnNoSubscription" />
+                        <Button x:Name="Step3Next" Style="{StaticResource Primary}"
                                 Content="Загрузить и продолжить" Click="OnAddSubscription" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 2: пробный запуск -->
-                <StackPanel x:Name="Step2" Visibility="Collapsed">
+                <!-- Шаг 4: пробный запуск -->
+                <StackPanel x:Name="Step4" Visibility="Collapsed">
                     <TextBlock Text="Пробный запуск" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock x:Name="Step2Detail" Style="{StaticResource Caption}"
+                    <TextBlock x:Name="Step4Detail" Style="{StaticResource Caption}"
                                Margin="0,8,0,0" TextWrapping="Wrap" />
 
                     <Border Style="{StaticResource Card}" Margin="0,18,0,0">
-                        <TextBlock x:Name="Step2Status" TextWrapping="Wrap"
+                        <TextBlock x:Name="Step4Status" TextWrapping="Wrap"
                                    Text="Ничего ещё не запускалось." />
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                         <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnStep2Back" />
-                        <Button x:Name="Step2Start" Style="{StaticResource Primary}"
-                                Content="Запустить" Margin="0,0,8,0" Click="OnStep2Start" />
-                        <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep2Next" />
+                                Margin="0,0,8,0" Click="OnBack" />
+                        <Button x:Name="Step4Start" Style="{StaticResource Primary}"
+                                Content="Запустить" Margin="0,0,8,0" Click="OnStep4Start" />
+                        <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep4Next" />
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 3: результат -->
-                <StackPanel x:Name="Step3" Visibility="Collapsed">
+                <!-- Шаг 5: результат и куда дальше -->
+                <StackPanel x:Name="Step5" Visibility="Collapsed">
                     <TextBlock Text="Результат" FontSize="17" FontWeight="SemiBold" />
 
                     <Border Style="{StaticResource Card}" Margin="0,16,0,0">
@@ -91,16 +208,39 @@
                         </StackPanel>
                     </Border>
 
+                    <!--
+                        Канал — здесь, на последнем шаге (владелец, 28.09):
+                        блокировки меняются, и новый выпуск с починкой
+                        человек узнаёт оттуда раньше, чем заглянет в программу.
+                    -->
+                    <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,16,0" VerticalAlignment="Center">
+                                <TextBlock Text="Новости — в телеграм-канале" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="Блокировки меняются, и починка приходит новым выпуском. В канале — что вышло и зачем обновляться, коротко." />
+                            </StackPanel>
+
+                            <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Открыть канал"
+                                    Click="OnTelegram" VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                         <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnStep3Back" />
+                                Margin="0,0,8,0" Click="OnBack" />
                         <Button Style="{StaticResource Ghost}" Content="Проверить ещё раз"
-                                Margin="0,0,8,0" Click="OnStep3Recheck" />
+                                Margin="0,0,8,0" Click="OnRecheck" />
                         <Button Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" />
                     </StackPanel>
                 </StackPanel>
 
-            </StackPanel>
+            </Grid>
         </Grid>
     </ScrollViewer>
 </UserControl>

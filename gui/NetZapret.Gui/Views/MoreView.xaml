@@ -57,7 +57,7 @@
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                             <TextBlock Text="Мастер первого запуска" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Подписка, пробный запуск и проверка сети — три шага, которые показываются один раз при первом открытии. Ничего из настроенного он не сбрасывает." />
+                                       Text="Знакомство, выбор темы, подписка, пробный запуск и проверка сети — показывается один раз при первом открытии. Ничего из настроенного он не сбрасывает." />
                         </StackPanel>
 
                         <Button Grid.Column="1" Style="{StaticResource Ghost}"
