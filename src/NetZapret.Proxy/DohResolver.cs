@@ -92,7 +92,9 @@ public static class DohResolver
             }
         }
 
-        return null;
+        // DoH молчит — возможно, его режут по имени. Обычный DNS по TCP
+        // тогда обычно проходит.
+        return (await TcpAddressesAsync(host, cancellationToken)).FirstOrDefault();
     }
 
     /// <summary>
@@ -143,7 +145,37 @@ public static class DohResolver
             }
         }
 
+        // И обычный DNS по TCP — мимо туннеля, разом ко всем. Там, где
+        // шифрованный DNS режут по имени (август 2026), выше не ответит
+        // никто, и без этого автоподбору не из чего было бы выбирать.
+        foreach (var address in await TcpAddressesAsync(host, cancellationToken))
+        {
+            if (!found.Contains(address, StringComparer.Ordinal))
+                found.Add(address);
+        }
+
         return found;
+    }
+
+    /// <summary>Резолверы для запроса по TCP, порт 53.</summary>
+    /// <remarks>8.8.4.4, а не 8.8.8.8: первый оставлен операторами открытым (см. AppSettings.GoogleDns).</remarks>
+    private static readonly string[] TcpServers = ["8.8.4.4", "1.1.1.1", "9.9.9.9"];
+
+    /// <summary>Адреса имени от обычного DNS по TCP; петля и нуль отброшены.</summary>
+    internal static async Task<IReadOnlyList<string>> TcpAddressesAsync(string host, CancellationToken cancellationToken)
+    {
+        var nic = DnsSurvey.PhysicalInterface();
+
+        var answers = await Task.WhenAll(TcpServers.Select(server =>
+            DnsSurvey.TcpAsync(server, host, DnsWire.TypeA, nic, cancellationToken)));
+
+        return answers
+            .Where(a => a is { Code: 0 })
+            .SelectMany(a => a!.Addresses)
+            .Select(a => a.ToString())
+            .Where(a => !IsStub(a))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>Все записи A из ответа.</summary>

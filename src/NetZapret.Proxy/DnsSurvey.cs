@@ -274,6 +274,66 @@ public static class DnsSurvey
         }
     }
 
+    /// <summary>Один запрос по TCP, порт 53; ответ либо <c>null</c>.</summary>
+    /// <remarks>
+    /// Запасной путь к честному ответу. По вики Zapret GUI, с августа 2026
+    /// у части абонентов шифрованный DNS режут по имени сервера (dns.google,
+    /// cloudflare-dns.com, dns.quad9.net), а UDP к 8.8.8.8 и 1.1.1.1
+    /// заворачивают на резолверы НСДИ. Обычный DNS по TCP при этом, как
+    /// правило, проходит — им вики и советует добывать адрес вручную
+    /// (<c>nslookup -vc</c>). Сокет привязан к физическому адаптеру: иначе
+    /// при работающих движках ответил бы наш собственный fakeip.
+    /// </remarks>
+    public static async Task<DnsWire.Answer?> TcpAsync(
+        string server, string name, ushort type, int? nic, CancellationToken cancellationToken)
+    {
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        Bind(socket, nic);
+
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(Timeout);
+
+        try
+        {
+            await socket.ConnectAsync(new IPEndPoint(IPAddress.Parse(server), 53), limit.Token);
+
+            var query = DnsWire.Query(name, type);
+            var framed = new byte[query.Length + 2];
+            framed[0] = (byte)(query.Length >> 8);
+            framed[1] = (byte)query.Length;
+            query.CopyTo(framed, 2);
+
+            await socket.SendAsync(framed, SocketFlags.None, limit.Token);
+
+            var head = new byte[2];
+            await ReceiveExactlyAsync(socket, head, limit.Token);
+
+            var body = new byte[(head[0] << 8) | head[1]];
+            await ReceiveExactlyAsync(socket, body, limit.Token);
+
+            return DnsWire.Parse(body);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    private static async Task ReceiveExactlyAsync(Socket socket, byte[] buffer, CancellationToken cancellationToken)
+    {
+        int got = 0;
+
+        while (got < buffer.Length)
+        {
+            int read = await socket.ReceiveAsync(buffer.AsMemory(got), SocketFlags.None, cancellationToken);
+
+            if (read == 0)
+                throw new IOException("резолвер закрыл соединение");
+
+            got += read;
+        }
+    }
+
     /// <summary>Соединение TLS до адреса с именем в SNI.</summary>
     private static async Task<(SslStream? Stream, string Failure)> TlsAsync(
         string address, int port, string name, int? nic, CancellationToken cancellationToken)
