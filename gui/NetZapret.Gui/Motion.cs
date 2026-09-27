@@ -62,6 +62,14 @@ public static class Motion
         if (element.RenderTransform is not (null or MatrixTransform { Matrix.IsIdentity: true } or TranslateTransform))
             return;
 
+        // В теме со стеклом — без сдвига. Кусок размытого фона под карточкой
+        // пересчитывается при перекладке окна (Glass), а сдвиг анимацией
+        // её не вызывает: карточка ехала, стекло стояло, и после анимации
+        // оставалось сдвинутым на десять точек. Владелец 28.09: «дёргано,
+        // в VPN и десинке особенно» — тема с фоном, карточек много.
+        if (Glass.Image is not null)
+            return;
+
         var shift = element.RenderTransform as TranslateTransform ?? new TranslateTransform();
         element.RenderTransform = shift;
 
@@ -99,33 +107,44 @@ public static class Motion
     /// Раздел появляется: карточки по очереди, сверху вниз.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Ищется первая колонка раздела — панель, где стоят его карточки, —
     /// обходом по разметке, а не по имени: разделов дюжина, и держать в каждом
-    /// своё имя для анимации значило бы размазать её по всем. Очередь — первые
-    /// двенадцать; дальше всё равно ниже края окна.
+    /// своё имя для анимации значило бы размазать её по всем.
+    /// </para>
+    /// <para>
+    /// Начинается не сразу, а когда раздел достроился (приоритет ContextIdle —
+    /// после его Loaded и первой отрисовки), а до того карточки скрыты.
+    /// Замер 28.09: «Главная» после открытия стоит 160 мс, «Маршруты» — 320,
+    /// и анимация, начатая сразу, проскакивала эти паузы рывком. Очередь —
+    /// первые восемь по 25 мс: чем короче появление, тем реже оно попадает
+    /// на догрузку раздела (VPN читает подписки на 300–600 мс).
+    /// </para>
     /// </remarks>
     public static void Page(FrameworkElement page)
     {
         if (!Enabled)
             return;
 
-        if (Column(page, 0) is not { } column)
+        var items = Column(page, 0) is { } column
+            ? column.Children.OfType<FrameworkElement>().Where(e => e.Visibility == Visibility.Visible).ToList()
+            : [page];
+
+        // Скрыть до начала — анимацией, а не значением: не ставим элементу
+        // ничего своего, что потом надо было бы снимать. Если раздел так
+        // и не дождётся простоя, через пять секунд всё проявится само.
+        foreach (var item in items)
         {
-            Arrive(page, dy: 8);
-            return;
+            item.BeginAnimation(UIElement.OpacityProperty,
+                new DoubleAnimation(0, 0, TimeSpan.FromSeconds(5)) { FillBehavior = FillBehavior.Stop });
         }
 
-        int step = 0;
-
-        foreach (UIElement child in column.Children)
+        page.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () =>
         {
-            if (child is not FrameworkElement { Visibility: Visibility.Visible } element)
-                continue;
-
-            Arrive(element, dy: 10, ms: 260, delay: Math.Min(step++, 12) * 35);
-        }
+            for (int i = 0; i < items.Count; i++)
+                Arrive(items[i], dy: 8, ms: 240, delay: Math.Min(i, 8) * 25);
+        });
     }
-
     private static Panel? Column(object node, int depth)
     {
         if (depth > 6)
