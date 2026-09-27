@@ -341,7 +341,7 @@ public static class ServiceCatalog
                 {
                     Name = "SeriesGraph",
                     List = "config/lists/seriesgraph.txt",
-                    Note = "по умолчанию напрямую: десинк рвал загрузку страницы",
+                    Note = "по умолчанию десинк с рецептом pass: рецепт пресета рвал загрузку страницы",
                 },
             ],
         },
