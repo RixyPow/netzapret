@@ -15,7 +15,14 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Одна строка отчёта диагностики.</summary>
-public sealed record DoctorLine(string Text, Brush Color, string? ActionLabel = null, Action? Act = null);
+/// <remarks>
+/// Цвет — именем ресурса, а кисть берётся при отрисовке: проверки идут
+/// в фоне (замер 28.09: 0,4 с), а ресурс окна из фона не прочитать.
+/// </remarks>
+public sealed record DoctorLine(string Text, string Kind, string? ActionLabel = null, Action? Act = null)
+{
+    public Brush Color => (Brush)Application.Current.FindResource(Kind);
+}
 
 /// <summary>Раздел отчёта.</summary>
 public sealed record DoctorSection(string Title, IReadOnlyList<DoctorLine> Lines);
@@ -47,28 +54,38 @@ public partial class DoctorView : UserControl
 
     private void OnRun(object sender, RoutedEventArgs e) => Run();
 
-    private void Run()
+    /// <remarks>
+    /// Проверки — в фоне. Замер 28.09: все вместе 0,4 с, и прежде раздел
+    /// всё это время стоял пустым, а окно не отзывалось (владелец: «диагностика
+    /// долго является пустой»). Теперь раздел открывается сразу со строкой
+    /// «Смотрю…», а список приходит следом.
+    /// </remarks>
+    private async void Run()
     {
         RunButton.IsEnabled = false;
         Status.Text = "Смотрю…";
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            var sections = new List<DoctorSection>
+            var sections = await Task.Run(() =>
             {
-                new("Права", Elevation()),
-                new("Движки", Engines()),
-                new("Десинк", Zapret(settings)),
-                new("Правила", Rules(settings)),
-                new("Конфиг туннеля", Proxy(settings)),
-                new("Имена и hosts", Names(settings)),
-                new("Браузеры и сертификаты", Browsers()),
-                new("Супервизор", Supervisor()),
-            };
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+                return new List<DoctorSection>
+                {
+                    new("Права", Elevation()),
+                    new("Движки", Engines()),
+                    new("Десинк", Zapret(settings)),
+                    new("Правила", Rules(settings)),
+                    new("Конфиг туннеля", Proxy(settings)),
+                    new("Имена и hosts", Names(settings)),
+                    new("Браузеры и сертификаты", Browsers()),
+                    new("Супервизор", Supervisor()),
+                };
+            });
 
             Sections.ItemsSource = sections;
+            Motion.Arrive(Sections, dy: 0, ms: 200);
 
             var lines = sections.SelectMany(s => s.Lines).ToList();
             int bad = lines.Count(l => Is(l, "Danger"));
@@ -89,8 +106,7 @@ public partial class DoctorView : UserControl
         }
     }
 
-    private bool Is(DoctorLine line, string key) =>
-        ReferenceEquals(line.Color, FindResource(key));
+    private static bool Is(DoctorLine line, string key) => line.Kind == key;
 
     private void OnLineAction(object sender, RoutedEventArgs e)
     {
@@ -177,12 +193,12 @@ public partial class DoctorView : UserControl
         }
     }
 
-    private DoctorLine Ok(string text) => new(text, (Brush)FindResource("Accent"));
+    private static DoctorLine Ok(string text) => new(text, "Accent");
 
-    private DoctorLine Warn(string text, string? action = null, Action? act = null) =>
-        new(text, (Brush)FindResource("Warn"), action, act);
+    private static DoctorLine Warn(string text, string? action = null, Action? act = null) =>
+        new(text, "Warn", action, act);
 
-    private DoctorLine Bad(string text) => new(text, (Brush)FindResource("Danger"));
+    private static DoctorLine Bad(string text) => new(text, "Danger");
 
     private IReadOnlyList<DoctorLine> Elevation()
     {
