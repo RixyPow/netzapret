@@ -104,28 +104,22 @@ public static class Motion
     }
 
     /// <summary>
-    /// Раздел появляется: карточки по очереди, сверху вниз.
+    /// Раздел проявляется целиком — одним коротким движением.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Ищется первая колонка раздела — панель, где стоят его карточки, —
-    /// обходом по разметке, а не по имени: разделов дюжина, и держать в каждом
-    /// своё имя для анимации значило бы размазать её по всем.
+    /// Прежде карточки проявлялись по очереди и со сдвигом, а начало ждало,
+    /// пока раздел достроится. Владелец 28.09 дважды: «дёргано», и
+    /// «диагностика долго является пустой». Замер: кадры при этом шли ровно
+    /// (7 мс), так что дело не в частоте — а в том, что сдвиг вёл текст
+    /// ступеньками, очередь из восьми карточек растягивала появление, а
+    /// ожидание простоя держало раздел пустым, пока он считал (у «Диагностики»
+    /// 0,4 с). Теперь — одно проявление всей страницы за 180 мс.
     /// </para>
     /// <para>
-    /// Начинается не сразу, а когда раздел достроился (приоритет ContextIdle —
-    /// после его Loaded и первой отрисовки), а до того карточки скрыты.
-    /// Замер 28.09: «Главная» после открытия стоит 160 мс, «Маршруты» — 320,
-    /// и анимация, начатая сразу, проскакивала эти паузы рывком.
-    /// </para>
-    /// <para>
-    /// Без сдвига, только проявление. Владелец 28.09: «рывки никуда
-    /// не делись» — при том что кадры шли ровно (замер: 7 мс в среднем,
-    /// ни одного дольше 33). Вероятная причина — сдвиг на несколько точек:
-    /// WPF привязывает текст к целым пикселям, и он едет ступеньками.
-    /// Не доказано, но другого кандидата замер не оставил. Очередь —
-    /// первые восемь по 25 мс: чем короче появление, тем реже оно попадает
-    /// на догрузку раздела (VPN читает подписки на 300–600 мс).
+    /// Начинается на Loaded раздела: подписка встаёт после его собственной
+    /// (она в конструкторе), и синхронная работа раздела к этому моменту
+    /// уже сделана — анимация не тратит свои миллисекунды на чужую паузу.
     /// </para>
     /// </remarks>
     public static void Page(FrameworkElement page)
@@ -133,42 +127,14 @@ public static class Motion
         if (!Enabled)
             return;
 
-        var items = Column(page, 0) is { } column
-            ? column.Children.OfType<FrameworkElement>().Where(e => e.Visibility == Visibility.Visible).ToList()
-            : [page];
-
-        // Скрыть до начала — анимацией, а не значением: не ставим элементу
-        // ничего своего, что потом надо было бы снимать. Если раздел так
-        // и не дождётся простоя, через пять секунд всё проявится само.
-        foreach (var item in items)
+        void Start(object sender, RoutedEventArgs e)
         {
-            item.BeginAnimation(UIElement.OpacityProperty,
-                new DoubleAnimation(0, 0, TimeSpan.FromSeconds(5)) { FillBehavior = FillBehavior.Stop });
+            page.Loaded -= Start;
+            Arrive(page, dy: 0, ms: 180);
         }
 
-        page.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle, () =>
-        {
-            for (int i = 0; i < items.Count; i++)
-                Arrive(items[i], dy: 0, ms: 220, delay: Math.Min(i, 8) * 25);
-        });
+        page.Loaded += Start;
     }
-    private static Panel? Column(object node, int depth)
-    {
-        if (depth > 6)
-            return null;
-
-        if (node is StackPanel { Children.Count: >= 3 } stack)
-            return stack;
-
-        foreach (var child in LogicalTreeHelper.GetChildren((DependencyObject)node).OfType<DependencyObject>())
-        {
-            if (Column(child, depth + 1) is { } found)
-                return found;
-        }
-
-        return null;
-    }
-
     /// <summary>Угасает и прячется; без анимации — сразу.</summary>
     public static void Leave(FrameworkElement element, Action? after = null)
     {
