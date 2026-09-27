@@ -700,12 +700,9 @@ public sealed class SingBoxService : SupervisedService
 
             using var handler = new HttpClientHandler
             {
-                Proxy = new System.Net.WebProxy($"http://127.0.0.1:{proxyPort}")
-                {
-                    Credentials = keys is { User.Length: > 0 }
-                        ? new System.Net.NetworkCredential(keys.User, keys.Password)
-                        : null,
-                },
+                // SOCKS5: учётку по HTTP .NET 8 шлёт повтором после 407,
+                // и sing-box это соединение рвёт (см. EngineKeys.Proxy).
+                Proxy = EngineKeys.Loopback(proxyPort, keys),
                 UseProxy = true,
             };
 

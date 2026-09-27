@@ -317,12 +317,9 @@ public sealed class ProxyProbe
         {
             using var handler = new HttpClientHandler
             {
-                // Инбаунд mixed обслуживает и SOCKS, и HTTP CONNECT, поэтому
-                // обычного HTTP-прокси достаточно и не нужен клиент SOCKS.
-                Proxy = new WebProxy($"http://127.0.0.1:{options.ListenPort}")
-                {
-                    Credentials = new NetworkCredential(keys.User, keys.Password),
-                },
+                // Инбаунд mixed обслуживает и SOCKS, и HTTP CONNECT. С 27.09
+                // через SOCKS5: с паролем HTTP-путь у .NET 8 рвётся (см. EngineKeys.Proxy).
+                Proxy = keys.Proxy(options.ListenPort),
                 UseProxy = true,
             };
 

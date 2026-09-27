@@ -123,10 +123,7 @@ public static class TunnelReach
 
         using var handler = new HttpClientHandler
         {
-            Proxy = new WebProxy($"http://127.0.0.1:{listenPort}")
-            {
-                Credentials = new NetworkCredential(keys.User, keys.Password),
-            },
+            Proxy = keys.Proxy(listenPort),
             UseProxy = true,
 
             // Перенаправления не нужны: вопрос в том, дошли ли мы до хоста,

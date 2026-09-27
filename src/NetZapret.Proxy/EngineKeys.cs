@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
@@ -45,6 +46,24 @@ public sealed record EngineKeys(string ClashSecret, string User, string Password
 
     /// <summary>Значение <c>Proxy-Authorization</c> для HTTP CONNECT ко входу.</summary>
     public string ProxyBasic => "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{User}:{Password}"));
+
+    /// <summary>Прокси для <c>HttpClient</c> через вход <c>mixed</c> на петле.</summary>
+    /// <remarks>
+    /// SOCKS5, а не HTTP. Учётку по HTTP .NET 8 предъявляет только в ответ
+    /// на 407 и повторяет CONNECT в том же соединении, а sing-box после 407
+    /// его рвёт: «удалённый хост принудительно разорвал подключение». Замер
+    /// 27.09: HTTP с учёткой — разрыв, SOCKS5 с той же учёткой — 204, curl
+    /// с -U (шлёт сразу) — 204. В SOCKS5 учётка идёт в рукопожатии, повтора
+    /// нет. Сторож на этом объявил живой туннель мёртвым в первый же запуск.
+    /// </remarks>
+    public WebProxy Proxy(int port) => Loopback(port, this);
+
+    /// <summary>То же для входа без пароля (<paramref name="keys"/> — <c>null</c> или пустые).</summary>
+    public static WebProxy Loopback(int port, EngineKeys? keys) =>
+        new($"socks5://127.0.0.1:{port}")
+        {
+            Credentials = keys is { User.Length: > 0 } ? new NetworkCredential(keys.User, keys.Password) : null,
+        };
 
     /// <summary>
     /// Пароли работающего движка — из его конфига; <c>null</c> — конфига нет
