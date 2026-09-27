@@ -57,7 +57,11 @@ public readonly record struct HelloResult(HelloAnswer Answer, string Detail, Tim
 /// <para>
 /// Ключ в <c>key_share</c> по той же причине взят случайными байтами:
 /// X25519 принимает любые тридцать два, сторона посчитает общий секрет
-/// и пришлёт ServerHello, а расшифровывать его мы не станем.
+/// и пришлёт ServerHello, а расшифровывать его мы не станем. С ML-KEM так
+/// нельзя: сторона проверяет, что каждый коэффициент ключа меньше 3329,
+/// и случайные байты этой проверки почти никогда не проходят. Поэтому
+/// коэффициенты тянутся случайно, но из допустимого диапазона
+/// (<see cref="MlKemKey"/>) — секрета к ним у нас нет, и он не нужен.
 /// </para>
 /// </remarks>
 public static class BrowserHello
@@ -91,10 +95,21 @@ public static class BrowserHello
     /// Собирает приветствие для <paramref name="host"/>.
     /// </summary>
     /// <remarks>
-    /// Состав и порядок расширений взяты у Chrome. Порядок значим: по нему
-    /// в том числе и узнают клиента, а переставленные расширения дают
-    /// отпечаток, не совпадающий ни с одним настоящим браузером, — то есть
-    /// ровно то, чего мы избегаем.
+    /// <para>
+    /// Состав взят у Chromium 152, снят 27.09.2026 с tls.peet.ws: JA4
+    /// <c>t13d1516h2_8daaf6152771_806a8c22fdea</c>. До того здесь был состав
+    /// Chrome ~110 (<c>…_e5627efa2ab1</c>: старый ALPS 0x4469, добивка, ни ECH,
+    /// ни постквантового обмена) — настоящий, но устаревший отпечаток.
+    /// Вики Zapret GUI разбирает случай, когда ТСПУ режет ровно один
+    /// устаревший отпечаток Chrome (<c>…_d8a2da3f94cd</c>, Chrome 134),
+    /// пропуская свежие: проба с таким отпечатком приняла бы блокировку
+    /// отпечатка за блокировку сайта.
+    /// </para>
+    /// <para>
+    /// Порядок расширений Chrome с версии 110 перемешивает при каждом
+    /// соединении, оставляя GREASE по краям, — так же и здесь. JA4 от порядка
+    /// не зависит: он сортирует расширения.
+    /// </para>
     /// </remarks>
     public static byte[] Build(string host)
     {
@@ -153,8 +168,6 @@ public static class BrowserHello
 
     private static List<byte> Extensions(string host)
     {
-        var list = new List<byte>();
-
         // Пустышек-расширений две — в начале и в конце, как у Chrome, — и они
         // обязаны различаться. Дважды одно и то же расширение в приветствии
         // протокол запрещает, и сторона вправе оборвать разговор: мы получили
@@ -162,80 +175,141 @@ public static class BrowserHello
         // и затеяно. Выпадает такое раз на шестнадцать.
         var (opening, closing) = TwoGrease();
 
-        Extension(list, opening, []);
-
         // Имя — единственное, что в приветствии по-настоящему наше.
         // Всё остальное здесь ради вида; имя ради дела.
         var name = Encoding.ASCII.GetBytes(host);
         var sni = new List<byte> { 0x00 };
         sni.AddRange(Block16(name));
-        Extension(list, 0x0000, Block16(sni));
 
-        Extension(list, 0x0017, []);
-        Extension(list, 0xFF01, [0x00]);
+        // Одна пустышка на группы и на ключ: у Chrome они совпадают.
+        ushort group = Pick();
 
         var groups = new List<byte>();
-        Add16(groups, Pick());
+        Add16(groups, group);
+        Add16(groups, 0x11EC);
         Add16(groups, 0x001D);
         Add16(groups, 0x0017);
         Add16(groups, 0x0018);
-        Extension(list, 0x000A, Block16(groups));
-
-        Extension(list, 0x000B, [0x01, 0x00]);
-        Extension(list, 0x0023, []);
 
         var alpn = new List<byte>();
         Name(alpn, "h2");
         Name(alpn, "http/1.1");
-        Extension(list, 0x0010, Block16(alpn));
 
-        Extension(list, 0x0005, [0x01, 0x00, 0x00, 0x00, 0x00]);
-
+        // ML-DSA (0x0904–0x0906) впереди — так у Chromium 152.
         var signatures = new List<byte>();
 
         foreach (ushort algorithm in (ushort[])
-            [0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601])
+            [0x0904, 0x0905, 0x0906,
+             0x0403, 0x0804, 0x0401, 0x0503, 0x0805, 0x0501, 0x0806, 0x0601])
         {
             Add16(signatures, algorithm);
         }
 
-        Extension(list, 0x000D, Block16(signatures));
-        Extension(list, 0x0012, []);
-
+        // Ключей три: пустышка, гибрид X25519MLKEM768 и запасной X25519.
+        // У гибрида сперва ключ ML-KEM, потом X25519 — так в черновике IETF.
         var shares = new List<byte>();
-        Add16(shares, Pick());
+        Add16(shares, group);
         shares.AddRange(Block16(new byte[] { 0x00 }));
+        Add16(shares, 0x11EC);
+        shares.AddRange(Block16([.. MlKemKey(), .. RandomNumberGenerator.GetBytes(32)]));
         Add16(shares, 0x001D);
         shares.AddRange(Block16(RandomNumberGenerator.GetBytes(32)));
-        Extension(list, 0x0033, Block16(shares));
-
-        Extension(list, 0x002D, [0x01, 0x01]);
 
         var versions = new List<byte>();
         Add16(versions, Pick());
         Add16(versions, 0x0304);
         Add16(versions, 0x0303);
-        Extension(list, 0x002B, Block8(versions));
-
-        // Сжатие сертификата, brotli. У SChannel его нет, а у браузеров есть
-        // с 2020 года, и это второе по заметности отличие после шифров.
-        Extension(list, 0x001B, [0x02, 0x00, 0x02]);
 
         var settings = new List<byte>();
         Name(settings, "h2");
-        Extension(list, 0x4469, Block16(settings));
 
+        var middle = new List<(ushort Type, IReadOnlyCollection<byte> Body)>
+        {
+            (0x0000, Block16(sni)),
+            (0x0017, []),
+            (0xFF01, [0x00]),
+            (0x000A, Block16(groups)),
+            (0x000B, [0x01, 0x00]),
+            (0x0023, []),
+            (0x0010, Block16(alpn)),
+            (0x0005, [0x01, 0x00, 0x00, 0x00, 0x00]),
+            (0x000D, Block16(signatures)),
+            (0x0012, []),
+            (0x0033, Block16(shares)),
+            (0x002D, [0x01, 0x01]),
+            (0x002B, Block8(versions)),
+
+            // Сжатие сертификата, brotli. У SChannel его нет, а у браузеров есть
+            // с 2020 года, и это второе по заметности отличие после шифров.
+            (0x001B, [0x02, 0x00, 0x02]),
+
+            // ALPS под новым номером: 0x4469 Chrome сменил на 0x44CD.
+            (0x44CD, Block16(settings)),
+            (0xFE0D, EchGrease()),
+        };
+
+        // Перемешивание как у Chrome 110+: каждое соединение по-своему.
+        RandomNumberGenerator.Shuffle(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(middle));
+
+        var list = new List<byte>();
+        Extension(list, opening, []);
+
+        foreach (var (type, body) in middle)
+            Extension(list, type, body);
+
+        // Добивки нет: с ключом ML-KEM приветствие и так под две тысячи байт,
+        // а Chrome добивает только короткие.
         Extension(list, closing, [0x00]);
 
-        // Добивка до пятисот двенадцати байт. Не украшение: приветствия
-        // короче двухсот пятидесяти шести байт ломают часть промежуточных
-        // узлов, и браузеры добивают их с тех же пор, как это выяснилось.
-        int length = list.Count + 2;
-
-        if (length < 512)
-            Extension(list, 0x0015, new byte[512 - length - 4]);
-
         return list;
+    }
+
+    /// <summary>
+    /// Ключ ML-KEM-768, годный на вид: 768 коэффициентов меньше 3329 и 32 байта затравки.
+    /// </summary>
+    /// <remarks>
+    /// Сторона проверяет ключ (FIPS 203, проверка модуля) и на негодный
+    /// отвечает отказом — неотличимым от блокировки. Коэффициенты по два
+    /// упакованы в три байта, младшими битами вперёд.
+    /// </remarks>
+    internal static byte[] MlKemKey()
+    {
+        var key = new byte[1184];
+
+        for (int i = 0; i < 1152; i += 3)
+        {
+            int a = RandomNumberGenerator.GetInt32(3329);
+            int b = RandomNumberGenerator.GetInt32(3329);
+
+            key[i] = (byte)a;
+            key[i + 1] = (byte)((a >> 8) | ((b & 0x0F) << 4));
+            key[i + 2] = (byte)(b >> 4);
+        }
+
+        RandomNumberGenerator.Fill(key.AsSpan(1152));
+
+        return key;
+    }
+
+    /// <summary>
+    /// Пустышка ECH, какую шлёт Chrome без настоящего ключа ECH.
+    /// </summary>
+    /// <remarks>
+    /// Внешнее приветствие: HKDF-SHA256, AES-128-GCM, случайный номер
+    /// конфигурации, 32 байта «ключа» и шифртекст случайной длины из тех,
+    /// что даёт Chrome. Сторона без ECH пропускает его мимо, как и положено
+    /// незнакомому.
+    /// </remarks>
+    private static List<byte> EchGrease()
+    {
+        var body = new List<byte> { 0x00, 0x00, 0x01, 0x00, 0x01 };
+        body.Add((byte)RandomNumberGenerator.GetInt32(256));
+        body.AddRange(Block16(RandomNumberGenerator.GetBytes(32)));
+
+        int[] sizes = [144, 176, 208, 240];
+        body.AddRange(Block16(RandomNumberGenerator.GetBytes(sizes[RandomNumberGenerator.GetInt32(sizes.Length)])));
+
+        return body;
     }
 
     /// <summary>

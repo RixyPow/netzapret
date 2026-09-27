@@ -125,7 +125,8 @@ public sealed class BrowserHelloTests
     [InlineData(0x0010, "ALPN")]
     [InlineData(0x0005, "status_request")]
     [InlineData(0x001B, "compress_certificate")]
-    [InlineData(0x4469, "application_settings")]
+    [InlineData(0x44CD, "application_settings")]
+    [InlineData(0xFE0D, "encrypted_client_hello")]
     [InlineData(0x0033, "key_share")]
     [InlineData(0x002B, "supported_versions")]
     public void The_extensions_schannel_lacks_are_present(int type, string name)
@@ -172,17 +173,53 @@ public sealed class BrowserHelloTests
         Assert.Contains((ushort)0x1303, suites);
     }
 
-    /// <summary>Добито до пятисот двенадцати байт.</summary>
+    /// <summary>
+    /// Предложен гибрид X25519MLKEM768, и ключ его проходит проверку модуля.
+    /// </summary>
     /// <remarks>
-    /// Не украшение: приветствия короче двухсот пятидесяти шести байт ломают
-    /// часть промежуточных узлов, и браузеры добивают их с тех пор, как это
-    /// выяснилось. Короткое приветствие выдало бы нас и здесь.
+    /// Без гибрида отпечаток устаревший (Chrome до 131). Ключ с коэффициентом
+    /// от 3329 и выше сторона отвергает (FIPS 203) — отказом, который проба
+    /// приняла бы за блокировку.
     /// </remarks>
     [Fact]
-    public void It_is_padded_like_a_browsers()
+    public void Post_quantum_key_is_offered_and_well_formed()
     {
-        Assert.True(Hello().Length >= 512, $"всего {Hello().Length} Б");
-        Assert.Contains((ushort)0x0015, Types(Hello()));
+        Assert.Contains((ushort)0x11EC, Groups(Hello()));
+
+        var key = BrowserHello.MlKemKey();
+        Assert.Equal(1184, key.Length);
+
+        for (int i = 0; i < 1152; i += 3)
+        {
+            int a = key[i] | ((key[i + 1] & 0x0F) << 8);
+            int b = (key[i + 1] >> 4) | (key[i + 2] << 4);
+
+            Assert.True(a < 3329 && b < 3329, $"коэффициент вне модуля на байте {i}");
+        }
+    }
+
+    /// <summary>Отпечаток совпадает с настоящим Chromium 152.</summary>
+    /// <remarks>
+    /// Снят 27.09.2026 с tls.peet.ws во встроенном браузере Claude
+    /// (Chrome/152.0.7977.130). Прежний состав давал <c>…_e5627efa2ab1</c>
+    /// (Chrome ~110), и github.com, i.scdn.co, web.telegram.org отвечали
+    /// на него illegal_parameter — проба видела отказ там, где браузер
+    /// проходит. Разойдись отпечаток снова — проба опять заговорит
+    /// не браузерным голосом, и заметит это только этот тест.
+    /// </remarks>
+    [Fact]
+    public void Fingerprint_is_chromium_152()
+    {
+        Assert.Equal("t13d1516h2_8daaf6152771_806a8c22fdea", Ja4(Hello()));
+        Assert.True(IsGrease(Types(Hello())[^1]), "последнее расширение");
+    }
+
+    /// <summary>Без добивки: Chrome добивает только короткие, а это под две тысячи байт.</summary>
+    [Fact]
+    public void It_is_not_padded_like_a_current_browsers()
+    {
+        Assert.DoesNotContain((ushort)0x0015, Types(Hello()));
+        Assert.True(Hello().Length > 1500, $"всего {Hello().Length} Б");
     }
 
     /// <summary>Два приветствия подряд не совпадают.</summary>
@@ -293,6 +330,72 @@ public sealed class BrowserHelloTests
         end = at + 2 + length;
 
         return at + 2;
+    }
+
+    /// <summary>Тело расширения по типу.</summary>
+    private static byte[] Body(byte[] hello, ushort type)
+    {
+        int at = Extensions(hello, out int end);
+
+        while (at < end)
+        {
+            int length = At(hello, at + 2);
+
+            if (At(hello, at) == type)
+                return hello[(at + 4)..(at + 4 + length)];
+
+            at += 4 + length;
+        }
+
+        return [];
+    }
+
+    /// <summary>Предложенные группы обмена ключами.</summary>
+    private static IReadOnlyList<ushort> Groups(byte[] hello)
+    {
+        var body = Body(hello, 0x000A);
+        var groups = new List<ushort>();
+
+        for (int i = 2; i < body.Length; i += 2)
+            groups.Add(At(body, i));
+
+        return groups;
+    }
+
+    /// <summary>
+    /// JA4 приветствия: шифры и расширения без GREASE, отсортированные,
+    /// подписи — в порядке приветствия. Как считает FoxIO.
+    /// </summary>
+    private static string Ja4(byte[] hello)
+    {
+        static string Hash(string text) =>
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(text)))
+                .ToLowerInvariant()[..12];
+
+        int at = Ciphers(hello);
+        int count = At(hello, at - 2) / 2;
+
+        var ciphers = Enumerable.Range(0, count)
+            .Select(i => At(hello, at + (i * 2)))
+            .Where(c => !IsGrease(c))
+            .Select(c => c.ToString("x4"))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        var types = Types(hello).Where(t => !IsGrease(t)).ToList();
+
+        var sorted = types
+            .Where(t => t is not 0x0000 and not 0x0010)
+            .Select(t => t.ToString("x4"))
+            .Order(StringComparer.Ordinal);
+
+        var signatures = Body(hello, 0x000D);
+        var algorithms = Enumerable.Range(0, At(signatures, 0) / 2)
+            .Select(i => At(signatures, 2 + (i * 2)).ToString("x4"));
+
+        return $"t13d{ciphers.Count:D2}{types.Count:D2}h2"
+            + $"_{Hash(string.Join(",", ciphers))}"
+            + $"_{Hash(string.Join(",", sorted) + "_" + string.Join(",", algorithms))}";
     }
 
     /// <summary>Типы расширений по порядку.</summary>
