@@ -89,7 +89,7 @@ public sealed class SingBoxOptions
     /// Апстрим DNS. Указывается адресом, а не именем: имя потребовало бы
     /// отдельного резолвера для его собственного разрешения.
     /// </summary>
-    public string DnsServer { get; init; } = "8.8.8.8";
+    public string DnsServer { get; init; } = NetZapret.Core.AppSettings.GoogleDns;
 
     public string DnsServerType { get; init; } = "https";
 
@@ -1592,7 +1592,7 @@ public sealed class SingBoxConfigCompiler
     /// </para>
     /// <para>
     /// Правило ограничено входящим <c>tun-in</c> намеренно. Наш собственный
-    /// DNS-сервер — тоже DoH и тоже на 8.8.8.8; без этой оговорки отказ
+    /// DNS-сервер — тоже DoH и нередко на том же адресе; без этой оговорки отказ
     /// накрыл бы его самого, и резолвить стало бы нечем.
     /// </para>
     /// </remarks>

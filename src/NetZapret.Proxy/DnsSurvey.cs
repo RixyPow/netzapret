@@ -114,7 +114,9 @@ public static class DnsSurvey
     /// </remarks>
     public static readonly IReadOnlyList<DnsProvider> Providers =
     [
-        new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.8.8", "dns.google",
+        // Шифрованный — на 8.8.4.4: 8.8.8.8 многие операторы с 3 июля
+        // закрыли по TCP, и обзор мерил бы то, чем туннель не пользуется.
+        new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.4.4", "dns.google",
             Note: "надёжный, без фильтрации"),
         new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com",
             Note: "быстрый, без фильтрации"),

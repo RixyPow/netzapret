@@ -92,7 +92,7 @@ public sealed class SupportReportTests : IDisposable
 
         // А нужное для разбора — на месте.
         Assert.Contains("не прочиталась", text);
-        Assert.Contains("DNS: 8.8.8.8, через туннель", text);
+        Assert.Contains("DNS: 8.8.4.4, через туннель", text);
         Assert.Contains("*.example.org", text);
         Assert.Contains("ERROR", text);
         Assert.Contains("youtube.com ок", text);

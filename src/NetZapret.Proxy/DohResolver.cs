@@ -34,7 +34,7 @@ public static class DohResolver
         "https://cloudflare-dns.com/dns-query",
         "https://dns.quad9.net:5053/dns-query",
         "https://1.1.1.1/dns-query",
-        "https://8.8.8.8/resolve",
+        "https://8.8.4.4/resolve",
     ];
 
     /// <summary>Ответ-заглушка: петля или нулевой адрес.</summary>

@@ -85,6 +85,22 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Equal(90, read.TrayDensity);
     }
 
+    /// <summary>
+    /// Прежнее умолчание 8.8.8.8 переводится на 8.8.4.4 (27.09): у многих
+    /// операторов первый закрыт по DoH. Прочий выбор человека не трогается.
+    /// </summary>
+    [Fact]
+    public void OldGoogleDefaultMovesToOpenAddress()
+    {
+        File.WriteAllText(_path, "{ \"DnsServer\": \"8.8.8.8\" }");
+        Assert.Equal("8.8.4.4", AppSettings.Load(_path).DnsServer);
+
+        File.WriteAllText(_path, "{ \"DnsServer\": \"1.1.1.1\" }");
+        Assert.Equal("1.1.1.1", AppSettings.Load(_path).DnsServer);
+
+        Assert.Equal("8.8.4.4", new AppSettings().DnsServer);
+    }
+
     [Fact]
     public void ThemeSurvivesAndDefaultsToDark()
     {

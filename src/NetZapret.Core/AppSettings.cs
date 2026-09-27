@@ -191,7 +191,17 @@ public sealed record AppSettings
     public bool DnsThroughTunnel { get; init; }
 
     /// <summary>Апстрим DNS; адресом, не именем.</summary>
-    public string DnsServer { get; init; } = "8.8.8.8";
+    /// <remarks>
+    /// 8.8.4.4, а не 8.8.8.8: с 3 июля многие операторы закрыли 8.8.8.8
+    /// по TCP — DoH и DoT, — а 8.8.4.4 оставили (вики Zapret GUI). Туннель
+    /// ходит к апстриму именно по DoH, и там, где закрыто, он оставался
+    /// без имён. У владельца 27.09 отвечают оба, 200 за 80 мс, так что
+    /// смена ничего не стоит и там, где блокировки нет.
+    /// </remarks>
+    public string DnsServer { get; init; } = GoogleDns;
+
+    /// <summary>Адрес Google, который работает по DoH и там, где 8.8.8.8 закрыт.</summary>
+    public const string GoogleDns = "8.8.4.4";
 
     /// <summary>
     /// Выбирать апстрим самому — быстрейший по DoH после каждого обзора.
@@ -428,7 +438,16 @@ public sealed record AppSettings
             // тогда настройка режима не меняла. С 23.09 меняет, и прочитанный
             // как есть записанный режим развёл бы окно и движок — окно
             // показывало бы «всё в туннель», а конфиг собирался бы по книге.
-            return read with { Mode = read.Engines.Mode };
+            //
+            // 8.8.8.8 переводится на 8.8.4.4: это тот же Google с тем же
+            // сертификатом, а записан он почти у всех потому, что стоял
+            // по умолчанию, а не потому, что выбран. Без перевода смена
+            // умолчания 27.09 досталась бы только новым установкам.
+            return read with
+            {
+                Mode = read.Engines.Mode,
+                DnsServer = read.DnsServer == "8.8.8.8" ? GoogleDns : read.DnsServer,
+            };
         }
         catch (Exception)
         {
