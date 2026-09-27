@@ -4,7 +4,7 @@
              Background="{DynamicResource Chrome}">
 
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid HorizontalAlignment="Left" MaxWidth="680">
+        <Grid HorizontalAlignment="Center" MaxWidth="680">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />

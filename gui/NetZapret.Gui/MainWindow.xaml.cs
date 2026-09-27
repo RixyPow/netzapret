@@ -103,7 +103,12 @@ public partial class MainWindow : Window
     private void ShowOnboarding()
     {
         var onboarding = new OnboardingView();
-        onboarding.Completed += (_, _) => Section.Content = new StatusView();
+        onboarding.Completed += (_, _) =>
+        {
+            var status = new StatusView();
+            Section.Content = status;
+            Motion.Page(status);
+        };
 
         Section.Content = onboarding;
     }
@@ -237,6 +242,9 @@ public partial class MainWindow : Window
             "more" => new MoreView(),
             _ => new StatusView(),
         };
+
+        if (Section.Content is FrameworkElement page)
+            Motion.Page(page);
     }
 
     /// <summary>Сколько уведомление висит, прежде чем уйти само.</summary>
@@ -277,7 +285,12 @@ public partial class MainWindow : Window
         ToastAct.IsEnabled = true;
         ToastAct.Visibility = Visibility.Visible;
         ToastLater.Content = "Позже";
+
+        // Угасание от прошлого «Позже» могло ещё идти — снимаем, иначе оно
+        // спрятало бы только что показанное.
+        Toast.BeginAnimation(OpacityProperty, null);
         Toast.Visibility = Visibility.Visible;
+        Motion.Arrive(Toast, dy: 18);
 
         _toastTimer.Stop();
         _toastTimer.Interval = ToastLife;
@@ -289,7 +302,7 @@ public partial class MainWindow : Window
     private void HideToast()
     {
         _toastTimer.Stop();
-        Toast.Visibility = Visibility.Collapsed;
+        Motion.Leave(Toast);
     }
 
     /// <summary>

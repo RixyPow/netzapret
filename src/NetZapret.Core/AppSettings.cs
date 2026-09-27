@@ -411,6 +411,14 @@ public sealed record AppSettings
     /// </remarks>
     public bool OnboardingDone { get; init; }
 
+    /// <summary>Анимации окна: смена разделов, появление карточек, уведомления, схема мастера.</summary>
+    /// <remarks>
+    /// Включены по умолчанию (владелец, 28.09: «добавим анимаций по всей
+    /// программе, с возможностью их выключить»). Выключенные в самой Windows
+    /// отключают их тоже, что бы здесь ни стояло.
+    /// </remarks>
+    public bool Animations { get; init; } = true;
+
     /// <summary>Карточка телеграм-канала на «Главной» скрыта человеком.</summary>
     public bool TelegramCardHidden { get; init; }
 

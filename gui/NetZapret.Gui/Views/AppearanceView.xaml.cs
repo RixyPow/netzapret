@@ -56,6 +56,35 @@ public partial class AppearanceView : UserControl
         EditThemeButton.Content = ThemeLoader.Shipped.Contains(current) ? "Изменить копию" : "Изменить";
         ShowFonts(settings);
         ShowTray(settings);
+        ShowAnimations(settings);
+    }
+
+    private void ShowAnimations(AppSettings settings)
+    {
+        AnimationsSwitch.IsChecked = settings.Animations;
+
+        // Выключены в Windows — наш выключатель ничего не решает, и сказать
+        // это надо здесь же, а не оставлять человека щёлкать без толку.
+        if (!SystemParameters.ClientAreaAnimation)
+            AnimationsNote.Text = "Выключены в самой Windows (Параметры → Специальные возможности → "
+                + "Визуальные эффекты) — пока они там выключены, окно не анимирует ничего.";
+    }
+
+    private void OnAnimations(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings with { Animations = !settings.Animations };
+
+            next.Save(AppSettings.DefaultPath);
+            Motion.Refresh();
+            ShowAnimations(next);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>Ступени плотности подложки меню трея, в процентах.</summary>

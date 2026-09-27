@@ -164,28 +164,11 @@ public partial class OnboardingView : UserControl
 
     // --- Движение ------------------------------------------------------------
 
-    /// <summary>Анимации включены в системе — иначе всё появляется сразу.</summary>
-    /// <remarks>
-    /// Тот, кто выключил анимацию в Windows, сделал это не просто так:
-    /// бегущие точки ему мешают, а не радуют.
-    /// </remarks>
-    private static bool Moving => SystemParameters.ClientAreaAnimation;
+    /// <summary>Анимировать ли: выключатель в «Оформлении» и сама Windows.</summary>
+    private static bool Moving => Motion.Enabled;
 
     /// <summary>Шаг въезжает справа и проявляется.</summary>
-    private static void Arrive(FrameworkElement panel)
-    {
-        if (!Moving)
-            return;
-
-        var shift = new TranslateTransform(18, 0);
-        panel.RenderTransform = shift;
-
-        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var time = TimeSpan.FromMilliseconds(320);
-
-        panel.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, time) { EasingFunction = ease });
-        shift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation(18, 0, time) { EasingFunction = ease });
-    }
+    private static void Arrive(FrameworkElement panel) => Motion.Arrive(panel, dx: 18, dy: 0, ms: 320);
 
     // --- Шаг 1: знакомство ---------------------------------------------------
 

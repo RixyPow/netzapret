@@ -454,6 +454,13 @@ public partial class StatusView : UserControl
 
     private void StartAnimations()
     {
+        // Анимации выключены — запуск видно цветом полосы, без бега и мигания.
+        if (!Motion.Enabled)
+        {
+            ShowStateBar("Warn");
+            return;
+        }
+
         // Дорожка тусклая, засечка яркая. Прежде оба красились в Warn,
         // и бегущая метка была невидима: она ехала по полосе своего же цвета.
         ShowStateBar("Border");

@@ -230,6 +230,28 @@
                             Меню читает настройки при каждом открытии — сохранить
                             и есть применить.
                         -->
+                        <!--
+                            Анимации окна (владелец, 28.09: «добавим анимаций
+                            по всей программе, с возможностью их выключить»).
+                        -->
+                        <TextBlock Text="Движение" FontWeight="SemiBold" Margin="0,18,0,8" />
+
+                        <Button Style="{StaticResource Choice}" Click="OnAnimations" Margin="0,0,0,7">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Анимации" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="AnimationsNote" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                               Text="Разделы появляются плавно, карточки — по очереди, уведомления выезжают снизу, в мастере бегут точки. Выключенные — всё показывается сразу." />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1" x:Name="AnimationsSwitch" Style="{StaticResource Switch}"
+                                              IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+
                         <TextBlock Text="Меню в трее" FontWeight="SemiBold" Margin="0,18,0,8" />
 
                         <Button Style="{StaticResource Choice}" Click="OnTrayBlur" Margin="0,0,0,7">
