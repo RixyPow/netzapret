@@ -275,6 +275,8 @@ public partial class MainWindow : Window
             + "на пару секунд — всё, что качается, придётся начать заново.";
 
         ToastAct.IsEnabled = true;
+        ToastAct.Visibility = Visibility.Visible;
+        ToastLater.Content = "Позже";
         Toast.Visibility = Visibility.Visible;
 
         _toastTimer.Stop();
@@ -315,7 +317,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        HideToast();
+        // Перезапуск применил настройку, но не к уже открытой вкладке:
+        // браузер держит прежние соединения (HTTP/2, QUIC) и прежние ответы
+        // DNS, и страница, открытая до перезапуска, ходит старой дорогой.
+        // Человек смотрит на неё и решает, что смена маршрута не сработала.
+        // Совет из вики Zapret GUI, 27.09.
+        ToastTitle.Text = "Движки перезапущены";
+        ToastBody.Text = "Уже открытые вкладки ходят по старым соединениям. Чтобы увидеть "
+            + "изменение, обновите страницу через Ctrl+F5 или откройте её в окне инкогнито.";
+        ToastAct.Visibility = Visibility.Collapsed;
+        ToastLater.Content = "Понятно";
+
+        _toastTimer.Interval = ToastLife;
+        _toastTimer.Start();
     }
 
     internal static string Version()
