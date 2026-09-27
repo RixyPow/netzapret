@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="13.7.1" />
+    <InternalsVisibleTo Include="NetZapret.Core.Tests" />
   </ItemGroup>
 
 </Project>

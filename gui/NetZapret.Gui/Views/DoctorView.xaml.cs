@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
+using NetZapret.Core.Diagnostics;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
@@ -14,7 +15,7 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Одна строка отчёта диагностики.</summary>
-public sealed record DoctorLine(string Text, Brush Color);
+public sealed record DoctorLine(string Text, Brush Color, string? ActionLabel = null, Action? Act = null);
 
 /// <summary>Раздел отчёта.</summary>
 public sealed record DoctorSection(string Title, IReadOnlyList<DoctorLine> Lines);
@@ -63,6 +64,7 @@ public partial class DoctorView : UserControl
                 new("Правила", Rules(settings)),
                 new("Конфиг туннеля", Proxy(settings)),
                 new("Имена и hosts", Names(settings)),
+                new("Браузеры и сертификаты", Browsers()),
                 new("Супервизор", Supervisor()),
             };
 
@@ -90,9 +92,95 @@ public partial class DoctorView : UserControl
     private bool Is(DoctorLine line, string key) =>
         ReferenceEquals(line.Color, FindResource(key));
 
+    private void OnLineAction(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is DoctorLine { Act: { } act })
+            act();
+    }
+
+    private IReadOnlyList<DoctorLine> Browsers()
+    {
+        var lines = new List<DoctorLine>();
+
+        try
+        {
+            var bypass = BrowserDns.Scan();
+
+            if (bypass.Count == 0)
+            {
+                lines.Add(Ok("Браузеры спрашивают имена у системы — пины и маршруты на них действуют."));
+            }
+
+            foreach (var b in bypass)
+            {
+                var provider = string.IsNullOrEmpty(b.Provider) ? "" : $" ({b.Provider})";
+
+                lines.Add(Warn($"{b.Browser} резолвит имена сам, через свой DNS{provider}. "
+                    + "Такой браузер обходит и файл hosts, и туннель: пины на него не действуют, "
+                    + "а «через VPN» для него не срабатывает. Выключить: " + b.Setting + "."));
+            }
+        }
+        catch (Exception ex)
+        {
+            lines.Add(Warn("Настройки браузеров не читаются: " + ex.GetBaseException().Message));
+        }
+
+        try
+        {
+            var roots = RussianRoot.Find();
+
+            if (roots.Count == 0)
+                lines.Add(Ok("Сертификата НУЦ Минцифры в системе нет."));
+
+            foreach (var root in roots)
+            {
+                // Окно своего хранилища: сертификаты компьютера — в certlm.msc
+                // и только с правами администратора, пользователя — в certmgr.msc.
+                var console = root.ForAllUsers ? "certlm.msc" : "certmgr.msc";
+
+                lines.Add(Warn($"Установлен сертификат «{root.Subject}» — {root.Place.ToLowerInvariant()}"
+                    + (root.ForAllUsers ? ", для всех пользователей" : "") + ". "
+                    + "Владелец его ключа может выпустить сертификат на любой сайт, и браузер "
+                    + "примет его без предупреждения: это путь к перехвату HTTPS. Цена удаления: "
+                    + "сайты банков на сертификатах НУЦ (Сбербанк, ВТБ и другие с августа 2026) "
+                    + $"перестанут открываться в Chrome и Edge. Удалить: в окне «{root.Place}» → "
+                    + "«Сертификаты» → правой кнопкой по нему → «Удалить».",
+                    "Открыть сертификаты",
+                    () => OpenConsole(console)));
+            }
+        }
+        catch (Exception ex)
+        {
+            lines.Add(Warn("Хранилище сертификатов не читается: " + ex.GetBaseException().Message));
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Открывает окно сертификатов Windows.
+    /// </summary>
+    /// <remarks>
+    /// Удаляет человек сам: хранилище доверия — системная настройка
+    /// безопасности, и у удаления есть цена (сайты банков). Программа
+    /// показывает, где лежит, и не решает за него.
+    /// </remarks>
+    private void OpenConsole(string console)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(console) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = $"Не удалось открыть {console}: " + ex.GetBaseException().Message;
+        }
+    }
+
     private DoctorLine Ok(string text) => new(text, (Brush)FindResource("Accent"));
 
-    private DoctorLine Warn(string text) => new(text, (Brush)FindResource("Warn"));
+    private DoctorLine Warn(string text, string? action = null, Action? act = null) =>
+        new(text, (Brush)FindResource("Warn"), action, act);
 
     private DoctorLine Bad(string text) => new(text, (Brush)FindResource("Danger"));
 

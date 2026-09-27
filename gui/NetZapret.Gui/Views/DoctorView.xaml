@@ -111,6 +111,7 @@
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
 
                                                     <!--
@@ -131,6 +132,22 @@
 
                                                     <TextBlock Grid.Column="1" Text="{Binding Text}"
                                                                TextWrapping="Wrap" />
+
+                                                    <!-- Действие у строки — только там, где его можно сделать отсюда. -->
+                                                    <Button Grid.Column="2" Margin="12,0,0,0" Padding="12,5"
+                                                            VerticalAlignment="Top"
+                                                            Content="{Binding ActionLabel}" Tag="{Binding}"
+                                                            Click="OnLineAction">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding ActionLabel}" Value="{x:Null}">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
