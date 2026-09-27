@@ -285,7 +285,8 @@ public sealed class ProxyProbe
             address = await DohResolver.ResolveAsync(server.Host, lookup, cancellationToken);
         }
 
-        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address);
+        var keys = EngineKeys.Generate();
+        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address, keys);
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
         var stopwatch = Stopwatch.StartNew();
@@ -318,7 +319,10 @@ public sealed class ProxyProbe
             {
                 // Инбаунд mixed обслуживает и SOCKS, и HTTP CONNECT, поэтому
                 // обычного HTTP-прокси достаточно и не нужен клиент SOCKS.
-                Proxy = new WebProxy($"http://127.0.0.1:{options.ListenPort}"),
+                Proxy = new WebProxy($"http://127.0.0.1:{options.ListenPort}")
+                {
+                    Credentials = new NetworkCredential(keys.User, keys.Password),
+                },
                 UseProxy = true,
             };
 

@@ -136,6 +136,10 @@ internal static class TunnelConfig
                 // вечно проваливающуюся проверку у исправного движка.
                 HealthInbound = settings.VerifyTraffic,
 
+                // Новые пароли служебных входов на каждую сборку: окно, nz
+                // и сторож читают их из этого же конфига (EngineKeys.Current).
+                Keys = EngineKeys.Generate(),
+
                 CaptureAddresses = capture,
                 PinnedProxyAddresses = pinned.Addresses,
                 PinnedProxyNames = pinned.Names,

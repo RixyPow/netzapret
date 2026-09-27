@@ -802,6 +802,11 @@ public class SingBoxConfigCompilerTests
         {
             PinnedProxyAddresses = ["203.0.114.7/32"],
             PinnedProxyNames = ["files.rutracker.org"],
+
+            // С паролями входов (27.09): поля users и secret движок разбирает
+            // сам, и незнакомое поле уронило бы весь конфиг.
+            HealthInbound = true,
+            Keys = EngineKeys.Generate(),
         });
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
 
@@ -897,7 +902,8 @@ public class SingBoxConfigCompilerTests
             return;
 
         var json = new SingBoxConfigCompiler()
-            .CompileProbeConfig(Server("probe", ProxyProtocol.Vless, "tcp"), 21099, logPath: null);
+            .CompileProbeConfig(Server("probe", ProxyProtocol.Vless, "tcp"), 21099, logPath: null,
+                keys: EngineKeys.Generate());
 
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-probe-{Guid.NewGuid():N}.json");
 

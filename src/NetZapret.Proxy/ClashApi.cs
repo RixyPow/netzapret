@@ -30,11 +30,18 @@ public sealed class ClashApi : IDisposable
 {
     private readonly HttpClient _http;
     private readonly bool _ownsClient;
+    private readonly EngineKeys? _keys;
 
-    public ClashApi(string listen = "127.0.0.1:9090", HttpClient? http = null)
+    /// <param name="keys">
+    /// Пароли движка; <c>null</c> — взять из конфига работающего движка
+    /// (<see cref="EngineKeys.Current"/>). С 27.09 Clash API под секретом,
+    /// и запрос без него получает 401.
+    /// </param>
+    public ClashApi(string listen = "127.0.0.1:9090", HttpClient? http = null, EngineKeys? keys = null)
     {
         Address = listen;
         _ownsClient = http is null;
+        _keys = keys ?? EngineKeys.Current();
 
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(40) };
     }
@@ -43,12 +50,23 @@ public sealed class ClashApi : IDisposable
 
     private string Root => $"http://{Address}";
 
+    /// <summary>
+    /// Отправляет запрос с секретом. Заголовок — на запрос, а не на клиент:
+    /// клиент у сторожа общий на все разговоры с движком.
+    /// </summary>
+    private Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, HttpContent? content, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(method, url) { Content = content };
+        EngineKeys.Authorize(request, _keys);
+        return _http.SendAsync(request, cancellationToken);
+    }
+
     /// <summary>Отзывается ли движок вообще.</summary>
     public async Task<bool> AliveAsync(CancellationToken cancellationToken)
     {
         try
         {
-            using var response = await _http.GetAsync($"{Root}/version", cancellationToken);
+            using var response = await SendAsync(HttpMethod.Get, $"{Root}/version", null, cancellationToken);
 
             return response.IsSuccessStatusCode;
         }
@@ -74,7 +92,7 @@ public sealed class ClashApi : IDisposable
                 + $"?timeout={(int)timeout.TotalMilliseconds}"
                 + $"&url={Uri.EscapeDataString(url)}";
 
-            using var response = await _http.GetAsync(query, cancellationToken);
+            using var response = await SendAsync(HttpMethod.Get, query, null, cancellationToken);
 
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -117,7 +135,7 @@ public sealed class ClashApi : IDisposable
 
             body.Headers.ContentType = new MediaTypeHeaderValue("application/json");
 
-            using var response = await _http.PutAsync(
+            using var response = await SendAsync(HttpMethod.Put,
                 $"{Root}/proxies/{Uri.EscapeDataString(group)}", body, cancellationToken);
 
             return response.IsSuccessStatusCode;
@@ -133,8 +151,8 @@ public sealed class ClashApi : IDisposable
     {
         try
         {
-            using var response = await _http.GetAsync(
-                $"{Root}/proxies/{Uri.EscapeDataString(group)}", cancellationToken);
+            using var response = await SendAsync(
+                HttpMethod.Get, $"{Root}/proxies/{Uri.EscapeDataString(group)}", null, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
                 return null;

@@ -94,8 +94,10 @@ public static class TunnelReach
             address = await DohResolver.ResolveAsync(server.Host, lookup, cancellationToken);
         }
 
+        var keys = EngineKeys.Generate();
+
         var json = new SingBoxConfigCompiler()
-            .CompileProbeConfig(server, listenPort, logPath, "warn", address);
+            .CompileProbeConfig(server, listenPort, logPath, "warn", address, keys);
 
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
@@ -121,7 +123,10 @@ public static class TunnelReach
 
         using var handler = new HttpClientHandler
         {
-            Proxy = new WebProxy($"http://127.0.0.1:{listenPort}"),
+            Proxy = new WebProxy($"http://127.0.0.1:{listenPort}")
+            {
+                Credentials = new NetworkCredential(keys.User, keys.Password),
+            },
             UseProxy = true,
 
             // Перенаправления не нужны: вопрос в том, дошли ли мы до хоста,

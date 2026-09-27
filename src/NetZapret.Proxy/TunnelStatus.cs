@@ -56,8 +56,7 @@ public static class TunnelStatus
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
-            var json = await http.GetStringAsync(
-                $"http://127.0.0.1:{clashPort}/proxies/auto", cancellationToken);
+            var json = await GetAsync(http, $"http://127.0.0.1:{clashPort}/proxies/auto", cancellationToken);
 
             using var document = JsonDocument.Parse(json);
 
@@ -71,9 +70,8 @@ public static class TunnelStatus
             // что не ответ на вопрос «через что мы сейчас ходим».
             if (name is not null && name.StartsWith("auto", StringComparison.OrdinalIgnoreCase))
             {
-                var inner = await http.GetStringAsync(
-                    $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(name)}",
-                    cancellationToken);
+                var inner = await GetAsync(
+                    http, $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(name)}", cancellationToken);
 
                 using var group = JsonDocument.Parse(inner);
 
@@ -94,6 +92,18 @@ public static class TunnelStatus
             // честнее выдуманного имени сервера.
             return (null, false);
         }
+    }
+
+    /// <summary>Запрос к Clash API с секретом движка (с 27.09 без него — 401).</summary>
+    private static async Task<string> GetAsync(HttpClient http, string url, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        EngineKeys.Authorize(request, EngineKeys.Current());
+
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
     /// <summary>
@@ -141,7 +151,10 @@ public static class TunnelStatus
             var url = $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(target)}/delay"
                 + "?timeout=5000&url=" + Uri.EscapeDataString("https://www.gstatic.com/generate_204");
 
-            using var response = await http.GetAsync(url, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            EngineKeys.Authorize(request, EngineKeys.Current());
+
+            using var response = await http.SendAsync(request, cancellationToken);
 
             return response.IsSuccessStatusCode ? TunnelState.Alive : TunnelState.Dead;
         }

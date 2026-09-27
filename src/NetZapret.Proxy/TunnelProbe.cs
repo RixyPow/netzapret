@@ -93,8 +93,14 @@ public static class TunnelProbe
             // и доменные правила сработают так же, как для настоящего
             // приложения. Разреши мы имя здесь, в туннель уехал бы адрес,
             // и правило по домену мимо него прошло бы.
+            // С 27.09 вход под паролем (EngineKeys): без него — 407, и проверка
+            // приняла бы отказ входа за отказ туннеля.
+            var auth = EngineKeys.Current() is { User.Length: > 0 } keys
+                ? $"Proxy-Authorization: {keys.ProxyBasic}\r\n"
+                : string.Empty;
+
             var request = Encoding.ASCII.GetBytes(
-                $"CONNECT {host}:{target} HTTP/1.1\r\nHost: {host}:{target}\r\n\r\n");
+                $"CONNECT {host}:{target} HTTP/1.1\r\nHost: {host}:{target}\r\n{auth}\r\n");
 
             await stream.WriteAsync(request, limit.Token);
 

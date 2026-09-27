@@ -55,6 +55,17 @@ public sealed class SingBoxOptions
     public string ClashApiListen { get; init; } = "127.0.0.1:9090";
 
     /// <summary>
+    /// Пароли служебных входов: секрет Clash API и учётка <c>health-in</c>;
+    /// <c>null</c> — без паролей, как было до 27.09.
+    /// </summary>
+    /// <remarks>
+    /// Без них любая программа на машине пользуется входами движка —
+    /// см. <see cref="EngineKeys"/>. Необязательны, чтобы сборки для проверок
+    /// и тестов не таскали пароли, которые некому предъявлять.
+    /// </remarks>
+    public EngineKeys? Keys { get; init; }
+
+    /// <summary>
     /// Куда движок кладёт своё: учётную запись MASQUE и выбор в селекторе.
     /// </summary>
     /// <remarks>
@@ -420,6 +431,12 @@ public sealed class SingBoxConfigCompiler
             },
         };
 
+        // Секрет Clash API: без него любая программа на машине переключает
+        // выход, читает список соединений и просит замерить задержку выхода
+        // до своего сервера — а тот видит адрес VPN (см. EngineKeys).
+        if (options.Keys is { ClashSecret.Length: > 0 } keys)
+            ((JsonObject)root["experimental"]!["clash_api"]!)["secret"] = keys.ClashSecret;
+
         // Раздел заводится только при надобности: пустой массив endpoints
         // движок принимает, но лишняя секция в конфиге — лишний повод
         // разбираться, откуда она взялась.
@@ -486,31 +503,44 @@ public sealed class SingBoxConfigCompiler
     /// Адрес сервера, выясненный заранее и в обход системного резолвера.
     /// <c>null</c> — оставить имя, пусть разрешает сам sing-box.
     /// </param>
+    /// <param name="keys">
+    /// Учётка входа пробника; <c>null</c> — без пароля. Пробник живёт секунды,
+    /// но замер подписки из десятков серверов держит входы открытыми минутами,
+    /// и каждый из них — прямой путь через сервер подписки (см. EngineKeys).
+    /// </param>
     public string CompileProbeConfig(
         ProxyServer server,
         int listenPort,
         string? logPath,
         string logLevel = "debug",
-        string? resolvedAddress = null)
+        string? resolvedAddress = null,
+        EngineKeys? keys = null)
     {
         var log = new JsonObject { ["level"] = logLevel, ["timestamp"] = true };
 
         if (!string.IsNullOrEmpty(logPath))
             log["output"] = Path.GetFullPath(logPath);
 
+        var probe = new JsonObject
+        {
+            ["type"] = "mixed",
+            ["tag"] = "probe-in",
+            ["listen"] = "127.0.0.1",
+            ["listen_port"] = listenPort,
+        };
+
+        if (keys is { User.Length: > 0 })
+        {
+            probe["users"] = new JsonArray
+            {
+                new JsonObject { ["username"] = keys.User, ["password"] = keys.Password },
+            };
+        }
+
         var root = new JsonObject
         {
             ["log"] = log,
-            ["inbounds"] = new JsonArray
-            {
-                new JsonObject
-                {
-                    ["type"] = "mixed",
-                    ["tag"] = "probe-in",
-                    ["listen"] = "127.0.0.1",
-                    ["listen_port"] = listenPort,
-                },
-            },
+            ["inbounds"] = new JsonArray { probe },
             ["outbounds"] = server.IsEndpoint
                 ? new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } }
                 : new JsonArray
@@ -859,13 +889,28 @@ public sealed class SingBoxConfigCompiler
         // супервизору не нужно знать, с TUN поднят движок или без него.
         if (options.HealthInbound)
         {
-            inbounds.Add(new JsonObject
+            var health = new JsonObject
             {
                 ["type"] = "mixed",
                 ["tag"] = "health-in",
                 ["listen"] = "127.0.0.1",
                 ["listen_port"] = SingBoxOptions.DefaultHealthPort,
-            });
+            };
+
+            // С паролем: вход ведёт в туннель, и открытым он отдавал адрес VPN
+            // любой программе, перебравшей порты петли (см. EngineKeys).
+            // local-in выше — прокси для приложений человека, их он прописывает
+            // сам, и пароль там сломал бы им подключение: браузеры SOCKS
+            // с паролем не умеют.
+            if (options.Keys is { User.Length: > 0 } keys)
+            {
+                health["users"] = new JsonArray
+                {
+                    new JsonObject { ["username"] = keys.User, ["password"] = keys.Password },
+                };
+            }
+
+            inbounds.Add(health);
         }
 
         return inbounds;

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text;
 using NetZapret.Proxy;
 
@@ -397,7 +397,7 @@ public sealed class SingBoxService : SupervisedService
     {
         ForgetFakeAddresses();
 
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
         foreach (var exit in StartExits(_preferredExit))
         {
@@ -639,7 +639,7 @@ public sealed class SingBoxService : SupervisedService
         if (action == BypassAction.Keep)
             return;
 
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
         var target = _bypass.TargetFor(action, LatencyGroup);
 
@@ -669,7 +669,7 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     private async Task<bool> ExitsAliveAsync(CancellationToken cancellationToken)
     {
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk);
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
         return await api.MeasureAsync(
             LatencyGroup,
@@ -690,13 +690,22 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Группа автоподбора — куда возвращаемся.</summary>
     private const string LatencyGroup = "auto-latency";
 
-    private static async Task<bool> CheckTrafficAsync(int proxyPort, CancellationToken cancellationToken)
+    private async Task<bool> CheckTrafficAsync(int proxyPort, CancellationToken cancellationToken)
     {
         try
         {
+            // С 27.09 вход проверки под паролем (EngineKeys) — без учётки
+            // он отвечает 407, и сторож объявил бы туннель мёртвым.
+            var keys = EngineKeys.Current(_configPath);
+
             using var handler = new HttpClientHandler
             {
-                Proxy = new System.Net.WebProxy($"http://127.0.0.1:{proxyPort}"),
+                Proxy = new System.Net.WebProxy($"http://127.0.0.1:{proxyPort}")
+                {
+                    Credentials = keys is { User.Length: > 0 }
+                        ? new System.Net.NetworkCredential(keys.User, keys.Password)
+                        : null,
+                },
                 UseProxy = true,
             };
 
