@@ -51,6 +51,12 @@ rules:
     value: config/lists/donationalerts.txt
     mode: direct
 
+  # SeriesGraph — не заблокирован, а десинк рвал загрузку страницы (замер 27.09:
+  # 24 КБ пришли, соединение не закрылось и за 20 с). Напрямую — щит pass.
+  - match: hostlist
+    value: config/lists/seriesgraph.txt
+    mode: direct
+
   # ── Telegram ────────────────────────────────────────────────────────────
   #
   # Правило по адресу, а не по программе: к серверам Telegram обращается

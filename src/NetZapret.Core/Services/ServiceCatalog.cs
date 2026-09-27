@@ -337,6 +337,12 @@ public static class ServiceCatalog
                 },
                 new ServicePart { Name = "Vimeo", List = "config/lists/vimeo.txt" },
                 new ServicePart { Name = "Crunchyroll", List = "config/lists/crunchyroll.txt" },
+                new ServicePart
+                {
+                    Name = "SeriesGraph",
+                    List = "config/lists/seriesgraph.txt",
+                    Note = "по умолчанию напрямую: десинк рвал загрузку страницы",
+                },
             ],
         },
 
