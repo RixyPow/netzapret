@@ -243,7 +243,9 @@ public partial class MainWindow : Window
             _ => new StatusView(),
         };
 
-        if (Section.Content is FrameworkElement page)
+        // «Маршруты» — без анимации (владелец, 28.09): список из сотни строк,
+        // и его появление по частям только мешает искать.
+        if (name != "routes" && Section.Content is FrameworkElement page)
             Motion.Page(page);
     }
 
