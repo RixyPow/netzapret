@@ -63,6 +63,32 @@ public partial class StatusView : UserControl
 
     private DateTimeOffset? _startingSince;
 
+    private void OnTelegram(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = About.Telegram, UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // Нет браузера по умолчанию — ссылка есть и в «Ещё», в карточке «О программе».
+        }
+    }
+
+    private void OnHideTelegram(object sender, RoutedEventArgs e)
+    {
+        TelegramCard.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            (AppSettings.Load(AppSettings.DefaultPath) with { TelegramCardHidden = true }).Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не записалось — карточка вернётся при следующем открытии, и только.
+        }
+    }
+
     public StatusView()
     {
         InitializeComponent();
@@ -79,8 +105,11 @@ public partial class StatusView : UserControl
             // Не по времени, в отличие от прочего: режим меняется только
             // отсюда, а автозапуск спрашивается у планировщика запуском
             // schtasks — раз в две секунды это был бы процесс на ровном месте.
-            ShowModes(AppSettings.Load(AppSettings.DefaultPath));
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            ShowModes(settings);
             ShowAutostart();
+
+            TelegramCard.Visibility = settings.TelegramCardHidden ? Visibility.Collapsed : Visibility.Visible;
 
             // Проверка обновлений идёт при запуске окна и может закончиться
             // уже после того, как «Главная» показана, — поэтому и подписка.

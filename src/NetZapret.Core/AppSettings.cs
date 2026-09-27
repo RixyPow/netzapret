@@ -411,6 +411,9 @@ public sealed record AppSettings
     /// </remarks>
     public bool OnboardingDone { get; init; }
 
+    /// <summary>Карточка телеграм-канала на «Главной» скрыта человеком.</summary>
+    public bool TelegramCardHidden { get; init; }
+
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
     private static readonly JsonSerializerOptions Options = new()

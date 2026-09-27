@@ -302,6 +302,32 @@
 
             <views:UpdatePanel x:Name="Updates" />
 
+            <!--
+                Канал — на «Главной» (владелец, 28.09): в «Ещё» кнопка стояла
+                внизу карточки «О программе», и её не находили. Скрывается
+                одним щелчком навсегда — это подсказка, а не реклама.
+            -->
+            <Border x:Name="TelegramCard" Style="{StaticResource Card}" Margin="0,22,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Новости — в телеграм-канале" FontWeight="SemiBold" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Text="Блокировки меняются, и починка приходит новым выпуском. В канале — что вышло и зачем обновляться, коротко." />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Открыть канал"
+                            Click="OnTelegram" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Скрыть"
+                            Click="OnHideTelegram" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
         </StackPanel>
         </Grid>
     </ScrollViewer>
