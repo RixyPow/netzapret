@@ -185,6 +185,25 @@ public class TunnelScopeTests
     }
 
     [Fact]
+    public void HealthInboundGoesIntoTheTunnelBeforeAnyRule()
+    {
+        // Замер 28.09: без своего правила вход проверки шёл по общим правилам,
+        // в выборочном режиме — напрямую, и сторож проверял домашнюю сеть.
+        var root = Compile(Rules, new SingBoxOptions { UseTun = true, HealthInbound = true, Scope = TunnelScope.ProxyOnly });
+        var rules = root.GetProperty("route").GetProperty("rules").EnumerateArray().ToList();
+
+        int health = rules.FindIndex(r => r.TryGetProperty("inbound", out var i)
+            && i.EnumerateArray().Any(x => x.GetString() == "health-in"));
+
+        Assert.True(health >= 0, "у health-in нет правила");
+        Assert.Equal("auto", rules[health].GetProperty("outbound").GetString());
+
+        // Раньше всех правил с выходом: иначе частное правило перехватит проверку.
+        int firstRouted = rules.FindIndex(r => r.TryGetProperty("outbound", out _));
+        Assert.Equal(health, firstRouted);
+    }
+
+    [Fact]
     public void HealthInboundDoesNotCollideWithProbePort()
     {
         // Замер серверов занимает 21080 и раздаёт параллельным замерам соседние
