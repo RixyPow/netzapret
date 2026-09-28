@@ -112,36 +112,6 @@ public sealed class ClashApi : IDisposable
         }
     }
 
-    /// <summary>
-    /// Заставляет группу автоподбора перезамерить всех и переизбрать выход.
-    /// </summary>
-    /// <remarks>
-    /// Бьёт по всем выходам группы разом — поэтому зовётся только тогда,
-    /// когда текущий выход умер, а не по расписанию.
-    /// </remarks>
-    /// <returns>Ответил ли движок.</returns>
-    public async Task<bool> RetestGroupAsync(string group, string url, TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var query = $"{Root}/group/{Uri.EscapeDataString(group)}/delay"
-                + $"?timeout={(int)timeout.TotalMilliseconds}"
-                + $"&url={Uri.EscapeDataString(url)}";
-
-            using var response = await SendAsync(HttpMethod.Get, query, null, cancellationToken);
-
-            return response.IsSuccessStatusCode;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
     /// <summary>Из каких выходов состоит группа; <c>null</c> — движок не отозвался.</summary>
     /// <remarks>
     /// Замер всей группы одним запросом (/group/…/delay) здесь нарочно
