@@ -338,7 +338,7 @@ public partial class MoreView : UserControl
 
         try
         {
-            var result = await Task.Run(() => SupportReport.Create(MainWindow.Version()));
+            var result = await Task.Run(() => SupportReport.Create(MainWindow.Version(), network: true));
 
             ReportValue.Text = $"Готово: {Path.GetFileName(result.Path)} — в папке reports. "
                 + $"Внутри: {string.Join(", ", result.Files)}.";

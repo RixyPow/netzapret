@@ -271,7 +271,7 @@ int Report()
         .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
         .FirstOrDefault()?.InformationalVersion.Split('+')[0] ?? "—";
 
-    var result = SupportReport.Create(version + " (nz)");
+    var result = SupportReport.Create(version + " (nz)", network: true);
 
     Console.WriteLine($"записано: {result.Path}");
     Console.WriteLine($"внутри: {string.Join(", ", result.Files)}");

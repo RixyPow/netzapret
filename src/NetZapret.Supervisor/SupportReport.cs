@@ -52,7 +52,8 @@ public static class SupportReport
         IEnumerable<string?>? secrets = null,
         string? directory = null,
         string? root = null,
-        DateTime? now = null)
+        DateTime? now = null,
+        bool network = false)
     {
         var when = now ?? DateTime.Now;
         var settings = AppSettings.Load(At(root, AppSettings.DefaultPath));
@@ -86,6 +87,18 @@ public static class SupportReport
                 settings with { SubscriptionUrl = null },
                 new JsonSerializerOptions { WriteIndented = true })),
         };
+
+        // Что вокруг: чужие обходы, VPN-клиенты, адаптеры, DNS. Без этого
+        // три отчёта подряд 28.09 кончались просьбой прислать вывод команд.
+        if (network)
+        {
+            var ours = (state?.Services ?? [])
+                .Where(s => s.ProcessId is not null)
+                .Select(s => s.ProcessId!.Value)
+                .ToHashSet();
+
+            parts.Add(("network.txt", NetworkSnapshot.Describe(ours)));
+        }
 
         AddLog(parts, "supervisor.log", At(root, Path.Combine("runtime", "supervisor.log")));
         AddLog(parts, "sing-box.log", At(root, Path.Combine("runtime", "sing-box.log")));
