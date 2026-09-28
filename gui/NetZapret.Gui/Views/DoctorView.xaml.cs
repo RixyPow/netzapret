@@ -223,13 +223,13 @@ public partial class DoctorView : UserControl
         {
             lines.Add(Ok("sing-box на месте."));
 
-            // Без wintun.dll TUN не поднимется, а супервизор скажет об этом
-            // только в журнал: со стороны это «работает, но интернета нет».
-            var wintun = Path.Combine(Path.GetDirectoryName(singBox)!, "wintun.dll");
-
-            lines.Add(File.Exists(wintun)
-                ? Ok("wintun.dll рядом — TUN сможет подняться.")
-                : Bad("wintun.dll рядом с sing-box нет: TUN не поднимется."));
+            // Отдельный wintun.dll не нужен: sing-box несёт драйвер в себе
+            // (sing-tun/internal/wintun, загрузка из памяти — memmod; в exe
+            // восемь встроенных образов, проверено 28.09 на 1.14.1-extended).
+            // Прежде здесь стояло «нет wintun.dll — TUN не поднимется», и
+            // красным это видел каждый, кто ставил из архива: в поставке
+            // файла нет и не было (обсуждение #8, человек искал его на GitHub
+            // wintun и решил, что из-за него не работает десинк).
         }
         else
         {
