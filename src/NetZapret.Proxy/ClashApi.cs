@@ -113,6 +113,73 @@ public sealed class ClashApi : IDisposable
     }
 
     /// <summary>
+    /// Замеряет всю группу разом: кто в ней состоит и кто ответил за сколько.
+    /// </summary>
+    /// <remarks>
+    /// Движок меряет выходы группы параллельно, и весь ответ укладывается
+    /// в один срок ожидания. Замер 28.09 на живом движке: селектор из 42 выходов —
+    /// 5,0 с при сроке 5 с. Пробник на те же серверы поднимает по процессу
+    /// на каждый, по восемь разом и до 8 с на сервер. Не ответившие в ответе
+    /// движка просто отсутствуют — поэтому состав спрашивается отдельно:
+    /// без него «не ответил» не отличить от «не в группе».
+    /// </remarks>
+    /// <returns><c>null</c> — движок не отозвался.</returns>
+    public async Task<GroupDelay?> MeasureGroupAsync(
+        string group,
+        string url,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var info = await SendAsync(
+                HttpMethod.Get, $"{Root}/proxies/{Uri.EscapeDataString(group)}", null, cancellationToken);
+
+            if (!info.IsSuccessStatusCode)
+                return null;
+
+            var members = (JsonNode.Parse(await info.Content.ReadAsStringAsync(cancellationToken))?["all"] as JsonArray)?
+                .Select(n => n?.GetValue<string>())
+                .OfType<string>()
+                .ToList();
+
+            if (members is null)
+                return null;
+
+            var query = $"{Root}/group/{Uri.EscapeDataString(group)}/delay"
+                + $"?timeout={(int)timeout.TotalMilliseconds}"
+                + $"&url={Uri.EscapeDataString(url)}";
+
+            using var response = await SendAsync(HttpMethod.Get, query, null, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var delays = new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
+
+            if (JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken)) is JsonObject answered)
+            {
+                foreach (var (tag, value) in answered)
+                {
+                    // Ноль движок пишет тем, кто не ответил, у части сборок.
+                    if (value is JsonValue v && v.TryGetValue<int>(out var ms) && ms > 0)
+                        delays[tag] = TimeSpan.FromMilliseconds(ms);
+                }
+            }
+
+            return new GroupDelay(members, delays);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Переключает группу на указанный выход.
     /// </summary>
     /// <remarks>
@@ -173,3 +240,7 @@ public sealed class ClashApi : IDisposable
             _http.Dispose();
     }
 }
+
+/// <summary>Групповой замер: состав группы и задержки ответивших.</summary>
+/// <param name="Members">Все выходы группы; кого нет в <paramref name="Delays"/>, тот не ответил.</param>
+public sealed record GroupDelay(IReadOnlyList<string> Members, IReadOnlyDictionary<string, TimeSpan> Delays);

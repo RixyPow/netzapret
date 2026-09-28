@@ -208,8 +208,15 @@ public partial class VpnView : UserControl
 
         Loaded += async (_, _) =>
         {
-            await LoadAsync();
+            // Движок спрашивается сразу, не дожидаясь подписок. Прежде опрос
+            // заводился после чтения всех подписок и первый раз срабатывал
+            // ещё через 15 с — с лежащей «Основной» карточка оживала
+            // через полминуты, и владелец (28.09) видел актуальный сервер
+            // только при перезаходе на вкладку.
+            var load = LoadAsync();
+            _ = ShowExitAsync();
             _exitTimer.Start();
+            await load;
         };
 
         Unloaded += (_, _) =>
@@ -223,14 +230,15 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>
-    /// Раз в четверть минуты — какой выход держит движок.
+    /// Раз в три секунды, пока вкладка открыта, — какой выход держит движок.
     /// </summary>
     /// <remarks>
     /// Автоподбор переключает выходы сам, по задержке и живости, и показанный
     /// однажды сервер к следующей минуте мог смениться. Опрос — к движку
-    /// на localhost, он дешёвый.
+    /// на localhost, он дешёвый; было 15 с, и смена выхода или запуск движков
+    /// доходили до карточки с таким же опозданием.
     /// </remarks>
-    private readonly System.Windows.Threading.DispatcherTimer _exitTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+    private readonly System.Windows.Threading.DispatcherTimer _exitTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
     /// <summary>Строка автоподбора без текущего выхода — к ней дописывается выход.</summary>
     private string _pickBase = string.Empty;
@@ -254,6 +262,8 @@ public partial class VpnView : UserControl
     /// <summary>Что движок ответил в последний раз: выход и выбран ли он сам.</summary>
     private (bool Running, string? Server, bool Automatic) _live;
 
+    private bool _asking;
+
     private async Task ShowExitAsync()
     {
         if (!IsLoaded || _pickBase.Length == 0)
@@ -267,7 +277,23 @@ public partial class VpnView : UserControl
             return;
         }
 
-        var (server, automatic) = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+        // Опрос чаще, чем движок иной раз отвечает: не копим вопросы в очередь.
+        if (_asking)
+            return;
+
+        _asking = true;
+        (string? server, bool automatic) answer;
+
+        try
+        {
+            answer = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+        }
+        finally
+        {
+            _asking = false;
+        }
+
+        var (server, automatic) = answer;
 
         if (!IsLoaded)
             return;
@@ -381,7 +407,7 @@ public partial class VpnView : UserControl
         }
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(bool force = false)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
@@ -458,7 +484,7 @@ public partial class VpnView : UserControl
                     ? $"Читаю подписку {i + 1} из {_rows.Count}…"
                     : "Читаю подписку…";
 
-                everyRead &= await FillAsync(_rows[i], settings, token);
+                everyRead &= await FillAsync(_rows[i], settings, token, force);
             }
 
             // Теги пула — до чистки замеров: замеры подписок в работе лежат
@@ -500,7 +526,7 @@ public partial class VpnView : UserControl
 
     /// <summary>Читает одну подписку и заполняет её папку.</summary>
     /// <returns>Прочиталась ли: ответила и разобралась.</returns>
-    private async Task<bool> FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken)
+    private async Task<bool> FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken, bool force = false)
     {
         // Папка ключей: читать нечего, ключи уже здесь — только разобрать.
         if (row.IsKeys)
@@ -523,13 +549,17 @@ public partial class VpnView : UserControl
 
         try
         {
-            using var client = new SubscriptionClient();
-
             // Чтение и разбор — в фоне. Без Task.Run разбор шёл продолжением
             // на главном потоке: замер 28.09 — паузы окна по 70–166 мс, пока
             // приходили подписки, прямо посреди появления раздела.
-            var info = await Task.Run(
-                () => client.FetchAsync(new Uri(row.Entry.Url), cancellationToken), cancellationToken);
+            //
+            // Свежий запас (моложе получаса) берётся без сети — тем же
+            // чтением, что у движка; к панели идут ⟳ и «Обновить».
+            var read = await Task.Run(
+                () => SubscriptionPool.ReadOneAsync(row.Entry.Url, force, cancellationToken), cancellationToken);
+
+            if (read.Info is not { } info)
+                throw new SubscriptionUnreadException(read.Error ?? "панель не ответила");
 
             var usable = info.Servers.Where(s => s.IsUsableOutbound).ToList();
 
@@ -545,7 +575,18 @@ public partial class VpnView : UserControl
             // вправе знать, куда делись пять.
             int skipped = info.Servers.Count - usable.Count;
 
-            var parts = new List<string> { $"обновлена {DateTime.Now:HH:mm}", $"{usable.Count} серверов" };
+            var at = (read.At ?? DateTimeOffset.Now).LocalDateTime;
+            var when = at.Date == DateTime.Today ? $"{at:HH:mm}" : $"{at:dd.MM HH:mm}";
+
+            // Из запаса — так и сказано, с причиной: иначе лежащая панель
+            // выглядела бы живой подпиской с часовой давности временем.
+            var parts = new List<string>
+            {
+                read.Source == SubscriptionReadSource.Reserve
+                    ? $"панель подвела ({read.Error}) — серверы из запаса {when}"
+                    : $"обновлена {when}",
+                $"{usable.Count} серверов",
+            };
 
             if (skipped > 0)
                 parts.Add($"ещё {skipped} sing-box не поддерживает");
@@ -571,9 +612,14 @@ public partial class VpnView : UserControl
             row.Detail = string.Join(" · ", parts);
             Redraw();
 
+            if (read.Source == SubscriptionReadSource.Reserve)
+                Journal.Write("подписка", $"«{row.Entry.Name}» панель подвела ({read.Error}), взят запас {when}");
+
             // Ответила, но не разобралась — не прочиталась: её серверы
-            // никуда не делись, и их замеры трогать нельзя.
-            return !(usable.Count == 0 && info.Errors.Count > 0);
+            // никуда не делись, и их замеры трогать нельзя. Запас — тоже
+            // не прочтение: что у панели сейчас, неизвестно.
+            return read.Source != SubscriptionReadSource.Reserve
+                && !(usable.Count == 0 && info.Errors.Count > 0);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -593,7 +639,7 @@ public partial class VpnView : UserControl
             // прерванного чтения. Это медленная или мёртвая панель.
             row.Detail = ex is OperationCanceledException
                 ? $"не прочиталась: панель не ответила за {SubscriptionClient.DefaultTimeout.TotalSeconds:0} с"
-                : "не прочиталась: " + ex.GetBaseException().Message;
+                : "не прочиталась: " + (ex is SubscriptionUnreadException ? ex.Message : ex.GetBaseException().Message);
 
             // В журнал — чтобы «периодически не читалась» можно было
             // разобрать задним числом. Без ссылки: она равносильна паролю.
@@ -1290,7 +1336,7 @@ public partial class VpnView : UserControl
         Redraw();
 
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        await FillAsync(row, settings, CancellationToken.None);
+        await FillAsync(row, settings, CancellationToken.None, force: true);
 
         // Метки пула зависят от соседей — пересчитываем для всех.
         ApplyPool(settings);
@@ -1549,7 +1595,7 @@ public partial class VpnView : UserControl
         };
     }
 
-    private async void OnRefresh(object sender, RoutedEventArgs e) => await LoadAsync();
+    private async void OnRefresh(object sender, RoutedEventArgs e) => await LoadAsync(force: true);
 
     /// <summary>
     /// Гоняет пробу по всем серверам всех подписок.
@@ -1644,14 +1690,61 @@ public partial class VpnView : UserControl
 
         try
         {
+            // Движки подняты — всё, что лежит в конфиге, меряет сам движок,
+            // одним запросом за пять секунд. Владелец 28.09: «ускорь проверку
+            // ключей». Пробнику остаётся то, чего в движке нет: подписки вне
+            // работы, не взятые в конфиг мёртвые, и всё — при остановленных
+            // движках.
+            var rest = servers;
+
+            if (EnginesRunning)
+            {
+                using var api = new ClashApi();
+
+                var group = await api.MeasureGroupAsync(
+                    SelectorGroup, "http://cp.cloudflare.com/generate_204", TimeSpan.FromSeconds(5), _work.Token);
+
+                if (group is not null)
+                {
+                    var inEngine = group.Members.ToHashSet(StringComparer.Ordinal);
+
+                    foreach (var server in servers.Where(s => inEngine.Contains(s.Tag)))
+                    {
+                        var delay = group.Delays.TryGetValue(server.Tag, out var d) ? d : (TimeSpan?)null;
+
+                        _health.Set(new ServerHealth
+                        {
+                            Tag = server.Tag,
+                            Success = delay is not null,
+                            LatencyMs = delay?.TotalMilliseconds,
+                            CheckedAt = DateTimeOffset.Now,
+                        });
+
+                        done++;
+                        _measuring.Remove(server.Tag);
+                    }
+
+                    rest = servers.Where(s => !inEngine.Contains(s.Tag)).ToList();
+
+                    Progress.Value = done;
+                    MeasureButton.Content = $"{done} из {servers.Count}…";
+                    Status.Text = $"Измерено {done} из {servers.Count}…";
+                    Reshow();
+                }
+            }
+
             await new ProxyProbe(singBox).RunManyAsync(
-                servers,
+                rest,
                 new ProbeOptions
                 {
                     // Внешний адрес здесь не показывают, а его поиск стоит
                     // секунд на каждом сервере.
                     LookupExternalIp = false,
                     LogLevel = "warn",
+
+                    // Вдвое против умолчания: 54 сервера пула — четыре волны
+                    // вместо семи. Движок проверки лёгкий — один вход, один выход.
+                    Parallelism = 16,
                 },
                 result =>
                 {
@@ -1974,4 +2067,7 @@ public partial class VpnView : UserControl
 
         return File.Exists(beside) ? beside : null;
     }
+
+    /// <summary>Панель подвела, а запаса нет — причина уже словами.</summary>
+    private sealed class SubscriptionUnreadException(string message) : Exception(message);
 }
