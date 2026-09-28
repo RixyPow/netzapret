@@ -4,7 +4,7 @@
 [![Последний выпуск](https://img.shields.io/github/v/release/RixyPow/netzapret?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA)](https://github.com/RixyPow/netzapret/releases/latest)
 [![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
-[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.8.6-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/aab93eccdeb3e266acff91ec596e804481d556720019d2b452d61f7ad96cf204)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.9.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/03661be7d784c2ebcc38ba94f37843c9070b5d8ac55f143e6a1048803874cc32)
 
 Диспетчер трафика для Windows. Для каждого приложения, домена или подсети решает,
 куда пустить трафик: **через десинк** (Zapret / winws2), **через VPN** (sing-box)
@@ -493,7 +493,7 @@ addresses:
 
 ## Антивирусы
 
-Архив 0.8.6 даёт на VirusTotal 2 срабатывания из 64, и оба — на средства
+Архив 0.9.0 даёт на VirusTotal 2 срабатывания из 63, и оба — на средства
 обхода, а не на вредоносный код:
 
 - **Elastic** — `Windows.Rootkit.WinDivert`: это **WinDivert**, драйвер
@@ -504,8 +504,8 @@ addresses:
   которые строят туннели.
 
 Отчёт VirusTotal по архиву выпуска —
-[NetZapret-0.8.6.zip](https://www.virustotal.com/gui/file/aab93eccdeb3e266acff91ec596e804481d556720019d2b452d61f7ad96cf204),
-SHA-256 `aab93eccdeb3e266acff91ec596e804481d556720019d2b452d61f7ad96cf204`.
+[NetZapret-0.9.0.zip](https://www.virustotal.com/gui/file/03661be7d784c2ebcc38ba94f37843c9070b5d8ac55f143e6a1048803874cc32),
+SHA-256 `03661be7d784c2ebcc38ba94f37843c9070b5d8ac55f143e6a1048803874cc32`.
 Тот же хэш стоит в примечаниях к выпуску: сверьте со скачанным файлом.
 
 Программа не подписана сертификатом издателя, поэтому Windows покажет SmartScreen.
