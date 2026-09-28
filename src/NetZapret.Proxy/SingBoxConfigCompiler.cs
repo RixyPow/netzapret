@@ -1477,6 +1477,20 @@ public sealed class SingBoxConfigCompiler
         foreach (var node in BuildDohRejects(options))
             rules.Add(node);
 
+        // Вход проверки — всегда в туннель, мимо правил. Без этого запрос
+        // сторожа к api.ipify.org шёл по общим правилам, то есть в выборочном
+        // режиме напрямую: замер 28.09 — через health-in пришёл домашний
+        // адрес 46.31.26.29, тот же, что без прокси. «Проверка прохода
+        // трафика» проверяла домашнюю сеть, а не туннель.
+        if (options.HealthInbound && haveServers)
+        {
+            rules.Add(new JsonObject
+            {
+                ["inbound"] = new JsonArray { "health-in" },
+                ["outbound"] = options.SelectorTag,
+            });
+        }
+
         rules.Add(new JsonObject { ["ip_is_private"] = true, ["outbound"] = "direct" });
 
         // В режиме «всё через VPN» правила не отбрасываются целиком, как было
