@@ -60,6 +60,37 @@ public sealed class SubscriptionBook
 {
     public List<SubscriptionEntry> Entries { get; set; } = [];
 
+    /// <summary>Отдельные ключи (0.9.0) — пароли, как и ссылки: не печатаются и не пишутся в журнал.</summary>
+    public List<string> Keys { get; set; } = [];
+
+    /// <summary>Ключи в работе — идут в пул движка.</summary>
+    public bool KeysInPool { get; set; } = true;
+
+    /// <summary>Ключи, которые идут в пул: пусто, если выключены.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<string> PoolKeys => KeysInPool ? Keys : [];
+
+    /// <summary>
+    /// Пишет ключи и ставит признак «ключи есть» в настройки.
+    /// </summary>
+    /// <remarks>
+    /// Признак нужен сборке и «Главной»: с одними ключами, без подписки
+    /// и WARP, программа иначе решала бы, что выхода нет.
+    /// </remarks>
+    public static void SaveKeys(IReadOnlyList<string> keys, bool inPool)
+    {
+        var book = Load();
+        book.Keys = [.. keys];
+        book.KeysInPool = inPool;
+        book.Save();
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        bool enabled = inPool && keys.Count > 0;
+
+        if (settings.KeysEnabled != enabled)
+            (settings with { KeysEnabled = enabled }).Save(AppSettings.DefaultPath);
+    }
+
     public static string DefaultPath => Path.Combine("config", "subscriptions.json");
 
     private static readonly JsonSerializerOptions Options = new()
@@ -209,8 +240,17 @@ public sealed class SubscriptionBook
     /// <summary>Счёт для показа. Ссылки не разглашает — в том и смысл.</summary>
     public string Describe(AppSettings settings)
     {
+        // Ключи — отдельным хвостом (0.9.0): подпиской они не являются.
+        var keys = Keys.Count == 0 ? string.Empty
+            : $" · ключей: {Keys.Count}" + (KeysInPool ? string.Empty : " (не в работе)");
+
+        return DescribeSubscriptions(settings) + keys;
+    }
+
+    private string DescribeSubscriptions(AppSettings settings)
+    {
         if (Entries.Count == 0)
-            return "нет";
+            return Keys.Count > 0 ? "подписок нет" : "нет";
 
         // Запись без признака — ещё не прочитанная из файла, собранная в памяти:
         // в работе та, на которую смотрит указатель, как при переходе к пулу.

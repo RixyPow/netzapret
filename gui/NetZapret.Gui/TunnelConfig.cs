@@ -56,22 +56,25 @@ internal static class TunnelConfig
             // действующей. Без подписок остаётся WARP: выше мы уже убедились,
             // что хоть один выход да заявлен. Указатель из настроек — на случай,
             // когда список подписок пуст, а ссылку поставила консоль.
-            var sources = SubscriptionBook.Load().Pool
+            var book = SubscriptionBook.Load();
+
+            var sources = book.Pool
                 .Select(e => new PoolSource(e.Name, e.Url))
                 .ToList();
 
             if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
                 sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
 
-            var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken);
+            // Отдельные ключи — последним источником пула (0.9.0).
+            var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken, keys: book.PoolKeys);
             IReadOnlyList<ProxyServer> fromSubscription = pool.Servers;
 
             // Подписки были, а серверов нет ни от одной, и запаса тоже — а WARP
             // выключен: собирать не из чего, и сказать надо, почему. Имена
             // подписок, не ссылки: ссылка — пароль.
-            if (sources.Count > 0 && fromSubscription.Count == 0 && !settings.WarpEnabled)
+            if ((sources.Count > 0 || book.PoolKeys.Count > 0) && fromSubscription.Count == 0 && !settings.WarpEnabled)
             {
-                return new BuildOutcome(false, "Конфиг не собрался: ни одна подписка не дала серверов: "
+                return new BuildOutcome(false, "Конфиг не собрался: ни подписки, ни ключи не дали серверов: "
                     + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
             }
 
@@ -174,7 +177,8 @@ internal static class TunnelConfig
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
             var note = $"Конфиг собран: {result.UsedServers.Count} серверов"
-                + (sources.Count > 1 ? $" из {sources.Count} подписок" : string.Empty);
+                + (sources.Count > 1 ? $" из {sources.Count} подписок" : string.Empty)
+                + (book.PoolKeys.Count > 0 ? $" и {book.PoolKeys.Count} ключей" : string.Empty);
 
             if (pool.Parts.Count(p => p.FromReserve) is > 0 and var reserved)
                 note += $", {reserved} из запаса — панель не ответила";

@@ -550,7 +550,18 @@ public sealed record AppSettings
     /// в одиночку не поднимался вовсе.
     /// </remarks>
     [JsonIgnore]
-    public bool HasTunnelExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || WarpEnabled;
+    public bool HasTunnelExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || WarpEnabled || KeysEnabled;
+
+    /// <summary>
+    /// Есть ли отдельные ключи в работе (0.9.0).
+    /// </summary>
+    /// <remarks>
+    /// Сами ключи — в subscriptions.json рядом со ссылками: это пароли,
+    /// и в настройках им не место. Здесь только признак, чтобы с одними
+    /// ключами, без подписки и WARP, программа не решала, что выхода нет.
+    /// Ставит его окно (SubscriptionBook); консоль ключей не читает.
+    /// </remarks>
+    public bool KeysEnabled { get; init; }
 
     /// <summary>
     /// Нужен ли десинк.

@@ -29,12 +29,21 @@ public sealed record ServerRow(
     bool CanChoose,
 
     /// <summary>Можно ли замерить его отдельным пробником.</summary>
-    bool Measurable);
+    bool Measurable,
+
+    /// <summary>Кнопка «убрать» — только у отдельных ключей.</summary>
+    Visibility RemoveShown = Visibility.Collapsed);
 
 /// <summary>Папка одной подписки.</summary>
 public sealed class SubRow
 {
     public required SubscriptionEntry Entry { get; init; }
+
+    /// <summary>Папка отдельных ключей, а не подписки (0.9.0).</summary>
+    public bool IsKeys { get; init; }
+
+    /// <summary>У папки ключей — какой ключ дал какой сервер: по нему ключ и убирают.</summary>
+    public IReadOnlyList<KeyServer> KeyServers { get; set; } = [];
 
     public string Name => Entry.Name;
 
@@ -394,6 +403,19 @@ public partial class VpnView : UserControl
             })
             .ToList();
 
+        // Отдельные ключи — последней папкой, как и последним источником пула:
+        // порядок тот же, что у сборки конфига, иначе метки пула разошлись бы.
+        if (_book.Keys.Count > 0)
+        {
+            _rows.Add(new SubRow
+            {
+                Entry = new SubscriptionEntry { Name = KeyRing.Name, Url = string.Empty, InPool = _book.KeysInPool },
+                IsKeys = true,
+                Open = true,
+                Active = _book.KeysInPool,
+            });
+        }
+
         Subscriptions.ItemsSource = _rows;
 
         if (_rows.Count == 0)
@@ -480,6 +502,25 @@ public partial class VpnView : UserControl
     /// <returns>Прочиталась ли: ответила и разобралась.</returns>
     private async Task<bool> FillAsync(SubRow row, AppSettings settings, CancellationToken cancellationToken)
     {
+        // Папка ключей: читать нечего, ключи уже здесь — только разобрать.
+        if (row.IsKeys)
+        {
+            var (parsed, errors) = KeyRing.Parse(_book.Keys);
+
+            row.KeyServers = parsed;
+            row.Raw = parsed.Select(k => k.Server).ToList();
+            row.Pooled = row.Raw;
+            row.AsGiven = Rows(row.Raw.Where(s => s.IsUsableOutbound).ToList(), row.Entry.Name, settings);
+            row.Servers = InChosenOrder(row.AsGiven);
+
+            row.Detail = $"{Count(parsed.Count, "ключ", "ключа", "ключей")}"
+                + (errors.Count > 0 ? $" · не разобрались: {errors.Count} — {errors[0]}" : string.Empty);
+
+            Redraw();
+            await Task.CompletedTask;
+            return true;
+        }
+
         try
         {
             using var client = new SubscriptionClient();
@@ -589,6 +630,10 @@ public partial class VpnView : UserControl
                 : row.Raw.Select((server, j) => server with { Tag = tags[index][j] }).ToList();
 
             row.AsGiven = Rows(row.Pooled.Where(s => s.IsUsableOutbound).ToList(), row.Entry.Name, settings);
+
+            if (row.IsKeys)
+                row.AsGiven = row.AsGiven.Select(s => s with { RemoveShown = Visibility.Visible }).ToList();
+
             row.Servers = InChosenOrder(row.AsGiven);
         }
 
@@ -980,6 +1025,13 @@ public partial class VpnView : UserControl
     {
         var url = NewUrl.Password.Trim();
 
+        // Ключ, а не ссылка подписки — в папку отдельных ключей (0.9.0).
+        if (KeyRing.IsKey(url))
+        {
+            AddKeys(url);
+            return;
+        }
+
         if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
         {
             // Ссылку не повторяем даже в жалобе: она уже в поле, и вынести её
@@ -1056,13 +1108,18 @@ public partial class VpnView : UserControl
 
         try
         {
-            SubscriptionBook.SetWorking(row.Entry.Url, working);
+            if (row.IsKeys)
+                SubscriptionBook.SaveKeys(_book.Keys, working);
+            else
+                SubscriptionBook.SetWorking(row.Entry.Url, working);
 
             _book = SubscriptionBook.Load();
 
             foreach (var r in _rows)
             {
-                r.Entry.InPool = _book.Entries.FirstOrDefault(e => e.Url == r.Entry.Url)?.InPool;
+                r.Entry.InPool = r.IsKeys
+                    ? _book.KeysInPool
+                    : _book.Entries.FirstOrDefault(e => e.Url == r.Entry.Url)?.InPool;
                 r.Active = r.Entry.Working;
             }
 
@@ -1087,6 +1144,103 @@ public partial class VpnView : UserControl
         catch (Exception ex)
         {
             Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>«1 ключ, 2 ключа, 5 ключей» — как в «Маршрутах».</summary>
+    private static string Count(int n, string one, string few, string many)
+    {
+        int tens = n % 100;
+        int last = n % 10;
+
+        var word = tens is >= 11 and <= 14 ? many
+            : last == 1 ? one
+            : last is >= 2 and <= 4 ? few
+            : many;
+
+        return $"{n} {word}";
+    }
+
+    /// <summary>Корзина у ключа: убрать его одного.</summary>
+    private void OnRemoveKey(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string tag })
+            return;
+
+        var keysRow = _rows.FirstOrDefault(r => r.IsKeys);
+
+        if (keysRow is null)
+            return;
+
+        // Ключ находится по месту сервера в папке: тег — пула, и у двойника
+        // с сервером подписки он тот же, так что ищем именно здесь.
+        int index = keysRow.Pooled.ToList().FindIndex(s => s.Tag == tag);
+
+        if (index < 0 || index >= keysRow.KeyServers.Count)
+            return;
+
+        var key = keysRow.KeyServers[index].Key;
+
+        try
+        {
+            var keys = _book.Keys.Where(k => k != key).ToList();
+            SubscriptionBook.SaveKeys(keys, _book.KeysInPool);
+
+            _ = LoadAsync();
+            Status.Text = $"Ключ «{tag}» убран.";
+
+            if (keysRow.Active)
+                this.Offer($"Ключ «{tag}» убран");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось убрать ключ: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Ключи из поля «Добавить» — в папку «Отдельные ключи».</summary>
+    private void AddKeys(string input)
+    {
+        var fresh = KeyRing.Split(input);
+
+        if (fresh.Count == 0)
+        {
+            Status.Text = "Ключей не нашлось: нужны строки вида vless://, hysteria2://, trojan://, ss://, vmess://.";
+            return;
+        }
+
+        var (parsed, errors) = KeyRing.Parse(fresh);
+
+        if (parsed.Count == 0)
+        {
+            Status.Text = "Ключ не разбирается: " + errors[0];
+            return;
+        }
+
+        try
+        {
+            var book = SubscriptionBook.Load();
+            var added = parsed.Select(k => k.Key).Where(k => !book.Keys.Contains(k)).ToList();
+
+            // Новые ключи — сразу в работе: добавляют, чтобы пользоваться.
+            SubscriptionBook.SaveKeys([.. book.Keys, .. added], inPool: true);
+
+            NewName.Clear();
+            NewUrl.Clear();
+
+            _ = LoadAsync();
+
+            Status.Text = added.Count == 0
+                ? "Эти ключи уже есть."
+                : $"Добавлено: {Count(added.Count, "ключ", "ключа", "ключей")} — в папке «{KeyRing.Name}»."
+                  + (errors.Count > 0 ? $" Не разобрались: {errors.Count}." : string.Empty);
+
+            if (added.Count > 0)
+                this.Offer($"Добавлено: {Count(added.Count, "ключ", "ключа", "ключей")}");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось добавить ключи: " + ex.GetBaseException().Message;
         }
     }
 
@@ -1139,6 +1293,18 @@ public partial class VpnView : UserControl
             return;
 
         bool first = _rows.Count > 0 && ReferenceEquals(_rows[0], row);
+
+        // У папки ключей — своё меню: ни ссылки, ни места в списке у неё нет.
+        if (row.IsKeys)
+        {
+            var keysMenu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+            keysMenu.Items.Add(Item("\uE72C", "Обновить", async () => await RefreshOneAsync(name)));
+            keysMenu.Items.Add(Item("\uEC4A", "Тест пинга", async () => await MeasureAsync([row]), row.CanCheck));
+            keysMenu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+            keysMenu.Items.Add(Item("\uE74D", "Удалить все ключи…", ConfirmRemoveKeys));
+            keysMenu.IsOpen = true;
+            return;
+        }
 
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
 
@@ -1258,6 +1424,23 @@ public partial class VpnView : UserControl
         {
             Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
         }
+    }
+
+    private void ConfirmRemoveKeys()
+    {
+        var answer = MessageBox.Show(
+            $"Удалить все отдельные ключи ({_book.Keys.Count})? Их серверы уйдут из пула, а ключи придётся вставлять заново.",
+            "Удалить ключи",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+
+        if (answer != MessageBoxResult.OK)
+            return;
+
+        SubscriptionBook.SaveKeys([], true);
+        _ = LoadAsync();
+        Status.Text = "Отдельные ключи удалены.";
+        this.Offer("Отдельные ключи удалены");
     }
 
     private void ConfirmRemove(string name)
@@ -1720,7 +1903,11 @@ public partial class VpnView : UserControl
             {
                 int index = owner!.Pooled.ToList().FindIndex(s => s.Tag == row.Tag);
 
-                SubscriptionBook.SetWorking(owner.Entry.Url, true);
+                if (owner.IsKeys)
+                    SubscriptionBook.SaveKeys(_book.Keys, true);
+                else
+                    SubscriptionBook.SetWorking(owner.Entry.Url, true);
+
                 _book = SubscriptionBook.Load();
                 owner.Entry.InPool = true;
                 owner.Active = true;

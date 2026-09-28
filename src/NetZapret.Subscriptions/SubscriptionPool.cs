@@ -67,7 +67,8 @@ public static class SubscriptionPool
     public static async Task<PoolResult> BuildAsync(
         IReadOnlyList<PoolSource> sources,
         CancellationToken cancellationToken,
-        string? reserveDirectory = null)
+        string? reserveDirectory = null,
+        IReadOnlyList<string>? keys = null)
     {
         var folder = reserveDirectory ?? DefaultReserveDirectory;
         var raw = new PoolPart[sources.Count];
@@ -81,9 +82,27 @@ public static class SubscriptionPool
                     raw[index] = await ReadAsync(source, folder, cancellationToken);
             }));
 
-        var tags = Tags(raw.Select(r => (r.Source.Name, r.Servers)).ToList());
+        // Отдельные ключи — последним источником: читать их не надо, они уже
+        // здесь. Разобрались не все — это видно в папке ключей, пул берёт
+        // разобравшиеся.
+        var all = raw.ToList();
 
-        var parts = raw
+        if (keys is { Count: > 0 })
+        {
+            var (parsed, errors) = KeyRing.Parse(keys);
+
+            all.Add(new PoolPart(
+                new PoolSource(KeyRing.Name, string.Empty),
+                parsed.Select(k => k.Server).ToList(),
+                false,
+                null,
+                parsed.Count == 0 && errors.Count > 0 ? errors[0] : null,
+                null));
+        }
+
+        var tags = Tags(all.Select(r => (r.Source.Name, r.Servers)).ToList());
+
+        var parts = all
             .Select((part, i) => part with
             {
                 Servers = part.Servers.Select((s, j) => s with { Tag = tags[i][j] }).ToList(),

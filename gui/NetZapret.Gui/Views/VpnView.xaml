@@ -128,7 +128,7 @@
                 -->
                 <Border Style="{StaticResource Card}" Margin="0,10,0,0">
                     <StackPanel>
-                        <TextBlock Text="Добавить подписку" FontWeight="SemiBold" />
+                        <TextBlock Text="Добавить подписку или ключи" FontWeight="SemiBold" />
 
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
@@ -140,14 +140,14 @@
                             <TextBox Grid.Column="0" x:Name="NewName" Margin="0,0,8,0"
                                      gui:Hint.Text="Имя для себя" />
                             <PasswordBox Grid.Column="1" x:Name="NewUrl" Margin="0,0,8,0"
-                                         gui:Hint.Text="Ссылка подписки" />
+                                         gui:Hint.Text="Ссылка подписки или ключи vless://, hysteria2://, trojan://…" />
 
                             <Button Grid.Column="2" Style="{StaticResource Primary}"
                                     Content="Добавить" Click="OnAdd" />
                         </Grid>
 
                         <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Слева имя для себя, справа ссылка. Ссылка обратно не показывается — только заменяется или убирается вместе с подпиской." />
+                                   Text="Слева имя для себя, справа ссылка подписки — или ключи, один или пачкой: они лягут в папку «Отдельные ключи». Ссылка и ключи обратно не показываются." />
                     </StackPanel>
                 </Border>
 
@@ -228,10 +228,18 @@
                                                    TextAlignment="Right" MinWidth="100"
                                                    Foreground="{Binding Color}" />
 
-                                        <Button Grid.Column="3" Style="{StaticResource Ghost}"
-                                                Content="{Binding ChooseLabel}" Padding="14,7"
-                                                IsEnabled="{Binding CanChoose}"
-                                                Tag="{Binding Tag}" Click="OnChoose" />
+                                        <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                            <Button Style="{StaticResource Ghost}"
+                                                    Content="{Binding ChooseLabel}" Padding="14,7"
+                                                    IsEnabled="{Binding CanChoose}"
+                                                    Tag="{Binding Tag}" Click="OnChoose" />
+
+                                            <!-- Только у отдельных ключей: ключ убирается по одному. -->
+                                            <Button Style="{StaticResource IconGhost}" Content="&#xE74D;"
+                                                    Margin="6,0,0,0" ToolTip="Убрать этот ключ"
+                                                    Visibility="{Binding RemoveShown}"
+                                                    Tag="{Binding Tag}" Click="OnRemoveKey" />
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -413,7 +421,7 @@
                 </ItemsControl>
 
                 <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                           Text="Сервер берётся из действующей подписки: конфиг движка собирается по одной ссылке, и выбор выхода из соседней делает действующей её. Замер поднимает движок с локальным входом и ходит через каждый сервер по очереди — TUN не трогается, работающий обход не прерывается." />
+                           Text="Движок берёт серверы всех подписок «в работе» и отдельных ключей, а автоподбор — быстрейший из живых. Замер поднимает движок с локальным входом и ходит через каждый сервер по очереди — TUN не трогается, работающий обход не прерывается." />
 
             </StackPanel>
         </Grid>
