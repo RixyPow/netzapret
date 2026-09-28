@@ -181,6 +181,18 @@ public enum BlockKind
     /// </para>
     /// </remarks>
     Handshake,
+
+    /// <summary>
+    /// Имя разрешилось в подменный адрес, а нашего туннеля нет.
+    /// </summary>
+    /// <remarks>
+    /// Адрес из 198.18.0.0/15 при остановленных движках выдаёт чужой
+    /// VPN-клиент в режиме TUN: Happ, Hiddify, Clash. Отчёт 28.09
+    /// (обсуждение #8) снят при остановленных движках, и десяток имён —
+    /// Discord, YouTube, Telegram — получили «туннель не доставил». Чинить
+    /// предлагалось сервер подписки, которой у человека не было вовсе.
+    /// </remarks>
+    ForeignFakeIp,
 }
 
 /// <summary>Исход одной пробы.</summary>
@@ -359,6 +371,7 @@ public sealed record TargetReport
         BlockKind.None => "доступен",
         BlockKind.TlsDpi => "DPI по TLS",
         BlockKind.TunnelFailed => "туннель не доставил",
+        BlockKind.ForeignFakeIp => "подменный адрес не от NetZapret",
         BlockKind.Stall => "обрыв после рукопожатия",
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
@@ -414,7 +427,7 @@ public sealed record TargetReport
                 BlockKind.TlsDpi or BlockKind.Handshake => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
-                BlockKind.TunnelFailed => Data.Detail is not null ? Data : Tls,
+                BlockKind.TunnelFailed or BlockKind.ForeignFakeIp => Data.Detail is not null ? Data : Tls,
                 _ => null,
             };
 
@@ -469,6 +482,7 @@ public sealed record TargetReport
         BlockKind.None => "ничего не нужно",
         BlockKind.TlsDpi => "десинк",
         BlockKind.TunnelFailed => "другой сервер подписки — десинк тут ни при чём",
+        BlockKind.ForeignFakeIp => "закрыть другой VPN-клиент или выключить в нём TUN",
         BlockKind.Stall => "другой рецепт десинка, иначе VPN",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
@@ -863,6 +877,11 @@ public static class BlockCheck
 
         // Разбор идёт по замеренному пути, а не по обещанному правилами.
         var kind = Classify(tcp, tls, http, data, viaTunnel);
+
+        // Подменный адрес, а нашего TUN нет — его выдал чужой клиент,
+        // и судить по такому замеру ни о туннеле, ни о сайте нельзя.
+        if (viaTunnel && kind != BlockKind.None && !TunnelHealth.OwnTunnelUp())
+            kind = BlockKind.ForeignFakeIp;
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
         // Маркер зоны, спрятанный за fakeip.

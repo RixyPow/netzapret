@@ -93,6 +93,32 @@ public static class TunnelHealth
         return InRange(address, range);
     }
 
+    /// <summary>
+    /// Поднят ли наш TUN — адаптер <c>netzapret0</c>.
+    /// </summary>
+    /// <remarks>
+    /// Подменный адрес из 198.18.0.0/15 раздаёт не только наш движок: тот же
+    /// диапазон по умолчанию у всякого клиента на sing-box или Clash — Happ,
+    /// Hiddify, Clash Verge. Отчёт 28.09 (обсуждение #8) снят при остановленных
+    /// движках, а десяток имён разрешался в 198.18.x и получал «туннель
+    /// не доставил» — туннелю, которого не было. Адаптер наш движок убирает
+    /// при остановке, так что его нет — значит, адрес выдал кто-то другой.
+    /// </remarks>
+    public static bool OwnTunnelUp(string interfaceName = "netzapret0")
+    {
+        try
+        {
+            return System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Any(n => string.Equals(n.Name, interfaceName, StringComparison.OrdinalIgnoreCase)
+                    && n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up);
+        }
+        catch (System.Net.NetworkInformation.NetworkInformationException)
+        {
+            // Не узнали — не обвиняем чужих: пусть остаётся прежний вердикт.
+            return true;
+        }
+    }
+
     /// <summary>Попадает ли адрес в подсеть, записанную как CIDR.</summary>
     public static bool InRange(IPAddress address, string cidr)
     {
