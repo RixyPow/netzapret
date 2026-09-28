@@ -483,6 +483,8 @@ public sealed class SingBoxService : SupervisedService
         // незачем: вся она об одном — о процессе, которого больше нет.
         _lastTrafficOk = true;
         _checkCounter = 0;
+        _watchCounter = 0;
+        _exitMisses = 0;
         _upstreamNoted = false;
         _trafficPortMissingSince = null;
         _trafficPortMissingNoted = false;
@@ -533,6 +535,9 @@ public sealed class SingBoxService : SupervisedService
         // такое перезапуском и лечится.
         if (!await SingBoxRunner.IsPortAcceptingAsync(_healthPort, TimeSpan.FromSeconds(2), cancellationToken))
             return ServiceCheck.Broken;
+
+        if (_watchCounter++ % ExitWatchEvery == 0)
+            await WatchExitAsync(cancellationToken);
 
         if (_trafficPort is null)
             return ServiceCheck.Healthy;
@@ -677,6 +682,66 @@ public sealed class SingBoxService : SupervisedService
             TimeSpan.FromSeconds(5),
             cancellationToken) is not null;
     }
+
+    /// <summary>Раз во сколько опросов (по 5 с) проверять текущий выход: полминуты.</summary>
+    private const int ExitWatchEvery = 6;
+
+    private int _watchCounter;
+    private int _exitMisses;
+
+    /// <summary>
+    /// Проверяет только подключённый выход; умер — автоподбор переизбирает.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Решение владельца 28.09: «пускай проверяется только сервер который
+    /// подключен, если он умирает то сразу переключается на другой». Прежде
+    /// движок сам мерил всю группу каждую минуту — у Trust это 16 соединений
+    /// в минуту на один вход с одним ключом, и в тот же день вход на минуту
+    /// перестал принимать даже TCP. Теперь общий замер — раз в полчаса
+    /// (<c>SingBoxOptions.LatencyTestInterval</c>), а здесь одно соединение
+    /// через текущий выход раз в полминуты.
+    /// </para>
+    /// <para>
+    /// Переизбрание — после двух промахов подряд, не одного: разовый отказ
+    /// бывает и у живого сервера, а перезамер группы бьёт по всем разом.
+    /// Закреплённый выход и обход не трогаем: первый выбран человеком,
+    /// второй ведёт своя проверка.
+    /// </para>
+    /// </remarks>
+    private async Task WatchExitAsync(CancellationToken cancellationToken)
+    {
+        if (_preferredExit is not null || _bypass.Engaged)
+            return;
+
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+        // Замер группы через /proxies — это одно соединение через тот выход,
+        // который группа держит сейчас.
+        if (await api.MeasureAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken) is not null)
+        {
+            _exitMisses = 0;
+            return;
+        }
+
+        if (++_exitMisses < 2)
+            return;
+
+        _exitMisses = 0;
+
+        var before = await api.SelectedAsync(LatencyGroup, cancellationToken);
+
+        if (!await api.RetestGroupAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken))
+            return;
+
+        var after = await api.SelectedAsync(LatencyGroup, cancellationToken);
+
+        Note(after is not null && after != before
+            ? $"выход «{before}» не ответил две проверки подряд — автоподбор перешёл на «{after}»."
+            : $"выход «{before}» не ответил две проверки подряд, а живее его автоподбор не нашёл.");
+    }
+
+    private const string WatchUrl = "http://cp.cloudflare.com/generate_204";
 
     /// <summary>Группа выбора в конфиге — та, что переключается.</summary>
     /// <remarks>
