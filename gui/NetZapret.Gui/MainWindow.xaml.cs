@@ -55,14 +55,24 @@ public partial class MainWindow : Window
     {
         await Task.Delay(TimeSpan.FromMinutes(2));
 
+        // Заглядываем раз в десять минут, а проверяем — когда движки подняты
+        // и с прошлой проверки прошло три часа. Прежде цикл спал три часа
+        // подряд: движки, поднятые позже второй минуты, ждали первой проверки
+        // до трёх часов. Zapret GUI 21.1.6.26 (28.09) обновляет адреса при
+        // запуске — не хуже него.
+        DateTime? last = null;
+
         while (true)
         {
             try
             {
                 var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
-                if (state is not null && state.IsSupervisorAlive())
+                if (state is not null && state.IsSupervisorAlive()
+                    && (last is null || DateTime.Now - last > TimeSpan.FromHours(3)))
                 {
+                    last = DateTime.Now;
+
                     var result = await Task.Run(() => NetZapret.Proxy.PinRefresh.RunAsync(CancellationToken.None));
 
                     if (result.Changes.Count > 0)
@@ -88,7 +98,7 @@ public partial class MainWindow : Window
                 Journal.Write("пин", "обновление пинов не удалось: " + ex.GetBaseException().Message);
             }
 
-            await Task.Delay(TimeSpan.FromHours(3));
+            await Task.Delay(TimeSpan.FromMinutes(10));
         }
     }
 
