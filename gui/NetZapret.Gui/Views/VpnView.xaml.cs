@@ -631,6 +631,32 @@ public partial class VpnView : UserControl
 
             row.AsGiven = Rows(row.Pooled.Where(s => s.IsUsableOutbound).ToList(), row.Entry.Name, settings);
 
+            // Показ — под своим именем из подписки, а тег — пула. Двойник
+            // носит тег того, кого повторяет: у Trust «🇩🇪 Германия 🚀» —
+            // тот же узел, что первый в «Авто-подборе локации», и без этого
+            // в папке стояли бы две строки с одним и тем же чужим именем.
+            var own = row.Raw.Where(s => s.IsUsableOutbound).ToList();
+
+            if (own.Count == row.AsGiven.Count)
+            {
+                row.AsGiven = row.AsGiven
+                    .Select((shown, j) =>
+                    {
+                        var (country, name) = CountryTag.Split(own[j].Tag);
+                        var flag = country.Length == 2 ? FlagImages.For(country) : null;
+
+                        return shown with
+                        {
+                            Name = name.Length > 0 ? name : own[j].Tag,
+                            Country = country,
+                            Flag = flag,
+                            CountryShown = country.Length == 0 || flag is not null ? Visibility.Collapsed : Visibility.Visible,
+                            FlagShown = flag is null ? Visibility.Collapsed : Visibility.Visible,
+                        };
+                    })
+                    .ToList();
+            }
+
             if (row.IsKeys)
                 row.AsGiven = row.AsGiven.Select(s => s with { RemoveShown = Visibility.Visible }).ToList();
 
