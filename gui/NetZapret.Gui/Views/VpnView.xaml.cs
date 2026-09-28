@@ -242,6 +242,9 @@ public partial class VpnView : UserControl
     /// что сказано в настройках, строка это называет.
     /// </para>
     /// </remarks>
+    /// <summary>Что движок ответил в последний раз: выход и выбран ли он сам.</summary>
+    private (bool Running, string? Server, bool Automatic) _live;
+
     private async Task ShowExitAsync()
     {
         if (!IsLoaded || _pickBase.Length == 0)
@@ -250,6 +253,8 @@ public partial class VpnView : UserControl
         if (!EnginesRunning)
         {
             PickLine.Text = _pickBase + " Движки не запущены — выхода сейчас нет.";
+            _live = (false, null, false);
+            ShowCurrent();
             return;
         }
 
@@ -257,6 +262,9 @@ public partial class VpnView : UserControl
 
         if (!IsLoaded)
             return;
+
+        _live = (true, server, automatic);
+        ShowCurrent();
 
         bool auto = AutoSwitch.IsChecked == true;
 
@@ -267,6 +275,101 @@ public partial class VpnView : UserControl
                 : auto
                     ? $"{_pickBase} Но движок держит закреплённый {server} — перезапустите движки, чтобы выбор применился."
                     : $"{_pickBase} Но движок выбирает сам и сейчас держит {server} — перезапустите движки, чтобы закрепление применилось.";
+    }
+
+    /// <summary>
+    /// Карточка текущего сервера: флаг, имя, откуда он и в каком состоянии.
+    /// </summary>
+    /// <remarks>
+    /// Имя — у движка, если он работает: показывать надо то, через что идёт
+    /// трафик, а не то, что выбрано в настройках, — они расходятся до
+    /// перезапуска. Движки стоят — показывается закреплённый сервер или
+    /// обещание автоподбора. Подписка, протокол и задержка — из пула
+    /// и замеров: по тегу пула сервер находится однозначно.
+    /// </remarks>
+    private void ShowCurrent()
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var (running, live, automatic) = _live;
+
+        bool pinned = !string.IsNullOrWhiteSpace(settings.PreferredServer);
+        var tag = running ? live : settings.PreferredServer;
+
+        // Имя группы вместо сервера: автоподбор ещё не выбрал — до первого
+        // своего замера ему выбирать не из чего. Показывать «auto-latency»
+        // как имя сервера значило бы выдать служебное слово за выход.
+        bool choosing = running && tag is not null && tag.StartsWith("auto", StringComparison.OrdinalIgnoreCase);
+
+        if (choosing)
+            tag = null;
+
+        CurrentCaption.Text = running
+            ? "Сейчас трафик идёт через"
+            : pinned ? "Закреплён — поднимется вместе с движками" : "Движки не запущены";
+
+        // Где сервер лежит: подписка пула или выход WARP.
+        var found = tag is null
+            ? default
+            : _rows.SelectMany(r => r.Pooled.Select(s => (Owner: r.Entry.Name, Server: s)))
+                .Concat(Warp.Exits().Select(s => (Owner: "WARP", Server: s)))
+                .FirstOrDefault(x => x.Server.Tag == tag);
+
+        if (tag is null)
+        {
+            CurrentName.Text = choosing ? "Автоподбор выбирает…" : running ? "Выход не назван" : "Выберет автоподбор";
+            CurrentDetail.Text = choosing
+                ? "Движок меряет серверы пула и возьмёт быстрейший из живых — обычно это секунды."
+                : running
+                    ? "Движок не ответил, какой выход держит."
+                    : "При запуске движков — быстрейший из живых серверов всех подписок в работе.";
+            ShowFlag(string.Empty);
+        }
+        else
+        {
+            var (country, name) = CountryTag.Split(tag);
+            CurrentName.Text = name.Length > 0 ? name : tag;
+            ShowFlag(country);
+
+            var parts = new List<string>();
+
+            if (found.Server is { } server)
+            {
+                parts.Add(found.Owner == "WARP" ? "WARP" : $"из «{found.Owner}»");
+                parts.Add(server.Protocol.ToString());
+            }
+
+            if (_health.Find(tag) is { Success: true, LatencyMs: { } ms })
+                parts.Add($"{ms:0} мс");
+
+            parts.Add(running
+                ? automatic ? "выбран автоподбором" : "закреплён"
+                : "закреплён");
+
+            CurrentDetail.Text = string.Join(" · ", parts);
+        }
+
+        // Метка состояния: зелёная, пока движки работают.
+        var key = running ? "Accent" : "Faint";
+        CurrentDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, key);
+        CurrentPill.SetResourceReference(Border.BorderBrushProperty, key);
+        CurrentState.Text = running ? "в работе" : "движки остановлены";
+    }
+
+    /// <summary>Флаг картинкой, а нет картинки — буквами страны.</summary>
+    private void ShowFlag(string country)
+    {
+        var flag = country.Length == 2 ? FlagImages.For(country) : null;
+
+        if (flag is not null)
+        {
+            CurrentFlag.Background = new ImageBrush(flag) { Stretch = Stretch.UniformToFill };
+            CurrentCountry.Text = string.Empty;
+        }
+        else
+        {
+            CurrentFlag.SetResourceReference(Border.BackgroundProperty, "Raised");
+            CurrentCountry.Text = country.Length == 2 ? country : "•";
+        }
     }
 
     private async Task LoadAsync()
@@ -490,6 +593,7 @@ public partial class VpnView : UserControl
         }
 
         Redraw();
+        ShowCurrent();
     }
 
     private IReadOnlyList<ServerRow> Rows(
@@ -612,6 +716,7 @@ public partial class VpnView : UserControl
         }
 
         Redraw();
+        ShowCurrent();
     }
 
     /// <summary>
@@ -711,6 +816,10 @@ public partial class VpnView : UserControl
     private void ShowWarp(AppSettings settings)
     {
         bool on = settings.WarpEnabled;
+
+        // Выключенный — не показываем вовсе (владелец, 28.09): включается он
+        // в «Настройках», и карточка «выключен» только занимала место.
+        WarpCard.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
 
         // Выключатель уехал в настройки, и строка теперь говорит не только
         // состояние, но и где его менять: иначе выключенный WARP выглядит

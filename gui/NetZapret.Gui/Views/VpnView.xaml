@@ -46,6 +46,47 @@
                 </Grid>
 
                 <!--
+                    Текущий сервер — первым на вкладке (владелец, 28.09: «сделай
+                    красивый прямоугольник с выбранным сервером»). Прежде выход
+                    был хвостом строки автоподбора, мелким шрифтом, и его искали.
+                    Заполняется в ShowCurrent: живой выход — у движка, раз
+                    в 15 секунд; подписка, протокол и задержка — из пула и замеров.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,22,0,0" Padding="20,18">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" x:Name="CurrentFlag" Width="56" Height="42" CornerRadius="8"
+                                Margin="0,0,18,0" VerticalAlignment="Center"
+                                Background="{DynamicResource Raised}">
+                            <TextBlock x:Name="CurrentCountry" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource Muted}" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock x:Name="CurrentCaption" Style="{StaticResource Caption}" />
+                            <TextBlock x:Name="CurrentName" FontSize="20" FontWeight="SemiBold" Margin="0,3,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="CurrentDetail" Style="{StaticResource Caption}" Margin="0,5,0,0"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Border Grid.Column="2" x:Name="CurrentPill" CornerRadius="11" Padding="11,5"
+                                BorderThickness="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="CurrentDot" Width="8" Height="8" Margin="0,0,7,0"
+                                         VerticalAlignment="Center" />
+                                <TextBlock x:Name="CurrentState" Style="{StaticResource Caption}"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+                <!--
                     Автоподбор (владелец, 25.09: «переименовать в автоподбор,
                     сделать подсказку и вместо кнопки вернуть тумблер»). Выше
                     стояла карточка «VPN включён / Выключить VPN» — она убрана:
@@ -58,7 +99,7 @@
                     это делает «выбрать» у сервера в списке, и строка так
                     и говорит.
                 -->
-                <Button Style="{StaticResource Choice}" Margin="0,22,0,0" Click="OnAuto">
+                <Button Style="{StaticResource Choice}" Margin="0,10,0,0" Click="OnAuto">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -124,7 +165,7 @@
                     он занимал её место — выбор его выхода делал действующим
                     его и отключал рабочий VPN целиком.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+                <Border x:Name="WarpCard" Style="{StaticResource Card}" Margin="0,10,0,0">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
