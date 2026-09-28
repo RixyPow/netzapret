@@ -41,37 +41,50 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Раз в три часа меняет умершие адреса пинов на живые (PinRefresh).
+    /// Меняет умершие адреса пинов на живые (PinRefresh) — раз на запуск движков.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Просьба владельца 28.09: посредники XBOX DNS и Comss меняют адреса,
     /// и в тот день умерший 87.228.47.204 положил Claude и ChatGPT, пока новый
-    /// адрес не нашёлся руками. Только при поднятых движках: часть посредников
-    /// отвечает напрямую лишь с десинком, и без него живой адрес выглядел бы
-    /// мёртвым. Первый раз — через две минуты, когда запуск окна и движков
-    /// уже улёгся. Окно живёт в трее, так что проверка идёт и со скрытым окном.
+    /// адрес не нашёлся руками.
+    /// </para>
+    /// <para>
+    /// Раз после каждого запуска движков и раз в сутки, если их не выключают.
+    /// Адреса посредников живут неделями и месяцами (владелец), и проверять
+    /// чаще незачем — так же делает Zapret GUI 21.1.6.26, обновляя адреса
+    /// при запуске. Первая версия проверяла раз в три часа.
+    /// </para>
+    /// <para>
+    /// Только при поднятых движках: часть посредников отвечает напрямую лишь
+    /// с десинком. Через минуту после подъёма — пусть автоподбор и десинк
+    /// улягутся. Раз в две минуты окно лишь читает файл состояния надзора,
+    /// в сеть не ходит. Окно живёт в трее, так что работает и скрытым.
+    /// </para>
     /// </remarks>
     private async Task RefreshPinsLoopAsync()
     {
-        await Task.Delay(TimeSpan.FromMinutes(2));
-
-        // Заглядываем раз в десять минут, а проверяем — когда движки подняты
-        // и с прошлой проверки прошло три часа. Прежде цикл спал три часа
-        // подряд: движки, поднятые позже второй минуты, ждали первой проверки
-        // до трёх часов. Zapret GUI 21.1.6.26 (28.09) обновляет адреса при
-        // запуске — не хуже него.
-        DateTime? last = null;
+        DateTimeOffset? checkedRun = null;
+        DateTime lastCheck = DateTime.MinValue;
 
         while (true)
         {
+            await Task.Delay(TimeSpan.FromMinutes(2));
+
             try
             {
                 var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
-                if (state is not null && state.IsSupervisorAlive()
-                    && (last is null || DateTime.Now - last > TimeSpan.FromHours(3)))
+                if (state is null || !state.IsSupervisorAlive())
+                    continue;
+
+                bool newRun = checkedRun != state.StartedAt
+                    && DateTimeOffset.Now - state.StartedAt > TimeSpan.FromMinutes(1);
+
+                if (newRun || DateTime.Now - lastCheck > TimeSpan.FromDays(1))
                 {
-                    last = DateTime.Now;
+                    checkedRun = state.StartedAt;
+                    lastCheck = DateTime.Now;
 
                     var result = await Task.Run(() => NetZapret.Proxy.PinRefresh.RunAsync(CancellationToken.None));
 
@@ -97,8 +110,6 @@ public partial class MainWindow : Window
             {
                 Journal.Write("пин", "обновление пинов не удалось: " + ex.GetBaseException().Message);
             }
-
-            await Task.Delay(TimeSpan.FromMinutes(10));
         }
     }
 
