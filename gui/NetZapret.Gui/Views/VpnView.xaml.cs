@@ -1690,46 +1690,55 @@ public partial class VpnView : UserControl
 
         try
         {
-            // Движки подняты — всё, что лежит в конфиге, меряет сам движок,
-            // одним запросом за пять секунд. Владелец 28.09: «ускорь проверку
-            // ключей». Пробнику остаётся то, чего в движке нет: подписки вне
-            // работы, не взятые в конфиг мёртвые, и всё — при остановленных
-            // движках.
+            // Движки подняты — всё, что лежит в конфиге, меряет сам движок:
+            // без процесса на сервер, как у пробника (владелец 28.09: «ускорь
+            // проверку ключей»). Но не залпом — не больше двух разом на вход
+            // и восьми всего: залп в 26 проверок на один вход Trust с одним
+            // ключом, 28.09, владелец увидел как «положил все сервера в trust».
+            // Пробнику остаётся то, чего в движке нет.
             var rest = servers;
+            var token = _work.Token;
 
             if (EnginesRunning)
             {
                 using var api = new ClashApi();
 
-                var group = await api.MeasureGroupAsync(
-                    SelectorGroup, "http://cp.cloudflare.com/generate_204", TimeSpan.FromSeconds(5), _work.Token);
-
-                if (group is not null)
+                if (await api.MembersAsync(SelectorGroup, token) is { } members)
                 {
-                    var inEngine = group.Members.ToHashSet(StringComparer.Ordinal);
-
-                    foreach (var server in servers.Where(s => inEngine.Contains(s.Tag)))
-                    {
-                        var delay = group.Delays.TryGetValue(server.Tag, out var d) ? d : (TimeSpan?)null;
-
-                        _health.Set(new ServerHealth
-                        {
-                            Tag = server.Tag,
-                            Success = delay is not null,
-                            LatencyMs = delay?.TotalMilliseconds,
-                            CheckedAt = DateTimeOffset.Now,
-                        });
-
-                        done++;
-                        _measuring.Remove(server.Tag);
-                    }
+                    var inEngine = members.ToHashSet(StringComparer.Ordinal);
+                    var mine = servers.Where(s => inEngine.Contains(s.Tag)).ToList();
 
                     rest = servers.Where(s => !inEngine.Contains(s.Tag)).ToList();
 
-                    Progress.Value = done;
-                    MeasureButton.Content = $"{done} из {servers.Count}…";
-                    Status.Text = $"Измерено {done} из {servers.Count}…";
-                    Reshow();
+                    await api.MeasureGentlyAsync(
+                        mine.Select(s => (s.Tag, $"{s.Host}:{s.Port}")).ToList(),
+                        "http://cp.cloudflare.com/generate_204",
+                        TimeSpan.FromSeconds(5),
+                        (tag, delay) =>
+                        {
+                            // Прерванный замер — не «не отвечает».
+                            if (token.IsCancellationRequested)
+                                return;
+
+                            _health.Set(new ServerHealth
+                            {
+                                Tag = tag,
+                                Success = delay is not null,
+                                LatencyMs = delay?.TotalMilliseconds,
+                                CheckedAt = DateTimeOffset.Now,
+                            });
+
+                            Dispatcher.Invoke(() =>
+                            {
+                                done++;
+                                Progress.Value = done;
+                                _measuring.Remove(tag);
+                                MeasureButton.Content = $"{done} из {servers.Count}…";
+                                Status.Text = $"Измерено {done} из {servers.Count}…";
+                                Reshow();
+                            });
+                        },
+                        token);
                 }
             }
 
@@ -1742,9 +1751,6 @@ public partial class VpnView : UserControl
                     LookupExternalIp = false,
                     LogLevel = "warn",
 
-                    // Вдвое против умолчания: 54 сервера пула — четыре волны
-                    // вместо семи. Движок проверки лёгкий — один вход, один выход.
-                    Parallelism = 16,
                 },
                 result =>
                 {

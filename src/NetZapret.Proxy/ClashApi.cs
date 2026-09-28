@@ -112,23 +112,15 @@ public sealed class ClashApi : IDisposable
         }
     }
 
-    /// <summary>
-    /// Замеряет всю группу разом: кто в ней состоит и кто ответил за сколько.
-    /// </summary>
+    /// <summary>Из каких выходов состоит группа; <c>null</c> — движок не отозвался.</summary>
     /// <remarks>
-    /// Движок меряет выходы группы параллельно, и весь ответ укладывается
-    /// в один срок ожидания. Замер 28.09 на живом движке: селектор из 42 выходов —
-    /// 5,0 с при сроке 5 с. Пробник на те же серверы поднимает по процессу
-    /// на каждый, по восемь разом и до 8 с на сервер. Не ответившие в ответе
-    /// движка просто отсутствуют — поэтому состав спрашивается отдельно:
-    /// без него «не ответил» не отличить от «не в группе».
+    /// Замер всей группы одним запросом (/group/…/delay) здесь нарочно
+    /// не используется: движок бьёт по всем выходам разом. 28.09 я так
+    /// замерил селектор из 42 выходов, 26 из них — один вход Trust с одним
+    /// ключом, и владелец увидел, что Trust лёг. Меряем по одному, с потолком
+    /// на вход (<see cref="MeasureGentlyAsync"/>).
     /// </remarks>
-    /// <returns><c>null</c> — движок не отозвался.</returns>
-    public async Task<GroupDelay?> MeasureGroupAsync(
-        string group,
-        string url,
-        TimeSpan timeout,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<string>?> MembersAsync(string group, CancellationToken cancellationToken)
     {
         try
         {
@@ -138,36 +130,10 @@ public sealed class ClashApi : IDisposable
             if (!info.IsSuccessStatusCode)
                 return null;
 
-            var members = (JsonNode.Parse(await info.Content.ReadAsStringAsync(cancellationToken))?["all"] as JsonArray)?
+            return (JsonNode.Parse(await info.Content.ReadAsStringAsync(cancellationToken))?["all"] as JsonArray)?
                 .Select(n => n?.GetValue<string>())
                 .OfType<string>()
                 .ToList();
-
-            if (members is null)
-                return null;
-
-            var query = $"{Root}/group/{Uri.EscapeDataString(group)}/delay"
-                + $"?timeout={(int)timeout.TotalMilliseconds}"
-                + $"&url={Uri.EscapeDataString(url)}";
-
-            using var response = await SendAsync(HttpMethod.Get, query, null, cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var delays = new Dictionary<string, TimeSpan>(StringComparer.Ordinal);
-
-            if (JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken)) is JsonObject answered)
-            {
-                foreach (var (tag, value) in answered)
-                {
-                    // Ноль движок пишет тем, кто не ответил, у части сборок.
-                    if (value is JsonValue v && v.TryGetValue<int>(out var ms) && ms > 0)
-                        delays[tag] = TimeSpan.FromMilliseconds(ms);
-                }
-            }
-
-            return new GroupDelay(members, delays);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -176,6 +142,68 @@ public sealed class ClashApi : IDisposable
         catch (Exception)
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Меряет выходы руками движка, бережно к продавцам.
+    /// </summary>
+    /// <remarks>
+    /// Не больше <paramref name="perEntry"/> проверок разом на один вход
+    /// (адрес и порт сервера) и не больше <paramref name="total"/> всего.
+    /// У многих продавцов ограничено число одновременных подключений на ключ,
+    /// а у Trust все страны сидят на одном входе с одним ключом — залп
+    /// из двух десятков проверок для него выглядит как злоупотребление.
+    /// Процесса на сервер, как у пробника, при этом не нужно — это и есть
+    /// выигрыш во времени.
+    /// </remarks>
+    /// <param name="servers">Тег выхода и вход, к которому он подключается.</param>
+    public async Task MeasureGentlyAsync(
+        IReadOnlyList<(string Tag, string Entry)> servers,
+        string url,
+        TimeSpan timeout,
+        Action<string, TimeSpan?> onResult,
+        CancellationToken cancellationToken,
+        int perEntry = 2,
+        int total = 8)
+    {
+        using var all = new SemaphoreSlim(total);
+
+        var byEntry = servers
+            .GroupBy(s => s.Entry, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, _ => new SemaphoreSlim(perEntry), StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            await Task.WhenAll(servers.Select(async server =>
+            {
+                var entry = byEntry[server.Entry];
+
+                await entry.WaitAsync(cancellationToken);
+
+                try
+                {
+                    await all.WaitAsync(cancellationToken);
+
+                    try
+                    {
+                        onResult(server.Tag, await MeasureAsync(server.Tag, url, timeout, cancellationToken));
+                    }
+                    finally
+                    {
+                        all.Release();
+                    }
+                }
+                finally
+                {
+                    entry.Release();
+                }
+            }));
+        }
+        finally
+        {
+            foreach (var semaphore in byEntry.Values)
+                semaphore.Dispose();
         }
     }
 
@@ -240,7 +268,3 @@ public sealed class ClashApi : IDisposable
             _http.Dispose();
     }
 }
-
-/// <summary>Групповой замер: состав группы и задержки ответивших.</summary>
-/// <param name="Members">Все выходы группы; кого нет в <paramref name="Delays"/>, тот не ответил.</param>
-public sealed record GroupDelay(IReadOnlyList<string> Members, IReadOnlyDictionary<string, TimeSpan> Delays);
