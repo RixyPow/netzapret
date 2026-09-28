@@ -36,6 +36,43 @@ public partial class MainWindow : Window
 
         UpdateNotice.Changed += () => Dispatcher.InvokeAsync(ShowUpdateBadge);
         _ = CheckForUpdateAsync();
+        _ = WarmRoutesAsync();
+    }
+
+    /// <summary>
+    /// Один раз в фоне проходит то, что «Маршруты» читают при открытии.
+    /// </summary>
+    /// <remarks>
+    /// Замер 28.09: первое открытие «Маршрутов» — ~380 мс на главном потоке,
+    /// из них 231 мс строки по каталогу (холодное чтение сотен списков
+    /// и первая компиляция кода); второе — ~95 мс. Прогрев делает первое
+    /// открытие вторым. Через три секунды после запуска, чтобы не спорить
+    /// с самим запуском окна; неудача молчит — раздел просто прочитает сам.
+    /// </remarks>
+    private static async Task WarmRoutesAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            await Task.Run(() =>
+            {
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+                var zapretRoot = NetZapret.Zapret.ZapretPaths.Discover()?.Root;
+                var userRules = NetZapret.Core.Rules.UserRulesFile.Load();
+
+                var engine = NetZapret.Core.Rules.RuleSetLoader.LoadLayered(
+                    settings.RulesPath, NetZapret.Core.Rules.UserRulesFile.DefaultPath, settings.Mode);
+
+                NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
+
+                foreach (var service in NetZapret.Core.Services.ServiceCatalog.All)
+                    NetZapret.Zapret.ServiceRouting.Describe(service, engine, zapretRoot, userRules);
+            });
+        }
+        catch (Exception)
+        {
+        }
     }
 
     /// <summary>

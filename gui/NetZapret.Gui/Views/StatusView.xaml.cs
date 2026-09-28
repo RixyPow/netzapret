@@ -782,28 +782,55 @@ public partial class StatusView : UserControl
     private void OnTunnel(object sender, RoutedEventArgs e) =>
         Choose(c => c with { Tunnel = TunnelSwitch.IsChecked == true });
 
-    private void ShowAutostart()
+    /// <summary>Что планировщик ответил в прошлый раз — на время работы окна.</summary>
+    private static (bool Installed, bool Stale)? _autostart;
+
+    /// <remarks>
+    /// Планировщик спрашивается в фоне, а до ответа показывается прошлый.
+    /// Замер 28.09: два запуска schtasks — «заведена ли» и «не устарела ли» —
+    /// 73–91 мс на главном потоке при каждом открытии «Главной», и это была
+    /// большая часть паузы, о которую спотыкалась анимация раздела.
+    /// </remarks>
+    private async void ShowAutostart()
     {
-        bool installed;
+        if (_autostart is { } known)
+        {
+            ApplyAutostart(known);
+        }
+        else
+        {
+            AutostartValue.Text = "проверяю…";
+            AutostartButton.IsEnabled = false;
+        }
 
         try
         {
-            installed = AutostartTask.IsInstalled(AutostartTask.DefaultTaskName);
+            var fresh = await Task.Run(() =>
+            {
+                bool installed = AutostartTask.IsInstalled(AutostartTask.DefaultTaskName);
+                return (Installed: installed, Stale: installed && IsStale());
+            });
+
+            _autostart = fresh;
+            ApplyAutostart(fresh);
         }
         catch (Exception ex)
         {
             AutostartValue.Text = "не читается";
             AutostartButton.IsEnabled = false;
             ShowProblem("Планировщик не отвечает: " + ex.GetBaseException().Message);
-
-            return;
         }
+    }
+
+    private void ApplyAutostart((bool Installed, bool Stale) state)
+    {
+        bool installed = state.Installed;
 
         AutostartValue.Text = installed ? "заведена" : "не заведена";
         AutostartButton.Content = installed ? "Убрать" : "Завести";
         AutostartButton.IsEnabled = true;
 
-        if (installed && IsStale())
+        if (state.Stale)
         {
             AutostartValue.Text = "заведена, но устарела";
 
@@ -917,6 +944,8 @@ public partial class StatusView : UserControl
             ShowProblem("Планировщик отказал: " + ex.GetBaseException().Message);
         }
 
+        // Задачу только что завели или убрали — запомненный ответ устарел.
+        _autostart = null;
         ShowAutostart();
     }
 

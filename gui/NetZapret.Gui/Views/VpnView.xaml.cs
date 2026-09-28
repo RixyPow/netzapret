@@ -367,7 +367,12 @@ public partial class VpnView : UserControl
         try
         {
             using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(new Uri(row.Entry.Url), cancellationToken);
+
+            // Чтение и разбор — в фоне. Без Task.Run разбор шёл продолжением
+            // на главном потоке: замер 28.09 — паузы окна по 70–166 мс, пока
+            // приходили подписки, прямо посреди появления раздела.
+            var info = await Task.Run(
+                () => client.FetchAsync(new Uri(row.Entry.Url), cancellationToken), cancellationToken);
 
             var usable = info.Servers.Where(s => s.IsUsableOutbound).ToList();
 
