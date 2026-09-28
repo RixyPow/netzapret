@@ -131,6 +131,7 @@ public sealed class SubscriptionPoolTests
             // Порт 1 на петле — отказ сразу, без ожидания срока.
             var dead = new PoolSource("Лежит", "http://127.0.0.1:1/sub");
             SubscriptionPool.SaveReserve(folder, dead.Url, "trojan://secret@reserve.example:443#Запасной\n");
+            Age(folder, TimeSpan.FromHours(2));
 
             var result = await SubscriptionPool.BuildAsync([dead], CancellationToken.None, folder);
 
@@ -144,6 +145,50 @@ public sealed class SubscriptionPoolTests
             if (Directory.Exists(folder))
                 Directory.Delete(folder, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task A_fresh_reserve_is_read_without_going_to_the_panel()
+    {
+        // Владелец 28.09: «почему так часто проводится чтение подписок».
+        // Свежий запас — ответ; к панели идут только силой (⟳, «Обновить»).
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            const string url = "http://127.0.0.1:1/sub";
+            var expires = new DateTimeOffset(2026, 12, 1, 0, 0, 0, TimeSpan.Zero);
+
+            SubscriptionPool.SaveReserve(folder, url, "trojan://secret@a.example:443#Германия\n",
+                new SubscriptionInfo { Servers = [], TotalBytes = 100, DownloadBytes = 40, ExpiresAt = expires });
+
+            var read = await SubscriptionPool.ReadOneAsync(url, force: false, CancellationToken.None, folder);
+
+            Assert.Equal(SubscriptionReadSource.Fresh, read.Source);
+            Assert.Equal("Германия", Assert.Single(read.Info!.Servers).Tag);
+
+            // Квота и срок приходят заголовками — запас хранит их рядом.
+            Assert.Equal(60, read.Info.RemainingBytes);
+            Assert.Equal(expires, read.Info.ExpiresAt);
+
+            // Силой — к панели; она лежит, и тогда тот же запас, но с причиной.
+            var forced = await SubscriptionPool.ReadOneAsync(url, force: true, CancellationToken.None, folder);
+
+            Assert.Equal(SubscriptionReadSource.Reserve, forced.Source);
+            Assert.NotNull(forced.Error);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>Состаривает запас: свежий пул к панели не ходит.</summary>
+    private static void Age(string folder, TimeSpan age)
+    {
+        foreach (var file in Directory.EnumerateFiles(folder))
+            File.SetLastWriteTime(file, DateTime.Now - age);
     }
 
     [Fact]

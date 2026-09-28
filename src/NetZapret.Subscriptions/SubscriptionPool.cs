@@ -125,24 +125,57 @@ public static class SubscriptionPool
         }
     }
 
-    private static async Task<PoolPart> ReadAsync(PoolSource source, string folder, CancellationToken cancellationToken)
+    /// <summary>
+    /// Сколько прочитанная подписка считается свежей и не перечитывается.
+    /// </summary>
+    /// <remarks>
+    /// Владелец, 28.09: «почему так часто проводится чтение подписок». Раздел
+    /// VPN перечитывал все подписки по очереди при каждом заходе и после
+    /// каждого щелчка — выключатель «в работе», переименование, удаление, —
+    /// а движок ещё раз при каждом запуске. Лежащая «Основная» стоила каждый
+    /// раз 12 с ожидания. Серверы у продавцов меняются раз в дни, не минуты;
+    /// силой перечитывают ⟳ и «Обновить».
+    /// </remarks>
+    public static readonly TimeSpan FreshFor = TimeSpan.FromMinutes(30);
+
+    /// <summary>Одна подписка: свежий запас без сети, иначе панель, при отказе — запас любой давности.</summary>
+    /// <param name="force">Идти к панели, даже если запас свежий: ⟳ и «Обновить».</param>
+    public static async Task<SubscriptionRead> ReadOneAsync(
+        string url,
+        bool force,
+        CancellationToken cancellationToken,
+        string? reserveDirectory = null)
     {
-        string? error;
+        var folder = reserveDirectory ?? DefaultReserveDirectory;
+
+        if (!force && LoadReserve(folder, url) is { } fresh
+            && fresh.Info.Servers.Count > 0
+            && DateTimeOffset.Now - fresh.At < FreshFor)
+        {
+            return new SubscriptionRead(fresh.Info, fresh.At, SubscriptionReadSource.Fresh, null);
+        }
+
+        string error;
 
         try
         {
             using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(new Uri(source.Url), cancellationToken);
+            var info = await client.FetchAsync(new Uri(url), cancellationToken);
 
             // Ответила, но не разобралась — в запас такое не кладём: он
             // затёр бы последний хороший ответ пустым.
             if (info.Servers.Count > 0 && client.LastBody is { } body)
-                SaveReserve(folder, source.Url, body);
+                SaveReserve(folder, url, body, info);
 
-            if (info.Servers.Count > 0)
-                return new PoolPart(source, info.Servers, false, null, null, info);
+            if (info.Servers.Count > 0 || info.Errors.Count == 0)
+                return new SubscriptionRead(info, DateTimeOffset.Now, SubscriptionReadSource.Panel, null);
 
-            error = info.Errors.Count > 0 ? "не разобралась: " + info.Errors[0] : "серверов нет";
+            error = "не разобралась: " + info.Errors[0];
+
+            if (LoadReserve(folder, url) is not { } kept || kept.Info.Servers.Count == 0)
+                return new SubscriptionRead(info, DateTimeOffset.Now, SubscriptionReadSource.Panel, null);
+
+            return new SubscriptionRead(kept.Info, kept.At, SubscriptionReadSource.Reserve, error);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -155,10 +188,27 @@ public static class SubscriptionPool
                 : ex.GetBaseException().Message;
         }
 
-        if (LoadReserve(folder, source.Url) is { } reserve && reserve.Servers.Count > 0)
-            return new PoolPart(source, reserve.Servers, true, reserve.At, null, null);
+        if (LoadReserve(folder, url) is { } reserve && reserve.Info.Servers.Count > 0)
+            return new SubscriptionRead(reserve.Info, reserve.At, SubscriptionReadSource.Reserve, error);
 
-        return new PoolPart(source, [], false, null, error, null);
+        return new SubscriptionRead(null, null, SubscriptionReadSource.None, error);
+    }
+
+    private static async Task<PoolPart> ReadAsync(PoolSource source, string folder, CancellationToken cancellationToken)
+    {
+        var read = await ReadOneAsync(source.Url, force: false, cancellationToken, folder);
+
+        return read.Source switch
+        {
+            SubscriptionReadSource.Fresh or SubscriptionReadSource.Panel when read.Info!.Servers.Count > 0
+                => new PoolPart(source, read.Info.Servers, false, null, null, read.Info),
+            SubscriptionReadSource.Reserve
+                => new PoolPart(source, read.Info!.Servers, true, read.At, null, null),
+            SubscriptionReadSource.Panel
+                => new PoolPart(source, [], false, null,
+                    read.Info!.Errors.Count > 0 ? "не разобралась: " + read.Info.Errors[0] : "серверов нет", read.Info),
+            _ => new PoolPart(source, [], false, null, read.Error, null),
+        };
     }
 
     /// <summary>
@@ -275,13 +325,27 @@ public static class SubscriptionPool
     private static string ReservePath(string folder, string url) =>
         Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url.Trim())))[..24] + ".txt");
 
-    internal static void SaveReserve(string folder, string url, string body)
+    /// <summary>
+    /// Квота и срок лежат рядом с телом: они приходят заголовками, а не в теле,
+    /// и без них строка подписки из запаса теряла бы «86 дн» и остаток трафика.
+    /// </summary>
+    private sealed record ReserveMeta(string? Title, long Upload, long Download, long Total, DateTimeOffset? Expires, double? Interval);
+
+    internal static void SaveReserve(string folder, string url, string body, SubscriptionInfo? info = null)
     {
         try
         {
             Directory.CreateDirectory(folder);
 
             var path = ReservePath(folder, url);
+
+            if (info is not null)
+            {
+                var meta = new ReserveMeta(info.Title, info.UploadBytes, info.DownloadBytes, info.TotalBytes, info.ExpiresAt, info.UpdateIntervalHours);
+                File.WriteAllText(path + ".meta", System.Text.Json.JsonSerializer.Serialize(meta), new UTF8Encoding(false));
+            }
+
+            // Тело — последним: по его времени судят о свежести.
             var temp = path + ".tmp";
 
             File.WriteAllText(temp, body, new UTF8Encoding(false));
@@ -293,7 +357,7 @@ public static class SubscriptionPool
         }
     }
 
-    private static (IReadOnlyList<ProxyServer> Servers, DateTimeOffset At)? LoadReserve(string folder, string url)
+    private static (SubscriptionInfo Info, DateTimeOffset At)? LoadReserve(string folder, string url)
     {
         try
         {
@@ -302,9 +366,33 @@ public static class SubscriptionPool
             if (!File.Exists(path))
                 return null;
 
-            var (servers, _) = SubscriptionParser.ParseBody(File.ReadAllText(path));
+            var (servers, errors) = SubscriptionParser.ParseBody(File.ReadAllText(path));
 
-            return (servers, File.GetLastWriteTime(path));
+            ReserveMeta? meta = null;
+
+            try
+            {
+                if (File.Exists(path + ".meta"))
+                    meta = System.Text.Json.JsonSerializer.Deserialize<ReserveMeta>(File.ReadAllText(path + ".meta"));
+            }
+            catch (Exception)
+            {
+                // Без квоты и срока запас всё равно годен.
+            }
+
+            var info = new SubscriptionInfo
+            {
+                Servers = servers,
+                Errors = errors,
+                Title = meta?.Title,
+                UploadBytes = meta?.Upload ?? 0,
+                DownloadBytes = meta?.Download ?? 0,
+                TotalBytes = meta?.Total ?? 0,
+                ExpiresAt = meta?.Expires,
+                UpdateIntervalHours = meta?.Interval,
+            };
+
+            return (info, File.GetLastWriteTime(path));
         }
         catch (Exception)
         {
@@ -312,3 +400,25 @@ public static class SubscriptionPool
         }
     }
 }
+
+/// <summary>Откуда взялась подписка.</summary>
+public enum SubscriptionReadSource
+{
+    /// <summary>Ничего: панель не ответила, запаса нет.</summary>
+    None,
+
+    /// <summary>Свежий запас, к панели не ходили.</summary>
+    Fresh,
+
+    /// <summary>Ответ панели только что.</summary>
+    Panel,
+
+    /// <summary>Панель подвела — запас прошлого удачного чтения.</summary>
+    Reserve,
+}
+
+/// <summary>Чтение одной подписки.</summary>
+/// <param name="Info"><c>null</c>, только когда <see cref="Source"/> — <see cref="SubscriptionReadSource.None"/>.</param>
+/// <param name="At">Когда получен ответ панели, из которого взяты серверы.</param>
+/// <param name="Error">Почему панель подвела; у запаса — причина, по которой пришлось к нему идти.</param>
+public sealed record SubscriptionRead(SubscriptionInfo? Info, DateTimeOffset? At, SubscriptionReadSource Source, string? Error);
