@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Windows;
@@ -54,6 +54,16 @@ public sealed class SubRow
     /// кнопка работала ровно один раз.
     /// </remarks>
     public IReadOnlyList<ServerRow> AsGiven { get; set; } = [];
+
+    /// <summary>Все серверы, как их дала подписка, — исходные теги.</summary>
+    public IReadOnlyList<ProxyServer> Raw { get; set; } = [];
+
+    /// <summary>
+    /// Те же серверы с тегами пула (<see cref="SubscriptionPool.Tag"/>), если
+    /// подписка в работе; иначе исходные. По ним выбирают, мерят и судят
+    /// о живости — как и сборка конфига, иначе замер лёг бы не на тот сервер.
+    /// </summary>
+    public IReadOnlyList<ProxyServer> Pooled { get; set; } = [];
 
     /// <summary>Идёт ли замер именно этой подписки.</summary>
     public bool Checking { get; set; }
@@ -146,11 +156,11 @@ public static class CountryTag
 /// <remarks>
 /// <para>
 /// Подписок может быть несколько, и каждая — своя папка со своими серверами,
-/// квотой и сроком. Но действует одна: конфиг sing-box собирается по одной
-/// ссылке из <see cref="AppSettings.SubscriptionUrl"/>, и это не наше
-/// ограничение показа, а устройство движка. Поэтому выбор сервера из соседней
-/// подписки делает действующей её — иначе конфиг собрался бы без этого
-/// сервера, а окно уверяло бы, что он выбран.
+/// квотой и сроком. С 0.9.0 движок собирается из пула — всех подписок
+/// «в работе» (<see cref="SubscriptionPool"/>), — и автоподбор выбирает
+/// из всех сразу. Сервер можно выбрать из любой; выбор из подписки вне работы
+/// ставит её в работу, иначе конфиг собрался бы без этого сервера. Теги
+/// серверов в работе — теги пула, те же, что у движка (<c>ApplyPool</c>).
 /// </para>
 /// <para>
 /// Замеры хранятся в том же <see cref="ServerHealthCache"/>, который читает
@@ -266,19 +276,18 @@ public partial class VpnView : UserControl
         ShowPick(settings);
 
         _book = SubscriptionBook.Load();
-        var active = _book.Active(settings);
 
         // Перенос старой строки WARP в выключатель мог поправить настройки —
         // перечитываем, иначе карточка покажет состояние до переноса.
         settings = AppSettings.Load(AppSettings.DefaultPath);
         ShowWarp(settings);
-        
+
         _rows = _book.Entries
             .Select(entry => new SubRow
             {
                 Entry = entry,
                 Open = entry.Open,
-                Active = active is not null && ReferenceEquals(entry, active),
+                Active = entry.Working,
             })
             .ToList();
 
@@ -326,6 +335,10 @@ public partial class VpnView : UserControl
 
                 everyRead &= await FillAsync(_rows[i], settings, token);
             }
+
+            // Теги пула — до чистки замеров: замеры подписок в работе лежат
+            // под ними, и чистка по исходным тегам выбросила бы их.
+            ApplyPool(settings);
 
             // Замеры исчезнувших серверов — вон, иначе файл копит их вечно,
             // а по ним судят о свежести всего списка. Звала это только
@@ -376,6 +389,10 @@ public partial class VpnView : UserControl
 
             var usable = info.Servers.Where(s => s.IsUsableOutbound).ToList();
 
+            // Теги пула ставятся, когда прочитаны все (ApplyPool): метка
+            // зависит от соседних подписок. До того — исходные.
+            row.Raw = info.Servers;
+            row.Pooled = info.Servers;
             row.AsGiven = Rows(usable, row.Entry.Name, settings);
             row.Servers = InChosenOrder(row.AsGiven);
 
@@ -422,6 +439,8 @@ public partial class VpnView : UserControl
         }
         catch (Exception ex)
         {
+            row.Raw = [];
+            row.Pooled = [];
             row.AsGiven = [];
             row.Servers = [];
 
@@ -439,6 +458,38 @@ public partial class VpnView : UserControl
 
         Redraw();
         return false;
+    }
+
+    /// <summary>
+    /// Ставит серверам подписок в работе теги пула — те же, что у движка.
+    /// </summary>
+    /// <remarks>
+    /// Тем же <see cref="SubscriptionPool.Tag"/>, что и сборка конфига, и в том
+    /// же порядке подписок: разойдись теги окна и движка, «выбрать» закреплял
+    /// бы сервер, которого в конфиге нет, а замер ложился бы не туда.
+    /// Подписки вне работы остаются с исходными тегами — в пуле их нет.
+    /// Не прочитавшаяся сейчас подписка в расчёт не входит, а движок взял бы
+    /// её из запаса; метка у совпавшего имени тогда может разойтись до
+    /// следующего чтения — это известное ограничение.
+    /// </remarks>
+    private void ApplyPool(AppSettings settings)
+    {
+        var working = _rows.Where(r => r.Active && r.Raw.Count > 0).ToList();
+        var tags = SubscriptionPool.Tag(working.Select(r => (r.Entry.Name, r.Raw)).ToList());
+
+        foreach (var row in _rows)
+        {
+            int index = working.IndexOf(row);
+
+            row.Pooled = index < 0
+                ? row.Raw
+                : row.Raw.Select((server, j) => server with { Tag = tags[index][j] }).ToList();
+
+            row.AsGiven = Rows(row.Pooled.Where(s => s.IsUsableOutbound).ToList(), row.Entry.Name, settings);
+            row.Servers = InChosenOrder(row.AsGiven);
+        }
+
+        Redraw();
     }
 
     private IReadOnlyList<ServerRow> Rows(
@@ -524,7 +575,6 @@ public partial class VpnView : UserControl
     private void Reshow()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        var active = _book.Active(settings);
 
         // Выходы WARP живут в карточке, а не в списке, и общий обход строк
         // их не касается — пересобираем отдельно, иначе замер по ним виден
@@ -533,7 +583,7 @@ public partial class VpnView : UserControl
         
         foreach (var row in _rows)
         {
-            row.Active = active is not null && ReferenceEquals(row.Entry, active);
+            row.Active = row.Entry.Working;
 
             // Раскладка считается от исходного порядка, а не от показанного:
             // иначе она накапливается сама на себе и вернуться некуда.
@@ -666,7 +716,7 @@ public partial class VpnView : UserControl
         // состояние, но и где его менять: иначе выключенный WARP выглядит
         // как показанное без всякой причины.
         WarpLine.Text = on
-            ? "Добавлен к серверам действующей подписки. Учётную запись движок "
+            ? "Добавлен к серверам подписок в работе. Учётную запись движок "
               + "заводит себе сам — от вас не требуется ничего."
             : "Выключен. Включается в «Настройках»: ни почты, ни оплаты, ни ключей.";
 
@@ -736,7 +786,7 @@ public partial class VpnView : UserControl
             ShowWarp(next);
 
             Status.Text = next.WarpEnabled
-                ? "WARP добавлен к серверам действующей подписки. Пока те живы, "
+                ? "WARP добавлен к серверам подписок в работе. Пока те живы, "
                   + "автоподбор берёт их. Применится при следующем запуске движков."
                 : "WARP выключен. Применится при следующем запуске движков.";
 
@@ -859,14 +909,14 @@ public partial class VpnView : UserControl
                 return;
             }
 
-            book.Entries.Add(new SubscriptionEntry { Name = name, Url = url });
+            book.Entries.Add(new SubscriptionEntry { Name = name, Url = url, InPool = true });
             book.Save();
 
-            // Первая становится действующей сама: иначе человек добавил бы
-            // подписку, увидел её серверы и не понял, почему туннель их
-            // не берёт.
-            if (book.Entries.Count == 1)
-                SubscriptionBook.MakeActive(book.Entries[0]);
+            // Новая встаёт в работу сразу: подписку добавляют, чтобы ею
+            // пользоваться, и увидеть её серверы, которых туннель не берёт,
+            // значило бы гадать почему. Указатель для консоли — следом.
+            SubscriptionBook.SetWorking(url, true);
+            this.Offer($"Подписка «{name}» в работе");
 
             NewName.Clear();
             NewUrl.Clear();
@@ -885,23 +935,45 @@ public partial class VpnView : UserControl
         // и папка захлопнется на ровном месте.
         e.Handled = true;
 
-        if (sender is not Button { Tag: string name })
+        if (sender is not FrameworkElement { Tag: string name })
             return;
 
-        var entry = _book.Entries.FirstOrDefault(x => x.Name == name);
+        var row = _rows.FirstOrDefault(r => r.Entry.Name == name);
 
-        if (entry is null)
+        if (row is null)
             return;
+
+        bool working = !row.Active;
 
         try
         {
-            SubscriptionBook.MakeActive(entry);
+            SubscriptionBook.SetWorking(row.Entry.Url, working);
+
+            _book = SubscriptionBook.Load();
+
+            foreach (var r in _rows)
+            {
+                r.Entry.InPool = _book.Entries.FirstOrDefault(e => e.Url == r.Entry.Url)?.InPool;
+                r.Active = r.Entry.Working;
+            }
+
+            // Метки пула зависят от того, кто в работе: вторая подписка
+            // с тем же именем сервера добавляет метку и первой.
+            ApplyPool(AppSettings.Load(AppSettings.DefaultPath));
             Reshow();
 
-            Status.Text = $"Действует «{name}». Прежний выбор сервера снят — в этой подписке "
-                + "такого тега может не быть. Применится при следующем запуске движков.";
+            int inPool = _rows.Count(r => r.Active);
 
-            this.Offer($"Действует подписка «{name}»");
+            Status.Text = working
+                ? $"«{name}» в работе: её серверы идут в общий автоподбор. В работе подписок: {inPool}. "
+                  + "Применится при следующем запуске движков."
+                : inPool == 0
+                    ? $"«{name}» выведена из работы, и в работе не осталось ни одной — VPN будет "
+                      + (AppSettings.Load(AppSettings.DefaultPath).WarpEnabled ? "только через WARP." : "недоступен.")
+                    : $"«{name}» выведена из работы. В работе подписок: {inPool}. "
+                      + "Применится при следующем запуске движков.";
+
+            this.Offer(working ? $"Подписка «{name}» в работе" : $"Подписка «{name}» выведена из работы");
         }
         catch (Exception ex)
         {
@@ -919,26 +991,22 @@ public partial class VpnView : UserControl
         try
         {
             var book = SubscriptionBook.Load();
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-            bool wasActive = book.Active(settings)?.Name == name;
+            var removed = book.Entries.FirstOrDefault(entry => entry.Name == name);
 
             book.Entries.RemoveAll(entry => entry.Name == name);
             book.Save();
 
-            if (wasActive)
+            // Указатель для консоли — на первую из оставшихся в работе;
+            // ссылка на убранную подписку жила бы в настройках молча.
+            if (removed is not null)
+                SubscriptionBook.SetWorking(removed.Url, false);
+
+            // В работе не осталось никого — выбранный сервер тоже ушёл вместе
+            // с подпиской, и закрепление указывало бы в никуда.
+            if (SubscriptionBook.Load().Pool.Count == 0)
             {
-                // Убрали действующую — туннелю не на что опереться. Берём
-                // первую из оставшихся, а если их нет, честно очищаем ссылку:
-                // ссылка на убранную подписку жила бы в настройках молча.
-                if (book.Entries.Count > 0)
-                {
-                    SubscriptionBook.MakeActive(book.Entries[0]);
-                }
-                else
-                {
-                    (settings with { SubscriptionUrl = null, PreferredServer = null })
-                        .Save(AppSettings.DefaultPath);
-                }
+                (AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = null })
+                    .Save(AppSettings.DefaultPath);
             }
 
             _ = LoadAsync();
@@ -1008,25 +1076,19 @@ public partial class VpnView : UserControl
     private async Task MeasureAsync(IReadOnlyList<SubRow> which)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        var servers = new List<ProxyServer>();
 
-        foreach (var row in which)
-        {
-            try
-            {
-                using var client = new SubscriptionClient();
-                var info = await client.FetchAsync(new Uri(row.Entry.Url), CancellationToken.None);
-
-                // Незамеряемые отсеиваются здесь, а не внутри пробника: иначе
-                // счётчик «измерено N из M» считал бы и тех, кого не трогали.
-                servers.AddRange(info.Servers.Where(s => s.IsUsableOutbound && s.IsMeasurable));
-            }
-            catch (Exception)
-            {
-                // Непрочитанная подписка просто не участвует в замере;
-                // почему она не прочиталась, уже написано в её папке.
-            }
-        }
+        // Уже прочитанные серверы, с тегами пула, а не свежее чтение панели:
+        // замер ложится под тот тег, под которым сервер знает движок, —
+        // иначе у совпавших имён из двух подписок замер попадал бы под
+        // исходное имя, и автоподбор его не видел. Двойник из соседней
+        // подписки — тот же узел под тем же тегом, мерить его дважды незачем.
+        // Незамеряемые отсеиваются здесь, а не внутри пробника: иначе
+        // счётчик «измерено N из M» считал бы и тех, кого не трогали.
+        var servers = which
+            .SelectMany(row => row.Pooled)
+            .Where(s => s.IsUsableOutbound && s.IsMeasurable)
+            .DistinctBy(s => s.Tag)
+            .ToList();
 
         // Выходы WARP замеряются вместе со всеми: в конфиге они лежат рядом
         // с серверами подписки, и знать про них надо то же самое.
@@ -1348,19 +1410,34 @@ public partial class VpnView : UserControl
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-            // Выходы WARP действующую подписку не меняют: они добавлены
-            // к ней, а не вместо неё, и уже лежат в том же конфиге. Попытка
-            // «сделать действующим» WARP как раз и отключала рабочий VPN.
+            // Выходы WARP подписок не касаются: они и так в пуле.
             var owner = row.Owner == WarpOwner
                 ? null
-                : _book.Entries.FirstOrDefault(entry => entry.Name == row.Owner);
+                : _rows.FirstOrDefault(r => r.Entry.Name == row.Owner);
 
-            bool switched = owner is not null && _book.Active(settings)?.Name != owner.Name;
+            var tag = row.Tag;
+            bool switched = owner is not null && !owner.Active;
 
+            // Сервер из подписки вне работы — ставим её в работу, иначе конфиг
+            // собрался бы без него. Метки пула от этого могут поменяться
+            // (совпадёт имя с сервером соседней), так что тег выбранного
+            // берём заново — по месту сервера в его подписке.
             if (switched)
-                SubscriptionBook.MakeActive(owner!);
+            {
+                int index = owner!.Pooled.ToList().FindIndex(s => s.Tag == row.Tag);
 
-            (AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = row.Tag })
+                SubscriptionBook.SetWorking(owner.Entry.Url, true);
+                _book = SubscriptionBook.Load();
+                owner.Entry.InPool = true;
+                owner.Active = true;
+
+                ApplyPool(settings);
+
+                if (index >= 0)
+                    tag = owner.Pooled[index].Tag;
+            }
+
+            (AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = tag })
                 .Save(AppSettings.DefaultPath);
 
             // Раньше перерисовки, а не после. Выбор уже записан, и движки уже
@@ -1368,14 +1445,14 @@ public partial class VpnView : UserControl
             // от того, как пройдёт перерисовка. Стояло последним, и любая
             // её заминка съедала уведомление целиком: настройка менялась
             // молча, а человек узнавал об этом в следующий раз.
-            this.Offer($"Выбран {row.Tag}");
+            this.Offer($"Выбран {tag}");
 
             Reshow();
 
             Status.Text = switched
-                ? $"Выбран {row.Tag}, действующей стала «{row.Owner}»: конфиг движка собирается "
-                  + "по одной ссылке. Применится при следующем запуске движков."
-                : $"Выбран {row.Tag}. Применится при следующем запуске движков.";
+                ? $"Выбран {tag}, и подписка «{row.Owner}» поставлена в работу — иначе "
+                  + "его не было бы в конфиге. Применится при следующем запуске движков."
+                : $"Выбран {tag}. Применится при следующем запуске движков.";
         }
         catch (Exception ex)
         {

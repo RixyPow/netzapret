@@ -1263,14 +1263,21 @@ public partial class CheckView : UserControl
         {
             Say($"Проверяю через сам туннель: {lost.Count}…");
 
-            using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), token);
+            // Тот же пул, что у движка (0.9.0): выход может быть из любой
+            // подписки в работе, и тег у него — тег пула, с меткой подписки
+            // при совпадении имён. По одной ссылке его было бы не найти.
+            var sources = SubscriptionBook.Load().Pool.Select(e => new PoolSource(e.Name, e.Url)).ToList();
+
+            if (sources.Count == 0)
+                sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
+
+            var pool = await SubscriptionPool.BuildAsync(sources, token);
 
             var live = await TunnelStatus.CurrentServerAsync(token);
 
-            var server = info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
-                ?? info.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == settings.PreferredServer)
-                ?? info.Servers.FirstOrDefault(s => s.IsUsableOutbound);
+            var server = pool.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
+                ?? pool.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == settings.PreferredServer)
+                ?? pool.Servers.FirstOrDefault(s => s.IsUsableOutbound);
 
             if (server is null)
                 return;

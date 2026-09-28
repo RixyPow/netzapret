@@ -165,20 +165,73 @@ public sealed class SubscriptionBookTests : IDisposable
     /// выбран.
     /// </remarks>
     [Fact]
-    public void Switching_the_subscription_forgets_the_chosen_server()
+    public void Putting_a_second_subscription_to_work_keeps_the_first_and_the_choice()
     {
+        // До 0.9.0 было наоборот: подписка «становилась действующей» вместо
+        // прежней, и выбор сервера сбрасывался. В пуле прежняя остаётся
+        // в работе, её серверы никуда не деваются — и выбор тоже.
         Settings(new AppSettings
         {
             SubscriptionUrl = "https://old.example/sub",
             PreferredServer = "USA-1",
         });
 
+        var book = SubscriptionBook.Load();
+        book.Entries.Add(new SubscriptionEntry { Name = "Вторая", Url = "https://new.example/sub", InPool = false });
+        book.Save();
+
         SubscriptionBook.MakeActive(new SubscriptionEntry { Url = "https://new.example/sub" });
 
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var pool = SubscriptionBook.Load().Pool.Select(e => e.Url).ToList();
 
-        Assert.Equal("https://new.example/sub", settings.SubscriptionUrl);
-        Assert.Null(settings.PreferredServer);
+        Assert.Equal(["https://old.example/sub", "https://new.example/sub"], pool);
+
+        // Указатель для консоли — первая в работе, а не последняя включённая.
+        Assert.Equal("https://old.example/sub", settings.SubscriptionUrl);
+        Assert.Equal("USA-1", settings.PreferredServer);
+    }
+
+    /// <summary>Переход к пулу не меняет поведения старых установок.</summary>
+    [Fact]
+    public void An_old_book_migrates_with_only_the_active_one_at_work()
+    {
+        Settings(new AppSettings { SubscriptionUrl = "https://b.example/sub" });
+
+        Directory.CreateDirectory("config");
+        File.WriteAllText(SubscriptionBook.DefaultPath, """
+            { "Entries": [
+                { "Name": "A", "Url": "https://a.example/sub" },
+                { "Name": "B", "Url": "https://b.example/sub" } ] }
+            """);
+
+        var book = SubscriptionBook.Load();
+
+        Assert.False(book.Entries[0].Working);
+        Assert.True(book.Entries[1].Working);
+    }
+
+    /// <summary>Выведенная из работы первая уступает указатель следующей.</summary>
+    [Fact]
+    public void Taking_the_first_out_moves_the_pointer_to_the_next_at_work()
+    {
+        Settings(new AppSettings { SubscriptionUrl = "https://a.example/sub" });
+
+        var book = new SubscriptionBook
+        {
+            Entries =
+            [
+                new SubscriptionEntry { Name = "A", Url = "https://a.example/sub", InPool = true },
+                new SubscriptionEntry { Name = "B", Url = "https://b.example/sub", InPool = true },
+            ],
+        };
+        book.Save();
+
+        SubscriptionBook.SetWorking("https://a.example/sub", false);
+        Assert.Equal("https://b.example/sub", AppSettings.Load(AppSettings.DefaultPath).SubscriptionUrl);
+
+        SubscriptionBook.SetWorking("https://b.example/sub", false);
+        Assert.Null(AppSettings.Load(AppSettings.DefaultPath).SubscriptionUrl);
     }
 
     /// <summary>Испорченный файл не мешает открыть раздел.</summary>

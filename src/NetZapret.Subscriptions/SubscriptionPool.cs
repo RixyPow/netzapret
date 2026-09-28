@@ -58,8 +58,11 @@ public static class SubscriptionPool
     /// Читает все подписки разом и склеивает пул.
     /// </summary>
     /// <remarks>
-    /// Разом, а не по очереди: при запуске движков ждать панели одну за другой
-    /// значило бы складывать их сроки. Одна подписка — одно чтение, как и прежде.
+    /// Разные панели — разом: при запуске движков ждать их одну за другой
+    /// значило бы складывать их сроки. Подписки с одной панели — по очереди:
+    /// панель у разных подписок часто одна и та же, и несколько запросов
+    /// в одну секунду с одного адреса ей не нравятся (урок раздела VPN,
+    /// который по той же причине читает подписки по очереди).
     /// </remarks>
     public static async Task<PoolResult> BuildAsync(
         IReadOnlyList<PoolSource> sources,
@@ -67,8 +70,16 @@ public static class SubscriptionPool
         string? reserveDirectory = null)
     {
         var folder = reserveDirectory ?? DefaultReserveDirectory;
+        var raw = new PoolPart[sources.Count];
 
-        var raw = await Task.WhenAll(sources.Select(source => ReadAsync(source, folder, cancellationToken)));
+        await Task.WhenAll(sources
+            .Select((source, index) => (source, index))
+            .GroupBy(x => Panel(x.source.Url), StringComparer.OrdinalIgnoreCase)
+            .Select(async panel =>
+            {
+                foreach (var (source, index) in panel)
+                    raw[index] = await ReadAsync(source, folder, cancellationToken);
+            }));
 
         var tags = Tags(raw.Select(r => (r.Source.Name, r.Servers)).ToList());
 
@@ -80,6 +91,19 @@ public static class SubscriptionPool
             .ToList();
 
         return new PoolResult(Merge(parts), parts);
+    }
+
+    /// <summary>Чья панель: адрес после развёртки обёртки клиента.</summary>
+    private static string Panel(string url)
+    {
+        try
+        {
+            return SubscriptionClient.Unwrap(new Uri(url)).Host;
+        }
+        catch (Exception)
+        {
+            return url;
+        }
     }
 
     private static async Task<PoolPart> ReadAsync(PoolSource source, string folder, CancellationToken cancellationToken)

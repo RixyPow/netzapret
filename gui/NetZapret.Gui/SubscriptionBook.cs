@@ -17,6 +17,17 @@ public sealed class SubscriptionEntry
 
     /// <summary>Состояние показа, а не настройка; хранится, чтобы папки не захлопывались при каждом заходе.</summary>
     public bool Open { get; set; } = true;
+
+    /// <summary>В работе — её серверы идут в пул движка (0.9.0).</summary>
+    /// <remarks>
+    /// Может быть пусто только в файле до 0.9.0: такие записи при чтении
+    /// переводятся так, чтобы поведение не изменилось, — в работе та,
+    /// что была действующей, остальные выключены (<see cref="SubscriptionBook.Load"/>).
+    /// </remarks>
+    public bool? InPool { get; set; }
+
+    [JsonIgnore]
+    public bool Working => InPool == true;
 }
 
 /// <summary>
@@ -28,14 +39,14 @@ public sealed class SubscriptionEntry
 /// ссылку — <see cref="AppSettings.SubscriptionUrl"/>, — и по ней собирает
 /// конфиг sing-box. Переучивать её ради окна значило бы править то, что
 /// работает, поэтому здесь заведён свой список, а <c>SubscriptionUrl</c>
-/// остаётся указателем на действующую. Обе стороны читают одно и то же
-/// и не расходятся.
+/// остаётся указателем — на первую подписку в работе. Обе стороны читают
+/// одно и то же и не расходятся.
 /// </para>
 /// <para>
-/// Отсюда следствие, которое видно в разделе VPN: сервер можно выбрать
-/// только из действующей подписки. Выбор сервера из соседней делает
-/// действующей её — иначе конфиг собрался бы без этого сервера, а окно
-/// уверяло бы, что он выбран.
+/// С 0.9.0 окно собирает движок из пула — всех подписок в работе
+/// (<see cref="NetZapret.Subscriptions.SubscriptionPool"/>), и сервер можно
+/// выбрать из любой из них. Выбор сервера из подписки вне работы ставит
+/// её в работу — иначе конфиг собрался бы без этого сервера.
 /// </para>
 /// <para>
 /// Файл лежит рядом с настройками и содержит пароли в открытом виде — ровно
@@ -128,6 +139,17 @@ public sealed class SubscriptionBook
             });
         }
 
+        // Переход к пулу (0.9.0): у записей до него признака нет. В работу
+        // встаёт та, что была действующей, остальные выключены — ровно
+        // прежнее поведение, пока человек сам не включит вторую.
+        // Указатель в настройках тоже всегда в работе: его ставит и консоль,
+        // и выставленный ею адрес должен работать, а не лежать выключенным.
+        foreach (var entry in book.Entries)
+        {
+            if (entry.InPool is null || (Same(entry.Url, active) && entry.InPool == false))
+                entry.InPool = Same(entry.Url, active);
+        }
+
         return book;
     }
 
@@ -142,32 +164,47 @@ public sealed class SubscriptionBook
         File.WriteAllText(target, JsonSerializer.Serialize(this, Options), new UTF8Encoding(false));
     }
 
-    /// <summary>Действующая — та, чью ссылку читает консоль.</summary>
+    /// <summary>Действующая — та, чью ссылку читает консоль: первая в работе.</summary>
     public SubscriptionEntry? Active(AppSettings settings) =>
         Entries.FirstOrDefault(e => Same(e.Url, settings.SubscriptionUrl));
 
+    /// <summary>Подписки в работе, в порядке списка: их серверы и есть пул.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<SubscriptionEntry> Pool => Entries.Where(e => e.Working).ToList();
+
     /// <summary>
-    /// Делает подписку действующей.
+    /// Включает подписку в пул или выводит из него — и записывает.
     /// </summary>
     /// <remarks>
-    /// Пишет её ссылку в настройки: там её ищет консоль, туда же смотрит
-    /// сборка конфига sing-box.
+    /// Указатель <see cref="AppSettings.SubscriptionUrl"/> после этого — первая
+    /// в работе: по нему консоль собирает свой конфиг, по нему окно судит,
+    /// есть ли вообще выход. Никого в работе — указателя нет.
     /// </remarks>
-    public static void MakeActive(SubscriptionEntry entry)
+    public static void SetWorking(string url, bool working)
     {
-        var settings = AppSettings.Load(AppSettings.DefaultPath) with
-        {
-            SubscriptionUrl = entry.Url,
+        var book = Load();
 
-            // Прежний выбор сервера принадлежал прошлой подписке, и в новой
-            // такого тега может не быть вовсе. Оставленный, он превратился бы
-            // в ссылку в никуда: конфиг собрался бы без выбранного выхода,
-            // а окно уверяло бы, что выход выбран.
-            PreferredServer = null,
-        };
+        foreach (var entry in book.Entries.Where(e => Same(e.Url, url)))
+            entry.InPool = working;
 
-        settings.Save(AppSettings.DefaultPath);
+        book.Save();
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var first = book.Pool.FirstOrDefault()?.Url;
+
+        if (!Same(first, settings.SubscriptionUrl))
+            (settings with { SubscriptionUrl = first }).Save(AppSettings.DefaultPath);
     }
+
+    /// <summary>
+    /// Ставит подписку в работу.
+    /// </summary>
+    /// <remarks>
+    /// До 0.9.0 — «сделать действующей»: она заменяла прежнюю, и выбор
+    /// сервера сбрасывался, потому что его тег мог остаться в прошлой.
+    /// В пуле прежние серверы никуда не деваются, и выбор сохраняется.
+    /// </remarks>
+    public static void MakeActive(SubscriptionEntry entry) => SetWorking(entry.Url, true);
 
     /// <summary>Счёт для показа. Ссылки не разглашает — в том и смысл.</summary>
     public string Describe(AppSettings settings)
@@ -175,13 +212,15 @@ public sealed class SubscriptionBook
         if (Entries.Count == 0)
             return "нет";
 
-        var active = Active(settings);
+        // Запись без признака — ещё не прочитанная из файла, собранная в памяти:
+        // в работе та, на которую смотрит указатель, как при переходе к пулу.
+        var pool = Entries.Where(e => e.InPool ?? Same(e.Url, settings.SubscriptionUrl)).ToList();
 
         return Entries.Count == 1
-            ? active is null ? "1, ни одна не действует" : $"1: {active.Name}"
-            : active is null
-                ? $"{Entries.Count}, ни одна не действует"
-                : $"{Entries.Count}, действует «{active.Name}»";
+            ? pool.Count == 0 ? "1, не в работе" : $"1: {pool[0].Name}"
+            : pool.Count == 0
+                ? $"{Entries.Count}, в работе ни одной"
+                : $"{Entries.Count}, в работе: {string.Join(", ", pool.Select(e => $"«{e.Name}»"))}";
     }
 
     /// <summary>Имя, которого ещё нет в списке.</summary>

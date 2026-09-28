@@ -261,7 +261,7 @@
                                                            FontWeight="SemiBold" FontSize="14"
                                                            TextTrimming="CharacterEllipsis" />
 
-                                                <TextBlock Grid.Column="1" Text="действует" Style="{StaticResource Mono}"
+                                                <TextBlock Grid.Column="1" Text="в работе" Style="{StaticResource Mono}"
                                                            Foreground="{DynamicResource Accent}"
                                                            Margin="10,0,0,0" VerticalAlignment="Center"
                                                            Visibility="{Binding ActiveShown}" />
@@ -272,10 +272,16 @@
                                         </StackPanel>
 
                                         <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                            <Button Style="{StaticResource Ghost}"
-                                                    Content="сделать действующей" Padding="12,6" Margin="0,0,8,0"
-                                                    Visibility="{Binding ActivateShown}"
-                                                    Tag="{Binding Name}" Click="OnActivate" />
+                                            <!--
+                                                Выключатель «в работе» вместо «сделать действующей»
+                                                (0.9.0, пул): подписок в работе может быть сколько
+                                                угодно, их серверы идут в один автоподбор.
+                                            -->
+                                            <ToggleButton Style="{StaticResource Switch}" Margin="0,0,14,0"
+                                                          VerticalAlignment="Center"
+                                                          IsChecked="{Binding Active, Mode=OneWay}"
+                                                          ToolTip="В работе: серверы этой подписки идут в пул движка"
+                                                          Tag="{Binding Name}" Click="OnActivate" />
 
                                             <Button Style="{StaticResource Ghost}"
                                                     Content="{Binding CheckLabel}" Padding="12,6" Margin="0,0,8,0"

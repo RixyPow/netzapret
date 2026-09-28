@@ -52,16 +52,36 @@ internal static class TunnelConfig
         {
             var (ruleSet, zapretRoot) = LoadRules(settings);
 
-            // Подписка читается, только если она есть. Без неё остаётся WARP:
-            // выше мы уже убедились, что хоть один выход да заявлен.
-            IReadOnlyList<ProxyServer> fromSubscription = [];
+            // Пул (0.9.0): серверы всех подписок в работе, а не одной
+            // действующей. Без подписок остаётся WARP: выше мы уже убедились,
+            // что хоть один выход да заявлен. Указатель из настроек — на случай,
+            // когда список подписок пуст, а ссылку поставила консоль.
+            var sources = SubscriptionBook.Load().Pool
+                .Select(e => new PoolSource(e.Name, e.Url))
+                .ToList();
 
-            if (!string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+            if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+                sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
+
+            var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken);
+            IReadOnlyList<ProxyServer> fromSubscription = pool.Servers;
+
+            // Подписки были, а серверов нет ни от одной, и запаса тоже — а WARP
+            // выключен: собирать не из чего, и сказать надо, почему. Имена
+            // подписок, не ссылки: ссылка — пароль.
+            if (sources.Count > 0 && fromSubscription.Count == 0 && !settings.WarpEnabled)
             {
-                using var client = new SubscriptionClient();
-                var info = await client.FetchAsync(new Uri(settings.SubscriptionUrl), cancellationToken);
+                return new BuildOutcome(false, "Конфиг не собрался: ни одна подписка не дала серверов: "
+                    + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
+            }
 
-                fromSubscription = info.Servers;
+            // Кто пришёл из запаса — в журнал: без этого «сервер из вчерашнего
+            // списка» было бы нечем объяснить.
+            foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))
+            {
+                Journal.Write("подписка", part.FromReserve
+                    ? $"«{part.Source.Name}» не ответила — серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
+                    : $"«{part.Source.Name}» не прочиталась и запаса нет: {part.Error}");
             }
 
             // WARP добавляется к серверам подписки, а не вместо них: он запасной
@@ -153,7 +173,11 @@ internal static class TunnelConfig
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
-            var note = $"Конфиг собран: {result.UsedServers.Count} серверов";
+            var note = $"Конфиг собран: {result.UsedServers.Count} серверов"
+                + (sources.Count > 1 ? $" из {sources.Count} подписок" : string.Empty);
+
+            if (pool.Parts.Count(p => p.FromReserve) is > 0 and var reserved)
+                note += $", {reserved} из запаса — панель не ответила";
 
             // Про мёртвых говорим вслух. Молча выведенный из автоподбора
             // сервер — это сервер, который человек считает рабочим, а он
