@@ -284,6 +284,38 @@ public partial class DoctorView : UserControl
             lines.Add(Warn("Пресет не выбран — десинк не запустится."));
         }
 
+        // Второй обход рядом — GoodbyeDPI, служба Zapret от Flowseal, чужой
+        // winws. Свой winws2 узнаём по номеру процесса из состояния надзора.
+        try
+        {
+            var ours = (SupervisorState.Load(SupervisorState.DefaultPath)?.Services ?? [])
+                .Where(s => s.ProcessId is not null)
+                .Select(s => s.ProcessId!.Value)
+                .ToHashSet();
+
+            var others = OtherBypassScan.Find(ours);
+
+            if (others.Count == 0)
+            {
+                lines.Add(Ok("Другого обхода рядом не видно."));
+            }
+
+            foreach (var other in others)
+            {
+                lines.Add(other.Running
+                    ? Bad($"Работает ещё один обход: {other.Name} ({other.Where}). Два перехватчика "
+                        + "на одном трафике мешают друг другу — десинк может не работать ни у одного. "
+                        + "Закройте его, пока работает NetZapret.")
+                    : Warn($"{other.Name} поднимется при старте Windows: {other.Where}. Сейчас не работает, "
+                        + "но после перезагрузки встанет рядом с NetZapret. Если он больше не нужен — "
+                        + "отключите службу (services.msc) или удалите ту сборку."));
+            }
+        }
+        catch (Exception ex)
+        {
+            lines.Add(Warn("Не удалось проверить, нет ли другого обхода: " + ex.GetBaseException().Message));
+        }
+
         return lines;
     }
 

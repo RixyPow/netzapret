@@ -62,6 +62,10 @@ public static class SecuritySoftware
         ("avastsvc", "Avast", false),
         ("avgsvc", "AVG", false),
         ("cmdagent", "Comodo", false),
+
+        // AdGuard для Windows фильтрует трафик своим драйвером — тот же слой,
+        // что у WinDivert (добавлен 28.09, обсуждение #8).
+        ("adguardsvc", "AdGuard", false),
     ];
 
     /// <summary>
