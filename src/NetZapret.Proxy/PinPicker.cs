@@ -193,23 +193,20 @@ public static class PinPicker
         var honest = (await DohResolver.CandidatesAsync(host, http, cancellationToken))
             .Select(a => new PinCandidate(a, PinSource.Honest, "честный резолвер"));
 
-        // Сначала то, что про это имя известно, — дёшево и без посредника,
-        // если сайт закрыт не по стране. Сайт ответил сам — дальше не ищем.
-        tried.AddRange(await ProbeAllAsync(host, Distinct(honest.Concat(known)), probes, cancellationToken));
+        // Все кандидаты разом — и посредники тоже, даже когда сайт ответил
+        // по настоящему адресу. Прежде посредники пробовались, только если
+        // настоящий не ответил, и владелец 28.09 не нашёл в таблице
+        // 87.228.47.204 для Claude: claude.ai по настоящему адресу отвечает
+        // 302, до посредников очередь не дошла. А «ответил» у настоящего
+        // адреса ещё не значит «работает»: API того же Claude по нему даёт
+        // отказ по стране. Выбирать — человеку, и видеть он должен всех.
+        PinCandidate[] helpers;
 
-        if (!tried.Any(p => p.Verdict == PinVerdict.Works))
-        {
-            PinCandidate[] helpers;
+        lock (proven)
+            helpers = [.. proven];
 
-            lock (proven)
-                helpers = [.. proven];
-
-            var fresh = Distinct(helpers.Concat(pool))
-                .Where(c => tried.All(t => t.Candidate.Address != c.Address))
-                .ToList();
-
-            tried.AddRange(await ProbeAllAsync(host, fresh, probes, cancellationToken));
-        }
+        tried.AddRange(await ProbeAllAsync(
+            host, Distinct(honest.Concat(known).Concat(helpers).Concat(pool)), probes, cancellationToken));
 
         var chosen = tried.Where(p => p.Usable).OrderBy(p => p.Rank).FirstOrDefault();
 

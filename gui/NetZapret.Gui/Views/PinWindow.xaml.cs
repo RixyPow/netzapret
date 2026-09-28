@@ -695,7 +695,7 @@ public partial class PinWindow : Window
 
         // Итог: выбранный подбором — первым и отмеченным, остальные —
         // в порядке, в каком подбор их оценил, последней — «не прибивать».
-        // Выбрать можно любого, кто ответил; отказавших и молчащих — нет.
+        // Выбрать можно любого, и отказавших с молчащими тоже (см. Line).
         foreach (var pick in picks)
         {
             var block = Block(pick.Host);
@@ -759,7 +759,13 @@ public partial class PinWindow : Window
     /// <summary>Блоки таблицы проверки — по одному на имя.</summary>
     private ObservableCollection<CheckBlock> _blocks = [];
 
-    /// <summary>Строка таблицы проверки: цвет по исходу, выбрать можно ответившего.</summary>
+    /// <summary>Строка таблицы проверки: цвет по исходу, выбрать можно любого.</summary>
+    /// <remarks>
+    /// Любого — и молчащего тоже (владелец 28.09): посредник XBOX DNS
+    /// пропадает и возвращается, 87.228.47.204 в тот день то соединялся
+    /// за 12 мс, то молчал 10 с, и проверка в неудачную минуту не должна
+    /// запрещать его прибить. Цвет и подпись говорят, что он не ответил.
+    /// </remarks>
     private CheckLine Line(string host, PinProbe probe) => new(
         host,
         probe.Candidate.Address,
@@ -773,7 +779,7 @@ public partial class PinWindow : Window
             PinVerdict.Refused => "Danger",
             _ => "Muted",
         }),
-        selectable: probe.Usable);
+        selectable: true);
 
     /// <summary>
     /// Спрашивает адрес у честного резолвера и проверяет каждый ответ.
