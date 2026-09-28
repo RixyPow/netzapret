@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -127,10 +128,49 @@ public static class Motion
         if (!Enabled)
             return;
 
+        // Скрыт с создания: первый кадр рисуется раньше Loaded (приоритет
+        // отрисовки выше), и без этого раздел успевал показаться целиком,
+        // а проявление шло уже по видимому — от 0,92 к 1 (замер 28.09,
+        // владелец: «анимации пропали»). Через пять секунд, если так и не
+        // дождались, проявится сам.
+        page.BeginAnimation(UIElement.OpacityProperty,
+            new DoubleAnimation(0, 0, TimeSpan.FromSeconds(5)) { FillBehavior = FillBehavior.Stop });
+
+        // Начало — на первом кадре после Loaded: к нему синхронная работа
+        // раздела сделана. Отсчёт свой, по часам, а не анимацией WPF: её
+        // часы начинали с времени до паузы раздела, и уже второй кадр
+        // выходил на 0,83 (замер 28.09) — проявление снова выглядело
+        // появлением. Здесь первый показанный кадр — ноль, дальше по
+        // реальному времени, с мягким замедлением к концу.
+        var clock = new Stopwatch();
+        const double Length = 240;
+
+        void Frame(object? sender, EventArgs e)
+        {
+            if (!clock.IsRunning)
+            {
+                page.BeginAnimation(UIElement.OpacityProperty, null);
+                page.Opacity = 0;
+                clock.Start();
+                return;
+            }
+
+            double x = Math.Min(1, clock.Elapsed.TotalMilliseconds / Length);
+
+            if (x >= 1)
+            {
+                CompositionTarget.Rendering -= Frame;
+                page.ClearValue(UIElement.OpacityProperty);
+                return;
+            }
+
+            page.Opacity = 1 - (1 - x) * (1 - x);
+        }
+
         void Start(object sender, RoutedEventArgs e)
         {
             page.Loaded -= Start;
-            Arrive(page, dy: 0, ms: 180);
+            CompositionTarget.Rendering += Frame;
         }
 
         page.Loaded += Start;
