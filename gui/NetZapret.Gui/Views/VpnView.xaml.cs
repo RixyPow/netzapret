@@ -71,7 +71,7 @@ public sealed class SubRow
     /// <summary>Занят ли замер вообще — хоть этой подпиской, хоть соседней.</summary>
     public bool Busy { get; set; }
 
-    public string CheckLabel => Checking ? "проверяю…" : "проверить";
+    public string CheckLabel => Checking ? "Тест пинга: замеряю…" : "Тест пинга: замерить серверы подписки";
 
     /// <summary>
     /// Пока идёт один замер, второй не начинают: каждый поднимает по пять
@@ -504,7 +504,7 @@ public partial class VpnView : UserControl
             // вправе знать, куда делись пять.
             int skipped = info.Servers.Count - usable.Count;
 
-            var parts = new List<string> { $"{usable.Count} серверов" };
+            var parts = new List<string> { $"обновлена {DateTime.Now:HH:mm}", $"{usable.Count} серверов" };
 
             if (skipped > 0)
                 parts.Add($"ещё {skipped} sing-box не поддерживает");
@@ -1090,13 +1090,198 @@ public partial class VpnView : UserControl
         }
     }
 
+    /// <summary>⟳ у подписки: перечитать только её.</summary>
+    private async void OnRefreshOne(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (sender is FrameworkElement { Tag: string name })
+            await RefreshOneAsync(name);
+    }
+
+    private async Task RefreshOneAsync(string name)
+    {
+        var row = _rows.FirstOrDefault(r => r.Entry.Name == name);
+
+        if (row is null)
+            return;
+
+        row.Detail = "читаю…";
+        Redraw();
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        await FillAsync(row, settings, CancellationToken.None);
+
+        // Метки пула зависят от соседей — пересчитываем для всех.
+        ApplyPool(settings);
+        Status.Text = $"«{name}» перечитана.";
+    }
+
+    /// <summary>
+    /// ⋯ у подписки: всё остальное — как в Happ (владелец, 28.09).
+    /// </summary>
+    /// <remarks>
+    /// Из пунктов Happ здесь нет «Маршрутизации» и «Настроек» подписки:
+    /// маршруты у нас общие для всех подписок (вкладка «Маршруты»), а имя
+    /// клиента для панели программа подбирает сама — заглушку для нелюбимого
+    /// клиента она узнаёт и переспрашивает под Happ.
+    /// </remarks>
+    private void OnMore(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (sender is not FrameworkElement { Tag: string name } anchor)
+            return;
+
+        var row = _rows.FirstOrDefault(r => r.Entry.Name == name);
+
+        if (row is null)
+            return;
+
+        bool first = _rows.Count > 0 && ReferenceEquals(_rows[0], row);
+
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        menu.Items.Add(Item("", "Обновить", async () => await RefreshOneAsync(name)));
+        menu.Items.Add(Item("", "Тест пинга", async () => await MeasureAsync([row]), row.CanCheck));
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+        menu.Items.Add(Item("", first ? "Уже первая" : "Закрепить наверху", () => MoveToTop(name), !first));
+        menu.Items.Add(Item("", "Копировать ссылку", () => CopyUrl(row)));
+        menu.Items.Add(Item("", "Изменить…", () => Edit(row)));
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+        menu.Items.Add(Item("", "Удалить…", () => ConfirmRemove(name)));
+
+        menu.IsOpen = true;
+    }
+
+    private static MenuItem Item(string glyph, string text, Action act, bool enabled = true)
+    {
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        var item = new MenuItem { Header = text, Icon = icon, IsEnabled = enabled };
+        item.Click += (_, _) => act();
+
+        return item;
+    }
+
+    /// <summary>
+    /// Первой в списке — и первой в пуле: её сервер побеждает при совпадении
+    /// узла у двух продавцов, и на неё смотрит консоль.
+    /// </summary>
+    private void MoveToTop(string name)
+    {
+        try
+        {
+            var book = SubscriptionBook.Load();
+            var entry = book.Entries.FirstOrDefault(x => x.Name == name);
+
+            if (entry is null)
+                return;
+
+            book.Entries.Remove(entry);
+            book.Entries.Insert(0, entry);
+            book.Save();
+
+            // Указатель для консоли — первая в работе.
+            SubscriptionBook.SetWorking(entry.Url, entry.Working);
+
+            _ = LoadAsync();
+            Status.Text = $"«{name}» закреплена наверху.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось переставить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// В буфер обмена, не на экран.
+    /// </summary>
+    /// <remarks>
+    /// Ссылка равносильна паролю и на экран не выводится нигде — но это ссылка
+    /// самого человека, и перенести её в другой клиент он вправе. Копируется
+    /// только по его нажатию, и подпись напоминает, чем она является.
+    /// </remarks>
+    private void CopyUrl(SubRow row)
+    {
+        try
+        {
+            Clipboard.SetText(row.Entry.Url);
+            Status.Text = $"Ссылка «{row.Entry.Name}» скопирована. Это пароль к вашим серверам — "
+                + "вставляйте её только в свой клиент.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось скопировать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void Edit(SubRow row)
+    {
+        var taken = _rows.Where(r => !ReferenceEquals(r, row)).Select(r => r.Entry.Name).ToList();
+        var window = new SubscriptionEditWindow(row.Entry.Name, taken) { Owner = Window.GetWindow(this) };
+
+        if (window.ShowDialog() != true || window.ChosenName is not { } name)
+            return;
+
+        try
+        {
+            var book = SubscriptionBook.Load();
+            var entry = book.Entries.FirstOrDefault(x => x.Url == row.Entry.Url);
+
+            if (entry is null)
+                return;
+
+            var oldUrl = entry.Url;
+            entry.Name = name;
+
+            if (window.ChosenUrl is { } url)
+                entry.Url = url;
+
+            book.Save();
+
+            // Ссылка сменилась — указатель консоли мог смотреть на прежнюю.
+            if (window.ChosenUrl is not null)
+                SubscriptionBook.SetWorking(entry.Url, entry.Working);
+
+            _ = LoadAsync();
+
+            Status.Text = window.ChosenUrl is null
+                ? $"Подписка переименована: «{name}»."
+                : $"«{name}»: ссылка заменена. Применится при следующем запуске движков.";
+
+            if (window.ChosenUrl is not null && entry.Working)
+                this.Offer($"У подписки «{name}» новая ссылка");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void ConfirmRemove(string name)
+    {
+        var answer = MessageBox.Show(
+            $"Удалить подписку «{name}»? Её серверы уйдут из пула, а ссылку придётся вставлять заново.",
+            "Удалить подписку",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Question);
+
+        if (answer == MessageBoxResult.OK)
+            Remove(name);
+    }
+
     private void OnRemove(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
 
-        if (sender is not Button { Tag: string name })
-            return;
+        if (sender is FrameworkElement { Tag: string name })
+            Remove(name);
+    }
 
+    private void Remove(string name)
+    {
         try
         {
             var book = SubscriptionBook.Load();

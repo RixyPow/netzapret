@@ -1,0 +1,37 @@
+<Window x:Class="NetZapret.Gui.Views.SubscriptionEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
+        Title="Подписка" Width="520" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Backdrop}"
+        ResizeMode="NoResize">
+
+    <!--
+        «Редактировать» из меню подписки (владелец, 28.09: «опции как в Happ»).
+        Ссылка — паролем и пустой: прежнюю не показываем, её можно только
+        заменить. Пустое поле — оставить как есть.
+    -->
+    <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
+        <TextBlock Text="Подписка" Style="{StaticResource Title}" FontSize="20" />
+
+        <TextBlock Text="Имя" FontWeight="SemiBold" Margin="0,18,0,6" />
+        <TextBox x:Name="NameBox" gui:Hint.Text="Имя для себя" />
+
+        <TextBlock Text="Новая ссылка" FontWeight="SemiBold" Margin="0,16,0,6" />
+        <PasswordBox x:Name="UrlBox" gui:Hint.Text="Пусто — оставить прежнюю" />
+
+        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                   Text="Прежняя ссылка не показывается: она равносильна паролю. Вставьте новую, если продавец её сменил." />
+
+        <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                   TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+            <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
+                    Margin="0,0,8,0" Click="OnCancel" />
+            <Button Style="{StaticResource Primary}" Content="Сохранить" IsDefault="True"
+                    Click="OnSave" />
+        </StackPanel>
+    </StackPanel>
+</Window>

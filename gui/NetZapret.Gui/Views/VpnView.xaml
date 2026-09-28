@@ -324,15 +324,24 @@
                                                           ToolTip="В работе: серверы этой подписки идут в пул движка"
                                                           Tag="{Binding Name}" Click="OnActivate" />
 
-                                            <Button Style="{StaticResource Ghost}"
-                                                    Content="{Binding CheckLabel}" Padding="12,6" Margin="0,0,8,0"
+                                            <!--
+                                                Значками, как в Happ (владелец, 28.09): обновить,
+                                                тест пинга и меню со всем остальным. Подписи —
+                                                во всплывающих подсказках.
+                                            -->
+                                            <Button Style="{StaticResource IconGhost}" Content="&#xE72C;"
+                                                    Margin="0,0,6,0" ToolTip="Обновить: перечитать подписку"
+                                                    Tag="{Binding Name}" Click="OnRefreshOne" />
+
+                                            <Button Style="{StaticResource IconGhost}" Content="&#xEC4A;"
+                                                    Margin="0,0,6,0" ToolTip="{Binding CheckLabel}"
                                                     IsEnabled="{Binding CanCheck}"
                                                     Tag="{Binding Name}" Click="OnCheckOne" />
                                         </StackPanel>
 
-                                        <Button Grid.Column="3" Style="{StaticResource Ghost}"
-                                                Content="убрать" Padding="12,6"
-                                                Tag="{Binding Name}" Click="OnRemove" />
+                                        <Button Grid.Column="3" Style="{StaticResource IconGhost}" Content="&#xE712;"
+                                                ToolTip="Ещё: закрепить, скопировать ссылку, изменить, удалить"
+                                                Tag="{Binding Name}" Click="OnMore" />
                                     </Grid>
                                 </Button>
 

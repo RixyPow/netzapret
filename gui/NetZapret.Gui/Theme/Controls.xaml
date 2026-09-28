@@ -97,7 +97,14 @@
                                 <local:CaptionSelector>
                                     <local:CaptionSelector.Text>
                                         <DataTemplate>
+                                            <!--
+                                                Шрифт — тоже кнопки: общий стиль надписей
+                                                ставил свой, и значки IconGhost выходили
+                                                квадратиками (28.09).
+                                            -->
                                             <TextBlock Text="{Binding}"
+                                                       FontFamily="{Binding FontFamily, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                       FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=Button}}"
                                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                         </DataTemplate>
                                     </local:CaptionSelector.Text>
@@ -812,6 +819,84 @@
                 </Setter>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!--
+        Значки — системным шрифтом значков Windows: Segoe Fluent Icons
+        в Windows 11, Segoe MDL2 Assets в 10. Линейные, как в Happ
+        (владелец, 28.09: «и значки как в хаппе»), и в цвет темы.
+    -->
+    <FontFamily x:Key="IconFont">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
+    <!-- Квадратная кнопка со значком: ⟳, ⏱, ⋯ у подписки. -->
+    <Style x:Key="IconGhost" TargetType="Button" BasedOn="{StaticResource Ghost}">
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Padding" Value="9,8" />
+        <Setter Property="MinWidth" Value="36" />
+    </Style>
+
+    <!--
+        Выпадающее меню (⋯ у подписки). Стандартное меню Windows в тёмной
+        теме — белое пятно с системным шрифтом; здесь — карточка темы.
+    -->
+    <Style TargetType="ContextMenu">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
+                            BorderThickness="1.5" CornerRadius="12" Padding="6" MinWidth="220">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="OverridesDefaultStyle" Value="True" />
+        <Setter Property="Foreground" Value="{DynamicResource Text}" />
+        <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Row" Background="Transparent" CornerRadius="8" Padding="10,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="28" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter Grid.Column="0" ContentSource="Icon" VerticalAlignment="Center" />
+                            <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource Raised}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource Faint}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="MenuLine" TargetType="Separator">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="1" Margin="8,4" Background="{DynamicResource Border}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--
