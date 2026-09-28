@@ -147,6 +147,88 @@
                 </StackPanel>
             </Border>
 
+            <!--
+                Проверка серверов — как часто и как напористо. Владелец 28.09:
+                «пусть каждый сам настраивает» — и «засунь это в настройки,
+                зачем это прям на странице». Продавцы разные: Trust держит все
+                страны на одном входе и закрывает его от частых проверок.
+                Значение строки — в Tag: секунды, минуты или штуки.
+            -->
+            <TextBlock Text="ПРОВЕРКА СЕРВЕРОВ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
+
+            <Border Style="{StaticResource SettingsGroup}">
+                <StackPanel>
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Проверять подключённый сервер" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Одно соединение через сервер, через который идёт трафик. Не ответил дважды подряд — серверы автоподбора проверяются строго по одному, и ставится лучший из ответивших." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="ExitCheckChoice" Width="180" SelectionChanged="OnCheckSetting">
+                            <ComboBoxItem Content="не проверять" Tag="0" />
+                            <ComboBoxItem Content="каждые 15 с" Tag="15" />
+                            <ComboBoxItem Content="каждые 30 с" Tag="30" />
+                            <ComboBoxItem Content="каждую минуту" Tag="60" />
+                            <ComboBoxItem Content="каждые 2 минуты" Tag="120" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Общий замер всех серверов" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Движок перемеряет всех участников автоподбора разом, чтобы знать, кто быстрее. Чем реже — тем меньше нагрузки на продавцов, но тем дольше автоподбор не заметит, что появился сервер быстрее." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="FullCheckChoice" Width="180" SelectionChanged="OnCheckSetting">
+                            <ComboBoxItem Content="каждую минуту" Tag="1" />
+                            <ComboBoxItem Content="каждые 5 минут" Tag="5" />
+                            <ComboBoxItem Content="каждые 15 минут" Tag="15" />
+                            <ComboBoxItem Content="каждые 30 минут" Tag="30" />
+                            <ComboBoxItem Content="раз в час" Tag="60" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Серверов с одного входа" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="У части продавцов много стран сидят на одном адресе — у Trust все. Автоподбор берёт с такого входа только быстрейших, чтобы не бить по нему пачкой проверок. Остальные страны по-прежнему выбираются руками в списке." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="PerEntryChoice" Width="180" SelectionChanged="OnCheckSetting">
+                            <ComboBoxItem Content="один" Tag="1" />
+                            <ComboBoxItem Content="два" Tag="2" />
+                            <ComboBoxItem Content="три" Tag="3" />
+                            <ComboBoxItem Content="все" Tag="0" />
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0"
                        TextWrapping="Wrap" />
 

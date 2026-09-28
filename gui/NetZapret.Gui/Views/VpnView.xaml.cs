@@ -906,8 +906,6 @@ public partial class VpnView : UserControl
     /// </remarks>
     private void ShowPick(AppSettings settings)
     {
-        ShowChecks(settings);
-
         var pinned = settings.PreferredServer;
 
         bool auto = string.IsNullOrWhiteSpace(pinned);
@@ -1046,69 +1044,6 @@ public partial class VpnView : UserControl
 
             Status.Text = "Сервер больше не закреплён — выбирается автоподбором по задержке.";
             this.Offer("Выбор сервера изменён");
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
-        }
-    }
-
-    /// <summary>Показ настроек проверки идёт — изменение выбора не запись.</summary>
-    private bool _showingChecks;
-
-    /// <summary>Ставит выпадающие списки проверки по настройкам.</summary>
-    /// <remarks>
-    /// Значение, которого нет в списке (правлено руками в файле), ставит
-    /// ближайшее — иначе список показал бы пустоту при работающей настройке.
-    /// </remarks>
-    private void ShowChecks(AppSettings settings)
-    {
-        _showingChecks = true;
-
-        try
-        {
-            Choose(ExitCheckChoice, settings.ExitCheckSeconds);
-            Choose(FullCheckChoice, settings.FullCheckMinutes);
-            Choose(PerEntryChoice, settings.AutoPickPerEntry);
-        }
-        finally
-        {
-            _showingChecks = false;
-        }
-
-        static void Choose(ComboBox box, int value)
-        {
-            var items = box.Items.OfType<ComboBoxItem>().ToList();
-
-            box.SelectedItem = items
-                .OrderBy(i => Math.Abs(int.Parse((string)i.Tag) - value))
-                .First();
-        }
-    }
-
-    private void OnCheckSetting(object sender, SelectionChangedEventArgs e)
-    {
-        if (_showingChecks || !IsLoaded)
-            return;
-
-        static int Value(ComboBox box) =>
-            box.SelectedItem is ComboBoxItem { Tag: string tag } ? int.Parse(tag) : -1;
-
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            settings = settings with
-            {
-                ExitCheckSeconds = Value(ExitCheckChoice) is >= 0 and var s ? s : settings.ExitCheckSeconds,
-                FullCheckMinutes = Value(FullCheckChoice) is > 0 and var m ? m : settings.FullCheckMinutes,
-                AutoPickPerEntry = Value(PerEntryChoice) is >= 0 and var n ? n : settings.AutoPickPerEntry,
-            };
-
-            settings.Save(AppSettings.DefaultPath);
-
-            Status.Text = "Проверка серверов изменена — начнёт действовать с перезапуском движков.";
-            this.Offer("Проверка серверов изменена");
         }
         catch (Exception ex)
         {

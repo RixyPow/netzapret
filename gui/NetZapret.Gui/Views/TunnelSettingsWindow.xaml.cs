@@ -70,6 +70,52 @@ public partial class TunnelSettingsWindow : Window
         Warp.IsChecked = settings.WarpEnabled;
 
         ShowBypass(settings.BypassWhenTunnelDead);
+        ShowChecks(settings);
+    }
+
+    /// <summary>Показ идёт — изменение выбора не запись.</summary>
+    private bool _showingChecks;
+
+    /// <summary>Ставит выпадающие списки проверки серверов по настройкам.</summary>
+    /// <remarks>
+    /// Значение, которого нет в списке (правлено руками в файле), ставит
+    /// ближайшее — иначе список показал бы пустоту при работающей настройке.
+    /// </remarks>
+    private void ShowChecks(AppSettings settings)
+    {
+        _showingChecks = true;
+
+        try
+        {
+            Choose(ExitCheckChoice, settings.ExitCheckSeconds);
+            Choose(FullCheckChoice, settings.FullCheckMinutes);
+            Choose(PerEntryChoice, settings.AutoPickPerEntry);
+        }
+        finally
+        {
+            _showingChecks = false;
+        }
+
+        static void Choose(System.Windows.Controls.ComboBox box, int value) =>
+            box.SelectedItem = box.Items.OfType<System.Windows.Controls.ComboBoxItem>()
+                .OrderBy(i => Math.Abs(int.Parse((string)i.Tag) - value))
+                .First();
+    }
+
+    private void OnCheckSetting(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_showingChecks || !IsLoaded)
+            return;
+
+        static int Value(System.Windows.Controls.ComboBox box) =>
+            box.SelectedItem is System.Windows.Controls.ComboBoxItem { Tag: string tag } ? int.Parse(tag) : -1;
+
+        Save(s => s with
+        {
+            ExitCheckSeconds = Value(ExitCheckChoice) is >= 0 and var sec ? sec : s.ExitCheckSeconds,
+            FullCheckMinutes = Value(FullCheckChoice) is > 0 and var min ? min : s.FullCheckMinutes,
+            AutoPickPerEntry = Value(PerEntryChoice) is >= 0 and var n ? n : s.AutoPickPerEntry,
+        }, "Проверка серверов изменена.");
     }
 
     /// <summary>

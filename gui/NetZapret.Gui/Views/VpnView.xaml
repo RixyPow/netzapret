@@ -121,65 +121,6 @@
                     </Grid>
                 </Button>
 
-                <!--
-                    Проверка серверов — как часто и как напористо. Владелец 28.09:
-                    «пусть каждый сам настраивает». Продавцы разные: Trust держит
-                    все страны на одном входе и закрывает его от частых проверок.
-                    Значение каждой строки — в Tag, секунды, минуты или штуки.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0" Padding="20,16">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Проверка серверов" FontWeight="SemiBold" VerticalAlignment="Center" />
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="Подключённый сервер проверяется одним соединением. Не ответил дважды подряд — серверы автоподбора проверяются строго по одному, и ставится лучший из ответивших.&#x0a;&#x0a;Общий замер — это движок перемеряет всех участников автоподбора разом, чтобы знать, кто быстрее.&#x0a;&#x0a;«С одного входа» — у части продавцов много стран сидят на одном адресе (у Trust — все). Автоподбор берёт с такого входа только быстрейших, чтобы не бить по нему пачкой; остальные выбираются руками.&#x0a;&#x0a;Меняется с перезапуском движков." />
-                        </StackPanel>
-
-                        <Grid Margin="0,12,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Проверять подключённый сервер" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            <ComboBox Grid.Column="1" x:Name="ExitCheckChoice" Width="190" SelectionChanged="OnCheckSetting">
-                                <ComboBoxItem Content="не проверять" Tag="0" />
-                                <ComboBoxItem Content="каждые 15 с" Tag="15" />
-                                <ComboBoxItem Content="каждые 30 с" Tag="30" />
-                                <ComboBoxItem Content="каждую минуту" Tag="60" />
-                                <ComboBoxItem Content="каждые 2 минуты" Tag="120" />
-                            </ComboBox>
-                        </Grid>
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Общий замер всех серверов" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            <ComboBox Grid.Column="1" x:Name="FullCheckChoice" Width="190" SelectionChanged="OnCheckSetting">
-                                <ComboBoxItem Content="каждую минуту" Tag="1" />
-                                <ComboBoxItem Content="каждые 5 минут" Tag="5" />
-                                <ComboBoxItem Content="каждые 15 минут" Tag="15" />
-                                <ComboBoxItem Content="каждые 30 минут" Tag="30" />
-                                <ComboBoxItem Content="раз в час" Tag="60" />
-                            </ComboBox>
-                        </Grid>
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Серверов с одного входа в автоподборе" VerticalAlignment="Center" TextWrapping="Wrap" />
-                            <ComboBox Grid.Column="1" x:Name="PerEntryChoice" Width="190" SelectionChanged="OnCheckSetting">
-                                <ComboBoxItem Content="один" Tag="1" />
-                                <ComboBoxItem Content="два" Tag="2" />
-                                <ComboBoxItem Content="три" Tag="3" />
-                                <ComboBoxItem Content="все" Tag="0" />
-                            </ComboBox>
-                        </Grid>
-                    </StackPanel>
-                </Border>
 
                 <!--
                     Новая подписка. Поле скрытое: по ссылке выдаются серверы
