@@ -37,6 +37,77 @@ public partial class MainWindow : Window
         UpdateNotice.Changed += () => Dispatcher.InvokeAsync(ShowUpdateBadge);
         _ = CheckForUpdateAsync();
         _ = WarmRoutesAsync();
+        _ = RefreshPinsLoopAsync();
+    }
+
+    /// <summary>
+    /// Раз в три часа меняет умершие адреса пинов на живые (PinRefresh).
+    /// </summary>
+    /// <remarks>
+    /// Просьба владельца 28.09: посредники XBOX DNS и Comss меняют адреса,
+    /// и в тот день умерший 87.228.47.204 положил Claude и ChatGPT, пока новый
+    /// адрес не нашёлся руками. Только при поднятых движках: часть посредников
+    /// отвечает напрямую лишь с десинком, и без него живой адрес выглядел бы
+    /// мёртвым. Первый раз — через две минуты, когда запуск окна и движков
+    /// уже улёгся. Окно живёт в трее, так что проверка идёт и со скрытым окном.
+    /// </remarks>
+    private async Task RefreshPinsLoopAsync()
+    {
+        await Task.Delay(TimeSpan.FromMinutes(2));
+
+        while (true)
+        {
+            try
+            {
+                var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+                if (state is not null && state.IsSupervisorAlive())
+                {
+                    var result = await Task.Run(() => NetZapret.Proxy.PinRefresh.RunAsync(CancellationToken.None));
+
+                    if (result.Changes.Count > 0)
+                    {
+                        Journal.Write("пин", "адрес умер, заменён живым: " + string.Join("; ", result.Changes)
+                            + (result.Backup is null ? string.Empty : $"; копия hosts: {result.Backup}"));
+
+                        Notify("Пины обновлены",
+                            "Посредник сменил адрес, прежний не отвечал — прибито к новому: "
+                            + string.Join("; ", result.Changes.Take(2)) + ".");
+                    }
+
+                    if (result.Dead.Count > 0)
+                        Journal.Write("пин", $"мёртвые без живой замены: {string.Join(", ", result.Dead.Take(8))}"
+                            + (result.Dead.Count > 8 ? $" и ещё {result.Dead.Count - 8}" : string.Empty));
+
+                    if (result.Error is { } error)
+                        Journal.Write("пин", "обновление пинов: " + error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Journal.Write("пин", "обновление пинов не удалось: " + ex.GetBaseException().Message);
+            }
+
+            await Task.Delay(TimeSpan.FromHours(3));
+        }
+    }
+
+    /// <summary>Уведомление без действия: сказать о том, что уже сделано.</summary>
+    public void Notify(string title, string body)
+    {
+        ToastTitle.Text = title;
+        ToastBody.Text = body;
+
+        ToastAct.Visibility = Visibility.Collapsed;
+        ToastLater.Content = "Понятно";
+
+        Toast.BeginAnimation(OpacityProperty, null);
+        Toast.Visibility = Visibility.Visible;
+        Motion.Arrive(Toast, dy: 18);
+
+        _toastTimer.Stop();
+        _toastTimer.Interval = ToastLife;
+        _toastTimer.Start();
     }
 
     /// <summary>

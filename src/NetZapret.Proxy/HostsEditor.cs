@@ -467,6 +467,47 @@ public static class HostsEditor
         return PinMany(many, path, note);
     }
 
+    /// <summary>Прибивает имена сразу к нескольким адресам: Windows пробует их по очереди.</summary>
+    public static PinResult Repin(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
+        string? path = null,
+        string? note = null) => PinMany(entries, path, note);
+
+    /// <summary>Наши имена со всеми их адресами; пусто, если блока нет.</summary>
+    /// <remarks>
+    /// <see cref="Pins"/> отдаёт по одному адресу на имя — последнему. Посредник
+    /// XBOX DNS раздаёт по два (.201 и .203, 28.09), и судить о живости имени
+    /// по одному значило бы менять пин, у которого второй адрес работает.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> PinsAll(string? path = null)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var target = path ?? HostsFile.DefaultPath;
+
+        if (!File.Exists(target))
+            return new Dictionary<string, IReadOnlyList<string>>();
+
+        var lines = File.ReadAllLines(target).ToList();
+        var (start, end) = FindBlock(lines);
+
+        if (start >= 0)
+        {
+            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            {
+                if (Split(line) is not { } pair)
+                    continue;
+
+                if (!result.TryGetValue(pair.Name, out var list))
+                    result[pair.Name] = list = [];
+
+                if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
+                    list.Add(pair.Address);
+            }
+        }
+
+        return result.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
     private static PinResult PinMany(
         IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
         string? path,
@@ -478,6 +519,16 @@ public static class HostsEditor
 
         var (start, end) = FindBlock(lines);
         var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+        // Без новой подписи блок сохраняет прежнюю: её пишет окно при закреплении
+        // («Claude — XBOX DNS»), а само обновление пинов (PinRefresh) ничего
+        // нового о происхождении блока не знает.
+        if (note is null && start >= 0 && start + 1 < end
+            && lines[start + 1].StartsWith("# ", StringComparison.Ordinal)
+            && !lines[start + 1].StartsWith("# Записи ведёт", StringComparison.Ordinal))
+        {
+            note = lines[start + 1][2..];
+        }
 
         // Уже прибитое нами сохраняется: закрепляют по одному сервису,
         // и переписывать блок целиком значило бы снимать все прежние.
