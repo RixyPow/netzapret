@@ -205,13 +205,29 @@ public static class SubscriptionPool
             return sourcesByName[name].Count > 1 ? $"{name} · {parts[p].Source}" : name;
         }
 
+        // Одинаковые имена разных узлов внутри одной подписки — суффиксом
+        // « #2», « #3», ровно как делает сборка конфига (AssignUniqueTags):
+        // иначе движок дописывал бы его сам, и окно не узнавало бы сервер
+        // по тегу — так карточка текущего сервера не нашла «proxy-3 #22»
+        // (Trust, 28.09). Пул раздаёт уникальные имена сам, и движку
+        // дописывать нечего.
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "direct", "auto" };
+        var unique = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var (key, (p, i)) in first)
+        {
+            var baseTag = Own(p, i);
+            var tag = baseTag;
+
+            for (int suffix = 2; !used.Add(tag); suffix++)
+                tag = $"{baseTag} #{suffix}";
+
+            unique[key] = tag;
+        }
+
         return parts
-            .Select((part, p) => part.Servers
-                .Select((server, i) =>
-                {
-                    var (fp, fi) = first[Identity(server)];
-                    return Own(fp, fi);
-                })
+            .Select(part => part.Servers
+                .Select(server => unique[Identity(server)])
                 .ToList())
             .ToList();
     }
@@ -234,9 +250,21 @@ public static class SubscriptionPool
         return result;
     }
 
-    /// <summary>Узел — протокол, адрес, порт и ключ. Имя не в счёт: его выбирает продавец.</summary>
-    internal static string Identity(ProxyServer server) =>
-        $"{server.Protocol}|{server.Host.Trim().ToLowerInvariant()}|{server.Port}|{server.Credential}";
+    /// <summary>
+    /// Узел — всё, чем сервер отличается на проводе. Имя не в счёт: его выбирает продавец.
+    /// </summary>
+    /// <remarks>
+    /// Не только адрес, порт и ключ: у Trust (28.09) все страны сидят на одном
+    /// входе 131.123.25.7:443 с одним ключом и различаются SNI и параметрами
+    /// Reality — по ним вход и разводит на выходы. Первая версия склейки
+    /// этого не видела и сложила «Германию», «Францию» и ещё полтора десятка
+    /// в один сервер.
+    /// </remarks>
+    internal static string Identity(ProxyServer server) => string.Join("|",
+        server.Protocol, server.Host.Trim().ToLowerInvariant(), server.Port, server.Credential,
+        server.Transport, server.Security, server.Sni, server.Flow,
+        server.RealityPublicKey, server.RealityShortId, server.Path, server.HostHeader, server.ServiceName,
+        server.ObfsType, server.ObfsPassword);
 
     private static string Name(ProxyServer server) =>
         string.IsNullOrWhiteSpace(server.Tag) ? $"{server.Host}:{server.Port}" : server.Tag.Trim();

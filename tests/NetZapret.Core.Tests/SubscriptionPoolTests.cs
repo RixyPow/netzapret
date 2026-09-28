@@ -66,6 +66,49 @@ public sealed class SubscriptionPoolTests
     }
 
     [Fact]
+    public void Same_names_inside_one_subscription_are_numbered_like_the_engine_does()
+    {
+        // Сборка конфига разводит одинаковые теги суффиксом « #2»; пул делает
+        // это сам, чтобы окно и движок звали сервер одинаково.
+        var tags = SubscriptionPool.Tag([("Trust", [Server("proxy", "a.example"), Server("proxy", "b.example"), Server("proxy", "c.example")])]);
+
+        Assert.Equal(["proxy", "proxy #2", "proxy #3"], tags[0]);
+    }
+
+    [Fact]
+    public void Xray_configs_are_named_by_their_remarks()
+    {
+        var body = """
+            [
+              { "remarks": "🇩🇪 Германия 🚀", "outbounds": [
+                  { "tag": "proxy", "protocol": "trojan", "settings": { "servers": [ { "address": "a.example", "port": 443, "password": "x" } ] } },
+                  { "tag": "direct", "protocol": "freedom" } ] },
+              { "remarks": "⬇️ Резерв ⬇️", "outbounds": [ { "tag": "direct", "protocol": "freedom" } ] },
+              { "remarks": "🇪🇺 Авто", "outbounds": [
+                  { "tag": "proxy", "protocol": "trojan", "settings": { "servers": [ { "address": "b.example", "port": 443, "password": "y" } ] } },
+                  { "tag": "proxy-2", "protocol": "trojan", "settings": { "servers": [ { "address": "c.example", "port": 443, "password": "z" } ] } } ] }
+            ]
+            """;
+
+        var (servers, _) = SubscriptionParser.ParseBody(body);
+
+        // Один конфиг — один сервер: запасной proxy-2 балансира не показывается.
+        Assert.Equal(["🇩🇪 Германия 🚀", "🇪🇺 Авто"], servers.Select(s => s.Tag));
+    }
+
+    [Fact]
+    public void Different_sni_on_the_same_gateway_is_a_different_server()
+    {
+        // Trust: все страны на одном входе с одним ключом, различает SNI.
+        var germany = Server("Германия", "gw.example") with { Sni = "de.example" };
+        var france = Server("Франция", "gw.example") with { Sni = "fr.example" };
+
+        var tags = SubscriptionPool.Tag([("Trust", [germany, france])]);
+
+        Assert.Equal(["Германия", "Франция"], tags[0]);
+    }
+
+    [Fact]
     public void Different_key_on_the_same_address_is_a_different_server()
     {
         var tags = SubscriptionPool.Tag(

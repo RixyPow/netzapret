@@ -68,6 +68,8 @@ public static class XrayConfigParser
                     continue;
                 }
 
+                var fromThis = new List<ProxyServer>();
+
                 foreach (var outbound in outbounds.EnumerateArray())
                 {
                     // Конфиг sing-box устроен так же — outbounds в корне, —
@@ -78,10 +80,29 @@ public static class XrayConfigParser
                         : TryRead(outbound, out server, out problem);
 
                     if (read)
-                        servers.Add(server!);
+                        fromThis.Add(server!);
                     else if (problem is not null)
                         errors.Add(problem);
                 }
+
+                // Имя — из подписи конфига (remarks), а не из внутреннего тега
+                // выхода. Тег у всех один — «proxy», «proxy-2», — и подписка
+                // Trust (28.09) выходила списком из «proxy» без стран, а движок
+                // дописывал им «#22». Подпись и есть то, что показывает Happ:
+                // «🇩🇪 Германия 🚀». 
+                //
+                // Один конфиг — один сервер, как в Happ (владелец, 28.09: «в Happ
+                // они норм выглядят»). Остальные выходы конфига — запасные
+                // для его балансира: Happ их не показывает, а у нас запасом
+                // служит сам пул. Показанные строкой каждый, они превращали
+                // 48 серверов Trust в 123 и замедляли запуск движка.
+                if (Text(root, "remarks") is { Length: > 0 } remarks && fromThis.Count > 0)
+                {
+                    servers.Add(fromThis[0] with { Tag = remarks });
+                    continue;
+                }
+
+                servers.AddRange(fromThis);
             }
         }
 
