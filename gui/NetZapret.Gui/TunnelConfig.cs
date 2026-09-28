@@ -110,6 +110,27 @@ internal static class TunnelConfig
             var options = new SingBoxOptions();
             var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
 
+            // «В пуле только рабочие» (владелец, 28.09) — буквально: мёртвый
+            // по замерам сервер в конфиг не идёт вовсе, а не только выводится
+            // из автоподбора. С пулом из трёх подписок в конфиге стало 118
+            // выходов, и sing-box поднимался 7 секунд против прежних двух;
+            // каждый мёртвый выход — лишняя работа движку ни за что.
+            // Закреплённый человеком остаётся — его выбрали руками. И не до
+            // пустоты: мёртвыми бывают все сразу — по устаревшим замерам, —
+            // и тогда пусть движок перебирает всех. В списке вкладки мёртвые
+            // видны по-прежнему; удачный замер вернёт сервер со следующим
+            // запуском.
+            var alive = servers
+                .Where(s => !dead.Contains(s.Tag) || s.Tag == settings.PreferredServer || s.IsSelfRegistering)
+                .ToList();
+
+            int dropped = servers.Count - alive.Count;
+
+            if (alive.Any(s => !s.IsSelfRegistering))
+                servers = alive;
+            else
+                dropped = 0;
+
             // Охват TUN следует за десинком, а не за настройкой, и это
             // исправление 21.09.
             //
@@ -187,7 +208,9 @@ internal static class TunnelConfig
             // сервер — это сервер, который человек считает рабочим, а он
             // не участвует в выборе, и почему — не видно нигде.
             if (dead.Count > 0)
-                note += $", {dead.Count} не отвечали и выведены из автоподбора";
+                note += dropped > 0
+                    ? $", {dropped} не отвечали и в конфиг не взяты"
+                    : $", {dead.Count} не отвечали и выведены из автоподбора";
 
             if (result.SkippedServers.Count > 0)
                 note += $", {result.SkippedServers.Count} пропущено";
