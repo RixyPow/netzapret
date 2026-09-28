@@ -98,8 +98,13 @@ public sealed class SubscriptionClient : IDisposable
 
             string? used = null;
 
-            foreach (var agent in agents)
+            // Заглушка, полученная под одним именем, — на случай, если под
+            // другими ничего лучше не выйдет: тогда отдаём её, как прежде.
+            (SubscriptionInfo Info, string Body, string Agent)? stub = null;
+
+            for (int i = 0; i < agents.Length; i++)
             {
+                var agent = agents[i];
                 used = agent;
 
                 response?.Dispose();
@@ -113,14 +118,40 @@ public sealed class SubscriptionClient : IDisposable
 
                 // Отказ «такого нет» или «не для тебя» — пробуем другое имя;
                 // сбой самой панели (5xx) другим именем не лечится.
-                if (response.StatusCode is not (HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized))
-                    break;
+                if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+                    continue;
+
+                response.EnsureSuccessStatusCode();
+
+                var info = await ParseAsync(response, cancellationToken);
+
+                // Панель ответила «200», но заглушкой — список на один адрес
+                // без шифрования. Так отвечает часть панелей клиенту, которого
+                // не любят: замер 28.09 (подписка Trust у владельца) — под
+                // именем sing-box 48 «серверов» на convert-flow.net:443 без TLS,
+                // под Happ и v2rayN — 123 настоящих с Reality на десяти адресах.
+                // Прежде переспрашивали только при 404/403, и заглушка уходила
+                // в пул целиком.
+                if (LooksLikeStub(info) && i < agents.Length - 1)
+                {
+                    stub ??= (info, LastBody ?? string.Empty, agent);
+                    continue;
+                }
+
+                // Сработало не имя по умолчанию — запомнить; сработало оно —
+                // забыть: панель могла снова начать отвечать обоим.
+                AgentMemory.Set(target, agent == _userAgents[0] ? null : agent, _memory);
+                return info;
+            }
+
+            if (stub is { } fallback)
+            {
+                LastBody = fallback.Body;
+                return fallback.Info;
             }
 
             response!.EnsureSuccessStatusCode();
 
-            // Сработало не имя по умолчанию — запомнить; сработало оно —
-            // забыть: панель могла снова начать отвечать обоим.
             AgentMemory.Set(target, used == _userAgents[0] ? null : used, _memory);
             return await ParseAsync(response, cancellationToken);
         }
@@ -129,6 +160,21 @@ public sealed class SubscriptionClient : IDisposable
             response?.Dispose();
         }
     }
+
+    /// <summary>
+    /// Похож ли ответ на заглушку для нелюбимого клиента.
+    /// </summary>
+    /// <remarks>
+    /// Несколько серверов, все на одном адресе и порту, и ни у одного нет
+    /// шифрования (ни TLS, ни Reality). Настоящая подписка так не выглядит:
+    /// разные страны — разные адреса, а голый VLESS на 443 ТСПУ узнаёт
+    /// с первого пакета. Один сервер заглушкой не считается — бывают
+    /// подписки из одного.
+    /// </remarks>
+    internal static bool LooksLikeStub(SubscriptionInfo info) =>
+        info.Servers.Count > 1
+        && info.Servers.Select(s => $"{s.Host}:{s.Port}").Distinct(StringComparer.OrdinalIgnoreCase).Count() == 1
+        && info.Servers.All(s => string.IsNullOrEmpty(s.Security) || string.Equals(s.Security, "none", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Тело последнего удачного ответа — для запаса пула (<see cref="SubscriptionPool"/>).</summary>
     /// <remarks>Пароль, как и ссылка: не печатается и не пишется в журнал.</remarks>
