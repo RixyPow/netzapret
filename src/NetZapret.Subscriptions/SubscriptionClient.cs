@@ -130,9 +130,14 @@ public sealed class SubscriptionClient : IDisposable
         }
     }
 
-    private static async Task<SubscriptionInfo> ParseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    /// <summary>Тело последнего удачного ответа — для запаса пула (<see cref="SubscriptionPool"/>).</summary>
+    /// <remarks>Пароль, как и ссылка: не печатается и не пишется в журнал.</remarks>
+    public string? LastBody { get; private set; }
+
+    private async Task<SubscriptionInfo> ParseAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        LastBody = body;
         var (servers, errors) = SubscriptionParser.ParseBody(body);
 
         return SubscriptionParser.BuildInfo(
