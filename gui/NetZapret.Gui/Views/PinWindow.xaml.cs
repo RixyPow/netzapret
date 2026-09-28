@@ -683,11 +683,17 @@ public partial class PinWindow : Window
 
         var probes = new Progress<(string Host, PinProbe Probe)>(p => Block(p.Host).Lines.Add(Line(p.Host, p.Probe)));
 
+        // Что посредники отдают этим именам сейчас. Снимок каталога стареет:
+        // 28.09 он знал у XBOX DNS только мёртвые .195 и .204, а живые .201
+        // и .203 владелец нашёл в чужом GUI (IntermediaryDns).
+        Status.Text = "Спрашиваю у XBOX DNS и Comss, какие адреса они отдают сейчас…";
+        var live = await IntermediaryDns.AskManyAsync(names, CancellationToken.None);
+
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
         // который едет с программой: без Zapret остался бы только второй.
         var picks = await PinPicker.PickAsync(
             names,
-            host => [.. own.PinCandidates(host), .. _catalog?.AnswersFor(host) ?? []],
+            host => [.. own.PinCandidates(host), .. live.TryGetValue(host, out var now) ? now : [], .. _catalog?.AnswersFor(host) ?? []],
             [.. _catalog?.Intermediaries() ?? [], .. own.Intermediaries],
             progress,
             CancellationToken.None,
