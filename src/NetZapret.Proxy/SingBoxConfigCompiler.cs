@@ -227,6 +227,16 @@ public sealed class SingBoxOptions
         new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>
+    /// Сколько серверов с одного входа (адрес:порт) берёт автоподбор; 0 — без предела.
+    /// </summary>
+    /// <remarks>См. <c>CapPerEntry</c>: 16 серверов Trust на одном входе били его пачкой.</remarks>
+    public int AutoPickPerEntry { get; init; } = 2;
+
+    /// <summary>Последние замеры по тегам, мс: какие два с одного входа брать.</summary>
+    public IReadOnlyDictionary<string, double> KnownLatency { get; init; } =
+        new Dictionary<string, double>(StringComparer.Ordinal);
+
+    /// <summary>
     /// На сколько миллисекунд новый сервер должен опережать текущий,
     /// чтобы произошло переключение.
     /// </summary>
@@ -1057,6 +1067,8 @@ public sealed class SingBoxConfigCompiler
         // который не читается, и лучше, чем один WARP.
         eligible = alive.Count > 0 ? alive : [.. primary, .. reserve];
 
+        eligible = CapPerEntry(eligible, options);
+
         var members = new JsonArray();
         foreach (var server in eligible)
             members.Add(tags[server]);
@@ -1466,6 +1478,43 @@ public sealed class SingBoxConfigCompiler
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// Не больше <see cref="SingBoxOptions.AutoPickPerEntry"/> серверов с одного входа
+    /// в автоподборе — быстрейших по последнему замеру.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Общий замер движка бьёт по всем участникам группы разом. У Trust все
+    /// 45 стран сидят на одном входе 131.123.25.7:443 с одним ключом, и в
+    /// группе их было 16 — 16 соединений в один вход одной пачкой. 28.09 этот
+    /// вход не принимал соединения: 763 таймаута в журнале движка за вечер.
+    /// </para>
+    /// <para>
+    /// Happ с той же подпиской исполняет один выбранный конфиг, и его
+    /// наблюдатель проверяет 2–4 сервера раз в минуту; остальные страны не
+    /// проверяются вовсе, пока не нажать «Тест пинга». Здесь так же: страны
+    /// сверх двух остаются выбираемыми руками (селектор их держит), но
+    /// автоподбор их не гоняет. Вход — адрес и порт: всё, что на одном,
+    /// для продавца одно и то же подключение.
+    /// </para>
+    /// </remarks>
+    private static List<ProxyServer> CapPerEntry(IReadOnlyList<ProxyServer> servers, SingBoxOptions options)
+    {
+        if (options.AutoPickPerEntry <= 0)
+            return [.. servers];
+
+        double Rank(ProxyServer s) =>
+            options.KnownLatency.TryGetValue(s.Tag, out var ms) ? ms : double.MaxValue;
+
+        var keep = servers
+            .GroupBy(s => $"{s.Host.Trim().ToLowerInvariant()}:{s.Port}")
+            .SelectMany(g => g.OrderBy(Rank).Take(options.AutoPickPerEntry))
+            .ToHashSet();
+
+        // Порядок подписки сохраняется: по нему идут и замер, и показ.
+        return servers.Where(keep.Contains).ToList();
     }
 
     private static JsonObject BuildRoute(

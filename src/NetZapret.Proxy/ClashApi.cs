@@ -112,36 +112,6 @@ public sealed class ClashApi : IDisposable
         }
     }
 
-    /// <summary>
-    /// Заставляет группу автоподбора перезамерить всех и переизбрать выход.
-    /// </summary>
-    /// <remarks>
-    /// Бьёт по всем выходам группы разом — поэтому зовётся только тогда,
-    /// когда текущий выход умер, а не по расписанию.
-    /// </remarks>
-    /// <returns>Ответил ли движок.</returns>
-    public async Task<bool> RetestGroupAsync(string group, string url, TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var query = $"{Root}/group/{Uri.EscapeDataString(group)}/delay"
-                + $"?timeout={(int)timeout.TotalMilliseconds}"
-                + $"&url={Uri.EscapeDataString(url)}";
-
-            using var response = await SendAsync(HttpMethod.Get, query, null, cancellationToken);
-
-            return response.IsSuccessStatusCode;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
     /// <summary>Из каких выходов состоит группа; <c>null</c> — движок не отозвался.</summary>
     /// <remarks>
     /// Замер всей группы одним запросом (/group/…/delay) здесь нарочно
@@ -181,6 +151,8 @@ public sealed class ClashApi : IDisposable
     /// <remarks>
     /// Не больше <paramref name="perEntry"/> проверок разом на один вход
     /// (адрес и порт сервера) и не больше <paramref name="total"/> всего.
+    /// По умолчанию на вход — строго по одному (владелец 28.09: «поочерёдная
+    /// проверка была бы логичнее»); разные продавцы друг другу не мешают.
     /// У многих продавцов ограничено число одновременных подключений на ключ,
     /// а у Trust все страны сидят на одном входе с одним ключом — залп
     /// из двух десятков проверок для него выглядит как злоупотребление.
@@ -194,7 +166,7 @@ public sealed class ClashApi : IDisposable
         TimeSpan timeout,
         Action<string, TimeSpan?> onResult,
         CancellationToken cancellationToken,
-        int perEntry = 2,
+        int perEntry = 1,
         int total = 8)
     {
         using var all = new SemaphoreSlim(total);

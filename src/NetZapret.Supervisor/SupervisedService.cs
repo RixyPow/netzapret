@@ -347,8 +347,10 @@ public sealed class SingBoxService : SupervisedService
         int? trafficPort = null,
         int trafficCheckEvery = 6,
         bool bypassWhenDead = true,
-        string? preferredExit = null)
+        string? preferredExit = null,
+        int exitCheckSeconds = 30)
     {
+        _exitCheckSeconds = exitCheckSeconds;
         _executablePath = executablePath;
         _configPath = configPath;
         _healthPort = healthPort;
@@ -359,6 +361,9 @@ public sealed class SingBoxService : SupervisedService
     }
 
     private readonly string? _preferredExit;
+
+    /// <summary>Как часто проверять подключённый выход, с; 0 — не проверять (AppSettings.ExitCheckSeconds).</summary>
+    private readonly int _exitCheckSeconds;
 
     /// <summary>
     /// Куда ставить группу выбора на старте, по порядку попыток.
@@ -416,12 +421,11 @@ public sealed class SingBoxService : SupervisedService
                 + "что помнит в своём кэше.");
         }
 
-        // Прогрев: автоподбор мерит всех и выбирает, и только потом сторож
-        // и проверка трафика начинают судить. 28.09 первая проверка шла через
-        // 5 с после старта, когда автоподбор никого ещё не мерил и стоял
-        // на первом в списке («🛡 ByPass»), — туннель был объявлен мёртвым
-        // и полторы минуты шёл в обход. Замер всех здесь не лишний: движок
-        // при старте делает его и сам.
+        // Прогрев: серверы автоподбора проверяются по одному, лучший ставится,
+        // и только потом сторож и проверка трафика начинают судить. 28.09
+        // первая проверка шла через 5 с после старта, когда автоподбор никого
+        // ещё не мерил и стоял на первом в списке («🛡 ByPass»), — туннель был
+        // объявлен мёртвым и полторы минуты шёл в обход.
         //
         // В фоне: надзор поднимает десинк только после этого метода, и ждать
         // пять секунд замера значило бы на столько же задержать десинк.
@@ -435,8 +439,16 @@ public sealed class SingBoxService : SupervisedService
             {
                 try
                 {
+                    // По одному, не залпом, — и сразу ставим лучшего: первая
+                    // проверка трафика пойдёт через заведомо ответивший сервер.
                     using var warm = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
-                    await warm.RetestGroupAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken);
+
+                    if (await PickOneByOneAsync(warm, cancellationToken) is { } best && run == _run)
+                        await warm.SelectAsync(SelectorGroup, best, cancellationToken);
+                }
+                catch (Exception)
+                {
+                    // Не вышло — останется автоподбор, как было до прогрева.
                 }
                 finally
                 {
@@ -706,7 +718,9 @@ public sealed class SingBoxService : SupervisedService
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-        var target = _bypass.TargetFor(action, LatencyGroup);
+        // Возврат из обхода — прямо на живой сервер, найденный по одному,
+        // а не в автоподбор, который мог стоять на мёртвом.
+        var target = _bypass.TargetFor(action, _returnTo ?? LatencyGroup);
 
         if (!await api.SelectAsync(SelectorGroup, target, cancellationToken))
         {
@@ -736,40 +750,88 @@ public sealed class SingBoxService : SupervisedService
     {
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-        if (await api.MeasureAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken) is not null)
+        // В обходе селектор стоит на direct — меряем автоподбор, а не его.
+        if (await api.MeasureAsync(LatencyGroup, WatchUrl, CheckTimeout, cancellationToken) is not null)
+        {
+            _returnTo = null;
             return true;
+        }
 
-        // Выбранный автоподбором молчит — пусть переизберёт. Общий замер
-        // теперь раз в пять минут, и без этого обход держался бы, пока
-        // до него не дойдёт очередь, даже когда живой сервер в группе есть.
-        await api.RetestGroupAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken);
-
-        return await api.MeasureAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken) is not null;
+        // Выбранный автоподбором молчит — ищем живого по одному. Найден —
+        // обход снимется, и селектор встанет прямо на него (_returnTo).
+        _returnTo = await PickOneByOneAsync(api, cancellationToken);
+        return _returnTo is not null;
     }
 
-    /// <summary>Раз во сколько опросов (по 5 с) проверять текущий выход: полминуты.</summary>
-    private const int ExitWatchEvery = 6;
+    /// <summary>Куда вернуть трафик при выходе из обхода; <c>null</c> — в автоподбор.</summary>
+    private string? _returnTo;
+
+    /// <summary>Сколько ждать ответа одной проверки — как наблюдатель Xray у Trust в Happ.</summary>
+    private static readonly TimeSpan CheckTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>Раз во сколько опросов (по 5 с) проверять текущий выход.</summary>
+    private int ExitWatchEvery => Math.Max(1, _exitCheckSeconds / 5);
 
     private int _watchCounter;
     private int _exitMisses;
 
+    /// <summary>Идёт подбор замены — второй не начинаем.</summary>
+    private int _picking;
+
     private const string WatchUrl = "http://cp.cloudflare.com/generate_204";
 
     /// <summary>
-    /// Следит за подключённым выходом; умер — автоподбор переизбирает сразу.
+    /// Проверяет серверы автоподбора строго по одному и ставит лучший из ответивших.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Решение владельца 28.09: проверять раз в полминуты только текущий
-    /// сервер, а всех — раз в пять минут и при смерти текущего. Одно соединение
-    /// через выход, который группа держит сейчас.
+    /// По очереди, а не залпом (владелец 28.09: «поочерёдная проверка была бы
+    /// логичнее»). Групповой перезамер (/group/…/delay) бил по всем разом:
+    /// 16 соединений в один вход Trust, и в тот вечер вход не принимал
+    /// соединения — 763 таймаута в журнале движка. Happ с той же подпиской
+    /// проверяет 2–4 сервера раз в минуту.
     /// </para>
     /// <para>
-    /// Промах — перепроверка на следующем опросе, через 5 с, а не через
-    /// полминуты: разовый отказ бывает и у живого сервера, но ждать его
-    /// подтверждения полминуты — значит полминуты сидеть без сети. Два промаха
-    /// подряд — перезамер группы и переизбрание. Худший случай ~35 с против
-    /// прежней минуты, а лишние проверки бывают, только когда что-то не так.
+    /// Лучший ставится в селектор прямо, мимо автоподбора: тот выбирает
+    /// быстрейший и после перезамера снова хватал «мигающий» сервер — быстрый,
+    /// пока жив, — и 28.09 туннель качало: 22:49 мёртв, 22:51 жив, 22:51:54 мёртв.
+    /// </para>
+    /// </remarks>
+    /// <returns>Поставленный сервер; <c>null</c> — живых нет.</returns>
+    private async Task<string?> PickOneByOneAsync(ClashApi api, CancellationToken cancellationToken)
+    {
+        var members = await api.MembersAsync(LatencyGroup, cancellationToken);
+
+        if (members is null || members.Count == 0)
+            return null;
+
+        string? best = null;
+        TimeSpan bestDelay = TimeSpan.MaxValue;
+
+        foreach (var tag in members)
+        {
+            var delay = await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken);
+
+            if (delay is { } d && d < bestDelay)
+                (best, bestDelay) = (tag, d);
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Следит за подключённым выходом; умер — по одному ищет живой и ставит его.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Решение владельца 28.09: проверять только подключённый сервер. Одно
+    /// соединение через селектор — то есть ровно тем путём, каким идёт трафик,
+    /// — раз в <see cref="AppSettings.ExitCheckSeconds"/> секунд.
+    /// </para>
+    /// <para>
+    /// Промах — перепроверка на следующем опросе, через 5 с: разовый отказ
+    /// бывает и у живого сервера. Два подряд — подбор замены по одному
+    /// (<see cref="PickOneByOneAsync"/>), в фоне, чтобы надзор не ждал.
     /// </para>
     /// <para>
     /// Закреплённый выход не трогаем — он выбран человеком. Обход тоже:
@@ -778,16 +840,16 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     private async Task WatchExitAsync(CancellationToken cancellationToken)
     {
-        if (_preferredExit is not null || _bypass.Engaged)
+        if (_preferredExit is not null || _bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0)
             return;
 
-        // После промаха — на каждом опросе, иначе раз в полминуты.
+        // После промаха — на каждом опросе, иначе по настройке.
         if (_exitMisses == 0 && _watchCounter++ % ExitWatchEvery != 0)
             return;
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-        if (await api.MeasureAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken) is not null)
+        if (await api.MeasureAsync(SelectorGroup, WatchUrl, CheckTimeout, cancellationToken) is not null)
         {
             _exitMisses = 0;
             return;
@@ -798,16 +860,47 @@ public sealed class SingBoxService : SupervisedService
 
         _exitMisses = 0;
 
-        var before = await api.SelectedAsync(LatencyGroup, cancellationToken);
+        var before = await api.SelectedAsync(SelectorGroup, cancellationToken);
 
-        if (!await api.RetestGroupAsync(LatencyGroup, WatchUrl, TimeSpan.FromSeconds(5), cancellationToken))
+        if (before == LatencyGroup)
+            before = await api.SelectedAsync(LatencyGroup, cancellationToken);
+
+        StartPick($"выход «{before}» не ответил дважды подряд");
+    }
+
+    /// <summary>Подбор замены в фоне; итог — в журнал.</summary>
+    private void StartPick(string why)
+    {
+        if (Interlocked.Exchange(ref _picking, 1) != 0)
             return;
 
-        var after = await api.SelectedAsync(LatencyGroup, cancellationToken);
+        int run = _run;
 
-        Note(after is not null && after != before
-            ? $"выход «{before}» не ответил дважды подряд — автоподбор перешёл на «{after}»."
-            : $"выход «{before}» не ответил дважды подряд, а живее его автоподбор не нашёл.");
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+                var best = await PickOneByOneAsync(api, CancellationToken.None);
+
+                // Пока искали, движок могли перезапустить — тогда не наше дело.
+                if (run != _run)
+                    return;
+
+                if (best is not null && await api.SelectAsync(SelectorGroup, best, CancellationToken.None))
+                    Note($"{why} — поставлен «{best}», лучший из ответивших при проверке по одному.");
+                else if (best is null)
+                    Note($"{why}, и ни один сервер автоподбора не ответил.");
+            }
+            catch (Exception)
+            {
+                // Не вышло сейчас — выйдет на следующем промахе.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _picking, 0);
+            }
+        }, CancellationToken.None);
     }
 
     /// <summary>Группа выбора в конфиге — та, что переключается.</summary>

@@ -140,6 +140,12 @@ public sealed class ServerHealthCache
             .Select(e => e.Tag)
             .ToList();
 
+    /// <summary>Последняя задержка ответивших серверов, мс — по ней автоподбор берёт лучших с входа.</summary>
+    public IReadOnlyDictionary<string, double> Latencies() =>
+        _entries.Values
+            .Where(e => e.Success && e.LatencyMs is not null)
+            .ToDictionary(e => e.Tag, e => e.LatencyMs!.Value, StringComparer.Ordinal);
+
     /// <summary>Оставляет только те записи, что относятся к нынешним серверам.</summary>
     /// <remarks>
     /// Подписка меняется, и без чистки файл копил бы записи об исчезнувших

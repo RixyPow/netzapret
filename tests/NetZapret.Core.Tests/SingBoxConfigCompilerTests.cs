@@ -549,6 +549,34 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void AutoPickTakesAtMostTwoFastestFromOneEntry()
+    {
+        // Trust 28.09: 16 серверов на одном входе, общий замер движка бил
+        // по нему пачкой в 16 соединений. С одного входа — два быстрейших,
+        // остальные остаются в селекторе, выбрать их руками можно.
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var servers = new[]
+        {
+            Server("a"), Server("b"), Server("c"), Server("d"),
+            Server("other") with { Host = "other.example.com" },
+        };
+
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions
+        {
+            KnownLatency = new Dictionary<string, double> { ["c"] = 10, ["a"] = 20, ["b"] = 300 },
+        });
+
+        var root = JsonDocument.Parse(result.Json).RootElement;
+        var outbounds = root.GetProperty("outbounds").EnumerateArray().ToList();
+
+        var auto = outbounds.Single(o => o.GetProperty("tag").GetString() == "auto-latency");
+        var selector = outbounds.Single(o => o.GetProperty("tag").GetString() == "auto");
+
+        Assert.Equal(["a", "c", "other"], auto.GetProperty("outbounds").EnumerateArray().Select(e => e.GetString()));
+        Assert.Contains("d", selector.GetProperty("outbounds").EnumerateArray().Select(e => e.GetString()));
+    }
+
+    [Fact]
     public void XhttpTransportCarriesPadding()
     {
         // Без набивки движок отказывается разбирать конфиг со словами

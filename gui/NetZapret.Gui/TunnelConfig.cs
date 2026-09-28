@@ -193,6 +193,11 @@ internal static class TunnelConfig
                 // закрепить такой сервер руками законное желание, он мог
                 // подняться между нашими замерами.
                 DeadServerTags = dead.ToHashSet(StringComparer.Ordinal),
+
+                // Проверка серверов — как настроил человек (AppSettings).
+                LatencyTestInterval = $"{Math.Max(1, settings.FullCheckMinutes)}m",
+                AutoPickPerEntry = Math.Max(0, settings.AutoPickPerEntry),
+                KnownLatency = ServerHealthCache.Load().Latencies(),
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
