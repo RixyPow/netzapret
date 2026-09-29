@@ -49,6 +49,19 @@ public sealed record ServerHealth
     /// </remarks>
     public int Failures { get; init; }
 
+    /// <summary>Исходы последних проверок, новые в конце; не больше <see cref="ServerHealthCache.RecentSize"/>.</summary>
+    /// <remarks>
+    /// Нужны, чтобы узнать «мигающий» сервер. Счёт промахов подряд его не ловит:
+    /// ОБС у SecureWay (замер 29.09) отвечали 2–3 раза из 5 вперемешку, и три
+    /// промаха подряд у них не случались.
+    /// </remarks>
+    public IReadOnlyList<bool> Recent { get; init; } = Array.Empty<bool>();
+
+    /// <summary>
+    /// Отвечает через раз: из последних проверок (не меньше пяти) удачных меньше 80 %.
+    /// </summary>
+    public bool Flaky => Recent.Count >= 5 && Recent.Count(ok => ok) * 5 < Recent.Count * 4;
+
     public TimeSpan Age => DateTimeOffset.Now - CheckedAt;
 }
 
@@ -117,13 +130,27 @@ public sealed class ServerHealthCache
     /// </remarks>
     public void Set(ServerHealth health)
     {
-        int before = _entries.GetValueOrDefault(health.Tag)?.Failures ?? 0;
+        var previous = _entries.GetValueOrDefault(health.Tag);
+        int before = previous?.Failures ?? 0;
+
+        var recent = (previous?.Recent ?? Array.Empty<bool>())
+            .Append(health.Success)
+            .TakeLast(RecentSize)
+            .ToList();
 
         _entries[health.Tag] = health with
         {
             Failures = health.Success ? 0 : before + 1,
+            Recent = recent,
         };
     }
+
+    /// <summary>Сколько последних исходов помнить.</summary>
+    public const int RecentSize = 10;
+
+    /// <summary>Отвечающие через раз (<see cref="ServerHealth.Flaky"/>) — мимо автоподбора, как мёртвые.</summary>
+    public IReadOnlyCollection<string> Flaky() =>
+        _entries.Values.Where(e => e.Flaky).Select(e => e.Tag).ToList();
 
     /// <summary>
     /// Теги, которые не отвечали <paramref name="times"/> проверок подряд.

@@ -32,7 +32,10 @@ public sealed record ServerRow(
     bool Measurable,
 
     /// <summary>Кнопка «убрать» — только у отдельных ключей.</summary>
-    Visibility RemoveShown = Visibility.Collapsed);
+    Visibility RemoveShown = Visibility.Collapsed,
+
+    /// <summary>Пункт меню строки: убрать из автоподбора или вернуть.</summary>
+    string AutoPickLabel = "Не брать в автоподбор");
 
 /// <summary>Папка одной подписки.</summary>
 public sealed class SubRow
@@ -728,13 +731,12 @@ public partial class VpnView : UserControl
             // на то время, пока движки стоят и спросить некого.
             var (latency, key) = !server.IsMeasurable && known is null
                 ? ("только в работе", "Faint")
-                : known switch
-                {
-                    { Success: true, LatencyMs: { } ms } => ($"{ms:0} мс", "Accent"),
-                    { Success: true } => ("отвечает", "Accent"),
-                    { Success: false } => ("не отвечает", "Danger"),
-                    _ => ("не замерян", "Faint"),
-                };
+                : (Latency(server.Tag), Key(server.Tag));
+
+            bool excluded = settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal);
+
+            if (excluded)
+                latency += " · вне подбора";
 
             var detail = Detail(server.Protocol.ToString(), server.Host, server.Port, server.Tag);
 
@@ -757,7 +759,8 @@ public partial class VpnView : UserControl
                 (Brush)FindResource(chosen ? "Accent" : key),
                 chosen ? "выбран" : "выбрать",
                 !chosen,
-                server.IsMeasurable);
+                server.IsMeasurable,
+                AutoPickLabel: excluded ? "Вернуть в автоподбор" : "Не брать в автоподбор");
         });
 
         // Сортировка здесь не применяется: список отдаётся в порядке подписки,
@@ -820,9 +823,14 @@ public partial class VpnView : UserControl
                     ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
                     CanChoose = server.Tag != settings.PreferredServer,
 
-                    Latency = server.Measurable || _health.Find(server.Tag) is not null
+                    Latency = (server.Measurable || _health.Find(server.Tag) is not null
                         ? Latency(server.Tag)
-                        : "только в работе",
+                        : "только в работе")
+                        + (settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal) ? " · вне подбора" : string.Empty),
+
+                    AutoPickLabel = settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal)
+                        ? "Вернуть в автоподбор"
+                        : "Не брать в автоподбор",
 
                     // Возраст замера пересчитывается здесь же: иначе он
                     // оставался тем, каким был при чтении подписки, и «17 мин
@@ -881,6 +889,9 @@ public partial class VpnView : UserControl
 
     private string Key(string tag) => _health.Find(tag) switch
     {
+        // Отвечает через раз — жёлтым (владелец 29.09): ОБС у SecureWay
+        // отвечали 2–3 раза из 5, и зелёный на таком врал бы.
+        { Flaky: true } => "Warn",
         { Success: true } => "Accent",
         { Success: false } => "Danger",
         _ => "Faint",
@@ -888,6 +899,8 @@ public partial class VpnView : UserControl
 
     private string Latency(string tag) => _health.Find(tag) switch
     {
+        { Flaky: true, LatencyMs: { } flaky } => $"{flaky:0} мс · через раз",
+        { Flaky: true } => "через раз",
         { Success: true, LatencyMs: { } ms } => $"{ms:0} мс",
         { Success: true } => "отвечает",
         { Success: false } => "не отвечает",
@@ -2072,6 +2085,45 @@ public partial class VpnView : UserControl
         var beside = Path.Combine(AppContext.BaseDirectory, "engines", "sing-box", "sing-box.exe");
 
         return File.Exists(beside) ? beside : null;
+    }
+
+    /// <summary>
+    /// Убирает сервер из автоподбора или возвращает (правый щелчок по строке).
+    /// </summary>
+    /// <remarks>
+    /// Владелец 29.09: ОБС у SecureWay отвечают через раз на домашней сети
+    /// и сбивают автоподбор. Убранный остаётся в списке — выбрать его руками
+    /// можно; меняется с перезапуском движков, как всё, что уходит в конфиг.
+    /// </remarks>
+    private void OnAutoPickToggle(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag })
+            return;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var list = settings.AutoPickExcluded.ToList();
+            bool remove = list.Remove(tag);
+
+            if (!remove)
+                list.Add(tag);
+
+            settings = settings with { AutoPickExcluded = list };
+            settings.Save(AppSettings.DefaultPath);
+
+            Reshow();
+
+            Status.Text = remove
+                ? $"«{tag}» снова в автоподборе. Применится при следующем запуске движков."
+                : $"«{tag}» убран из автоподбора — выбрать его руками по-прежнему можно. Применится при следующем запуске движков.";
+
+            this.Offer("Автоподбор изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>Панель подвела, а запаса нет — причина уже словами.</summary>

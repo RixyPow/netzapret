@@ -196,7 +196,13 @@ internal static class TunnelConfig
                 // Мёртвые — мимо автоподбора, но в селекторе остаются:
                 // закрепить такой сервер руками законное желание, он мог
                 // подняться между нашими замерами.
-                DeadServerTags = dead.ToHashSet(StringComparer.Ordinal),
+                // И убранные человеком, и отвечающие через раз (ServerHealth.Flaky):
+                // в селекторе они остаются, выбрать руками можно, а автоподбор
+                // на них не садится.
+                DeadServerTags = dead
+                    .Concat(settings.AutoPickExcluded)
+                    .Concat(ServerHealthCache.Load().Flaky())
+                    .ToHashSet(StringComparer.Ordinal),
 
                 // Проверка серверов — как настроил человек (AppSettings).
                 LatencyTestInterval = $"{Math.Max(1, settings.FullCheckMinutes)}m",

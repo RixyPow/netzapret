@@ -330,6 +330,15 @@ public sealed record AppSettings
     public bool PinAutoRefresh { get; init; } = true;
 
     /// <summary>
+    /// Серверы, которые человек убрал из автоподбора; выбрать их руками можно по-прежнему.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 29.09: ОБС у SecureWay отвечают через раз на домашней сети
+    /// (замер: 2–3 из 5) и сбивают автоподбор, а на мобильной, вероятно, нужны.
+    /// </remarks>
+    public IReadOnlyList<string> AutoPickExcluded { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Тема окна — имя папки в <c>themes\</c>: <c>dark</c>, <c>light</c> или чужая.
     /// </summary>
     /// <remarks>

@@ -359,7 +359,17 @@
                                               Margin="20,8,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11">
+                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11"
+                                                    ToolTip="Правый щелчок — убрать из автоподбора или вернуть">
+                                                <!--
+                                                    Убрать сервер из автоподбора (владелец 29.09: ОБС у SecureWay
+                                                    отвечают через раз на домашней сети). Выбрать руками — можно.
+                                                -->
+                                                <Border.ContextMenu>
+                                                    <ContextMenu>
+                                                        <MenuItem Header="{Binding AutoPickLabel}" Tag="{Binding Tag}" Click="OnAutoPickToggle" />
+                                                    </ContextMenu>
+                                                </Border.ContextMenu>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
