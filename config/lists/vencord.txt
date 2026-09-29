@@ -1,0 +1,3 @@
+# Vencord — сторонний клиент-дополнение к Discord.
+# Деление Discord как в Zapret GUI (владелец 29.09).
+vencord.dev

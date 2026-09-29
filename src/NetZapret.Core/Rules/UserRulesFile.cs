@@ -104,7 +104,13 @@ public sealed class UserRulesFile
     /// Чем чинить имя при <see cref="RoutingMode.Desync"/>; <c>null</c> —
     /// решает пресет, как было до появления выбора.
     /// </param>
-    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null)
+    /// <param name="before">
+    /// Значение более широкого правила того же типа, раньше которого встаёт
+    /// новая запись. Часть сервиса, лежащая внутри другого списка
+    /// (<c>ServicePart.Within</c>), иначе встала бы после него и не сработала
+    /// никогда: движок берёт первое совпавшее правило.
+    /// </param>
+    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null)
     {
         var trimmed = value.Trim();
         int index = _entries.FindIndex(e => e.Match == match && e.Matches(trimmed));
@@ -123,7 +129,15 @@ public sealed class UserRulesFile
         };
 
         if (index >= 0)
+        {
             _entries[index] = entry;
+            return;
+        }
+
+        int wider = before is null ? -1 : _entries.FindIndex(e => e.Match == match && e.Matches(before.Trim()));
+
+        if (wider >= 0)
+            _entries.Insert(wider, entry);
         else
             _entries.Add(entry);
     }

@@ -76,6 +76,17 @@ public sealed record ServicePart
 
     /// <summary>Пояснение, зачем эту часть трогать.</summary>
     public string? Note { get; init; }
+
+    /// <summary>
+    /// Более широкий список, внутри которого лежат имена этой части.
+    /// </summary>
+    /// <remarks>
+    /// updates.discord.com — внутри discord.com, картинки Discord — внутри
+    /// discordapp.net. Правило такой части записывается раньше правила
+    /// широкого списка, иначе движок, берущий первое совпадение, до неё
+    /// не дошёл бы (UserRulesFile.Set, <c>before</c>).
+    /// </remarks>
+    public string? Within { get; init; }
 }
 
 /// <summary>
@@ -182,6 +193,26 @@ public static class ServiceCatalog
                     List = "config/lists/discord.txt",
                     Note = "всё, кроме голоса: переписка, шлюз, приглашения, "
                         + "картинки, вложения и обновления",
+                },
+                new ServicePart
+                {
+                    Name = "Картинки",
+                    List = "config/lists/discord-images.txt",
+                    Within = "config/lists/discord.txt",
+                    Note = "картинки и вложения в чатах; ломаются отдельно от переписки",
+                },
+                new ServicePart
+                {
+                    Name = "Обновления",
+                    List = "config/lists/discord-updates.txt",
+                    Within = "config/lists/discord.txt",
+                    Note = "обновления клиента; без них Discord зависает на запуске",
+                },
+                new ServicePart
+                {
+                    Name = "Vencord",
+                    List = "config/lists/vencord.txt",
+                    Note = "сторонний клиент-дополнение",
                 },
                 new ServicePart
                 {
@@ -300,6 +331,7 @@ public static class ServiceCatalog
                 {
                     Name = "Сайт и сообщество",
                     List = "config/lists/steam-web.txt",
+                    Within = "config/lists/steam.txt",
                     Note = "страницы; ломаются отдельно от загрузок и лечатся иначе",
                 },
                 new ServicePart

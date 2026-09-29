@@ -1863,7 +1863,12 @@ public partial class RoutesView : UserControl
         try
         {
             var file = UserRulesFile.Load();
-            file.Set(match, parts[1], mode, recipe);
+
+            // Часть внутри более широкого списка — раньше его правила (ServicePart.Within).
+            var within = ServiceCatalog.All.SelectMany(s => s.Parts)
+                .FirstOrDefault(p => string.Equals(p.List, parts[1], StringComparison.OrdinalIgnoreCase))?.Within;
+
+            file.Set(match, parts[1], mode, recipe, before: within);
             file.Save();
 
             // Перечитываем сразу: подпись слева и сводка папки считаются при
