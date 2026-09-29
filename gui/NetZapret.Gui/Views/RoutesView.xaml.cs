@@ -805,6 +805,57 @@ public partial class RoutesView : UserControl
 
     private void OnReload(object sender, RoutedEventArgs e) => Reload();
 
+    private void OnFixKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            OnFix(sender, e);
+    }
+
+    /// <summary>
+    /// «Сайт не открывается»: пути по очереди, сработавший — в правила (SiteFixer).
+    /// </summary>
+    private async void OnFix(object sender, RoutedEventArgs e)
+    {
+        var input = FixSite.Text;
+
+        if (string.IsNullOrWhiteSpace(input) || !FixButton.IsEnabled)
+            return;
+
+        FixButton.IsEnabled = false;
+        FixButton.Content = "Проверяю…";
+        FixResult.Visibility = Visibility.Visible;
+
+        var progress = new Progress<string>(text => FixResult.Text = text);
+
+        try
+        {
+            var result = await Task.Run(() => NetZapret.Supervisor.SiteFixer.FixAsync(input, progress, CancellationToken.None));
+
+            FixResult.Text = result.Summary;
+
+            Journal.Write("починка сайта", $"{result.Host}: "
+                + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
+                + (result.Applied is { } mode ? $" → записан маршрут {mode}" : " → маршрут не менялся"));
+
+            if (result.Applied is not null)
+            {
+                Reload();
+
+                if (result.NeedsRestart)
+                    this.Offer($"Маршрут для {result.Host}: через VPN");
+            }
+        }
+        catch (Exception ex)
+        {
+            FixResult.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            FixButton.IsEnabled = true;
+            FixButton.Content = "Починить";
+        }
+    }
+
     /// <summary>
     /// Отмечает части, чьи имена прибиты в hosts.
     /// </summary>

@@ -46,6 +46,7 @@ return command switch
     "migrate" or "перенос" => NetZapret.Tools.Migrate.Run(args.ElementAtOrDefault(1)),
     "catalog" or "каталог" => await Catalog(),
     "report" or "отчёт" => Report(),
+    "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     null or "help" or "--help" or "-h" => Help(),
     _ => Unknown(command),
 };
@@ -152,6 +153,22 @@ int Where(string target)
         RoutingMode.Desync => "десинк",
         _ => "напрямую",
     };
+}
+
+// «Сайт не открывается»: пути по очереди, сработавший — в правила.
+// Решение целиком в SiteFixer; здесь только вывод.
+async Task<int> Fix(string target)
+{
+    var result = await NetZapret.Supervisor.SiteFixer.FixAsync(
+        target, new Progress<string>(Console.WriteLine), CancellationToken.None);
+
+    foreach (var step in result.Steps)
+        Console.WriteLine($"  {(step.Works ? "да " : "нет")}  {step.Path}: {step.Detail}");
+
+    Console.WriteLine();
+    Console.WriteLine(result.Summary);
+
+    return result.Applied is null && result.Steps.All(s => !s.Works) ? 1 : 0;
 }
 
 // Обзор резолверов: задержки, кто отвечает на самом деле, подмена.
@@ -287,6 +304,8 @@ int Help()
     Console.WriteLine("  nz where <имя|программа.exe|адрес>");
     Console.WriteLine("               куда пойдёт: по правилам и при нынешних выключателях");
     Console.WriteLine("  nz routes    книга маршрутов и противоречия в ней");
+    Console.WriteLine("  nz fix <сайт>  не открывается: пробует как есть, напрямую, через VPN");
+    Console.WriteLine("               и записывает сработавший маршрут");
     Console.WriteLine("  nz migrate [файл]   черновик переноса прежних правил;");
     Console.WriteLine("               без имени файла — только сверка, ничего не пишется");
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
