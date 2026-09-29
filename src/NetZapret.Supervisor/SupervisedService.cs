@@ -421,7 +421,7 @@ public sealed class SingBoxService : SupervisedService
                 + "что помнит в своём кэше.");
         }
 
-        // Прогрев: серверы автоподбора проверяются по одному, лучший ставится,
+        // Прогрев: серверы автоподбора проверяются по одному, первый ответивший ставится,
         // и только потом сторож и проверка трафика начинают судить. 28.09
         // первая проверка шла через 5 с после старта, когда автоподбор никого
         // ещё не мерил и стоял на первом в списке («🛡 ByPass»), — туннель был
@@ -781,7 +781,7 @@ public sealed class SingBoxService : SupervisedService
     private const string WatchUrl = "http://cp.cloudflare.com/generate_204";
 
     /// <summary>
-    /// Проверяет серверы автоподбора строго по одному и ставит лучший из ответивших.
+    /// Проверяет серверы автоподбора строго по одному и ставит первый ответивший.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -792,7 +792,7 @@ public sealed class SingBoxService : SupervisedService
     /// проверяет 2–4 сервера раз в минуту.
     /// </para>
     /// <para>
-    /// Лучший ставится в селектор прямо, мимо автоподбора: тот выбирает
+    /// Найденный ставится в селектор прямо, мимо автоподбора: тот выбирает
     /// быстрейший и после перезамера снова хватал «мигающий» сервер — быстрый,
     /// пока жив, — и 28.09 туннель качало: 22:49 мёртв, 22:51 жив, 22:51:54 мёртв.
     /// </para>
@@ -805,18 +805,24 @@ public sealed class SingBoxService : SupervisedService
         if (members is null || members.Count == 0)
             return null;
 
-        string? best = null;
-        TimeSpan bestDelay = TimeSpan.MaxValue;
+        // Первый ответивший, в порядке последних замеров, — а не лучший из
+        // всех. Владелец 29.09: «туннель очень долго переключается при смерти
+        // сервера». Перебор всех по 3 с — до полуминуты без сети сверх
+        // полуминуты ожидания проверки; в порядке замеров первый живой
+        // обычно и есть быстрейший, и находится за секунды.
+        var known = ServerHealthCache.Load().Latencies();
 
-        foreach (var tag in members)
+        var ordered = members
+            .OrderBy(tag => known.TryGetValue(tag, out var ms) ? ms : double.MaxValue)
+            .ToList();
+
+        foreach (var tag in ordered)
         {
-            var delay = await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken);
-
-            if (delay is { } d && d < bestDelay)
-                (best, bestDelay) = (tag, d);
+            if (await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken) is not null)
+                return tag;
         }
 
-        return best;
+        return null;
     }
 
     /// <summary>
@@ -888,7 +894,7 @@ public sealed class SingBoxService : SupervisedService
                     return;
 
                 if (best is not null && await api.SelectAsync(SelectorGroup, best, CancellationToken.None))
-                    Note($"{why} — поставлен «{best}», лучший из ответивших при проверке по одному.");
+                    Note($"{why} — поставлен «{best}», первый ответивший при проверке по одному.");
                 else if (best is null)
                     Note($"{why}, и ни один сервер автоподбора не ответил.");
             }
