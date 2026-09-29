@@ -79,6 +79,20 @@ public static class AutostartTask
     /// ноутбуке без питания — для постоянно работающего десинка и то и другое
     /// неприемлемо.
     /// </remarks>
+    /// <summary>
+    /// Кем запускать задачу: SID текущего пользователя, а не имя.
+    /// </summary>
+    /// <remarks>
+    /// Голое имя (Environment.UserName) планировщик не всегда сопоставляет
+    /// с учётной записью: 29.09 у пользователя «kirihomu» — «ERROR: The parameter
+    /// is incorrect. (10,26):UserId», строка UserId триггера входа. Так бывает,
+    /// когда имя компьютера совпадает с именем пользователя, или у учётной
+    /// записи Microsoft. SID однозначен — так пишет пользователя сама Windows
+    /// в выгруженных задачах.
+    /// </remarks>
+    public static string CurrentUserId() =>
+        System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+
     public static string BuildXml(AutostartOptions options)
     {
         var command = SecurityElement.Escape(options.ExecutablePath);

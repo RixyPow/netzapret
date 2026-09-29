@@ -932,7 +932,8 @@ public partial class StatusView : UserControl
                     // открыть программу заново.
                     Arguments = TrayIcon.Switch,
                     WorkingDirectory = Path.GetFullPath("."),
-                    UserId = Environment.UserName,
+                    // SID, а не имя: см. AutostartTask.CurrentUserId.
+                    UserId = AutostartTask.CurrentUserId(),
                 });
 
                 if (!ok)

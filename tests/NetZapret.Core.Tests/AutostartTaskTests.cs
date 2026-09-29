@@ -103,4 +103,10 @@ public class AutostartTaskTests
 
         Assert.Null(exception);
     }
-}
+
+    [Fact]
+    public void Task_runs_as_the_user_sid_not_a_bare_name()
+    {
+        // 29.09: голое имя «kirihomu» планировщик не принял — (10,26):UserId.
+        Assert.StartsWith("S-1-", NetZapret.Supervisor.AutostartTask.CurrentUserId());
+    }}
