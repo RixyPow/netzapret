@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:NetZapret.Gui.Views"
+        xmlns:local="clr-namespace:NetZapret.Gui"
         Title="NetZapret"
         Height="720" Width="1080"
         MinHeight="560" MinWidth="880"
@@ -17,7 +18,8 @@
     -->
     <Grid x:Name="Root" LayoutTransform="{DynamicResource UiScaleTransform}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="212" />
+            <!-- Шире на значок с отступом (30.09): под них ушло 30 точек, а самой длинной подписи, «Проверке блокировок», нужна прежняя ширина. -->
+            <ColumnDefinition Width="236" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -67,10 +69,10 @@
                         это настройки программы, а не часть работы с сетью.
                     -->
                     <StackPanel x:Name="Rail">
-                        <RadioButton x:Name="RailStatus" Style="{StaticResource RailItem}" Content="Главная" Tag="status" IsChecked="True" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="VPN" Tag="vpn" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" Checked="OnSection" />
+                        <RadioButton x:Name="RailStatus" Style="{StaticResource RailItem}" Content="Главная" Tag="status" local:MenuIcon.Glyph="&#xE80F;" IsChecked="True" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="VPN" Tag="vpn" local:MenuIcon.Glyph="&#xE774;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" local:MenuIcon.Glyph="&#xE9E9;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" local:MenuIcon.Glyph="&#xE816;" Checked="OnSection" />
 
                         <!--
                             Заголовок группы, а не пункт: прописными, мельче
@@ -87,16 +89,16 @@
                             <Border Grid.Column="1" Height="1" Background="{DynamicResource Border}"
                                     VerticalAlignment="Center" Margin="10,1,0,0" />
                         </Grid>
-                        <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" local:MenuIcon.Glyph="&#xE721;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" local:MenuIcon.Glyph="&#xE968;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" local:MenuIcon.Glyph="&#xE8A5;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" local:MenuIcon.Glyph="&#xE9D2;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" local:MenuIcon.Glyph="&#xE8FD;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" local:MenuIcon.Glyph="&#xE9D9;" Checked="OnSection" />
 
                         <Border Height="1" Background="{DynamicResource Border}" Margin="22,12,22,10" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Оформление" Tag="look" Checked="OnSection" />
-                        <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Оформление" Tag="look" local:MenuIcon.Glyph="&#xE790;" Checked="OnSection" />
+                        <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" local:MenuIcon.Glyph="&#xE713;" Checked="OnSection" />
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>

@@ -14,7 +14,9 @@ using NetZapret.Supervisor;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Строка про один движок.</summary>
-public sealed record EngineRow(string Name, string Detail, Brush Color);
+/// <param name="Word">Отметка в карточке одним-двумя словами (EngineHealth.Word).</param>
+/// <param name="Detail">Строка под ней: причина надзора, когда движок не в порядке.</param>
+public sealed record EngineRow(string Name, string Word, string Detail, Brush Color, int? ProcessId = null);
 
 /// <summary>Предупреждение, которое стоит прочитать до запуска.</summary>
 public sealed record WarningRow(string Title, string Body);
@@ -63,29 +65,84 @@ public partial class StatusView : UserControl
 
     private DateTimeOffset? _startingSince;
 
-    private void OnTelegram(object sender, RoutedEventArgs e)
+    private void OnTelegram(object sender, RoutedEventArgs e) => OpenLink(About.Telegram);
+
+    private void OnGitHub(object sender, RoutedEventArgs e) => OpenLink(About.Repository);
+
+    /// <summary>Описание — README на GitHub: он и есть документация, другой нет.</summary>
+    private void OnDocs(object sender, RoutedEventArgs e) => OpenLink(About.Repository + "#readme");
+
+    private static void OpenLink(string url)
     {
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = About.Telegram, UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
         }
         catch (Exception)
         {
-            // Нет браузера по умолчанию — ссылка есть и в «Ещё», в карточке «О программе».
+            // Нет браузера по умолчанию — те же ссылки есть в «Ещё», в карточке «О программе».
         }
     }
 
-    private void OnHideTelegram(object sender, RoutedEventArgs e)
-    {
-        TelegramCard.Visibility = Visibility.Collapsed;
+    /// <summary>
+    /// Арт сбоку — только когда колонке есть где его показать.
+    /// </summary>
+    /// <remarks>
+    /// Колонке достаётся остаток после содержимого, и на окне по умолчанию
+    /// (1080) это полоска в несколько точек: кусок картинки у края читался
+    /// ошибкой отрисовки (снимок 30.09). Уже 220 — не рисуем вовсе.
+    /// </remarks>
+    private void OnArtSize(object sender, SizeChangedEventArgs e) =>
+        Art.Visibility = e.NewSize.Width >= 220 ? Visibility.Visible : Visibility.Hidden;
 
+    private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
+
+    private void OnQuickLog(object sender, RoutedEventArgs e) => Open("log");
+
+    private void OnQuickDoctor(object sender, RoutedEventArgs e) => Open("doctor");
+
+    private void OnDesyncSettings(object sender, RoutedEventArgs e) => Open("desync");
+
+    private void Open(string section) => (Window.GetWindow(this) as MainWindow)?.Open(section);
+
+    /// <summary>
+    /// Папка настроек в проводнике, с выделенным файлом.
+    /// </summary>
+    /// <remarks>
+    /// Папку, а не файл в блокноте: окно работает от администратора, и блокнот,
+    /// открытый им, тоже был бы администраторским — правка настроек мимо окна
+    /// с полными правами без нужды. Проводник открывается от человека.
+    /// </remarks>
+    private void OnQuickConfig(object sender, RoutedEventArgs e)
+    {
         try
         {
-            (AppSettings.Load(AppSettings.DefaultPath) with { TelegramCardHidden = true }).Save(AppSettings.DefaultPath);
+            var file = Path.GetFullPath(AppSettings.DefaultPath);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                ArgumentList = { File.Exists(file) ? "/select," + file : Path.GetDirectoryName(file)! },
+                UseShellExecute = false,
+            });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Не записалось — карточка вернётся при следующем открытии, и только.
+            ShowProblem("Проводник не открылся: " + ex.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>То же окно, что у шестерёнки на вкладке VPN.</summary>
+    private void OnTunnelSettings(object sender, RoutedEventArgs e)
+    {
+        var window = new TunnelSettingsWindow { Owner = Window.GetWindow(this) };
+
+        window.ShowDialog();
+
+        if (window.Changed)
+        {
+            Update();
+            this.Offer("Настройки туннеля изменены");
         }
     }
 
@@ -108,8 +165,6 @@ public partial class StatusView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             ShowModes(settings);
             ShowAutostart();
-
-            TelegramCard.Visibility = settings.TelegramCardHidden ? Visibility.Collapsed : Visibility.Visible;
 
             // Проверка обновлений идёт при запуске окна и может закончиться
             // уже после того, как «Главная» показана, — поэтому и подписка.
@@ -219,6 +274,7 @@ public partial class StatusView : UserControl
         Problem.Visibility = Visibility.Collapsed;
 
         PresetValue.Text = settings.DescribePreset();
+        ShowPresetNote(settings.PresetName);
         ServerValue.Text = _exit is null ? settings.DescribeServer() : $"{settings.DescribeServer()} · сейчас {_exit}";
         DnsValue.Text = settings.DnsServer;
 
@@ -230,6 +286,7 @@ public partial class StatusView : UserControl
         bool running = state is not null && state.IsSupervisorAlive();
 
         ShowState(settings, state, running);
+        ShowFooter(state, running);
         ShowWarnings(settings);
 
         _ = ReadExitAsync(settings, running && state!.Services.Any(s => s.Name == "sing-box"));
@@ -291,7 +348,7 @@ public partial class StatusView : UserControl
 
         if (!running)
         {
-            Dot.Fill = (Brush)FindResource("Faint");
+            ShowDot("Faint");
             ShowStateBar("Faint");
 
             StateLine.Text = "Остановлено";
@@ -322,7 +379,7 @@ public partial class StatusView : UserControl
 
         var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
 
-        Dot.Fill = (Brush)FindResource(colour);
+        ShowDot(colour);
         ShowStateBar(colour);
 
         StateLine.Text = healthy
@@ -366,7 +423,7 @@ public partial class StatusView : UserControl
         StopButton.Visibility = Visibility.Visible;
         StopButton.IsEnabled = true;
 
-        Dot.Fill = (Brush)FindResource("Warn");
+        ShowDot("Warn");
         ShowStateBar("Warn");
 
         StateLine.Text = "Запускается…";
@@ -509,6 +566,204 @@ public partial class StatusView : UserControl
     /// точку над красной полосой — и человеку пришлось бы решать, какой
     /// из них верить.
     /// </remarks>
+    /// <summary>
+    /// Красит точку состояния, её свечение и точку в строке внизу — одним цветом.
+    /// </summary>
+    /// <remarks>
+    /// Серая «стоит» — без свечения: светящаяся серая точка выглядит
+    /// включённой лампочкой, а обход в это время не идёт.
+    /// </remarks>
+    private void ShowDot(string colourKey)
+    {
+        var brush = (Brush)FindResource(colourKey);
+
+        Dot.Fill = brush;
+        FooterDot.Fill = brush;
+        DotGlow.Color = colourKey != "Faint" && brush is SolidColorBrush solid ? solid.Color : Colors.Transparent;
+    }
+
+    /// <summary>
+    /// Строка внизу: состояние с длительностью и время сборки конфига туннеля.
+    /// </summary>
+    private void ShowFooter(SupervisorState? state, bool running)
+    {
+        FooterState.Text = running && _startingSince is null
+            ? $"{StateLine.Text} · {Span(DateTimeOffset.Now - state!.StartedAt)}"
+            : StateLine.Text;
+
+        // Конфиг собирается при каждом запуске, и серверы подписок берутся
+        // тогда же, — поэтому время файла и есть время, когда их взяли.
+        // Отдельного «подписки обновлены» программа не хранит.
+        try
+        {
+            var config = new FileInfo(Path.Combine("runtime", "singbox.json"));
+
+            FooterConfig.Text = config.Exists
+                ? $"Конфиг туннеля собран {config.LastWriteTime:dd.MM.yyyy} в {config.LastWriteTime:HH:mm}"
+                : string.Empty;
+        }
+        catch (Exception)
+        {
+            FooterConfig.Text = string.Empty;
+        }
+    }
+
+    /// <summary>«23 дня, 4 часа», «4 ч 12 мин», «7 мин».</summary>
+    internal static string Span(TimeSpan span)
+    {
+        if (span.TotalDays >= 1)
+        {
+            int days = (int)span.TotalDays;
+            return $"{days} {Plural(days, "день", "дня", "дней")}, {span.Hours} {Plural(span.Hours, "час", "часа", "часов")}";
+        }
+
+        return span.TotalHours >= 1
+            ? $"{(int)span.TotalHours} ч {span.Minutes} мин"
+            : $"{Math.Max(0, span.Minutes)} мин";
+    }
+
+    private static string Plural(int count, string one, string few, string many)
+    {
+        int tail = count % 100;
+
+        if (tail is >= 11 and <= 14)
+            return many;
+
+        return (tail % 10) switch
+        {
+            1 => one,
+            2 or 3 or 4 => few,
+            _ => many,
+        };
+    }
+
+    /// <summary>Пресет, описание которого уже показано, — чтобы не читать файл на каждом тике.</summary>
+    private string? _notedPreset = "\0";
+
+    /// <summary>
+    /// Первая фраза описания пресета — из его же файла.
+    /// </summary>
+    /// <remarks>
+    /// Читается при смене пресета, а не каждые две секунды: разбор файла —
+    /// сотни строк, а меняется выбор раз в неделю.
+    /// </remarks>
+    private void ShowPresetNote(string? preset)
+    {
+        if (preset == _notedPreset)
+            return;
+
+        _notedPreset = preset;
+        PresetNote.Text = preset is null ? "Десинк без пресета не поднимается." : string.Empty;
+
+        if (preset is null)
+            return;
+
+        try
+        {
+            if (NetZapret.Zapret.ZapretPaths.FindPreset(preset) is not { } file)
+            {
+                PresetNote.Text = "Файла пресета нет в папке presets.";
+                return;
+            }
+
+            var description = new NetZapret.Zapret.PresetReader().Read([file]).FirstOrDefault()?.Description;
+
+            PresetNote.Text = FirstSentence(description) ?? "Описания в файле пресета нет.";
+        }
+        catch (Exception)
+        {
+            PresetNote.Text = string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// До первой точки, двоеточия или тире с пробелом после — дальше в описаниях
+    /// пресетов начинаются подробности.
+    /// </summary>
+    /// <remarks>
+    /// С пробелом, а не любая точка: в описаниях стоят версии и имена
+    /// («v1.0.3», «www.facebook.com»), и по голой точке фраза рвалась бы на них.
+    /// </remarks>
+    internal static string? FirstSentence(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        text = text.Trim();
+
+        var end = System.Text.RegularExpressions.Regex.Match(text, @"[.:](\s|$)|\s—\s");
+
+        return end.Success && end.Index > 0 ? text[..end.Index].TrimEnd() + "." : text;
+    }
+
+    /// <summary>
+    /// Выпадающий список пресетов у «Изменить».
+    /// </summary>
+    /// <remarks>
+    /// Список тот же и в том же порядке, что в «Десинке» (PresetOrder), и запись
+    /// та же — PresetName. Последним пунктом — сам раздел: там видно, чем
+    /// пресеты отличаются, а здесь только имена.
+    /// </remarks>
+    private void OnPresetMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu { PlacementTarget = PresetMenu, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        string? chosen;
+
+        try
+        {
+            chosen = AppSettings.Load(AppSettings.DefaultPath).PresetName;
+
+            var names = PresetOrder.Apply(
+                NetZapret.Zapret.ZapretPaths.PresetFiles.Select(Path.GetFileName).OfType<string>().ToList(),
+                file => file);
+
+            foreach (var file in names)
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                var item = new MenuItem { Header = name, Tag = name };
+
+                if (string.Equals(name, chosen, StringComparison.OrdinalIgnoreCase))
+                    item.Icon = new TextBlock { Text = "", FontFamily = (FontFamily)FindResource("IconFont"), Foreground = (Brush)FindResource("Accent") };
+
+                item.Click += (_, _) => ChoosePreset(name);
+                menu.Items.Add(item);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowProblem("Пресеты не читаются: " + ex.GetBaseException().Message);
+            return;
+        }
+
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+
+        var all = new MenuItem { Header = "Все пресеты — раздел «Десинк»" };
+        all.Click += (_, _) => Open("desync");
+        menu.Items.Add(all);
+
+        menu.IsOpen = true;
+    }
+
+    private void ChoosePreset(string name)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (string.Equals(settings.PresetName, name, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            (settings with { PresetName = name }).Save(AppSettings.DefaultPath);
+
+            Update();
+            this.Offer($"Выбран пресет «{name}»");
+        }
+        catch (Exception ex)
+        {
+            ShowProblem("Не удалось записать выбор: " + ex.GetBaseException().Message);
+        }
+    }
+
     private void ShowStateBar(string colourKey) =>
         StateBarFill.Fill = (Brush)FindResource(
             // Точки и полосы берут насыщенный жёлтый: текстовый на светлой
@@ -530,10 +785,10 @@ public partial class StatusView : UserControl
         var colour = (Brush)FindResource(colourKey);
 
         if (settings.NeedsProxy)
-            rows.Add(new EngineRow("sing-box", detail, colour));
+            rows.Add(new EngineRow("sing-box", detail, string.Empty, colour));
 
         if (settings.NeedsDesync)
-            rows.Add(new EngineRow("winws2", detail, colour));
+            rows.Add(new EngineRow("winws2", detail, string.Empty, colour));
 
         return rows;
     }
@@ -553,9 +808,11 @@ public partial class StatusView : UserControl
             _ => "Faint",
         };
 
-        var detail = EngineHealth.Status(service);
+        // Причина — только у того, что не работает: у работающего Status
+        // говорит «работает, процесс N», а номер и так стоит строкой ниже.
+        var detail = service.Health == ServiceHealth.Healthy ? string.Empty : EngineHealth.Status(service);
 
-        return new EngineRow(service.Name, detail, (Brush)FindResource(key));
+        return new EngineRow(service.Name, EngineHealth.Word(service.Health), detail, (Brush)FindResource(key), service.ProcessId);
     }
 
     /// <summary>
@@ -592,8 +849,8 @@ public partial class StatusView : UserControl
         _engines = rows;
 
         // Каждый движок — в своей карточке, рядом с выключателем (26.09).
-        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState);
-        ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState);
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid);
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
     }
 
     /// <summary>Строка состояния движка в его карточке.</summary>
@@ -601,17 +858,25 @@ public partial class StatusView : UserControl
     /// Нет строки — движок в этот запуск не поднимали: выключен или нет
     /// подписки. «Остановлен» здесь соврало бы, что он был.
     /// </remarks>
-    private void ShowEngine(EngineRow? row, System.Windows.Shapes.Ellipse dot, TextBlock state)
+    private void ShowEngine(EngineRow? row, System.Windows.Shapes.Ellipse dot, TextBlock state, TextBlock pid)
     {
         if (row is null)
         {
             dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
             state.Text = "не поднимается";
+            pid.Text = string.Empty;
             return;
         }
 
         dot.Fill = row.Color;
-        state.Text = row.Detail;
+        state.Text = row.Word;
+
+        // Номер процесса — чтобы найти движок в диспетчере задач (владелец,
+        // 26.09). У движка не в порядке на его месте причина надзора: она
+        // важнее номера, и места под обе строки в карточке нет.
+        pid.Text = row.Detail.Length > 0
+            ? row.Detail
+            : row.ProcessId is { } id ? $"Процесс: {id}" : string.Empty;
     }
 
     /// <summary>
@@ -741,11 +1006,12 @@ public partial class StatusView : UserControl
         TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
 
         EnginesLine.Text = engines.Complaint ?? string.Empty;
+        EnginesLine.Visibility = engines.Complaint is null ? Visibility.Collapsed : Visibility.Visible;
 
         // Автозапуск поднимает ровно это. Сказано здесь же, где задано:
         // иначе про связь пришлось бы догадываться, а догадка — источник
         // того самого «трей запускается, а движки нужно поднимать кнопкой».
-        AutostartRaises.Text = "При входе в систему поднимется: " + engines.Describe() + ".";
+        AutostartRaises.Text = "При входе в систему под этим пользователем поднимется: " + engines.Describe() + ".";
     }
 
     /// <summary>
@@ -799,8 +1065,9 @@ public partial class StatusView : UserControl
         }
         else
         {
-            AutostartValue.Text = "проверяю…";
-            AutostartButton.IsEnabled = false;
+            AutostartValue.Text = "Задача планировщика: проверяю…";
+            AutostartValue.Visibility = Visibility.Visible;
+            AutostartSwitch.IsEnabled = false;
         }
 
         try
@@ -816,8 +1083,9 @@ public partial class StatusView : UserControl
         }
         catch (Exception ex)
         {
-            AutostartValue.Text = "не читается";
-            AutostartButton.IsEnabled = false;
+            AutostartValue.Text = "Задача планировщика не читается.";
+            AutostartValue.Visibility = Visibility.Visible;
+            AutostartSwitch.IsEnabled = false;
             ShowProblem("Планировщик не отвечает: " + ex.GetBaseException().Message);
         }
     }
@@ -826,18 +1094,19 @@ public partial class StatusView : UserControl
     {
         bool installed = state.Installed;
 
-        AutostartValue.Text = installed ? "заведена" : "не заведена";
-        AutostartButton.Content = installed ? "Убрать" : "Завести";
-        AutostartButton.IsEnabled = true;
+        AutostartValue.Visibility = Visibility.Collapsed;
+        AutostartSwitch.IsChecked = installed;
+        AutostartSwitch.IsEnabled = true;
 
         if (state.Stale)
         {
-            AutostartValue.Text = "заведена, но устарела";
+            AutostartValue.Text = "Задача устарела и запускает прежнюю программу — выключите и включите снова.";
+            AutostartValue.Visibility = Visibility.Visible;
 
             ShowProblem(
                 "Задача автозапуска осталась от прежней версии и запускает не то, "
                 + "что нужно: до 0.5.0 это была консольная программа, которой в поставке "
-                + "больше нет. Уберите и заведите заново — это две кнопки.");
+                + "больше нет. Выключите автозапуск и включите снова — это два щелчка.");
         }
     }
 

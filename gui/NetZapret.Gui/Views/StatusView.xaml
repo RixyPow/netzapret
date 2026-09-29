@@ -2,37 +2,55 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:NetZapret.Gui.Views"
-             Background="{DynamicResource Chrome}">
+             Background="{DynamicResource Backdrop}">
 
     <!--
-        Колонка содержимого. Вторая колонка Auto, а не звёздочка, и это
-        не мелочь: две звёздочки делили окно пополам независимо от MaxWidth,
-        и на широком мониторе половина пропадала впустую, а на среднем
-        заголовок «VPN» сжимался до столбика букв по одной в строке.
-        Теперь колонка берёт всю ширину до 1240, а MinWidth держит её,
-        когда окно сузили до предела.
+        Подложка сплошная, а не прозрачная, как у прочих разделов (Chrome):
+        картинка темы здесь стоит своей колонкой справа, и та же картинка
+        во всё окно под карточками выходила вторым, тусклым персонажем
+        (снимок 30.09).
     -->
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Column="0">
+    <!--
+        Компоновка — по макету владельца 30.09: шапка со ссылками, крупная
+        карточка состояния, под ней пресет и параметры подключения рядом,
+        движки, автозапуск с обновлением, быстрые действия и строка внизу.
 
-            <TextBlock Text="Главная" Style="{StaticResource Title}" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                       Text="Что настроено, что из этого работает прямо сейчас и две главные ручки." />
+        Две колонки: содержимое слева, не шире 940, и арт темы справа
+        (SideArt, Themes.cs). Веса 100 к 1, а не две звёздочки поровну:
+        поровну они делили окно пополам независимо от MaxWidth, и на среднем
+        мониторе карточки сжимались. Так левая берёт всё до своего предела,
+        а правой достаётся остаток — на узком окне ноль, и арт просто уходит.
+    -->
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="100*" MinWidth="560" MaxWidth="940" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
 
-            <!--
-                Вышла новая версия (UpdateNotice). Над состоянием: её видно
-                при первом взгляде на окно, а не только тем, кто дошёл до «Ещё».
-                «Не сейчас» прячет её до следующей версии. Решение владельца
-                23.09: карточка и точка у «Ещё», без уведомлений Windows.
-            -->
-            <Border x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,22,0,0"
-                    BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
+        <!--
+            Арт сбоку. Не прокручивается вместе со страницей — он фон, а не
+            содержимое. Левый край растушёван в подложку, чтобы колонка
+            не читалась ещё одной карточкой. Лёгкое затемнение поверх — своё,
+            а не затемнение темы: текста на арте нет, и затемнять его ради
+            читаемости незачем.
+        -->
+        <Grid Grid.Column="1" IsHitTestVisible="False" SizeChanged="OnArtSize">
+            <Rectangle x:Name="Art" Fill="{DynamicResource SideArt}">
+                <Rectangle.OpacityMask>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="Transparent" />
+                        <GradientStop Offset="0.3" Color="Black" />
+                        <GradientStop Offset="1" Color="Black" />
+                    </LinearGradientBrush>
+                </Rectangle.OpacityMask>
+            </Rectangle>
+        </Grid>
+
+        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,28,32,20">
+            <StackPanel>
+
+                <!-- Шапка: заголовок и ссылки. Ссылки справа, как в макете. -->
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -40,298 +58,539 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" FontSize="15" />
-                        <TextBlock x:Name="UpdateWhat" Style="{StaticResource Caption}"
-                                   Margin="0,6,0,0" TextWrapping="Wrap" />
+                        <TextBlock Text="Главная" Style="{StaticResource Title}" FontSize="28" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="Идёт ли обход, что для него настроено, и главные ручки." />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource Ghost}" Content="Что нового"
-                                Click="OnUpdateNotes" Margin="0,0,8,0" />
-                        <Button Style="{StaticResource Ghost}" Content="Не сейчас"
-                                Click="OnUpdateLater" Margin="0,0,8,0" />
-                        <Button Style="{StaticResource Primary}" Content="Обновить"
-                                Click="OnUpdateNow" />
+                    <!--
+                        Канал — кнопкой здесь, а не карточкой внизу страницы:
+                        в макете карточки нет, а быть на «Главной» ему велено
+                        (владелец, 28.09: в «Ещё» кнопку не находили).
+                    -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                        <Button Style="{StaticResource Ghost}" Click="OnDocs" Margin="0,0,8,0"
+                                ToolTip="Описание программы на GitHub">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE82D;" Margin="0,0,8,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="Документация" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource Ghost}" Click="OnGitHub" Margin="0,0,8,0"
+                                ToolTip="Исходники, выпуски, вопросы и обсуждения">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE943;" Margin="0,0,8,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="GitHub" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource Ghost}" Click="OnTelegram"
+                                ToolTip="Новости в телеграм-канале: что вышло и зачем обновляться, коротко">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="Telegram" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Grid>
-            </Border>
 
-            <!--
-                Карточка состояния. Крупная точка и одна строка словами:
-                первое, зачем окно открывают, — понять, идёт ли обход.
-            -->
-            <Border Style="{StaticResource Card}" Margin="0,22,0,0">
-                <StackPanel>
+                <!--
+                    Вышла новая версия (UpdateNotice). Над состоянием: её видно
+                    при первом взгляде на окно, а не только тем, кто дошёл вниз.
+                    «Не сейчас» прячет её до следующей версии. Решение владельца
+                    23.09: карточка и точка у пункта меню, без уведомлений Windows.
+                -->
+                <Border x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,22,0,0"
+                        BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <Ellipse x:Name="Dot" Grid.Column="0" Width="12" Height="12"
-                                 VerticalAlignment="Center" Margin="2,0,16,0"
-                                 Fill="{DynamicResource Faint}" />
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="StateLine" FontSize="16" FontWeight="SemiBold" Text="Проверяю…" />
-                            <TextBlock x:Name="StateHint" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                       TextWrapping="Wrap" Text="" />
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" FontSize="15" />
+                            <TextBlock x:Name="UpdateWhat" Style="{StaticResource Caption}"
+                                       Margin="0,6,0,0" TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button x:Name="StartButton" Style="{StaticResource Primary}"
-                                    Content="Запустить" Click="OnStart" Visibility="Collapsed" />
-                            <Button x:Name="StopButton" Style="{StaticResource Destructive}"
-                                    Content="Остановить" Click="OnStop" Visibility="Collapsed" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Ghost}" Content="Что нового"
+                                    Click="OnUpdateNotes" Margin="0,0,8,0" />
+                            <Button Style="{StaticResource Ghost}" Content="Не сейчас"
+                                    Click="OnUpdateLater" Margin="0,0,8,0" />
+                            <Button Style="{StaticResource Primary}" Content="Обновить"
+                                    Click="OnUpdateNow" />
                         </StackPanel>
                     </Grid>
+                </Border>
 
-                </StackPanel>
-            </Border>
+                <!--
+                    Карточка состояния. Крупная точка и одна строка словами:
+                    первое, зачем окно открывают, — понять, идёт ли обход.
+                    Точка со свечением её же цвета (макет 30.09): свечение
+                    красится вместе с точкой, в ShowDot, и разойтись им нечем.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,22,0,0" Padding="22,20,22,16">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
 
-            <!--
-                Полоса состояния. Отдельным блоком под карточкой, а не внутри
-                неё: появляясь внутри, она раздвигала карточку, и та прыгала
-                в размерах при каждом запуске и остановке.
+                            <Ellipse x:Name="Dot" Grid.Column="0" Width="26" Height="26"
+                                     VerticalAlignment="Center" Margin="4,0,20,0"
+                                     Fill="{DynamicResource Faint}">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
+                                                      Opacity="0.7" Color="Transparent" />
+                                </Ellipse.Effect>
+                            </Ellipse>
 
-                Цвет несёт то же, что и точка выше, — серый «стоит», жёлтый
-                «поднимается», зелёный «работает», красный «беда». Бегущая
-                засечка только при подъёме, и она неопределённая намеренно:
-                сколько он займёт, заранее не известно — проверка прохода
-                трафика уходит в сеть. Обещать долю выполнения значило бы
-                её выдумывать.
-            -->
-            <Border x:Name="StateBar" Height="6" CornerRadius="3" Margin="0,10,0,0"
-                    Background="{DynamicResource Border}" ClipToBounds="True"
-                    HorizontalAlignment="Stretch">
-                <Grid>
-                    <Rectangle x:Name="StateBarFill" RadiusX="3" RadiusY="3"
-                               Fill="{DynamicResource Faint}" />
-
-                    <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="3" RadiusY="3"
-                               HorizontalAlignment="Left" Visibility="Collapsed"
-                               Fill="{DynamicResource WarnFill}">
-                        <Rectangle.RenderTransform>
-                            <TranslateTransform x:Name="StartProgressShift" />
-                        </Rectangle.RenderTransform>
-                    </Rectangle>
-                </Grid>
-            </Border>
-
-            <!-- Настройка. Только показ: правка — в своих разделах. -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="150" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Caption}" Text="Пресет" Margin="0,0,0,10" />
-                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="PresetValue" Margin="0,0,0,10" Text="—" />
-
-                    <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource Caption}" Text="Сервер" Margin="0,0,0,10" />
-                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="ServerValue" Margin="0,0,0,10" Text="—" TextTrimming="CharacterEllipsis" />
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Style="{StaticResource Caption}" Text="DNS" Margin="0,0,0,10" />
-                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DnsValue" Margin="0,0,0,10" Text="—" />
-
-                    <TextBlock Grid.Row="3" Grid.Column="0" Style="{StaticResource Caption}" Text="Подписки" />
-                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SubscriptionValue" Text="—" />
-                </Grid>
-            </Border>
-
-            <!-- Предупреждения: защитник в стеке, стёртый hosts. Пусто — не показываем. -->
-            <ItemsControl x:Name="Warnings" Margin="0,10,0,0">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Border Style="{StaticResource Card}" Margin="0,0,0,8"
-                                BorderBrush="{DynamicResource Warn}">
-                            <StackPanel>
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
-                                <TextBlock Text="{Binding Body}" Style="{StaticResource Caption}"
-                                           TextWrapping="Wrap" Margin="0,6,0,0" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
+                                           FontFamily="{DynamicResource DisplayFont}" />
+                                <TextBlock x:Name="StateHint" Foreground="{DynamicResource Muted}" FontSize="13.5"
+                                           Margin="0,5,0,0" TextWrapping="Wrap" Text="" />
                             </StackPanel>
+
+                            <!--
+                                Одна кнопка на месте: «Запустить» или «Остановить».
+                                Обе залиты цветом кнопки (макет), а не «Остановить»
+                                красной рамкой: это главное действие карточки,
+                                а не опасное — остановленный обход поднимается
+                                той же кнопкой через секунду.
+                            -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="34,14"
+                                        MinWidth="210" Click="OnStart" Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <TextBlock Text="Запустить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="34,14"
+                                        MinWidth="210" Click="OnStop" Visibility="Collapsed">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                        <TextBlock Text="Остановить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!--
+                            Полоса состояния — внизу карточки, во всю её ширину.
+                            Внутри, но под строкой с кнопкой и постоянной высоты:
+                            прежде появлявшаяся внутри полоса раздвигала карточку,
+                            и та прыгала при каждом запуске.
+
+                            Цвет несёт то же, что и точка, — серый «стоит», жёлтый
+                            «поднимается», зелёный «работает», красный «беда».
+                            Бегущая засечка только при подъёме, и она неопределённая
+                            намеренно: сколько он займёт, заранее не известно.
+                        -->
+                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,18,0,0"
+                                Background="{DynamicResource Border}" ClipToBounds="True"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Rectangle x:Name="StateBarFill" RadiusX="2" RadiusY="2"
+                                           Fill="{DynamicResource Faint}" />
+
+                                <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="2" RadiusY="2"
+                                           HorizontalAlignment="Left" Visibility="Collapsed"
+                                           Fill="{DynamicResource WarnFill}">
+                                    <Rectangle.RenderTransform>
+                                        <TranslateTransform x:Name="StartProgressShift" />
+                                    </Rectangle.RenderTransform>
+                                </Rectangle>
+                            </Grid>
                         </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Foreground="{DynamicResource Danger}"
-                       Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-
-            <!--
-                Два прямоугольника вместо списка режимов — решение владельца
-                21.09. Режимов было пять, они пришли по одному, каждый под
-                свой случай, и объяснить разницу между «всё через VPN»
-                и «без исключений» удавалось только примером.
-
-                Движка два, и человек думает именно о них: что у меня сейчас
-                работает. Прежние режимы из этой пары выводятся — «оба» это
-                выборочно, «только десинк» это десинк без туннеля, «туннель
-                без десинка» это всё через VPN.
-
-                В строку, а не столбцом: они равноправны, и вертикаль
-                намекала бы на порядок, которого нет.
-            -->
-            <!--
-                «Движки»: состояние каждого — прямо в его карточке, рядом
-                с выключателем (владелец 26.09: «засунем движки прям в нижние
-                прямоугольники с номером процесса и статусом»). Прежде был
-                отдельный список «Движки» выше и «Что поднимать» здесь: одно
-                и то же разнесено по двум местам. Состояние у каждого своё —
-                sing-box может подняться, а winws2 упасть, — поэтому и строка
-                у каждого своя, а не одна лампочка на двоих.
-            -->
-            <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="15" Margin="4,26,0,10" />
-
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="12" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" x:Name="DesyncCard" Style="{StaticResource Card}" Padding="16,14">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Десинк" FontWeight="SemiBold" FontSize="14"
-                                           VerticalAlignment="Center" />
-
-                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
-                            </StackPanel>
-
-                            <ToggleButton Grid.Column="1" x:Name="DesyncSwitch" Style="{StaticResource Switch}"
-                                          Click="OnDesync" VerticalAlignment="Center" />
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
-                            <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{DynamicResource Faint}" />
-                            <TextBlock x:Name="DesyncState" Margin="8,0,0,0" FontSize="12.5"
-                                       Foreground="{DynamicResource Muted}" Text="—" />
-                        </StackPanel>
-
-                        <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
-                                   Margin="0,8,0,0" TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
 
-                <Border Grid.Column="2" x:Name="TunnelCard" Style="{StaticResource Card}" Padding="16,14">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                <!-- Пресет и параметры подключения — рядом, как в макете. -->
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="Туннель" FontWeight="SemiBold" FontSize="14"
-                                           VerticalAlignment="Center" />
+                    <Border Grid.Column="0" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
-                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Без десинка забирает весь трафик — как обычный VPN. Вместе с ним уводит только названное, оставляя десинку остальное.&#x0a;&#x0a;Требует подписки: без неё поднимать нечего." />
-                            </StackPanel>
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                            <ToggleButton Grid.Column="1" x:Name="TunnelSwitch" Style="{StaticResource Switch}"
-                                          Click="OnTunnel" VerticalAlignment="Center" />
-                        </Grid>
+                                <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE9E9;" Foreground="{DynamicResource Accent}" />
+                                </Border>
 
-                        <StackPanel Orientation="Horizontal" Margin="0,9,0,0">
-                            <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center"
-                                     Fill="{DynamicResource Faint}" />
-                            <TextBlock x:Name="TunnelState" Margin="8,0,0,0" FontSize="12.5"
-                                       Foreground="{DynamicResource Muted}" Text="—" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="PresetValue" FontSize="15" FontWeight="SemiBold" Text="—"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <!--
+                                        Первая фраза описания из самого файла пресета
+                                        («# Description:»), в две строки. Своих описаний
+                                        не придумываем: пресеты меняются выпусками,
+                                        и придуманное разошлось бы с файлом.
+                                    -->
+                                    <TextBlock x:Name="PresetNote" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34" />
+                                </StackPanel>
+
+                                <!--
+                                    Смена пресета — тем же, чем в «Десинке»: запись
+                                    PresetName и предложение перезапустить. Список
+                                    в том же порядке, что там.
+                                -->
+                                <Button Grid.Column="2" x:Name="PresetMenu" Style="{StaticResource Ghost}"
+                                        Padding="12,7" Margin="10,0,0,0" VerticalAlignment="Top" Click="OnPresetMenu">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Изменить" VerticalAlignment="Center" />
+                                        <Path Style="{StaticResource Chevron}" Margin="10,1,0,0">
+                                            <Path.RenderTransform>
+                                                <RotateTransform Angle="90" />
+                                            </Path.RenderTransform>
+                                        </Path>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
                         </StackPanel>
+                    </Border>
 
-                        <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"
-                                   Margin="0,8,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-            </Grid>
+                    <!-- Настройка. Только показ: правка — в своих разделах. -->
+                    <Border Grid.Column="2" Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Параметры подключения" Style="{StaticResource Caption}" FontSize="12.5" />
 
-            <TextBlock x:Name="EnginesLine" Style="{StaticResource Caption}"
-                       Margin="4,10,0,0" TextWrapping="Wrap" />
-            <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-            <!--
-                Кнопка — по центру всей карточки, а не её первой строки
-                (владелец, 28.09: «почему прямоугольники не посередине»):
-                пояснения внизу лежали вне сетки, и кнопка висела у верха.
-            -->
-            <Border Style="{StaticResource Card}">
+                                <TextBlock Grid.Row="0" Style="{StaticResource LineGlyph}" Text="&#xE8CE;" Margin="0,0,0,9" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource Caption}" Text="Сервер"
+                                           Margin="0,0,14,9" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" x:Name="ServerValue" Text="—" Margin="0,0,0,9"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Row="1" Style="{StaticResource LineGlyph}" Text="&#xE774;" Margin="0,0,0,9" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Caption}" Text="DNS"
+                                           Margin="0,0,14,9" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="DnsValue" Text="—" Margin="0,0,0,9"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                <TextBlock Grid.Row="2" Style="{StaticResource LineGlyph}" Text="&#xE7C3;" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Caption}" Text="Подписки"
+                                           Margin="0,0,14,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" x:Name="SubscriptionValue" Text="—"
+                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Предупреждения: защитник в стеке, стёртый hosts. Пусто — не показываем. -->
+                <ItemsControl x:Name="Warnings" Margin="0,10,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,8"
+                                    BorderBrush="{DynamicResource Warn}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
+                                    <TextBlock Text="{Binding Body}" Style="{StaticResource Caption}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Foreground="{DynamicResource Danger}"
+                           Margin="4,4,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+                <!--
+                    Два прямоугольника вместо списка режимов — решение владельца
+                    21.09. Движка два, и человек думает именно о них: что у меня
+                    сейчас работает. В строку, а не столбцом: они равноправны.
+
+                    Состояние каждого — прямо в его карточке, рядом с выключателем,
+                    с номером процесса (владелец 26.09). Состояние у каждого своё —
+                    sing-box может подняться, а winws2 упасть, — поэтому и отметка
+                    у каждого своя, а не одна лампочка на двоих.
+                -->
+                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,10" />
+
                 <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" x:Name="DesyncCard" Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE82D;" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Десинк" FontWeight="SemiBold" FontSize="15"
+                                                   VerticalAlignment="Center" />
+
+                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,6,0"
+                                                        Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
+
+                                        <!-- Отметка состояния: точка и слова, цветом состояния. -->
+                                        <Border CornerRadius="8" Padding="8,3" Background="{DynamicResource Raised}"
+                                                VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center"
+                                                         Fill="{DynamicResource Faint}" />
+                                                <TextBlock x:Name="DesyncState" Margin="6,0,0,0" FontSize="12"
+                                                           Foreground="{DynamicResource Muted}" Text="—" />
+                                            </StackPanel>
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <ToggleButton Grid.Column="1" x:Name="DesyncSwitch" Style="{StaticResource Switch}"
+                                                  Click="OnDesync" VerticalAlignment="Top" Margin="10,0,0,0" />
+                                </Grid>
+
+                                <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
+                                           Margin="0,9,0,0" TextWrapping="Wrap" />
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Name="DesyncPid" Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
+
+                                    <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
+                                            Padding="7,6" MinWidth="0" Click="OnDesyncSettings"
+                                            ToolTip="Пресеты и рецепты — раздел «Десинк»" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" x:Name="TunnelCard" Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE72D;" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Туннель" FontWeight="SemiBold" FontSize="15"
+                                                   VerticalAlignment="Center" />
+
+                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,6,0"
+                                                        Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Без десинка забирает весь трафик — как обычный VPN. Вместе с ним уводит только названное, оставляя десинку остальное.&#x0a;&#x0a;Требует подписки: без неё поднимать нечего." />
+
+                                        <Border CornerRadius="8" Padding="8,3" Background="{DynamicResource Raised}"
+                                                VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center"
+                                                         Fill="{DynamicResource Faint}" />
+                                                <TextBlock x:Name="TunnelState" Margin="6,0,0,0" FontSize="12"
+                                                           Foreground="{DynamicResource Muted}" Text="—" />
+                                            </StackPanel>
+                                        </Border>
+                                    </WrapPanel>
+
+                                    <ToggleButton Grid.Column="1" x:Name="TunnelSwitch" Style="{StaticResource Switch}"
+                                                  Click="OnTunnel" VerticalAlignment="Top" Margin="10,0,0,0" />
+                                </Grid>
+
+                                <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"
+                                           Margin="0,9,0,0" TextWrapping="Wrap" />
+
+                                <Grid Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Name="TunnelPid" Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
+
+                                    <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
+                                            Padding="7,6" MinWidth="0" Click="OnTunnelSettings"
+                                            ToolTip="Настройки туннеля" />
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Жалоба на сочетание движков; пусто — строки нет вовсе, и отступа тоже. -->
+                <TextBlock x:Name="EnginesLine" Style="{StaticResource Caption}"
+                           Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+                <!-- Автозапуск и обновление — рядом, как в макете. -->
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource Card}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE945;" />
+                            </Border>
+
+                            <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Задача планировщика, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается та же программа и с теми же ключами, что и кнопка «Запустить», — иначе автозапуск поднимал бы не то, что вы проверили руками." />
+                                </StackPanel>
+
+                                <!--
+                                    Что именно поднимется — теми же словами, какими
+                                    это задано выключателями движков. Своего выбора
+                                    у автозапуска нет намеренно: он был бы вторым
+                                    местом, где решают одно и то же.
+                                -->
+                                <TextBlock x:Name="AutostartRaises" Style="{StaticResource Caption}"
+                                           Margin="0,5,0,0" TextWrapping="Wrap" />
+
+                                <!--
+                                    Слова о задаче — только когда с ней не всё
+                                    ясно: проверяется, не читается, устарела.
+                                    «Заведена» и так говорит выключатель.
+                                -->
+                                <TextBlock x:Name="AutostartValue" Style="{StaticResource Caption}"
+                                           Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                            </StackPanel>
+
+                            <!--
+                                Выключатель, а не кнопка «Завести/Убрать» (макет
+                                30.09). Щелчок заводит или убирает задачу, а положение
+                                затем ставится по ответу планировщика, не по щелчку:
+                                отказал планировщик — выключатель вернётся.
+                            -->
+                            <ToggleButton Grid.Column="2" x:Name="AutostartSwitch" Style="{StaticResource Switch}"
+                                          Click="OnAutostart" VerticalAlignment="Top" />
+                        </Grid>
+                    </Border>
+
+                    <views:UpdatePanel Grid.Column="2" x:Name="Updates" />
+                </Grid>
+
+                <!--
+                    Быстрые действия (макет 30.09): переходы в разделы разбора
+                    и папка настроек — то, за чем идут, когда что-то не так.
+                -->
+                <TextBlock Text="Быстрые действия" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,10" />
+
+                <UniformGrid Rows="1">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickCheck">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" Margin="0,0,10,0" />
+                            <TextBlock Text="Проверить блокировки" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickLog">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,10,0" />
+                            <TextBlock Text="Открыть журнал" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickDoctor">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE756;" Margin="0,0,10,0" />
+                            <TextBlock Text="Диагностика" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Ghost}" Padding="12,11" Click="OnQuickConfig"
+                            ToolTip="Папка config в проводнике, файл настроек выделен">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8B7;" Margin="0,0,10,0" />
+                            <TextBlock Text="Открыть конфиг" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Button>
+                </UniformGrid>
+
+                <!--
+                    Строка внизу: сколько работает обход и когда собран конфиг
+                    туннеля. В макете — «Подписки обновлены»; но списки серверов
+                    берутся при сборке конфига на запуске, и отдельного времени
+                    обновления подписок программа не хранит. Время файла конфига —
+                    то, что известно наверняка, им и названо.
+                -->
+                <Grid Margin="4,20,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="1" x:Name="AutostartButton" Style="{StaticResource Ghost}"
-                            Click="OnAutostart" VerticalAlignment="Center" />
-
-                <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                    <TextBlock Text="Задача планировщика" Style="{StaticResource Caption}" />
-                    <TextBlock x:Name="AutostartValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
-
-                    <!--
-                        Что именно поднимется — теми же словами, какими это
-                        задано выключателями выше. Своего выбора у автозапуска
-                        нет намеренно: он был бы вторым местом, где решают одно
-                        и то же, и разошёлся бы с окном при первой же правке.
-                        Хуже того, после входа выключатели показывали бы
-                        поднятым то, чего нет.
-                    -->
-                    <TextBlock x:Name="AutostartRaises" Style="{StaticResource Caption}"
-                               Margin="0,10,0,0" TextWrapping="Wrap" />
-
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Планировщик, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается тот же netzapret.exe и с теми же ключами, что и кнопка «Запустить» выше, — иначе автозапуск поднимал бы не то, что вы проверили руками." />
-                </StackPanel>
-                </Grid>
-            </Border>
-
-            <views:UpdatePanel x:Name="Updates" />
-
-            <!--
-                Канал — на «Главной» (владелец, 28.09): в «Ещё» кнопка стояла
-                внизу карточки «О программе», и её не находили. Скрывается
-                одним щелчком навсегда — это подсказка, а не реклама.
-            -->
-            <Border x:Name="TelegramCard" Style="{StaticResource Card}" Margin="0,22,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Новости — в телеграм-канале" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                   Text="Блокировки меняются, и починка приходит новым выпуском. В канале — что вышло и зачем обновляться, коротко." />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Ellipse x:Name="FooterDot" Width="8" Height="8" VerticalAlignment="Center"
+                                 Fill="{DynamicResource Faint}" />
+                        <TextBlock x:Name="FooterState" Style="{StaticResource Caption}" Margin="8,0,0,0" />
                     </StackPanel>
 
-                    <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Открыть канал"
-                            Click="OnTelegram" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Скрыть"
-                            Click="OnHideTelegram" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" x:Name="FooterConfig" Style="{StaticResource Caption}" Margin="16,0,0,0" />
                 </Grid>
-            </Border>
 
-        </StackPanel>
-        </Grid>
-    </ScrollViewer>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

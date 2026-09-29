@@ -6,48 +6,52 @@
         Обновление — на «Главной» (владелец, 23.09). Прежде жило в «Ещё»,
         а карточка «Вышла новая версия» на «Главной» уводила туда ради
         одной кнопки. Установка по-прежнему одна — эта.
+
+        Карточкой рядом с автозапуском, по макету 30.09. Пояснение о том,
+        что обновление останавливает движки, — в подсказке у заголовка:
+        оно нужно в момент решения, а не при каждом взгляде на окно.
     -->
-    <StackPanel>
-        <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
+    <Border Style="{StaticResource Card}">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
 
-        <!--
-            Кнопки — по центру всей карточки (владелец, 28.09: «почему
-            прямоугольники не посередине»): пояснение внизу лежало вне
-            сетки, и кнопки висели у верха. Отступ между кнопками — у
-            «Обновить», а не у «Проверить»: при одной кнопке он отодвигал
-            её от края дальше, чем у соседних карточек.
-        -->
-        <Border Style="{StaticResource Card}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE895;" />
+            </Border>
 
-                <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                    <TextBlock Text="Установлено" Style="{StaticResource Caption}" />
-                    <TextBlock x:Name="VersionValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
-                    <TextBlock x:Name="UpdateValue" Style="{StaticResource Caption}"
-                               Margin="0,6,0,0" TextWrapping="Wrap" />
-
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                               Text="Обновление останавливает движки: с 0.5.0 супервизор — это та же программа, и заменить её файл, пока он запущен, Windows не даёт. Соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса переживают обновление." />
+            <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                    Content="Обновление останавливает движки: с 0.5.0 супервизор — это та же программа, и заменить её файл, пока он запущен, Windows не даёт. Соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса переживают обновление." />
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
-                            Content="Проверить" Click="OnCheckUpdate" />
+                <TextBlock x:Name="VersionValue" Style="{StaticResource Caption}" Margin="0,5,0,0" />
+                <TextBlock x:Name="UpdateValue" Style="{StaticResource Caption}"
+                           Margin="0,6,0,0" TextWrapping="Wrap" />
+            </StackPanel>
 
-                    <!--
-                        Появляется только когда есть что ставить:
-                        кнопка установки при последней версии
-                        предлагала бы действие без смысла.
-                    -->
-                    <Button x:Name="InstallButton" Style="{StaticResource Primary}"
-                            Content="Обновить" Click="OnInstallUpdate" Margin="8,0,0,0"
-                            Visibility="Collapsed" />
-                </StackPanel>
-            </Grid>
-        </Border>
-    </StackPanel>
+            <!--
+                Кнопки столбцом: карточка в полстраницы, и две кнопки в строку
+                сжимали текст слева до слова на строку.
+            -->
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
+                        Content="Проверить" Click="OnCheckUpdate" />
+
+                <!--
+                    Появляется только когда есть что ставить:
+                    кнопка установки при последней версии
+                    предлагала бы действие без смысла.
+                -->
+                <Button x:Name="InstallButton" Style="{StaticResource Primary}"
+                        Content="Обновить" Click="OnInstallUpdate" Margin="0,8,0,0"
+                        Padding="18,9" Visibility="Collapsed" />
+            </StackPanel>
+        </Grid>
+    </Border>
 </UserControl>

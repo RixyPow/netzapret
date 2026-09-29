@@ -379,6 +379,27 @@ public partial class MainWindow : Window
             Motion.Page(page);
     }
 
+    /// <summary>
+    /// Открывает раздел по имени из <c>Tag</c> пункта меню — для быстрых
+    /// действий «Главной».
+    /// </summary>
+    /// <remarks>
+    /// Отмечает пункт меню, а не подменяет содержимое напрямую: переход
+    /// идёт тем же <see cref="OnSection"/>, и меню не показывает одно,
+    /// когда видно другое.
+    /// </remarks>
+    public void Open(string section)
+    {
+        foreach (var item in Rail.Children.OfType<RadioButton>())
+        {
+            if (item.Tag as string == section)
+            {
+                item.IsChecked = true;
+                return;
+            }
+        }
+    }
+
     /// <summary>Сколько уведомление висит, прежде чем уйти само.</summary>
     private static readonly TimeSpan ToastLife = TimeSpan.FromSeconds(14);
 

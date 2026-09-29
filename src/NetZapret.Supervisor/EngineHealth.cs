@@ -123,6 +123,22 @@ public static class EngineHealth
             ? $"{service.Name}: {error}"
             : $"{service.Name}: {Name(service.Health)}";
 
+    /// <summary>
+    /// Состояние одним-двумя словами — для отметки в карточке движка.
+    /// </summary>
+    /// <remarks>
+    /// Отметка короткая по макету «Главной» (владелец, 30.09): причина надзора
+    /// в неё не влезает и идёт строкой ниже, из <see cref="Status"/>.
+    /// </remarks>
+    public static string Word(ServiceHealth health) => health switch
+    {
+        ServiceHealth.Healthy => "работает",
+        ServiceHealth.Degraded => "проверку не проходит",
+        ServiceHealth.Dead => "процесс умер",
+        ServiceHealth.Faulted => "не поднимается",
+        _ => "остановлен",
+    };
+
     private static string Name(ServiceHealth health) => health switch
     {
         ServiceHealth.Healthy => "работает",

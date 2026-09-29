@@ -190,6 +190,13 @@ public static class Themes
             dictionary["BackdropImage"] = Frozen(Stretch(new ImageBrush(image), background.Fit, image));
             dictionary["BackdropDim"] = dim;
 
+            // Та же картинка для колонки справа на «Главной» (макет владельца
+            // 30.09: «арт сбоку»). Во всё окно персонаж, стоящий по центру
+            // картинки, оказывался под карточками; в своей колонке он стоит
+            // по центру её. Заполнением, а не вписыванием: колонка узкая
+            // и высокая, и вписанная картинка вышла бы полоской посередине.
+            dictionary["SideArt"] = Frozen(new ImageBrush(image) { Stretch = System.Windows.Media.Stretch.UniformToFill });
+
             // Разделы прозрачные: под ними тот же фон, что под всем окном
             // (владелец, 23.09: «давай попробуем и под боковым меню»).
             dictionary["Chrome"] = Frozen(new SolidColorBrush(Colors.Transparent));
@@ -232,6 +239,7 @@ public static class Themes
         else
         {
             dictionary["BackdropImage"] = Frozen(new SolidColorBrush(Colors.Transparent));
+            dictionary["SideArt"] = Frozen(new SolidColorBrush(Colors.Transparent));
             dictionary["BackdropDim"] = 1.0;
             dictionary["Chrome"] = backdrop;
             dictionary["RailFill"] = backdrop;

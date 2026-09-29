@@ -32,7 +32,7 @@ public partial class UpdatePanel : UserControl
 
     public void ShowVersion(AppSettings settings)
     {
-        VersionValue.Text = UpdateCheck.Current;
+        VersionValue.Text = "Текущая версия: " + UpdateCheck.Current;
 
         // Найденное при запуске окна (UpdateNotice) показывается сразу —
         // вместе с кнопкой установки, без повторного вопроса GitHub.
