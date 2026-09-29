@@ -6,9 +6,9 @@
 
     <!--
         Подложка сплошная, а не прозрачная, как у прочих разделов (Chrome):
-        картинка темы здесь стоит своей колонкой справа, и та же картинка
-        во всё окно под карточками выходила вторым, тусклым персонажем
-        (снимок 30.09).
+        окно кладёт картинку темы под всё, а здесь она своя, сдвинутая
+        вправо (ArtLayer), — без сплошной подложки под ней проступал бы
+        второй, оконный персонаж (снимок 30.09).
     -->
 
     <!--
@@ -24,27 +24,23 @@
     -->
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="100*" MinWidth="560" MaxWidth="940" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="ContentColumn" Width="100*" MinWidth="560" MaxWidth="940" />
+            <ColumnDefinition x:Name="ArtColumn" Width="*" />
         </Grid.ColumnDefinitions>
 
         <!--
-            Арт сбоку. Не прокручивается вместе со страницей — он фон, а не
-            содержимое. Левый край растушёван в подложку, чтобы колонка
-            не читалась ещё одной карточкой. Лёгкое затемнение поверх — своё,
-            а не затемнение темы: текста на арте нет, и затемнять его ради
-            читаемости незачем.
+            Арт сбоку. Картинка одна на всю страницу, но сдвинута так, что её
+            середина стоит посередине правой колонки: персонаж справа, а под
+            карточками — край той же картинки. Под карточками затемнение
+            темы, к колонке оно сходит почти на нет (ArtShade). Так карточки
+            остаются полупрозрачными, как на прочих вкладках (владелец, 30.09:
+            «где стёклышки, почему всё непрозрачное»), и второго, тусклого
+            персонажа под ними нет. Раскладывается в коде (PlaceArt): место
+            зависит от ширины колонок. Не прокручивается — это фон.
         -->
-        <Grid Grid.Column="1" IsHitTestVisible="False" SizeChanged="OnArtSize">
-            <Rectangle x:Name="Art" Fill="{DynamicResource SideArt}">
-                <Rectangle.OpacityMask>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                        <GradientStop Offset="0" Color="Transparent" />
-                        <GradientStop Offset="0.3" Color="Black" />
-                        <GradientStop Offset="1" Color="Black" />
-                    </LinearGradientBrush>
-                </Rectangle.OpacityMask>
-            </Rectangle>
+        <Grid x:Name="ArtLayer" Grid.ColumnSpan="2" IsHitTestVisible="False" SizeChanged="OnArtSize">
+            <Rectangle x:Name="Art" />
+            <Rectangle x:Name="ArtShade" />
         </Grid>
 
         <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,28,32,20">

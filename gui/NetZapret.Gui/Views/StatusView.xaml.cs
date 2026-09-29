@@ -84,16 +84,94 @@ public partial class StatusView : UserControl
         }
     }
 
+    private void OnArtSize(object sender, SizeChangedEventArgs e) => PlaceArt();
+
+    /// <summary>Уже этой колонки персонажа в ней не ставим — картинка ляжет по центру страницы.</summary>
+    private const double ArtColumnMin = 220;
+
+    /// <summary>Затемнение над персонажем: текста там нет, читаемость беречь незачем.</summary>
+    private const double ArtDim = 0.12;
+
     /// <summary>
-    /// Арт сбоку — только когда колонке есть где его показать.
+    /// Кладёт картинку темы так, чтобы её середина стояла посередине правой
+    /// колонки, и затемняет её под карточками так же, как тема.
     /// </summary>
     /// <remarks>
-    /// Колонке достаётся остаток после содержимого, и на окне по умолчанию
-    /// (1080) это полоска в несколько точек: кусок картинки у края читался
-    /// ошибкой отрисовки (снимок 30.09). Уже 220 — не рисуем вовсе.
+    /// <para>
+    /// По высоте страницы, с сохранением пропорций: персонаж в картинках
+    /// стоит по центру, и при вписывании по высоте он целиком в колонке.
+    /// Слева картинка может не доставать до края — там сплошная подложка,
+    /// а края у артов обычно тёмные, и шва под затемнением не видно.
+    /// </para>
+    /// <para>
+    /// Под карточками — затемнение темы (BackdropDim): с ним тема прошла
+    /// проверку читаемости, и текст на полупрозрачных карточках читается
+    /// так же, как на прочих вкладках. Переход к лёгкому затемнению —
+    /// у правого края содержимого, по ширине одной карточки.
+    /// </para>
+    /// <para>
+    /// Колонка уже 220 (окно по умолчанию, 1080): персонажу места нет,
+    /// картинка ложится по центру страницы под сплошным затемнением темы —
+    /// как на прочих вкладках. Прежде в такой колонке торчала полоска арта
+    /// в несколько точек и читалась ошибкой отрисовки (снимок 30.09).
+    /// </para>
     /// </remarks>
-    private void OnArtSize(object sender, SizeChangedEventArgs e) =>
-        Art.Visibility = e.NewSize.Width >= 220 ? Visibility.Visible : Visibility.Hidden;
+    private void PlaceArt()
+    {
+        double width = ArtLayer.ActualWidth, height = ArtLayer.ActualHeight;
+
+        if (TryFindResource("SideArt") is not ImageBrush { ImageSource: { } image }
+            || width <= 0 || height <= 0 || image.Height <= 0)
+        {
+            Art.Fill = null;
+            ArtShade.Fill = null;
+            return;
+        }
+
+        double aspect = image.Width / image.Height;
+        double w = height * aspect, h = height;
+
+        // Уже страницы — растягиваем до её ширины: пустая полоса справа хуже обрезки.
+        if (w < width)
+        {
+            w = width;
+            h = width / aspect;
+        }
+
+        double column = ArtColumn.ActualWidth;
+        bool side = column >= ArtColumnMin;
+        double centre = side ? width - column / 2 : width / 2;
+
+        Art.Fill = new ImageBrush(image)
+        {
+            Stretch = Stretch.Fill,
+            TileMode = TileMode.None,
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(centre - w / 2, (height - h) / 2, w, h),
+        };
+
+        var backdrop = TryFindResource("BackdropColor") is Color c ? c : Colors.Black;
+        double dim = TryFindResource("BackdropDim") is double d ? d : 1.0;
+
+        var under = Color.FromArgb((byte)Math.Round(dim * 255), backdrop.R, backdrop.G, backdrop.B);
+
+        if (!side)
+        {
+            ArtShade.Fill = new SolidColorBrush(under);
+            return;
+        }
+
+        double edge = width - column;
+        var over = Color.FromArgb((byte)Math.Round(ArtDim * 255), backdrop.R, backdrop.G, backdrop.B);
+
+        ArtShade.Fill = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(edge - 40, 0),
+            EndPoint = new Point(edge + Math.Min(260, column / 2), 0),
+            GradientStops = { new GradientStop(under, 0), new GradientStop(over, 1) },
+        };
+    }
 
     private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
 
