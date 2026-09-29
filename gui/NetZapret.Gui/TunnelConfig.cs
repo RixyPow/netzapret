@@ -149,7 +149,11 @@ internal static class TunnelConfig
             //
             // С 23.09 — по TunnelTakesAll: при игнорируемых исключениях
             // туннель забирает всё и при включённом выключателе десинка.
-            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly;
+            //
+            // С 29.09 — и не при программе, которую правила ведут в туннель
+            // (RuleSet.RoutesProgramIntoTunnel, обсуждение №10): её трафик
+            // идёт на адреса, которых в выборочном перехвате нет.
+            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !ruleSet.RoutesProgramIntoTunnel;
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {

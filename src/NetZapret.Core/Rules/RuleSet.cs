@@ -34,6 +34,20 @@ public sealed record RuleSet
     /// </remarks>
     public IReadOnlyList<string> CaptureEntries { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Есть ли программа, которую правила ведут в туннель, — тогда перехватывать надо всё.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №10 (29.09): «Fallout76.exe → proxy» в rules.user.yaml
+    /// не действовало. Выборочный перехват заводит в TUN только адреса из
+    /// правил, серверы игры туда не попадают, а процесс sing-box узнаёт уже
+    /// внутри туннеля. Решение владельца — вариант «а»: при таком правиле
+    /// туннель забирает всё, а куда что идёт, решают маршруты; всё без правила
+    /// уходит в direct, мимо VPN.
+    /// </remarks>
+    public bool RoutesProgramIntoTunnel =>
+        Rules.Any(r => r.Enabled && r.Match == MatchKind.Process && r.Mode == RoutingMode.Proxy);
+
     public static RuleSet Empty { get; } = new()
     {
         Rules = Array.Empty<RoutingRule>(),

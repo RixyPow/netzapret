@@ -31,6 +31,9 @@ internal static class RouteKeys
     /// <summary>Свой домен, добавленный человеком.</summary>
     public const string Own = "own";
 
+    /// <summary>Своя программа: правило по имени процесса (обсуждение №10, 29.09).</summary>
+    public const string Program = "prog";
+
     /// <summary>Часть сервиса, заданная подсетями.</summary>
     public const string IpSet = "ipset";
 
@@ -56,6 +59,7 @@ internal static class RouteKeys
     public static MatchKind MatchOf(string kind, string value) => kind switch
     {
         IpSet => MatchKind.IpSet,
+        Program => MatchKind.Process,
         Own when !OwnLists.IsOwn(value) => MatchKind.Domain,
         _ => MatchKind.HostList,
     };
@@ -90,6 +94,10 @@ internal static class RouteKeys
         // мог прийти раньше.
         if (kind == Own && !OwnLists.IsOwn(value))
             return [value.TrimStart('*', '.')];
+
+        // У программы имён нет: её трафик узнаётся по процессу.
+        if (kind == Program)
+            return [];
 
         try
         {

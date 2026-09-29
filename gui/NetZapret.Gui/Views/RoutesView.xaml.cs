@@ -922,7 +922,53 @@ public partial class RoutesView : UserControl
             rows.Add(new ServiceRow(title, [part]));
         }
 
+        // Свои программы — правило по имени процесса (обсуждение №10, 29.09).
+        // Пина у программы нет: у неё нет имени сайта, только процесс.
+        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.Process))
+        {
+            var (color, choice) = entry.Mode switch
+            {
+                RoutingMode.Direct => ("Muted", 0),
+                RoutingMode.Desync => ("Warn", 1),
+                _ => ("Accent", 2),
+            };
+
+            var part = new PartRow
+            {
+                Key = RouteKeys.Make(RouteKeys.Program, entry.Value),
+                Title = entry.Value,
+                Detail = entry.Mode == RoutingMode.Proxy
+                    ? "программа · через VPN туннель перехватывает весь трафик, куда что — решают маршруты"
+                    : "программа",
+                Mode = Describe(entry.Mode),
+                Color = (Brush)Application.Current.FindResource(color),
+                Choice = choice,
+                Applied = choice,
+                CanRoute = true,
+                CanPin = false,
+                Own = true,
+                Letter = entry.Value.Length > 0 ? entry.Value[..1].ToUpperInvariant() : "·",
+                Lead = 24,
+            };
+
+            rows.Add(new ServiceRow(entry.Value, [part]));
+        }
+
         return rows;
+    }
+
+    /// <summary>
+    /// Имя программы из поля: «Fallout76.exe», «C:\Games\x.exe»; <c>null</c> — не программа.
+    /// </summary>
+    internal static string? ProgramInput(string text)
+    {
+        var value = text.Trim().Trim('"');
+
+        if (!value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || value.Length <= 4)
+            return null;
+
+        // Путь оставляется путём: sing-box различает process_path и process_name.
+        return value.IndexOfAny(System.IO.Path.GetInvalidPathChars()) >= 0 ? null : value;
     }
 
 
@@ -1240,11 +1286,14 @@ public partial class RoutesView : UserControl
         // похоже на имя сайта, а в списке оно не нашлось ни частью, ни доменом.
         // Нашлось — значит, такое уже есть, и второе правило на него было бы
         // двойником, спорящим с первым.
-        var domain = found.Count == 0 ? DomainInput.Normalize(needle) : null;
+        var program = found.Count == 0 ? ProgramInput(needle) : null;
+        var domain = found.Count == 0 && program is null ? DomainInput.Normalize(needle) : null;
 
-        AddOffer.Visibility = domain is null ? Visibility.Collapsed : Visibility.Visible;
+        AddOffer.Visibility = domain is null && program is null ? Visibility.Collapsed : Visibility.Visible;
 
-        if (domain is not null)
+        if (program is not null)
+            AddOfferText.Text = $"«{program}» в списке нет. Добавить программу — сперва «напрямую», дальше правится в её строке. «Через VPN» для программы заводит в туннель весь трафик машины: куда что идёт, решают маршруты.";
+        else if (domain is not null)
             AddOfferText.Text = $"«{domain}» в списке нет. Добавить своим доменом — сперва «напрямую», дальше правится в его строке.";
 
         Status.Text = found.Count > 0
@@ -1498,6 +1547,27 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void AddOwn()
     {
+        if (ProgramInput(Search.Text) is { } program)
+        {
+            try
+            {
+                var rules = UserRulesFile.Load();
+                rules.Set(MatchKind.Process, program, RoutingMode.Direct, recipe: null);
+                rules.Save();
+                Reload();
+
+                Status.Text = $"Записано: {program} → напрямую. Режим меняется в её строке ниже. "
+                    + "Применится при следующем запуске движков.";
+                this.Offer($"Добавлен маршрут: {program}");
+            }
+            catch (Exception ex)
+            {
+                Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+            }
+
+            return;
+        }
+
         var name = DomainInput.Normalize(Search.Text);
 
         if (name is null)
@@ -1589,7 +1659,8 @@ public partial class RoutesView : UserControl
     private void OnRemoveOwn(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string key }
-            || RouteKeys.Parse(key) is not (RouteKeys.Own, var value))
+            || RouteKeys.Parse(key) is not var (kind, value)
+            || kind is not (RouteKeys.Own or RouteKeys.Program))
         {
             return;
         }
@@ -1599,9 +1670,11 @@ public partial class RoutesView : UserControl
             var file = UserRulesFile.Load();
             // И правило, и файл: свой список без правила — мусор, который
             // никто не читает и никто не увидит.
-            file.Remove(RouteKeys.MatchOf(RouteKeys.Own, value), value);
+            file.Remove(RouteKeys.MatchOf(kind, value), value);
             file.Save();
-            OwnLists.Delete(value);
+
+            if (kind == RouteKeys.Own)
+                OwnLists.Delete(value);
 
             // Перечитываем целиком: строка ушла из общего списка,
             // а не только из карточки.

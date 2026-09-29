@@ -161,4 +161,22 @@ public sealed class CaptureTests : IDisposable
         Assert.False(JsonDocument.Parse(json).RootElement
             .GetProperty("inbounds")[0].TryGetProperty("route_address", out _));
     }
-}
+
+    [Theory]
+    [InlineData("proxy", true)]
+    [InlineData("direct", false)]
+    [InlineData("desync", false)]
+    public void A_program_routed_into_the_tunnel_needs_full_capture(string mode, bool full)
+    {
+        // Обсуждение №10: Fallout76.exe → proxy не действовало при выборочном
+        // перехвате — серверы игры не попадали в TUN.
+        var engine = RuleSetLoader.Load($"""
+            mode: selective
+            rules:
+              - match: process
+                value: "Fallout76.exe"
+                mode: {mode}
+            """);
+
+        Assert.Equal(full, engine.RuleSet.RoutesProgramIntoTunnel);
+    }}
