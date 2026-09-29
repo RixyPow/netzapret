@@ -42,6 +42,90 @@ public sealed class ServerHealthCacheTests : IDisposable
         Assert.False(reloaded.Find("🇸🇪 Швеция")!.Success);
     }
 
+    /// <summary>
+    /// Две копии — окно и надзор — не затирают записи друг друга.
+    /// </summary>
+    /// <remarks>
+    /// С 30.09 в файл пишет и сторож. Прежде сохранение писало копию целиком,
+    /// и вкладка VPN, прочитавшая файл при входе, стёрла бы проверки сторожа,
+    /// пришедшие после этого.
+    /// </remarks>
+    [Fact]
+    public void TwoWritersKeepEachOthersResults()
+    {
+        var window = ServerHealthCache.Load(_path);
+        var watchdog = ServerHealthCache.Load(_path);
+
+        watchdog.Set(Entry("Эстония", success: true, ms: 150));
+        watchdog.Save(_path);
+
+        window.Set(Entry("Финляндия", success: false, ms: null));
+        window.Save(_path);
+
+        var both = ServerHealthCache.Load(_path);
+
+        Assert.Equal(150, both.Find("Эстония")!.LatencyMs);
+        Assert.False(both.Find("Финляндия")!.Success);
+    }
+
+    /// <summary>
+    /// История исходов копится из обоих источников, а не у того, кто сохранил последним.
+    /// </summary>
+    /// <remarks>
+    /// По ней считаются «мигающие»: теряй она проверки сторожа, пункт
+    /// «Открытого» от 30.09 так и остался бы открытым.
+    /// </remarks>
+    [Fact]
+    public void RecentOutcomesAccumulateAcrossWriters()
+    {
+        var window = ServerHealthCache.Load(_path);
+        var watchdog = ServerHealthCache.Load(_path);
+
+        watchdog.Set(Entry("ОБС", success: false, ms: null));
+        watchdog.Save(_path);
+
+        window.Set(Entry("ОБС", success: true, ms: 230));
+        window.Save(_path);
+
+        Assert.Equal([false, true], ServerHealthCache.Load(_path).Find("ОБС")!.Recent);
+    }
+
+    /// <summary>Перечитанная копия видит чужое и не теряет своё несохранённое.</summary>
+    [Fact]
+    public void ReloadShowsOthersAndKeepsOwnPending()
+    {
+        var window = ServerHealthCache.Load(_path);
+        window.Set(Entry("Германия", success: true, ms: 160));
+
+        var watchdog = ServerHealthCache.Load(_path);
+        watchdog.Set(Entry("Эстония", success: true, ms: 150));
+        watchdog.Save(_path);
+
+        window.Reload(_path);
+
+        Assert.NotNull(window.Find("Эстония"));
+        Assert.NotNull(window.Find("Германия"));
+    }
+
+    /// <summary>Чистка исчезнувших переживает сохранение поверх чужого файла.</summary>
+    [Fact]
+    public void DroppedEntriesStayDroppedAfterMerging()
+    {
+        var seed = ServerHealthCache.Load(_path);
+        seed.Set(Entry("исчезнувший", true, 50));
+        seed.Set(Entry("живой", true, 60));
+        seed.Save(_path);
+
+        var window = ServerHealthCache.Load(_path);
+        window.KeepOnly(["живой"]);
+        window.Save(_path);
+
+        var after = ServerHealthCache.Load(_path);
+
+        Assert.Null(after.Find("исчезнувший"));
+        Assert.NotNull(after.Find("живой"));
+    }
+
     [Fact]
     public void FreshnessIsJudgedByTheOldestEntry()
     {

@@ -818,11 +818,65 @@ public sealed class SingBoxService : SupervisedService
 
         foreach (var tag in ordered)
         {
-            if (await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken) is not null)
+            var delay = await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken);
+            Record(tag, delay);
+
+            if (delay is not null)
                 return tag;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Кладёт проверку в общий файл замеров — тот, что показывает вкладка VPN.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 30.09: «почему если настройка раз в минуту, последний замер
+    /// 32 минуты назад». Проверки сторожа шли, но оставались в нём: вкладка
+    /// показывала только свои замеры, а «мигающие» считались по ним одним
+    /// (пункт «Открытого» с 29.09).
+    /// </para>
+    /// <para>
+    /// Новых соединений это не добавляет — пишется то, что сторож и так
+    /// проверил. Файл общий с окном; перезаписать чужое не даёт сам кэш
+    /// (<see cref="ServerHealthCache.Save"/>).
+    /// </para>
+    /// </remarks>
+    private static void Record(string tag, TimeSpan? delay)
+    {
+        try
+        {
+            var cache = ServerHealthCache.Load();
+
+            cache.Set(new ServerHealth
+            {
+                Tag = tag,
+                Success = delay is not null,
+                LatencyMs = delay?.TotalMilliseconds,
+                CheckedAt = DateTimeOffset.Now,
+            });
+
+            cache.Save();
+        }
+        catch (Exception)
+        {
+            // Замер не записался — надзору до этого дела нет.
+        }
+    }
+
+    /// <summary>
+    /// Выход, через который идёт трафик: выбранный в селекторе, а если там
+    /// автоподбор — выбранный им. <c>null</c> — движок не ответил.
+    /// </summary>
+    private static async Task<string?> CurrentExitAsync(ClashApi api, CancellationToken cancellationToken)
+    {
+        var selected = await api.SelectedAsync(SelectorGroup, cancellationToken);
+
+        return selected == LatencyGroup
+            ? await api.SelectedAsync(LatencyGroup, cancellationToken)
+            : selected;
     }
 
     /// <summary>
@@ -840,13 +894,21 @@ public sealed class SingBoxService : SupervisedService
     /// (<see cref="PickOneByOneAsync"/>), в фоне, чтобы надзор не ждал.
     /// </para>
     /// <para>
-    /// Закреплённый выход не трогаем — он выбран человеком. Обход тоже:
-    /// его ведёт своя проверка (<see cref="ExitsAliveAsync"/>).
+    /// Закреплённый выход меряем, но не меняем — он выбран человеком. До 30.09
+    /// его не мерили вовсе, и при выбранном руками сервере настройка «проверять
+    /// каждую минуту» не действовала ни на что: вкладка VPN показывала замер
+    /// получасовой давности. Обход не трогаем: его ведёт своя проверка
+    /// (<see cref="ExitsAliveAsync"/>).
+    /// </para>
+    /// <para>
+    /// Меряется сам выход, а не селектор: путь тот же, а результат ложится
+    /// под тег сервера (<see cref="Record"/>). Не ответил движок на вопрос,
+    /// какой выход выбран, — меряем селектор, как прежде, без записи.
     /// </para>
     /// </remarks>
     private async Task WatchExitAsync(CancellationToken cancellationToken)
     {
-        if (_preferredExit is not null || _bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0)
+        if (_bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0)
             return;
 
         // После промаха — на каждом опросе, иначе по настройке.
@@ -855,23 +917,28 @@ public sealed class SingBoxService : SupervisedService
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-        if (await api.MeasureAsync(SelectorGroup, WatchUrl, CheckTimeout, cancellationToken) is not null)
+        var exit = await CurrentExitAsync(api, cancellationToken);
+        var delay = await api.MeasureAsync(exit ?? SelectorGroup, WatchUrl, CheckTimeout, cancellationToken);
+
+        if (exit is not null)
+            Record(exit, delay);
+
+        if (delay is not null)
         {
             _exitMisses = 0;
             return;
         }
+
+        // Выбран человеком — промах записан, а менять выход не нам.
+        if (_preferredExit is not null)
+            return;
 
         if (++_exitMisses < 2)
             return;
 
         _exitMisses = 0;
 
-        var before = await api.SelectedAsync(SelectorGroup, cancellationToken);
-
-        if (before == LatencyGroup)
-            before = await api.SelectedAsync(LatencyGroup, cancellationToken);
-
-        StartPick($"выход «{before}» не ответил дважды подряд");
+        StartPick($"выход «{exit}» не ответил дважды подряд");
     }
 
     /// <summary>Подбор замены в фоне; итог — в журнал.</summary>

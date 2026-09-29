@@ -243,6 +243,66 @@ public sealed class ClashApi : IDisposable
         }
     }
 
+    /// <summary>
+    /// Последний удачный замер каждого выхода, как его помнит движок;
+    /// <c>null</c> — движок не ответил.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Одним запросом и без единой проверки: движок сам хранит итог каждого
+    /// замера — автоподбора по его интервалу, /delay сторожа и окна. Поэтому
+    /// читать это можно хоть каждые несколько секунд, продавцы не заметят.
+    /// </para>
+    /// <para>
+    /// Только удачные: неудачный замер sing-box не записывает, а стирает
+    /// прежний. Отсутствие записи не значит «не отвечает» — могли и не мерить.
+    /// Замер 30.09: при выбранном руками сервере автоподбор движком
+    /// не используется и не мерится вовсе — последний его замер был сделан
+    /// при запуске движка, за 41 минуту до вопроса, при интервале в минуту.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyDictionary<string, (double Ms, DateTimeOffset At)>?> HistoryAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, $"{Root}/proxies", null, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var proxies = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken))?["proxies"] as JsonObject;
+            var found = new Dictionary<string, (double, DateTimeOffset)>(StringComparer.Ordinal);
+
+            if (proxies is null)
+                return found;
+
+            foreach (var (tag, node) in proxies)
+            {
+                if ((node?["history"] as JsonArray)?.LastOrDefault() is not { } last)
+                    continue;
+
+                int delay = last["delay"]?.GetValue<int>() ?? 0;
+                var time = last["time"]?.GetValue<string>();
+
+                if (delay <= 0 || time is null || !DateTimeOffset.TryParse(time, out var at))
+                    continue;
+
+                found[tag] = (delay, at);
+            }
+
+            return found;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>На что сейчас указывает группа; <c>null</c> — не выяснилось.</summary>
     public async Task<string?> SelectedAsync(string group, CancellationToken cancellationToken)
     {

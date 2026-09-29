@@ -229,7 +229,11 @@ public partial class VpnView : UserControl
             _exitTimer.Stop();
         };
 
-        _exitTimer.Tick += async (_, _) => await ShowExitAsync();
+        _exitTimer.Tick += async (_, _) =>
+        {
+            await ShowExitAsync();
+            await RefreshMeasuresAsync();
+        };
     }
 
     /// <summary>
@@ -376,7 +380,7 @@ public partial class VpnView : UserControl
                 parts.Add(server.Protocol.ToString());
             }
 
-            if (_health.Find(tag) is { Success: true, LatencyMs: { } ms })
+            if (Seen(tag) is { Success: true, LatencyMs: { } ms })
                 parts.Add($"{ms:0} мс");
 
             parts.Add(running
@@ -729,7 +733,7 @@ public partial class VpnView : UserControl
     {
         var rows = servers.Select(server =>
         {
-            var known = _health.Find(server.Tag);
+            var known = Seen(server.Tag);
             bool chosen = server.Tag == settings.PreferredServer;
 
             // Незамеряемого пробником меряет сам движок — и тогда у него
@@ -786,14 +790,14 @@ public partial class VpnView : UserControl
     private IReadOnlyList<ServerRow> InChosenOrder(IReadOnlyList<ServerRow> rows) =>
         _byLatency ? rows.OrderBy(Rank).ThenBy(Ms).ToList() : rows;
 
-    private int Rank(ServerRow row) => _health.Find(row.Tag) switch
+    private int Rank(ServerRow row) => Seen(row.Tag) switch
     {
         { Success: true } => 0,
         null => 1,
         _ => 2,
     };
 
-    private double Ms(ServerRow row) => _health.Find(row.Tag)?.LatencyMs ?? double.MaxValue;
+    private double Ms(ServerRow row) => Seen(row.Tag)?.LatencyMs ?? double.MaxValue;
 
     private void Redraw()
     {
@@ -823,13 +827,13 @@ public partial class VpnView : UserControl
                     Color = (Brush)FindResource(
                         server.Tag == settings.PreferredServer
                             ? "Accent"
-                            : server.Measurable || _health.Find(server.Tag) is not null
+                            : server.Measurable || Seen(server.Tag) is not null
                                 ? Key(server.Tag)
                                 : "Faint"),
                     ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
                     CanChoose = server.Tag != settings.PreferredServer,
 
-                    Latency = (server.Measurable || _health.Find(server.Tag) is not null
+                    Latency = (server.Measurable || Seen(server.Tag) is not null
                         ? Latency(server.Tag)
                         : "только в работе")
                         + (settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal) ? " · вне подбора" : string.Empty),
@@ -865,7 +869,7 @@ public partial class VpnView : UserControl
         if (_measuring.Contains(tag))
             return detail + " · идёт замер";
 
-        return _health.Find(tag) is { } known
+        return Seen(tag) is { } known
             ? detail + $" · замер {Ago(known.CheckedAt)}"
             : detail;
     }
@@ -885,7 +889,7 @@ public partial class VpnView : UserControl
         if (_measuring.Contains(tag))
             return head + " · идёт замер";
 
-        return _health.Find(tag) is { } known
+        return Seen(tag) is { } known
             ? head + $" · замер {Ago(known.CheckedAt)}"
             : head;
     }
@@ -893,7 +897,83 @@ public partial class VpnView : UserControl
     /// <summary>Теги, которые замеряются прямо сейчас.</summary>
     private readonly HashSet<string> _measuring = new(StringComparer.Ordinal);
 
-    private string Key(string tag) => _health.Find(tag) switch
+    /// <summary>Последние удачные замеры, как их помнит движок (ClashApi.HistoryAsync).</summary>
+    private IReadOnlyDictionary<string, (double Ms, DateTimeOffset At)> _engine =
+        new Dictionary<string, (double, DateTimeOffset)>();
+
+    /// <summary>
+    /// Замер сервера для показа — свежий из двух: файла и движка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 30.09: «почему если настройка раз в минуту, последний замер
+    /// 32 минуты назад». Вкладка показывала только файл, а в нём были лишь
+    /// её собственные замеры. Теперь туда пишет и сторож, а удачные замеры
+    /// автоподбора берутся прямо у движка — без новых соединений к продавцам.
+    /// </para>
+    /// <para>
+    /// Замер движка только для показа и в файл не пишется: неудач движок
+    /// не хранит, и история «мигающих» из одних удач врала бы в их пользу.
+    /// Жёлтый цвет «мигающего» поэтому по-прежнему считается по файлу.
+    /// </para>
+    /// </remarks>
+    private ServerHealth? Seen(string tag)
+    {
+        var known = _health.Find(tag);
+
+        if (!_engine.TryGetValue(tag, out var engine) || (known is not null && known.CheckedAt >= engine.At))
+            return known;
+
+        return (known ?? new ServerHealth { Tag = tag, Success = true, CheckedAt = engine.At })
+            with { Success = true, LatencyMs = engine.Ms, CheckedAt = engine.At };
+    }
+
+    /// <summary>Каждый какой тик таймера выхода (3 с) перечитывать замеры.</summary>
+    private const int FreshEvery = 3;
+
+    private int _freshTick;
+
+    /// <summary>
+    /// Перечитывает файл замеров и замеры движка; изменилось — перерисовывает.
+    /// </summary>
+    /// <remarks>
+    /// Раз в девять секунд, пока вкладка открыта: сторож пишет раз в минуту
+    /// по умолчанию, и чаще перечитывать незачем, а реже — «замер N мин назад»
+    /// отставал бы от правды. Перерисовка только при изменении: полный
+    /// перебор строк раз в несколько секунд дёргал окно (24.09).
+    /// </remarks>
+    private async Task RefreshMeasuresAsync()
+    {
+        if (_freshTick++ % FreshEvery != 0 || _measuring.Count > 0)
+            return;
+
+        var before = Stamp();
+
+        _health.Reload();
+
+        if (EnginesRunning)
+        {
+            using var api = new ClashApi();
+
+            if (await api.HistoryAsync(CancellationToken.None) is { } history)
+                _engine = history;
+        }
+        else
+        {
+            _engine = new Dictionary<string, (double, DateTimeOffset)>();
+        }
+
+        if (Stamp() != before)
+            Reshow();
+    }
+
+    /// <summary>Отпечаток всех замеров — чтобы понять, есть ли что перерисовывать.</summary>
+    private string Stamp() => string.Join("|",
+        _health.Entries.Values.Select(e => $"{e.Tag}:{e.CheckedAt.Ticks}:{e.Success}")
+            .Concat(_engine.Select(e => $"{e.Key}:{e.Value.At.Ticks}"))
+            .Order(StringComparer.Ordinal));
+
+    private string Key(string tag) => Seen(tag) switch
     {
         // Отвечает через раз — жёлтым (владелец 29.09): ОБС у SecureWay
         // отвечали 2–3 раза из 5, и зелёный на таком врал бы.
@@ -903,7 +983,7 @@ public partial class VpnView : UserControl
         _ => "Faint",
     };
 
-    private string Latency(string tag) => _health.Find(tag) switch
+    private string Latency(string tag) => Seen(tag) switch
     {
         { Flaky: true, LatencyMs: { } flaky } => $"{flaky:0} мс · через раз",
         { Flaky: true } => "через раз",

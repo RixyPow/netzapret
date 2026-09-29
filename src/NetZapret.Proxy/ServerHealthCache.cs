@@ -65,13 +65,74 @@ public sealed record ServerHealth
     public TimeSpan Age => DateTimeOffset.Now - CheckedAt;
 }
 
+/// <remarks>
+/// <para>
+/// Пишут в файл двое: окно (замеры вкладки VPN) и надзор (проверки сторожа,
+/// с 30.09). Каждый держит свою копию в памяти, и прежде сохранение писало
+/// её целиком — чужие записи, сделанные после чтения, пропадали молча.
+/// Поэтому копия помнит не только итог, но и что в неё записали
+/// (<see cref="_pending"/>), а <see cref="Save"/> под общей блокировкой
+/// перечитывает файл и повторяет свои записи поверх — как журнал, а не как
+/// снимок. Запись — через временный файл: читающий не увидит обрезанного.
+/// </para>
+/// </remarks>
 public sealed class ServerHealthCache
 {
     private readonly Dictionary<string, ServerHealth> _entries;
 
+    /// <summary>Записи этой копии, ещё не сохранённые, — в порядке поступления.</summary>
+    private readonly List<ServerHealth> _pending = [];
+
+    /// <summary>Чем ограничил <see cref="KeepOnly"/>; <c>null</c> — не ограничивал.</summary>
+    private HashSet<string>? _keep;
+
     private ServerHealthCache(Dictionary<string, ServerHealth> entries)
     {
         _entries = entries;
+    }
+
+    /// <summary>
+    /// Общая для окна и надзора блокировка файла. Local — сессия одна:
+    /// надзор запускается окном под тем же пользователем.
+    /// </summary>
+    private const string GateName = @"Local\NetZapret.ServerHealth";
+
+    /// <summary>
+    /// Берёт блокировку; не дождался за пару секунд — работает без неё.
+    /// </summary>
+    /// <remarks>
+    /// Замеры — вспомогательные цифры: лучше изредка потерять одну запись,
+    /// чем повесить сторожа или окно на чужой блокировке.
+    /// </remarks>
+    private static IDisposable Gate()
+    {
+        var mutex = new Mutex(false, GateName);
+
+        try
+        {
+            if (mutex.WaitOne(TimeSpan.FromSeconds(2)))
+                return new Held(mutex);
+        }
+        catch (AbandonedMutexException)
+        {
+            // Прежний владелец умер, держа блокировку, — теперь она наша.
+            return new Held(mutex);
+        }
+
+        mutex.Dispose();
+        return new Held(null);
+    }
+
+    private sealed class Held(Mutex? mutex) : IDisposable
+    {
+        public void Dispose()
+        {
+            if (mutex is null)
+                return;
+
+            mutex.ReleaseMutex();
+            mutex.Dispose();
+        }
     }
 
     public static string DefaultPath => Path.Combine("runtime", "server-health.json");
@@ -97,24 +158,67 @@ public sealed class ServerHealthCache
 
     public static ServerHealthCache Load(string? path = null)
     {
-        var target = path ?? DefaultPath;
+        using var gate = Gate();
 
+        return new ServerHealthCache(Read(path ?? DefaultPath));
+    }
+
+    private static Dictionary<string, ServerHealth> Read(string target)
+    {
         if (!File.Exists(target))
-            return new ServerHealthCache([]);
+            return new(StringComparer.Ordinal);
 
         try
         {
             var list = JsonSerializer.Deserialize<List<ServerHealth>>(File.ReadAllText(target), Options);
 
-            return new ServerHealthCache(
-                list?.ToDictionary(e => e.Tag, StringComparer.Ordinal) ?? []);
+            return list?.ToDictionary(e => e.Tag, StringComparer.Ordinal) ?? new(StringComparer.Ordinal);
         }
         catch (Exception)
         {
             // Испорченный или несовместимый файл — не повод падать:
             // это всего лишь запомненные цифры, они соберутся заново.
-            return new ServerHealthCache([]);
+            return new(StringComparer.Ordinal);
         }
+    }
+
+    /// <summary>
+    /// Перечитывает файл, сохраняя свои несохранённые записи поверх.
+    /// </summary>
+    /// <remarks>
+    /// Для вкладки, которая открыта долго: сторож пишет каждую минуту,
+    /// и без перечитывания вкладка показывала бы замер часовой давности.
+    /// </remarks>
+    public void Reload(string? path = null)
+    {
+        Dictionary<string, ServerHealth> fresh;
+
+        using (Gate())
+            fresh = Read(path ?? DefaultPath);
+
+        Replay(fresh);
+        Replace(fresh);
+    }
+
+    /// <summary>Повторяет свои записи и чистку поверх прочитанного с диска.</summary>
+    private void Replay(Dictionary<string, ServerHealth> entries)
+    {
+        foreach (var health in _pending)
+            Apply(entries, health);
+
+        if (_keep is { } keep)
+        {
+            foreach (var tag in entries.Keys.Where(t => !keep.Contains(t)).ToList())
+                entries.Remove(tag);
+        }
+    }
+
+    private void Replace(Dictionary<string, ServerHealth> entries)
+    {
+        _entries.Clear();
+
+        foreach (var (tag, health) in entries)
+            _entries[tag] = health;
     }
 
     public ServerHealth? Find(string tag) => _entries.GetValueOrDefault(tag);
@@ -130,7 +234,13 @@ public sealed class ServerHealthCache
     /// </remarks>
     public void Set(ServerHealth health)
     {
-        var previous = _entries.GetValueOrDefault(health.Tag);
+        Apply(_entries, health);
+        _pending.Add(health);
+    }
+
+    private static void Apply(Dictionary<string, ServerHealth> entries, ServerHealth health)
+    {
+        var previous = entries.GetValueOrDefault(health.Tag);
         int before = previous?.Failures ?? 0;
 
         var recent = (previous?.Recent ?? Array.Empty<bool>())
@@ -138,7 +248,7 @@ public sealed class ServerHealthCache
             .TakeLast(RecentSize)
             .ToList();
 
-        _entries[health.Tag] = health with
+        entries[health.Tag] = health with
         {
             Failures = health.Success ? 0 : before + 1,
             Recent = recent,
@@ -182,29 +292,55 @@ public sealed class ServerHealthCache
     {
         var keep = new HashSet<string>(tags, StringComparer.Ordinal);
 
+        _keep = _keep is null ? keep : _keep.Intersect(keep).ToHashSet(StringComparer.Ordinal);
+
         foreach (var tag in _entries.Keys.Where(t => !keep.Contains(t)).ToList())
             _entries.Remove(tag);
     }
 
+    /// <summary>
+    /// Сохраняет свои записи поверх того, что в файле сейчас.
+    /// </summary>
+    /// <remarks>
+    /// Не снимок копии, а её записи, повторённые на свежепрочитанном файле:
+    /// так проверки сторожа, пришедшие после того, как окно прочитало файл,
+    /// не затираются замером вкладки — и наоборот.
+    /// </remarks>
     public void Save(string? path = null)
     {
         var target = path ?? DefaultPath;
 
         try
         {
+            using var gate = Gate();
+
+            var merged = Read(target);
+            Replay(merged);
+
             var directory = Path.GetDirectoryName(Path.GetFullPath(target));
 
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
+            // Через временный файл: читающий без блокировки (или не дождавшийся
+            // её) увидит прежний файл или новый, но не обрезанный.
+            var temporary = target + ".tmp";
+
             File.WriteAllText(
-                target,
-                JsonSerializer.Serialize(_entries.Values.ToList(), Options),
+                temporary,
+                JsonSerializer.Serialize(merged.Values.ToList(), Options),
                 new UTF8Encoding(false));
+
+            File.Move(temporary, target, overwrite: true);
+
+            Replace(merged);
+            _pending.Clear();
+            _keep = null;
         }
         catch (Exception)
         {
             // Не сохранилось — переживём: в следующий раз проверим заново.
+            // Свои записи копия помнит и повторит при следующем сохранении.
         }
     }
 }
