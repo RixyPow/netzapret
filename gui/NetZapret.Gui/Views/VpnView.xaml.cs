@@ -423,6 +423,12 @@ public partial class VpnView : UserControl
         settings = AppSettings.Load(AppSettings.DefaultPath);
         ShowWarp(settings);
 
+        // Запасы подписок, убранных раньше, — в том числе до того, как их
+        // начали стирать при удалении (30.09). Пустая книга не в счёт: так же
+        // выглядит испорченный файл, и чистка по ней стёрла бы всё.
+        if (_book.Entries.Count > 0)
+            KeepReserves(_book, settings);
+
         _rows = _book.Entries
             .Select(entry => new SubRow
             {
@@ -1571,11 +1577,36 @@ public partial class VpnView : UserControl
                     .Save(AppSettings.DefaultPath);
             }
 
+            // Запас убранной — вон вместе с ней: в нём ключи серверов (30.09).
+            // Только если она и правда нашлась и убрана: иначе книга могла
+            // прочитаться пустой из-за порчи, и стёрлись бы запасы всех.
+            if (removed is not null)
+                KeepReserves(SubscriptionBook.Load(), AppSettings.Load(AppSettings.DefaultPath));
+
             _ = LoadAsync();
         }
         catch (Exception ex)
         {
             Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Оставляет запасы только нынешних подписок и ссылки консоли.
+    /// </summary>
+    /// <remarks>
+    /// Ссылка консоли (<c>SubscriptionUrl</c>) — отдельно: nz читает её
+    /// и сам, и её запас нужен ему, даже когда в книге её почему-то нет.
+    /// </remarks>
+    private static void KeepReserves(SubscriptionBook book, AppSettings settings)
+    {
+        try
+        {
+            SubscriptionPool.KeepReserves(book.Entries.Select(e => e.Url).Append(settings.SubscriptionUrl));
+        }
+        catch (Exception)
+        {
+            // Не стёрлось — сотрётся при следующем входе на вкладку.
         }
     }
 

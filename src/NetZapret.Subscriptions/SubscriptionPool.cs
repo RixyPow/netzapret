@@ -326,6 +326,57 @@ public static class SubscriptionPool
         Path.Combine(folder, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(url.Trim())))[..24] + ".txt");
 
     /// <summary>
+    /// Стирает запасы всех подписок, кроме названных; возвращает, сколько стёрто.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 30.09. Запас — весь ответ панели, с ключами серверов, то есть
+    /// тот же пароль, что и ссылка. Подписку убирали, а её запас оставался
+    /// в runtime\subscriptions навсегда: у владельца лежал запас WOW VPN,
+    /// которой в списке уже не было. В git и в архив runtime\ не идёт,
+    /// но держать чужие ключи без нужды незачем.
+    /// </para>
+    /// <para>
+    /// От обратного — «оставить эти», а не «стереть ту»: имя файла — отпечаток
+    /// ссылки, и по нему не узнать, чей это запас. Так уходят и запасы,
+    /// оставшиеся от подписок, убранных до этой правки.
+    /// </para>
+    /// </remarks>
+    public static int KeepReserves(IEnumerable<string?> urls, string? reserveDirectory = null)
+    {
+        var folder = reserveDirectory ?? DefaultReserveDirectory;
+
+        if (!Directory.Exists(folder))
+            return 0;
+
+        var keep = urls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => Path.GetFileName(ReservePath(folder, url!)))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        int removed = 0;
+
+        foreach (var body in Directory.GetFiles(folder, "*.txt"))
+        {
+            if (keep.Contains(Path.GetFileName(body)))
+                continue;
+
+            try
+            {
+                File.Delete(body);
+                File.Delete(body + ".meta");
+                removed++;
+            }
+            catch (Exception)
+            {
+                // Занят или нет прав — сотрётся при следующей чистке.
+            }
+        }
+
+        return removed;
+    }
+
+    /// <summary>
     /// Квота и срок лежат рядом с телом: они приходят заголовками, а не в теле,
     /// и без них строка подписки из запаса теряла бы «86 дн» и остаток трафика.
     /// </summary>

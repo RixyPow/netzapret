@@ -147,6 +147,43 @@ public sealed class SubscriptionPoolTests
         }
     }
 
+    /// <summary>
+    /// Запас убранной подписки стирается, запасы оставшихся — нет.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 30.09: в запасе — ключи серверов, и запас WOW VPN лежал
+    /// после того, как подписку убрали. Метаданные (квота, срок) — вместе с телом.
+    /// </remarks>
+    [Fact]
+    public async Task Only_reserves_of_remaining_subscriptions_are_kept()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            const string kept = "http://127.0.0.1:1/kept";
+            const string gone = "http://127.0.0.1:1/gone";
+
+            SubscriptionPool.SaveReserve(folder, kept, "trojan://secret@a.example:443#Остаётся\n",
+                new SubscriptionInfo { Servers = [], TotalBytes = 100 });
+            SubscriptionPool.SaveReserve(folder, gone, "trojan://secret@b.example:443#Уходит\n",
+                new SubscriptionInfo { Servers = [], TotalBytes = 100 });
+
+            Assert.Equal(1, SubscriptionPool.KeepReserves([kept, null, "  "], folder));
+
+            // Оставшийся читается из запаса по-прежнему, убранного нет вовсе.
+            var left = await SubscriptionPool.ReadOneAsync(kept, force: false, CancellationToken.None, folder);
+            Assert.Equal("Остаётся", Assert.Single(left.Info!.Servers).Tag);
+
+            Assert.Equal(2, Directory.GetFiles(folder).Length);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task A_fresh_reserve_is_read_without_going_to_the_panel()
     {
