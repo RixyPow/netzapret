@@ -51,6 +51,17 @@ rules:
     value: config/lists/donationalerts.txt
     mode: direct
 
+  # GitHub — десинк с рецептом pass (владелец 29.09): имя winws2 не трогает,
+  # в туннель не идёт. Так же GitHub стоит и в пресете Zapret GUI
+  # («GitHub · pass (ничего не делает)»), и там он работает. Прежде GitHub
+  # шёл по секции «Выбрано вручную: github» Universal V10 с рецептом
+  # hostfakesplit_multi, выбранным без замера, — и 28.09 при поднятых
+  # движках замерзало 10–80 % соединений.
+  - match: hostlist
+    value: config/lists/github.txt
+    mode: desync
+    recipe: "pass"
+
   # Российские сайты по имени — те, чьих адресов нет в ipset-ru.
   - match: hostlist
     value: config/lists/ru-sites.txt
