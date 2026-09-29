@@ -9,7 +9,8 @@ public sealed record PinRefreshResult(
     IReadOnlyList<string> Changes,
     IReadOnlyList<string> Dead,
     string? Backup,
-    string? Error);
+    string? Error,
+    int Checked = 0);
 
 /// <summary>
 /// Сам меняет умерший адрес пина на живой, который посредник отдаёт сейчас.
@@ -30,6 +31,12 @@ public sealed record PinRefreshResult(
 /// <para>
 /// Проверять стоит при поднятых движках: часть посредников напрямую отвечает
 /// только с десинком (.195 28.09). Без движков живой адрес выглядел бы мёртвым.
+/// </para>
+/// <para>
+/// Запускается кнопкой на вкладке DNS, и только ею (владелец, 30.09: «даже
+/// не всегда при запуске нужен»). Прежде окно звало её само — при открытии
+/// и раз в сутки; обещанное «после запуска движков» из-за ошибки в времени
+/// начала надзора не случалось ни разу.
 /// </para>
 /// </remarks>
 public static class PinRefresh
@@ -72,13 +79,13 @@ public static class PinRefresh
         if (alive.Count >= 4 && deadCount * 2 > alive.Count)
         {
             return new([], [], null,
-                $"не ответили {deadCount} адресов из {alive.Count} — похоже на сбой сети, пины не тронуты");
+                $"не ответили {deadCount} адресов из {alive.Count} — похоже на сбой сети, пины не тронуты", alive.Count);
         }
 
         var plan = Plan(pins, alive);
 
         if (plan.Count == 0)
-            return new([], [], null, null);
+            return new([], [], null, null, alive.Count);
 
         // Для каждого имени без живого адреса — что посредники отдают сейчас.
         var live = await IntermediaryDns.AskManyAsync(plan, cancellationToken);
@@ -114,7 +121,7 @@ public static class PinRefresh
         var dead = plan.Where(n => !entries.ContainsKey(n)).ToList();
 
         if (entries.Count == 0)
-            return new([], dead, null, null);
+            return new([], dead, null, null, alive.Count);
 
         var changes = entries
             .GroupBy(e => $"{string.Join(", ", pins[e.Key].Order(StringComparer.Ordinal))} → {string.Join(", ", e.Value.Order(StringComparer.Ordinal))}")
@@ -129,12 +136,12 @@ public static class PinRefresh
                 HostsEditor.FlushDns();
 
             return result.RevertedBy is { } by
-                ? new([], dead, result.Backup, $"hosts вернул к своему {by}")
-                : new(changes, dead, result.Backup, null);
+                ? new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count)
+                : new(changes, dead, result.Backup, null, alive.Count);
         }
         catch (Exception ex)
         {
-            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message);
+            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message, alive.Count);
         }
     }
 

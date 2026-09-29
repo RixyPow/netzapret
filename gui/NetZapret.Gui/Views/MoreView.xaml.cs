@@ -506,12 +506,6 @@ public partial class MoreView : UserControl
                 + "Сам он не перезапускается никогда: посреди звонка это хуже задержки.")
             { On = settings.OfferDiscordRestart },
 
-            new("pins", "Обновлять пины сами",
-                "Если адрес посредника (XBOX DNS, Comss) в hosts умер, программа после запуска "
-                + "движков прибьёт имя к живому, который посредник отдаёт сейчас. Работающие "
-                + "пины не трогаются.")
-            { On = settings.PinAutoRefresh },
-
             new("updates", "Искать обновления при запуске",
                 "Только искать. Установка остаётся отдельным действием с отдельным согласием.")
             { On = settings.CheckForUpdates },
@@ -534,7 +528,6 @@ public partial class MoreView : UserControl
                 "logs" => settings with { LogsEnabled = !settings.LogsEnabled },
                 "verify" => settings with { VerifyTraffic = !settings.VerifyTraffic },
                 "discord" => settings with { OfferDiscordRestart = !settings.OfferDiscordRestart },
-                "pins" => settings with { PinAutoRefresh = !settings.PinAutoRefresh },
                 _ => settings with { CheckForUpdates = !settings.CheckForUpdates },
             };
 

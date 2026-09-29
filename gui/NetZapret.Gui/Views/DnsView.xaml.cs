@@ -567,4 +567,73 @@ public partial class DnsView : UserControl
             SurveyButton.IsEnabled = true;
         }
     }
+
+    /// <summary>
+    /// Проверяет адреса пинов и меняет умершие на те, что посредники отдают сейчас.
+    /// </summary>
+    /// <remarks>
+    /// Не прерывается уходом с вкладки: посреди неё может идти запись hosts,
+    /// а итог всё равно ляжет в журнал. Токен поэтому не раздела, а пустой.
+    /// </remarks>
+    private async void OnPins(object sender, RoutedEventArgs e)
+    {
+        PinsButton.IsEnabled = false;
+
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+        bool engines = state is not null && state.IsSupervisorAlive();
+
+        PinsStatus.Text = "Проверяю: по одному соединению на каждый прибитый адрес…";
+
+        try
+        {
+            var result = await Task.Run(() => PinRefresh.RunAsync(CancellationToken.None));
+
+            if (result.Changes.Count > 0)
+                Journal.Write("пин", "адрес умер, заменён живым: " + string.Join("; ", result.Changes)
+                    + (result.Backup is null ? string.Empty : $"; копия hosts: {result.Backup}"));
+
+            if (result.Dead.Count > 0)
+                Journal.Write("пин", $"мёртвые без живой замены: {string.Join(", ", result.Dead.Take(8))}"
+                    + (result.Dead.Count > 8 ? $" и ещё {result.Dead.Count - 8}" : string.Empty));
+
+            if (result.Error is { } error)
+                Journal.Write("пин", "проверка адресов: " + error);
+
+            PinsStatus.Text = Describe(result)
+                + (engines ? string.Empty : " Движки не подняты — часть посредников без десинка не отвечает, и мёртвыми могли показаться живые.");
+        }
+        catch (Exception ex)
+        {
+            PinsStatus.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+            Journal.Write("пин", "проверка адресов не удалась: " + ex.GetBaseException().Message);
+        }
+        finally
+        {
+            PinsButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Итог проверки словами — что сделано и чего не сделано.</summary>
+    internal static string Describe(PinRefreshResult result)
+    {
+        if (result.Checked == 0 && result.Error is null)
+            return "В hosts нет пинов к адресам посредников — проверять нечего.";
+
+        var parts = new List<string>();
+
+        if (result.Error is { } error)
+            parts.Add($"Ничего не заменено: {error}.");
+
+        if (result.Changes.Count > 0)
+            parts.Add($"Заменено: {string.Join("; ", result.Changes)}.");
+
+        if (result.Dead.Count > 0)
+            parts.Add($"Живой замены не нашлось: {string.Join(", ", result.Dead.Take(6))}"
+                + (result.Dead.Count > 6 ? $" и ещё {result.Dead.Count - 6}." : "."));
+
+        if (parts.Count == 0)
+            parts.Add($"Проверено адресов: {result.Checked}, все отвечают — менять нечего.");
+
+        return string.Join(" ", parts);
+    }
 }

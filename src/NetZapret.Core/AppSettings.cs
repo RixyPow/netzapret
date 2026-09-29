@@ -326,9 +326,6 @@ public sealed record AppSettings
     /// <summary>Сколько серверов с одного входа (адрес:порт) берёт автоподбор; 0 — всех.</summary>
     public int AutoPickPerEntry { get; init; } = 2;
 
-    /// <summary>Менять ли сами умершие адреса пинов (PinRefresh) — владелец 29.09 попросил выключатель.</summary>
-    public bool PinAutoRefresh { get; init; } = true;
-
     /// <summary>
     /// Серверы, которые человек убрал из автоподбора; выбрать их руками можно по-прежнему.
     /// </summary>
