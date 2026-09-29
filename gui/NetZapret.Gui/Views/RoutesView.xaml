@@ -100,40 +100,7 @@
                     заметна — карточка стоит в ряду с такими же, и смена
                     стиля не должна двигать её относительно соседей.
                 -->
-                <!--
-                    «Сайт не открывается» — программа решает сама (владелец 29.09:
-                    людей бесит ставить «напрямую» на каждый сервис руками).
-                    Пробует как есть, напрямую, через VPN и записывает
-                    сработавший маршрут. Решение целиком в SiteFixer.
-                -->
                 <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="16,11">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Сайт не открывается?" FontWeight="SemiBold" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
-                                            Content="Вставьте ссылку или имя сайта. Программа попробует его как есть, потом напрямую — без десинка, — потом через VPN и сама запишет маршрут, который сработал.&#x0a;&#x0a;«Напрямую» проверяется и действует сразу, без перезапуска. «Через VPN» заработает после перезапуска движков.&#x0a;&#x0a;Движки должны быть запущены: без них сравнивать не с чем." />
-                        </StackPanel>
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0" x:Name="FixSite" Margin="0,0,8,0" KeyDown="OnFixKey"
-                                     gui:Hint.Text="https://aternos.org/go/ или просто aternos.org" />
-
-                            <Button Grid.Column="1" x:Name="FixButton" Style="{StaticResource Ghost}"
-                                    Content="Починить" Click="OnFix" MinWidth="110" />
-                        </Grid>
-
-                        <TextBlock x:Name="FixResult" Style="{StaticResource Caption}" Margin="0,8,0,0"
-                                   TextWrapping="Wrap" Visibility="Collapsed" />
-                    </StackPanel>
-                </Border>
-
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0" Padding="16,11">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Свой домен" FontWeight="SemiBold" VerticalAlignment="Center" />
