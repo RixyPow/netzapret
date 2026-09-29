@@ -75,7 +75,8 @@ public partial class MainWindow : Window
             {
                 var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
-                if (state is null || !state.IsSupervisorAlive())
+                if (state is null || !state.IsSupervisorAlive()
+                    || !AppSettings.Load(AppSettings.DefaultPath).PinAutoRefresh)
                     continue;
 
                 bool newRun = checkedRun != state.StartedAt

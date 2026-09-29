@@ -63,6 +63,18 @@ public static class PinRefresh
         foreach (var (address, name) in byAddress)
             alive[address] = await AnswersAsync(address, name, cancellationToken);
 
+        // Не отвечает больше половины адресов разом — это сбой сети, а не смерть
+        // адресов. 29.09 в 14:58 проверка сочла мёртвыми 68 имён сразу, среди
+        // них заведомо живые, и «заменила» настоящие адреса Spotify
+        // (35.186.224.x) на прокси XBOX. При таком раскладе не меняем ничего.
+        int deadCount = alive.Values.Count(ok => !ok);
+
+        if (alive.Count >= 4 && deadCount * 2 > alive.Count)
+        {
+            return new([], [], null,
+                $"не ответили {deadCount} адресов из {alive.Count} — похоже на сбой сети, пины не тронуты");
+        }
+
         var plan = Plan(pins, alive);
 
         if (plan.Count == 0)
