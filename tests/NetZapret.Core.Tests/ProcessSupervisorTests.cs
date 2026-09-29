@@ -139,6 +139,24 @@ public sealed class ProcessSupervisorTests : IDisposable
         await run.WaitAsync(TimeSpan.FromSeconds(15));
     }
 
+    /// <summary>
+    /// Время начала не сдвигается от записи к записи.
+    /// </summary>
+    /// <remarks>
+    /// До 30.09 каждая запись ставила «сейчас»: «Работает · 0 мин» висело
+    /// вечно, а замена пинов после запуска движков не случалась ни разу.
+    /// </remarks>
+    [Fact]
+    public async Task TheStartTimeStaysPutBetweenStateWrites()
+    {
+        var supervisor = new ProcessSupervisor([new FakeService()], Options());
+
+        var first = supervisor.BuildState().StartedAt;
+        await Task.Delay(50);
+
+        Assert.Equal(first, supervisor.BuildState().StartedAt);
+    }
+
     [Fact]
     public async Task StartsWritesStateAndCleansUpOnStop()
     {

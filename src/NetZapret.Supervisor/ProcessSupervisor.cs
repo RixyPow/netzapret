@@ -61,6 +61,22 @@ public sealed class ProcessSupervisor
     private readonly Dictionary<string, DateTimeOffset> _since = new();
     private readonly RollingLog _log;
 
+    /// <summary>
+    /// Когда поднят надзор — один раз, при создании.
+    /// </summary>
+    /// <remarks>
+    /// Прежде <see cref="BuildState"/> ставил в StartedAt «сейчас» при каждой
+    /// записи состояния, и время начала было временем последней записи.
+    /// Окно показывало «Запущено только что» и «Работает · 0 мин» при движках,
+    /// поднятых часами раньше (владелец, 30.09). Хуже того, замена умерших
+    /// пинов (MainWindow.RefreshPinsLoopAsync) ждёт минуту после начала
+    /// запуска, а состояние пишется каждые пять секунд — минута не проходила
+    /// никогда, и «раз после запуска движков» не случалось ни разу: пины
+    /// менялись только при открытии окна и раз в сутки. Журнал 29.09 с этим
+    /// сходится — записи замены стоят в моменты перезапуска окна.
+    /// </remarks>
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
+
     public ProcessSupervisor(IReadOnlyList<SupervisedService> services, SupervisorOptions? options = null)
     {
         _services = services;
@@ -301,7 +317,7 @@ public sealed class ProcessSupervisor
     public SupervisorState BuildState() => new()
     {
         SupervisorProcessId = Environment.ProcessId,
-        StartedAt = DateTimeOffset.Now,
+        StartedAt = _startedAt,
         Services = _services.Select(s => new ServiceState
         {
             Name = s.Name,
