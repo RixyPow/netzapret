@@ -51,6 +51,11 @@ rules:
     value: config/lists/donationalerts.txt
     mode: direct
 
+  # Российские сайты по имени — те, чьих адресов нет в ipset-ru.
+  - match: hostlist
+    value: config/lists/ru-sites.txt
+    mode: direct
+
   # Авито на своих сетях (176.114.x, 95.181.182.x, 78.159.252.x), и в список
   # российских сетей они не попали — в режиме «всё через VPN» он уходил
   # в туннель, а зарубежный адрес Авито тормозит и отправляет на проверки
