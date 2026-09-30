@@ -47,9 +47,12 @@ public static class TunnelCapture
     public const int Limit = 40;
 
     /// <summary>Дописывает исключение к готовой строке запуска.</summary>
-    public static void Apply(List<string> arguments, IReadOnlyList<IPAddress>? servers)
+    /// <param name="fakeRange">
+    /// Диапазон подменных адресов туннеля (<c>198.18.0.0/15</c>); <c>null</c> — не выводить.
+    /// </param>
+    public static void Apply(List<string> arguments, IReadOnlyList<IPAddress>? servers, string? fakeRange = null)
     {
-        var filter = Filter((servers ?? []).Take(Limit).ToList());
+        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange);
 
         if (filter.Length == 0)
             return;
@@ -74,10 +77,11 @@ public static class TunnelCapture
     }
 
     /// <summary>Сколько из этих адресов строка запуска выводит из перехвата.</summary>
-    public static int Applied(IReadOnlyList<string> arguments, IReadOnlyList<IPAddress> servers)
+    public static int Applied(
+        IReadOnlyList<string> arguments, IReadOnlyList<IPAddress> servers, string? fakeRange = null)
     {
         var kept = servers.Take(Limit).ToList();
-        var filter = Filter(kept);
+        var filter = Filter(kept, fakeRange);
 
         return filter.Length > 0
             && arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase)
@@ -87,9 +91,32 @@ public static class TunnelCapture
     }
 
     /// <summary>Условие «пакет не от сервера и не к нему»; нет адресов — пусто.</summary>
-    public static string Filter(IReadOnlyList<IPAddress> servers)
+    /// <remarks>
+    /// <para>
+    /// С диапазоном подменных адресов — ещё и «пакет не в туннель». Имени,
+    /// уведённому в VPN, движок выдаёт адрес из 198.18.0.0/15, и соединение
+    /// идёт на адаптер туннеля. WinDivert снимает пакеты и с него, а свои
+    /// «местные» адреса winws2 исключает сам только для 10/8, 172.16/12,
+    /// 192.168/16 и 169.254/16 (текст фильтра, <c>--wf-save</c>, 30.09) —
+    /// этого диапазона среди них нет. Если такое имя есть в списках пресета,
+    /// десинк резал и подделывал пакеты соединения, которое и так уходит
+    /// в туннель и в десинке не нуждается.
+    /// </para>
+    /// <para>
+    /// Подменные адреса IPv6 (fc00::/18) отдельной строки не требуют: fc00::/7
+    /// winws2 исключает сам. Чем это исключение отзывается на скорости,
+    /// на 30.09 не замерено.
+    /// </para>
+    /// </remarks>
+    public static string Filter(IReadOnlyList<IPAddress> servers, string? fakeRange = null)
     {
         var tests = new List<string>();
+
+        if (Bounds(fakeRange) is var (first, last))
+        {
+            tests.Add($"(ip.DstAddr>={first} and ip.DstAddr<={last})");
+            tests.Add($"(ip.SrcAddr>={first} and ip.SrcAddr<={last})");
+        }
 
         foreach (var server in servers)
         {
@@ -109,5 +136,33 @@ public static class TunnelCapture
         }
 
         return tests.Count == 0 ? string.Empty : $"({string.Join(" or ", tests)} ? false : true)";
+    }
+
+    /// <summary>Первый и последний адрес диапазона IPv4 вида 198.18.0.0/15; не разобрался — <c>null</c>.</summary>
+    public static (IPAddress First, IPAddress Last)? Bounds(string? range)
+    {
+        if (string.IsNullOrWhiteSpace(range))
+            return null;
+
+        var parts = range.Trim().Split('/');
+
+        if (parts.Length != 2
+            || !IPAddress.TryParse(parts[0], out var address)
+            || address.AddressFamily != AddressFamily.InterNetwork
+            || !int.TryParse(parts[1], out int bits)
+            || bits is < 8 or > 32)
+        {
+            return null;
+        }
+
+        var bytes = address.GetAddressBytes();
+        uint value = (uint)(bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]);
+        uint mask = bits == 32 ? uint.MaxValue : ~(uint.MaxValue >> bits);
+        uint first = value & mask;
+        uint last = first | ~mask;
+
+        static IPAddress From(uint v) => new([(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v]);
+
+        return (From(first), From(last));
     }
 }

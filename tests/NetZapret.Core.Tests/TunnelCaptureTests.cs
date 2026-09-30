@@ -114,6 +114,58 @@ public sealed class TunnelCaptureTests
         Assert.Equal(string.Empty, TunnelCapture.Filter([]));
     }
 
+    /// <summary>
+    /// Подменные адреса туннеля (30.09): соединения на них идут в VPN,
+    /// и десинк их не перехватывает — диапазоном, в обе стороны.
+    /// </summary>
+    [Fact]
+    public void TheFakeRangeIsExcludedAsARange()
+    {
+        Assert.Equal(
+            "((ip.DstAddr>=198.18.0.0 and ip.DstAddr<=198.19.255.255)"
+            + " or (ip.SrcAddr>=198.18.0.0 and ip.SrcAddr<=198.19.255.255)"
+            + " or ip.DstAddr=77.1.1.1 or ip.SrcAddr=77.1.1.1 ? false : true)",
+            TunnelCapture.Filter([IPAddress.Parse("77.1.1.1")], "198.18.0.0/15"));
+
+        // Серверов нет (обход без адресов) — диапазон выводится всё равно.
+        Assert.StartsWith("((ip.DstAddr>=198.18.0.0", TunnelCapture.Filter([], "198.18.0.0/15"));
+
+        // Без диапазона — прежняя строка, знак в знак.
+        Assert.Equal(TunnelCapture.Filter(Servers), TunnelCapture.Filter(Servers, null));
+        Assert.Equal(TunnelCapture.Filter(Servers), TunnelCapture.Filter(Servers, "не диапазон"));
+    }
+
+    [Fact]
+    public void RangeBounds()
+    {
+        Assert.Equal((IPAddress.Parse("198.18.0.0"), IPAddress.Parse("198.19.255.255")), TunnelCapture.Bounds("198.18.0.0/15"));
+        Assert.Equal((IPAddress.Parse("10.0.0.0"), IPAddress.Parse("10.255.255.255")), TunnelCapture.Bounds("10.1.2.3/8"));
+        Assert.Null(TunnelCapture.Bounds("fc00::/18"));
+        Assert.Null(TunnelCapture.Bounds("198.18.0.0"));
+        Assert.Null(TunnelCapture.Bounds(null));
+    }
+
+    [Fact]
+    public void TheFakeRangeIsReadFromTheCompiledConfig()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-fake-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, Compile(("NL", "77.1.1.1")).ToJsonString());
+            Assert.Equal("198.18.0.0/15", TunnelEndpoints.FakeRange(path));
+
+            File.WriteAllText(path, "{ \"dns\": { \"servers\": [ { \"type\": \"https\" } ] } }");
+            Assert.Null(TunnelEndpoints.FakeRange(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        Assert.Null(TunnelEndpoints.FakeRange(path));
+    }
+
     /// <summary>Зона у адреса IPv6 в фильтр не попадает.</summary>
     [Fact]
     public void AnIpv6ScopeIsDropped()
@@ -198,7 +250,12 @@ public sealed class TunnelCaptureTests
                 .SelectMany(i => new[] { IPAddress.Parse($"77.1.1.{1 + i}"), IPAddress.Parse($"2a01:4f8:c0c:{1 + i:x}::1") })
                 .ToList();
 
-            foreach (var filter in new[] { TunnelCapture.Filter(Servers), "(ip.TTL>1) and " + TunnelCapture.Filter(many) })
+            foreach (var filter in new[]
+            {
+                TunnelCapture.Filter(Servers),
+                "(ip.TTL>1) and " + TunnelCapture.Filter(many),
+                TunnelCapture.Filter(many, "198.18.0.0/15"),
+            })
             {
                 bool ok = compile(filter, 0, new byte[65536], 65536, out var error, out uint position);
 

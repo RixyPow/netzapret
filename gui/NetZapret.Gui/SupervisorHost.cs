@@ -352,11 +352,17 @@ internal static class SupervisorHost
             ? []
             : TunnelEndpoints.Read(options.ProxyConfig, settings.PreferredServer);
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers);
+        // И соединения, которые уходят в туннель по подменным адресам.
+        var fakeRange = options.NoProxy ? null : TunnelEndpoints.FakeRange(options.ProxyConfig);
+
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange);
+
+        if (fakeRange is not null && TunnelCapture.Applied(arguments, servers, fakeRange) == servers.Take(TunnelCapture.Limit).Count())
+            Console.WriteLine($"Десинк не перехватывает трафик в туннель: подменные адреса {fakeRange}.");
 
         if (servers.Count > 0)
         {
-            int skipped = TunnelCapture.Applied(arguments, servers);
+            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange);
 
             Console.WriteLine(skipped == 0
                 ? "Серверы туннеля остались в перехвате десинка: у пресета свой --wf-raw-filter файлом."

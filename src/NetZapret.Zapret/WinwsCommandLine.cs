@@ -72,19 +72,24 @@ public static class WinwsCommandLine
     /// Адреса серверов туннеля: их пакеты winws2 не перехватывает вовсе
     /// (см. <see cref="TunnelCapture"/>). Без адресов строка остаётся как была.
     /// </param>
+    /// <param name="tunnelFakeRange">
+    /// Диапазон подменных адресов туннеля: соединения на них идут в VPN,
+    /// и десинк их тоже не перехватывает.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
         IReadOnlyList<OwnDesyncProfile>? own = null,
         bool gameFilter = false,
-        IReadOnlyList<IPAddress>? tunnelServers = null)
+        IReadOnlyList<IPAddress>? tunnelServers = null,
+        string? tunnelFakeRange = null)
     {
         var arguments = BuildPreset(preset, excludeList, own);
 
         if (gameFilter)
             GameFilter.Apply(arguments);
 
-        TunnelCapture.Apply(arguments, tunnelServers);
+        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange);
 
         return arguments;
     }

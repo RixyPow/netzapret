@@ -81,6 +81,32 @@ public static class TunnelEndpoints
     }
 
     /// <summary>
+    /// Диапазон подменных адресов IPv4 из конфига движка; нет его — <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Подменные адреса раздаются только при выборочном перехвате. При полном
+    /// их нет, и в туннель идёт всё по настоящим адресам — такое из перехвата
+    /// десинка по адресу не вывести.
+    /// </remarks>
+    public static string? FakeRange(string configPath)
+    {
+        try
+        {
+            var servers = JsonNode.Parse(File.ReadAllText(configPath))?["dns"]?["servers"] as JsonArray;
+
+            return (servers ?? [])
+                .OfType<JsonObject>()
+                .Where(s => (string?)s["type"] == "fakeip")
+                .Select(s => (string?)s["inet4_range"])
+                .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r));
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Куда подключается туннель: <c>server</c> у выходов и адреса пиров WireGuard.
     /// </summary>
     internal static IReadOnlyList<string> Hosts(JsonNode? config, string? first = null)
