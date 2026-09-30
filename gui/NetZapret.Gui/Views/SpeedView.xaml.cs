@@ -301,7 +301,11 @@ public partial class SpeedView : UserControl
             Data = Arc(SpeedGauge.StartAngle, SpeedGauge.StartAngle + SpeedGauge.Sweep),
         };
 
-        track.SetResourceReference(Shape.StrokeProperty, "Raised");
+        // Приглушённый текст вполсилы, а не цвет поверхности: в теме со стеклом
+        // поверхности прозрачны, и дуга цвета Raised терялась на картинке
+        // (снимок на теме владельца, 30.09).
+        track.SetResourceReference(Shape.StrokeProperty, "Muted");
+        track.Opacity = 0.28;
         Dial.Children.Add(track);
 
         _value.StrokeThickness = Thickness;
