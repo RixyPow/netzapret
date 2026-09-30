@@ -308,16 +308,25 @@ public partial class VpnView : UserControl
         _live = (true, server, automatic);
         ShowCurrent();
 
-        bool auto = AutoSwitch.IsChecked == true;
+        // Расхождение — только когда сервер выбран, а движок держит другой.
+        // При автоподборе сервер, стоящий прямо в селекторе, — обычное дело:
+        // его ставит сторож (прогрев и замена умершего, с 28.09), и писать
+        // про него «держит закреплённый, перезапустите движки» было неправдой.
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
 
         PickLine.Text = server is null
             ? _pickBase + " Движок не ответил, какой выход держит."
-            : auto == automatic
+            : TunnelStatus.Standing(server, settings.PreferredServer) != ExitStanding.Other
                 ? $"{_pickBase} Сейчас: {server}."
-                : auto
-                    ? $"{_pickBase} Но движок держит закреплённый {server} — перезапустите движки, чтобы выбор применился."
-                    : $"{_pickBase} Но движок выбирает сам и сейчас держит {server} — перезапустите движки, чтобы закрепление применилось.";
+                : StandInRemark() is { } remark
+                    ? $"{_pickBase} Сейчас: {server} — {remark}."
+                    : $"{_pickBase} Но движок сейчас держит {server} — перезапустите движки, чтобы закрепление применилось.";
     }
+
+    /// <summary>Примечание надзора о туннеле: «временная замена…»; <c>null</c> — нет.</summary>
+    private static string? StandInRemark() =>
+        SupervisorState.Load(SupervisorState.DefaultPath)?.Services
+            .FirstOrDefault(s => s.Name == "sing-box")?.Remark;
 
     /// <summary>
     /// Карточка текущего сервера: флаг, имя, откуда он и в каком состоянии.
@@ -383,16 +392,18 @@ public partial class VpnView : UserControl
             if (Seen(tag) is { Success: true, LatencyMs: { } ms })
                 parts.Add($"{ms:0} мс");
 
-            // Замену выбранному серверу называет надзор (SingBoxService):
-            // со стороны её не отличить от выбора, который ещё не применился.
-            var remark = running && !automatic
-                ? SupervisorState.Load(SupervisorState.DefaultPath)?.Services
-                    .FirstOrDefault(s => s.Name == "sing-box")?.Remark
-                : null;
-
-            parts.Add(running
-                ? automatic ? "выбран автоподбором" : remark ?? "закреплён"
-                : "закреплён");
+            // Закреплён ли сервер, знают настройки, а не селектор: сторож ставит
+            // серверы прямо в него и при автоподборе (TunnelStatus.Standing).
+            // Замену выбранному серверу называет надзор: со стороны её
+            // не отличить от выбора, который ещё не применился.
+            parts.Add(!running
+                ? "закреплён"
+                : TunnelStatus.Standing(tag, settings.PreferredServer) switch
+                {
+                    ExitStanding.Pinned => "закреплён",
+                    ExitStanding.Other => StandInRemark() ?? "выбор в настройках ещё не применён",
+                    _ => "выбран автоподбором",
+                });
 
             CurrentDetail.Text = string.Join(" · ", parts);
         }

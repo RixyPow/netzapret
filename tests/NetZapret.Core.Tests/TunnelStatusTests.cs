@@ -217,4 +217,24 @@ public sealed class TunnelStatusTests
             TunnelState.Unknown,
             await TunnelStatus.StateAsync("Финляндия", CancellationToken.None, free));
     }
+
+    /// <summary>
+    /// Случай 30.09: в настройках автоподбор, сторож поставил сервер прямо
+    /// в селектор — это не «закреплён».
+    /// </summary>
+    [Fact]
+    public void A_server_placed_by_the_watch_is_not_pinned()
+    {
+        Assert.Equal(ExitStanding.Auto, TunnelStatus.Standing("🇪🇪 Эстония", null));
+        Assert.Equal(ExitStanding.Auto, TunnelStatus.Standing("🇪🇪 Эстония", "  "));
+        Assert.Equal(ExitStanding.Auto, TunnelStatus.Standing(null, null));
+    }
+
+    [Fact]
+    public void Only_the_server_from_the_settings_is_pinned()
+    {
+        Assert.Equal(ExitStanding.Pinned, TunnelStatus.Standing("🇪🇪 Эстония", "🇪🇪 Эстония"));
+        Assert.Equal(ExitStanding.Other, TunnelStatus.Standing("🇩🇪 Германия", "🇪🇪 Эстония"));
+        Assert.Equal(ExitStanding.Other, TunnelStatus.Standing(null, "🇪🇪 Эстония"));
+    }
 }

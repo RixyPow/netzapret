@@ -90,14 +90,23 @@ int Status()
         var (server, automatic) = NetZapret.Proxy.TunnelStatus.CurrentExitAsync(CancellationToken.None)
             .GetAwaiter().GetResult();
 
-        // Замену выбранному серверу называет надзор — со стороны она выглядит
-        // как закреплённый сервер.
+        // Закреплён ли сервер, знают только настройки: сторож ставит серверы
+        // прямо в селектор и при автоподборе (TunnelStatus.Standing). Замену
+        // выбранному серверу называет надзор.
         var remark = state.Services.First(s => s.Name == "sing-box").Remark;
+
+        var word = NetZapret.Proxy.TunnelStatus.Standing(server, settings.PreferredServer) switch
+        {
+            NetZapret.Proxy.ExitStanding.Pinned => "закреплён",
+            NetZapret.Proxy.ExitStanding.Other =>
+                remark ?? $"в настройках выбран «{settings.PreferredServer}» — применится при запуске движков",
+            _ => automatic ? "автоподбор" : "автоподбор, поставлен сторожем",
+        };
 
         Console.WriteLine();
         Console.WriteLine(server is null
             ? "выход:   движок не ответил"
-            : $"выход:   {server} ({(automatic ? "автоподбор" : remark ?? "закреплён")})");
+            : $"выход:   {server} ({word})");
     }
 
     Console.WriteLine();
