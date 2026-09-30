@@ -215,9 +215,9 @@ internal sealed class TrayIcon : IDisposable
 
         try
         {
-            var state = SupervisorState.Load(SupervisorState.DefaultPath);
-
-            if (state is not null && state.IsSupervisorAlive())
+            // Не по одному файлу состояния: он появляется, лишь когда движки
+            // подняты, и посреди подъёма трей предлагал запустить второй раз.
+            if (EngineControl.IsRunning)
                 await EngineControl.StopAsync("меню трея", CancellationToken.None);
             else
                 await EngineControl.StartAsync("меню трея", CancellationToken.None);

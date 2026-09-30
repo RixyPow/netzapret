@@ -111,6 +111,7 @@ internal static class SupervisorHost
         {
             var statePath = SupervisorState.DefaultPath;
             var existing = SupervisorState.Load(statePath);
+            bool tookOver = false;
 
             // Живой супервизор — не повод отказаться, а повод его сменить.
             //
@@ -123,17 +124,18 @@ internal static class SupervisorHost
             // своим же порядком: движки включены в объект задания и уходят
             // вместе с ним. Убивать чужие движки напрямую мы однажды уже
             // пробовали, и это гасило исправный sing-box — см. ниже.
-            if (existing is not null && existing.IsSupervisorAlive())
+            if (existing is not null && SupervisorLock.IsOurs(existing.SupervisorProcessId))
             {
                 Console.WriteLine(
                     $"Перенимаю у супервизора PID {existing.SupervisorProcessId}: "
                     + "двум сразу нельзя, они дерутся за TUN и WinDivert.");
 
                 await StopAsync(CancellationToken.None);
+                tookOver = true;
 
                 // Ждём, пока он вправду уйдёт: стартовать поверх умирающего
                 // значит получить обоих сразу, чего мы и избегаем.
-                for (int i = 0; i < 20 && SupervisorState.Load(statePath)?.IsSupervisorAlive() == true; i++)
+                for (int i = 0; i < 20 && SupervisorState.Load(statePath) is { } left && SupervisorLock.IsOurs(left.SupervisorProcessId); i++)
                     await Task.Delay(250, CancellationToken.None);
 
                 existing = SupervisorState.Load(statePath);
@@ -142,6 +144,17 @@ internal static class SupervisorHost
             // Состояние от убитого процесса мешает: чистим, раз владелец мёртв.
             if (existing is not null)
                 SupervisorState.Clear(statePath);
+
+            // Замок — на всю жизнь супервизора (SupervisorLock). Файл состояния
+            // появляется, лишь когда движки подняты, и супервизор, стартовавший
+            // секундой раньше, по нему не виден; замок он берёт первым делом.
+            using var held = await TakeLockAsync(tookOver);
+
+            if (held is null)
+            {
+                Console.Error.WriteLine("Прежний супервизор не уступил замок за 15 с — второй не запускаю.");
+                return 2;
+            }
 
             var services = new List<SupervisedService>();
 
@@ -229,30 +242,131 @@ internal static class SupervisorHost
     }
 
     /// <summary>
+    /// Берёт замок супервизора, снимая прежнего держателя.
+    /// </summary>
+    /// <remarks>
+    /// Держатель снимается так же, как остановкой, — целиком, с движками.
+    /// После снятия — те же три секунды, что у перезапуска (EngineControl):
+    /// TUN освобождается не мгновенно, и sing-box, начатый сразу, падает
+    /// с «Cannot create a file when that file already exists».
+    /// </remarks>
+    /// <param name="removed">Прежний уже снят — по файлу состояния.</param>
+    private static async Task<SupervisorLock?> TakeLockAsync(bool removed)
+    {
+
+        for (int attempt = 0; attempt < 60; attempt++)
+        {
+            if (SupervisorLock.TryAcquire() is { } held)
+            {
+                if (removed)
+                    await Task.Delay(TimeSpan.FromSeconds(3), CancellationToken.None);
+
+                return held;
+            }
+
+            if (SupervisorLock.Holder() is { } holder && SupervisorLock.IsOurs(holder))
+            {
+                Console.WriteLine($"Перенимаю у супервизора PID {holder}: двум сразу нельзя, они дерутся за TUN и WinDivert.");
+                await KillAsync(holder, CancellationToken.None);
+                removed = true;
+                continue;
+            }
+
+            // Замок в руках у того, кто в этот миг проверяет, свободен ли он, —
+            // окно спрашивает об этом при запуске. Отпустит через мгновение.
+            await Task.Delay(250, CancellationToken.None);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Жив ли супервизор — по файлу состояния, по замку и по запущенному окном процессу.
+    /// </summary>
+    public static bool IsRunning(int? spawned = null) =>
+        Supervisors(spawned).Count > 0;
+
+    /// <summary>
+    /// Ждёт, пока запущенный супервизор возьмёт замок, — не дольше срока.
+    /// </summary>
+    /// <remarks>
+    /// Запуск окна считается законченным, когда супервизор виден остальным:
+    /// остановка, пришедшая следом, иначе не нашла бы его и сказала бы
+    /// «не запущен» — так в отчёте reaass и остался жить супервизор без окна.
+    /// </remarks>
+    public static async Task<bool> WaitRegisteredAsync(int processId, TimeSpan limit, CancellationToken cancellationToken)
+    {
+        var until = DateTime.UtcNow + limit;
+
+        while (DateTime.UtcNow < until)
+        {
+            if (SupervisorLock.Holder() == processId)
+                return true;
+
+            if (!SupervisorLock.IsOurs(processId))
+                return false;
+
+            await Task.Delay(100, cancellationToken);
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Гасит супервизор вместе со службами.
     /// </summary>
     /// <remarks>
-    /// По файлу состояния, а не по имени процесса: имя теперь то же самое,
-    /// что у окна, и поиск по нему закрыл бы и само окно.
+    /// <para>
+    /// По файлу состояния и замку, а не по имени процесса: имя теперь то же
+    /// самое, что у окна, и поиск по нему закрыл бы и само окно.
+    /// </para>
+    /// <para>
+    /// Замок и номер, запущенный окном (<paramref name="spawned"/>), — с 01.10:
+    /// файл состояния пишется, только когда движки подняты, и остановка
+    /// посреди подъёма его не находила.
+    /// </para>
     /// </remarks>
-    public static async Task<string> StopAsync(CancellationToken cancellationToken)
+    public static async Task<string> StopAsync(CancellationToken cancellationToken, int? spawned = null)
     {
         var statePath = SupervisorState.DefaultPath;
-        var state = SupervisorState.Load(statePath);
+        var targets = Supervisors(spawned);
 
-        if (state is null || !state.IsSupervisorAlive())
-        {
-            SupervisorState.Clear(statePath);
+        foreach (var target in targets)
+            await KillAsync(target, cancellationToken);
 
-            // Драйвер выгружается и здесь: супервизора нет, а WinDivert
-            // от прошлого запуска может держать файл до перезагрузки.
-            // Замер 23.09: движки опущены, служба Monkey — RUNNING.
-            return "Супервизор не запущен. " + await WinDivertDriver.TryUnloadAsync(cancellationToken);
-        }
+        SupervisorState.Clear(statePath);
 
+        // Драйвер выгружается и без супервизора: WinDivert от прошлого
+        // запуска может держать файл до перезагрузки. Замер 23.09: движки
+        // опущены, служба Monkey — RUNNING. Без этого папку программы нельзя
+        // было удалить до перезагрузки (жалоба 23.09).
+        var driver = await WinDivertDriver.TryUnloadAsync(cancellationToken);
+
+        return (targets.Count == 0 ? "Супервизор не запущен. " : "Остановлено. ") + driver;
+    }
+
+    /// <summary>Живые супервизоры: из файла состояния, из замка, запущенный окном.</summary>
+    private static List<int> Supervisors(int? spawned)
+    {
+        var found = new List<int>();
+
+        if (SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive())
+            found.Add(state.SupervisorProcessId);
+
+        if (SupervisorLock.Holder() is { } holder)
+            found.Add(holder);
+
+        if (spawned is { } own)
+            found.Add(own);
+
+        return found.Distinct().Where(SupervisorLock.IsOurs).ToList();
+    }
+
+    private static async Task KillAsync(int processId, CancellationToken cancellationToken)
+    {
         try
         {
-            using var process = Process.GetProcessById(state.SupervisorProcessId);
+            using var process = Process.GetProcessById(processId);
 
             process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
@@ -261,12 +375,6 @@ internal static class SupervisorHost
         {
             // Мог завершиться сам между проверкой и вызовом.
         }
-
-        SupervisorState.Clear(statePath);
-
-        // Без этого остановка оставляла драйвер в ядре, а его файл — занятым:
-        // папку программы нельзя было удалить до перезагрузки (жалоба 23.09).
-        return "Остановлено. " + await WinDivertDriver.TryUnloadAsync(cancellationToken);
     }
 
     private static bool TryAddSingBox(Options options, List<SupervisedService> services)
