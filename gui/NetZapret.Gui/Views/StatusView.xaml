@@ -21,6 +21,11 @@
         поровну они делили окно пополам независимо от MaxWidth, и на среднем
         мониторе карточки сжимались. Так левая берёт всё до своего предела,
         а правой достаётся остаток — на узком окне ноль, и арт просто уходит.
+
+        Отступы по вертикали ужаты 30.09 под окно владельца: 1920×1080
+        при масштабе Windows 125 % — это 1536×794 точки, и страница была
+        на 28 выше. Полоса прокрутки вставала у края карточек вертикальной
+        чертой. Добавляя сюда строку, проверьте, что эта высота держится.
     -->
     <Grid>
         <Grid.ColumnDefinitions>
@@ -43,7 +48,7 @@
             <Rectangle x:Name="ArtShade" />
         </Grid>
 
-        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,28,32,20">
+        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,22,32,14">
             <StackPanel>
 
                 <!-- Шапка: заголовок и ссылки. Ссылки справа, как в макете. -->
@@ -98,7 +103,7 @@
                     «Не сейчас» прячет её до следующей версии. Решение владельца
                     23.09: карточка и точка у пункта меню, без уведомлений Windows.
                 -->
-                <Border x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,22,0,0"
+                <Border x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,18,0,0"
                         BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -129,7 +134,7 @@
                     Точка со свечением её же цвета (макет 30.09): свечение
                     красится вместе с точкой, в ShowDot, и разойтись им нечем.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,22,0,0" Padding="22,20,22,16">
+                <Border Style="{StaticResource Card}" Margin="0,18,0,0" Padding="22,16,22,14">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -194,7 +199,7 @@
                             Бегущая засечка только при подъёме, и она неопределённая
                             намеренно: сколько он займёт, заранее не известно.
                         -->
-                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,18,0,0"
+                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,14,0,0"
                                 Background="{DynamicResource Border}" ClipToBounds="True"
                                 HorizontalAlignment="Stretch">
                             <Grid>
@@ -214,7 +219,7 @@
                 </Border>
 
                 <!-- Пресет и параметры подключения — рядом, как в макете. -->
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -338,7 +343,7 @@
                     sing-box может подняться, а winws2 упасть, — поэтому и отметка
                     у каждого своя, а не одна лампочка на двоих.
                 -->
-                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,10" />
+                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
 
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -472,7 +477,7 @@
                            Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
                 <!-- Автозапуск и обновление — рядом, как в макете. -->
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -534,28 +539,28 @@
                     Быстрые действия (макет 30.09): переходы в разделы разбора
                     и папка настроек — то, за чем идут, когда что-то не так.
                 -->
-                <TextBlock Text="Быстрые действия" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,10" />
+                <TextBlock Text="Быстрые действия" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
 
                 <UniformGrid Rows="1">
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickCheck">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickCheck">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" Margin="0,0,10,0" />
                             <TextBlock Text="Проверить блокировки" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickLog">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickLog">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,10,0" />
                             <TextBlock Text="Открыть журнал" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,11" Click="OnQuickDoctor">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickDoctor">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE756;" Margin="0,0,10,0" />
                             <TextBlock Text="Диагностика" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Padding="12,11" Click="OnQuickConfig"
+                    <Button Style="{StaticResource Ghost}" Padding="12,9" Click="OnQuickConfig"
                             ToolTip="Папка config в проводнике, файл настроек выделен">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8B7;" Margin="0,0,10,0" />
@@ -571,7 +576,7 @@
                     обновления подписок программа не хранит. Время файла конфига —
                     то, что известно наверняка, им и названо.
                 -->
-                <Grid Margin="4,20,0,0">
+                <Grid Margin="4,14,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
