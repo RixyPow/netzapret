@@ -221,6 +221,41 @@ public sealed class SubscriptionPoolTests
         }
     }
 
+    /// <summary>
+    /// Остаток трафика — из запаса, без панели: он нужен предупреждению
+    /// перед замером скорости (30.09), и ходить ради него в сеть незачем.
+    /// </summary>
+    [Fact]
+    public void The_kept_answer_gives_the_quota_without_the_panel()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            // Адрес, по которому никто не слушает: обратись мы к панели — был бы отказ.
+            const string url = "http://127.0.0.1:1/sub";
+
+            Assert.Null(SubscriptionPool.Kept(url, folder));
+
+            SubscriptionPool.SaveReserve(folder, url, "trojan://secret@a.example:443#Германия\n",
+                new SubscriptionInfo { Servers = [], TotalBytes = 100, DownloadBytes = 40 });
+
+            // Старый запас годится тоже: свежесть здесь никто не спрашивает.
+            Age(folder, TimeSpan.FromDays(3));
+
+            var kept = SubscriptionPool.Kept(url, folder);
+
+            Assert.NotNull(kept);
+            Assert.Equal(60, kept.Value.Info.RemainingBytes);
+            Assert.Equal("Германия", Assert.Single(kept.Value.Info.Servers).Tag);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
     /// <summary>Состаривает запас: свежий пул к панели не ходит.</summary>
     private static void Age(string folder, TimeSpan age)
     {

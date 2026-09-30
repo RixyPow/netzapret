@@ -189,4 +189,75 @@ public sealed class SpeedHistoryTests
         Assert.Null(SpeedVerdict.Unevenness([10, 10, 10]));
         Assert.Null(SpeedVerdict.Unevenness([0, 0, 0, 0, 0, 0, 0, 0]));
     }
+
+    private const long Gb = 1L << 30;
+
+    private static NetZapret.Subscriptions.SubscriptionInfo Quota(long total, long used) => new()
+    {
+        Servers = [],
+        TotalBytes = total,
+        DownloadBytes = used,
+    };
+
+    /// <summary>Подписка без лимита — предупреждать не о чем.</summary>
+    [Fact]
+    public void AnUnlimitedSubscriptionNeedsNoWarning()
+    {
+        Assert.Null(SpeedQuota.Warning("Trust", Quota(0, 5 * Gb)));
+    }
+
+    /// <summary>Замер владельца 30.09 стоил 217 МБ; при остатке в 2 ГБ это десятая часть.</summary>
+    [Fact]
+    public void ALimitedSubscriptionIsWarnedAboutWithTheShare()
+    {
+        var text = SpeedQuota.Warning("SecureWay", Quota(10 * Gb, 8 * Gb), expected: 217L * 1024 * 1024)!;
+
+        Assert.Contains("«SecureWay»", text);
+        Assert.Contains("осталось 2 ГБ из 10 ГБ", text);
+        Assert.Contains("около 217 МБ", text);
+        Assert.Contains("11 % остатка", text);
+    }
+
+    /// <summary>Остатка много — доля не называется: «0 % остатка» только пугает.</summary>
+    [Fact]
+    public void ASmallShareIsNotNamed()
+    {
+        var text = SpeedQuota.Warning("SecureWay", Quota(500 * Gb, 10 * Gb), expected: 217L * 1024 * 1024)!;
+
+        Assert.DoesNotContain("%", text);
+        Assert.EndsWith("217 МБ.", text);
+    }
+
+    /// <summary>Прошлого замера нет — называется порядок величины, а не выдуманная точная цифра.</summary>
+    [Fact]
+    public void WithoutAPastMeasurementTheCostIsAnOrderOfMagnitude()
+    {
+        var text = SpeedQuota.Warning("SecureWay", Quota(10 * Gb, 9 * Gb))!;
+
+        Assert.Contains("сотни мегабайт — порядка 250 МБ", text);
+        Assert.Contains("24 % остатка", text);
+    }
+
+    [Fact]
+    public void AnExhaustedSubscriptionIsNamed()
+    {
+        var text = SpeedQuota.Warning("SecureWay", Quota(10 * Gb, 12 * Gb))!;
+
+        Assert.Contains("трафик кончился", text);
+    }
+
+    [Fact]
+    public void HistoryAsTextForTheReport()
+    {
+        Assert.Equal("Замеров скорости не было.", SpeedHistory.Describe([]));
+
+        var text = SpeedHistory.Describe([Direct(Noon), Tunnel(Noon.AddMinutes(-1))]);
+        var lines = text.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(2, lines.Length);
+        Assert.Contains("напрямую", lines[0]);
+        Assert.Contains("скачивание 355 Мбит/с", lines[0]);
+        Assert.Contains("через туннель", lines[1]);
+        Assert.Contains("сервер Эстония — TLS XHTTP", lines[1]);
+    }
 }

@@ -408,6 +408,17 @@ public static class SubscriptionPool
         }
     }
 
+    /// <summary>
+    /// Подписка из запаса, без обращения к панели: серверы, квота и срок
+    /// на момент последнего ответа. <c>null</c> — запаса нет.
+    /// </summary>
+    /// <remarks>
+    /// Для тех, кому нужен только остаток трафика (предупреждение перед замером
+    /// скорости, 30.09): ходить ради него к панели незачем.
+    /// </remarks>
+    public static (SubscriptionInfo Info, DateTimeOffset At)? Kept(string url, string? reserveDirectory = null) =>
+        LoadReserve(reserveDirectory ?? DefaultReserveDirectory, url);
+
     private static (SubscriptionInfo Info, DateTimeOffset At)? LoadReserve(string folder, string url)
     {
         try

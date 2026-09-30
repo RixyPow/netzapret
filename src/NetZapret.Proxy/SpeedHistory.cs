@@ -1,4 +1,6 @@
+using System.Text;
 using System.Text.Json;
+using NetZapret.Subscriptions;
 
 namespace NetZapret.Proxy;
 
@@ -84,6 +86,43 @@ public static class SpeedHistory
         {
             return [];
         }
+    }
+
+    /// <summary>
+    /// Замеры текстом, свежие первыми, — для отчёта для разбора.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 30.09: «есть ли последние результаты проверки в отчёте?»
+    /// До того в отчёт попадала только строка журнала о каждом замере.
+    /// </remarks>
+    public static string Describe(IReadOnlyList<SpeedEntry> entries)
+    {
+        if (entries.Count == 0)
+            return "Замеров скорости не было.";
+
+        var text = new StringBuilder();
+
+        foreach (var entry in entries)
+        {
+            text.Append($"{entry.At.ToLocalTime():dd.MM.yyyy HH:mm}  {(entry.Tunnel ? "через туннель" : "напрямую     ")}  ");
+            text.Append(SpeedVerdict.Line(entry));
+
+            if (entry.Tunnel && entry.Exit is { Length: > 0 } exit)
+                text.Append($"; сервер {exit}");
+
+            if (entry.Country is { Length: > 0 } country)
+                text.Append($"; страна выхода {country}");
+
+            if (entry.Node is { Length: > 0 } node)
+                text.Append($", узел Cloudflare {node}");
+
+            if (entry.Bytes > 0)
+                text.Append($"; ушло {entry.Bytes / (1024 * 1024)} МБ");
+
+            text.AppendLine();
+        }
+
+        return text.ToString();
     }
 
     /// <summary>Дописывает замер; не записалось — замер всё равно показан, и только.</summary>
@@ -195,7 +234,8 @@ public static class SpeedVerdict
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static string Line(SpeedEntry entry)
+    /// <summary>Итог одного замера одной строкой.</summary>
+    public static string Line(SpeedEntry entry)
     {
         var parts = new List<string>();
 
@@ -255,4 +295,53 @@ public static class SpeedVerdict
 
     private static string Sentence(string text) =>
         char.ToUpper(text[0]) + text[1..] + (text.EndsWith('.') ? string.Empty : ".");
+}
+
+/// <summary>
+/// Предупреждение перед замером через туннель: у подписки лимит трафика.
+/// </summary>
+/// <remarks>
+/// Владелец 30.09: «добавь предупреждение, если проверка туннеля и соединение
+/// лимитное, что потратится много трафика». Замер через туннель у него стоил
+/// 217 МБ за раз; при подписке в десять гигабайт это пятидесятая часть за одно
+/// нажатие.
+/// </remarks>
+public static class SpeedQuota
+{
+    /// <summary>Сколько уходит на замер, когда прошлого замера нет: порядок величины.</summary>
+    public const long Typical = 250L * 1024 * 1024;
+
+    /// <summary>Доля остатка, с которой о ней говорится отдельно.</summary>
+    public const double Noticeable = 0.05;
+
+    /// <summary>Слова предупреждения; <c>null</c> — лимита у подписки нет.</summary>
+    /// <param name="expected">Сколько ушло на прошлый замер через туннель; <c>null</c> — не мерили.</param>
+    public static string? Warning(string subscription, SubscriptionInfo info, long? expected = null)
+    {
+        if (info.TotalBytes <= 0)
+            return null;
+
+        long left = info.RemainingBytes ?? 0;
+
+        if (left <= 0)
+            return $"У подписки «{subscription}» трафик кончился — замер через туннель, скорее всего, не пройдёт.";
+
+        long cost = expected is > 0 ? expected.Value : Typical;
+        double share = (double)cost / left;
+
+        var text = $"У подписки «{subscription}» лимит трафика: осталось {Size(left)} из {Size(info.TotalBytes)}. "
+            + (expected is > 0 ? $"Замер потратит около {Size(cost)}" : $"Замер потратит сотни мегабайт — порядка {Size(cost)}");
+
+        return share >= Noticeable
+            ? $"{text}, это {Math.Min(100, share * 100):0} % остатка."
+            : text + ".";
+    }
+
+    public static string Size(long bytes) => bytes switch
+    {
+        >= 1L << 40 => $"{bytes / (double)(1L << 40):0.#} ТБ",
+        >= 1L << 30 => $"{bytes / (double)(1L << 30):0.#} ГБ",
+        >= 1L << 20 => $"{bytes / (double)(1L << 20):0} МБ",
+        _ => $"{bytes / 1024.0:0} КБ",
+    };
 }

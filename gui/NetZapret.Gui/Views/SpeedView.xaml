@@ -48,14 +48,11 @@
 
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,24,32,24">
         <!--
-            Не шире тысячи: на широком окне блоки разъехались бы, и цифры
-            оказались бы далеко от своих подписей. Остаток — справа, пустым.
+            Во всю ширину страницы (владелец, 30.09: «растяни на всю страницу»).
+            Прежде раздел был не шире тысячи точек, и на развёрнутом окне
+            справа оставалась пустая полоса.
         -->
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MaxWidth="1000" />
-            </Grid.ColumnDefinitions>
-
             <StackPanel x:Name="Page" SizeChanged="OnPageSize">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -193,6 +190,23 @@
                             <TextBlock Text="Что проверяет" FontWeight="SemiBold" />
                             <TextBlock x:Name="WhatText" Style="{StaticResource Caption}" Margin="0,5,0,8"
                                        TextWrapping="Wrap" />
+
+                            <!--
+                                Лимит трафика у подписки — до нажатия, а не после
+                                (владелец, 30.09): замер через туннель стоит сотни
+                                мегабайт, и узнать об этом по остатку поздно.
+                            -->
+                            <Grid x:Name="QuotaBox" Margin="0,0,0,8" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" FontFamily="{StaticResource IconFont}" Text="&#xE7BA;"
+                                           FontSize="14" Foreground="{DynamicResource Warn}" Margin="0,1,9,0" />
+                                <TextBlock Grid.Column="1" x:Name="QuotaText" TextWrapping="Wrap" FontSize="12.5"
+                                           Foreground="{DynamicResource Warn}" />
+                            </Grid>
 
                             <Border Height="1" Background="{DynamicResource Border}" Margin="0,2,0,4" />
 

@@ -2,8 +2,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using NetZapret.Core.Updates;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
@@ -68,6 +70,21 @@ public partial class SpeedView : UserControl
     private double _target;
     private double _shown;
 
+    /// <summary>Стрелка в движении — подписка на кадры стоит.</summary>
+    private bool _moving;
+
+    /// <summary>
+    /// Раз в несколько секунд смотрим, поднят ли туннель и через что идёт.
+    /// </summary>
+    /// <remarks>
+    /// Прежде это узнавалось один раз, при входе в раздел. Владелец 30.09:
+    /// «после замера через туннель/напрямую не меняется» — движки стояли
+    /// (только что отработал build.cmd), половинка «Через туннель» была
+    /// погашена, и подняв движки, он так бы и видел её погашенной до нового
+    /// захода в раздел.
+    /// </remarks>
+    private readonly DispatcherTimer _watch = new() { Interval = TimeSpan.FromSeconds(4) };
+
     public SpeedView()
     {
         InitializeComponent();
@@ -75,43 +92,54 @@ public partial class SpeedView : UserControl
 
         StreamsText.Text = $"{new SpeedTestOptions().Streams} разом";
 
+        _watch.Tick += async (_, _) =>
+        {
+            // Во время замера путь не трогаем: он выбран и идёт.
+            if (_run is null && await LookAtTunnelAsync() && IsLoaded && _run is null)
+                Choose(_tunnel);
+        };
+
         Loaded += async (_, _) =>
         {
-            CompositionTarget.Rendering += OnFrame;
-            await ShowPathsAsync();
+            await LookAtTunnelAsync();
+
+            if (!IsLoaded)
+                return;
+
+            // Туннель — первым выбором, если есть: за ним сюда и приходят.
+            Choose(_tunnelUp);
+            ShowHistory();
+            _watch.Start();
         };
 
         Unloaded += (_, _) =>
         {
-            CompositionTarget.Rendering -= OnFrame;
+            _watch.Stop();
+            StopFrames();
             _run?.Cancel();
         };
     }
 
     /// <summary>
-    /// Что доступно и что выбрано: туннель — только при поднятом движке.
+    /// Поднят ли туннель и через какой сервер он идёт.
     /// </summary>
-    private async Task ShowPathsAsync()
+    /// <returns>Изменилось ли что-нибудь с прошлого раза.</returns>
+    private async Task<bool> LookAtTunnelAsync()
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
-        _tunnelUp = state is not null
+        bool up = state is not null
             && state.IsSupervisorAlive()
             && state.Services.Any(s => s.Name == "sing-box" && s.ProcessId is not null);
 
-        if (_tunnelUp)
-            (_exit, _) = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+        string? exit = up ? (await TunnelStatus.CurrentExitAsync(CancellationToken.None)).Server : null;
 
-        if (!IsLoaded)
-            return;
+        bool changed = up != _tunnelUp || exit != _exit;
 
-        ViaTunnel.IsEnabled = _tunnelUp;
-        ViaTunnel.ToolTip = _tunnelUp ? null : "Движок туннеля не запущен — мерить нечего.";
-        ToolTipService.SetShowOnDisabled(ViaTunnel, true);
+        _tunnelUp = up;
+        _exit = exit;
 
-        // Туннель — первым выбором, если есть: за ним сюда и приходят.
-        Choose(_tunnelUp);
-        ShowHistory();
+        return changed;
     }
 
     /// <summary>Выбор пути: переключатель, справка и последний замер этого пути.</summary>
@@ -124,7 +152,16 @@ public partial class SpeedView : UserControl
 
         var shot = tunnel ? _tunnelShot : _directShot;
 
-        WhatText.Text = tunnel
+        // Половинки переключателя живые всегда: погашенная «Через туннель»
+        // читалась как сломанный переключатель. Нельзя мерить — гаснет кнопка
+        // замера, и рядом сказано почему.
+        bool possible = !tunnel || _tunnelUp;
+
+        Go.IsEnabled = possible;
+
+        WhatText.Text = !possible
+            ? "Движок туннеля не запущен — мерить нечего. Запустите движки на «Главной», и замер станет доступен сам."
+            : tunnel
             ? _exit == TunnelBypass.DirectTag
                 ? "Скорость через туннель. Сейчас включён обход: выходы не отвечают, и трафик туннеля идёт напрямую — замер покажет прямую сеть."
                 : $"Скорость через туннель — так идёт всё, что уведено в VPN. Сейчас через {ExitName(_exit) ?? "сервер, который движок не назвал"}."
@@ -142,6 +179,74 @@ public partial class SpeedView : UserControl
             + (tunnel ? " — из трафика подписки" : string.Empty);
 
         ShowShot(shot);
+        _ = ShowQuotaAsync(tunnel && _tunnelUp);
+    }
+
+    /// <summary>
+    /// Предупреждение о лимите трафика подписки — только для замера через туннель.
+    /// </summary>
+    /// <remarks>
+    /// Считается вне потока окна: ради остатка трафика разбираются запасы
+    /// всех подписок в работе. К панелям обращений нет — только запас на диске.
+    /// </remarks>
+    private async Task ShowQuotaAsync(bool wanted)
+    {
+        QuotaBox.Visibility = Visibility.Collapsed;
+
+        if (!wanted)
+            return;
+
+        var exit = _exit;
+        long? spent = _tunnelShot?.Entry.Bytes;
+
+        var warning = await Task.Run(() => QuotaWarning(exit, spent));
+
+        // Пока считали, путь могли сменить.
+        if (!IsLoaded || !_tunnel || warning is null)
+            return;
+
+        QuotaText.Text = warning;
+        QuotaBox.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Слова о лимите у подписки, чей сервер держит туннель; сервер не нашёлся
+    /// ни в одной — у всех подписок в работе, у которых лимит есть.
+    /// </summary>
+    private static string? QuotaWarning(string? exit, long? spent)
+    {
+        try
+        {
+            var parts = SubscriptionBook.Load().Pool
+                .Select(entry => (entry.Name, Kept: SubscriptionPool.Kept(entry.Url)))
+                .Where(part => part.Kept is not null)
+                .Select(part => (part.Name, part.Kept!.Value.Info))
+                .ToList();
+
+            if (parts.Count == 0)
+                return null;
+
+            // Теги — те же, что в конфиге движка: по ним и ищем хозяина сервера.
+            var tags = SubscriptionPool.Tag(
+                parts.Select(part => (part.Name, part.Info.Servers)).ToList());
+
+            int owner = exit is null ? -1 : tags.ToList().FindIndex(list => list.Contains(exit));
+
+            // Расход — по прошлому замеру через туннель, если он был.
+            spent ??= SpeedHistory.Load().FirstOrDefault(e => e.Tunnel && e.Bytes > 0)?.Bytes;
+
+            var warnings = (owner >= 0 ? [parts[owner]] : parts)
+                .Select(part => SpeedQuota.Warning(part.Name, part.Info, spent))
+                .OfType<string>()
+                .ToList();
+
+            return warnings.Count == 0 ? null : string.Join(" ", warnings);
+        }
+        catch (Exception)
+        {
+            // Предупреждение — удобство: не вышло его собрать, замеру это не помеха.
+            return null;
+        }
     }
 
     private void OnTunnel(object sender, RoutedEventArgs e)
@@ -216,7 +321,7 @@ public partial class SpeedView : UserControl
         finally
         {
             _run = null;
-            _target = 0;
+            Move(0);
 
             ShowRunning(false);
 
@@ -235,8 +340,12 @@ public partial class SpeedView : UserControl
         GoText.Text = running ? "Остановить" : "Начать замер";
         GoGlyph.Text = running ? "" : "";
 
-        ViaTunnel.IsEnabled = !running && _tunnelUp;
+        ViaTunnel.IsEnabled = !running;
         Direct.IsEnabled = !running;
+
+        // Идёт замер — кнопка живая: она же «Остановить».
+        if (running)
+            Go.IsEnabled = true;
 
         PhaseText.Text = string.Empty;
     }
@@ -271,18 +380,18 @@ public partial class SpeedView : UserControl
 
             case SpeedPhase.Download when reading.Done:
                 DownText.Text = SpeedVerdict.Number(reading.Mbps);
-                _target = 0;
+                Move(0);
                 break;
 
             case SpeedPhase.Upload when reading.Done:
                 UpText.Text = SpeedVerdict.Number(reading.Mbps);
-                _target = 0;
+                Move(0);
                 break;
 
             case SpeedPhase.Download:
                 PhaseText.Text = "скачивание";
                 DownText.Text = SpeedVerdict.Number(reading.Mbps);
-                _target = reading.Mbps;
+                Move(reading.Mbps);
                 _value.SetResourceReference(Shape.StrokeProperty, "Accent");
                 _down.Add(reading.Mbps);
                 DownLine.Show(_down);
@@ -291,7 +400,7 @@ public partial class SpeedView : UserControl
             case SpeedPhase.Upload:
                 PhaseText.Text = "отдача";
                 UpText.Text = SpeedVerdict.Number(reading.Mbps);
-                _target = reading.Mbps;
+                Move(reading.Mbps);
                 _value.SetResourceReference(Shape.StrokeProperty, "Warn");
                 _up.Add(reading.Mbps);
                 UpLine.Show(_up);
@@ -583,6 +692,36 @@ public partial class SpeedView : UserControl
     }
 
     /// <summary>
+    /// Велит стрелке идти к показанию.
+    /// </summary>
+    /// <remarks>
+    /// Подписка на кадры — только пока стрелка идёт. Первая версия держала
+    /// её всё время, пока раздел открыт, и окно из-за этого отрисовывалось
+    /// без остановки: сторож подвисаний у владельца 30.09 писал «поток окна
+    /// был занят 300–700 мс, раздел «Замер скорости»» каждые несколько секунд,
+    /// при нуле процессорного времени, — и на простое, без всякого замера.
+    /// </remarks>
+    private void Move(double target)
+    {
+        _target = target;
+
+        if (_moving || _target == _shown)
+            return;
+
+        _moving = true;
+        CompositionTarget.Rendering += OnFrame;
+    }
+
+    private void StopFrames()
+    {
+        if (!_moving)
+            return;
+
+        _moving = false;
+        CompositionTarget.Rendering -= OnFrame;
+    }
+
+    /// <summary>
     /// Стрелка догоняет показание: показания приходят раз в 150 мс, и без
     /// этого она шла бы рывками.
     /// </summary>
@@ -593,14 +732,15 @@ public partial class SpeedView : UserControl
         if (Math.Abs(next - _target) < 0.05)
             next = _target;
 
-        if (next == _shown)
-            return;
-
         _shown = next;
 
         double angle = SpeedGauge.Angle(_shown);
 
         _needle.Angle = angle;
         _value.Data = Arc(SpeedGauge.StartAngle, angle);
+
+        // Дошла — кадры больше не нужны.
+        if (_shown == _target)
+            StopFrames();
     }
 }
