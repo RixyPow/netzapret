@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 
 namespace NetZapret.Zapret;
@@ -67,16 +68,23 @@ public static class WinwsCommandLine
     /// Дописать секции game filter (см. <see cref="GameFilter"/>). Выключенный
     /// не меняет в строке ничего — ни секций, ни перехвата.
     /// </param>
+    /// <param name="tunnelServers">
+    /// Адреса серверов туннеля: их пакеты winws2 не перехватывает вовсе
+    /// (см. <see cref="TunnelCapture"/>). Без адресов строка остаётся как была.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
         IReadOnlyList<OwnDesyncProfile>? own = null,
-        bool gameFilter = false)
+        bool gameFilter = false,
+        IReadOnlyList<IPAddress>? tunnelServers = null)
     {
         var arguments = BuildPreset(preset, excludeList, own);
 
         if (gameFilter)
             GameFilter.Apply(arguments);
+
+        TunnelCapture.Apply(arguments, tunnelServers);
 
         return arguments;
     }

@@ -342,9 +342,27 @@ internal static class SupervisorHost
         // потому что правила читаются там, а запуск живёт тут.
         var own = OwnDesyncLists.Read();
 
-        bool gameFilter = AppSettings.Load(AppSettings.DefaultPath).GameFilter;
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        bool gameFilter = settings.GameFilter;
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter);
+        // Соединения туннеля с его серверами десинку не нужны, а стоят дорого
+        // (замер 30.09 — в TunnelEndpoints). Без туннеля выводить нечего.
+        IReadOnlyList<System.Net.IPAddress> servers = options.NoProxy
+            ? []
+            : TunnelEndpoints.Read(options.ProxyConfig, settings.PreferredServer);
+
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers);
+
+        if (servers.Count > 0)
+        {
+            int skipped = TunnelCapture.Applied(arguments, servers);
+
+            Console.WriteLine(skipped == 0
+                ? "Серверы туннеля остались в перехвате десинка: у пресета свой --wf-raw-filter файлом."
+                : skipped < servers.Count
+                    ? $"Десинк не перехватывает соединения туннеля: {skipped} адресов серверов из {servers.Count}, остальные в фильтр не поместились."
+                    : $"Десинк не перехватывает соединения туннеля: адресов серверов — {skipped}.");
+        }
 
         if (gameFilter)
             Console.WriteLine($"Game filter: секции игр по ipset-all на портах {GameFilter.Ports}");
