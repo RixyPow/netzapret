@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using NetZapret.Core;
+using NetZapret.Proxy;
 
 namespace NetZapret.Supervisor;
 
@@ -66,6 +67,10 @@ public static class SupportReport
         // самая свежая: прошлые описывают сеть, которой уже нет.
         var blockcheck = LatestBlockcheck(At(root, DefaultDirectory));
 
+        // Замеры скорости (владелец 30.09: «есть ли последние результаты проверки
+        // в отчёте?»). Адреса в них нет — история его не хранит.
+        var speed = SpeedHistory.Load(At(root, SpeedHistory.DefaultPath));
+
         var hidden = (secrets ?? [])
             .Append(settings.SubscriptionUrl)
             .Concat(book)
@@ -79,7 +84,7 @@ public static class SupportReport
             // Имена файлов — латиницей. Русские в архиве у части распаковщиков
             // выходят кракозябрами — так показал unzip из Git 25.09. Отчёт уходит
             // к чужим людям с чужими распаковщиками.
-            ("summary.txt", Summary(version, settings, state, book.Count, blockcheck, when)),
+            ("summary.txt", Summary(version, settings, state, book.Count, blockcheck, speed, when)),
 
             // Ссылку из настроек убираем до сериализации, а не надеемся
             // на вычистку: поле ради того и названо.
@@ -109,6 +114,9 @@ public static class SupportReport
         if (blockcheck is not null)
             AddFile(parts, blockcheck.Name, blockcheck.FullName);
 
+        if (speed.Count > 0)
+            parts.Add(("speed.txt", SpeedHistory.Describe(speed)));
+
         var folder = directory ?? At(root, DefaultDirectory);
         Directory.CreateDirectory(folder);
 
@@ -134,6 +142,7 @@ public static class SupportReport
         SupervisorState? state,
         int subscriptions,
         FileInfo? blockcheck,
+        IReadOnlyList<SpeedEntry> speed,
         DateTime when)
     {
         var text = new StringBuilder();
@@ -152,6 +161,23 @@ public static class SupportReport
         text.AppendLine(blockcheck is null
             ? "Проверка блокировок: не проводилась"
             : $"Проверка блокировок: {blockcheck.Name}, снята {blockcheck.LastWriteTime:dd.MM.yyyy HH:mm}");
+
+        // Свежий замер каждого пути — в сводке, остальные — в speed.txt.
+        if (speed.Count == 0)
+        {
+            text.AppendLine("Замер скорости: не проводился");
+        }
+        else
+        {
+            foreach (var entry in new[] { speed.FirstOrDefault(e => e.Tunnel), speed.FirstOrDefault(e => !e.Tunnel) }
+                .OfType<SpeedEntry>()
+                .OrderByDescending(e => e.At))
+            {
+                text.AppendLine($"Замер скорости {(entry.Tunnel ? "через туннель" : "напрямую")}, "
+                    + $"{entry.At.ToLocalTime():dd.MM.yyyy HH:mm}: {SpeedVerdict.Line(entry)}");
+            }
+        }
+
         text.AppendLine();
 
         if (state is null)
@@ -176,6 +202,9 @@ public static class SupportReport
 
                 if (!string.IsNullOrWhiteSpace(service.LastError))
                     text.AppendLine($"    последняя ошибка: {service.LastError}");
+
+                if (!string.IsNullOrWhiteSpace(service.Remark))
+                    text.AppendLine($"    примечание: {service.Remark}");
             }
         }
 

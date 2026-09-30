@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using NetZapret.Proxy;
 using NetZapret.Supervisor;
 using Xunit;
 
@@ -98,6 +99,62 @@ public sealed class SupportReportTests : IDisposable
         Assert.Contains("youtube.com ок", text);
         Assert.DoesNotContain("старая проверка", text);
         Assert.Contains("Проверка блокировок: blockcheck-2026-09-25-2327.txt", text);
+    }
+
+    /// <summary>
+    /// Замеры скорости — в отчёте (владелец 30.09: «есть ли последние результаты
+    /// проверки в отчёте?»): свежий замер каждого пути в сводке, все — в speed.txt.
+    /// </summary>
+    [Fact]
+    public void SpeedMeasurementsAreInTheReport()
+    {
+        var history = Path.Combine(_root, "runtime", "speed-history.json");
+        var noon = new DateTimeOffset(2026, 9, 30, 12, 53, 0, DateTimeOffset.Now.Offset);
+
+        SpeedHistory.Add(new SpeedEntry
+        {
+            At = noon, Tunnel = true, Exit = "Эстония — TLS XHTTP",
+            DownMbps = 156.2, UpMbps = 48.2, PingMs = 37, Country = "EE", Node = "ARN", Bytes = 217L * 1024 * 1024,
+        }, history);
+
+        SpeedHistory.Add(new SpeedEntry
+        {
+            At = noon.AddMinutes(1), Tunnel = false,
+            DownMbps = 354.7, UpMbps = 341.6, PingMs = 8, Country = "RU", Node = "DME",
+        }, history);
+
+        var result = SupportReport.Create("0.10.0 (4)", root: _root);
+
+        Assert.Contains("speed.txt", result.Files);
+
+        using var archive = ZipFile.OpenRead(result.Path);
+
+        var summary = Read(archive, "summary.txt");
+        var speed = Read(archive, "speed.txt");
+
+        Assert.Contains("Замер скорости напрямую, 30.09.2026 12:54: скачивание 355 Мбит/с", summary);
+        Assert.Contains("Замер скорости через туннель, 30.09.2026 12:53: скачивание 156 Мбит/с", summary);
+
+        Assert.Contains("через туннель", speed);
+        Assert.Contains("сервер Эстония — TLS XHTTP; страна выхода EE, узел Cloudflare ARN; ушло 217 МБ", speed);
+
+        // Свежий — первым.
+        Assert.True(speed.IndexOf("12:54", StringComparison.Ordinal) < speed.IndexOf("12:53", StringComparison.Ordinal));
+
+        static string Read(ZipArchive archive, string name)
+        {
+            using var reader = new StreamReader(archive.GetEntry(name)!.Open());
+            return reader.ReadToEnd();
+        }
+    }
+
+    [Fact]
+    public void WithoutMeasurementsTheReportSaysSo()
+    {
+        var result = SupportReport.Create("0.10.0 (4)", root: _root);
+
+        Assert.DoesNotContain("speed.txt", result.Files);
+        Assert.Contains("Замер скорости: не проводился", ReadAll(result.Path));
     }
 
     [Fact]
