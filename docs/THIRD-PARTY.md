@@ -11,7 +11,8 @@ NetZapret не работает сам по себе: он управляет д
 | --- | --- | --- |
 | sing-box | GPL v3 или новее | `engines/sing-box/LICENSE` |
 | wintun.dll | проприетарная, © WireGuard LLC | см. wintun.net |
-| Zapret (winws2, списки, пресеты) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
+| Zapret 2 (winws2 и его библиотека lua) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
+| Zapret GUI (сценарии lua, списки, пресеты, каталог адресов) | MIT, © 2025–2026 censorliber; автор — loop-uh | `engines/zapret/LICENSE-ZapretGUI.txt` |
 | cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
 
@@ -107,7 +108,14 @@ Red Hat.
 
 ## Zapret
 
-`engines/zapret/exe/winws2.exe`, а также `lists/`, `lua/`, `bin/`, `presets/`.
+`engines/zapret/exe/winws2.exe` — версия 1.0.3 — и шесть модулей его библиотеки
+в `engines/zapret/lua/`: `zapret-lib.lua`, `zapret-antidpi.lua`,
+`zapret-auto.lua`, `zapret-obfs.lua`, `zapret-pcap.lua`, `zapret-tests.lua`.
+Оттуда же часть образцов пакетов в `bin/` и частей фильтра в `windivert.filter/`.
+
+Всё остальное в `engines/zapret/` — не его, а Zapret GUI, о нём следующий
+раздел. До 30.09 этот документ приписывал bol-van папку целиком, и это было
+неверно.
 
 **MIT License, Copyright (c) 2016–2024 bol-van.** «Zapret 2»
 ([github.com/bol-van/zapret2](https://github.com/bol-van/zapret2)) — форк проекта
@@ -125,15 +133,53 @@ MIT разрешает распространение в любом виде, в
 не распознаёт и показывает репозиторий как «без лицензии»; это особенность
 размещения файла, а не отсутствие условий.
 
-Списки доменов и адресов принадлежат проекту Zapret и обновляются вместе с ним.
-Мы их не изменяем и не дополняем — только читаем.
+## Zapret GUI
 
-`config/catalog.zapret.yaml` — выборка из каталога адресов установки Zapret
-(`system/hosts_catalog.sqlite3`): те записи «имя — адрес», что ответили при
-проверке в день сборки. Сам каталог `pack.cmd` тоже кладёт в архив, если он
-есть на машине сборщика. Лицензии у каталога отдельно не указано; это адреса
-чужих публичных DNS-сервисов (XBOX DNS, Comss DNS и других), то есть ответы,
-которые те раздают всем желающим.
+Программа **Zapret GUI**, автор — **loop-uh**:
+[wiki.zapret.moe](https://wiki.zapret.moe/), исходники —
+[git.zapret.moe/zapretdiscordyoutube/zapretgui](https://git.zapret.moe/zapretdiscordyoutube/zapretgui).
+Папка `engines/zapret/` в архиве — это копия её установки, и на ней NetZapret
+стоит не меньше, чем на самом winws2. Из Zapret GUI взято:
+
+* **сценарии десинка на lua** — пятнадцать модулей в `engines/zapret/lua/`:
+  `combined-detector.lua`, `custom_diag.lua`, `custom_funcs.lua`,
+  `domain-grouping.lua`, `fakemultidisorder.lua`, `fakemultisplit.lua`,
+  `init_vars.lua`, `silent-drop-detector.lua`, `strategies.lua`,
+  `strategy-lock-manager.lua`, `strategy-stats.lua`, `zapret-16kb.lua`,
+  `zapret-multishake.lua`, `zapret-rst-flood.lua`, `zapret-wgobfs.lua` —
+  и шесть файлов со стратегиями рядом с ними (`circular-config.txt`,
+  `strategies-*-source.txt`). Наш пресет Universal V10 грузит пять из этих
+  модулей: на одном winws2 от bol-van он бы не поднялся;
+* **списки доменов и адресов** в `engines/zapret/lists/` — мы их не изменяем
+  и не дополняем, только читаем;
+* **образцы пакетов** в `engines/zapret/bin/` — те, которых нет у bol-van;
+* **пресеты** в `presets/` — формат и сами наборы секций. Сверка с установкой
+  30.09: четыре пресета совпадают с её пресетами дословно, семь отличаются
+  на одну — двенадцать строк, а Universal V7–V10 в установке нет — они
+  собраны уже здесь, но из тех же секций и в том же формате;
+* **каталог адресов**. `config/catalog.zapret.yaml` — выборка из каталога
+  установки (`system/hosts_catalog.sqlite3`): те записи «имя — адрес», что
+  ответили при проверке в день сборки. Сам каталог `pack.cmd` тоже кладёт
+  в архив, если он есть на машине сборщика. Это адреса чужих публичных
+  DNS-сервисов (XBOX DNS, Comss DNS и других), то есть ответы, которые
+  те раздают всем желающим; собрал их в каталог автор Zapret GUI;
+* **сборка драйвера** — `Monkey64.sys`, о котором сказано в разделе WinDivert,
+  едет в том виде, в каком лежит в установке Zapret GUI.
+
+**MIT License, Copyright (c) 2025–2026 censorliber.** Так правообладатель назван
+в самом файле лицензии —
+[docs/LICENSE](https://git.zapret.moe/zapretdiscordyoutube/zapretgui/src/branch/main/docs/LICENSE)
+в репозитории проекта; коммиты в репозитории подписаны loop-uh. Строка
+приведена дословно, как того требует MIT, а текст целиком лежит
+в `engines/zapret/LICENSE-ZapretGUI.txt` (в репозитории —
+[docs/licenses/zapretgui-MIT.txt](licenses/zapretgui-MIT.txt)). В нём же сам
+Zapret GUI называет, что взял у bol-van.
+
+Оговорка о точности. Какие именно образцы пакетов и части фильтра WinDivert
+в установке принадлежат bol-van, а какие добавлены Zapret GUI, пофайлово
+не разобрано: сверены только модули lua (30.09, по каталогу `lua/`
+репозитория zapret2). Лицензия у обоих одна — MIT, и оба уведомления едут
+рядом с файлами.
 
 ## Сам NetZapret
 

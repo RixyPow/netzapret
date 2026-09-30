@@ -7,7 +7,8 @@ namespace NetZapret.Core;
 /// <param name="Role">Что он делает у нас — одной фразой.</param>
 /// <param name="License">Лицензия, коротко.</param>
 /// <param name="Source">Где лежит исходный код или страница проекта.</param>
-public sealed record Component(string Name, string Role, string License, string Source);
+/// <param name="Site">Сайт проекта, если он отдельно от исходников; <c>null</c> — нет.</param>
+public sealed record Component(string Name, string Role, string License, string Source, string? Site = null);
 
 /// <summary>
 /// Кто делает программу и из чего она собрана — для карточки «О программе».
@@ -49,9 +50,19 @@ public static class About
             "https://github.com/shtorm-7/sing-box-extended"),
 
         new("Zapret 2",
-            "Десинк: winws2, списки и пресеты",
+            "Десинк: winws2 и его библиотека lua",
             "MIT",
             "https://github.com/bol-van/zapret2"),
+
+        // До 30.09 всё, что едет рядом с winws2, было приписано bol-van.
+        // Сценарии lua сверх шести его модулей, списки, пресеты и каталог
+        // адресов — из Zapret GUI; автора назвал владелец, лицензия и подпись
+        // коммитов сверены по репозиторию (docs/THIRD-PARTY.md).
+        new("Zapret GUI",
+            "Сценарии десинка на lua, списки доменов и адресов, пресеты, каталог адресов — автор loop-uh",
+            "MIT",
+            "https://git.zapret.moe/zapretdiscordyoutube/zapretgui",
+            "https://wiki.zapret.moe/"),
 
         new("WinDivert",
             "Перехват пакетов для winws2",

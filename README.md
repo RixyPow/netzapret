@@ -25,7 +25,8 @@
 | Компонент | Зачем | Лицензия | Исходники |
 | --- | --- | --- | --- |
 | sing-box extended | туннель: серверы подписки и WARP | GPL v3 | [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) |
-| Zapret 2 | десинк: winws2, списки, пресеты | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
+| Zapret 2 | десинк: winws2 и его библиотека lua | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
+| Zapret GUI, автор — loop-uh | сценарии десинка на lua, списки доменов и адресов, пресеты, каталог адресов | MIT | [wiki.zapret.moe](https://wiki.zapret.moe/), [zapretgui](https://git.zapret.moe/zapretdiscordyoutube/zapretgui) |
 | WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
 | Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
 | Cygwin | среда, в которой работает winws2 | LGPL v3 | [cygwin.com](https://cygwin.com/) |
@@ -673,6 +674,11 @@ sing-box удерживает TUN-адаптер, осиротевший winws2 
 Zapret — MIT, WinDivert и Cygwin — LGPL, `wintun.dll` — проприетарная
 лицензия WireGuard LLC. Они запускаются отдельными процессами и на лицензию
 NetZapret не влияют. Разбор — в [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
+
+Сценарии десинка на lua, списки доменов и адресов, пресеты и каталог адресов,
+на которых стоит десинк, — работа **loop-uh**, автора
+[Zapret GUI](https://wiki.zapret.moe/) (MIT). Без них от Zapret здесь был бы
+один winws2.
 
 ## Дальше
 

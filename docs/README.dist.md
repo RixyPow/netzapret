@@ -98,4 +98,7 @@ NetZapret распространяется под лицензией MIT — с�
 WinDivert и Cygwin — LGPL, `wintun.dll` — проприетарная лицензия WireGuard LLC.
 Подробности в `THIRD-PARTY.md`.
 
+Сценарии десинка на lua, списки доменов и адресов, пресеты и каталог адресов —
+работа loop-uh, автора Zapret GUI (MIT): https://wiki.zapret.moe/
+
 Исходный код: https://github.com/RixyPow/netzapret

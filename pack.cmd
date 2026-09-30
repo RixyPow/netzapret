@@ -214,8 +214,15 @@ rem Licences of what we redistribute, and the one obligation that actually
 rem needs an action from us: Zapret is MIT, and MIT requires the notice to
 rem travel with the copies. The installation ships no licence file at all,
 rem so the text comes from upstream and is placed beside the engine.
+rem
+rem Two notices, because the folder holds two works. winws2 and six lua
+rem modules are bol-van's Zapret 2. Everything else in it - the other lua
+rem modules, lists, blobs, the address catalogue - comes from Zapret GUI by
+rem loop-uh (git.zapret.moe), also MIT. Until 30.09 only the first notice
+rem shipped, and the archive credited all of it to bol-van.
 copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
+copy /y "%ROOT%docs\licenses\zapretgui-MIT.txt" "%ENGINES%\zapret\LICENSE-ZapretGUI.txt" >nul 2>&1
 
 rem Last line of defence before the archive exists. dist\ is wiped at the start,
 rem so these files should never be here - but testing happens in the unpacked

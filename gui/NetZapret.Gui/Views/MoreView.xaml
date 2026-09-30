@@ -252,8 +252,28 @@
                                             </TextBlock>
                                         </StackPanel>
 
-                                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Исходники"
-                                                Tag="{Binding Source}" Click="OnLink" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <!--
+                                                Сайт — у кого он отдельно от исходников.
+                                                Заведён ради Zapret GUI: владелец 30.09
+                                                просил ссылку на автора, а его дом —
+                                                wiki.zapret.moe, не только репозиторий.
+                                            -->
+                                            <Button Content="Сайт" Tag="{Binding Site}" Click="OnLink" Margin="0,0,8,0">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Site}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+
+                                            <Button Style="{StaticResource Ghost}" Content="Исходники"
+                                                    Tag="{Binding Source}" Click="OnLink" />
+                                        </StackPanel>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
