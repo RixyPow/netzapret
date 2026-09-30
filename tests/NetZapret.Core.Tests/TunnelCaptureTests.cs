@@ -385,6 +385,22 @@ public sealed class TunnelCaptureTests
         Assert.Equal(["162.159.192.1"], TunnelEndpoints.Hosts(config));
     }
 
+    /// <summary>
+    /// WARP остаётся в перехвате десинка: без него соединение с узлом замерзает
+    /// у оператора, и WARP не отвечает (замер 01.10, см. TunnelEndpoints.Hosts).
+    /// </summary>
+    [Fact]
+    public void WarpStaysInTheCapture()
+    {
+        var config = JsonNode.Parse("""
+            { "outbounds": [
+                { "type": "vless", "tag": "NL", "server": "77.1.1.1", "server_port": 443 },
+                { "type": "masque", "tag": "Cloudflare WARP", "use_http2": true } ] }
+            """);
+
+        Assert.Equal(["77.1.1.1"], TunnelEndpoints.Hosts(config, "Cloudflare WARP"));
+    }
+
     [Fact]
     public void AddressesAreReadWithoutRepeatsAndLoopback()
     {

@@ -109,6 +109,23 @@ public static class TunnelEndpoints
     /// <summary>
     /// Куда подключается туннель: <c>server</c> у выходов и адреса пиров WireGuard.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// WARP (MASQUE) сюда не попадает — узла в конфиге у него нет, — и это
+    /// оставлено намеренно, по замеру. 01.10 его узлы (162.159.198.1–2 и пара
+    /// IPv6) выводились из перехвата так же, как серверы подписки, ради нагрузки:
+    /// весь WARP — одно соединение к 162.159.198.2:443, и winws2 под замером
+    /// скорости сидел на 86–87 % ядра (184 и 187 Мбит/с вниз, 171 и 175 вверх).
+    /// </para>
+    /// <para>
+    /// Без десинка WARP умер: соединение с узлом замерзало, движок писал
+    /// «connected party did not properly respond» каждые 20–50 с, замер через
+    /// движок не отвечал, проверка прохода трафика увела сеть в обход. Его
+    /// рукопожатие через оператора проводит секция пресета «Cloudflare TCP»
+    /// (имя узла в cloudflare.txt) — та же заморозка Cloudflare, что у списков
+    /// отзыва Let's Encrypt (CLAUDE.md). Нагрузка на winws2 — цена работающего WARP.
+    /// </para>
+    /// </remarks>
     internal static IReadOnlyList<string> Hosts(JsonNode? config, string? first = null)
     {
         var hosts = new List<string>();
