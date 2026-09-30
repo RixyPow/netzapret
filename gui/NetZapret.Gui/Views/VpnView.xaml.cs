@@ -769,6 +769,13 @@ public partial class VpnView : UserControl
             var detail = Detail(server.Protocol.ToString(), server.Host, server.Port, server.Tag);
 
             var (country, name) = CountryTag.Split(server.Tag);
+
+            // WARP выпускает в ближайшем городе Cloudflare, из России — в Москве
+            // (замер 01.10: loc=RU, colo=DME). Флага в имени нет, а имя менять
+            // нельзя — к нему привязана учётная запись в кэше движка.
+            if (server.IsSelfRegistering && country.Length == 0)
+                country = "RU";
+
             var flag = country.Length == 2 ? FlagImages.For(country) : null;
 
             return new ServerRow(

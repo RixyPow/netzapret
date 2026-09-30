@@ -1024,8 +1024,13 @@ public sealed class SingBoxConfigCompiler
         // свой же. Для обхода блокировки оператора это годится, для сервисов,
         // закрывающихся от страны, — нет: адрес остаётся отечественным,
         // и отказ приходит тот же, что и без туннеля.
+        //
+        // WARP — тоже домашний, хоть флага в имени у него и нет: Cloudflare
+        // выпускает в ближайшем городе, из России — в Москве (замер 01.10:
+        // loc=RU, colo=DME, warp=on). До 01.10 «только зарубежные» его
+        // пропускали запасным.
         var eligible = options.ForeignExitsOnly
-            ? servers.Where(s => !LooksDomestic(tags[s])).ToList()
+            ? servers.Where(s => !LooksDomestic(tags[s]) && !s.IsSelfRegistering).ToList()
             : servers;
 
         // Но не до пустоты: подписка может состоять из домашних серверов

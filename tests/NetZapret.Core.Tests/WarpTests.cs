@@ -135,6 +135,24 @@ public class WarpTests
         Assert.Equal(["NL", Warp.MasqueTag], Members(root, "auto-latency"));
     }
 
+    /// <summary>
+    /// «Только зарубежные»: WARP — домашний выход (замер 01.10: loc=RU, colo=DME),
+    /// и запасным его не берут. Выбрать руками по-прежнему можно — селектор знает его.
+    /// </summary>
+    [Fact]
+    public void ForeignExitsOnlyLeavesWarpOutOfAutoLatency()
+    {
+        var root = Compile(new SingBoxOptions { ForeignExitsOnly = true, DeadServerTags = new HashSet<string> { "NL" } },
+            Ordinary(), Warp.MasqueServer());
+
+        Assert.Equal(["NL"], Members(root, "auto-latency"));
+        Assert.Contains(Warp.MasqueTag, Members(root, "auto"));
+
+        // Не до пустоты: кроме WARP, выходов нет — он и остаётся.
+        Assert.Equal([Warp.MasqueTag],
+            Members(Compile(new SingBoxOptions { ForeignExitsOnly = true }, Warp.MasqueServer()), "auto-latency"));
+    }
+
     /// <summary>Без подписки WARP и есть автоподбор.</summary>
     [Fact]
     public void WarpAloneFillsAutoLatency()
