@@ -682,5 +682,5 @@ NetZapret не влияют. Разбор — в [docs/THIRD-PARTY.md](docs/THIR
 в [docs/roadmap.md](docs/roadmap.md), а что обсуждается, но не решено, —
 в [docs/ideas.md](docs/ideas.md).
 
-Открытые вопросы и журнал разбора неисправностей — в [NOTES.md](NOTES.md).
+Разбор неисправностей — командой `nz` (выше) и вкладкой «Диагностика».
 Разбор sing-box и формат ссылок подписки — в [docs/singbox.md](docs/singbox.md).

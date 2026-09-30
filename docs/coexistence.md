@@ -127,7 +127,7 @@ WinDivert видит исходные потоки, и десинк работа
 
 ### Точечный VPN для приложения — подтверждено 2026-08-23
 
-Конфиг `config/rules.telegram.yaml`: правило `match: process` для
+Проверочный конфиг (удалён 30.09 вместе с прочими файлами PoC): правило `match: process` для
 `telegram.exe` с `mode: proxy`, плюс секция `capture` с
 `lists/ipset-telegram.txt`.
 

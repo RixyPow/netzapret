@@ -33,13 +33,3 @@ public interface IHostnameSource
     /// <summary>Возвращает имя для адреса или <c>null</c>, если оно неизвестно.</summary>
     string? Resolve(System.Net.IPAddress address);
 }
-
-/// <summary>Пустой поставщик: имён нет, доменные правила не срабатывают.</summary>
-public sealed class NullHostnameSource : IHostnameSource
-{
-    public static readonly NullHostnameSource Instance = new();
-
-    private NullHostnameSource() { }
-
-    public string? Resolve(System.Net.IPAddress address) => null;
-}

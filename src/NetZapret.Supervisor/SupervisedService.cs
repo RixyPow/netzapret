@@ -1025,11 +1025,6 @@ public sealed class SingBoxService : SupervisedService
 /// он висит на фильтре WinDivert. Единственный доступный признак — живость
 /// процесса, что и отражено возвратом <c>true</c>.
 /// </para>
-/// <para>
-/// ВНИМАНИЕ: не тестировано. Запуск winws2 требует прав администратора
-/// (драйвер WinDivert), а ночная сессия работала без них по условию задания.
-/// Код написан, но вживую не проверялся — нужен ручной запуск с повышением прав.
-/// </para>
 /// </remarks>
 public sealed class WinwsService : SupervisedService
 {

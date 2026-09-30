@@ -43,8 +43,8 @@ public sealed record ConnectionEvent
     public int? ProcessId { get; init; }
 
     /// <summary>
-    /// Доменное имя назначения, если известно. В PoC заполняется только из
-    /// внешней карты (--hosts-map); в бою — из fakeip-таблицы sing-box и sniffing'а.
+    /// Доменное имя назначения, если известно: у наблюдения — из кэша ответов
+    /// DNS (DnsNameCache), у проверок и «куда пойдёт» — то имя, о котором спросили.
     /// </summary>
     public string? Hostname { get; init; }
 
