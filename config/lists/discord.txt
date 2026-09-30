@@ -27,3 +27,11 @@ discordsays.com
 discordactivities.com
 discord-activities.com
 discord-attachments-uploads-prd.storage.googleapis.com
+
+# Капча Discord — hCaptcha, и она обязана идти тем же путём, что Discord.
+# Жалоба 30.09: Discord целиком через VPN, а при получении Orbs за видео
+# в конце — ошибка капчи. hcaptcha.com шёл напрямую, то есть с другого
+# адреса, чем сам Discord; добавленный человеком к Discord — заработало.
+# Чем именно капча отказывала, не выяснено: догадка — сверка адреса.
+# Цена: капча других сайтов на hCaptcha идёт тем же маршрутом, что Discord.
+hcaptcha.com
