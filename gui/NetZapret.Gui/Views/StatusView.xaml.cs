@@ -100,8 +100,12 @@ public partial class StatusView : UserControl
     /// <para>
     /// По высоте страницы, с сохранением пропорций: персонаж в картинках
     /// стоит по центру, и при вписывании по высоте он целиком в колонке.
-    /// Слева картинка может не доставать до края — там сплошная подложка,
-    /// а края у артов обычно тёмные, и шва под затемнением не видно.
+    /// Слева картинка может не доставать до края — там сплошная подложка.
+    /// Край картинки растворяется в ней (маска прозрачности), и растворение
+    /// кончается до колонки с артом. Прежде я рассчитывал, что края у артов
+    /// тёмные и шва под затемнением не видно: у «Слойки» так, а у «Trident»
+    /// светлая картина обрывалась вертикальной чертой посреди карточек
+    /// (владелец, 30.09: «темы обрываются»).
     /// </para>
     /// <para>
     /// Под карточками — затемнение темы (BackdropDim): с ним тема прошла
@@ -142,13 +146,36 @@ public partial class StatusView : UserControl
         bool side = column >= ArtColumnMin;
         double centre = side ? width - column / 2 : width / 2;
 
+        double left = centre - w / 2;
+
         Art.Fill = new ImageBrush(image)
         {
             Stretch = Stretch.Fill,
             TileMode = TileMode.None,
             ViewportUnits = BrushMappingMode.Absolute,
-            Viewport = new Rect(centre - w / 2, (height - h) / 2, w, h),
+            Viewport = new Rect(left, (height - h) / 2, w, h),
         };
+
+        // Левый край картинки — в подложку, без черты. Растворение кончается
+        // до колонки с артом (не позже 80 % пути от края картинки до неё),
+        // чтобы персонаж стоял целиком; без колонки — на четверти картинки.
+        // Картинка, начинающаяся левее страницы, края не показывает — маска
+        // не нужна.
+        double fade = side ? Math.Max(120, (width - column - left) * 0.8) : w * 0.25;
+
+        Art.OpacityMask = left <= 0
+            ? null
+            : new LinearGradientBrush
+            {
+                MappingMode = BrushMappingMode.Absolute,
+                StartPoint = new Point(left, 0),
+                EndPoint = new Point(left + fade, 0),
+                GradientStops =
+                {
+                    new GradientStop(Colors.Transparent, 0),
+                    new GradientStop(Colors.Black, 1),
+                },
+            };
 
         var backdrop = TryFindResource("BackdropColor") is Color c ? c : Colors.Black;
         double dim = TryFindResource("BackdropDim") is double d ? d : 1.0;
