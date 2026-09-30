@@ -4,7 +4,8 @@ using System.Net.Sockets;
 namespace NetZapret.Zapret;
 
 /// <summary>
-/// Выводит соединения туннеля с его серверами из перехвата winws2.
+/// Выводит соединения туннеля с его серверами из перехвата winws2 — а с 30.09
+/// и UDP к сетям, которым десинк не нужен (<see cref="UdpOffDesync"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -43,6 +44,9 @@ public static class TunnelCapture
     /// с game filter, — 60 и не принимает 70 («Filter expression too long»),
     /// IPv4 и IPv6 одинаково. Сорок оставляют запас под пресет тяжелее;
     /// остальные серверы остаются в перехвате, как были.
+    /// Вместе с подменными адресами и сетями Riot (30.09, winws2 <c>--wf-save</c>
+    /// и тот же WinDivert): Default v1 с game filter принимает 52 адреса
+    /// и не принимает 56, V10 — 56.
     /// </remarks>
     public const int Limit = 40;
 
@@ -50,9 +54,16 @@ public static class TunnelCapture
     /// <param name="fakeRange">
     /// Диапазон подменных адресов туннеля (<c>198.18.0.0/15</c>); <c>null</c> — не выводить.
     /// </param>
-    public static void Apply(List<string> arguments, IReadOnlyList<IPAddress>? servers, string? fakeRange = null)
+    /// <param name="udpOff">
+    /// Сети, UDP к которым десинку не отдаётся вовсе (<see cref="UdpOffDesync"/>).
+    /// </param>
+    public static void Apply(
+        List<string> arguments,
+        IReadOnlyList<IPAddress>? servers,
+        string? fakeRange = null,
+        IReadOnlyList<string>? udpOff = null)
     {
-        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange);
+        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange, udpOff);
 
         if (filter.Length == 0)
             return;
@@ -78,16 +89,28 @@ public static class TunnelCapture
 
     /// <summary>Сколько из этих адресов строка запуска выводит из перехвата.</summary>
     public static int Applied(
-        IReadOnlyList<string> arguments, IReadOnlyList<IPAddress> servers, string? fakeRange = null)
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<IPAddress> servers,
+        string? fakeRange = null,
+        IReadOnlyList<string>? udpOff = null) =>
+        Carries(arguments, servers, fakeRange, udpOff) ? Math.Min(servers.Count, Limit) : 0;
+
+    /// <summary>Встало ли исключение в строку запуска.</summary>
+    /// <remarks>
+    /// Не встаёт, когда у пресета свой <c>--wf-raw-filter</c> файлом, — и тогда
+    /// ничего из переданного из перехвата не выведено.
+    /// </remarks>
+    public static bool Carries(
+        IReadOnlyList<string> arguments,
+        IReadOnlyList<IPAddress> servers,
+        string? fakeRange = null,
+        IReadOnlyList<string>? udpOff = null)
     {
-        var kept = servers.Take(Limit).ToList();
-        var filter = Filter(kept, fakeRange);
+        var filter = Filter(servers.Take(Limit).ToList(), fakeRange, udpOff);
 
         return filter.Length > 0
             && arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase)
-                && a.Contains(filter, StringComparison.Ordinal))
-            ? kept.Count
-            : 0;
+                && a.Contains(filter, StringComparison.Ordinal));
     }
 
     /// <summary>Условие «пакет не от сервера и не к нему»; нет адресов — пусто.</summary>
@@ -107,8 +130,19 @@ public static class TunnelCapture
     /// winws2 исключает сам. Чем это исключение отзывается на скорости,
     /// на 30.09 не замерено.
     /// </para>
+    /// <para>
+    /// С сетями <paramref name="udpOff"/> — ещё и «не UDP к ним». Только
+    /// исходящий: UDP winws2 перехватывает на выходе (<c>--wf-udp-out</c>,
+    /// снято <c>--wf-save</c> 30.09), а входящий — лишь по разбору нагрузки
+    /// в частях фильтра пресета. Сети сливаются в диапазоны: у Riot 22 записи
+    /// дают 13 диапазонов и 27 проверок вместо 45. Место в фильтре общее
+    /// с серверами туннеля (см. <see cref="Limit"/>).
+    /// </para>
     /// </remarks>
-    public static string Filter(IReadOnlyList<IPAddress> servers, string? fakeRange = null)
+    public static string Filter(
+        IReadOnlyList<IPAddress> servers,
+        string? fakeRange = null,
+        IReadOnlyList<string>? udpOff = null)
     {
         var tests = new List<string>();
 
@@ -116,6 +150,19 @@ public static class TunnelCapture
         {
             tests.Add($"(ip.DstAddr>={first} and ip.DstAddr<={last})");
             tests.Add($"(ip.SrcAddr>={first} and ip.SrcAddr<={last})");
+        }
+
+        var ranges = Ranges(udpOff ?? []);
+
+        if (ranges.Count > 0)
+        {
+            var inside = ranges.Select(r =>
+            {
+                var field = r.First.AddressFamily == AddressFamily.InterNetwork ? "ip" : "ipv6";
+                return $"({field}.DstAddr>={r.First} and {field}.DstAddr<={r.Last})";
+            });
+
+            tests.Add($"(udp and ({string.Join(" or ", inside)}))");
         }
 
         foreach (var server in servers)
@@ -164,5 +211,104 @@ public static class TunnelCapture
         static IPAddress From(uint v) => new([(byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v]);
 
         return (From(first), From(last));
+    }
+
+    /// <summary>
+    /// Сети списком слитых диапазонов: сперва IPv4, затем IPv6, по возрастанию.
+    /// </summary>
+    /// <remarks>
+    /// Соседние и вложенные сети сливаются в одну: 138.0.12.0/23, 138.0.14.0/24
+    /// и 138.0.15.0/24 — это один диапазон и две проверки вместо шести.
+    /// Неразобранная запись пропускается.
+    /// </remarks>
+    public static IReadOnlyList<(IPAddress First, IPAddress Last)> Ranges(IEnumerable<string> cidrs)
+    {
+        var v4 = new List<(UInt128 First, UInt128 Last)>();
+        var v6 = new List<(UInt128 First, UInt128 Last)>();
+
+        foreach (var cidr in cidrs)
+        {
+            if (Span(cidr) is not var (family, first, last))
+                continue;
+
+            (family == AddressFamily.InterNetwork ? v4 : v6).Add((first, last));
+        }
+
+        return
+        [
+            .. Merge(v4).Select(r => (Address(r.First, 4), Address(r.Last, 4))),
+            .. Merge(v6).Select(r => (Address(r.First, 16), Address(r.Last, 16))),
+        ];
+    }
+
+    /// <summary>Семейство, первый и последний адрес сети; не разобралась — <c>null</c>.</summary>
+    private static (AddressFamily Family, UInt128 First, UInt128 Last)? Span(string? cidr)
+    {
+        if (string.IsNullOrWhiteSpace(cidr))
+            return null;
+
+        var parts = cidr.Trim().Split('/');
+
+        if (parts.Length > 2 || !IPAddress.TryParse(parts[0], out var address))
+            return null;
+
+        int width = address.AddressFamily switch
+        {
+            AddressFamily.InterNetwork => 32,
+            AddressFamily.InterNetworkV6 => 128,
+            _ => 0,
+        };
+
+        int bits = width;
+
+        if (width == 0 || (parts.Length == 2 && (!int.TryParse(parts[1], out bits) || bits < 0 || bits > width)))
+            return null;
+
+        UInt128 value = 0;
+
+        foreach (var octet in address.GetAddressBytes())
+            value = (value << 8) | octet;
+
+        // Биты узла; у IPv6 со всеми 128 сдвиг на ширину не определён — отдельно.
+        UInt128 host = bits == width
+            ? UInt128.Zero
+            : width == 128 ? UInt128.MaxValue >> bits : (UInt128.One << (width - bits)) - 1;
+
+        UInt128 start = value & ~host;
+        return (address.AddressFamily, start, start | host);
+    }
+
+    private static List<(UInt128 First, UInt128 Last)> Merge(List<(UInt128 First, UInt128 Last)> spans)
+    {
+        var merged = new List<(UInt128 First, UInt128 Last)>();
+
+        foreach (var span in spans.OrderBy(s => s.First))
+        {
+            if (merged.Count > 0
+                && (merged[^1].Last == UInt128.MaxValue || span.First <= merged[^1].Last + 1))
+            {
+                if (span.Last > merged[^1].Last)
+                    merged[^1] = (merged[^1].First, span.Last);
+
+                continue;
+            }
+
+            merged.Add(span);
+        }
+
+        return merged;
+    }
+
+    private static IPAddress Address(UInt128 value, int length)
+    {
+        var bytes = new byte[length];
+
+        for (int i = length - 1; i >= 0; i--)
+        {
+            bytes[i] = (byte)(value & 0xFF);
+            value >>= 8;
+        }
+
+        return new IPAddress(bytes);
     }
 }

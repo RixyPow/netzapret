@@ -1,3 +1,5 @@
+using NetZapret.Core.Rules;
+
 namespace NetZapret.Core.Services;
 
 /// <summary>
@@ -550,18 +552,41 @@ public static class ServiceCatalog
             ],
         },
 
+        // Riot — отдельной папкой с полки игр (владелец, 30.09): вход и игра
+        // ломаются врозь и лечатся врозь. Вход по именам, TCP — у части провайдеров
+        // без десинка или VPN не проходит. Игра — UDP по голым адресам сетей
+        // Riot Direct, и ей не нужно ни то, ни другое: игрокам советуют «VPN
+        // только на вход» (обсуждение №11). «Напрямую» у игровой части выводит
+        // её UDP из перехвата winws2 (UdpOffDesync) — щит по именам его
+        // не узнал бы. Имя папки — прежнее имя строки, чтобы выбранный
+        // порядок в «Маршрутах» не потерял её.
+        new ServiceDefinition
+        {
+            Name = "Riot и Valorant",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Вход и клиент",
+                    List = "config/lists/riot-valorant.txt",
+                    Note = "по именам: вход, клиент, магазин, чат; античиты плохо переносят и десинк, и туннель",
+                },
+                new ServicePart
+                {
+                    Name = "Игровой UDP",
+                    List = ProgramCapture.RiotNetwork,
+                    ByAddress = true,
+                    Note = "сети Riot Direct, игровые серверы; «напрямую» — мимо десинка целиком",
+                },
+            ],
+        },
+
         new ServiceDefinition
         {
             Name = "Игры",
             Grouping = true,
             Parts =
             [
-                new ServicePart
-                {
-                    Name = "Riot и Valorant",
-                    List = "config/lists/riot-valorant.txt",
-                    Note = "античиты плохо переносят и десинк, и туннель",
-                },
                 new ServicePart { Name = "Epic Games и Fortnite", List = "config/lists/epicgames-fortnite.txt" },
                 new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
                 new ServicePart { Name = "itch.io", List = "config/lists/itch.txt" },

@@ -355,14 +355,27 @@ internal static class SupervisorHost
         // И соединения, которые уходят в туннель по подменным адресам.
         var fakeRange = options.NoProxy ? null : TunnelEndpoints.FakeRange(options.ProxyConfig);
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange);
+        // Игровой UDP Riot, пока его часть не на «десинке» (UdpOffDesync, 30.09).
+        // Сети выбирает сборка списков по правилам, здесь их только подбирают.
+        var udpOff = UdpOffDesync.Read();
 
-        if (fakeRange is not null && TunnelCapture.Applied(arguments, servers, fakeRange) == servers.Take(TunnelCapture.Limit).Count())
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff);
+
+        bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff);
+
+        if (fakeRange is not null && carried)
             Console.WriteLine($"Десинк не перехватывает трафик в туннель: подменные адреса {fakeRange}.");
+
+        if (udpOff.Count > 0)
+        {
+            Console.WriteLine(carried
+                ? $"Десинк не перехватывает игровой UDP Riot: сетей — {udpOff.Count}."
+                : "Игровой UDP Riot остался в перехвате десинка: у пресета свой --wf-raw-filter файлом.");
+        }
 
         if (servers.Count > 0)
         {
-            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange);
+            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange, udpOff);
 
             Console.WriteLine(skipped == 0
                 ? "Серверы туннеля остались в перехвате десинка: у пресета свой --wf-raw-filter файлом."

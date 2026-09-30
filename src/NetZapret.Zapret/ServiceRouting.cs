@@ -103,7 +103,7 @@ public static class ServiceRouting
             result.Add(new PartStatus
             {
                 Part = part,
-                Mode = part.ByAddress ? ModeForAddress(entries[0], engine) : ModeFor(entries[0], engine),
+                Mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine),
                 DomainCount = entries.Count,
                 Explicit = set,
                 Example = entries[0],
@@ -122,7 +122,7 @@ public static class ServiceRouting
     /// адрес в <see cref="ModeFor"/>: выдуманное значение попадает в чужие
     /// правила и уводит ответ.
     /// </remarks>
-    private static RoutingMode ModeForAddress(string cidr, RuleEngine engine)
+    internal static RoutingMode AddressMode(string cidr, RuleEngine engine)
     {
         var text = cidr.Split('/')[0].Trim();
 

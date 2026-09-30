@@ -26,19 +26,27 @@ namespace NetZapret.Core.Rules;
 /// </remarks>
 public static class ProgramCapture
 {
-    /// <summary>Сети Riot — игровые серверы Valorant и League.</summary>
+    /// <summary>
+    /// Сети Riot — игровые серверы Valorant и League; часть «Игровой UDP» в «Маршрутах».
+    /// </summary>
     public const string RiotNetwork = "config/lists/riot-network.txt";
-
-    /// <summary>Список имён Riot, по маршруту которого решается, выводить ли её сети.</summary>
-    private const string RiotNames = "riot-valorant.txt";
 
     /// <summary>
     /// Адресные списки, которые при полном перехвате ради программы идут мимо туннеля.
     /// </summary>
     /// <remarks>
-    /// Riot — если её маршрут не «через VPN»: отправленную в VPN выводить
-    /// из туннеля нельзя. Маршрут — первого совпавшего правила по её списку
-    /// имён, как решает и движок. Правила нет — Riot идёт мимо VPN, и сети выводятся.
+    /// <para>
+    /// Riot — если её игровая часть не «через VPN»: отправленную в VPN выводить
+    /// из туннеля нельзя. Маршрут — первого правила по списку сетей, как решает
+    /// и движок. Правила нет — Riot идёт мимо VPN, и сети выводятся.
+    /// </para>
+    /// <para>
+    /// До 30.09 решал маршрут имён Riot. С разделением на «Вход и клиент»
+    /// и «Игровой UDP» решает вторая часть: вход через VPN при игре напрямую —
+    /// ровно то, что советуют игрокам (обсуждение №11), и вход от этого не
+    /// страдает — имена при полном перехвате получают подменный адрес и идут
+    /// в туннель мимо этого исключения.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<string> KeepOut(RuleSet ruleSet)
     {
@@ -47,9 +55,12 @@ public static class ProgramCapture
 
         var riot = ruleSet.Rules.FirstOrDefault(r =>
             r.Enabled
-            && r.Match == MatchKind.HostList
-            && r.Value.Replace('\\', '/').EndsWith("/" + RiotNames, StringComparison.OrdinalIgnoreCase));
+            && r.Match == MatchKind.IpSet
+            && IsRiotNetwork(r.Value));
 
         return riot?.Mode == RoutingMode.Proxy ? [] : [RiotNetwork];
     }
+
+    private static bool IsRiotNetwork(string value) =>
+        value.Replace('\\', '/').EndsWith("/" + Path.GetFileName(RiotNetwork), StringComparison.OrdinalIgnoreCase);
 }

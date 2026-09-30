@@ -216,6 +216,73 @@ public sealed class TunnelCaptureTests
         Assert.Equal(TunnelCapture.Limit, TunnelCapture.Applied(arguments, many));
     }
 
+    /// <summary>Сети Riot из поставки — те, что выводит часть «Игровой UDP».</summary>
+    private static IReadOnlyList<string> RiotNetworks() =>
+        Repository() is { } root
+            ? AddressListReader.Expand([ProgramCapture.RiotNetwork], root, out _)
+            : [];
+
+    /// <summary>
+    /// Соседние и вложенные сети сливаются: место в фильтре общее с серверами туннеля.
+    /// </summary>
+    [Fact]
+    public void NetworksMergeIntoRanges()
+    {
+        var ranges = TunnelCapture.Ranges(
+        [
+            "138.0.14.0/24", "138.0.12.0/23", "138.0.15.0/24",
+            "104.160.128.0/19", "104.160.130.0/24",
+            "2a04:82c0::/29",
+            "не сеть", "10.0.0.0/33",
+        ]);
+
+        Assert.Equal(
+        [
+            (IPAddress.Parse("104.160.128.0"), IPAddress.Parse("104.160.159.255")),
+            (IPAddress.Parse("138.0.12.0"), IPAddress.Parse("138.0.15.255")),
+            (IPAddress.Parse("2a04:82c0::"), IPAddress.Parse("2a04:82c7:ffff:ffff:ffff:ffff:ffff:ffff")),
+        ], ranges);
+
+        Assert.Equal([(IPAddress.Parse("5.5.5.5"), IPAddress.Parse("5.5.5.5"))], TunnelCapture.Ranges(["5.5.5.5"]));
+
+        // Список из поставки: 22 записи, 13 диапазонов (сверено руками 30.09).
+        if (RiotNetworks() is { Count: > 0 } riot)
+            Assert.Equal(13, TunnelCapture.Ranges(riot).Count);
+    }
+
+    /// <summary>
+    /// Игровой UDP Riot (30.09): только UDP и только к этим сетям — TCP к ним
+    /// и UDP к прочим остаются в перехвате.
+    /// </summary>
+    [Fact]
+    public void UdpToOffNetworksLeavesTheCapture()
+    {
+        Assert.Equal(
+            "((udp and ((ip.DstAddr>=104.160.128.0 and ip.DstAddr<=104.160.159.255)"
+            + " or (ipv6.DstAddr>=2a04:82c0:: and ipv6.DstAddr<=2a04:82c7:ffff:ffff:ffff:ffff:ffff:ffff))) ? false : true)",
+            TunnelCapture.Filter([], null, ["104.160.128.0/19", "2a04:82c0::/29"]));
+
+        // Вместе с прочим — после подменных адресов, раньше серверов.
+        var all = TunnelCapture.Filter([IPAddress.Parse("77.1.1.1")], "198.18.0.0/15", ["104.160.128.0/19"]);
+
+        Assert.StartsWith("((ip.DstAddr>=198.18.0.0", all);
+        Assert.Contains("or (udp and ((ip.DstAddr>=104.160.128.0 and ip.DstAddr<=104.160.159.255))) or ip.DstAddr=77.1.1.1 ", all);
+
+        // Без сетей — прежняя строка, знак в знак.
+        Assert.Equal(TunnelCapture.Filter(Servers), TunnelCapture.Filter(Servers, null, []));
+    }
+
+    /// <summary>Сети без серверов туннеля (десинк без VPN) — ключ всё равно встаёт, и это видно.</summary>
+    [Fact]
+    public void UdpOffWorksWithoutTheTunnel()
+    {
+        var arguments = WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), udpOff: ["104.160.128.0/19"]);
+
+        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=((udp and ", StringComparison.Ordinal));
+        Assert.True(TunnelCapture.Carries(arguments, [], null, ["104.160.128.0/19"]));
+        Assert.False(TunnelCapture.Carries(arguments, [], null, ["185.40.64.0/22"]));
+    }
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     private delegate bool CompileFilter(
         string filter, int layer, byte[] compiled, uint length, out IntPtr error, out uint position);
@@ -255,6 +322,7 @@ public sealed class TunnelCaptureTests
                 TunnelCapture.Filter(Servers),
                 "(ip.TTL>1) and " + TunnelCapture.Filter(many),
                 TunnelCapture.Filter(many, "198.18.0.0/15"),
+                TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks()),
             })
             {
                 bool ok = compile(filter, 0, new byte[65536], 65536, out var error, out uint position);

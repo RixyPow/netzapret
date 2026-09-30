@@ -17,7 +17,14 @@ public sealed class ProgramCaptureTests
             mode: proxy
         """;
 
+    /// <summary>Часть «Игровой UDP»: по ней с 30.09 и решается, выводить ли сети.</summary>
     private static string Riot(string mode) => $"""
+          - match: ipset
+            value: "config/lists/riot-network.txt"
+            mode: {mode}
+        """;
+
+    private static string RiotNames(string mode) => $"""
           - match: hostlist
             value: "config/lists/riot-valorant.txt"
             mode: {mode}
@@ -44,6 +51,19 @@ public sealed class ProgramCaptureTests
     public void RiotRoutedToTheVpnStaysIn()
     {
         Assert.Empty(ProgramCapture.KeepOut(Rules("mode: selective\nrules:\n" + Program + "\n" + Riot("proxy"))));
+    }
+
+    /// <summary>
+    /// Вход через VPN, игра напрямую — совет игрокам из обсуждения №11: сети
+    /// выводятся, маршрут имён на это не влияет.
+    /// </summary>
+    [Fact]
+    public void LoginThroughTheVpnDoesNotPullTheGameIn()
+    {
+        var keptOut = ProgramCapture.KeepOut(
+            Rules("mode: selective\nrules:\n" + Program + "\n" + RiotNames("proxy") + "\n" + Riot("direct")));
+
+        Assert.Equal([ProgramCapture.RiotNetwork], keptOut);
     }
 
     /// <summary>Правила про Riot нет вовсе — она идёт мимо VPN, и её сети тоже.</summary>

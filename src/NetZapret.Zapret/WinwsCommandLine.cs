@@ -76,20 +76,24 @@ public static class WinwsCommandLine
     /// Диапазон подменных адресов туннеля: соединения на них идут в VPN,
     /// и десинк их тоже не перехватывает.
     /// </param>
+    /// <param name="udpOff">
+    /// Сети, UDP к которым десинк не перехватывает (<see cref="UdpOffDesync"/>).
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
         IReadOnlyList<OwnDesyncProfile>? own = null,
         bool gameFilter = false,
         IReadOnlyList<IPAddress>? tunnelServers = null,
-        string? tunnelFakeRange = null)
+        string? tunnelFakeRange = null,
+        IReadOnlyList<string>? udpOff = null)
     {
         var arguments = BuildPreset(preset, excludeList, own);
 
         if (gameFilter)
             GameFilter.Apply(arguments);
 
-        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange);
+        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff);
 
         return arguments;
     }
