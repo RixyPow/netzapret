@@ -42,6 +42,7 @@ return command switch
     "status" or "состояние" => Status(),
     "where" or "куда" => Where(string.Join(' ', args.Skip(1))),
     "dns" => await Dns(),
+    "dns-mode" or "днс" => DnsMode(args.ElementAtOrDefault(1)),
     "routes" or "маршруты" => Routes(),
     "catalog" or "каталог" => await Catalog(),
     "report" or "отчёт" => Report(),
@@ -144,6 +145,22 @@ int Where(string target)
             Console.WriteLine($"  десинк:            {NetZapret.Proxy.HostsFile.DescribeBypass(bypass)}");
     }
 
+    // Через что разрешается имя — сейчас, по hosts и конфигу работающего
+    // движка (DnsPath). 30.09 имена мимо VPN разрешались через туннель,
+    // и при заминке сервера пропадали у всей машины.
+    if (connection.Hostname is { } name)
+    {
+        var steps = NetZapret.Proxy.DnsPath.Explain(
+            name,
+            NetZapret.Proxy.HostsFile.Read(),
+            ReadEngineConfig(),
+            TunnelRunning(),
+            NetZapret.Proxy.SystemResolvers.Discover());
+
+        for (int i = 0; i < steps.Count; i++)
+            Console.WriteLine((i == 0 ? "  DNS:              " : "                    ") + steps[i]);
+    }
+
     return 0;
 
     static string Word(RoutingMode mode) => mode switch
@@ -168,6 +185,75 @@ async Task<int> Fix(string target)
     Console.WriteLine(result.Summary);
 
     return result.Applied is null && result.Steps.All(s => !s.Works) ? 1 : 0;
+}
+
+// Как движок спрашивает имена, и переключение — то же, что список на
+// вкладке DNS: пишется DnsThroughTunnel, применяется при следующем запуске
+// движков. Перезапустить их nz не может — прав администратора он не просит.
+int DnsMode(string? choice)
+{
+    var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+    if (choice is { Length: > 0 })
+    {
+        bool? through = choice.ToLowerInvariant() switch
+        {
+            "напрямую" or "direct" => false,
+            "туннель" or "через-туннель" or "tunnel" => true,
+            _ => null,
+        };
+
+        if (through is null)
+        {
+            Console.Error.WriteLine("nz dns-mode напрямую | туннель");
+            return 2;
+        }
+
+        if (settings.DnsThroughTunnel != through)
+        {
+            settings = settings with { DnsThroughTunnel = through.Value };
+            settings.Save(AppSettings.DefaultPath);
+            Console.WriteLine("записано; применится при следующем запуске движков");
+        }
+        else
+        {
+            Console.WriteLine("и так стоит");
+        }
+    }
+
+    Console.WriteLine($"в настройках: {settings.DnsServer}, {(settings.DnsThroughTunnel ? "через туннель" : "напрямую")}");
+
+    // Что делает работающий движок — может отставать от настроек до перезапуска.
+    var config = ReadEngineConfig();
+
+    if (!TunnelRunning() || config is null)
+    {
+        Console.WriteLine("движок:       туннель не поднят — имена разрешает Windows сама");
+        return 0;
+    }
+
+    var final = (string?)config["dns"]?["final"] ?? "?";
+    Console.WriteLine($"движок:       {NetZapret.Proxy.DnsPath.Describe(config["dns"], final, string.Empty)}");
+
+    return 0;
+}
+
+System.Text.Json.Nodes.JsonNode? ReadEngineConfig()
+{
+    try
+    {
+        return System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(NetZapret.Proxy.EngineKeys.DefaultConfigPath));
+    }
+    catch (Exception)
+    {
+        return null;
+    }
+}
+
+bool TunnelRunning()
+{
+    var state = SupervisorState.Load(SupervisorState.DefaultPath);
+    return state is not null && state.IsSupervisorAlive() && state.Services.Any(s => s.Name == "sing-box");
 }
 
 // Обзор резолверов: задержки, кто отвечает на самом деле, подмена.
@@ -289,11 +375,14 @@ int Help()
     Console.WriteLine();
     Console.WriteLine("  nz status    что сейчас поднято");
     Console.WriteLine("  nz where <имя|программа.exe|адрес>");
-    Console.WriteLine("               куда пойдёт: по правилам и при нынешних выключателях");
+    Console.WriteLine("               куда пойдёт и через что разрешится имя: по правилам,");
+    Console.WriteLine("               выключателям, hosts и конфигу работающего движка");
     Console.WriteLine("  nz routes    противоречия в своих маршрутах и пинах");
     Console.WriteLine("  nz fix <сайт>  не открывается: пробует как есть, напрямую, через VPN");
     Console.WriteLine("               и записывает сработавший маршрут");
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
+    Console.WriteLine("  nz dns-mode [напрямую|туннель]");
+    Console.WriteLine("               как движок спрашивает имена; с аргументом — переключить");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
     Console.WriteLine("  nz report    отчёт для разбора: журналы и настройки архивом в reports\\,");
