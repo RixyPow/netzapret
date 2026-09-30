@@ -270,6 +270,7 @@ public partial class MainWindow : Window
             "desync" => new DesyncView(),
             "routes" => new RoutesView(),
             "check" => new CheckView(),
+            "speed" => new SpeedView(),
             "dns" => new DnsView(),
             "hosts" => new HostsView(),
             "watch" => new WatchView(),

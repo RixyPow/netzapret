@@ -31,6 +31,7 @@ public sealed class ViewsLoadTests
         { "Файл hosts", () => new HostsView() },
         { "VPN", () => new VpnView() },
         { "DNS", () => new DnsView() },
+        { "Замер скорости", () => new SpeedView() },
         { "Журнал", () => new LogView() },
         { "Диагностика", () => new DoctorView() },
         { "Наблюдение", () => new WatchView() },

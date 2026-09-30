@@ -81,6 +81,7 @@
                                     VerticalAlignment="Center" Margin="10,1,0,0" />
                         </Grid>
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" local:MenuIcon.Glyph="&#xE721;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="Замер скорости" Tag="speed" local:MenuIcon.Glyph="&#xEC4A;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" local:MenuIcon.Glyph="&#xE968;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" local:MenuIcon.Glyph="&#xE8A5;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" local:MenuIcon.Glyph="&#xE9D2;" Checked="OnSection" />
