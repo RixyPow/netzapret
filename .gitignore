@@ -105,3 +105,4 @@ themes/*
 !themes/rose/
 !themes/cream/
 !themes/sloyka1/
+config/*.tmp

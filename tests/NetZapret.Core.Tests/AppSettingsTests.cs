@@ -17,6 +17,50 @@ public sealed class AppSettingsTests : IDisposable
             File.Delete(_path);
     }
 
+    /// <summary>
+    /// «Файла нет» и «файл не прочитался» — разные ответы (30.09): второй
+    /// до того выдавал мастер первого запуска человеку, прошедшему его давно.
+    /// </summary>
+    [Fact]
+    public void MissingAndUnreadableAreTold()
+    {
+        AppSettings.TryLoad(_path, out var missing);
+        Assert.Equal(AppSettings.ReadResult.Missing, missing);
+
+        File.WriteAllText(_path, "{ не json");
+        AppSettings.TryLoad(_path, out var broken);
+        Assert.Equal(AppSettings.ReadResult.Unreadable, broken);
+
+        // Пустой файл — тот самый обрезанный на полпути записи: тоже не «прочитан».
+        File.WriteAllText(_path, string.Empty);
+        AppSettings.TryLoad(_path, out var empty);
+        Assert.Equal(AppSettings.ReadResult.Unreadable, empty);
+
+        new AppSettings { OnboardingDone = true }.Save(_path);
+        var read = AppSettings.TryLoad(_path, out var fine);
+        Assert.Equal(AppSettings.ReadResult.Read, fine);
+        Assert.True(read.OnboardingDone);
+    }
+
+    /// <summary>
+    /// Файл, занятый чужим чтением, записывается, когда его отпустят, —
+    /// а не падает и не остаётся обрезанным.
+    /// </summary>
+    [Fact]
+    public void SavingWaitsForAReaderAndLeavesNoTemp()
+    {
+        new AppSettings { PresetName = "до" }.Save(_path);
+
+        var reader = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var release = Task.Delay(150).ContinueWith(_ => reader.Dispose());
+
+        new AppSettings { PresetName = "после" }.Save(_path);
+        release.Wait();
+
+        Assert.Equal("после", AppSettings.Load(_path).PresetName);
+        Assert.False(File.Exists(_path + ".tmp"));
+    }
+
     [Fact]
     public void SettingsSurviveRoundTrip()
     {

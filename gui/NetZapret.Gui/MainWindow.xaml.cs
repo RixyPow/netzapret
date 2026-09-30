@@ -123,16 +123,25 @@ public partial class MainWindow : Window
     /// </remarks>
     private void ShowOnboardingIfNeeded()
     {
-        try
+        var settings = AppSettings.TryLoad(AppSettings.DefaultPath, out var read);
+
+        // Файл есть, но не прочитался — это не свежая установка. До 30.09
+        // такой случай показывал мастер: владелец видел его дважды при
+        // настройках, где он давно пройден. Мастер — для тех, у кого файла
+        // нет или флаг не стоит; причина — в журнал, чтобы в следующий раз
+        // было видно, откуда он взялся.
+        if (read == AppSettings.ReadResult.Unreadable)
         {
-            if (AppSettings.Load(AppSettings.DefaultPath).OnboardingDone)
-                return;
+            Journal.Write("окно", $"настройки не прочитались ({Path.GetFullPath(AppSettings.DefaultPath)}) — мастер первого запуска не показан");
+            return;
         }
-        catch (Exception)
-        {
-            // Настройки не читаются — не повод не показать мастер. Он же
-            // и заведёт файл настроек первым сохранением.
-        }
+
+        if (settings.OnboardingDone)
+            return;
+
+        Journal.Write("окно", read == AppSettings.ReadResult.Missing
+            ? "мастер первого запуска: файла настроек нет"
+            : "мастер первого запуска: в настройках он не пройден");
 
         ShowOnboarding();
     }

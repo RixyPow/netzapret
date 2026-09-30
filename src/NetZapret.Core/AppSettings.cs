@@ -476,17 +476,80 @@ public sealed record AppSettings
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public static AppSettings Load(string? path = null)
+    /// <summary>Как прошло чтение настроек.</summary>
+    public enum ReadResult
+    {
+        /// <summary>Прочитаны.</summary>
+        Read,
+
+        /// <summary>Файла нет — свежая установка.</summary>
+        Missing,
+
+        /// <summary>Файл есть, но не прочитался: занят либо испорчен.</summary>
+        Unreadable,
+    }
+
+    public static AppSettings Load(string? path = null) => TryLoad(path, out _);
+
+    /// <summary>
+    /// Настройки и то, как они прочитались.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Нужно тем, кому «файла нет» и «файл не прочитался» — разные ответы.
+    /// Владелец 30.09: «почему у меня уже второй раз программа первого запуска
+    /// появляется». Мастер показывался, когда <see cref="OnboardingDone"/>
+    /// читалось как false, а читалось оно так всякий раз, когда чтение
+    /// не удавалось: вместо настроек возвращались значения по умолчанию.
+    /// Чем именно не удалось чтение у владельца, не установлено — в журнале
+    /// причина не писалась.
+    /// </para>
+    /// <para>
+    /// Занятый файл — не испорченный: окно, надзор и nz читают и пишут его
+    /// из разных процессов. Такое чтение повторяется несколько раз с короткой
+    /// паузой, прежде чем сдаться.
+    /// </para>
+    /// </remarks>
+    public static AppSettings TryLoad(string? path, out ReadResult result)
     {
         var target = path ?? DefaultPath;
 
         if (!File.Exists(target))
+        {
+            result = ReadResult.Missing;
             return new AppSettings();
+        }
+
+        string? text = null;
+
+        for (int attempt = 0; attempt < 5 && text is null; attempt++)
+        {
+            try
+            {
+                text = File.ReadAllText(target);
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(60);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Thread.Sleep(60);
+            }
+        }
+
+        if (text is null)
+        {
+            result = ReadResult.Unreadable;
+            return new AppSettings();
+        }
 
         try
         {
-            var read = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(target), Options)
-                ?? new AppSettings();
+            var read = JsonSerializer.Deserialize<AppSettings>(text, Options)
+                ?? throw new JsonException("пустой файл настроек");
+
+            result = ReadResult.Read;
 
             // Режим сводится к выключателям при каждом чтении. 0.7.0 писала
             // «выборочный» рядом с включённым «игнорировать исключения»:
@@ -508,10 +571,21 @@ public sealed record AppSettings
         {
             // Испорченный файл настроек не повод не запуститься: берём значения
             // по умолчанию, а сохранение перезапишет его корректным.
+            result = ReadResult.Unreadable;
             return new AppSettings();
         }
     }
 
+    /// <summary>
+    /// Записывает настройки целиком и разом.
+    /// </summary>
+    /// <remarks>
+    /// Через временный файл и подмену: прежняя запись поверх открытого файла
+    /// сперва обрезала его до нуля, и чтение из другого процесса в это мгновение
+    /// получало пустоту — то есть настройки по умолчанию, вплоть до мастера
+    /// первого запуска (30.09). Подмена файла на Windows падает, пока его держит
+    /// читающий, — поэтому несколько попыток.
+    /// </remarks>
     public void Save(string? path = null)
     {
         var target = path ?? DefaultPath;
@@ -520,7 +594,22 @@ public sealed record AppSettings
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
-        File.WriteAllText(target, JsonSerializer.Serialize(this, Options), new UTF8Encoding(false));
+        var temp = target + ".tmp";
+
+        File.WriteAllText(temp, JsonSerializer.Serialize(this, Options), new UTF8Encoding(false));
+
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(temp, target, overwrite: true);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException && attempt < 9)
+            {
+                Thread.Sleep(50);
+            }
+        }
     }
 
     /// <remarks>
