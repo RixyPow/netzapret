@@ -90,10 +90,14 @@ int Status()
         var (server, automatic) = NetZapret.Proxy.TunnelStatus.CurrentExitAsync(CancellationToken.None)
             .GetAwaiter().GetResult();
 
+        // Замену выбранному серверу называет надзор — со стороны она выглядит
+        // как закреплённый сервер.
+        var remark = state.Services.First(s => s.Name == "sing-box").Remark;
+
         Console.WriteLine();
         Console.WriteLine(server is null
             ? "выход:   движок не ответил"
-            : $"выход:   {server} ({(automatic ? "автоподбор" : "закреплён")})");
+            : $"выход:   {server} ({(automatic ? "автоподбор" : remark ?? "закреплён")})");
     }
 
     Console.WriteLine();

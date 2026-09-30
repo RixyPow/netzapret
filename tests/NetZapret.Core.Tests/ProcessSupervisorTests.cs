@@ -383,6 +383,23 @@ public sealed class EngineStatusTests
     public void AHealthyEngineShowsItsProcess() =>
         Assert.Equal("работает, процесс 6784", EngineHealth.Status(State(ServiceHealth.Healthy, pid: 6784)));
 
+    /// <summary>Замена выбранному серверу (30.09): туннель здоров, но сказать о ней надо.</summary>
+    [Fact]
+    public void AHealthyEngineShowsItsRemark() =>
+        Assert.Equal(
+            "работает, процесс 6784 · временная замена — выбранный «Эстония» не отвечал",
+            EngineHealth.Status(State(ServiceHealth.Healthy, pid: 6784) with
+            {
+                Remark = "временная замена — выбранный «Эстония» не отвечал",
+            }));
+
+    /// <summary>У больной службы говорит причина, а не примечание.</summary>
+    [Fact]
+    public void ASickEngineDoesNotShowTheRemark() =>
+        Assert.DoesNotContain(
+            "замена",
+            EngineHealth.Status(State(ServiceHealth.Degraded, "трафик не проходит") with { Remark = "временная замена" }));
+
     [Fact]
     public void ADegradedEngineSaysWhyAndSince() =>
         Assert.Equal(

@@ -100,7 +100,11 @@ public static class EngineHealth
     public static string Status(ServiceState service)
     {
         if (service.Health == ServiceHealth.Healthy)
-            return service.ProcessId is { } pid ? $"работает, процесс {pid}" : "работает";
+        {
+            var works = service.ProcessId is { } pid ? $"работает, процесс {pid}" : "работает";
+
+            return service.Remark is { Length: > 0 } remark ? $"{works} · {remark}" : works;
+        }
 
         var text = service.Health switch
         {

@@ -92,6 +92,16 @@ public abstract class SupervisedService
 
     public string? LastError { get; protected set; }
 
+    /// <summary>
+    /// Что стоит знать о службе, которая работает; <c>null</c> — нечего.
+    /// </summary>
+    /// <remarks>
+    /// Не ошибка: у sing-box это «временная замена выбранному серверу» —
+    /// туннель здоров, но идёт не через то, что выбрал человек, и узнать
+    /// об этом только из журнала было бы поздно.
+    /// </remarks>
+    public string? Remark { get; protected set; }
+
     /// <summary>Процесс существует и не завершился.</summary>
     public bool IsProcessAlive => Process is { HasExited: false };
 
@@ -340,6 +350,9 @@ public sealed class SingBoxService : SupervisedService
     /// <param name="preferredExit">
     /// Закреплённый в настройках выход; <c>null</c> — автоподбор.
     /// </param>
+    /// <param name="replacePinned">
+    /// Подменять ли закреплённый выход, пока он молчит (AppSettings.ReplaceSilentServer).
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
@@ -348,7 +361,8 @@ public sealed class SingBoxService : SupervisedService
         int trafficCheckEvery = 6,
         bool bypassWhenDead = true,
         string? preferredExit = null,
-        int exitCheckSeconds = 30)
+        int exitCheckSeconds = 30,
+        bool replacePinned = false)
     {
         _exitCheckSeconds = exitCheckSeconds;
         _executablePath = executablePath;
@@ -358,9 +372,22 @@ public sealed class SingBoxService : SupervisedService
         _trafficCheckEvery = Math.Max(1, trafficCheckEvery);
         _bypassWhenDead = bypassWhenDead;
         _preferredExit = string.IsNullOrWhiteSpace(preferredExit) ? null : preferredExit;
+        _watch = new ExitWatch(_preferredExit, replacePinned);
     }
 
     private readonly string? _preferredExit;
+
+    /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
+    private readonly ExitWatch _watch;
+
+    /// <summary>
+    /// Закреплённый выход есть в конфиге и встал на старте.
+    /// </summary>
+    /// <remarks>
+    /// Пропавший из подписки сервер возвращать некуда, и мерить его незачем:
+    /// каждый замер лёг бы в файл замеров промахом сервера, которого нет.
+    /// </remarks>
+    private bool _pinnedPlaced;
 
     /// <summary>Как часто проверять подключённый выход, с; 0 — не проверять (AppSettings.ExitCheckSeconds).</summary>
     private readonly int _exitCheckSeconds;
@@ -411,6 +438,7 @@ public sealed class SingBoxService : SupervisedService
             if (await api.SelectAsync(SelectorGroup, exit, cancellationToken))
             {
                 placed = true;
+                _pinnedPlaced = exit == _preferredExit;
                 break;
             }
         }
@@ -554,7 +582,9 @@ public sealed class SingBoxService : SupervisedService
         _warm = false;
         _run++;
         _watchCounter = 0;
-        _exitMisses = 0;
+        _watch.Forget();
+        _pinnedPlaced = false;
+        Remark = null;
         _upstreamNoted = false;
         _trafficPortMissingSince = null;
         _trafficPortMissingNoted = false;
@@ -773,7 +803,6 @@ public sealed class SingBoxService : SupervisedService
     private int ExitWatchEvery => Math.Max(1, _exitCheckSeconds / 5);
 
     private int _watchCounter;
-    private int _exitMisses;
 
     /// <summary>Идёт подбор замены — второй не начинаем.</summary>
     private int _picking;
@@ -797,8 +826,10 @@ public sealed class SingBoxService : SupervisedService
     /// пока жив, — и 28.09 туннель качало: 22:49 мёртв, 22:51 жив, 22:51:54 мёртв.
     /// </para>
     /// </remarks>
+    /// <param name="except">Кого не проверять: закреплённый сервер, которому ищем замену.</param>
     /// <returns>Поставленный сервер; <c>null</c> — живых нет.</returns>
-    private async Task<string?> PickOneByOneAsync(ClashApi api, CancellationToken cancellationToken)
+    private async Task<string?> PickOneByOneAsync(
+        ClashApi api, CancellationToken cancellationToken, string? except = null)
     {
         var members = await api.MembersAsync(LatencyGroup, cancellationToken);
 
@@ -813,6 +844,7 @@ public sealed class SingBoxService : SupervisedService
         var known = ServerHealthCache.Load().Latencies();
 
         var ordered = members
+            .Where(tag => tag != except)
             .OrderBy(tag => known.TryGetValue(tag, out var ms) ? ms : double.MaxValue)
             .ToList();
 
@@ -901,6 +933,12 @@ public sealed class SingBoxService : SupervisedService
     /// (<see cref="ExitsAliveAsync"/>).
     /// </para>
     /// <para>
+    /// С настройкой «подменять выбранный сервер» (<see cref="ExitWatch"/>)
+    /// молчащему закреплённому ищется замена тем же порядком, а сам он
+    /// проверяется дальше — одним соединением за плановую проверку — и
+    /// возвращается, ответив дважды подряд.
+    /// </para>
+    /// <para>
     /// Меряется сам выход, а не селектор: путь тот же, а результат ложится
     /// под тег сервера (<see cref="Record"/>). Не ответил движок на вопрос,
     /// какой выход выбран, — меряем селектор, как прежде, без записи.
@@ -908,11 +946,17 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     private async Task WatchExitAsync(CancellationToken cancellationToken)
     {
+        // В обходе трафик идёт мимо туннеля — о замене говорить нечего.
+        if (_bypass.Engaged)
+            Remark = null;
+
         if (_bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0)
             return;
 
         // После промаха — на каждом опросе, иначе по настройке.
-        if (_exitMisses == 0 && _watchCounter++ % ExitWatchEvery != 0)
+        bool planned = !_watch.Rechecking;
+
+        if (planned && _watchCounter++ % ExitWatchEvery != 0)
             return;
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
@@ -923,26 +967,53 @@ public sealed class SingBoxService : SupervisedService
         if (exit is not null)
             Record(exit, delay);
 
-        if (delay is not null)
+        bool replaced = _pinnedPlaced && _watch.Replaced(exit);
+
+        // Окну и nz: туннель здоров, но идёт не через то, что выбрано.
+        Remark = replaced ? StandInRemark : null;
+
+        // Стоит замена — заодно спрашиваем закреплённый сервер. Только
+        // на плановой проверке: перепроверка через 5 с — про замену, а два
+        // ответа закреплённого с разницей в 5 с — это один ответ.
+        if (planned && replaced)
         {
-            _exitMisses = 0;
-            return;
+            var pinned = await api.MeasureAsync(_preferredExit!, WatchUrl, CheckTimeout, cancellationToken);
+            Record(_preferredExit!, pinned);
+
+            if (_watch.OnPinned(pinned is not null) == ExitAction.Restore
+                && await api.SelectAsync(SelectorGroup, _preferredExit!, cancellationToken))
+            {
+                Remark = null;
+                Note($"выбранный сервер «{_preferredExit}» снова отвечает — трафик возвращён на него.");
+                return;
+            }
         }
 
-        // Выбран человеком — промах записан, а менять выход не нам.
-        if (_preferredExit is not null)
+        if (_watch.OnCurrent(delay is not null) != ExitAction.Replace)
             return;
 
-        if (++_exitMisses < 2)
-            return;
+        // Молчит сам закреплённый — замена временная, и сказать об этом надо
+        // сразу: иначе в журнале это выглядит как самовольная смена сервера.
+        bool standIn = _pinnedPlaced && exit == _preferredExit;
 
-        _exitMisses = 0;
-
-        StartPick($"выход «{exit}» не ответил дважды подряд");
+        StartPick(
+            standIn
+                ? $"выбранный сервер «{exit}» не ответил дважды подряд"
+                : $"выход «{exit}» не ответил дважды подряд",
+            except: standIn ? exit : null,
+            promise: standIn ? $" Вернём «{exit}», как только ответит дважды подряд." : string.Empty);
     }
 
+    /// <summary>Примечание, пока вместо закреплённого сервера стоит замена.</summary>
+    private string StandInRemark => $"временная замена — выбранный «{_preferredExit}» не отвечал";
+
     /// <summary>Подбор замены в фоне; итог — в журнал.</summary>
-    private void StartPick(string why)
+    /// <param name="except">
+    /// Закреплённый сервер, которому ищем замену, — его среди кандидатов нет:
+    /// ответь он при подборе, «заменой» стал бы он сам.
+    /// </param>
+    /// <param name="promise">Что добавить к записи о замене.</param>
+    private void StartPick(string why, string? except = null, string promise = "")
     {
         if (Interlocked.Exchange(ref _picking, 1) != 0)
             return;
@@ -954,14 +1025,14 @@ public sealed class SingBoxService : SupervisedService
             try
             {
                 using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
-                var best = await PickOneByOneAsync(api, CancellationToken.None);
+                var best = await PickOneByOneAsync(api, CancellationToken.None, except);
 
                 // Пока искали, движок могли перезапустить — тогда не наше дело.
                 if (run != _run)
                     return;
 
                 if (best is not null && await api.SelectAsync(SelectorGroup, best, CancellationToken.None))
-                    Note($"{why} — поставлен «{best}», первый ответивший при проверке по одному.");
+                    Note($"{why} — поставлен «{best}», первый ответивший при проверке по одному.{promise}");
                 else if (best is null)
                     Note($"{why}, и ни один сервер автоподбора не ответил.");
             }

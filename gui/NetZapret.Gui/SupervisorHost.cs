@@ -300,7 +300,8 @@ internal static class SupervisorHost
             singBox, options.ProxyConfig, 9090, trafficPort,
             bypassWhenDead: settings.BypassWhenTunnelDead,
             preferredExit: settings.PreferredServer,
-            exitCheckSeconds: settings.ExitCheckSeconds)
+            exitCheckSeconds: settings.ExitCheckSeconds,
+            replacePinned: settings.ReplaceSilentServer)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         });

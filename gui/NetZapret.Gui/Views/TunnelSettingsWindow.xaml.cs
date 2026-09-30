@@ -63,6 +63,23 @@ public partial class TunnelSettingsWindow : Window
         Word(ForeignWord, settings.ForeignExitsOnly);
         Foreign.IsChecked = settings.ForeignExitsOnly;
 
+        Word(ReplaceWord, settings.ReplaceSilentServer);
+        Replace.IsChecked = settings.ReplaceSilentServer;
+
+        // Без выбранного сервера настройке подменять нечего — но выключатель
+        // живой: её ставят заранее, до выбора сервера.
+        //
+        // Замену ищет сторож, а он молчит при выключенной проверке: сказать
+        // об этом надо здесь же, иначе включённая настройка не делает ничего
+        // и не объясняет почему (у владельца 30.09 стояло «не проверять»).
+        ReplaceLine.Text = settings.ExitCheckSeconds <= 0
+            ? "Проверка подключённого сервера выключена — замену искать некому. Включите её ниже."
+            : string.IsNullOrWhiteSpace(settings.PreferredServer)
+            ? "Сейчас сервер не выбран — работает автоподбор, он ищет замену сам."
+            : settings.ReplaceSilentServer
+                ? $"Пока «{settings.PreferredServer}» молчит, трафик пойдёт через другой сервер."
+                : $"Пока «{settings.PreferredServer}» молчит, туннель ждёт его.";
+
         Word(BypassWord, settings.BypassWhenTunnelDead);
         Bypass.IsChecked = settings.BypassWhenTunnelDead;
 
@@ -173,6 +190,12 @@ public partial class TunnelSettingsWindow : Window
             Foreign.IsChecked == true
                 ? "Автоподбор будет брать только зарубежные выходы."
                 : "Автоподбор снова берёт все выходы, включая отечественные.");
+
+    private void OnReplace(object sender, RoutedEventArgs e) =>
+        Save(s => s with { ReplaceSilentServer = Replace.IsChecked == true },
+            Replace.IsChecked == true
+                ? "Выбранному серверу будет искаться замена, пока он молчит."
+                : "Выбранный сервер не подменяется: молчит — туннель ждёт его.");
 
     private void OnBypass(object sender, RoutedEventArgs e)
     {

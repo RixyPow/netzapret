@@ -383,8 +383,15 @@ public partial class VpnView : UserControl
             if (Seen(tag) is { Success: true, LatencyMs: { } ms })
                 parts.Add($"{ms:0} мс");
 
+            // Замену выбранному серверу называет надзор (SingBoxService):
+            // со стороны её не отличить от выбора, который ещё не применился.
+            var remark = running && !automatic
+                ? SupervisorState.Load(SupervisorState.DefaultPath)?.Services
+                    .FirstOrDefault(s => s.Name == "sing-box")?.Remark
+                : null;
+
             parts.Add(running
-                ? automatic ? "выбран автоподбором" : "закреплён"
+                ? automatic ? "выбран автоподбором" : remark ?? "закреплён"
                 : "закреплён");
 
             CurrentDetail.Text = string.Join(" · ", parts);

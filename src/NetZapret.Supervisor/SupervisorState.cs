@@ -132,6 +132,9 @@ public sealed record ServiceState
 
     public string? LastError { get; init; }
 
+    /// <summary>Что стоит знать о работающей службе (SupervisedService.Remark); <c>null</c> — нечего.</summary>
+    public string? Remark { get; init; }
+
     /// <summary>С какого момента держится нынешнее <see cref="Health"/>; <c>null</c> — неизвестно.</summary>
     public DateTimeOffset? HealthSince { get; init; }
 }

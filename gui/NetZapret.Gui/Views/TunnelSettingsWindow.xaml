@@ -90,6 +90,40 @@
 
             <Border Style="{StaticResource SettingsGroup}">
                 <StackPanel>
+                    <!--
+                        Первой: замена сервера срабатывает раньше обхода
+                        (две проверки сервера против трёх проверок трафика)
+                        и оставляет трафик в туннеле. Владелец 30.09: «сделай
+                        это как настройку в настройках VPN».
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Замена выбранному серверу" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Сервер, выбранный руками, не ответил дважды подряд — трафик временно переходит на первый ответивший сервер автоподбора: они проверяются по одному, начиная с быстрейших. Выбранный проверяется дальше и возвращается, когда ответит дважды подряд.&#x0a;&#x0a;Замена может оказаться в другой стране.&#x0a;&#x0a;Как быстро это сработает, решает «Проверять подключённый сервер» ниже: при проверке каждые 30 с — до 40 секунд, каждые 15 с — до 25.&#x0a;&#x0a;При автоподборе замена ищется всегда, без этой настройки." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="ReplaceLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="ReplaceWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Replace" Style="{StaticResource Switch}"
+                                      Click="OnReplace" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
                     <Grid Margin="16,13">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

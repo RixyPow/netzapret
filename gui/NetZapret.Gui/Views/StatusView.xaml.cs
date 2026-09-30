@@ -929,7 +929,10 @@ public partial class StatusView : UserControl
 
         // Причина — только у того, что не работает: у работающего Status
         // говорит «работает, процесс N», а номер и так стоит строкой ниже.
-        var detail = service.Health == ServiceHealth.Healthy ? string.Empty : EngineHealth.Status(service);
+        // У работающего — только примечание надзора («временная замена…»).
+        var detail = service.Health == ServiceHealth.Healthy
+            ? service.Remark ?? string.Empty
+            : EngineHealth.Status(service);
 
         return new EngineRow(service.Name, EngineHealth.Word(service.Health), detail, (Brush)FindResource(key), service.ProcessId);
     }

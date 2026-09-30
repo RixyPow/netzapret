@@ -327,6 +327,7 @@ public sealed class ProcessSupervisor
             StartedAt = s.StartedAt,
             RestartCount = s.RestartCount,
             LastError = s.LastError,
+            Remark = s.Remark,
         }).ToList(),
     };
 
