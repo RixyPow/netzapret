@@ -47,7 +47,7 @@ public sealed class AppSettingsTests : IDisposable
     /// а не падает и не остаётся обрезанным.
     /// </summary>
     [Fact]
-    public void SavingWaitsForAReaderAndLeavesNoTemp()
+    public async Task SavingWaitsForAReaderAndLeavesNoTemp()
     {
         new AppSettings { PresetName = "до" }.Save(_path);
 
@@ -55,7 +55,7 @@ public sealed class AppSettingsTests : IDisposable
         var release = Task.Delay(150).ContinueWith(_ => reader.Dispose());
 
         new AppSettings { PresetName = "после" }.Save(_path);
-        release.Wait();
+        await release;
 
         Assert.Equal("после", AppSettings.Load(_path).PresetName);
         Assert.False(File.Exists(_path + ".tmp"));
