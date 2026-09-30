@@ -101,4 +101,7 @@ WinDivert и Cygwin — LGPL, `wintun.dll` — проприетарная лиц
 Сценарии десинка на lua, списки доменов и адресов, пресеты и каталог адресов —
 работа loop-uh, автора Zapret GUI (MIT): https://wiki.zapret.moe/
 
+Game filter и список адресов ipset-all — от Flowseal, автора
+zapret-discord-youtube (MIT): https://github.com/Flowseal/zapret-discord-youtube
+
 Исходный код: https://github.com/RixyPow/netzapret

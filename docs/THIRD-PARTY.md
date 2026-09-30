@@ -13,6 +13,7 @@ NetZapret не работает сам по себе: он управляет д
 | wintun.dll | проприетарная, © WireGuard LLC | см. wintun.net |
 | Zapret 2 (winws2 и его библиотека lua) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
 | Zapret GUI (сценарии lua, списки, пресеты, каталог адресов) | MIT, © 2025–2026 censorliber; автор — loop-uh | `engines/zapret/LICENSE-ZapretGUI.txt` |
+| zapret-discord-youtube (game filter, список ipset-all) | MIT, © 2024–2026 Flowseal, © 2016–2026 bol-van | `engines/zapret/LICENSE-Flowseal.txt` |
 | cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
 
@@ -151,7 +152,8 @@ MIT разрешает распространение в любом виде, в
   `strategies-*-source.txt`). Наш пресет Universal V10 грузит пять из этих
   модулей: на одном winws2 от bol-van он бы не поднялся;
 * **списки доменов и адресов** в `engines/zapret/lists/` — мы их не изменяем
-  и не дополняем, только читаем;
+  и не дополняем, только читаем. Один из них, `ipset-all.txt`, в установку
+  пришёл от Flowseal — о нём следующий раздел;
 * **образцы пакетов** в `engines/zapret/bin/` — те, которых нет у bol-van;
 * **пресеты** в `presets/` — формат и сами наборы секций. Сверка с установкой
   30.09: четыре пресета совпадают с её пресетами дословно, семь отличаются
@@ -180,6 +182,37 @@ Zapret GUI называет, что взял у bol-van.
 не разобрано: сверены только модули lua (30.09, по каталогу `lua/`
 репозитория zapret2). Лицензия у обоих одна — MIT, и оба уведомления едут
 рядом с файлами.
+
+## zapret-discord-youtube
+
+Сборка **zapret-discord-youtube**, автор — **Flowseal**:
+[github.com/Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube).
+Отсюда взято три вещи:
+
+* **game filter** — выключатель на вкладке «Десинк». У Flowseal это
+  выключатель в `service.bat`: он открывает двум последним секциям каждого
+  `.bat` порты 1024–65535. У нас те же две секции дописываются к любому
+  пресету (`GameFilter` в коде). Отбор по `ipset-all` и `ipset-exclude`,
+  обрезка на четвёртом пакете, рецепты — перевод секций его `general (ALT11).bat`
+  на язык Zapret 2;
+* **список адресов** `engines/zapret/lists/ipset-all.txt` — облака, хостинги
+  и Cloudflare, по которым game filter отбирает трафик. Сверка 30.09: все
+  33 048 записей нашего файла совпадают с `lists/ipset-all.txt.backup`
+  в репозитории Flowseal. К нам он попадает из установки Zapret GUI;
+* **три образца пакетов**, которыми эти секции пользуются:
+  `bin/tls_clienthello_max_ru.bin`, `bin/stun2.bin` и `bin/ACTIVE_GAME_UDP.bin`.
+  Сверка 30.09: побайтно те же файлы, что в `bin/` его репозитория. Тоже
+  едут из установки Zapret GUI.
+
+**MIT License, Copyright (c) 2016–2026 bol-van, Copyright (c) 2024–2026
+Flowseal** — обе строки стоят в его
+[LICENSE.txt](https://github.com/Flowseal/zapret-discord-youtube/blob/main/LICENSE.txt),
+и приводятся как есть. Текст целиком — в `engines/zapret/LICENSE-Flowseal.txt`
+(в репозитории — [docs/licenses/flowseal-MIT.txt](licenses/flowseal-MIT.txt)).
+
+Исполняемых файлов из этой сборки в архиве нет: winws2 и WinDivert у нас свои,
+описанные выше. Остальные образцы пакетов в `bin/` с его репозиторием
+не сверялись.
 
 ## Сам NetZapret
 

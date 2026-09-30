@@ -27,6 +27,7 @@
 | sing-box extended | туннель: серверы подписки и WARP | GPL v3 | [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) |
 | Zapret 2 | десинк: winws2 и его библиотека lua | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
 | Zapret GUI, автор — loop-uh | сценарии десинка на lua, списки доменов и адресов, пресеты, каталог адресов | MIT | [wiki.zapret.moe](https://wiki.zapret.moe/), [zapretgui](https://git.zapret.moe/zapretdiscordyoutube/zapretgui) |
+| zapret-discord-youtube, автор — Flowseal | game filter: секции игр, список адресов `ipset-all` и образцы пакетов к ним | MIT | [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) |
 | WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
 | Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
 | Cygwin | среда, в которой работает winws2 | LGPL v3 | [cygwin.com](https://cygwin.com/) |
@@ -679,6 +680,11 @@ NetZapret не влияют. Разбор — в [docs/THIRD-PARTY.md](docs/THIR
 на которых стоит десинк, — работа **loop-uh**, автора
 [Zapret GUI](https://wiki.zapret.moe/) (MIT). Без них от Zapret здесь был бы
 один winws2.
+
+Game filter — выключатель для игр на вкладке «Десинк» — перенесён
+с [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
+**Flowseal** (MIT); его же список адресов `ipset-all`, по которому секции
+игр отбирают трафик.
 
 ## Дальше
 

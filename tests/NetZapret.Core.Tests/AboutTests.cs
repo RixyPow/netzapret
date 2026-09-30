@@ -87,11 +87,21 @@ public sealed class AboutTests
         Assert.DoesNotContain("пресеты", zapret.Role);
     }
 
+    /// <summary>Flowseal назван: у него взяты game filter и список ipset-all (30.09).</summary>
+    [Fact]
+    public void FlowsealIsCredited()
+    {
+        var flowseal = Assert.Single(About.Components, c => c.Name == "zapret-discord-youtube");
+
+        Assert.Contains("Flowseal", flowseal.Role);
+        Assert.Equal("https://github.com/Flowseal/zapret-discord-youtube", flowseal.Source);
+    }
+
     /// <summary>
-    /// Обе лицензии Zapret едут в архив: уведомление об авторстве — условие MIT.
+    /// Все три лицензии едут в архив: уведомление об авторстве — условие MIT.
     /// </summary>
     [Fact]
-    public void BothZapretNoticesAreShipped()
+    public void EveryZapretNoticeIsShipped()
     {
         var path = ThirdParty();
         if (path is null)
@@ -100,11 +110,15 @@ public sealed class AboutTests
         var root = Path.GetDirectoryName(Path.GetDirectoryName(path))!;
         var pack = File.ReadAllText(Path.Combine(root, "pack.cmd"));
 
-        foreach (var notice in new[] { "zapret-MIT.txt", "zapretgui-MIT.txt" })
+        foreach (var notice in new[] { "zapret-MIT.txt", "zapretgui-MIT.txt", "flowseal-MIT.txt" })
         {
             Assert.True(File.Exists(Path.Combine(root, "docs", "licenses", notice)), $"нет docs/licenses/{notice}");
             Assert.Contains(notice, pack);
         }
+
+        Assert.Contains(
+            "Copyright (c) 2024-2026 Flowseal",
+            File.ReadAllText(Path.Combine(root, "docs", "licenses", "flowseal-MIT.txt")));
 
         Assert.Contains(
             "Copyright (c) 2025-2026 censorliber",

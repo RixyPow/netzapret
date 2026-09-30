@@ -64,6 +64,14 @@ public static class About
             "https://git.zapret.moe/zapretdiscordyoutube/zapretgui",
             "https://wiki.zapret.moe/"),
 
+        // Game filter — перенос его выключателя и секций ALT11 (GameFilter);
+        // список ipset-all и три образца пакетов сверены с его репозиторием
+        // 30.09 — совпадают целиком.
+        new("zapret-discord-youtube",
+            "Game filter: секции игр, список адресов ipset-all и образцы пакетов к ним — автор Flowseal",
+            "MIT",
+            "https://github.com/Flowseal/zapret-discord-youtube"),
+
         new("WinDivert",
             "Перехват пакетов для winws2",
             "LGPL v3 / GPL v3",

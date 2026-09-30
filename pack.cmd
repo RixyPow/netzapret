@@ -220,9 +220,14 @@ rem modules are bol-van's Zapret 2. Everything else in it - the other lua
 rem modules, lists, blobs, the address catalogue - comes from Zapret GUI by
 rem loop-uh (git.zapret.moe), also MIT. Until 30.09 only the first notice
 rem shipped, and the archive credited all of it to bol-van.
+rem
+rem And a third: lists\ipset-all.txt is Flowseal's list from
+rem zapret-discord-youtube, entry for entry, and our game filter is his
+rem ALT11 sections carried over to Zapret 2. MIT as well.
 copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapretgui-MIT.txt" "%ENGINES%\zapret\LICENSE-ZapretGUI.txt" >nul 2>&1
+copy /y "%ROOT%docs\licenses\flowseal-MIT.txt" "%ENGINES%\zapret\LICENSE-Flowseal.txt" >nul 2>&1
 
 rem Last line of defence before the archive exists. dist\ is wiped at the start,
 rem so these files should never be here - but testing happens in the unpacked
