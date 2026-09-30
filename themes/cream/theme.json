@@ -1,0 +1,24 @@
+{
+  // Кремовая, встроенная (владелец, 30.09). Светлая тёплая — для тех, кому
+  // белая режет глаз. Зелёный темнее, чем в светлой: на кремовой кнопке
+  // прежний давал 4.2.
+  "name": "Кремовая",
+  "author": "NetZapret",
+  "base": "light",
+  "colors": {
+    "backdrop": "#F4EEE3",
+    "surface": "#FCF8F1",
+    "raised": "#EBE3D5",
+    "border": "#D6CBB8",
+    "text": "#2A241C",
+    "muted": "#6B5F50",
+    "faint": "#8C806E",
+    "accent": "#17662F",
+    "accent-dim": "#6B4A1A",
+    "danger": "#B3261E",
+    "warn": "#7A5200",
+    "accent-fill": "#8A5A1F",
+    "on-accent": "#FFFFFF",
+    "warn-fill": "#A87B00"
+  }
+}

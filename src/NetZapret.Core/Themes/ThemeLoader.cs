@@ -36,11 +36,12 @@ public static class ThemeLoader
     /// Темы, которые едут с программой, — в этом порядке в списке выбора.
     /// </summary>
     /// <remarks>
-    /// Серая и тёмно-синяя добавлены 24.09 по просьбе владельца. Основами
+    /// Серая и тёмно-синяя добавлены 24.09 по просьбе владельца, пять цветных —
+    /// 30.09 («пару расцветок на любой вкус»). Основами
     /// они не служат: основа — только тёмная и светлая, чтобы чужая тема
     /// не зависела от темы, которую мы однажды поправим.
     /// </remarks>
-    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted"];
+    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream"];
 
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;

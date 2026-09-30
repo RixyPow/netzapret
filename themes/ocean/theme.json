@@ -1,0 +1,23 @@
+{
+  // Морская, встроенная (владелец, 30.09). Тёмная бирюза; подпись на главной
+  // кнопке тёмная — на такой заливке белая не дотягивает до 4.5.
+  "name": "Морская",
+  "author": "NetZapret",
+  "base": "dark",
+  "colors": {
+    "backdrop": "#08161A",
+    "surface": "#0F2227",
+    "raised": "#163037",
+    "border": "#24454E",
+    "text": "#E8F4F5",
+    "muted": "#8DB0B6",
+    "faint": "#64878D",
+    "accent": "#3FC98A",
+    "accent-dim": "#1F5F66",
+    "danger": "#F56B62",
+    "warn": "#E0A93C",
+    "accent-fill": "#1E9AA8",
+    "on-accent": "#04191C",
+    "warn-fill": "#E0A93C"
+  }
+}

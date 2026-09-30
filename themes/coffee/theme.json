@@ -1,0 +1,23 @@
+{
+  // Кофейная, встроенная (владелец, 30.09). Тёплая тёмная, главная кнопка —
+  // янтарная с тёмной подписью.
+  "name": "Кофейная",
+  "author": "NetZapret",
+  "base": "dark",
+  "colors": {
+    "backdrop": "#17120E",
+    "surface": "#211A14",
+    "raised": "#2B221A",
+    "border": "#43362A",
+    "text": "#F3EBE2",
+    "muted": "#B5A595",
+    "faint": "#8C7C6C",
+    "accent": "#6CC067",
+    "accent-dim": "#6B4A24",
+    "danger": "#F26D5B",
+    "warn": "#E5A83A",
+    "accent-fill": "#C98A3C",
+    "on-accent": "#1A1006",
+    "warn-fill": "#E5A83A"
+  }
+}

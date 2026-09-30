@@ -195,7 +195,7 @@ if errorlevel 8 exit /b 1
 rem Themes: only the shipped ones and the format description. Named one
 rem by one on purpose - themes\ in a working copy also holds the owner's and
 rem artists' own themes (git ignores them), and a folder copy would ship them.
-for %%T in (dark light grey tinted) do (
+for %%T in (dark light grey tinted violet ocean coffee rose cream) do (
     robocopy "%ROOT%themes\%%T" "%STAGE%\themes\%%T" theme.json /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
     if errorlevel 8 exit /b 1
 )

@@ -1,0 +1,23 @@
+{
+  // Розовая, встроенная (владелец, 30.09). Подпись на главной кнопке тёмная:
+  // белая на этой заливке давала 3.8 при пороге 4.5.
+  "name": "Розовая",
+  "author": "NetZapret",
+  "base": "dark",
+  "colors": {
+    "backdrop": "#1A0F14",
+    "surface": "#25161D",
+    "raised": "#301D27",
+    "border": "#4A2E3C",
+    "text": "#F7E9EF",
+    "muted": "#BF9BAB",
+    "faint": "#94707F",
+    "accent": "#55C47A",
+    "accent-dim": "#7A2F52",
+    "danger": "#FF6B6B",
+    "warn": "#E6AD45",
+    "accent-fill": "#D6538C",
+    "on-accent": "#1F0610",
+    "warn-fill": "#E6AD45"
+  }
+}
