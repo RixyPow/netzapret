@@ -43,8 +43,17 @@ public partial class SpeedView : UserControl
     /// <summary>Сколько прошлых замеров показывать.</summary>
     private const int HistoryShown = 4;
 
-    /// <summary>Уже этого вывод уходит под таблицу замеров.</summary>
-    private const double NarrowBelow = 760;
+    /// <summary>
+    /// Уже этого вывод уходит под таблицу замеров.
+    /// </summary>
+    /// <remarks>
+    /// Считается от таблицы, а не на глаз: её столбцы с цифрами занимают 356
+    /// точек, путю нужно не меньше 150 («Через туннель» со значком), поля
+    /// карточки и строки — 56, и рядом ещё 312 под вывод. Первый порог, 760,
+    /// был взят на глаз: на окне владельца в 765 точек столбцу пути осталось
+    /// сорок, и «Через туннель» легло поверх скорости (снимок 30.09).
+    /// </remarks>
+    private const double NarrowBelow = 356 + 150 + 56 + 312 + 6;
 
     /// <summary>Последний замер пути со всем, чего нет в истории.</summary>
     private sealed record Shot(
@@ -483,7 +492,10 @@ public partial class SpeedView : UserControl
 
         Add(0, at.Date == DateTime.Today ? $"{at:HH:mm}" : $"{at:dd.MM HH:mm}", muted: true);
 
-        var path = new StackPanel { Orientation = Orientation.Horizontal };
+        // DockPanel, а не StackPanel: тот отдаёт тексту сколько попросит,
+        // и в тесном столбце подпись ложилась поверх соседнего. Здесь текст
+        // получает остаток столбца и обрезается многоточием.
+        var path = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 8, 0) };
 
         var glyph = new TextBlock
         {
