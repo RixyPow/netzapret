@@ -1,0 +1,25 @@
+{
+  "name": "Слойка 1",
+  "colors": {
+    "backdrop": "#110D17",
+    "surface": "#9915111C",
+    "raised": "#221C2C",
+    "border": "#3A3149",
+    "text": "#EEE9F5",
+    "muted": "#D2CADF",
+    "faint": "#8E849E",
+    "accent": "#7DD69B",
+    "accent-dim": "#3B2A55",
+    "danger": "#F2607F",
+    "warn": "#E6C06A",
+    "accent-fill": "#8E5CC7",
+    "on-accent": "#FFFFFF",
+    "warn-fill": "#E6C06A"
+  },
+  "background": {
+    "image": "background.jpg",
+    "fit": "cover",
+    "dim": 0.6,
+    "blur": 0
+  }
+}

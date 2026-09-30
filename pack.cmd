@@ -199,6 +199,11 @@ for %%T in (dark light grey tinted violet ocean coffee rose cream) do (
     robocopy "%ROOT%themes\%%T" "%STAGE%\themes\%%T" theme.json /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
     if errorlevel 8 exit /b 1
 )
+rem The one shipped theme with a picture. The art is by an acquaintance of
+rem the owner and ships with her permission (owner, 30.09); every other
+rem picture theme in a working copy is somebody else's art and stays out.
+robocopy "%ROOT%themes\sloyka1" "%STAGE%\themes\sloyka1" theme.json background.jpg /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+if errorlevel 8 exit /b 1
 copy /y "%ROOT%themes\README.md" "%STAGE%\themes\" >nul
 
 rem The service catalogue: seven sets of proxy addresses for services that

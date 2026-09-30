@@ -92,7 +92,7 @@ public sealed class ThemeLoaderTests : IDisposable
 
         var all = ThemeLoader.LoadAll(_root);
 
-        Assert.Equal(["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "zzz"], all.Select(t => t.Id));
+        Assert.Equal(["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1", "zzz"], all.Select(t => t.Id));
     }
 
     /// <summary>Основа даёт недостающее: три своих цвета, остальное — от тёмной.</summary>

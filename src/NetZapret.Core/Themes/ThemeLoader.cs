@@ -41,7 +41,7 @@ public static class ThemeLoader
     /// они не служат: основа — только тёмная и светлая, чтобы чужая тема
     /// не зависела от темы, которую мы однажды поправим.
     /// </remarks>
-    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream"];
+    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1"];
 
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;
