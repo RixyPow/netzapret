@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using NetZapret.Core.Updates;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
 
@@ -13,8 +14,9 @@ namespace NetZapret.Gui.Views;
 /// <remarks>
 /// <para>
 /// Владелец 30.09: «замер скорости прям в программе», «как спидтест»,
-/// «на отдельной вкладке». Считает <see cref="SpeedTest"/> — раздел только
-/// показывает: крупные цифры, дуга со стрелкой, одна кнопка.
+/// «на отдельной вкладке». Считает <see cref="SpeedTest"/>, помнит
+/// <see cref="SpeedHistory"/>, выводит <see cref="SpeedVerdict"/> — раздел
+/// только показывает.
 /// </para>
 /// <para>
 /// Путей два, и в этом весь смысл: «через туннель» идёт через вход проверки
@@ -23,20 +25,31 @@ namespace NetZapret.Gui.Views;
 /// когда замер появился, разница между ними и нашла главную беду туннеля.
 /// </para>
 /// <para>
-/// Раздел создаётся заново при каждом заходе (MainWindow.OnSection), поэтому
-/// итоги лежат в статических полях — по одному на путь, до закрытия программы:
-/// сравнивают обычно два замера, снятых подряд. Уход из раздела замер
-/// обрывает: он гонит трафик, а показывать его некому.
+/// Раздел создаётся заново при каждом заходе (MainWindow.OnSection). Итоги
+/// лежат в файле истории; кривые последнего замера каждого пути и адрес,
+/// с которого нас видели, — в статических полях, до закрытия программы:
+/// кривые в файл не идут за ненадобностью, адрес — потому что личный.
+/// Уход из раздела замер обрывает: он гонит трафик, а показывать его некому.
 /// </para>
 /// </remarks>
 public partial class SpeedView : UserControl
 {
-    private static readonly Point Centre = new(160, 150);
-    private const double Radius = 120;
-    private const double Thickness = 12;
+    private static readonly Point Centre = new(150, 112);
+    private const double Radius = 100;
+    private const double Thickness = 11;
 
-    private static (SpeedResult Result, DateTime At, string? Exit)? _lastTunnel;
-    private static (SpeedResult Result, DateTime At, string? Exit)? _lastDirect;
+    /// <summary>Сколько прошлых замеров показывать.</summary>
+    private const int HistoryShown = 4;
+
+    /// <summary>Уже этого вывод уходит под таблицу замеров.</summary>
+    private const double NarrowBelow = 760;
+
+    /// <summary>Последний замер пути со всем, чего нет в истории.</summary>
+    private sealed record Shot(
+        SpeedEntry Entry, string? Address, List<double> Down, List<double> Up, List<double> Ping);
+
+    private static Shot? _tunnelShot;
+    private static Shot? _directShot;
 
     private readonly Path _value = new();
     private readonly RotateTransform _needle = new(SpeedGauge.StartAngle, Centre.X, Centre.Y);
@@ -46,6 +59,11 @@ public partial class SpeedView : UserControl
     private bool _tunnelUp;
     private string? _exit;
 
+    /// <summary>Показания идущего замера — для кривых.</summary>
+    private List<double> _down = [];
+    private List<double> _up = [];
+    private List<double> _ping = [];
+
     /// <summary>Куда стрелка идёт и где она сейчас, Мбит/с.</summary>
     private double _target;
     private double _shown;
@@ -54,6 +72,8 @@ public partial class SpeedView : UserControl
     {
         InitializeComponent();
         DrawDial();
+
+        StreamsText.Text = $"{new SpeedTestOptions().Streams} разом";
 
         Loaded += async (_, _) =>
         {
@@ -86,26 +106,42 @@ public partial class SpeedView : UserControl
             return;
 
         ViaTunnel.IsEnabled = _tunnelUp;
-
-        TunnelLine.Text = !_tunnelUp
-            ? "Движок туннеля не запущен — мерить нечего."
-            : _exit == TunnelBypass.DirectTag
-                ? "Сейчас включён обход: трафик туннеля идёт напрямую."
-                : $"Сейчас через {ExitName(_exit) ?? "сервер, который движок не назвал"}. Тратит трафик подписки — сотни мегабайт за замер.";
-
-        DirectLine.Text = "Мимо VPN — так идёт всё, что не уведено в туннель.";
+        ViaTunnel.ToolTip = _tunnelUp ? null : "Движок туннеля не запущен — мерить нечего.";
+        ToolTipService.SetShowOnDisabled(ViaTunnel, true);
 
         // Туннель — первым выбором, если есть: за ним сюда и приходят.
         Choose(_tunnelUp);
-        ShowLast();
+        ShowHistory();
     }
 
+    /// <summary>Выбор пути: переключатель, справка и последний замер этого пути.</summary>
     private void Choose(bool tunnel)
     {
         _tunnel = tunnel;
 
-        ViaTunnel.SetResourceReference(BorderBrushProperty, tunnel ? "Accent" : "Border");
-        Direct.SetResourceReference(BorderBrushProperty, tunnel ? "Border" : "Accent");
+        ViaTunnel.Style = (Style)FindResource(tunnel ? "SegmentOn" : "SegmentOff");
+        Direct.Style = (Style)FindResource(tunnel ? "SegmentOff" : "SegmentOn");
+
+        var shot = tunnel ? _tunnelShot : _directShot;
+
+        WhatText.Text = tunnel
+            ? _exit == TunnelBypass.DirectTag
+                ? "Скорость через туннель. Сейчас включён обход: выходы не отвечают, и трафик туннеля идёт напрямую — замер покажет прямую сеть."
+                : $"Скорость через туннель — так идёт всё, что уведено в VPN. Сейчас через {ExitName(_exit) ?? "сервер, который движок не назвал"}."
+            : "Скорость мимо VPN — так идёт всё, что не уведено в туннель, вместе с десинком, если он поднят.";
+
+        ServerText.Text = shot?.Entry.Node is { Length: > 0 } node ? $"Cloudflare, узел {node}" : "Cloudflare, ближайший узел";
+
+        SeenText.Text = shot?.Address is { Length: > 0 } address
+            ? address + (shot.Entry.Country is { Length: > 0 } country ? $" ({country})" : string.Empty)
+            : "покажет замер";
+
+        SpentText.Text = (shot?.Entry.Bytes > 0
+                ? $"в прошлый раз {shot.Entry.Bytes / (1024 * 1024)} МБ"
+                : "сотни мегабайт: чем быстрее, тем больше")
+            + (tunnel ? " — из трафика подписки" : string.Empty);
+
+        ShowShot(shot);
     }
 
     private void OnTunnel(object sender, RoutedEventArgs e)
@@ -133,12 +169,12 @@ public partial class SpeedView : UserControl
         using var run = new CancellationTokenSource();
         _run = run;
 
-        Go.Content = "Остановить";
-        ViaTunnel.IsEnabled = false;
-        Direct.IsEnabled = false;
-        Status.Text = string.Empty;
-        DownText.Text = UpText.Text = PingText.Text = "—";
-        JitterText.Text = "мс";
+        ShowRunning(true);
+        ShowShot(null);
+
+        _down = [];
+        _up = [];
+        _ping = [];
 
         var options = new SpeedTestOptions
         {
@@ -150,45 +186,62 @@ public partial class SpeedView : UserControl
         // Progress создан в потоке окна и туда же возвращает показания.
         var progress = new Progress<SpeedReading>(Show);
 
+        string? note = null;
+
         try
         {
             var result = await Task.Run(() => new SpeedTest(options).RunAsync(progress, run.Token));
+            var entry = SpeedEntry.From(result, tunnel, ExitName(_exit), DateTimeOffset.Now);
+            var shot = new Shot(entry, result.Address, _down, _up, _ping);
 
             if (tunnel)
-                _lastTunnel = (result, DateTime.Now, _exit);
+                _tunnelShot = shot;
             else
-                _lastDirect = (result, DateTime.Now, null);
+                _directShot = shot;
+
+            SpeedHistory.Add(entry);
 
             // В журнал — без адреса: он личный, а журнал уходит в отчёты.
             Journal.Write("замер", $"{(tunnel ? "через туннель" : "напрямую")}: {SpeedTest.Describe(result)}"
                 + (result.Country is { } country ? $"; страна выхода {country}, узел {result.Node}" : string.Empty));
-
-            ShowResult(result, tunnel);
         }
         catch (OperationCanceledException)
         {
-            Status.Text = "Замер остановлен.";
+            note = "Замер остановлен.";
         }
         catch (Exception ex)
         {
-            Status.Text = "Замер не удался: " + ex.GetBaseException().Message;
+            note = "Замер не удался: " + ex.GetBaseException().Message;
         }
         finally
         {
             _run = null;
             _target = 0;
 
-            NowText.Text = string.Empty;
-            PhaseText.Text = string.Empty;
-            Go.Content = "Начать";
-            ViaTunnel.IsEnabled = _tunnelUp;
-            Direct.IsEnabled = true;
+            ShowRunning(false);
 
-            ShowLast();
+            // Тот же путь: справка подхватит свежий узел, адрес и расход,
+            // блоки — итог с кривыми (либо прошлый замер, если этот оборван).
+            Choose(tunnel);
+            ShowHistory();
+
+            if (note is not null)
+                Status.Text = note;
         }
     }
 
-    /// <summary>Показание на ходу: стрелка, подпись этапа, итог этапа — в крупные цифры.</summary>
+    private void ShowRunning(bool running)
+    {
+        GoText.Text = running ? "Остановить" : "Начать замер";
+        GoGlyph.Text = running ? "" : "";
+
+        ViaTunnel.IsEnabled = !running && _tunnelUp;
+        Direct.IsEnabled = !running;
+
+        PhaseText.Text = string.Empty;
+    }
+
+    /// <summary>Показание на ходу: стрелка, кривая, подпись этапа; итог этапа — в крупные цифры.</summary>
     private void Show(SpeedReading reading)
     {
         if (_run is null)
@@ -200,75 +253,233 @@ public partial class SpeedView : UserControl
                 PhaseText.Text = "устанавливается связь…";
                 break;
 
+            case SpeedPhase.Ping when reading.Done:
+                PingText.Text = reading.PingMs is { } median ? $"{median:0}" : "—";
+                break;
+
             case SpeedPhase.Ping:
                 PhaseText.Text = "задержка";
 
                 if (reading.PingMs is { } ms)
+                {
                     PingText.Text = $"{ms:0}";
+                    _ping.Add(ms);
+                    PingLine.Show(_ping);
+                }
 
                 break;
 
             case SpeedPhase.Download when reading.Done:
-                DownText.Text = Speed(reading.Mbps);
+                DownText.Text = SpeedVerdict.Number(reading.Mbps);
                 _target = 0;
                 break;
 
             case SpeedPhase.Upload when reading.Done:
-                UpText.Text = Speed(reading.Mbps);
+                UpText.Text = SpeedVerdict.Number(reading.Mbps);
                 _target = 0;
                 break;
 
-            case SpeedPhase.Download or SpeedPhase.Upload:
-                PhaseText.Text = reading.Phase == SpeedPhase.Download ? "скачивание, Мбит/с" : "отдача, Мбит/с";
-                NowText.Text = Speed(reading.Mbps);
+            case SpeedPhase.Download:
+                PhaseText.Text = "скачивание";
+                DownText.Text = SpeedVerdict.Number(reading.Mbps);
                 _target = reading.Mbps;
-                _value.SetResourceReference(Shape.StrokeProperty, reading.Phase == SpeedPhase.Download ? "Accent" : "Warn");
+                _value.SetResourceReference(Shape.StrokeProperty, "Accent");
+                _down.Add(reading.Mbps);
+                DownLine.Show(_down);
+                break;
+
+            case SpeedPhase.Upload:
+                PhaseText.Text = "отдача";
+                UpText.Text = SpeedVerdict.Number(reading.Mbps);
+                _target = reading.Mbps;
+                _value.SetResourceReference(Shape.StrokeProperty, "Warn");
+                _up.Add(reading.Mbps);
+                UpLine.Show(_up);
                 break;
         }
     }
 
-    private void ShowResult(SpeedResult result, bool tunnel)
+    /// <summary>Блоки с цифрами и кривыми — по замеру; <c>null</c> — пусто.</summary>
+    private void ShowShot(Shot? shot)
     {
-        DownText.Text = result.DownMbps is { } down ? Speed(down) : "—";
-        UpText.Text = result.UpMbps is { } up ? Speed(up) : "—";
-        PingText.Text = result.PingMs is { } ping ? $"{ping:0}" : "—";
-        JitterText.Text = result.JitterMs is { } jitter ? $"мс · разброс {jitter:0.#}" : "мс";
+        var entry = shot?.Entry;
 
-        var lines = new List<string>();
+        DownText.Text = entry?.DownMbps is { } down ? SpeedVerdict.Number(down) : "—";
+        UpText.Text = entry?.UpMbps is { } up ? SpeedVerdict.Number(up) : "—";
+        PingText.Text = entry?.PingMs is { } ping ? $"{ping:0}" : "—";
 
-        if (result.Problem is { Length: > 0 } problem)
-            lines.Add(char.ToUpper(problem[0]) + problem[1..] + ".");
+        DownLine.Show(shot?.Down ?? []);
+        UpLine.Show(shot?.Up ?? []);
+        PingLine.Show(shot?.Ping ?? []);
 
-        if (result.Address is { } address)
-        {
-            lines.Add($"Виден как {address}"
-                + (result.Country is { } country ? $" ({country})" : string.Empty)
-                + (result.Node is { } node ? $", узел Cloudflare {node}." : "."));
-        }
+        DownWord.Text = Steadiness(shot?.Down);
+        UpWord.Text = Steadiness(shot?.Up);
+        PingWord.Text = entry?.JitterMs is { } jitter ? $"разброс {jitter:0.#} мс" : " ";
 
-        long spent = (result.DownBytes + result.UpBytes) / (1024 * 1024);
+        Status.Text = entry?.Problem is { Length: > 0 } problem
+            ? char.ToUpper(problem[0]) + problem[1..] + "."
+            : string.Empty;
 
-        if (spent > 0)
-            lines.Add($"На замер ушло {spent} МБ" + (tunnel ? " трафика подписки." : "."));
-
-        Status.Text = string.Join("\n", lines);
+        // Слово о том, как шла скорость: по разбросу показаний после разгона.
+        static string Steadiness(List<double>? readings) =>
+            readings is null ? " " : SpeedVerdict.Unevenness(readings) switch
+            {
+                null => " ",
+                <= SpeedVerdict.Steady => "стабильно",
+                _ => "неровно",
+            };
     }
 
-    /// <summary>Последние замеры обоих путей — чтобы сравнить, не записывая.</summary>
-    private void ShowLast()
+    /// <summary>Таблица прошлых замеров и вывод из последнего.</summary>
+    private void ShowHistory()
     {
-        TunnelResult.Text = Last(_lastTunnel);
-        DirectResult.Text = Last(_lastDirect);
+        var history = SpeedHistory.Load();
 
-        static string Last((SpeedResult Result, DateTime At, string? Exit)? last)
+        HistoryRows.Children.Clear();
+        HistoryEmpty.Visibility = history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        for (int i = 0; i < Math.Min(HistoryShown, history.Count); i++)
+            HistoryRows.Children.Add(Row(history[i], latest: i == 0));
+
+        if (history.Count == 0)
         {
-            if (last is not { } entry)
-                return "ещё не мерили";
-
-            var text = $"{entry.At:HH:mm} — {SpeedTest.Describe(entry.Result)}";
-
-            return ExitName(entry.Exit) is { } exit ? $"{text} · {exit}" : text;
+            VerdictTitle.Text = "Пока нечего сказать";
+            VerdictText.Text = "Замерьте оба пути — будет видно, сколько скорости стоит туннель.";
+            CopyButton.IsEnabled = false;
+            return;
         }
+
+        var (title, text) = SpeedVerdict.Describe(history[0], SpeedVerdict.Pair(history[0], history));
+
+        VerdictTitle.Text = title;
+        VerdictText.Text = text;
+        CopyButton.IsEnabled = true;
+    }
+
+    /// <summary>Строка таблицы замеров; свежая — на подложке.</summary>
+    private Border Row(SpeedEntry entry, bool latest)
+    {
+        var grid = new Grid();
+
+        foreach (var width in new[]
+        {
+            new GridLength(78), new GridLength(1, GridUnitType.Star),
+            new GridLength(104), new GridLength(104), new GridLength(70),
+        })
+        {
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
+        }
+
+        var at = entry.At.ToLocalTime();
+
+        Add(0, at.Date == DateTime.Today ? $"{at:HH:mm}" : $"{at:dd.MM HH:mm}", muted: true);
+
+        var path = new StackPanel { Orientation = Orientation.Horizontal };
+
+        var glyph = new TextBlock
+        {
+            Text = entry.Tunnel ? "" : "",
+            FontFamily = (FontFamily)FindResource("IconFont"),
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0),
+        };
+
+        glyph.SetResourceReference(TextBlock.ForegroundProperty, entry.Tunnel ? "Accent" : "Muted");
+        path.Children.Add(glyph);
+
+        path.Children.Add(new TextBlock
+        {
+            Text = (entry.Tunnel ? "Через туннель" : "Напрямую")
+                + (entry.DownMbps is null && entry.UpMbps is null ? " — не удался" : string.Empty),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+
+        Grid.SetColumn(path, 1);
+        grid.Children.Add(path);
+
+        Add(2, entry.DownMbps is { } down ? $"{SpeedVerdict.Number(down)} Мбит/с" : "—");
+        Add(3, entry.UpMbps is { } up ? $"{SpeedVerdict.Number(up)} Мбит/с" : "—");
+        Add(4, entry.PingMs is { } ping ? $"{ping:0} мс" : "—");
+
+        var row = new Border
+        {
+            Child = grid,
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 6, 10, 6),
+            ToolTip = Tip(entry),
+        };
+
+        if (latest)
+            row.SetResourceReference(Border.BackgroundProperty, "Raised");
+
+        return row;
+
+        void Add(int column, string text, bool muted = false)
+        {
+            var block = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center };
+
+            if (muted)
+                block.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+
+            Grid.SetColumn(block, column);
+            grid.Children.Add(block);
+        }
+
+        static string? Tip(SpeedEntry entry)
+        {
+            var parts = new List<string>();
+
+            if (entry.Exit is { Length: > 0 } exit)
+                parts.Add($"сервер {exit}");
+
+            if (entry.Country is { Length: > 0 } country)
+                parts.Add($"страна выхода {country}");
+
+            if (entry.Node is { Length: > 0 } node)
+                parts.Add($"узел Cloudflare {node}");
+
+            if (entry.Bytes > 0)
+                parts.Add($"ушло {entry.Bytes / (1024 * 1024)} МБ");
+
+            if (entry.Problem is { Length: > 0 } problem)
+                parts.Add(problem);
+
+            return parts.Count == 0 ? null : string.Join("; ", parts);
+        }
+    }
+
+    private void OnCopy(object sender, RoutedEventArgs e)
+    {
+        var history = SpeedHistory.Load();
+
+        if (history.Count == 0)
+            return;
+
+        try
+        {
+            Clipboard.SetText(SpeedVerdict.Copy(history[0], SpeedVerdict.Pair(history[0], history), UpdateCheck.Current));
+            CopyText.Text = "Скопировано";
+        }
+        catch (Exception)
+        {
+            // Буфер обмена занят другой программой — бывает, и не наша беда.
+            CopyText.Text = "Буфер занят — ещё раз";
+        }
+    }
+
+    /// <summary>На узком окне вывод уходит под таблицу замеров.</summary>
+    private void OnPageSize(object sender, SizeChangedEventArgs e)
+    {
+        bool narrow = Page.ActualWidth < NarrowBelow;
+
+        BottomGap.Width = new GridLength(narrow ? 0 : 12);
+        BottomSide.Width = new GridLength(narrow ? 0 : 300);
+
+        Grid.SetColumn(VerdictCard, narrow ? 0 : 2);
+        Grid.SetRow(VerdictCard, narrow ? 1 : 0);
+        VerdictCard.Margin = new Thickness(0, narrow ? 12 : 0, 0, 0);
     }
 
     /// <summary>
@@ -284,9 +495,6 @@ public partial class SpeedView : UserControl
 
         return name.Length > 0 ? name : tag;
     }
-
-    /// <summary>До сотни — с десятой, дальше целым: «8,4», «138».</summary>
-    private static string Speed(double mbps) => mbps < 100 ? $"{mbps:0.0}" : $"{mbps:0}";
 
     /// <summary>
     /// Дуга, отметки шкалы и стрелка.
@@ -317,7 +525,7 @@ public partial class SpeedView : UserControl
         for (int i = 0; i < SpeedGauge.Marks.Count; i++)
         {
             double angle = SpeedGauge.StartAngle + SpeedGauge.Sweep * i / (SpeedGauge.Marks.Count - 1);
-            var at = SpeedGauge.At(Centre, Radius - 30, angle);
+            var at = SpeedGauge.At(Centre, Radius - 27, angle);
 
             var label = new TextBlock
             {
@@ -336,9 +544,9 @@ public partial class SpeedView : UserControl
         {
             Points =
             [
-                new Point(Centre.X, Centre.Y - (Radius - 46)),
-                new Point(Centre.X - 4, Centre.Y),
-                new Point(Centre.X + 4, Centre.Y),
+                new Point(Centre.X, Centre.Y - (Radius - 42)),
+                new Point(Centre.X - 3.5, Centre.Y),
+                new Point(Centre.X + 3.5, Centre.Y),
             ],
             RenderTransform = _needle,
             Opacity = 0.9,
@@ -347,11 +555,11 @@ public partial class SpeedView : UserControl
         needle.SetResourceReference(Shape.FillProperty, "Text");
         Dial.Children.Add(needle);
 
-        var hub = new Ellipse { Width = 14, Height = 14 };
+        var hub = new Ellipse { Width = 13, Height = 13 };
 
         hub.SetResourceReference(Shape.FillProperty, "Text");
-        Canvas.SetLeft(hub, Centre.X - 7);
-        Canvas.SetTop(hub, Centre.Y - 7);
+        Canvas.SetLeft(hub, Centre.X - 6.5);
+        Canvas.SetTop(hub, Centre.Y - 6.5);
         Dial.Children.Add(hub);
     }
 

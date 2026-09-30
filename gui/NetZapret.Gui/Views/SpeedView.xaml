@@ -1,139 +1,301 @@
 <UserControl x:Class="NetZapret.Gui.Views.SpeedView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:NetZapret.Gui.Views"
              Background="{DynamicResource Chrome}">
 
     <!--
-        Замер скорости — владелец 30.09: «давай попробуем сделать замер
-        скорости прям в программе», «как спидтест», «на отдельной вкладке».
-        От Speedtest — вид: крупные цифры скачивания и отдачи, задержка,
-        дуга со стрелкой, одна кнопка.
+        Замер скорости — владелец 30.09: «замер скорости прям в программе»,
+        «как спидтест», «на отдельной вкладке». Компоновка — по его же макету
+        того дня: переключатель пути, три блока с цифрой и кривой, дуга
+        с кнопкой и справкой рядом, внизу прошлые замеры и вывод. «Советы»
+        из макета не делаются — его слово.
 
         Своё здесь — выбор пути. Speedtest мерит то, как идёт его собственный
         трафик; нам нужно сравнить туннель с прямой сетью, и замер идёт либо
         через вход проверки движка, либо мимо всякого прокси.
     -->
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <StackPanel>
-            <TextBlock Text="Замер скорости" Style="{StaticResource Title}" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Задержка, скачивание и отдача — через туннель или напрямую. Меряется несколькими соединениями к серверу Cloudflare, около двадцати секунд." />
+    <UserControl.Resources>
+        <!-- Половинки переключателя пути: выбранная залита, другая — голый текст. -->
+        <Style x:Key="SegmentOff" TargetType="Button" BasedOn="{StaticResource Ghost}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Padding" Value="16,8" />
+        </Style>
+        <Style x:Key="SegmentOn" TargetType="Button" BasedOn="{StaticResource Primary}">
+            <Setter Property="Padding" Value="16,8" />
+        </Style>
 
-            <!--
-                Карточка замера не шире 600: на широком окне цифры и дуга
-                разъехались бы по углам. Остаток ширины остаётся справа пустым.
-            -->
-            <Grid Margin="0,20,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="440" MaxWidth="600" />
-                    <ColumnDefinition Width="16" />
-                    <ColumnDefinition Width="340" />
-                </Grid.ColumnDefinitions>
+        <Style x:Key="Metric" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource DisplayFont}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FontSize" Value="36" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
 
-                <Border Grid.Column="0" Style="{StaticResource Card}" Padding="20,20,20,20" VerticalAlignment="Top">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+        <Style x:Key="FactLabel" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+            <Setter Property="Margin" Value="0,5,12,5" />
+        </Style>
+        <Style x:Key="FactValue" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Margin" Value="0,5,0,5" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
 
-                            <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE896;" FontSize="12"
-                                               Foreground="{DynamicResource Accent}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                    <TextBlock Text="СКАЧИВАНИЕ" Style="{StaticResource GroupHead}" />
-                                </StackPanel>
-                                <TextBlock x:Name="DownText" Text="—" FontSize="40" FontWeight="Light"
-                                           FontFamily="{DynamicResource DisplayFont}" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                <TextBlock Text="Мбит/с" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
-                            </StackPanel>
+    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,24,32,24">
+        <!--
+            Не шире тысячи: на широком окне блоки разъехались бы, и цифры
+            оказались бы далеко от своих подписей. Остаток — справа, пустым.
+        -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="1000" />
+            </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE898;" FontSize="12"
-                                               Foreground="{DynamicResource Warn}" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                    <TextBlock Text="ОТДАЧА" Style="{StaticResource GroupHead}" />
-                                </StackPanel>
-                                <TextBlock x:Name="UpText" Text="—" FontSize="40" FontWeight="Light"
-                                           FontFamily="{DynamicResource DisplayFont}" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                <TextBlock Text="Мбит/с" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
-                            </StackPanel>
+            <StackPanel x:Name="Page" SizeChanged="OnPageSize">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                                <TextBlock Text="ЗАДЕРЖКА" Style="{StaticResource GroupHead}" HorizontalAlignment="Center" />
-                                <TextBlock x:Name="PingText" Text="—" FontSize="40" FontWeight="Light"
-                                           FontFamily="{DynamicResource DisplayFont}" HorizontalAlignment="Center" Margin="0,2,0,0" />
-                                <TextBlock x:Name="JitterText" Text="мс" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
-                            </StackPanel>
-                        </Grid>
-
-                        <!--
-                            Дуга со стрелкой. Рисуется кодом (DrawDial): отметки
-                            стоят по неравномерной шкале SpeedGauge, и держать
-                            их координаты в разметке значило бы считать их руками.
-                        -->
-                        <Grid Width="320" Height="246" Margin="0,18,0,0">
-                            <Canvas x:Name="Dial" Width="320" Height="246" />
-
-                            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,2">
-                                <TextBlock x:Name="NowText" FontSize="26" FontWeight="SemiBold"
-                                           FontFamily="{DynamicResource DisplayFont}" HorizontalAlignment="Center" />
-                                <TextBlock x:Name="PhaseText" Style="{StaticResource Caption}" HorizontalAlignment="Center"
-                                           Margin="0,2,0,0" />
-                            </StackPanel>
-                        </Grid>
-
-                        <Button x:Name="Go" Style="{StaticResource Primary}" Content="Начать" Click="OnGo"
-                                HorizontalAlignment="Center" MinWidth="170" Margin="0,14,0,0" />
-
-                        <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="0,12,0,0"
-                                   TextWrapping="Wrap" TextAlignment="Center" />
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock Text="Замер скорости" Style="{StaticResource Title}" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                   Text="Задержка, скачивание и отдача — через туннель или напрямую." />
                     </StackPanel>
-                </Border>
 
-                <StackPanel Grid.Column="2">
-                    <TextBlock Text="ЧТО МЕРИТЬ" Style="{StaticResource GroupHead}" Margin="4,0,0,7" />
-
-                    <!-- Путь. Выбранный обведён, как всякая строка выбора. -->
-                    <Button x:Name="ViaTunnel" Style="{StaticResource Choice}" Click="OnTunnel">
-                        <StackPanel>
-                            <TextBlock Text="Через туннель" FontWeight="SemiBold" />
-                            <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="Direct" Style="{StaticResource Choice}" Click="OnDirect">
-                        <StackPanel>
-                            <TextBlock Text="Напрямую" FontWeight="SemiBold" />
-                            <TextBlock x:Name="DirectLine" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Button>
-
-                    <TextBlock Text="ПОСЛЕДНИЕ ЗАМЕРЫ" Style="{StaticResource GroupHead}" Margin="4,14,0,7" />
-
-                    <Border Style="{StaticResource SettingsGroup}">
-                        <StackPanel>
-                            <StackPanel Margin="16,12">
-                                <TextBlock Text="Через туннель" />
-                                <TextBlock x:Name="TunnelResult" Style="{StaticResource Caption}"
-                                           Margin="0,4,0,0" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <Border Style="{StaticResource RowLine}" />
-
-                            <StackPanel Margin="16,12">
-                                <TextBlock Text="Напрямую" />
-                                <TextBlock x:Name="DirectResult" Style="{StaticResource Caption}"
-                                           Margin="0,4,0,0" TextWrapping="Wrap" />
-                            </StackPanel>
+                    <!-- Путь: что мерить. Туннель — только при поднятом движке. -->
+                    <Border Grid.Column="1" VerticalAlignment="Center" CornerRadius="13" Padding="4"
+                            Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="ViaTunnel" Style="{StaticResource SegmentOff}" Click="OnTunnel">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE774;" FontSize="13"
+                                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Через туннель" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="Direct" Style="{StaticResource SegmentOff}" Click="OnDirect" Margin="4,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE80F;" FontSize="13"
+                                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Напрямую" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
-                </StackPanel>
-            </Grid>
-        </StackPanel>
+                </Grid>
+
+                <!-- Три блока: цифра, кривая замера и слово о том, как он шёл. -->
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="0,16,0,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="22,0">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE896;" FontSize="14"
+                                           Foreground="{DynamicResource Accent}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="СКАЧИВАНИЕ" Style="{StaticResource GroupHead}" />
+                            </StackPanel>
+                            <TextBlock x:Name="DownText" Text="—" Style="{StaticResource Metric}" Margin="0,4,0,0" />
+                            <TextBlock Text="Мбит/с" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
+                            <views:Sparkline x:Name="DownLine" Height="34" Margin="0,8,0,0"
+                                             Stroke="{DynamicResource Accent}" />
+                            <TextBlock x:Name="DownWord" Style="{StaticResource Caption}" HorizontalAlignment="Center"
+                                       Margin="0,6,0,0" />
+                        </StackPanel>
+
+                        <Border Grid.Column="1" Width="1" Background="{DynamicResource Border}" Margin="0,4" />
+
+                        <StackPanel Grid.Column="2" Margin="22,0">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE898;" FontSize="14"
+                                           Foreground="{DynamicResource Warn}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="ОТДАЧА" Style="{StaticResource GroupHead}" />
+                            </StackPanel>
+                            <TextBlock x:Name="UpText" Text="—" Style="{StaticResource Metric}" Margin="0,4,0,0" />
+                            <TextBlock Text="Мбит/с" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
+                            <views:Sparkline x:Name="UpLine" Height="34" Margin="0,8,0,0"
+                                             Stroke="{DynamicResource Warn}" />
+                            <TextBlock x:Name="UpWord" Style="{StaticResource Caption}" HorizontalAlignment="Center"
+                                       Margin="0,6,0,0" />
+                        </StackPanel>
+
+                        <Border Grid.Column="3" Width="1" Background="{DynamicResource Border}" Margin="0,4" />
+
+                        <StackPanel Grid.Column="4" Margin="22,0">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE916;" FontSize="14"
+                                           Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <TextBlock Text="ЗАДЕРЖКА" Style="{StaticResource GroupHead}" />
+                            </StackPanel>
+                            <TextBlock x:Name="PingText" Text="—" Style="{StaticResource Metric}" Margin="0,4,0,0" />
+                            <TextBlock Text="мс" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
+                            <views:Sparkline x:Name="PingLine" Height="34" Margin="0,8,0,0" Headroom="2"
+                                             Stroke="{DynamicResource Muted}" />
+                            <TextBlock x:Name="PingWord" Style="{StaticResource Caption}" HorizontalAlignment="Center"
+                                       Margin="0,6,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Дуга с кнопкой и, рядом, что именно меряется. -->
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0" Padding="20,14,22,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <!--
+                                Дуга рисуется кодом (DrawDial): отметки стоят
+                                по неравномерной шкале SpeedGauge, и держать
+                                их координаты в разметке значило бы считать
+                                их руками.
+                            -->
+                            <Grid Width="300" Height="200">
+                                <Canvas x:Name="Dial" Width="300" Height="200" />
+
+                                <!--
+                                    Только подпись этапа. Текущая скорость идёт
+                                    в крупную цифру блока наверху: между отметками
+                                    «0» и «1000» число не помещалось, а два числа
+                                    об одном — лишнее.
+                                -->
+                                <TextBlock x:Name="PhaseText" Style="{StaticResource Caption}"
+                                           VerticalAlignment="Bottom" HorizontalAlignment="Center" />
+                            </Grid>
+
+                            <Button x:Name="Go" Style="{StaticResource Primary}" Click="OnGo"
+                                    HorizontalAlignment="Center" MinWidth="190" Margin="0,10,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="GoGlyph" FontFamily="{StaticResource IconFont}" Text="&#xE768;"
+                                               FontSize="12" VerticalAlignment="Center" Margin="0,1,9,0" />
+                                    <TextBlock x:Name="GoText" Text="Начать замер" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                            <TextBlock Text="Что проверяет" FontWeight="SemiBold" />
+                            <TextBlock x:Name="WhatText" Style="{StaticResource Caption}" Margin="0,5,0,8"
+                                       TextWrapping="Wrap" />
+
+                            <Border Height="1" Background="{DynamicResource Border}" Margin="0,2,0,4" />
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Сервер замера" Style="{StaticResource FactLabel}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ServerText" Style="{StaticResource FactValue}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Виден как" Style="{StaticResource FactLabel}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" x:Name="SeenText" Style="{StaticResource FactValue}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Соединений" Style="{StaticResource FactLabel}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" x:Name="StreamsText" Style="{StaticResource FactValue}" />
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Трафик" Style="{StaticResource FactLabel}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SpentText" Style="{StaticResource FactValue}" />
+
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Время" Style="{StaticResource FactLabel}" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="около двадцати секунд" Style="{StaticResource FactValue}" />
+                            </Grid>
+
+                            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource Warn}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!--
+                    Прошлые замеры и вывод. На узком окне вывод уходит под
+                    таблицу (OnPageSize): пять столбцов в трёхстах точках
+                    не читаются.
+                -->
+                <Grid x:Name="Bottom" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="BottomGap" Width="12" />
+                        <ColumnDefinition x:Name="BottomSide" Width="300" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Border x:Name="HistoryCard" Grid.Column="0" Style="{StaticResource Card}" Padding="18,14,18,12">
+                        <StackPanel>
+                            <TextBlock Text="Последние замеры" FontWeight="SemiBold" />
+
+                            <Grid Margin="10,10,10,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="78" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="104" />
+                                    <ColumnDefinition Width="104" />
+                                    <ColumnDefinition Width="70" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="Время" Style="{StaticResource Caption}" />
+                                <TextBlock Grid.Column="1" Text="Путь" Style="{StaticResource Caption}" />
+                                <TextBlock Grid.Column="2" Text="Скачивание" Style="{StaticResource Caption}" />
+                                <TextBlock Grid.Column="3" Text="Отдача" Style="{StaticResource Caption}" />
+                                <TextBlock Grid.Column="4" Text="Задержка" Style="{StaticResource Caption}" />
+                            </Grid>
+
+                            <StackPanel x:Name="HistoryRows" />
+
+                            <TextBlock x:Name="HistoryEmpty" Style="{StaticResource Caption}" Margin="10,6,0,4"
+                                       Text="Замеров ещё не было." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="VerdictCard" Grid.Column="2" Style="{StaticResource Card}" Padding="18,14,18,14">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Вывод" FontWeight="SemiBold" />
+
+                            <Button DockPanel.Dock="Bottom" x:Name="CopyButton" Style="{StaticResource Ghost}"
+                                    Click="OnCopy" Margin="0,12,0,0" HorizontalContentAlignment="Left"
+                                    ToolTip="Итог замера текстом — без вашего адреса">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8C8;" Margin="0,0,10,0" />
+                                    <TextBlock x:Name="CopyText" Text="Скопировать результат" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <StackPanel Margin="0,10,0,0">
+                                <TextBlock x:Name="VerdictTitle" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                <TextBlock x:Name="VerdictText" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+        </Grid>
     </ScrollViewer>
 </UserControl>
