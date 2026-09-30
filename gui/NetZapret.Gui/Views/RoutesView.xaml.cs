@@ -430,7 +430,7 @@ public partial class RoutesView : UserControl
 
             ShowOrder(engine);
 
-            ShowBook();
+            ShowShare();
             StartIcons(services);
         }
         catch (Exception ex)

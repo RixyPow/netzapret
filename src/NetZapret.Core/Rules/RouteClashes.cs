@@ -1,12 +1,57 @@
 namespace NetZapret.Core.Rules;
 
+/// <summary>Куда отправлено имя — для поиска противоречий.</summary>
+public enum RouteChoice
+{
+    /// <summary>Мимо туннеля и мимо десинка.</summary>
+    Direct,
+
+    /// <summary>Мимо туннеля, чинится десинком.</summary>
+    Desync,
+
+    /// <summary>Через туннель.</summary>
+    Vpn,
+
+    /// <summary>Прибито в <c>hosts</c>.</summary>
+    /// <remarks>
+    /// Четвёртый маршрут наравне с прочими — решение владельца 21.09: пин
+    /// тоже решает, куда пойдёт имя, и спорит с туннелем и десинком.
+    /// </remarks>
+    Pin,
+}
+
+/// <summary>Одно имя и его маршрут.</summary>
+public sealed record RouteEntry
+{
+    /// <summary>Название списка (группа) либо отдельный домен.</summary>
+    public required string Name { get; init; }
+
+    public required RouteChoice Choice { get; init; }
+
+    /// <summary>Группа это или одно имя — по точке: <c>discord</c> и <c>discord.com</c>.</summary>
+    public bool IsGroup => !Name.Contains('.');
+}
+
+/// <summary>Одно имя названо дважды и по-разному.</summary>
+public sealed record RouteClash
+{
+    public required string Name { get; init; }
+
+    public required RouteChoice First { get; init; }
+
+    public required RouteChoice Second { get; init; }
+
+    /// <summary>Чем это кончится на деле — словами.</summary>
+    public required string Outcome { get; init; }
+}
+
 /// <summary>
 /// Ищет имена, названные дважды и по-разному.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ради этого книга маршрутов и заводилась. Не удобство: молчаливая
-/// поломка становится громкой.
+/// Самое ценное из того, что дала книга маршрутов (21.09), и единственное,
+/// что от неё осталось (30.09): молчаливая поломка становится громкой.
 /// </para>
 /// <para>
 /// 21.09 у владельца Instagram был прибит в <c>hosts</c> и потому выведен
@@ -16,13 +61,73 @@ namespace NetZapret.Core.Rules;
 /// поднимает свой winws2 без списка исключений. Разбор занял час.
 /// </para>
 /// <para>
-/// Ни один из пяти источников правил не мог этого сказать — они не сведены,
-/// и порядок между ними лежит в коде. Сведённые в книгу, те же сведения
-/// дают ответ при чтении файла.
+/// Собирается прямо из правил и пинов (<see cref="FromRules"/>): книга
+/// для этого была лишним шагом — её каждый раз и так собирали из правил.
 /// </para>
 /// </remarks>
 public static class RouteClashes
 {
+    /// <summary>
+    /// Противоречия в своих правилах и пинах.
+    /// </summary>
+    /// <remarks>
+    /// Выключенные правила не в счёт — они ничего не решают. Правила
+    /// по адресам и программам тоже: они не про имена, и спорить с пином
+    /// или доменом им не о чем.
+    /// </remarks>
+    /// <param name="pins">Прибитые нами имена.</param>
+    public static IReadOnlyList<RouteClash> FromRules(
+        IEnumerable<UserRuleEntry> rules,
+        IEnumerable<string> pins,
+        Func<string, IReadOnlyList<string>>? members = null)
+    {
+        var entries = new List<RouteEntry>();
+
+        foreach (var rule in rules.Where(r => r.Enabled))
+        {
+            var name = rule.Match switch
+            {
+                MatchKind.HostList => Trim(Path.GetFileNameWithoutExtension(rule.Value.Replace('\\', '/'))),
+                MatchKind.Domain => Trim(rule.Value),
+                _ => null,
+            };
+
+            if (name is { Length: > 0 })
+                entries.Add(new RouteEntry { Name = name, Choice = ChoiceOf(rule.Mode) });
+        }
+
+        // Пины после правил: имя может быть и выведено напрямую, и прибито —
+        // tmdb у владельца, — это не противоречие, оба «мимо всего».
+        foreach (var pinned in pins)
+        {
+            var name = Trim(pinned);
+
+            if (name.Length > 0)
+                entries.Add(new RouteEntry { Name = name, Choice = RouteChoice.Pin });
+        }
+
+        return Find(entries, members);
+    }
+
+    private static RouteChoice ChoiceOf(RoutingMode mode) => mode switch
+    {
+        RoutingMode.Desync => RouteChoice.Desync,
+        RoutingMode.Proxy => RouteChoice.Vpn,
+        _ => RouteChoice.Direct,
+    };
+
+    private static string Trim(string value) =>
+        value.Trim().Trim('"', '\'').TrimStart('*', '.').Trim();
+
+    /// <summary>Маршрут словами окна.</summary>
+    public static string Word(RouteChoice choice) => choice switch
+    {
+        RouteChoice.Desync => "десинк",
+        RouteChoice.Vpn => "через VPN",
+        RouteChoice.Pin => "пин",
+        _ => "напрямую",
+    };
+
     /// <param name="members">
     /// Чем наполнена группа: имя группы → домены. Без него ловятся только
     /// точные повторы; с ним — ещё и домен, спорящий со своей группой.
@@ -123,8 +228,8 @@ public static class RouteClashes
                     Name = domain,
                     First = group.Choice,
                     Second = own.Choice,
-                    Outcome = $"в группе «{group.Name}» — {RouteBookFile.NameOf(group.Choice)}, "
-                        + $"а отдельной строкой — {RouteBookFile.NameOf(own.Choice)}: "
+                    Outcome = $"в группе «{group.Name}» — {Word(group.Choice)}, "
+                        + $"а отдельной строкой — {Word(own.Choice)}: "
                         + Outcome(group.Choice, own.Choice),
                 };
             }

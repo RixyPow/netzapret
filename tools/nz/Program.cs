@@ -43,7 +43,6 @@ return command switch
     "where" or "куда" => Where(string.Join(' ', args.Skip(1))),
     "dns" => await Dns(),
     "routes" or "маршруты" => Routes(),
-    "migrate" or "перенос" => NetZapret.Tools.Migrate.Run(args.ElementAtOrDefault(1)),
     "catalog" or "каталог" => await Catalog(),
     "report" or "отчёт" => Report(),
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
@@ -104,9 +103,9 @@ int Status()
     return EngineHealth.Running(state) ? 0 : 1;
 }
 
-// Куда пойдёт имя, программа или адрес — сейчас, а не по книге.
+// Куда пойдёт имя, программа или адрес — сейчас, а не по правилам.
 //
-// Книга отвечает «через VPN», а при выключенном туннеле это напрямую;
+// Правило говорит «через VPN», а при выключенном туннеле это напрямую;
 // «десинк» при прибитом в hosts имени не трогается вовсе. Поэтому три
 // факта врозь: что сказано в правилах, что из этого делают выключатели,
 // и выведено ли имя из-под десинка. Сводить их здесь в один ответ
@@ -202,43 +201,31 @@ async Task<int> Dns()
     return 0;
 }
 
-// Книга маршрутов и её противоречия.
+// Противоречия в своих маршрутах и пинах.
 //
-// Нужна затем же, зачем задумывалась сама книга: 21.09 разбор «почему
-// инста не грузится» занял час, и ответ всё это время лежал в том,
-// что имя прибито в hosts и потому выведено из-под десинка.
+// Нужна затем, что 21.09 разбор «почему инста не грузится» занял час,
+// и ответ всё это время лежал в том, что имя прибито в hosts и потому
+// выведено из-под десинка. Тем же RouteClashes.FromRules, что и карточка
+// на вкладке «Маршруты». До 30.09 читала файл книги маршрутов, которого
+// программа сама не заводила, и отвечала «книги нет».
 int Routes()
 {
-    var path = RouteBookFile.DefaultPath;
+    var rules = UserRulesFile.Load().Entries;
+    var pins = NetZapret.Proxy.HostsEditor.Pins().Keys.ToList();
+    var clashes = RouteClashes.FromRules(rules, pins);
 
-    if (!File.Exists(path))
+    Console.WriteLine($"своих маршрутов: {rules.Count(r => r.Enabled)}, пинов: {pins.Count}");
+
+    if (clashes.Count == 0)
     {
-        Console.WriteLine($"книги маршрутов нет: {path}");
-        return 1;
-    }
-
-    var book = RouteBookFile.Parse(File.ReadAllText(path));
-
-    Console.WriteLine($"записей: {book.Entries.Count}, своих групп: {book.Groups.Count}");
-    Console.WriteLine();
-
-    foreach (var entry in book.Entries)
-    {
-        var line = $"  {entry.Name,-28} {RouteBookFile.NameOf(entry.Choice)}";
-
-        if (entry.Recipe is { Length: > 0 } recipe)
-            line += $"  ({recipe})";
-
-        Console.WriteLine(line);
-    }
-
-    if (book.Clashes.Count == 0)
+        Console.WriteLine("противоречий нет");
         return 0;
+    }
 
     Console.WriteLine();
-    Console.WriteLine($"ПРОТИВОРЕЧИЙ: {book.Clashes.Count}");
+    Console.WriteLine($"ПРОТИВОРЕЧИЙ: {clashes.Count}");
 
-    foreach (var clash in book.Clashes)
+    foreach (var clash in clashes)
     {
         Console.WriteLine();
         Console.WriteLine($"  {clash.Name}");
@@ -303,11 +290,9 @@ int Help()
     Console.WriteLine("  nz status    что сейчас поднято");
     Console.WriteLine("  nz where <имя|программа.exe|адрес>");
     Console.WriteLine("               куда пойдёт: по правилам и при нынешних выключателях");
-    Console.WriteLine("  nz routes    книга маршрутов и противоречия в ней");
+    Console.WriteLine("  nz routes    противоречия в своих маршрутах и пинах");
     Console.WriteLine("  nz fix <сайт>  не открывается: пробует как есть, напрямую, через VPN");
     Console.WriteLine("               и записывает сработавший маршрут");
-    Console.WriteLine("  nz migrate [файл]   черновик переноса прежних правил;");
-    Console.WriteLine("               без имени файла — только сверка, ничего не пишется");
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");

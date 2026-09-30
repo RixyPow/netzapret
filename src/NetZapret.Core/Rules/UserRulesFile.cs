@@ -204,6 +204,13 @@ public sealed class UserRulesFile
     /// <summary>Заменяет запись на её же месте.</summary>
     public void ReplaceAt(int index, UserRuleEntry entry) => _entries[index] = entry;
 
+    /// <summary>Заменяет все записи чужими — загрузка маршрутов из файла (<see cref="RulesShare"/>).</summary>
+    public void ReplaceAll(IEnumerable<UserRuleEntry> entries)
+    {
+        _entries.Clear();
+        _entries.AddRange(entries);
+    }
+
     public bool Toggle(int index)
     {
         if (index < 0 || index >= _entries.Count)
