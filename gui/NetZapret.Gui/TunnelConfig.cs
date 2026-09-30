@@ -155,6 +155,16 @@ internal static class TunnelConfig
             // идёт на адреса, которых в выборочном перехвате нет.
             bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !ruleSet.RoutesProgramIntoTunnel;
 
+            // Полный перехват только ради программы — игры с маршрутом мимо VPN
+            // выводятся из туннеля и идут так же, как без этого правила
+            // (ProgramCapture, 30.09). Выбранный человеком режим «всё через
+            // туннель» не трогаем: там туннель забирает всё по его решению.
+            bool forcedByProgram = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && ruleSet.RoutesProgramIntoTunnel;
+
+            var keptOut = forcedByProgram
+                ? AddressListReader.Expand(ProgramCapture.KeepOut(ruleSet), zapretRoot, out _)
+                : [];
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
@@ -189,6 +199,7 @@ internal static class TunnelConfig
                 Keys = EngineKeys.Generate(),
 
                 CaptureAddresses = capture,
+                DesyncAddresses = keptOut,
                 PinnedProxyAddresses = pinned.Addresses,
                 PinnedProxyNames = pinned.Names,
                 AddressOverrides = addresses,

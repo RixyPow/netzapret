@@ -938,7 +938,7 @@ public partial class RoutesView : UserControl
                 Key = RouteKeys.Make(RouteKeys.Program, entry.Value),
                 Title = entry.Value,
                 Detail = entry.Mode == RoutingMode.Proxy
-                    ? "программа · через VPN туннель перехватывает весь трафик, куда что — решают маршруты"
+                    ? "программа · пока правило стоит, туннель забирает весь трафик машины: всё без маршрута идёт мимо VPN, но через движок туннеля. Сети Riot остаются мимо него"
                     : "программа",
                 Mode = Describe(entry.Mode),
                 Color = (Brush)Application.Current.FindResource(color),
