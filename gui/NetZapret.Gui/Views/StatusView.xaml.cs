@@ -164,12 +164,26 @@ public partial class StatusView : UserControl
         double edge = width - column;
         var over = Color.FromArgb((byte)Math.Round(ArtDim * 255), backdrop.R, backdrop.G, backdrop.B);
 
+        // Переход начинается под карточками и тянется на большую часть
+        // колонки. Прежде он шёл 300 точек от края карточек: затемнение
+        // менялось прямо по волосам персонажа, у края колонки стоит ещё
+        // и полоса прокрутки страницы, и картинка читалась обрубленной
+        // по вертикальной черте (владелец, 30.09). Середина — не прямая:
+        // промежуточная точка держит затемнение дольше у карточек и
+        // быстрее отпускает у персонажа.
+        var middle = Color.FromArgb((byte)Math.Round((dim * 0.45 + ArtDim * 0.55) * 255), backdrop.R, backdrop.G, backdrop.B);
+
         ArtShade.Fill = new LinearGradientBrush
         {
             MappingMode = BrushMappingMode.Absolute,
-            StartPoint = new Point(edge - 40, 0),
-            EndPoint = new Point(edge + Math.Min(260, column / 2), 0),
-            GradientStops = { new GradientStop(under, 0), new GradientStop(over, 1) },
+            StartPoint = new Point(edge - 160, 0),
+            EndPoint = new Point(edge + column * 0.7, 0),
+            GradientStops =
+            {
+                new GradientStop(under, 0),
+                new GradientStop(middle, 0.4),
+                new GradientStop(over, 1),
+            },
         };
     }
 
