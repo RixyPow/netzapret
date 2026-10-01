@@ -103,6 +103,14 @@ public sealed class ExitWatchTests
     }
 
     [Fact]
+    public void Only_the_chosen_server_ends_the_bypass_unless_replacing_is_allowed()
+    {
+        Assert.False(new ExitWatch(Pinned, replacePinned: false).MayLeaveBypassElsewhere);
+        Assert.True(new ExitWatch(Pinned, replacePinned: true).MayLeaveBypassElsewhere);
+        Assert.True(new ExitWatch(null, replacePinned: false).MayLeaveBypassElsewhere);
+    }
+
+    [Fact]
     public void A_restart_forgets_the_misses()
     {
         var watch = new ExitWatch(null, replacePinned: false);

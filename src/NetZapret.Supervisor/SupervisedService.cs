@@ -788,6 +788,26 @@ public sealed class SingBoxService : SupervisedService
     {
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
+        // Выбранный руками — первым: снять обход на него, а не в автоподбор
+        // (до 01.10 выбор человека так терялся до перезапуска).
+        if (_pinnedPlaced)
+        {
+            var pinned = await api.MeasureAsync(_preferredExit!, WatchUrl, CheckTimeout, cancellationToken);
+            Record(_preferredExit!, pinned);
+
+            if (pinned is not null)
+            {
+                _returnTo = _preferredExit;
+                return true;
+            }
+
+            if (!_watch.MayLeaveBypassElsewhere)
+            {
+                _returnTo = null;
+                return false;
+            }
+        }
+
         // В обходе селектор стоит на direct — меряем автоподбор, а не его.
         if (await api.MeasureAsync(LatencyGroup, WatchUrl, CheckTimeout, cancellationToken) is not null)
         {

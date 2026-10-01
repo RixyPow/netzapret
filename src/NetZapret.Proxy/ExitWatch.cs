@@ -71,6 +71,24 @@ public sealed class ExitWatch
     public bool Replaced(string? current) =>
         _replacePinned && _pinned is not null && current is not null && current != _pinned;
 
+    /// <summary>
+    /// Можно ли снять обход на другой сервер, пока выбранный руками молчит.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// До 01.10 обход снимался в автоподбор всегда: у владельца был выбран
+    /// WARP, обход сработал — и селектор вернулся на <c>auto-latency</c>,
+    /// а выбор человека пропал до перезапуска движков.
+    /// </para>
+    /// <para>
+    /// Подменять не велено — значит, обход снимает только сам выбранный
+    /// сервер. Так же, как для WARP: сам с одного на другое туннель
+    /// не переходит, при мёртвом выходе — обход. С подменой — первый ответивший,
+    /// а выбранный вернётся, ответив дважды (<see cref="OnPinned"/>).
+    /// </para>
+    /// </remarks>
+    public bool MayLeaveBypassElsewhere => _pinned is null || _replacePinned;
+
     /// <summary>Учесть проверку подключённого выхода.</summary>
     public ExitAction OnCurrent(bool answers)
     {
