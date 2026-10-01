@@ -30,6 +30,20 @@ public sealed class ProgramCaptureTests
             mode: {mode}
         """;
 
+    /// <summary>
+    /// Полный перехват ради программы — только без десинка (владелец, 01.10).
+    /// </summary>
+    [Fact]
+    public void AProgramTakesTheWholeTunnelOnlyWithoutDesync()
+    {
+        var withProgram = Rules("mode: selective\nrules:\n" + Program);
+        var without = Rules("mode: selective\nrules:\n" + Riot("desync"));
+
+        Assert.False(ProgramCapture.ForcesFullCapture(withProgram, desyncRuns: true));
+        Assert.True(ProgramCapture.ForcesFullCapture(withProgram, desyncRuns: false));
+        Assert.False(ProgramCapture.ForcesFullCapture(without, desyncRuns: false));
+    }
+
     [Fact]
     public void WithoutAProgramRouteNothingIsKeptOut()
     {

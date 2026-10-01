@@ -158,13 +158,17 @@ internal static class TunnelConfig
             // С 29.09 — и не при программе, которую правила ведут в туннель
             // (RuleSet.RoutesProgramIntoTunnel, обсуждение №10): её трафик
             // идёт на адреса, которых в выборочном перехвате нет.
-            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !ruleSet.RoutesProgramIntoTunnel;
+            //
+            // С 01.10 — только без десинка (ProgramCapture.ForcesFullCapture,
+            // владелец): при десинке весь трафик через движок ломал голос Discord.
+            bool byProgram = ProgramCapture.ForcesFullCapture(ruleSet, settings.NeedsDesync);
+            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !byProgram;
 
             // Полный перехват только ради программы — игры с маршрутом мимо VPN
             // выводятся из туннеля и идут так же, как без этого правила
             // (ProgramCapture, 30.09). Выбранный человеком режим «всё через
             // туннель» не трогаем: там туннель забирает всё по его решению.
-            bool forcedByProgram = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && ruleSet.RoutesProgramIntoTunnel;
+            bool forcedByProgram = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && byProgram;
 
             var keptOut = forcedByProgram
                 ? AddressListReader.Expand(ProgramCapture.KeepOut(ruleSet), zapretRoot, out _)
