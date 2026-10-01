@@ -6,6 +6,15 @@
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
 [![VirusTotal](https://img.shields.io/badge/VirusTotal-0.9.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/03661be7d784c2ebcc38ba94f37843c9070b5d8ac55f143e6a1048803874cc32)
 
+**Для тех, у кого есть подписка VPN и кому мало одного Zapret.** Десинк чинит
+то, что тормозит провайдер, VPN берёт то, что закрыто по стране, — а NetZapret
+решает, что куда, для каждого сайта и программы.
+
+### [⬇ Скачать последнюю версию](https://github.com/RixyPow/netzapret/releases/latest)
+
+Архив для Windows 10 и 11: распаковать и запустить `NetZapret.exe`, больше
+ничего ставить не нужно.
+
 Диспетчер трафика для Windows. Для каждого приложения, домена или подсети решает,
 куда пустить трафик: **через десинк** (Zapret / winws2), **через VPN** (sing-box)
 или **напрямую** — и запускает оба движка под одним присмотром.
