@@ -285,6 +285,7 @@ public partial class StatusView : UserControl
             ShowModes(settings);
             ShowAutostart();
             ShowWidth(settings);
+            ShowSupport(settings);
 
             // Проверка обновлений идёт при запуске окна и может закончиться
             // уже после того, как «Главная» показана, — поэтому и подписка.
@@ -313,6 +314,29 @@ public partial class StatusView : UserControl
     }
 
     private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
+
+    private void ShowSupport(AppSettings settings) =>
+        SupportCard.Visibility = settings.OnboardingDone && !settings.SupportCardHidden
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    /// <summary>Звезда ставится на странице репозитория — на неё и ведём.</summary>
+    private void OnStar(object sender, RoutedEventArgs e) => OpenLink(About.Repository);
+
+    private void OnSupportHide(object sender, RoutedEventArgs e)
+    {
+        SupportCard.Visibility = Visibility.Collapsed;
+
+        try
+        {
+            (AppSettings.Load(AppSettings.DefaultPath) with { SupportCardHidden = true })
+                .Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не сохранилось — карточка вернётся при следующем запуске, беды в том нет.
+        }
+    }
 
     /// <summary>Карточка «вышла новая версия» — если есть что и о нём не сказали «не сейчас».</summary>
     private void ShowUpdate()

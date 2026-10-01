@@ -129,6 +129,55 @@
                 </Border>
 
                 <!--
+                    Просьба о звезде и канале (владелец, 01.10). Одной строкой
+                    и прячется навсегда: «Скрыть» пишет SupportCardHidden.
+                    Показывается после мастера первого запуска — до него
+                    человеку не до звёзд.
+                -->
+                <Border x:Name="SupportCard" Style="{StaticResource Card}" Margin="0,18,0,0"
+                        Padding="18,12,12,12" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Style="{StaticResource LineGlyph}" Text="&#xE735;"
+                                   FontSize="18" Foreground="{DynamicResource Warn}"
+                                   VerticalAlignment="Center" Margin="0,0,14,0" />
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"
+                                       Text="Нравится NetZapret? Поставьте звезду и подпишитесь на канал" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Так о программе узнают другие, а вы — о новых версиях." />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource Ghost}" Click="OnStar" Margin="0,0,8,0"
+                                    ToolTip="Страница NetZapret на GitHub — звезда справа вверху">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE734;" Margin="0,0,8,0"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="Звезда на GitHub" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Ghost}" Click="OnTelegram" Margin="0,0,8,0"
+                                    ToolTip="Новости в телеграм-канале">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <TextBlock Text="Канал" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Ghost}" Click="OnSupportHide" Content="Скрыть"
+                                    ToolTip="Больше не показывать" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!--
                     Карточка состояния. Крупная точка и одна строка словами:
                     первое, зачем окно открывают, — понять, идёт ли обход.
                     Точка со свечением её же цвета (макет 30.09): свечение

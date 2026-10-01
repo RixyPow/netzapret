@@ -474,6 +474,9 @@ public sealed record AppSettings
     /// </remarks>
     public bool OnboardingDone { get; init; }
 
+    /// <summary>Спрятана ли на «Главной» просьба о звезде на GitHub и канале (01.10).</summary>
+    public bool SupportCardHidden { get; init; }
+
     /// <summary>Анимации окна: смена разделов, появление карточек, уведомления, схема мастера.</summary>
     /// <remarks>
     /// Включены по умолчанию (владелец, 28.09: «добавим анимаций по всей
