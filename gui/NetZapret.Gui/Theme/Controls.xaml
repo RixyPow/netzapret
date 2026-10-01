@@ -280,13 +280,17 @@
                             <ScrollViewer x:Name="PART_ContentHost" />
 
                             <!--
-                                Подсказка (Hint.cs). Отступ 4: строка ввода
-                                начинает текст на 2 правее своего края, и ещё 2 —
-                                зазор под курсор, чтобы тот стоял перед первой
-                                буквой, а не на ней.
+                                Подсказка (Hint.cs) встаёт туда же, где первая
+                                буква. WPF сам отдаёт Padding поля прокрутке
+                                внутри PART_ContentHost, поэтому текст стоит
+                                на отступ правее рамки шаблона, а строка ввода
+                                отходит от края ещё на 2. Отсюда Margin — Padding
+                                поля, Padding — 2. По верху, а не по середине:
+                                строка ввода тоже стоит по верху.
                             -->
                             <TextBlock x:Name="HintText" IsHitTestVisible="False"
-                                       Margin="4,0,0,0" VerticalAlignment="Center"
+                                       Margin="{TemplateBinding Padding}" Padding="2,0"
+                                       VerticalAlignment="Top"
                                        Foreground="{DynamicResource Muted}"
                                        FontSize="{TemplateBinding FontSize}"
                                        TextTrimming="CharacterEllipsis"
@@ -331,7 +335,8 @@
 
                             <!-- Подсказка, как у TextBox; пустоту отмечает Hint.Empty. -->
                             <TextBlock x:Name="HintText" IsHitTestVisible="False"
-                                       Margin="4,0,0,0" VerticalAlignment="Center"
+                                       Margin="{TemplateBinding Padding}" Padding="2,0"
+                                       VerticalAlignment="Top"
                                        Foreground="{DynamicResource Muted}"
                                        FontSize="{TemplateBinding FontSize}"
                                        TextTrimming="CharacterEllipsis"
