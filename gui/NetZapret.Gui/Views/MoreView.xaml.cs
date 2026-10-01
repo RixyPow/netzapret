@@ -274,7 +274,7 @@ public partial class MoreView : UserControl
             if (Directory.Exists("runtime"))
                 Directory.Delete("runtime", recursive: true);
 
-            new AppSettings { SubscriptionUrl = subscription }.Save(AppSettings.DefaultPath);
+            (AppSettings.Fresh with { SubscriptionUrl = subscription }).Save(AppSettings.DefaultPath);
 
             Reload();
             Status.Text = "Настройки сброшены, подписка сохранена. Прежние лежат рядом с .bak.";

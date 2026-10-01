@@ -578,6 +578,35 @@ public sealed record AppSettings
         };
     }
 
+    /// <summary>
+    /// Выключен ли game filter разовым переводом (01.10); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? GameFilterReset { get; init; }
+
+    /// <summary>
+    /// Разовое выключение game filter у всех (владелец, 01.10).
+    /// </summary>
+    /// <remarks>
+    /// Выключен по умолчанию он был и прежде, но включали его многие —
+    /// советом из обсуждений, — и забывали. Цена измерена: при включённом
+    /// десинк подделывал начало игрового UDP Valorant по сетям Riot из
+    /// ipset-all (30.09), и под подозрением пинг Genshin (обсуждение #12).
+    /// Один раз: включивший его после перевода сохраняет и отметку,
+    /// и выключатель дальше значит то, что значит.
+    /// </remarks>
+    private static AppSettings GameFilterOnce(AppSettings read) =>
+        read.GameFilterReset == true ? read : read with { GameFilter = false, GameFilterReset = true };
+
+    /// <summary>
+    /// Настройки с нуля — с отметками разовых переводов.
+    /// </summary>
+    /// <remarks>
+    /// Без отметок первое сохранение таких настроек выглядело бы старым файлом,
+    /// и следующее чтение перевело бы их ещё раз: включённый человеком game
+    /// filter молча выключился бы.
+    /// </remarks>
+    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true };
+
     /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
     [JsonIgnore]
     private bool HasSubscriptionExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || KeysEnabled;
@@ -589,7 +618,7 @@ public sealed record AppSettings
         if (!File.Exists(target))
         {
             result = ReadResult.Missing;
-            return new AppSettings();
+            return Fresh;
         }
 
         string? text = null;
@@ -613,7 +642,7 @@ public sealed record AppSettings
         if (text is null)
         {
             result = ReadResult.Unreadable;
-            return new AppSettings();
+            return Fresh;
         }
 
         try
@@ -633,18 +662,18 @@ public sealed record AppSettings
             // сертификатом, а записан он почти у всех потому, что стоял
             // по умолчанию, а не потому, что выбран. Без перевода смена
             // умолчания 27.09 досталась бы только новым установкам.
-            return WarpAsPath(read with
+            return GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer == "8.8.8.8" ? GoogleDns : read.DnsServer,
-            });
+            }));
         }
         catch (Exception)
         {
             // Испорченный файл настроек не повод не запуститься: берём значения
             // по умолчанию, а сохранение перезапишет его корректным.
             result = ReadResult.Unreadable;
-            return new AppSettings();
+            return Fresh;
         }
     }
 

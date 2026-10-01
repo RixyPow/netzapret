@@ -99,6 +99,31 @@ public sealed class AppSettingsTests : IDisposable
         Assert.True(read.WarpIsPath);
     }
 
+    /// <summary>Game filter выключается у всех один раз (01.10), а включённый после — остаётся.</summary>
+    [Theory]
+    [InlineData("""{ "GameFilter": true }""", false)]
+    [InlineData("""{ "GameFilterReset": true, "GameFilter": true }""", true)]
+    public void GameFilterIsTurnedOffOnce(string json, bool expected)
+    {
+        File.WriteAllText(_path, json);
+
+        var read = AppSettings.Load(_path);
+
+        Assert.Equal(expected, read.GameFilter);
+        Assert.True(read.GameFilterReset);
+    }
+
+    /// <summary>
+    /// Настройки с нуля, сохранённые с включённым game filter, не переводятся ещё раз.
+    /// </summary>
+    [Fact]
+    public void FreshSettingsKeepAGameFilterTurnedOnLater()
+    {
+        (AppSettings.Fresh with { GameFilter = true }).Save(_path);
+
+        Assert.True(AppSettings.Load(_path).GameFilter);
+    }
+
     [Fact]
     public void SettingsSurviveRoundTrip()
     {
