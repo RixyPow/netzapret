@@ -34,3 +34,13 @@ public sealed class SubscriptionAddWindowTests
         });
     }
 }
+
+/// <summary>Окно выбора программы (01.10): разметка разбирается.</summary>
+public sealed class ProgramPickerWindowTests
+{
+    [Fact]
+    public void The_picker_is_created_without_throwing()
+    {
+        Sta.Run(() => Assert.NotNull(new ProgramPickerWindow()));
+    }
+}

@@ -101,7 +101,28 @@
                     стиля не должна двигать её относительно соседей.
                 -->
                 <Border Style="{StaticResource Card}" Margin="0,16,0,0" Padding="16,11">
-                    <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!--
+                            Программа — кнопкой с меню, как «Добавить…» в Happ
+                            (владелец 01.10, снимки): из запущенных или файлом.
+                            Вписать имя в поле по-прежнему можно, но угадать
+                            это было нельзя.
+                        -->
+                        <Button Grid.Column="1" x:Name="AddProgramButton" Style="{StaticResource Ghost}"
+                                Margin="12,0,0,0" VerticalAlignment="Center" Click="OnAddProgram">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE710;" FontSize="13"
+                                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="Добавить программу" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+
+                    <StackPanel Grid.Column="0">
                         <StackPanel Orientation="Horizontal">
                             <!--
                                 «и программа» — с 01.10. Программу сюда можно
@@ -126,6 +147,7 @@
                         <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
                                    Margin="0,4,0,0" TextWrapping="Wrap" />
                     </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!--

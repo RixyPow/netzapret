@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using NetZapret.Core;
+using NetZapret.Core.Programs;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
 using NetZapret.Proxy;
@@ -967,6 +968,7 @@ public partial class RoutesView : UserControl
                 CanPin = false,
                 Own = true,
                 Letter = entry.Value.Length > 0 ? entry.Value[..1].ToUpperInvariant() : "·",
+                Icon = ProgramIcon(entry.Value),
                 Lead = 24,
             };
 
@@ -974,6 +976,36 @@ public partial class RoutesView : UserControl
         }
 
         return rows;
+    }
+
+    /// <summary>Пути запущенных программ по имени файла — для значков строк.</summary>
+    private static Dictionary<string, string>? _programPaths;
+
+    private static DateTime _programPathsAt;
+
+    /// <summary>
+    /// Значок своей программы, как в Happ: из файла, если вписан путь, иначе —
+    /// из запущенного процесса с тем же именем. Не запущена — буква.
+    /// </summary>
+    /// <remarks>
+    /// Список процессов запоминается на полминуты: раздел пересобирается
+    /// при каждой смене маршрута, и перебирать все процессы всякий раз —
+    /// лишняя работа в потоке окна.
+    /// </remarks>
+    private static BitmapImage? ProgramIcon(string value)
+    {
+        if (value.Contains('\\'))
+            return ProgramIcons.Of(value);
+
+        if (_programPaths is null || DateTime.UtcNow - _programPathsAt > TimeSpan.FromSeconds(30))
+        {
+            _programPaths = RunningPrograms.List()
+                .GroupBy(program => program.Name, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().Path, StringComparer.OrdinalIgnoreCase);
+            _programPathsAt = DateTime.UtcNow;
+        }
+
+        return _programPaths.TryGetValue(value, out var path) ? ProgramIcons.Of(path) : null;
     }
 
     /// <summary>
@@ -1553,6 +1585,88 @@ public partial class RoutesView : UserControl
 
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
 
+    /// <summary>«Добавить программу»: меню «из запущенных» и «файлом», как в Happ.</summary>
+    private void OnAddProgram(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = AddProgramButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        menu.Items.Add(MenuEntry("", "Из запущенных…", PickRunningProgram));
+        menu.Items.Add(MenuEntry("", "Выбрать файл…", PickProgramFile));
+        menu.IsOpen = true;
+    }
+
+    private static MenuItem MenuEntry(string glyph, string text, Action act)
+    {
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        var item = new MenuItem { Header = text, Icon = icon };
+        item.Click += (_, _) => act();
+
+        return item;
+    }
+
+    private void PickRunningProgram()
+    {
+        var window = new ProgramPickerWindow { Owner = Window.GetWindow(this) };
+
+        if (window.ShowDialog() == true && window.Chosen is { } chosen)
+            AddProgram(chosen.Name);
+    }
+
+    private void PickProgramFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Программа",
+            Filter = "Программы|*.exe",
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            AddProgram(System.IO.Path.GetFileName(dialog.FileName));
+    }
+
+    /// <summary>
+    /// Записывает программу — «напрямую», по имени файла — и показывает её строку.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// По имени, а не по пути, и из окна выбора, и из файла. У Happ на снимке
+    /// владельца восемь строк claude.exe — по одной на версию: путь в
+    /// WindowsApps меняется с каждым обновлением, и правило по пути
+    /// перестаёт совпадать. Имя переживает обновление. Вписанный руками
+    /// путь остаётся путём — это осознанный выбор человека.
+    /// </para>
+    /// <para>
+    /// Поле поиска получает имя программы: список сворачивается до её строки,
+    /// где и меняется маршрут, — как у своего домена.
+    /// </para>
+    /// </remarks>
+    private void AddProgram(string program)
+    {
+        try
+        {
+            var rules = UserRulesFile.Load();
+            rules.Set(MatchKind.Process, program, RoutingMode.Direct, recipe: null);
+            rules.Save();
+
+            Search.Text = program;
+            Reload();
+
+            Status.Text = $"Записано: {program} → напрямую. Режим меняется в её строке ниже. "
+                + "Применится при следующем запуске движков.";
+            this.Offer($"Добавлен маршрут: {program}");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
     /// <summary>
     /// Записывает свой домен из поля поиска — «напрямую».
     /// </summary>
@@ -1574,22 +1688,7 @@ public partial class RoutesView : UserControl
     {
         if (ProgramInput(Search.Text) is { } program)
         {
-            try
-            {
-                var rules = UserRulesFile.Load();
-                rules.Set(MatchKind.Process, program, RoutingMode.Direct, recipe: null);
-                rules.Save();
-                Reload();
-
-                Status.Text = $"Записано: {program} → напрямую. Режим меняется в её строке ниже. "
-                    + "Применится при следующем запуске движков.";
-                this.Offer($"Добавлен маршрут: {program}");
-            }
-            catch (Exception ex)
-            {
-                Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
-            }
-
+            AddProgram(program);
             return;
         }
 
