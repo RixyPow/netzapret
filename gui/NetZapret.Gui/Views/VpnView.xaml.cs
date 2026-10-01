@@ -53,11 +53,14 @@ public sealed record QuickTile(
     Brush Fill,
     string Tip);
 
-/// <summary>Строка «Недавних серверов».</summary>
+/// <summary>Строка «Недавних серверов»: флаг, а нет его — знак (буквы страны, у WARP — облачко).</summary>
 public sealed record RecentRow(
     string Name,
-    string Country,
-    Visibility CountryShown,
+    string Mark,
+    FontFamily MarkFont,
+    double MarkSize,
+    Brush MarkBrush,
+    Visibility MarkShown,
     BitmapImage? Flag,
     Visibility FlagShown,
     string Latency,
@@ -305,7 +308,8 @@ public partial class VpnView : UserControl
 
         if (!EnginesRunning)
         {
-            PickLine.Text = _pickBase + " Движки не запущены — выхода сейчас нет.";
+            // «Движки остановлены» говорит карточка выхода — здесь не повторяем.
+            ShowPickLine(_pickBase);
             _live = (false, null, false);
             ShowCurrent();
             return;
@@ -335,20 +339,10 @@ public partial class VpnView : UserControl
         _live = (true, server, automatic);
         ShowCurrent();
 
-        // Расхождение — только когда сервер выбран, а движок держит другой.
-        // При автоподборе сервер, стоящий прямо в селекторе, — обычное дело:
-        // его ставит сторож (прогрев и замена умершего, с 28.09), и писать
-        // про него «держит закреплённый, перезапустите движки» было неправдой.
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-        // Сам выход — в карточке выше; здесь только расхождение с выбором.
-        PickLine.Text = server is null
-            ? _pickBase + " Движок не ответил, какой выход держит."
-            : TunnelStatus.Standing(server, Warp.PreferredExit(settings)) != ExitStanding.Other
-                ? _pickBase
-                : StandInRemark() is { } remark
-                    ? $"{_pickBase} Сейчас {server} — {remark}."
-                    : $"{_pickBase} Но движок сейчас держит {server} — перезапустите движки, чтобы выбор применился.";
+        // Сам выход и расхождение с выбором — в карточке выше (ShowCurrent):
+        // здесь одна короткая строка, чтобы карточка ленты не прыгала по высоте
+        // (владелец, 01.10).
+        ShowPickLine(_pickBase);
     }
 
     /// <summary>Примечание надзора о туннеле: «временная замена…»; <c>null</c> — нет.</summary>
@@ -404,12 +398,17 @@ public partial class VpnView : UserControl
                     ? "Движок не ответил, какой выход держит."
                     : "При запуске движков — быстрейший из живых серверов всех подписок в работе.";
             ShowFlag(string.Empty);
+            ShowStats(null, null, null);
         }
         else
         {
             var (country, name) = CountryTag.Split(tag);
             CurrentName.Text = name.Length > 0 ? name : tag;
-            ShowFlag(country);
+
+            if (tag == Warp.MasqueTag)
+                ShowCloud();
+            else
+                ShowFlag(country);
 
             // Только как выход выбран: подписка, протокол и задержка — цифрами
             // ниже (макет 01.10), повторять их строкой незачем.
@@ -449,11 +448,13 @@ public partial class VpnView : UserControl
         StatProtocol.Text = server is null ? "—" : Transport(server);
         StatKind.Text = server?.Protocol.ToString() ?? "—";
 
-        var source = owner is null ? null : owner == "WARP" ? "Cloudflare WARP" : owner;
+        bool warp = owner == "WARP";
+        var source = owner is null ? null : warp ? "WARP" : owner;
         StatSource.Text = source ?? "—";
 
+        // У WARP значок повторил бы имя.
         CurrentSource.Text = source ?? string.Empty;
-        CurrentSourcePill.Visibility = source is null ? Visibility.Collapsed : Visibility.Visible;
+        CurrentSourcePill.Visibility = source is null || warp ? Visibility.Collapsed : Visibility.Visible;
     }
 
     /// <summary>Защита и транспорт словами, как их пишут продавцы: «TLS XHTTP», «Reality TCP».</summary>
@@ -479,9 +480,28 @@ public partial class VpnView : UserControl
         return text.Length > 0 ? text : "—";
     }
 
+    /// <summary>Цвет облачка Cloudflare — его знак.</summary>
+    private static readonly Brush Cloud = Frozen(new SolidColorBrush(Color.FromRgb(0xF3, 0x80, 0x20)));
+
+    private static Brush Frozen(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>У WARP вместо флага облачко (владелец, 01.10: на месте флага стояла точка).</summary>
+    private void ShowCloud()
+    {
+        CurrentFlag.SetResourceReference(Border.BackgroundProperty, "Raised");
+        CurrentCountry.Text = string.Empty;
+        CurrentCloud.Visibility = Visibility.Visible;
+    }
+
     /// <summary>Флаг картинкой, а нет картинки — буквами страны.</summary>
     private void ShowFlag(string country)
     {
+        CurrentCloud.Visibility = Visibility.Collapsed;
+
         var flag = country.Length == 2 ? FlagImages.For(country) : null;
 
         if (flag is not null)
@@ -880,12 +900,20 @@ public partial class VpnView : UserControl
     private IReadOnlyList<ServerRow> InChosenOrder(IReadOnlyList<ServerRow> rows) =>
         _byLatency ? rows.OrderBy(Rank).ThenBy(Ms).ToList() : rows;
 
+    /// <summary>
+    /// Ранг для сортировки по задержке: живые, затем — при «Сначала стабильные» —
+    /// живые, но мигающие, затем незамеренные и мёртвые.
+    /// </summary>
     private int Rank(ServerRow row) => Seen(row.Tag) switch
     {
+        { Success: true, Flaky: true } when _stableFirst => 1,
         { Success: true } => 0,
-        null => 1,
-        _ => 2,
+        null => 2,
+        _ => 3,
     };
+
+    /// <summary>«Сначала стабильные» — из настроек, обновляется при каждой пересборке строк.</summary>
+    private bool _stableFirst = true;
 
     private double Ms(ServerRow row) => Seen(row.Tag)?.LatencyMs ?? double.MaxValue;
 
@@ -897,12 +925,18 @@ public partial class VpnView : UserControl
         // Лента и сводка строятся из тех же строк — вместе с ними.
         ShowQuick(AppSettings.Load(AppSettings.DefaultPath));
         ShowSummary();
+
+        // Надпись — по тому, что раскрыто, а не по прошлому нажатию: вкладка
+        // пересоздаётся при каждом заходе, а раскрытые папки хранятся в книге
+        // (владелец, 01.10: «багается при переходе между страницами»).
+        ShowAllButton.Content = _rows.Count > 0 && _rows.All(r => r.Open) ? "Скрыть все" : "Показать все";
     }
 
     /// <summary>Пересобирает строки серверов, не перечитывая подписки.</summary>
     private void Reshow()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+        _stableFirst = settings.StableFirst;
 
         // Выходы WARP живут в карточке, а не в списке, и общий обход строк
         // их не касается — пересобираем отдельно, иначе замер по ним виден
@@ -1103,22 +1137,23 @@ public partial class VpnView : UserControl
 
         bool auto = string.IsNullOrWhiteSpace(pinned);
 
+        // Коротко, одной строкой (владелец, 01.10: длинная подпись меняла
+        // высоту карточки). Имя закреплённого — без флага-букв из тега.
         _pickBase = settings.WarpEnabled
             ? "На паузе: туннель идёт через WARP."
             : auto
-                ? "Автоподбор: трафик идёт через быстрейший из живых серверов."
-                : $"Закреплён {pinned}. Плитка «Авто» вернёт автоподбор.";
+                ? "Автоподбор: быстрейший из живых."
+                : $"Закреплён: {CountryTag.Split(pinned!).Name}. «Авто» вернёт автоподбор.";
 
         // Сторож выключен настройкой — сказать здесь, а не только в окне настроек.
         // 30.09 у владельца стояло «не проверять», заминки сервера никто
         // не замечал, а вкладка обещала «быстрейший из живых».
         if (settings.ExitCheckSeconds <= 0 && !settings.WarpEnabled)
-        {
-            _pickBase += " Проверка подключённого сервера выключена: замолчит — сам не сменится. "
-                + "Включается в «Настройках» наверху.";
-        }
+            _pickBase += " Проверка сервера выключена.";
 
-        PickLine.Text = _pickBase;
+        ShowPickLine(_pickBase);
+        ForeignSwitch.IsChecked = settings.ForeignExitsOnly;
+        StableSwitch.IsChecked = settings.StableFirst;
 
         // Выход — следом, не дожидаясь таймера: иначе первые четверть минуты
         // на вкладке строка была бы без него.
@@ -1148,7 +1183,13 @@ public partial class VpnView : UserControl
             : "Бесплатный выход через сеть Cloudflare. Включите — и туннель пойдёт через него вместо подписок.";
 
         // Замер — руками движка, а он знает WARP, только когда тот в конфиге.
-        WarpCheckButton.Visibility = on && EnginesRunning ? Visibility.Visible : Visibility.Collapsed;
+        // Кнопка на месте всегда: пропадая, она не говорила, почему её нет.
+        WarpCheckButton.IsEnabled = on && EnginesRunning;
+        WarpCheckButton.ToolTip = !on
+            ? "Замер пинга WARP — когда он включён и движки работают"
+            : EnginesRunning
+                ? "Замерить пинг WARP"
+                : "Замер пинга WARP — когда движки работают";
 
         // Подписки и лента на паузе — видно сразу, а не только в подписи.
         PausedLine.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
@@ -1251,7 +1292,7 @@ public partial class VpnView : UserControl
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            settings = settings with { ForeignExitsOnly = !settings.ForeignExitsOnly };
+            settings = settings with { ForeignExitsOnly = ForeignSwitch.IsChecked == true };
             settings.Save(AppSettings.DefaultPath);
 
             ShowPick(settings);
@@ -2104,7 +2145,6 @@ public partial class VpnView : UserControl
     private async void OnCheckWarp(object sender, RoutedEventArgs e)
     {
         WarpCheckButton.IsEnabled = false;
-        WarpCheckButton.Content = "меряю…";
         Status.Text = "Спрашиваю движок о задержке WARP…";
 
         try
@@ -2123,7 +2163,7 @@ public partial class VpnView : UserControl
         finally
         {
             WarpCheckButton.IsEnabled = true;
-            WarpCheckButton.Content = "проверить";
+            ShowWarp(AppSettings.Load(AppSettings.DefaultPath));
         }
     }
 
@@ -2290,7 +2330,8 @@ public partial class VpnView : UserControl
             .Where(r => r.Active)
             .SelectMany(r => r.Servers)
             .DistinctBy(s => s.Tag)
-            .OrderBy(s => Seen(s.Tag) is { Success: true, LatencyMs: { } ms } ? ms : double.MaxValue)
+            .OrderBy(s => settings.StableFirst && Seen(s.Tag) is { Flaky: true } ? 1 : 0)
+            .ThenBy(s => Seen(s.Tag) is { Success: true, LatencyMs: { } ms } ? ms : double.MaxValue)
             .Take(24);
 
         foreach (var server in servers)
@@ -2385,7 +2426,7 @@ public partial class VpnView : UserControl
         }
     }
 
-    /// <summary>«Показать все» — раскрыть папки подписок и прокрутить к ним; раскрыты — свернуть.</summary>
+    /// <summary>«Показать все» — раскрыть папки подписок и прокрутить к ним; раскрыты — «Скрыть все».</summary>
     private void OnShowAll(object sender, RoutedEventArgs e)
     {
         bool open = !_rows.All(r => r.Open);
@@ -2406,7 +2447,6 @@ public partial class VpnView : UserControl
         }
 
         Redraw();
-        ShowAllButton.Content = open ? "Свернуть все" : "Показать все";
 
         if (open)
             Subscriptions.BringIntoView();
@@ -2428,19 +2468,24 @@ public partial class VpnView : UserControl
 
         _recentShown = shown;
 
+        var icons = (FontFamily)FindResource("IconFont");
+        var text = (FontFamily)FindResource("UiFont");
+        var muted = (Brush)FindResource("Muted");
+
         RecentList.ItemsSource = recent.Select(seen =>
         {
             var (country, name) = CountryTag.Split(seen.Tag);
 
-            // У WARP флага в имени нет, а выход — в Москве (замер 01.10).
-            if (seen.Tag == Warp.MasqueTag && country.Length == 0)
-                country = "RU";
-
-            var flag = country.Length == 2 ? FlagImages.For(country) : null;
+            // У WARP флага нет — облачко (владелец, 01.10).
+            bool warp = seen.Tag == Warp.MasqueTag;
+            var flag = !warp && country.Length == 2 ? FlagImages.For(country) : null;
 
             return new RecentRow(
                 Short(name.Length > 0 ? name : seen.Tag),
-                country,
+                warp ? "\uE753" : country.Length == 2 ? country : "•",
+                warp ? icons : text,
+                warp ? 15 : 11,
+                warp ? Cloud : muted,
                 flag is null ? Visibility.Visible : Visibility.Collapsed,
                 flag,
                 flag is null ? Visibility.Collapsed : Visibility.Visible,
@@ -2481,5 +2526,34 @@ public partial class VpnView : UserControl
 
         if (show)
             NewName.Focus();
+    }
+
+    private void OnStable(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            settings = settings with { StableFirst = StableSwitch.IsChecked == true };
+            settings.Save(AppSettings.DefaultPath);
+
+            Reshow();
+
+            Status.Text = settings.StableFirst
+                ? "Сначала стабильные: мигающие серверы — мимо автоподбора и после стабильных в ленте."
+                : "Только по задержке: мигающие серверы — наравне со всеми.";
+
+            this.Offer("Отбор серверов изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Подпись ленты: одна строка; не влезла — целиком в подсказке.</summary>
+    private void ShowPickLine(string text)
+    {
+        PickLine.Text = text;
+        PickLine.ToolTip = text;
     }
 }

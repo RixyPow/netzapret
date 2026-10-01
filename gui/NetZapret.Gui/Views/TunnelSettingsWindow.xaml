@@ -61,28 +61,6 @@
                                       Click="OnRussian" VerticalAlignment="Center" />
                     </Grid>
 
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Автоподбор только по зарубежным" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="Подбор идёт по задержке и потому всегда сползает на ближайший сервер — свой же. Через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ приходит тот же, что и без туннеля." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="ForeignWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="Foreign" Style="{StaticResource Switch}"
-                                      Click="OnForeign" VerticalAlignment="Center" />
-                    </Grid>
                 </StackPanel>
             </Border>
 

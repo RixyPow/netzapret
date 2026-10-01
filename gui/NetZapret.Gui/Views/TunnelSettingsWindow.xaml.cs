@@ -64,8 +64,6 @@ public partial class TunnelSettingsWindow : Window
 
         Status.Text = engines.Complaint ?? string.Empty;
 
-        Word(ForeignWord, settings.ForeignExitsOnly);
-        Foreign.IsChecked = settings.ForeignExitsOnly;
 
         Word(ReplaceWord, settings.ReplaceSilentServer);
         Replace.IsChecked = settings.ReplaceSilentServer;
@@ -185,12 +183,6 @@ public partial class TunnelSettingsWindow : Window
             Russian.IsChecked == true
                 ? "Всё пойдёт через туннель, исключения не действуют."
                 : "Исключения снова действуют: «напрямую» и «десинк» — мимо туннеля.");
-
-    private void OnForeign(object sender, RoutedEventArgs e) =>
-        Save(s => s with { ForeignExitsOnly = Foreign.IsChecked == true },
-            Foreign.IsChecked == true
-                ? "Автоподбор будет брать только зарубежные выходы."
-                : "Автоподбор снова берёт все выходы, включая отечественные.");
 
     private void OnReplace(object sender, RoutedEventArgs e) =>
         Save(s => s with { ReplaceSilentServer = Replace.IsChecked == true },

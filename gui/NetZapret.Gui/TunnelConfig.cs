@@ -220,9 +220,12 @@ internal static class TunnelConfig
                 // И убранные человеком, и отвечающие через раз (ServerHealth.Flaky):
                 // в селекторе они остаются, выбрать руками можно, а автоподбор
                 // на них не садится.
+                //
+                // Мигающие — по выключателю «Сначала стабильные» (01.10), по
+                // умолчанию включённому: с 29.09 они выводились всегда.
                 DeadServerTags = dead
                     .Concat(settings.AutoPickExcluded)
-                    .Concat(ServerHealthCache.Load().Flaky())
+                    .Concat(settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
                     .ToHashSet(StringComparer.Ordinal),
 
                 // Проверка серверов — как настроил человек (AppSettings).
