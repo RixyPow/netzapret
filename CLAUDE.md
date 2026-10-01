@@ -152,6 +152,13 @@
 - **Логи — в `runtime\` корня установки** (`InstallRoot`), у рабочей копии —
   `runtime\` корня проекта, не `build\runtime\`. `supervisor.log` — журнал
   окна и сторожа, `sing-box.log`, `winws2.log`.
+- **Голос Discord: адрес звука — в журнале самого Discord**
+  (`%APPDATA%\discord\logs\renderer_js.log`, «Creating connection to адрес:порт»,
+  за ним `Connection state change` — подключился ли). 02.10 так найдено:
+  до 30.09 звук шёл на Google Cloud 35.217.x и проходил без VPN, с 01.10 —
+  на Cloudflare 104.29.136–159.x и без VPN не проходит ни разу (провайдер
+  или десинк — не разделено). Через VPN заработал после `493bc24`
+  (списки адресов в TUN) и `e367189` (весь 104.29.128.0/19).
 - **Начинать разбор с `nz`**: `nz status`, `nz where <имя|программа.exe|адрес>`
   (по имени адресные правила, вроде `ipset-ru`, не видны — спрашивать и по
   адресу), `nz report` (архив с `network.txt`: чужие обходы, VPN-клиенты,
