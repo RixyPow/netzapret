@@ -52,48 +52,53 @@ internal static class TunnelConfig
         {
             var (ruleSet, zapretRoot) = LoadRules(settings);
 
-            // Пул (0.9.0): серверы всех подписок в работе, а не одной
-            // действующей. Без подписок остаётся WARP: выше мы уже убедились,
-            // что хоть один выход да заявлен. Указатель из настроек — на случай,
-            // когда список подписок пуст, а ссылку поставила консоль.
-            var book = SubscriptionBook.Load();
+            // WARP и подписки — одно из двух (владелец, 01.10; Warp.TunnelExits).
+            // При включённом WARP подписки на паузе, и ходить за ними незачем:
+            // запуск не ждёт панелей, которые всё равно не понадобятся.
+            IReadOnlyList<ProxyServer> fromSubscription = [];
+            int sourceCount = 0, keyCount = 0, reserved = 0;
 
-            var sources = book.Pool
-                .Select(e => new PoolSource(e.Name, e.Url))
-                .ToList();
-
-            if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
-                sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
-
-            // Отдельные ключи — последним источником пула (0.9.0).
-            var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken, keys: book.PoolKeys);
-            IReadOnlyList<ProxyServer> fromSubscription = pool.Servers;
-
-            // Подписки были, а серверов нет ни от одной, и запаса тоже — а WARP
-            // выключен: собирать не из чего, и сказать надо, почему. Имена
-            // подписок, не ссылки: ссылка — пароль.
-            if ((sources.Count > 0 || book.PoolKeys.Count > 0) && fromSubscription.Count == 0 && !settings.WarpEnabled)
+            if (!settings.WarpEnabled)
             {
-                return new BuildOutcome(false, "Конфиг не собрался: ни подписки, ни ключи не дали серверов: "
-                    + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
+                // Пул (0.9.0): серверы всех подписок в работе, а не одной
+                // действующей. Указатель из настроек — на случай, когда список
+                // подписок пуст, а ссылку поставила консоль.
+                var book = SubscriptionBook.Load();
+
+                var sources = book.Pool
+                    .Select(e => new PoolSource(e.Name, e.Url))
+                    .ToList();
+
+                if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+                    sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
+
+                // Отдельные ключи — последним источником пула (0.9.0).
+                var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken, keys: book.PoolKeys);
+                fromSubscription = pool.Servers;
+                sourceCount = sources.Count;
+                keyCount = book.PoolKeys.Count;
+                reserved = pool.Parts.Count(p => p.FromReserve);
+
+                // Подписки были, а серверов нет ни от одной, и запаса тоже:
+                // собирать не из чего, и сказать надо, почему. Имена подписок,
+                // не ссылки: ссылка — пароль.
+                if ((sources.Count > 0 || book.PoolKeys.Count > 0) && fromSubscription.Count == 0)
+                {
+                    return new BuildOutcome(false, "Конфиг не собрался: ни подписки, ни ключи не дали серверов: "
+                        + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
+                }
+
+                // Кто пришёл из запаса — в журнал: без этого «сервер из вчерашнего
+                // списка» было бы нечем объяснить.
+                foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))
+                {
+                    Journal.Write("подписка", part.FromReserve
+                        ? $"«{part.Source.Name}» не ответила — серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
+                        : $"«{part.Source.Name}» не прочиталась и запаса нет: {part.Error}");
+                }
             }
 
-            // Кто пришёл из запаса — в журнал: без этого «сервер из вчерашнего
-            // списка» было бы нечем объяснить.
-            foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))
-            {
-                Journal.Write("подписка", part.FromReserve
-                    ? $"«{part.Source.Name}» не ответила — серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
-                    : $"«{part.Source.Name}» не прочиталась и запаса нет: {part.Error}");
-            }
-
-            // WARP добавляется к серверам подписки, а не вместо них: он запасной
-            // выход, и подменять им основной — ровно обратное тому, зачем он
-            // заведён. Автоподбор опрашивает всех вместе и, пока живы серверы
-            // подписки, оседает на них: они быстрее.
-            var servers = settings.WarpEnabled
-                ? [.. fromSubscription, .. Warp.Exits()]
-                : fromSubscription;
+            var servers = Warp.TunnelExits(settings, fromSubscription);
 
             var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out _);
 
@@ -121,7 +126,7 @@ internal static class TunnelConfig
             // видны по-прежнему; удачный замер вернёт сервер со следующим
             // запуском.
             var alive = servers
-                .Where(s => !dead.Contains(s.Tag) || s.Tag == settings.PreferredServer || s.IsSelfRegistering)
+                .Where(s => !dead.Contains(s.Tag) || s.Tag == Warp.PreferredExit(settings) || s.IsSelfRegistering)
                 .ToList();
 
             int dropped = servers.Count - alive.Count;
@@ -181,7 +186,7 @@ internal static class TunnelConfig
                 // на другую как раз тогда, когда выход текущей лёг.
                 PanelHosts = SubscriptionHosts.From(
                     [settings.SubscriptionUrl, .. SubscriptionBook.Load().Entries.Select(e => e.Url)]),
-                PreferredServerTag = settings.PreferredServer,
+                PreferredServerTag = Warp.PreferredExit(settings),
 
                 // «Игнорировать исключения» сюда больше не передаётся:
                 // с 23.09 она отменяет все прямые правила, а не одно
@@ -228,11 +233,13 @@ internal static class TunnelConfig
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
-            var note = $"Конфиг собран: {result.UsedServers.Count} серверов"
-                + (sources.Count > 1 ? $" из {sources.Count} подписок" : string.Empty)
-                + (book.PoolKeys.Count > 0 ? $" и {book.PoolKeys.Count} ключей" : string.Empty);
+            var note = settings.WarpEnabled
+                ? "Конфиг собран: туннель через WARP, подписки на паузе"
+                : $"Конфиг собран: {result.UsedServers.Count} серверов"
+                    + (sourceCount > 1 ? $" из {sourceCount} подписок" : string.Empty)
+                    + (keyCount > 0 ? $" и {keyCount} ключей" : string.Empty);
 
-            if (pool.Parts.Count(p => p.FromReserve) is > 0 and var reserved)
+            if (reserved > 0)
                 note += $", {reserved} из запаса — панель не ответила";
 
             // Про мёртвых говорим вслух. Молча выведенный из автоподбора

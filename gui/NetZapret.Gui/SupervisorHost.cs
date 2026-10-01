@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using NetZapret.Core;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
@@ -407,7 +408,7 @@ internal static class SupervisorHost
         services.Add(new SingBoxService(
             singBox, options.ProxyConfig, 9090, trafficPort,
             bypassWhenDead: settings.BypassWhenTunnelDead,
-            preferredExit: settings.PreferredServer,
+            preferredExit: Warp.PreferredExit(settings),
             exitCheckSeconds: settings.ExitCheckSeconds,
             replacePinned: settings.ReplaceSilentServer)
         {
@@ -458,7 +459,7 @@ internal static class SupervisorHost
         // (замер 30.09 — в TunnelEndpoints). Без туннеля выводить нечего.
         IReadOnlyList<System.Net.IPAddress> servers = options.NoProxy
             ? []
-            : TunnelEndpoints.Read(options.ProxyConfig, settings.PreferredServer);
+            : TunnelEndpoints.Read(options.ProxyConfig, Warp.PreferredExit(settings));
 
         // И соединения, которые уходят в туннель по подменным адресам.
         var fakeRange = options.NoProxy ? null : TunnelEndpoints.FakeRange(options.ProxyConfig);

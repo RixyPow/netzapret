@@ -370,12 +370,13 @@ public partial class DoctorView : UserControl
 
         // Выход — подписка, отдельные ключи или WARP (0.9.0): с одними
         // ключами «подписка не задана» было бы ложной тревогой.
-        lines.Add(!string.IsNullOrWhiteSpace(settings.SubscriptionUrl)
-            ? Ok("Подписка задана.")
-            : settings.KeysEnabled
-                ? Ok("Подписки нет, выход — отдельные ключи.")
-                : settings.WarpEnabled
-                    ? Ok("Подписки нет, выход — WARP.")
+        // С 01.10 WARP — не запасной, а выбор пути: включён — подписки на паузе.
+        lines.Add(settings.WarpEnabled
+            ? Ok("Туннель идёт через WARP; подписки на паузе.")
+            : !string.IsNullOrWhiteSpace(settings.SubscriptionUrl)
+                ? Ok("Подписка задана.")
+                : settings.KeysEnabled
+                    ? Ok("Подписки нет, выход — отдельные ключи.")
                     : Bad("Ни подписки, ни ключей, ни WARP, а режим требует туннеля: серверов нет."));
 
         var path = settings.ProxyConfigPath;

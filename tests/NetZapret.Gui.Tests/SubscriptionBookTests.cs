@@ -99,12 +99,14 @@ public sealed class SubscriptionBookTests : IDisposable
     }
 
     /// <summary>
-    /// WARP переносится из списка в выключатель.
+    /// WARP уходит из списка; выключатель не включается, если действующей была подписка.
     /// </summary>
     /// <remarks>
     /// Отдельной строкой он оказался вреден: конфиг собирается по одной
     /// ссылке, и выбор его выхода делал действующим его, отключая рабочую
-    /// подписку целиком.
+    /// подписку целиком. С 01.10 включённый WARP ставит подписки на паузу,
+    /// поэтому лишняя строка WARP рядом с действующей подпиской его
+    /// не включает: человек ходил через подписку.
     /// </remarks>
     [Fact]
     public void A_warp_entry_becomes_the_switch()
@@ -123,7 +125,7 @@ public sealed class SubscriptionBookTests : IDisposable
         var book = SubscriptionBook.Load();
 
         Assert.Single(book.Entries);
-        Assert.True(AppSettings.Load(AppSettings.DefaultPath).WarpEnabled);
+        Assert.False(AppSettings.Load(AppSettings.DefaultPath).WarpEnabled);
     }
 
     /// <summary>

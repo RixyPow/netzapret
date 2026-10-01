@@ -155,29 +155,6 @@
                         <ToggleButton Grid.Column="2" x:Name="Bypass" Style="{StaticResource Switch}"
                                       Click="OnBypass" VerticalAlignment="Center" />
                     </Grid>
-
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Запасной выход WARP" VerticalAlignment="Center" />
-
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="Бесплатный выход Cloudflare. Подмешивается к серверам действующей подписки, а не заменяет их: пока те живы, автоподбор берёт их — они быстрее; когда лягут, останется WARP.&#x0a;&#x0a;Учётную запись движок заводит себе сам: ни почты, ни оплаты, ни ключей.&#x0a;&#x0a;Выпускает трафик в ближайшей стране, и на российском подключении это Москва. От блокировок оператора спасает, от отказов по стране — нет." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="WarpWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="Warp" Style="{StaticResource Switch}"
-                                      Click="OnWarp" VerticalAlignment="Center" />
-                    </Grid>
                 </StackPanel>
             </Border>
 

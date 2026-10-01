@@ -140,7 +140,12 @@ public sealed class SubscriptionBook
 
                 (moved with
                 {
-                    WarpEnabled = true,
+                    // С 01.10 включённый WARP ставит подписки на паузу: включаем
+                    // его, только если через него человек и ходил — он был
+                    // действующим — либо других подписок не осталось.
+                    WarpEnabled = moved.WarpEnabled
+                        || moved.SubscriptionUrl?.StartsWith("warp://", StringComparison.OrdinalIgnoreCase) == true
+                        || book.Entries.Count == 0,
 
                     // Если действующей была она, указатель повис бы на ссылку,
                     // которой больше нет, и раздел показал бы «ни одна

@@ -19,6 +19,10 @@ namespace NetZapret.Gui.Views;
 /// и замеры, здесь — то, что задают однажды.
 /// </para>
 /// <para>
+/// WARP вернулся на вкладку (01.10): он стал выбором пути — либо WARP, либо
+/// подписки, — и его выключатель стоит рядом с подписками, которые он ставит на паузу.
+/// </para>
+/// <para>
 /// Вид взят у клиента Happ, и взято там ровно три приёма. Одна карточка
 /// на группу вместо карточки на настройку — наши пять настроек занимали
 /// пятьсот точек высоты. Справа состояние, а не действие: кнопка
@@ -82,9 +86,6 @@ public partial class TunnelSettingsWindow : Window
 
         Word(BypassWord, settings.BypassWhenTunnelDead);
         Bypass.IsChecked = settings.BypassWhenTunnelDead;
-
-        Word(WarpWord, settings.WarpEnabled);
-        Warp.IsChecked = settings.WarpEnabled;
 
         ShowBypass(settings.BypassWhenTunnelDead);
         ShowChecks(settings);
@@ -208,12 +209,6 @@ public partial class TunnelSettingsWindow : Window
                 ? "Обход включён: при мёртвых выходах сеть продолжит работать мимо туннеля."
                 : "Обход выключен: при мёртвых выходах ничего не пойдёт мимо туннеля.");
     }
-
-    private void OnWarp(object sender, RoutedEventArgs e) =>
-        Save(s => s with { WarpEnabled = Warp.IsChecked == true },
-            Warp.IsChecked == true
-                ? "WARP добавлен к серверам действующей подписки."
-                : "WARP выключен.");
 
     /// <summary>
     /// Пишет изменение и говорит о нём.

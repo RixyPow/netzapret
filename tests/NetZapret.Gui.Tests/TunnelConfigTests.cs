@@ -205,23 +205,28 @@ public sealed class TunnelConfigTests : IDisposable
         Assert.Contains("health-in", inbounds);
     }
 
-    /// <summary>WARP добавляется к серверам подписки, а не вместо них.</summary>
+    /// <summary>
+    /// WARP — одно из двух с подписками (владелец, 01.10): включён — в конфиге
+    /// только он, выключен — только подписки.
+    /// </summary>
     /// <remarks>
-    /// Он запасной выход, и подменять им основной — обратное тому, зачем
-    /// он заведён.
+    /// До 01.10 WARP подмешивался к серверам подписки запасным, и этот тест
+    /// требовал обратного.
     /// </remarks>
-    [Fact]
-    public async Task Warp_is_added_to_the_subscription_not_instead_of_it()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Warp_and_the_subscription_are_one_or_the_other(bool warp)
     {
-        var root = await BuildAsync(s => s with { WarpEnabled = true });
+        var root = await BuildAsync(s => s with { WarpEnabled = warp });
 
         var tags = root.GetProperty("outbounds")
             .EnumerateArray()
             .Select(o => o.GetProperty("tag").GetString() ?? string.Empty)
             .ToList();
 
-        Assert.Contains(tags, t => t.Contains("USA", StringComparison.Ordinal));
-        Assert.Contains(tags, t => t.Contains("WARP", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(!warp, tags.Any(t => t.Contains("USA", StringComparison.Ordinal)));
+        Assert.Equal(warp, tags.Any(t => t.Contains("WARP", StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>

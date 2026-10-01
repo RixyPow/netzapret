@@ -1,3 +1,5 @@
+using NetZapret.Core;
+
 namespace NetZapret.Subscriptions;
 
 /// <summary>
@@ -83,6 +85,37 @@ public static class Warp
     /// VPN целиком.
     /// </remarks>
     public static IReadOnlyList<ProxyServer> Exits() => [MasqueServer()];
+
+    /// <summary>
+    /// Выходы туннеля: только WARP, когда он включён, иначе только подписки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Одно из двух, а не вместе (владелец, 01.10). До того WARP подмешивался
+    /// к серверам подписок запасным: в автоподбор входил, когда живых серверов
+    /// подписки не оставалось. Со стороны это читалось плохо — включённый WARP
+    /// почти никогда не работал, а выбранный руками соседствовал с подписками,
+    /// и надзор при заминке уводил с него на автоподбор подписок.
+    /// </para>
+    /// <para>
+    /// Теперь выключатель WARP — это выбор пути: включён — туннель идёт только
+    /// через WARP, подписки на паузе и не запрашиваются; выключен — только
+    /// подписки. Сам с одного на другое туннель не переходит: при мёртвом
+    /// выходе работает обход, как и прежде.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<ProxyServer> TunnelExits(AppSettings settings, IReadOnlyList<ProxyServer> subscriptions) =>
+        settings.WarpEnabled ? Exits() : subscriptions;
+
+    /// <summary>
+    /// Выход, который ставить в селектор первым: WARP, когда включён он, иначе выбранный сервер подписки.
+    /// </summary>
+    /// <remarks>
+    /// Выбранный сервер подписки в настройках сохраняется и при включённом WARP:
+    /// выключили WARP — туннель возвращается туда, где был.
+    /// </remarks>
+    public static string? PreferredExit(AppSettings settings) =>
+        settings.WarpEnabled ? MasqueTag : settings.PreferredServer;
 
     /// <summary>
     /// Выход MASQUE: тот же WARP, поверх HTTP/2 на 443 порту (с 23.09; по QUIC не доходил).
