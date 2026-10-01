@@ -17,7 +17,21 @@
         Список в духе Happ: одна карточка на группу, строки с волосяными
         разделителями, справа состояние, пояснения под значком «i».
     -->
-    <ScrollViewer LayoutTransform="{DynamicResource UiScaleTransform}" VerticalScrollBarVisibility="Auto" Padding="22,20,22,22">
+    <!--
+        «Закрыть» и строка состояния — под прокруткой, а не в ней. 01.10,
+        со строкой «Прятать VPN» и сообщением после щелчка, окно упёрлось
+        в MaxHeight при масштабе интерфейса владельца: появилась полоса,
+        ширина карточек ушла на неё, а «Закрыть» обрезался краем окна.
+        Полоса — поверх отступа (PageScroll), как на страницах: ширина
+        не прыгает, когда она появляется.
+    -->
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" Style="{StaticResource PageScroll}" Padding="22,20,22,0">
         <StackPanel>
             <TextBlock Text="Настройки туннеля" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
@@ -251,11 +265,15 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0"
+        </StackPanel>
+    </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Margin="22,12,22,20">
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,0,0,0"
                        TextWrapping="Wrap" />
 
             <Button Style="{StaticResource Ghost}" Content="Закрыть" Click="OnClose"
-                    HorizontalAlignment="Right" Margin="0,18,0,0" MinWidth="110" />
+                    HorizontalAlignment="Right" Margin="0,12,0,0" MinWidth="110" />
         </StackPanel>
-    </ScrollViewer>
+    </Grid>
 </Window>

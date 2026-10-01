@@ -41,7 +41,26 @@ public partial class TunnelSettingsWindow : Window
     {
         InitializeComponent();
 
+        // Не выше рабочей области экрана: при масштабе интерфейса 820 точек
+        // окна выходили за край, и низ с кнопкой «Закрыть» уходил под панель
+        // задач (владелец, 01.10).
+        MaxHeight = Math.Min(MaxHeight, SystemParameters.WorkArea.Height - 40);
+
         Show(AppSettings.Load(AppSettings.DefaultPath));
+    }
+
+    /// <summary>
+    /// Пояснение под строкой — пустое прячется целиком.
+    /// </summary>
+    /// <remarks>
+    /// Пустая строка с полем сверху всё равно занимает место: строка карточки
+    /// выходит выше, а выключатель съезжает ниже названия. Владелец 01.10
+    /// увидел это, когда в «Куда идёт трафик» стало две таких строки.
+    /// </remarks>
+    private static void Line(System.Windows.Controls.TextBlock line, string text)
+    {
+        line.Text = text;
+        line.Visibility = text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Show(AppSettings settings)
@@ -58,9 +77,9 @@ public partial class TunnelSettingsWindow : Window
         // сама отправляет в туннель всё, в том числе при включённом десинке.
         Russian.IsEnabled = engines.Tunnel;
 
-        RussianLine.Text = engines.Tunnel
+        Line(RussianLine, engines.Tunnel
             ? string.Empty
-            : "Действует, когда туннель включён.";
+            : "Действует, когда туннель включён.");
 
         Status.Text = engines.Complaint ?? string.Empty;
 
@@ -69,11 +88,11 @@ public partial class TunnelSettingsWindow : Window
 
         // Сказать, когда включённое ничего не делает: «без исключений»
         // отбрасывает все правила «напрямую», а без туннеля прятать не от чего.
-        HideVpnLine.Text = !engines.Tunnel
+        Line(HideVpnLine, !engines.Tunnel
             ? "Действует, когда туннель включён."
             : engines.IgnoreExclusions && settings.HideVpnFromRussianApps
                 ? "Сейчас не действует: включено «Игнорировать исключения»."
-                : string.Empty;
+                : string.Empty);
 
 
         Word(ReplaceWord, settings.ReplaceSilentServer);
