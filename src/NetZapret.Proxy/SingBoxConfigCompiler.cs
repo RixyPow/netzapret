@@ -726,9 +726,18 @@ public sealed class SingBoxConfigCompiler
         if (ruleSet.Operating != OperatingMode.Selective)
             return Array.Empty<string>();
 
-        return ruleSet.Rules
-            .Where(r => r.Mode == RoutingMode.Proxy && r.Match == MatchKind.Ip)
+        var proxied = ruleSet.Rules.Where(r => r.Mode == RoutingMode.Proxy);
+
+        // Список адресов — то же правило по адресу, только файлом. До 01.10
+        // сюда шли одни одиночные адреса, и часть «Звук голоса (адреса)»
+        // через VPN в туннель ничего не заводила: правило в маршрутах
+        // движка стояло, а пакеты до TUN не доходили.
+        return proxied
+            .Where(r => r.Match == MatchKind.Ip)
             .Select(r => r.Value)
+            .Concat(proxied
+                .Where(r => r.Match == MatchKind.IpSet)
+                .SelectMany(r => r.IpSetCidrs))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -953,7 +962,7 @@ public sealed class SingBoxConfigCompiler
 
         if (options.Scope == TunnelScope.ProxyOnly)
         {
-            var captured = new JsonArray
+            var captured = new List<string>
             {
                 options.FakeIpV4Range,
                 options.FakeIpV6Range,
@@ -983,7 +992,13 @@ public sealed class SingBoxConfigCompiler
             foreach (var cidr in options.PinnedProxyAddresses)
                 captured.Add(cidr);
 
-            tun["route_address"] = captured;
+            // Одна сеть приходит и правилом, и секцией capture: список
+            // Telegram через VPN стоит в обоих. Повтор движку не нужен.
+            var unique = new JsonArray();
+            foreach (var cidr in captured.Distinct(StringComparer.OrdinalIgnoreCase))
+                unique.Add(cidr);
+
+            tun["route_address"] = unique;
         }
 
         if (options.DesyncAddresses.Count > 0)

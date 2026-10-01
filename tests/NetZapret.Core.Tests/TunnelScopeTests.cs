@@ -60,6 +60,46 @@ public class TunnelScopeTests
     }
 
     [Fact]
+    public void ProxyOnlyCapturesAddressListsGoingThroughTheTunnel()
+    {
+        // 01.10: часть Discord «Звук голоса (адреса)» через VPN — список
+        // discord-voice-net.txt. Правило в маршрутах движка стояло, а сети
+        // в route_address не было: звук разговора до TUN не доходил, и голос
+        // при десинке не работал ни через VPN, ни правилом программы.
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: ipset
+                value: "config/lists/discord-voice-net.txt"
+                mode: proxy
+              - match: ipset
+                value: "config/lists/ipset-discord.txt"
+                mode: desync
+            """);
+
+        engine.RuleSet.Rules[0].LoadIpSet(["104.29.158.0/24"]);
+        engine.RuleSet.Rules[1].LoadIpSet(["104.17.0.0/16"]);
+
+        var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+
+            // Та же сеть секцией capture — в route_address она должна быть одна.
+            CaptureAddresses = ["104.29.158.0/24"],
+        }).Json;
+
+        var captured = JsonDocument.Parse(json).RootElement
+            .GetProperty("inbounds")[0].GetProperty("route_address")
+            .EnumerateArray().Select(e => e.GetString()).ToList();
+
+        Assert.Single(captured, c => c == "104.29.158.0/24");
+
+        // Список десинка в туннель не заходит: WinDivert должен видеть
+        // исходный поток.
+        Assert.DoesNotContain("104.17.0.0/16", captured);
+    }
+
+    [Fact]
     public void ProxyOnlyCapturesResolverAddressesSoFakeIpHasSomethingToRewrite()
     {
         var root = Compile(Rules, new SingBoxOptions
