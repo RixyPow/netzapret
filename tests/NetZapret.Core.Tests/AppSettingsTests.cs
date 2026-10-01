@@ -46,16 +46,31 @@ public sealed class AppSettingsTests : IDisposable
     /// Файл, занятый чужим чтением, записывается, когда его отпустят, —
     /// а не падает и не остаётся обрезанным.
     /// </summary>
+    /// <remarks>
+    /// Читатель отпускает файл из своего потока, а не продолжением задачи.
+    /// Продолжение шло через общий пул, и на CI, где тесты идут параллельно
+    /// и пул занят, оно запускалось позже, чем Save ждёт (десять попыток по
+    /// 50 мс): 01.10 три падения подряд за 483–537 мс — Save сдавался
+    /// с «Access to the path is denied», а очистка теста не могла удалить
+    /// всё ещё открытый файл. Ошибка была в тесте: сон отдельного потока
+    /// система не откладывает, как задачу в занятом пуле.
+    /// </remarks>
     [Fact]
-    public async Task SavingWaitsForAReaderAndLeavesNoTemp()
+    public void SavingWaitsForAReaderAndLeavesNoTemp()
     {
         new AppSettings { PresetName = "до" }.Save(_path);
 
         var reader = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var release = Task.Delay(150).ContinueWith(_ => reader.Dispose());
+        var release = new Thread(() =>
+        {
+            Thread.Sleep(150);
+            reader.Dispose();
+        });
+
+        release.Start();
 
         new AppSettings { PresetName = "после" }.Save(_path);
-        await release;
+        release.Join();
 
         Assert.Equal("после", AppSettings.Load(_path).PresetName);
         Assert.False(File.Exists(_path + ".tmp"));
