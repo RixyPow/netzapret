@@ -182,16 +182,18 @@ public sealed class TunnelConfigTests : IDisposable
     }
 
     /// <summary>
-    /// Служебный вход поднимается тогда и только тогда, когда его спросят.
+    /// Служебный вход поднимается всегда, а не только под «Проверку прохода трафика».
     /// </summary>
     /// <remarks>
-    /// Разойдясь, эти два решения дают вечно проваливающуюся проверку
-    /// у исправного движка: супервизор стучится туда, где никого нет.
+    /// Через него идут замер скорости и проверка блокировок через туннель.
+    /// До 0.10.3 он шёл за настройкой, по умолчанию выключенной, и у большинства
+    /// замер через туннель падал с «конечный компьютер отверг запрос» (01.10).
+    /// Стучится ли в него супервизор, по-прежнему решает настройка.
     /// </remarks>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task The_health_inbound_follows_the_setting(bool asked)
+    public async Task The_health_inbound_is_always_there(bool asked)
     {
         var root = await BuildAsync(s => s with { VerifyTraffic = asked });
 
@@ -200,7 +202,7 @@ public sealed class TunnelConfigTests : IDisposable
             .Select(i => i.GetProperty("tag").GetString())
             .ToList();
 
-        Assert.Equal(asked, inbounds.Contains("health-in"));
+        Assert.Contains("health-in", inbounds);
     }
 
     /// <summary>WARP добавляется к серверам подписки, а не вместо них.</summary>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 
 namespace NetZapret.Proxy;
 
@@ -163,7 +164,7 @@ public sealed class SpeedTest
         }
         catch (Exception ex)
         {
-            return result with { Problem = "сервер замера недоступен: " + Short(ex) };
+            return result with { Problem = Unreachable(ex) };
         }
 
         try
@@ -581,8 +582,35 @@ public sealed class SpeedTest
     private static string Short(Exception ex) => ex.GetBaseException() switch
     {
         OperationCanceledException => "сервер замера не ответил вовремя",
+        TimeoutException => "соединение не установилось за 10 с",
         var inner => inner.Message,
     };
+
+    /// <summary>
+    /// Почему не дошли до сервера замера.
+    /// </summary>
+    /// <remarks>
+    /// Через туннель виноват чаще туннель, чем сервер, а прежде любой отказ
+    /// звался «сервер замера недоступен» (01.10, два случая за вечер):
+    /// <list type="bullet">
+    /// <item>отказ в подключении к петле — входа проверки нет вовсе: до 0.10.3
+    /// он поднимался только с «Проверкой прохода трафика», по умолчанию
+    /// выключенной, и у большинства замер через туннель не работал;</item>
+    /// <item>вход есть, а соединение не установилось за срок — туннель не
+    /// пропустил: у владельца замер нажат через 24 с после запуска, когда
+    /// WARP ещё не пропускал трафик.</item>
+    /// </list>
+    /// </remarks>
+    private string Unreachable(Exception ex)
+    {
+        if (_options.Proxy is null)
+            return "сервер замера недоступен: " + Short(ex);
+
+        if (ex.GetBaseException() is SocketException { SocketErrorCode: SocketError.ConnectionRefused })
+            return "вход проверки движка не отвечает — перезапустите движки";
+
+        return "туннель не пропустил соединение: " + Short(ex);
+    }
 
     /// <summary>Тело запроса, считающее записанное: по нему идёт стрелка отдачи.</summary>
     private sealed class CountingContent : HttpContent

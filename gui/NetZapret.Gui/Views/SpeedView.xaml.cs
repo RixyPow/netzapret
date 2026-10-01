@@ -315,6 +315,15 @@ public partial class SpeedView : UserControl
 
             SpeedHistory.Add(entry);
 
+            // Не дошли через туннель — сказать, что видит надзор: 01.10 замер
+            // нажали через 24 с после запуска, когда WARP ещё не пропускал
+            // трафик, и прочли «сервер замера недоступен».
+            if (tunnel && result.Problem is { Length: > 0 } problem
+                && TunnelReadiness.Why(SupervisorState.Load(SupervisorState.DefaultPath), DateTimeOffset.Now) is { } why)
+            {
+                note = $"Замер не удался: {problem}. {why}";
+            }
+
             // В журнал — без адреса: он личный, а журнал уходит в отчёты.
             Journal.Write("замер", $"{(tunnel ? "через туннель" : "напрямую")}: {SpeedTest.Describe(result)}"
                 + (result.Country is { } country ? $"; страна выхода {country}, узел {result.Node}" : string.Empty));
