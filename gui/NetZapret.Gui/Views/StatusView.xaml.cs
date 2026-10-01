@@ -1393,8 +1393,17 @@ public partial class StatusView : UserControl
     /// «На всю ширину» (Оформление, 01.10): без предела у содержимого и без колонки под арт.
     /// </summary>
     /// <remarks>
-    /// Колонка арта в ноль — и PlaceArt сам кладёт картинку под карточки,
-    /// как на узком окне.
+    /// <para>
+    /// Фон тогда — как у прочих вкладок: своя картинка «Главной» прячется,
+    /// подложка становится прозрачной (Chrome), и видна картинка окна под
+    /// затемнением темы. Владелец 01.10: растянули — «обои темы не должны
+    /// сдвигаться вправо».
+    /// </para>
+    /// <para>
+    /// Своя картинка пересчитывается только по размеру своего слоя, а он
+    /// при смене колонок не меняется: стоило лишь обнулить колонку, и арт
+    /// оставался на месте, рассчитанном под неё, — сдвинутым вправо.
+    /// </para>
     /// </remarks>
     private void ShowWidth(AppSettings settings)
     {
@@ -1402,11 +1411,18 @@ public partial class StatusView : UserControl
         {
             ContentColumn.MaxWidth = double.PositiveInfinity;
             ArtColumn.Width = new GridLength(0);
+            ArtLayer.Visibility = Visibility.Collapsed;
+            SetResourceReference(BackgroundProperty, "Chrome");
         }
         else
         {
             ContentColumn.MaxWidth = 940;
             ArtColumn.Width = new GridLength(1, GridUnitType.Star);
+            ArtLayer.Visibility = Visibility.Visible;
+            SetResourceReference(BackgroundProperty, "Backdrop");
+
+            // Слой мог прятаться — разложить заново, когда станет известен размер.
+            Dispatcher.BeginInvoke(PlaceArt, System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 }
