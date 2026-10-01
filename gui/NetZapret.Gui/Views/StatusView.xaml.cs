@@ -395,7 +395,7 @@ public partial class StatusView : UserControl
 
         PresetValue.Text = settings.DescribePreset();
         ShowPresetNote(settings.PresetName);
-        ServerValue.Text = _exit is null ? settings.DescribeServer() : $"{settings.DescribeServer()} · сейчас {_exit}";
+        ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
         DnsValue.Text = settings.DnsServer;
 
         // Ссылки на подписки — пароли, и в окне им не место. Показываем лишь
@@ -448,7 +448,7 @@ public partial class StatusView : UserControl
                 return;
 
             _exit = server;
-            ServerValue.Text = $"{settings.DescribeServer()} · сейчас {server}";
+            ServerValue.Text = TunnelStatus.ServerLine(settings, server);
         }
         finally
         {

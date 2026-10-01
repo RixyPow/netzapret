@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using NetZapret.Core;
+using NetZapret.Subscriptions;
 
 namespace NetZapret.Proxy;
 
@@ -51,6 +53,37 @@ public static class TunnelStatus
         string.IsNullOrWhiteSpace(preferred)
             ? ExitStanding.Auto
             : server == preferred ? ExitStanding.Pinned : ExitStanding.Other;
+
+    /// <summary>
+    /// Строка «Сервер» на «Главной»: имя выхода, а при автоподборе — «(авто)» следом.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 01.10: прежде строка была «выбранное в настройках · сейчас
+    /// живое», с флагом буквами — «IT Италия · сейчас Cloudflare WARP», — и при
+    /// включённом WARP называла выбранным сервер подписки, которая на паузе.
+    /// Теперь одно имя: живое, когда движок ответил, иначе выбранное
+    /// (Warp.PreferredExit — при WARP это он). «(временно)» — когда движок
+    /// держит не выбранный: замена молчащему либо выбор ещё не применён.
+    /// </remarks>
+    /// <param name="live">Через что идёт трафик по ответу движка; <c>null</c> — движки стоят или не ответили.</param>
+    public static string ServerLine(AppSettings settings, string? live)
+    {
+        var preferred = Warp.PreferredExit(settings);
+
+        if (live is null)
+            return preferred is null ? "Автоподбор" : NameOf(preferred);
+
+        return Standing(live, preferred) switch
+        {
+            ExitStanding.Auto => $"{NameOf(live)} (авто)",
+            ExitStanding.Pinned => NameOf(live),
+            _ => $"{NameOf(live)} (временно)",
+        };
+    }
+
+    /// <summary>Имя сервера без флага: «🇮🇹 Италия» → «Италия».</summary>
+    public static string NameOf(string tag) =>
+        CountryTag.Split(tag).Name is { Length: > 0 } name ? name : tag;
 
     /// <summary>
     /// Через какой сервер движок ходит прямо сейчас.
