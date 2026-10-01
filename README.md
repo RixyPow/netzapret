@@ -4,7 +4,7 @@
 [![Последний выпуск](https://img.shields.io/github/v/release/RixyPow/netzapret?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA)](https://github.com/RixyPow/netzapret/releases/latest)
 [![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
-[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.9.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec?nocache=1)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.11.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec?nocache=1)
 
 **Для тех, у кого есть подписка VPN и кому мало одного Zapret.** Десинк чинит
 то, что тормозит провайдер, VPN берёт то, что закрыто по стране, — а NetZapret
