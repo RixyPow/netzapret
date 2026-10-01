@@ -145,6 +145,41 @@ public sealed class TunnelCaptureTests
         Assert.Null(TunnelCapture.Bounds(null));
     }
 
+    /// <summary>
+    /// Адреса нашего TUN — из перехвата в обе стороны (01.10: голос Discord
+    /// при полном перехвате получал подделку десинка внутри туннеля).
+    /// </summary>
+    [Fact]
+    public void TheTunAddressesAreLeftOutOfTheCapture()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-tun-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, Compile(("NL", "77.1.1.1")).ToJsonString());
+            var tun = TunnelEndpoints.TunAddresses(path);
+
+            Assert.Equal(["172.19.0.1", "fdfe:dcba:9876::1"], tun.Select(a => a.ToString()));
+
+            var filter = TunnelCapture.Filter([IPAddress.Parse("77.1.1.1")], null, null, tun);
+
+            Assert.Equal(
+                "(ip.DstAddr=172.19.0.1 or ip.SrcAddr=172.19.0.1"
+                + " or ipv6.DstAddr=fdfe:dcba:9876::1 or ipv6.SrcAddr=fdfe:dcba:9876::1"
+                + " or ip.DstAddr=77.1.1.1 or ip.SrcAddr=77.1.1.1 ? false : true)",
+                filter);
+
+            // Без адресов TUN — прежняя строка, знак в знак.
+            Assert.Equal(TunnelCapture.Filter(Servers), TunnelCapture.Filter(Servers, null, null, []));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        Assert.Empty(TunnelEndpoints.TunAddresses(path));
+    }
+
     [Fact]
     public void TheFakeRangeIsReadFromTheCompiledConfig()
     {

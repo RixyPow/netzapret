@@ -79,6 +79,10 @@ public static class WinwsCommandLine
     /// <param name="udpOff">
     /// Сети, UDP к которым десинк не перехватывает (<see cref="UdpOffDesync"/>).
     /// </param>
+    /// <param name="tunAddresses">
+    /// Адреса нашего TUN: пакеты по дороге в туннель и из него десинк не видит,
+    /// они пройдут через него на выходе из sing-box.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
@@ -86,14 +90,15 @@ public static class WinwsCommandLine
         bool gameFilter = false,
         IReadOnlyList<IPAddress>? tunnelServers = null,
         string? tunnelFakeRange = null,
-        IReadOnlyList<string>? udpOff = null)
+        IReadOnlyList<string>? udpOff = null,
+        IReadOnlyList<IPAddress>? tunAddresses = null)
     {
         var arguments = BuildPreset(preset, excludeList, own);
 
         if (gameFilter)
             GameFilter.Apply(arguments);
 
-        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff);
+        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff, tunAddresses);
 
         return arguments;
     }

@@ -57,13 +57,15 @@ public static class TunnelCapture
     /// <param name="udpOff">
     /// Сети, UDP к которым десинку не отдаётся вовсе (<see cref="UdpOffDesync"/>).
     /// </param>
+    /// <param name="tun">Адреса нашего TUN: пакеты в туннель и из него.</param>
     public static void Apply(
         List<string> arguments,
         IReadOnlyList<IPAddress>? servers,
         string? fakeRange = null,
-        IReadOnlyList<string>? udpOff = null)
+        IReadOnlyList<string>? udpOff = null,
+        IReadOnlyList<IPAddress>? tun = null)
     {
-        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange, udpOff);
+        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange, udpOff, tun);
 
         if (filter.Length == 0)
             return;
@@ -92,8 +94,9 @@ public static class TunnelCapture
         IReadOnlyList<string> arguments,
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
-        IReadOnlyList<string>? udpOff = null) =>
-        Carries(arguments, servers, fakeRange, udpOff) ? Math.Min(servers.Count, Limit) : 0;
+        IReadOnlyList<string>? udpOff = null,
+        IReadOnlyList<IPAddress>? tun = null) =>
+        Carries(arguments, servers, fakeRange, udpOff, tun) ? Math.Min(servers.Count, Limit) : 0;
 
     /// <summary>Встало ли исключение в строку запуска.</summary>
     /// <remarks>
@@ -104,9 +107,10 @@ public static class TunnelCapture
         IReadOnlyList<string> arguments,
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
-        IReadOnlyList<string>? udpOff = null)
+        IReadOnlyList<string>? udpOff = null,
+        IReadOnlyList<IPAddress>? tun = null)
     {
-        var filter = Filter(servers.Take(Limit).ToList(), fakeRange, udpOff);
+        var filter = Filter(servers.Take(Limit).ToList(), fakeRange, udpOff, tun);
 
         return filter.Length > 0
             && arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase)
@@ -142,7 +146,8 @@ public static class TunnelCapture
     public static string Filter(
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
-        IReadOnlyList<string>? udpOff = null)
+        IReadOnlyList<string>? udpOff = null,
+        IReadOnlyList<IPAddress>? tun = null)
     {
         var tests = new List<string>();
 
@@ -165,7 +170,10 @@ public static class TunnelCapture
             tests.Add($"(udp and ({string.Join(" or ", inside)}))");
         }
 
-        foreach (var server in servers)
+        // Адреса нашего TUN — тем же сравнением, что серверы: пакет с ними
+        // идёт в туннель или из него, а через десинк он пройдёт на выходе
+        // из sing-box (TunnelEndpoints.TunAddresses, замер 01.10).
+        foreach (var server in (tun ?? []).Concat(servers))
         {
             // Адрес IPv6 — без зоны (%12): в фильтре ей места нет.
             var (field, text) = server.AddressFamily switch

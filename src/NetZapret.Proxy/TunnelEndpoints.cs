@@ -107,6 +107,47 @@ public static class TunnelEndpoints
     }
 
     /// <summary>
+    /// Адреса нашего TUN (<c>address</c> у входа <c>tun</c>) — без длины префикса.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пакет с таким адресом источника идёт в туннель, с таким назначением —
+    /// из него. WinDivert снимает их на адаптере TUN, и при полном перехвате
+    /// (правило для программы) winws2 видел каждое соединение дважды: по дороге
+    /// в TUN с настоящим адресом назначения и на выходе из sing-box.
+    /// </para>
+    /// <para>
+    /// Замер 01.10 у владельца (полный перехват — правила Telegram.exe
+    /// и ChatGPT.exe): голос Discord — шесть UDP-соединений к 104.29.158.5:19316,
+    /// по 36 КБ отправлено, ноль получено, Discord пишет «Не установлен маршрут».
+    /// Движок опознал в этих соединениях www.google.com: первым пакетом каждого
+    /// к нему пришла подделка секции «Голосовые звонки/чаты»
+    /// (<c>fake:blob=quic_google</c>, десять повторов). В TUN поддельный пакет
+    /// не теряется по TTL, как рассчитано, а уходит серверу обычным.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<IPAddress> TunAddresses(string configPath)
+    {
+        try
+        {
+            var inbounds = JsonNode.Parse(File.ReadAllText(configPath))?["inbounds"] as JsonArray;
+
+            return (inbounds ?? [])
+                .OfType<JsonObject>()
+                .Where(i => (string?)i["type"] == "tun")
+                .SelectMany(i => i["address"] as JsonArray ?? [])
+                .Select(a => ((string?)a)?.Split('/')[0])
+                .Select(a => IPAddress.TryParse(a, out var address) ? address : null)
+                .OfType<IPAddress>()
+                .ToList();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// Куда подключается туннель: <c>server</c> у выходов и адреса пиров WireGuard.
     /// </summary>
     /// <remarks>

@@ -473,12 +473,20 @@ internal static class SupervisorHost
         // Сети выбирает сборка списков по правилам, здесь их только подбирают.
         var udpOff = UdpOffDesync.Read();
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff);
+        // Пакеты по дороге в наш TUN и из него (TunnelEndpoints.TunAddresses, 01.10).
+        IReadOnlyList<System.Net.IPAddress> tun = options.NoProxy
+            ? []
+            : TunnelEndpoints.TunAddresses(options.ProxyConfig);
 
-        bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff);
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun);
+
+        bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff, tun);
 
         if (fakeRange is not null && carried)
             Console.WriteLine($"Десинк не перехватывает трафик в туннель: подменные адреса {fakeRange}.");
+
+        if (tun.Count > 0 && carried)
+            Console.WriteLine($"Десинк не перехватывает пакеты на пути в TUN и из него: {string.Join(", ", tun)}.");
 
         if (udpOff.Count > 0)
         {
@@ -489,7 +497,7 @@ internal static class SupervisorHost
 
         if (servers.Count > 0)
         {
-            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange, udpOff);
+            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange, udpOff, tun);
 
             Console.WriteLine(skipped == 0
                 ? "Серверы туннеля остались в перехвате десинка: у пресета свой --wf-raw-filter файлом."
