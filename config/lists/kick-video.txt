@@ -1,0 +1,9 @@
+# Видео Kick — Amazon IVS.
+#
+# Ссылка на поток из API Kick ведёт на *.playback.live-video.net, плейлист
+# качества — на *.playlist.live-video.net, куски — на
+# *.hls.live-video.net (CloudFront); замер 01.10 на живом канале.
+# Тот же IVS у Twitch, и зона лежит и в twitch.txt: Kick в маршрутах
+# не находился, а его видео шло путём Twitch — и под рецептом секции
+# Twitch пресета (жалоба 01.10: с NetZapret поток Kick не играет).
+live-video.net

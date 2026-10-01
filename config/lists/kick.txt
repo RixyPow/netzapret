@@ -1,0 +1,6 @@
+# Kick — сайт, чат и картинки.
+#
+# assets, files, images и static.kick.com — поддомены, их покрывает зона
+# (страница канала 01.10). Видео не здесь: его отдаёт Amazon IVS
+# с live-video.net — см. kick-video.txt.
+kick.com

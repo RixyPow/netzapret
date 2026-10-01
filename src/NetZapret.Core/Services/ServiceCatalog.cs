@@ -294,6 +294,25 @@ public static class ServiceCatalog
             Parts = [new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" }],
         },
 
+        // Не заблокирован — по умолчанию «напрямую» (config/rules.yaml,
+        // владелец 01.10). Видео — у Amazon IVS, на live-video.net из списка
+        // Twitch, поэтому частью внутри Twitch: выбранный путь пишется раньше.
+        new ServiceDefinition
+        {
+            Name = "Kick",
+            Parts =
+            [
+                new ServicePart { Name = "Сайт и чат", List = "config/lists/kick.txt" },
+                new ServicePart
+                {
+                    Name = "Видео (Amazon IVS)",
+                    List = "config/lists/kick-video.txt",
+                    Within = "config/lists/twitch.txt",
+                    Note = "те же серверы IVS у части видео Twitch",
+                },
+            ],
+        },
+
         // Донаты и виджеты для стримов. Не заблокирован — по умолчанию
         // «напрямую» (config/rules.yaml): десинку здесь чинить нечего.
         new ServiceDefinition
