@@ -190,6 +190,10 @@ public partial class VpnView : UserControl
 
         Loaded += async (_, _) =>
         {
+            // Фокус — на вкладку, иначе Ctrl+V («Из буфера») не дошёл бы до неё:
+            // после перехода из меню фокус остаётся на пункте меню.
+            Focus();
+
             // Движок спрашивается сразу, не дожидаясь подписок. Прежде опрос
             // заводился после чтения всех подписок и первый раз срабатывал
             // ещё через 15 с — с лежащей «Основной» карточка оживала
@@ -1323,6 +1327,12 @@ public partial class VpnView : UserControl
             return;
         }
 
+        AddSubscription(url);
+    }
+
+    /// <summary>Ссылку подписки — в книгу и в работу; из поля, буфера и файла одинаково.</summary>
+    private void AddSubscription(string url)
+    {
         try
         {
             var book = SubscriptionBook.Load();
@@ -1472,7 +1482,8 @@ public partial class VpnView : UserControl
 
         if (fresh.Count == 0)
         {
-            Status.Text = "Ключей не нашлось: нужны строки вида vless://, hysteria2://, trojan://, ss://, vmess://.";
+            Status.Text = "Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, "
+                + "wireguard:// и подобные.";
             return;
         }
 
@@ -1509,6 +1520,158 @@ public partial class VpnView : UserControl
         {
             Status.Text = "Не удалось добавить ключи: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>«Из буфера»: ключи, ссылка подписки или картинка с QR-кодом.</summary>
+    private void OnPasteImport(object sender, RoutedEventArgs e) => ImportFromClipboard();
+
+    /// <summary>
+    /// Ctrl+V на вкладке — то же, что «Из буфера», если курсор не в поле ввода.
+    /// </summary>
+    /// <remarks>
+    /// В поле Ctrl+V остаётся обычной вставкой: человек вставляет в поле —
+    /// значит, хочет видеть вставленное там.
+    /// </remarks>
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.V || Keyboard.Modifiers != ModifierKeys.Control)
+            return;
+
+        if (Keyboard.FocusedElement is TextBox or PasswordBox)
+            return;
+
+        e.Handled = true;
+        ImportFromClipboard();
+    }
+
+    private void ImportFromClipboard()
+    {
+        string? text;
+
+        try
+        {
+            if (Clipboard.ContainsText())
+            {
+                text = Clipboard.GetText();
+            }
+            else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
+            {
+                text = ReadQr(image);
+
+                if (text is null)
+                {
+                    Status.Text = "В буфере картинка, но QR-кода на ней не нашлось.";
+                    return;
+                }
+            }
+            else if (Clipboard.ContainsFileDropList() && Clipboard.GetFileDropList() is { Count: > 0 } files)
+            {
+                ImportFile(files[0]!);
+                return;
+            }
+            else
+            {
+                Status.Text = "В буфере ничего: скопируйте ключ, ссылку подписки или картинку с QR-кодом.";
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Буфер не читается: " + ex.GetBaseException().Message;
+            return;
+        }
+
+        Import(text, name: null, where: "В буфере");
+    }
+
+    /// <summary>«Из файла»: .conf WireGuard и AmneziaWG либо картинка с QR-кодом.</summary>
+    private void OnFileImport(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Ключ из файла",
+            Filter = "Ключ или QR-код|*.conf;*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|Все файлы|*.*",
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            ImportFile(dialog.FileName);
+    }
+
+    private void ImportFile(string path)
+    {
+        try
+        {
+            var extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
+
+            if (extension is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp")
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad;
+                image.UriSource = new Uri(path);
+                image.EndInit();
+
+                var text = ReadQr(image);
+
+                if (text is null)
+                {
+                    Status.Text = "На картинке QR-кода не нашлось.";
+                    return;
+                }
+
+                Import(text, name: null, where: "В QR-коде");
+                return;
+            }
+
+            // Ключ или файл .conf — это килобайты. Больше — не тот файл,
+            // и читать его целиком в память незачем.
+            if (new System.IO.FileInfo(path).Length > 1_000_000)
+            {
+                Status.Text = "Файл слишком большой для ключа.";
+                return;
+            }
+
+            Import(System.IO.File.ReadAllText(path), System.IO.Path.GetFileNameWithoutExtension(path), "В файле");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Файл не читается: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Найденное — туда же, куда ведёт кнопка «Добавить».</summary>
+    /// <param name="where">Откуда — для жалобы, когда не нашлось ничего.</param>
+    private void Import(string? text, string? name, string where)
+    {
+        var found = KeyImport.FromText(text, name);
+
+        if (found.Keys.Count > 0)
+        {
+            AddKeys(string.Join("\n", found.Keys));
+            return;
+        }
+
+        if (found.SubscriptionUrl is { } url)
+        {
+            AddSubscription(url);
+            return;
+        }
+
+        Status.Text = $"{where} {found.Problem}.";
+    }
+
+    /// <summary>
+    /// QR-код с картинки WPF: пиксели в BGRA — и в библиотеку.
+    /// </summary>
+    private static string? ReadQr(BitmapSource image)
+    {
+        var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        var pixels = new byte[stride * bgra.PixelHeight];
+
+        bgra.CopyPixels(pixels, stride, 0);
+
+        return KeyImport.ReadQr(pixels, bgra.PixelWidth, bgra.PixelHeight);
     }
 
     /// <summary>⟳ у подписки: перечитать только её.</summary>

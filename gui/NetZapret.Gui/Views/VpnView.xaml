@@ -2,7 +2,9 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:gui="clr-namespace:NetZapret.Gui"
-             Background="{DynamicResource Chrome}">
+             Background="{DynamicResource Chrome}"
+             Focusable="True" FocusVisualStyle="{x:Null}"
+             PreviewKeyDown="OnPreviewKeyDown">
 
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
         <Grid>
@@ -412,8 +414,21 @@
                                     Content="Добавить" Click="OnAdd" />
                         </Grid>
 
+                        <!--
+                            Ключи раздают не только строкой: QR-кодом на сайте
+                            продавца и файлом .conf у WireGuard и AmneziaVPN
+                            (владелец 01.10: «ключ из буфера или по QR можно»).
+                        -->
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Style="{StaticResource Ghost}" Content="Из буфера" Click="OnPasteImport"
+                                    ToolTip="Ключи, ссылка подписки или картинка с QR-кодом — например, снимок Win+Shift+S. Ctrl+V на вкладке делает то же." />
+                            <Button Style="{StaticResource Ghost}" Content="Из файла…" Margin="8,0,0,0"
+                                    Click="OnFileImport"
+                                    ToolTip="Файл .conf WireGuard или AmneziaWG либо картинка с QR-кодом." />
+                        </StackPanel>
+
                         <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Слева имя для себя, справа ссылка подписки — или ключи, один или пачкой: они лягут в папку «Отдельные ключи». Ссылка и ключи обратно не показываются." />
+                                   Text="Слева имя для себя, справа ссылка подписки — или ключи, один или пачкой: они лягут в папку «Отдельные ключи». Ключ можно взять и из буфера — строкой или QR-кодом, — и из файла .conf. Ссылка и ключи обратно не показываются." />
                     </StackPanel>
                 </Border>
 

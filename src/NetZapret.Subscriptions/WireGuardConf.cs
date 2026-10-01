@@ -104,6 +104,47 @@ public static class WireGuardConf
     }
 
     /// <summary>
+    /// Сервер WireGuard обратно в ссылку — чтобы файл .conf жил обычным ключом.
+    /// </summary>
+    /// <remarks>
+    /// Ключи экранируются целиком: в base64 есть «/», «+» и «=», и сырыми
+    /// они разрезали бы ссылку. Разбирает её <see cref="ProxyUriParser"/>,
+    /// и проверено это круговым тестом: файл → ссылка → тот же сервер.
+    /// </remarks>
+    public static string ToLink(ProxyServer server)
+    {
+        var query = new List<string>
+        {
+            "publickey=" + Uri.EscapeDataString(server.PeerPublicKey ?? string.Empty),
+            "address=" + Uri.EscapeDataString(string.Join(",", server.LocalAddresses)),
+            "mtu=" + server.Mtu,
+            "keepalive=" + server.KeepaliveSeconds,
+        };
+
+        if (!string.IsNullOrEmpty(server.PreSharedKey))
+            query.Add("presharedkey=" + Uri.EscapeDataString(server.PreSharedKey));
+
+        if (server.AmneziaOptions is { } amnezia
+            && System.Text.Json.Nodes.JsonNode.Parse(amnezia) is System.Text.Json.Nodes.JsonObject block)
+        {
+            foreach (var (key, value) in block)
+            {
+                var text = value is System.Text.Json.Nodes.JsonValue v && v.TryGetValue<string>(out var s)
+                    ? s
+                    : value?.ToJsonString() ?? string.Empty;
+
+                query.Add(key + "=" + Uri.EscapeDataString(text));
+            }
+        }
+
+        var host = server.Host.Contains(':') ? $"[{server.Host}]" : server.Host;
+
+        return $"wireguard://{Uri.EscapeDataString(server.Credential)}@{host}:{server.Port}"
+            + "?" + string.Join("&", query)
+            + "#" + Uri.EscapeDataString(server.Tag);
+    }
+
+    /// <summary>
     /// Свои адреса в туннеле, через запятую; без маски — как одиночный адрес.
     /// </summary>
     /// <remarks>

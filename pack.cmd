@@ -233,6 +233,9 @@ copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapretgui-MIT.txt" "%ENGINES%\zapret\LICENSE-ZapretGUI.txt" >nul 2>&1
 copy /y "%ROOT%docs\licenses\flowseal-MIT.txt" "%ENGINES%\zapret\LICENSE-Flowseal.txt" >nul 2>&1
+rem ZXing.Net reads QR codes with keys (01.10). Apache-2.0: the licence text
+rem must travel with the copy; the library sits beside NetZapret.exe.
+copy /y "%ROOT%docs\licenses\zxing-net-Apache-2.0.txt" "%STAGE%\LICENSE-ZXing.Net.txt" >nul 2>&1
 
 rem Last line of defence before the archive exists. dist\ is wiped at the start,
 rem so these files should never be here - but testing happens in the unpacked

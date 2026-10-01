@@ -1,5 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    ZXing.Net — чтение QR-кодов с ключами (01.10): встроенного распознавания
+    в Windows нет. Apache-2.0, назван в docs/THIRD-PARTY.md.
+  -->
+  <ItemGroup>
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\NetZapret.Core\NetZapret.Core.csproj" />
   </ItemGroup>

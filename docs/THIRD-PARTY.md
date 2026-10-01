@@ -16,6 +16,7 @@ NetZapret не работает сам по себе: он управляет д
 | zapret-discord-youtube (game filter, список ipset-all) | MIT, © 2024–2026 Flowseal, © 2016–2026 bol-van | `engines/zapret/LICENSE-Flowseal.txt` |
 | cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
+| ZXing.Net (чтение QR-кодов с ключами, с 01.10) | Apache-2.0, Michael Jahn | `LICENSE-ZXing.Net.txt` |
 
 ## Как это соотносится с лицензией самого NetZapret
 
