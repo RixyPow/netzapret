@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -59,8 +61,12 @@ public sealed record CatalogRow
 }
 
 /// <summary>Пресет в списке выбора.</summary>
-public sealed record PresetRow(string Name, string Version, string Fake)
+public sealed record PresetRow(string Name, string Version, string Fake) : INotifyPropertyChanged
 {
+    private string _detail = string.Empty;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Имя файла — то, чем строка отличается от соседней.
     /// </summary>
@@ -71,7 +77,24 @@ public sealed record PresetRow(string Name, string Version, string Fake)
     /// </remarks>
     public required string File { get; init; }
 
-    public required string Detail { get; set; }
+    /// <summary>
+    /// Подпись строки; меняется на месте, когда досчитано покрытие.
+    /// </summary>
+    /// <remarks>
+    /// С уведомлением, а не пересборкой списка (01.10): прежде на каждый
+    /// досчитанный пресет оба списка пересоздавались целиком, шестнадцать раз
+    /// подряд, — поток окна стоял по 330–730 мс (журнал сторожа), и проявление
+    /// раздела шло рывками.
+    /// </remarks>
+    public required string Detail
+    {
+        get => _detail;
+        set
+        {
+            _detail = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Detail)));
+        }
+    }
 
     public bool Chosen { get; set; }
 
@@ -255,6 +278,20 @@ public partial class DesyncView : UserControl
     /// названия, которые уже разобраны, значит держать раздел пустым секунду
     /// на ровном месте.
     /// </remarks>
+    /// <summary>
+    /// Покрытие пресетов, уже посчитанное, — до изменения файла.
+    /// </summary>
+    /// <remarks>
+    /// Раздел пересоздаётся при каждом заходе, а счёт стоит дорого: замер 01.10 —
+    /// около 50 мс и сотни тысяч строк из списков на пресет, шестнадцать пресетов.
+    /// Пересчитывать то, что не менялось, незачем.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<string, (DateTime Written, int Domains, int Addresses)> Coverage =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Пауза перед счётом — чтобы раздел успел проявиться ровно.</summary>
+    private static readonly TimeSpan CountingDelay = TimeSpan.FromMilliseconds(400);
+
     private void StartCounting(IReadOnlyList<PresetRow> rows)
     {
         var root = ZapretPaths.Discover()?.Root;
@@ -266,20 +303,45 @@ public partial class DesyncView : UserControl
         _counting = new CancellationTokenSource();
 
         var token = _counting.Token;
+        var pending = new List<(PresetRow Row, string Path, DateTime Written)>();
 
-        _ = Task.Run(() =>
+        foreach (var row in rows)
         {
+            // По имени файла, а не по названию пресета: названия у разных
+            // файлов совпадают, и поиск по ним считал бы покрытие одного
+            // и того же трижды.
+            var path = Path.Combine(ZapretPaths.PresetDirectory, row.File);
+
+            DateTime written;
+
+            try
+            {
+                written = System.IO.File.GetLastWriteTimeUtc(path);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            if (Coverage.TryGetValue(path, out var known) && known.Written == written)
+                row.Detail += Covered(known.Domains, known.Addresses);
+            else
+                pending.Add((row, path, written));
+        }
+
+        if (pending.Count == 0)
+            return;
+
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(CountingDelay, token);
+
             var reader = new PresetReader();
 
-            foreach (var row in rows)
+            foreach (var (row, path, written) in pending)
             {
                 if (token.IsCancellationRequested)
                     return;
-
-                // По имени файла, а не по названию пресета: названия у разных
-                // файлов совпадают, и поиск по ним считал бы покрытие одного
-                // и того же трижды.
-                var path = Path.Combine(ZapretPaths.PresetDirectory, row.File);
 
                 if (!System.IO.File.Exists(path))
                     continue;
@@ -302,17 +364,18 @@ public partial class DesyncView : UserControl
                     continue;
                 }
 
+                Coverage[path] = (written, domains, addresses);
+
                 if (token.IsCancellationRequested)
                     return;
 
-                Dispatcher.Invoke(() =>
-                {
-                    row.Detail += $" · {domains} доменов, {addresses} подсетей";
-                    Redraw();
-                });
+                // Без ожидания и без пересборки: строка обновит себя сама.
+                _ = Dispatcher.BeginInvoke(() => row.Detail += Covered(domains, addresses));
             }
         }, token);
     }
+
+    private static string Covered(int domains, int addresses) => $" · {domains} доменов, {addresses} подсетей";
 
     /// <summary>
     /// Раскладывает строки по двум спискам.
