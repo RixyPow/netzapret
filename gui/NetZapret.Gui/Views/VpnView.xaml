@@ -390,47 +390,10 @@
                            Text="На паузе: туннель идёт через WARP. Выключите WARP выше — и он вернётся к подпискам." />
 
                 <!--
-                    Новая подписка. Поле скрытое: по ссылке выдаются серверы
-                    и ключи, и увидеть её здесь не сможет ни тот, кто заглянет
-                    через плечо, ни снимок экрана.
+                    Новая подписка — отдельным окном (SubscriptionAddWindow,
+                    владелец 01.10: «как в Happ»). До того здесь стояла
+                    карточка с одним полем на всё.
                 -->
-                <Border x:Name="AddCard" Style="{StaticResource Card}" Margin="0,10,0,0" Visibility="Collapsed">
-                    <StackPanel>
-                        <TextBlock Text="Добавить подписку или ключи" FontWeight="SemiBold" />
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0" x:Name="NewName" Margin="0,0,8,0"
-                                     gui:Hint.Text="Имя для себя" />
-                            <PasswordBox Grid.Column="1" x:Name="NewUrl" Margin="0,0,8,0"
-                                         gui:Hint.Text="Ссылка подписки или ключи vless://, hysteria2://, trojan://…" />
-
-                            <Button Grid.Column="2" Style="{StaticResource Primary}"
-                                    Content="Добавить" Click="OnAdd" />
-                        </Grid>
-
-                        <!--
-                            Ключи раздают не только строкой: QR-кодом на сайте
-                            продавца и файлом .conf у WireGuard и AmneziaVPN
-                            (владелец 01.10: «ключ из буфера или по QR можно»).
-                        -->
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button Style="{StaticResource Ghost}" Content="Из буфера" Click="OnPasteImport"
-                                    ToolTip="Ключи, ссылка подписки или картинка с QR-кодом — например, снимок Win+Shift+S. Ctrl+V на вкладке делает то же." />
-                            <Button Style="{StaticResource Ghost}" Content="Из файла…" Margin="8,0,0,0"
-                                    Click="OnFileImport"
-                                    ToolTip="Файл .conf WireGuard или AmneziaWG либо картинка с QR-кодом." />
-                        </StackPanel>
-
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Слева имя для себя, справа ссылка подписки — или ключи, один или пачкой: они лягут в папку «Отдельные ключи». Ключ можно взять и из буфера — строкой или QR-кодом, — и из файла .conf. Ссылка и ключи обратно не показываются." />
-                    </StackPanel>
-                </Border>
 
                 <TextBlock x:Name="Status" Margin="4,10,0,0" TextWrapping="Wrap" Text="Читаю подписки…">
                     <TextBlock.Style>

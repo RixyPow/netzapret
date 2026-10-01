@@ -1292,54 +1292,35 @@ public partial class VpnView : UserControl
         Redraw();
     }
 
-    private void OnAdd(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// «Добавить подписку» — окно добавления (владелец 01.10: «как в Happ»).
+    /// </summary>
+    private void OnAddToggle(object sender, RoutedEventArgs e) => OpenAdd(pasteOnOpen: false);
+
+    /// <param name="pasteOnOpen">Ctrl+V на вкладке: окно сразу берёт из буфера.</param>
+    private void OpenAdd(bool pasteOnOpen)
     {
-        var url = NewUrl.Password.Trim();
+        var taken = _book.Entries.Select(entry => entry.Name).ToList();
+        var window = new SubscriptionAddWindow(taken, pasteOnOpen) { Owner = Window.GetWindow(this) };
 
-        // Ключ, а не ссылка подписки — в папку отдельных ключей (0.9.0).
-        if (KeyRing.IsKey(url))
-        {
-            AddKeys(url);
+        if (window.ShowDialog() != true || window.Request is not { } request)
             return;
-        }
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
-        {
-            // Ссылку не повторяем даже в жалобе: она уже в поле, и вынести её
-            // в подпись значило бы показать ровно то, что мы прячем.
-            Status.Text = "Это не похоже на ссылку.";
-            return;
-        }
-
-        // Обёртки клиентов разворачиваются до проверки, а не после.
-        // Библиотека их и так понимает — happ://add/, clash://install-config,
-        // sn://subscription, — но проверка стояла раньше неё и отбивала
-        // ссылку, которую программа умеет читать. Поставщики раздают именно
-        // такие: у них одна кнопка «добавить в клиент».
-        parsed = SubscriptionClient.Unwrap(parsed);
-        url = parsed.ToString();
-
-        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
-        {
-            Status.Text = "Это не похоже на ссылку подписки: нужна http, https "
-                + "либо обёртка happ, clash или sn.";
-
-            return;
-        }
-
-        AddSubscription(url);
+        if (request.Kind == AddKind.Keys)
+            AddKeys(request.Input, request.InPool);
+        else
+            AddSubscription(request.Input, request.Name, request.InPool);
     }
 
-    /// <summary>Ссылку подписки — в книгу и в работу; из поля, буфера и файла одинаково.</summary>
-    private void AddSubscription(string url)
+    /// <summary>Ссылку подписки — в книгу; обёртки клиентов уже развёрнуты окном.</summary>
+    /// <param name="name">Имя; <c>null</c> — первое свободное.</param>
+    /// <param name="inPool">Сразу в работу.</param>
+    private void AddSubscription(string url, string? name, bool inPool)
     {
         try
         {
             var book = SubscriptionBook.Load();
-            var name = NewName.Text.Trim();
-
-            if (name.Length == 0)
-                name = book.FreeName();
+            name ??= book.FreeName();
 
             if (book.Entries.Any(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase)))
             {
@@ -1347,17 +1328,22 @@ public partial class VpnView : UserControl
                 return;
             }
 
-            book.Entries.Add(new SubscriptionEntry { Name = name, Url = url, InPool = true });
+            book.Entries.Add(new SubscriptionEntry { Name = name, Url = url, InPool = inPool });
             book.Save();
 
-            // Новая встаёт в работу сразу: подписку добавляют, чтобы ею
-            // пользоваться, и увидеть её серверы, которых туннель не берёт,
-            // значило бы гадать почему. Указатель для консоли — следом.
-            SubscriptionBook.SetWorking(url, true);
-            this.Offer($"Подписка «{name}» в работе");
-
-            NewName.Clear();
-            NewUrl.Clear();
+            // По умолчанию новая встаёт в работу сразу: подписку добавляют,
+            // чтобы ею пользоваться, и увидеть её серверы, которых туннель
+            // не берёт, значило бы гадать почему. Указатель для консоли — следом.
+            // С 01.10 это выключатель в окне: можно добавить и на паузе.
+            if (inPool)
+            {
+                SubscriptionBook.SetWorking(url, true);
+                this.Offer($"Подписка «{name}» в работе");
+            }
+            else
+            {
+                Status.Text = $"Подписка «{name}» добавлена на паузе — включите её, когда понадобится.";
+            }
 
             _ = LoadAsync();
         }
@@ -1475,8 +1461,12 @@ public partial class VpnView : UserControl
         }
     }
 
-    /// <summary>Ключи из поля «Добавить» — в папку «Отдельные ключи».</summary>
-    private void AddKeys(string input)
+    /// <summary>Ключи из окна добавления — в папку «Отдельные ключи».</summary>
+    /// <param name="inPool">
+    /// Сразу в работу. «В работе» — у папки целиком, не у ключа: если папка
+    /// уже в работе, новые ключи войдут в неё и при выключенном выключателе.
+    /// </param>
+    private void AddKeys(string input, bool inPool)
     {
         var fresh = KeyRing.Split(input);
 
@@ -1500,11 +1490,11 @@ public partial class VpnView : UserControl
             var book = SubscriptionBook.Load();
             var added = parsed.Select(k => k.Key).Where(k => !book.Keys.Contains(k)).ToList();
 
-            // Новые ключи — сразу в работе: добавляют, чтобы пользоваться.
-            SubscriptionBook.SaveKeys([.. book.Keys, .. added], inPool: true);
-
-            NewName.Clear();
-            NewUrl.Clear();
+            // Новые ключи по умолчанию сразу в работе: добавляют, чтобы
+            // пользоваться. Папку, уже стоящую в работе, выключатель окна
+            // не выводит — он про новое, а не про прежние ключи.
+            bool folderInPool = book.Keys.Count == 0 ? inPool : book.KeysInPool || inPool;
+            SubscriptionBook.SaveKeys([.. book.Keys, .. added], inPool: folderInPool);
 
             _ = LoadAsync();
 
@@ -1522,15 +1512,12 @@ public partial class VpnView : UserControl
         }
     }
 
-    /// <summary>«Из буфера»: ключи, ссылка подписки или картинка с QR-кодом.</summary>
-    private void OnPasteImport(object sender, RoutedEventArgs e) => ImportFromClipboard();
-
     /// <summary>
-    /// Ctrl+V на вкладке — то же, что «Из буфера», если курсор не в поле ввода.
+    /// Ctrl+V на вкладке — окно добавления, сразу взявшее из буфера.
     /// </summary>
     /// <remarks>
-    /// В поле Ctrl+V остаётся обычной вставкой: человек вставляет в поле —
-    /// значит, хочет видеть вставленное там.
+    /// Если курсор в поле ввода, Ctrl+V остаётся обычной вставкой: человек
+    /// вставляет в поле — значит, хочет видеть вставленное там.
     /// </remarks>
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -1541,137 +1528,7 @@ public partial class VpnView : UserControl
             return;
 
         e.Handled = true;
-        ImportFromClipboard();
-    }
-
-    private void ImportFromClipboard()
-    {
-        string? text;
-
-        try
-        {
-            if (Clipboard.ContainsText())
-            {
-                text = Clipboard.GetText();
-            }
-            else if (Clipboard.ContainsImage() && Clipboard.GetImage() is { } image)
-            {
-                text = ReadQr(image);
-
-                if (text is null)
-                {
-                    Status.Text = "В буфере картинка, но QR-кода на ней не нашлось.";
-                    return;
-                }
-            }
-            else if (Clipboard.ContainsFileDropList() && Clipboard.GetFileDropList() is { Count: > 0 } files)
-            {
-                ImportFile(files[0]!);
-                return;
-            }
-            else
-            {
-                Status.Text = "В буфере ничего: скопируйте ключ, ссылку подписки или картинку с QR-кодом.";
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Буфер не читается: " + ex.GetBaseException().Message;
-            return;
-        }
-
-        Import(text, name: null, where: "В буфере");
-    }
-
-    /// <summary>«Из файла»: .conf WireGuard и AmneziaWG либо картинка с QR-кодом.</summary>
-    private void OnFileImport(object sender, RoutedEventArgs e)
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Title = "Ключ из файла",
-            Filter = "Ключ или QR-код|*.conf;*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|Все файлы|*.*",
-        };
-
-        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
-            ImportFile(dialog.FileName);
-    }
-
-    private void ImportFile(string path)
-    {
-        try
-        {
-            var extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
-
-            if (extension is ".png" or ".jpg" or ".jpeg" or ".bmp" or ".gif" or ".webp")
-            {
-                var image = new BitmapImage();
-                image.BeginInit();
-                image.CacheOption = BitmapCacheOption.OnLoad;
-                image.UriSource = new Uri(path);
-                image.EndInit();
-
-                var text = ReadQr(image);
-
-                if (text is null)
-                {
-                    Status.Text = "На картинке QR-кода не нашлось.";
-                    return;
-                }
-
-                Import(text, name: null, where: "В QR-коде");
-                return;
-            }
-
-            // Ключ или файл .conf — это килобайты. Больше — не тот файл,
-            // и читать его целиком в память незачем.
-            if (new System.IO.FileInfo(path).Length > 1_000_000)
-            {
-                Status.Text = "Файл слишком большой для ключа.";
-                return;
-            }
-
-            Import(System.IO.File.ReadAllText(path), System.IO.Path.GetFileNameWithoutExtension(path), "В файле");
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Файл не читается: " + ex.GetBaseException().Message;
-        }
-    }
-
-    /// <summary>Найденное — туда же, куда ведёт кнопка «Добавить».</summary>
-    /// <param name="where">Откуда — для жалобы, когда не нашлось ничего.</param>
-    private void Import(string? text, string? name, string where)
-    {
-        var found = KeyImport.FromText(text, name);
-
-        if (found.Keys.Count > 0)
-        {
-            AddKeys(string.Join("\n", found.Keys));
-            return;
-        }
-
-        if (found.SubscriptionUrl is { } url)
-        {
-            AddSubscription(url);
-            return;
-        }
-
-        Status.Text = $"{where} {found.Problem}.";
-    }
-
-    /// <summary>
-    /// QR-код с картинки WPF: пиксели в BGRA — и в библиотеку.
-    /// </summary>
-    private static string? ReadQr(BitmapSource image)
-    {
-        var bgra = new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
-        int stride = bgra.PixelWidth * 4;
-        var pixels = new byte[stride * bgra.PixelHeight];
-
-        bgra.CopyPixels(pixels, stride, 0);
-
-        return KeyImport.ReadQr(pixels, bgra.PixelWidth, bgra.PixelHeight);
+        OpenAdd(pasteOnOpen: true);
     }
 
     /// <summary>⟳ у подписки: перечитать только её.</summary>
@@ -2658,18 +2515,6 @@ public partial class VpnView : UserControl
             >= 2 and <= 4 => few,
             _ => many,
         };
-
-    /// <summary>«Добавить подписку» раскрывает форму; повторное нажатие — прячет.</summary>
-    private void OnAddToggle(object sender, RoutedEventArgs e)
-    {
-        bool show = AddCard.Visibility != Visibility.Visible;
-
-        AddCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        AddToggle.Content = show ? "Скрыть" : "Добавить подписку";
-
-        if (show)
-            NewName.Focus();
-    }
 
     private void OnStable(object sender, RoutedEventArgs e)
     {
