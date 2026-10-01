@@ -1530,16 +1530,22 @@ public partial class RoutesView : UserControl
         // Без звёздочки: правило хранится как «*.example.com», но вводил
         // человек «example.com», и показывать ему наше устройство хранения
         // вместо его же имени незачем. В списке ниже они и так без неё.
+        // Свои программы — в том же счёте (с 01.10): они стоят в том же
+        // списке ниже, и счёт без них говорил бы «своих правил нет» тому,
+        // у кого заведена только игра.
         var own = UserRulesFile.Load().Entries
-            .Where(entry => entry.Match == MatchKind.Domain
+            .Where(entry => entry.Match is MatchKind.Domain or MatchKind.Process
                 || (entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value)))
-            .Select(entry => entry.Match == MatchKind.Domain
-                ? entry.Value.TrimStart('*', '.')
-                : OwnLists.NameOf(entry.Value))
+            .Select(entry => entry.Match switch
+            {
+                MatchKind.Domain => entry.Value.TrimStart('*', '.'),
+                MatchKind.Process => entry.Value,
+                _ => OwnLists.NameOf(entry.Value),
+            })
             .ToList();
 
         OwnSummary.Text = own.Count == 0
-            ? "Впишите сайт в поле ниже: если его нет в списке, программа предложит добавить."
+            ? "Впишите сайт или программу — например, Diablo IV.exe — в поле ниже: если их нет в списке, появится «Добавить»."
             : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
               + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
               + ". Они стоят в списке ниже вместе с сервисами.";
