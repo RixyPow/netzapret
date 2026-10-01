@@ -1,0 +1,25 @@
+{
+  "name": "Blissfield",
+  "colors": {
+    "backdrop": "#0E1014",
+    "surface": "#B2151820",
+    "raised": "#1E222B",
+    "border": "#2C313D",
+    "text": "#ECE6DC",
+    "muted": "#CFC7BA",
+    "faint": "#8F887D",
+    "accent": "#93C9A1",
+    "accent-dim": "#2B3B33",
+    "danger": "#E8838A",
+    "warn": "#E3C47F",
+    "accent-fill": "#3F6E55",
+    "on-accent": "#FFFFFF",
+    "warn-fill": "#E3C47F"
+  },
+  "background": {
+    "image": "background.jpg",
+    "fit": "cover",
+    "dim": 0.4,
+    "blur": 12
+  }
+}
