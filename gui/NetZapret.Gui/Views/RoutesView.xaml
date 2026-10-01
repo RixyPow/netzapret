@@ -209,13 +209,23 @@
                             <Button Style="{StaticResource Folder}" Click="OnFolder"
                                     Margin="0,0,0,6"
                                     Visibility="{Binding HeaderShown}">
+                                <!--
+                                    Резиновая колонка — у итога, а не у числа
+                                    частей. Было наоборот, и у Discord итог
+                                    («3 десинк: … · 1 десинк: по имени секции
+                                    нет, по адресам — может сработать») не влез:
+                                    колонка «по содержимому» берёт сколько
+                                    просит, число частей сжалось в ноль,
+                                    итог прилип к имени и обрезался справа
+                                    без многоточия (владелец, 01.10).
+                                -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
                                     <!--
@@ -259,13 +269,15 @@
 
                                     <TextBlock Grid.Column="3" Text="{Binding Count}"
                                                Style="{StaticResource Caption}" Margin="10,0,12,0"
-                                               VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis" />
+                                               VerticalAlignment="Center" />
 
                                     <TextBlock Grid.Column="4" Text="{Binding Summary}"
                                                Style="{StaticResource Mono}"
                                                Foreground="{Binding Color}"
-                                               VerticalAlignment="Center" />
+                                               HorizontalAlignment="Right"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip="{Binding Summary}" />
                                 </Grid>
                             </Button>
 
