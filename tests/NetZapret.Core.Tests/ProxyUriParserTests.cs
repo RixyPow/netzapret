@@ -182,7 +182,7 @@ public class ProxyUriParserTests
     [Theory]
     [InlineData("", "пустая строка")]
     [InlineData("не ссылка вовсе", "'://'")]
-    [InlineData("wireguard://something@host:443", "неподдерживаемая схема")]
+    [InlineData("mieru://something@host:443", "неподдерживаемая схема")]
     [InlineData("vless://uuid@host", "не указан порт")]
     [InlineData("vless://host:443", "до '@'")]
     public void MalformedInputReportsAReadableReason(string uri, string expectedFragment)
@@ -226,7 +226,7 @@ public class SubscriptionParserTests
     {
         var (servers, errors) = SubscriptionParser.ParseBody(string.Join('\n',
             "vless://b7f3c1d2-4a5e-4c11-9f2b-8e7d6a1c0f33@us.example.com:443?type=tcp#US",
-            "wireguard://nope@host:443#skip",
+            "mieru://nope@host:443#skip",
             "hysteria2://s3cret@nl.example.com:4443/?sni=nl.example.com#NL"));
 
         Assert.Equal(2, servers.Count);
@@ -238,7 +238,7 @@ public class SubscriptionParserTests
     {
         // Сообщение об ошибке уходит в лог; целиком ссылку туда писать нельзя.
         var (_, errors) = SubscriptionParser.ParseBody(
-            "wireguard://super-secret-credential-value@host.example.com:443#node");
+            "mieru://super-secret-credential-value@host.example.com:443#node");
 
         Assert.Single(errors);
         Assert.DoesNotContain("super-secret-credential-value", errors[0]);

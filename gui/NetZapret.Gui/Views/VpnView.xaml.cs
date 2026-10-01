@@ -399,7 +399,7 @@ public partial class VpnView : UserControl
     {
         StatLatency.Text = tag is not null && Seen(tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—";
         StatProtocol.Text = server is null ? "—" : Transport(server);
-        StatKind.Text = server?.Protocol.ToString() ?? "—";
+        StatKind.Text = server?.ProtocolName ?? "—";
 
         bool warp = owner == "WARP";
         var source = owner is null ? null : warp ? "WARP" : owner;
@@ -423,9 +423,15 @@ public partial class VpnView : UserControl
 
         var transport = string.IsNullOrWhiteSpace(server.Transport) ? null : server.Transport.ToUpperInvariant();
 
-        // У Hysteria2 и MASQUE транспорт свой и словом не называется.
-        if (server.Protocol is ProxyProtocol.Hysteria2 or ProxyProtocol.Masque)
-            transport = server.Protocol == ProxyProtocol.Masque ? "HTTP/2" : "QUIC";
+        // У протоколов на QUIC, у MASQUE и WireGuard транспорт свой и словом
+        // из ссылки не называется.
+        transport = server.Protocol switch
+        {
+            ProxyProtocol.Masque => "HTTP/2",
+            ProxyProtocol.Hysteria2 or ProxyProtocol.Hysteria or ProxyProtocol.Tuic => "QUIC",
+            ProxyProtocol.Wireguard => "UDP",
+            _ => transport,
+        };
 
         var parts = new[] { security, transport }.Where(p => !string.IsNullOrEmpty(p));
         var text = string.Join(" ", parts);
@@ -804,7 +810,7 @@ public partial class VpnView : UserControl
             if (excluded)
                 latency += " · вне подбора";
 
-            var detail = Detail(server.Protocol.ToString(), server.Host, server.Port, server.Tag);
+            var detail = Detail(server.ProtocolName, server.Host, server.Port, server.Tag);
 
             var (country, name) = CountryTag.Split(server.Tag);
 

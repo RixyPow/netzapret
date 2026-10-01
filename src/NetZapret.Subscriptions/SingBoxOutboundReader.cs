@@ -49,6 +49,9 @@ internal static class SingBoxOutboundReader
             "trojan" => ProxyProtocol.Trojan,
             "shadowsocks" => ProxyProtocol.Shadowsocks,
             "hysteria2" => ProxyProtocol.Hysteria2,
+            "tuic" => ProxyProtocol.Tuic,
+            "hysteria" => ProxyProtocol.Hysteria,
+            "anytls" => ProxyProtocol.AnyTls,
             _ => (ProxyProtocol?)null,
         };
 
@@ -63,9 +66,13 @@ internal static class SingBoxOutboundReader
         var host = Empty(Text(outbound, "server"));
         var port = Port(outbound);
 
-        var credential = kind is ProxyProtocol.Vless or ProxyProtocol.Vmess
+        // У Hysteria первой версии ключ — auth_str, и он бывает пустым:
+        // сервер без авторизации законен.
+        var credential = kind is ProxyProtocol.Vless or ProxyProtocol.Vmess or ProxyProtocol.Tuic
             ? Empty(Text(outbound, "uuid"))
-            : Empty(Text(outbound, "password"));
+            : kind == ProxyProtocol.Hysteria
+                ? Text(outbound, "auth_str") ?? string.Empty
+                : Empty(Text(outbound, "password"));
 
         if (host is null || port == 0 || credential is null)
         {
@@ -79,16 +86,22 @@ internal static class SingBoxOutboundReader
 
         // Hysteria2 без TLS не бывает: он встроен в протокол, и в конфиге
         // секция может стоять без enabled. Так же его помечает и разбор ссылок.
+        // То же у TUIC, Hysteria первой версии и AnyTLS.
+        bool builtInTls = kind is ProxyProtocol.Hysteria2 or ProxyProtocol.Tuic
+            or ProxyProtocol.Hysteria or ProxyProtocol.AnyTls;
+
         var security = Flag(reality, "enabled") ? "reality"
-            : Flag(tls, "enabled") || kind == ProxyProtocol.Hysteria2 ? "tls"
+            : Flag(tls, "enabled") || builtInTls ? "tls"
             : "none";
 
         var transportSection = Section(outbound, "transport");
-        var transport = kind == ProxyProtocol.Hysteria2
+        var transport = kind is ProxyProtocol.Hysteria2 or ProxyProtocol.Tuic or ProxyProtocol.Hysteria
             ? "udp"
             : Empty(Text(transportSection, "type")) ?? "tcp";
 
+        // У Hysteria2 obfs — объект с типом и паролем, у первой версии — строка-пароль.
         var obfs = Section(outbound, "obfs");
+        var legacyObfs = kind == ProxyProtocol.Hysteria ? Empty(Text(outbound, "obfs")) : null;
 
         server = new ProxyServer
         {
@@ -118,7 +131,15 @@ internal static class SingBoxOutboundReader
                 : kind == ProxyProtocol.Vmess ? Empty(Text(outbound, "security")) : null,
             AlterId = Number(outbound, "alter_id"),
             ObfsType = Empty(Text(obfs, "type")),
-            ObfsPassword = Empty(Text(obfs, "password")),
+            ObfsPassword = legacyObfs ?? Empty(Text(obfs, "password")),
+            Password = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "password")) : null,
+            CongestionControl = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "congestion_control")) : null,
+            UdpRelayMode = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "udp_relay_mode")) : null,
+
+            // Запасные — те же, что у разбора ссылок: без скорости движок
+            // не соберёт исходящий (см. ProxyUriParser).
+            UpMbps = kind == ProxyProtocol.Hysteria ? Positive(Number(outbound, "up_mbps"), 10) : 0,
+            DownMbps = kind == ProxyProtocol.Hysteria ? Positive(Number(outbound, "down_mbps"), 50) : 0,
         };
 
         return true;
@@ -165,6 +186,8 @@ internal static class SingBoxOutboundReader
             && value.TryGetInt32(out var number)
                 ? number
                 : 0;
+
+    private static int Positive(int value, int fallback) => value > 0 ? value : fallback;
 
     private static IReadOnlyList<string> Strings(JsonElement parent, string name)
     {

@@ -9,14 +9,25 @@ public enum ProxyProtocol
     Shadowsocks,
     Hysteria2,
 
+    /// <summary>TUIC v5 — поверх QUIC, ключ из UUID и пароля.</summary>
+    Tuic,
+
+    /// <summary>Hysteria первой версии: скорость канала задаётся в ссылке.</summary>
+    Hysteria,
+
+    /// <summary>AnyTLS — поверх TLS на TCP, ключ — пароль.</summary>
+    AnyTls,
+
     /// <summary>
-    /// WireGuard. В подписках не встречается — так подключается WARP.
+    /// WireGuard и AmneziaWG. Так подключается WARP и так же — ключи
+    /// <c>wireguard://</c> и файлы <c>.conf</c>.
     /// </summary>
     /// <remarks>
     /// Стоит особняком не названием, а местом в конфиге: sing-box собирает
     /// его не исходящим, а <c>endpoint</c>'ом, то есть сетевым интерфейсом
     /// со своим адресом. Разница видна в генераторе, а для остальной программы
-    /// это такой же сервер, как прочие.
+    /// это такой же сервер, как прочие. AmneziaWG — тот же WireGuard с
+    /// маскировкой рукопожатия, см. <see cref="ProxyServer.AmneziaOptions"/>.
     /// </remarks>
     Wireguard,
 
@@ -130,8 +141,41 @@ public sealed record ProxyServer
     /// <summary>Пароль обфускации; отдельный от пароля подключения.</summary>
     public string? ObfsPassword { get; init; }
 
+    /// <summary>Пароль TUIC: ключ у него из двух частей, UUID лежит в <see cref="Credential"/>.</summary>
+    public string? Password { get; init; }
+
+    /// <summary>Управление перегрузкой TUIC: <c>bbr</c>, <c>cubic</c>, <c>new_reno</c>.</summary>
+    public string? CongestionControl { get; init; }
+
+    /// <summary>Как TUIC везёт UDP: <c>native</c> или <c>quic</c>.</summary>
+    public string? UdpRelayMode { get; init; }
+
+    /// <summary>Скорость отдачи для Hysteria первой версии, Мбит/с.</summary>
+    /// <remarks>
+    /// Без неё движок не соберёт исходящий вовсе («missing upload speed»),
+    /// и одна такая ссылка уронила бы весь конфиг. Отсюда запасные значения
+    /// при разборе — см. <c>ProxyUriParser</c>.
+    /// </remarks>
+    public int UpMbps { get; init; }
+
+    /// <summary>Скорость скачивания для Hysteria первой версии, Мбит/с.</summary>
+    public int DownMbps { get; init; }
+
     /// <summary>Открытый ключ узла WireGuard.</summary>
     public string? PeerPublicKey { get; init; }
+
+    /// <summary>Общий ключ пира WireGuard (PresharedKey), если задан.</summary>
+    public string? PreSharedKey { get; init; }
+
+    /// <summary>
+    /// Маскировка AmneziaWG — объектом JSON в именах sing-box, или <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Строкой по той же причине, что <see cref="XhttpOptions"/>: сервер
+    /// служит ключом при сборке конфига и сравниваться должен по содержимому.
+    /// Что и каких типов сюда кладётся — см. <c>AmneziaSettings</c>.
+    /// </remarks>
+    public string? AmneziaOptions { get; init; }
 
     /// <summary>
     /// Адреса нашего конца туннеля WireGuard, с маской: <c>172.16.0.2/32</c>.
@@ -254,6 +298,21 @@ public sealed record ProxyServer
     /// в конфиге при чистом списке на экране.
     /// </remarks>
     public bool IsUsableOutbound => IsSupportedBySingBox && HasDialableAddress;
+
+    /// <summary>
+    /// Протокол словом — для окна.
+    /// </summary>
+    /// <remarks>
+    /// Прежние показываются как и были (имя значения), а новые — как их
+    /// пишут люди: «AnyTls» и «Wireguard» у AmneziaWG выглядели бы ошибкой.
+    /// </remarks>
+    public string ProtocolName => Protocol switch
+    {
+        ProxyProtocol.Tuic => "TUIC",
+        ProxyProtocol.AnyTls => "AnyTLS",
+        ProxyProtocol.Wireguard => AmneziaOptions is null ? "WireGuard" : "AmneziaWG",
+        _ => Protocol.ToString(),
+    };
 
     public override string ToString() =>
         $"{Protocol.ToString().ToLowerInvariant()} {Host}:{Port} [{Transport}/{Security}] {Tag}";

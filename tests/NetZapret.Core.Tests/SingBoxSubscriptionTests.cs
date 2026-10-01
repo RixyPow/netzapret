@@ -119,12 +119,14 @@ public sealed class SingBoxSubscriptionTests
     [Fact]
     public void An_unknown_protocol_is_named_not_swallowed()
     {
+        // До 01.10 здесь стоял tuic; теперь он читается, и незнакомым
+        // взят mieru — его движок умеет, а мы нет.
         var (servers, errors) = SubscriptionParser.ParseBody("""
-            { "outbounds": [ { "type": "tuic", "tag": "X", "server": "x.example.com", "server_port": 1 } ] }
+            { "outbounds": [ { "type": "mieru", "tag": "X", "server": "x.example.com", "server_port": 1 } ] }
             """);
 
         Assert.Empty(servers);
-        Assert.Contains(errors, e => e.Contains("tuic"));
+        Assert.Contains(errors, e => e.Contains("mieru"));
     }
 
     [Fact]

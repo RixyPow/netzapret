@@ -45,6 +45,10 @@ public static class ProxyUriParser
                 "hysteria2" or "hy2" => ParseHysteria2(rest),
                 "vmess" => ParseVmess(rest),
                 "ss" => ParseShadowsocks(rest),
+                "tuic" => ParseTuic(rest),
+                "hysteria" => ParseHysteria(rest),
+                "anytls" => ParseAnyTls(rest),
+                "wireguard" or "wg" => ParseWireGuard(rest),
                 _ => null,
             };
 
@@ -130,6 +134,198 @@ public static class ProxyUriParser
             ObfsPassword = Get(q, "obfs-password") ?? Get(q, "obfsPassword") ?? Get(q, "obfs_password"),
             Extra = q,
         };
+    }
+
+    /// <summary>
+    /// TUIC v5: <c>tuic://uuid:пароль@host:port?congestion_control=bbr&amp;alpn=h3&amp;sni=…</c>.
+    /// </summary>
+    /// <remarks>
+    /// Пароль бывает и параметром (<c>?password=</c>) — так пишут часть панелей.
+    /// Значения управления перегрузкой и пересылки UDP пропускаются только
+    /// известные движку: незнакомое слово уронило бы весь конфиг.
+    /// </remarks>
+    private static ProxyServer ParseTuic(string rest)
+    {
+        var parts = UriParts.Split(rest);
+
+        if (parts.UserInfo is null)
+            throw new FormatException("отсутствует UUID до '@'");
+
+        var q = parts.Query;
+        var user = Uri.UnescapeDataString(parts.UserInfo);
+        int colon = user.IndexOf(':');
+
+        var uuid = colon >= 0 ? user[..colon] : user;
+        var password = colon >= 0 ? user[(colon + 1)..] : Get(q, "password");
+
+        if (string.IsNullOrEmpty(password))
+            throw new FormatException("у TUIC не указан пароль");
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Tuic,
+            Tag = parts.Fragment ?? $"{parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = uuid,
+            Password = password,
+            Transport = "udp",
+            Security = "tls",
+            Sni = Get(q, "sni") ?? Get(q, "peer"),
+            Alpn = SplitAlpn(Get(q, "alpn")),
+            AllowInsecure = IsTruthy(Get(q, "allow_insecure")) || IsTruthy(Get(q, "insecure"))
+                || IsTruthy(Get(q, "allowInsecure")),
+            CongestionControl = Known(Get(q, "congestion_control") ?? Get(q, "congestion-control"),
+                "bbr", "cubic", "new_reno"),
+            UdpRelayMode = Known(Get(q, "udp_relay_mode") ?? Get(q, "udp-relay-mode"), "native", "quic"),
+            Extra = q,
+        };
+    }
+
+    /// <summary>
+    /// Hysteria первой версии:
+    /// <c>hysteria://host:port?auth=…&amp;peer=…&amp;upmbps=50&amp;downmbps=100&amp;obfsParam=…</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Скорость обязательна: без неё движок не соберёт исходящий вовсе
+    /// («missing upload speed»), и одна такая ссылка уронила бы весь конфиг.
+    /// Нет в ссылке — ставим осторожные 10 и 50 Мбит/с, чтобы не забить канал;
+    /// эти числа не замерены.
+    /// </para>
+    /// <para>
+    /// Протокол бывает и не UDP (<c>faketcp</c>, <c>wechat-video</c>) — движок
+    /// их не умеет, и такая ссылка отвергается здесь, а не в конфиге.
+    /// </para>
+    /// </remarks>
+    private static ProxyServer ParseHysteria(string rest)
+    {
+        var parts = UriParts.Split(rest);
+        var q = parts.Query;
+
+        var protocol = Get(q, "protocol");
+        if (protocol is not null && !protocol.Equals("udp", StringComparison.OrdinalIgnoreCase))
+            throw new FormatException($"протокол Hysteria «{protocol}» движок не поддерживает");
+
+        var auth = parts.UserInfo is { } user
+            ? Uri.UnescapeDataString(user)
+            : Get(q, "auth") ?? Get(q, "auth_str") ?? string.Empty;
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Hysteria,
+            Tag = parts.Fragment ?? $"{parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = auth,
+            Transport = "udp",
+            Security = "tls",
+            Sni = Get(q, "peer") ?? Get(q, "sni"),
+            Alpn = SplitAlpn(Get(q, "alpn")),
+            AllowInsecure = IsTruthy(Get(q, "insecure")) || IsTruthy(Get(q, "allowInsecure")),
+            UpMbps = Mbps(Get(q, "upmbps") ?? Get(q, "up_mbps") ?? Get(q, "up")) ?? 10,
+            DownMbps = Mbps(Get(q, "downmbps") ?? Get(q, "down_mbps") ?? Get(q, "down")) ?? 50,
+            ObfsType = Get(q, "obfs"),
+            ObfsPassword = Get(q, "obfsParam") ?? Get(q, "obfs-password") ?? Get(q, "obfs_password"),
+            Extra = q,
+        };
+    }
+
+    /// <summary>AnyTLS: <c>anytls://пароль@host:port?sni=…</c>.</summary>
+    private static ProxyServer ParseAnyTls(string rest)
+    {
+        var parts = UriParts.Split(rest);
+
+        if (parts.UserInfo is null)
+            throw new FormatException("отсутствует пароль до '@'");
+
+        var q = parts.Query;
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.AnyTls,
+            Tag = parts.Fragment ?? $"{parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = Uri.UnescapeDataString(parts.UserInfo),
+            Transport = "tcp",
+            Security = "tls",
+            Sni = Get(q, "sni") ?? Get(q, "peer"),
+            Fingerprint = Get(q, "fp"),
+            Alpn = SplitAlpn(Get(q, "alpn")),
+            AllowInsecure = IsTruthy(Get(q, "insecure")) || IsTruthy(Get(q, "allowInsecure")),
+            Extra = q,
+        };
+    }
+
+    /// <summary>
+    /// WireGuard и AmneziaWG:
+    /// <c>wireguard://закрытый-ключ@host:port?publickey=…&amp;address=10.0.0.2/32&amp;jc=4…</c>.
+    /// </summary>
+    /// <remarks>
+    /// Форма ссылки — как у v2rayN и Hiddify; имена ключей у клиентов разнятся,
+    /// поэтому читаются все встречающиеся. Параметры AmneziaWG (Jc, S1, H1, I1…)
+    /// в той же строке — см. <see cref="AmneziaSettings"/>.
+    /// </remarks>
+    private static ProxyServer ParseWireGuard(string rest)
+    {
+        // Закрытый ключ — base64, и «/» в нём примерно у каждого второго.
+        // Общий разбор отрезает путь по первой «/» раньше, чем отделяет
+        // ключ, и ключ обрывался бы. В base64 нет «@», так что граница
+        // ключа видна точно, и «/» в нём можно экранировать заранее.
+        int at = rest.IndexOf('@');
+        if (at > 0)
+            rest = rest[..at].Replace("/", "%2F", StringComparison.Ordinal) + rest[at..];
+
+        var parts = UriParts.Split(rest);
+
+        if (parts.UserInfo is null)
+            throw new FormatException("отсутствует закрытый ключ до '@'");
+
+        var q = parts.Query;
+
+        var publicKey = Get(q, "publickey") ?? Get(q, "public_key") ?? Get(q, "peer_public_key") ?? Get(q, "pbk")
+            ?? throw new FormatException("у WireGuard не указан открытый ключ сервера (publickey)");
+
+        var addresses = WireGuardConf.Addresses(Get(q, "address") ?? Get(q, "ip") ?? Get(q, "local_address"));
+
+        if (addresses.Count == 0)
+            throw new FormatException("у WireGuard не указан свой адрес в туннеле (address)");
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Wireguard,
+            Tag = parts.Fragment ?? $"{parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = Uri.UnescapeDataString(parts.UserInfo),
+            Transport = "udp",
+            PeerPublicKey = publicKey,
+            PreSharedKey = Get(q, "presharedkey") ?? Get(q, "pre_shared_key") ?? Get(q, "psk"),
+            LocalAddresses = addresses,
+            Mtu = int.TryParse(Get(q, "mtu"), out var mtu) && mtu >= 576 ? mtu : 1280,
+            KeepaliveSeconds = int.TryParse(Get(q, "keepalive") ?? Get(q, "persistent_keepalive"), out var keep)
+                && keep > 0 ? keep : 30,
+            AmneziaOptions = AmneziaSettings.From(key => Get(q, key)),
+            Extra = q,
+        };
+    }
+
+    /// <summary>Значение, если оно из известных движку; иначе <c>null</c> — движок возьмёт своё.</summary>
+    private static string? Known(string? value, params string[] allowed) =>
+        value is not null && allowed.Contains(value.Trim().ToLowerInvariant())
+            ? value.Trim().ToLowerInvariant()
+            : null;
+
+    /// <summary>Мбит/с из «50» или «50 Mbps»; <c>null</c> — не задано или не число.</summary>
+    private static int? Mbps(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var digits = new string(value.Trim().TakeWhile(char.IsDigit).ToArray());
+
+        return int.TryParse(digits, out var mbps) && mbps > 0 ? mbps : null;
     }
 
     /// <summary>vmess — base64 от JSON, без query-параметров вовсе.</summary>

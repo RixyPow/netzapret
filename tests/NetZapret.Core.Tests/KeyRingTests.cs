@@ -57,4 +57,20 @@ public sealed class KeyRingTests
         Assert.Equal(KeyRing.Name, part.Source.Name);
         Assert.Equal(["Германия", "Финляндия"], result.Servers.Select(s => s.Tag));
     }
+    /// <summary>
+    /// Новые с 01.10 — склеенные полем пароля, без переносов. «hysteria2://»
+    /// не путается с «hysteria://»: после «hysteria» у него идёт «2», а не «://».
+    /// </summary>
+    [Fact]
+    public void Keys_of_the_new_protocols_are_split_too()
+    {
+        const string tuic = "tuic://u:p@t.example:443#T";
+        const string hy = "hysteria://h.example:443?auth=a#H";
+        const string any = "anytls://s@a.example:443#A";
+        const string wg = "wg://k@w.example:51820?publickey=x&address=10.0.0.2#W";
+
+        var keys = KeyRing.Split(tuic + Hy2 + hy + any + wg);
+
+        Assert.Equal([tuic, Hy2, hy, any, wg], keys);
+    }
 }

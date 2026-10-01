@@ -1168,7 +1168,10 @@ public sealed class SingBoxConfigCompiler
                 ["persistent_keepalive_interval"] = server.KeepaliveSeconds,
             };
 
-            endpoints.Add(new JsonObject
+            if (!string.IsNullOrEmpty(server.PreSharedKey))
+                peer["pre_shared_key"] = server.PreSharedKey;
+
+            var endpoint = new JsonObject
             {
                 ["type"] = "wireguard",
                 ["tag"] = tags[server],
@@ -1176,7 +1179,14 @@ public sealed class SingBoxConfigCompiler
                 ["address"] = addresses,
                 ["private_key"] = server.Credential,
                 ["peers"] = new JsonArray { peer },
-            });
+            };
+
+            // AmneziaWG — блок маскировки сборки extended; типы значений
+            // приведены при разборе (AmneziaSettings).
+            if (server.AmneziaOptions is { } amnezia)
+                endpoint["amnezia"] = JsonNode.Parse(amnezia);
+
+            endpoints.Add(endpoint);
         }
 
         return endpoints;
@@ -1324,6 +1334,44 @@ public sealed class SingBoxConfigCompiler
 
                 break;
 
+            // Новые с 01.10: TUIC, Hysteria первой версии, AnyTLS. Собираются
+            // здесь, как прочие, а не выходом «parser» движка, который сам
+            // разбирает ссылку: проба на 1.14.1-extended-2.7.2 показала, что
+            // непонятая им ссылка — у Hysteria он ждёт up_mbps, а люди пишут
+            // upmbps — роняет весь конфиг, а с ним и все остальные серверы.
+            // И подставить адрес вместо имени (PinAddress) в ссылку нельзя.
+            case ProxyProtocol.Tuic:
+                outbound["type"] = "tuic";
+                outbound["uuid"] = server.Credential;
+                outbound["password"] = server.Password ?? string.Empty;
+
+                if (!string.IsNullOrEmpty(server.CongestionControl))
+                    outbound["congestion_control"] = server.CongestionControl;
+
+                if (!string.IsNullOrEmpty(server.UdpRelayMode))
+                    outbound["udp_relay_mode"] = server.UdpRelayMode;
+
+                break;
+
+            case ProxyProtocol.Hysteria:
+                outbound["type"] = "hysteria";
+                outbound["up_mbps"] = server.UpMbps;
+                outbound["down_mbps"] = server.DownMbps;
+
+                if (!string.IsNullOrEmpty(server.Credential))
+                    outbound["auth_str"] = server.Credential;
+
+                // У первой версии обфускация — просто пароль (xplus), без типа.
+                if (!string.IsNullOrEmpty(server.ObfsPassword))
+                    outbound["obfs"] = server.ObfsPassword;
+
+                break;
+
+            case ProxyProtocol.AnyTls:
+                outbound["type"] = "anytls";
+                outbound["password"] = server.Credential;
+                break;
+
             case ProxyProtocol.Wireguard:
                 throw new InvalidOperationException(
                     "WireGuard собирается в endpoints, а не в исходящие — см. BuildEndpoints.");
@@ -1346,10 +1394,11 @@ public sealed class SingBoxConfigCompiler
     private static JsonObject? BuildTls(ProxyServer server)
     {
         bool reality = server.Security.Equals("reality", StringComparison.OrdinalIgnoreCase);
+        // TUIC, Hysteria и AnyTLS без TLS не бывают — он у них в протоколе.
         bool tls = reality
             || server.Security.Equals("tls", StringComparison.OrdinalIgnoreCase)
-            || server.Protocol == ProxyProtocol.Hysteria2
-            || server.Protocol == ProxyProtocol.Trojan;
+            || server.Protocol is ProxyProtocol.Hysteria2 or ProxyProtocol.Trojan
+                or ProxyProtocol.Tuic or ProxyProtocol.Hysteria or ProxyProtocol.AnyTls;
 
         if (!tls)
             return null;
@@ -1362,10 +1411,18 @@ public sealed class SingBoxConfigCompiler
         if (server.AllowInsecure)
             block["insecure"] = true;
 
-        if (server.Alpn.Count > 0)
+        // ALPN по умолчанию у протоколов на QUIC: серверы TUIC ждут h3,
+        // Hysteria первой версии — «hysteria», и без него рукопожатие
+        // не сходится. В ссылках его часто не пишут.
+        IReadOnlyList<string> alpnValues = server.Alpn.Count > 0 ? server.Alpn
+            : server.Protocol == ProxyProtocol.Tuic ? ["h3"]
+            : server.Protocol == ProxyProtocol.Hysteria ? ["hysteria"]
+            : [];
+
+        if (alpnValues.Count > 0)
         {
             var alpn = new JsonArray();
-            foreach (var value in server.Alpn)
+            foreach (var value in alpnValues)
                 alpn.Add(value);
 
             block["alpn"] = alpn;
