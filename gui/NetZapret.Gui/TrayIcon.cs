@@ -198,11 +198,59 @@ internal sealed class TrayIcon : IDisposable
         _icon.Text = "NetZapret — " + status.Headline;
     }
 
+    /// <summary>Меню сейчас открывается — второй щелчок ждёт, а не открывает его ещё раз.</summary>
+    private bool _opening;
+
     private void OpenMenu()
     {
-        _menu ??= new TrayMenu(Toggle, Show, Quit);
-        _menu.Render(TrayStatus.Read(_busy));
-        _menu.PopUp();
+        // Show() у окна прокачивает сообщения, пока создаёт его, и щелчок
+        // по значку посреди этого входил сюда второй раз — повторный Show()
+        // того же окна. Так ли упало у пользователя 02.10, не проверено.
+        if (_opening)
+            return;
+
+        _opening = true;
+
+        try
+        {
+            _menu ??= new TrayMenu(Toggle, Show, Quit);
+            _menu.Render(TrayStatus.Read(_busy));
+
+            try
+            {
+                _menu.PopUp();
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // 02.10, у пользователя 0.11.1: «Корневой элемент Visual для
+                // VisualTarget не может иметь родительский элемент» из
+                // Window.Show() — окно меню, живущее всё время работы, WPF
+                // заново показать отказался, и программа падала целиком.
+                // Почему окно так испортилось, не выяснено; меню без
+                // состояния, так что его не жалко собрать заново.
+                Discard(_menu);
+
+                _menu = new TrayMenu(Toggle, Show, Quit);
+                _menu.Render(TrayStatus.Read(_busy));
+                _menu.PopUp();
+            }
+        }
+        finally
+        {
+            _opening = false;
+        }
+    }
+
+    private static void Discard(TrayMenu menu)
+    {
+        try
+        {
+            menu.Close();
+        }
+        catch (Exception)
+        {
+            // Окно и так сломано — закрыть его не обязательно.
+        }
     }
 
     private async void Toggle()
