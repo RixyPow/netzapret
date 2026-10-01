@@ -327,9 +327,13 @@ public partial class VpnView : UserControl
         if (choosing)
             tag = null;
 
+        bool desyncOnly = !running && DesyncOnly;
+
         CurrentCaption.Text = running
             ? "Сейчас трафик идёт через"
-            : pinned ? "Закреплён — поднимется вместе с движками" : "Движки не запущены";
+            : desyncOnly
+                ? "Туннель выключен — работает один десинк"
+                : pinned ? "Закреплён — поднимется вместе с движками" : "Движки не запущены";
 
         // Где сервер лежит: подписка пула или выход WARP.
         var found = tag is null
@@ -382,7 +386,7 @@ public partial class VpnView : UserControl
         var key = running ? "Accent" : "Faint";
         CurrentDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, key);
         CurrentState.SetResourceReference(TextBlock.ForegroundProperty, key);
-        CurrentState.Text = running ? "В работе" : "Движки остановлены";
+        CurrentState.Text = running ? "В работе" : desyncOnly ? "Туннель выключен" : "Движки остановлены";
 
         ShowStats(tag, found.Owner, found.Server);
         ShowRecent(running ? live : null);
@@ -2076,8 +2080,24 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>Работают ли движки прямо сейчас.</summary>
+    /// <summary>
+    /// Работает ли движок туннеля: у вкладки всё — выход, замеры, WARP — спрашивается у него.
+    /// </summary>
+    /// <remarks>
+    /// Не «жив ли надзор»: при одном десинке надзор жив, а sing-box нет, и вкладка
+    /// писала «В работе · Выход не назван · Движок не ответил» (владелец, 01.10:
+    /// «это что за прикол»).
+    /// </remarks>
     private static bool EnginesRunning =>
-        SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive();
+        SupervisorState.Load(SupervisorState.DefaultPath) is { } state
+        && state.IsSupervisorAlive()
+        && state.Services.Any(s => s.Name == "sing-box");
+
+    /// <summary>Надзор жив, а туннеля среди служб нет — работает один десинк.</summary>
+    private static bool DesyncOnly =>
+        SupervisorState.Load(SupervisorState.DefaultPath) is { } state
+        && state.IsSupervisorAlive()
+        && state.Services.All(s => s.Name != "sing-box");
 
     /// <summary>Тег группы, которой движок выбирает выход.</summary>
     private const string SelectorGroup = "auto";
