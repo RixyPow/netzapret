@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -27,29 +26,6 @@ namespace NetZapret.Supervisor;
 /// </remarks>
 public static class NetworkSnapshot
 {
-    /// <summary>VPN-клиенты, которые поднимают свой TUN или прокси рядом с нашим.</summary>
-    private static readonly (string Process, string Name)[] VpnClients =
-    [
-        ("happ", "Happ"),
-        ("happd", "Happ (служба)"),
-        ("xray", "Xray"),
-        ("v2rayN", "v2rayN"),
-        ("v2ray", "V2Ray"),
-        ("hiddify", "Hiddify"),
-        ("HiddifyNext", "Hiddify"),
-        ("clash", "Clash"),
-        ("clash-verge", "Clash Verge"),
-        ("verge-mihomo", "Clash Verge (mihomo)"),
-        ("mihomo", "mihomo"),
-        ("nekoray", "NekoRay"),
-        ("nekobox", "NekoBox"),
-        ("AmneziaVPN", "AmneziaVPN"),
-        ("Outline", "Outline"),
-        ("wireguard", "WireGuard"),
-        ("openvpn", "OpenVPN"),
-        ("sing-box", "sing-box"),
-    ];
-
     /// <summary>Имена для проверки DNS: заблокированное и обычное.</summary>
     private static readonly string[] Probes = ["youtube.com", "discord.com", "ya.ru"];
 
@@ -95,32 +71,12 @@ public static class NetworkSnapshot
         text.AppendLine();
     }
 
+    /// <remarks>Список клиентов общий с «Диагностикой» — <see cref="OtherVpnScan"/>.</remarks>
     private static IEnumerable<string> Clients(IReadOnlySet<int> ours)
     {
-        var found = new List<string>();
-
-        foreach (var (process, name) in VpnClients)
-        {
-            Process[] running;
-
-            try
-            {
-                running = Process.GetProcessesByName(process);
-            }
-            catch (Exception)
-            {
-                continue;
-            }
-
-            foreach (var p in running)
-            {
-                using (p)
-                {
-                    if (!ours.Contains(p.Id))
-                        found.Add($"{name}: процесс {process}.exe, №{p.Id}");
-                }
-            }
-        }
+        var found = OtherVpnScan.Clients(ours)
+            .Select(c => $"{c.Name}: процесс №{string.Join(", №", c.Processes)}")
+            .ToList();
 
         return found.Count == 0 ? ["не найдено"] : found;
     }
@@ -146,9 +102,7 @@ public static class NetworkSnapshot
 
             // TUN чужого клиента — то, из-за чего спорят за маршруты: Wintun,
             // TAP, «sing-tun», «SocksTunnel» у Happ.
-            bool tunnel = nic.Description.Contains("tun", StringComparison.OrdinalIgnoreCase)
-                || nic.Description.Contains("TAP", StringComparison.Ordinal)
-                || nic.NetworkInterfaceType == NetworkInterfaceType.Tunnel;
+            bool tunnel = OtherVpnScan.IsTunnel(nic.Description, nic.NetworkInterfaceType);
 
             // Выключенный обычный адаптер — Wi-Fi Direct, Bluetooth — ни о чём
             // не говорит; выключенный туннель говорит о клиенте, что его завёл.

@@ -78,6 +78,7 @@ public partial class DoctorView : UserControl
                     new("Десинк", Zapret(settings)),
                     new("Правила", Rules(settings)),
                     new("Конфиг туннеля", Proxy(settings)),
+                    new("Другие VPN-клиенты", OtherVpns()),
                     new("Имена и hosts", Names(settings)),
                     new("Браузеры и сертификаты", Browsers()),
                     new("Супервизор", Supervisor()),
@@ -314,6 +315,60 @@ public partial class DoctorView : UserControl
         catch (Exception ex)
         {
             lines.Add(Warn("Не удалось проверить, нет ли другого обхода: " + ex.GetBaseException().Message));
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Чужой VPN рядом: поднятый туннель — поломка, запущенный клиент — оговорка.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 01.10: туннель Zapret KVN рядом — и каждое новое имя разрешалось
+    /// по 12 с, трафик шёл то в туннель, то мимо. Различие поломки и оговорки —
+    /// в <see cref="OtherVpnScan"/>.
+    /// </remarks>
+    private IReadOnlyList<DoctorLine> OtherVpns()
+    {
+        var lines = new List<DoctorLine>();
+
+        try
+        {
+            var ours = (SupervisorState.Load(SupervisorState.DefaultPath)?.Services ?? [])
+                .Where(s => s.ProcessId is not null)
+                .Select(s => s.ProcessId!.Value)
+                .ToHashSet();
+
+            var clients = OtherVpnScan.Clients(ours);
+            var tunnels = OtherVpnScan.Tunnels(new SingBoxOptions().TunInterfaceName);
+            var names = string.Join(", ", clients.Select(c => c.Name));
+
+            foreach (var tunnel in tunnels)
+            {
+                lines.Add(Bad($"Поднят чужой туннель: {tunnel.Name} ({tunnel.Description})"
+                    + (clients.Count > 0 ? $", рядом запущены: {names}" : string.Empty)
+                    + ". Два туннеля спорят за маршруты: трафик идёт то через один, то через другой, "
+                    + "имена разрешаются с задержкой, а замеры и проверки врут. "
+                    + "Отключитесь в том клиенте, пока работает NetZapret."));
+            }
+
+            // Служба вроде happd работает и при закрытом клиенте — оговорку
+            // даёт только сам клиент, иначе она висела бы у владельца всегда.
+            var open = clients.Where(c => !c.Service).ToList();
+
+            if (tunnels.Count == 0 && open.Count > 0)
+            {
+                lines.Add(Warn($"Запущен VPN-клиент: {string.Join(", ", open.Select(c => c.Name))}. "
+                    + "Своего туннеля он сейчас не держит, но если подключиться в нём в режиме TUN, "
+                    + "туннель встанет рядом с нашим и они будут мешать друг другу."));
+            }
+
+            if (tunnels.Count == 0 && open.Count == 0)
+                lines.Add(Ok("Других VPN-клиентов рядом не видно."));
+        }
+        catch (Exception ex)
+        {
+            lines.Add(Warn("Не удалось проверить, нет ли другого VPN: " + ex.GetBaseException().Message));
         }
 
         return lines;
