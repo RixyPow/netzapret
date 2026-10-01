@@ -178,6 +178,19 @@ public static class ServiceCatalog
                     Probe = "probe.discord.media",
                     Note = "голосовые серверы; ломается отдельно от переписки",
                 },
+
+                // Сам звук — UDP на голые адреса, которые Discord сообщает
+                // клиенту без DNS: правило «Голоса» по имени их не видит,
+                // и при десинке звук в туннель не попадал ни при «Голосе»,
+                // ни при Discord.exe через VPN (01.10, замер у владельца).
+                new ServicePart
+                {
+                    Name = "Звук голоса (адреса)",
+                    List = "config/lists/discord-voice-net.txt",
+                    ByAddress = true,
+                    Note = "сам разговор: UDP на адреса Cloudflare; чтобы голос шёл через VPN при десинке, "
+                        + "сюда — тот же путь, что у «Голоса»",
+                },
                 // Одной строкой, а не тремя, и это не упрощение показа.
                 // Записи в списках — зоны: discordapp.net в discord.txt
                 // покрывает и media.discordapp.net, и обе images-ext, а
