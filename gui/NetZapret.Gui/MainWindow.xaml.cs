@@ -61,8 +61,7 @@ public partial class MainWindow : Window
                 var zapretRoot = NetZapret.Zapret.ZapretPaths.Discover()?.Root;
                 var userRules = NetZapret.Core.Rules.UserRulesFile.Load();
 
-                var engine = NetZapret.Core.Rules.RuleSetLoader.LoadLayered(
-                    settings.RulesPath, NetZapret.Core.Rules.UserRulesFile.DefaultPath, settings.Mode);
+                var engine = NetZapret.Core.Rules.RuleSetLoader.LoadFor(settings);
 
                 NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
 

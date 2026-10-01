@@ -215,8 +215,7 @@ public partial class PinWindow : Window
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             var root = ZapretPaths.Discover()?.Root;
 
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+            var engine = RuleSetLoader.LoadFor(settings);
 
             RuleSetExpander.Expand(engine.RuleSet, root);
 

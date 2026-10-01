@@ -355,8 +355,7 @@ public partial class CheckView : UserControl
 
             try
             {
-                engine = RuleSetLoader.LoadLayered(
-                    settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+                engine = RuleSetLoader.LoadFor(settings);
 
                 RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
             }

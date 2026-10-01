@@ -89,6 +89,37 @@ public static class RuleSetLoader
                 .ToList());
     }
 
+    /// <summary>
+    /// Правила по настройкам: оба файла, режим и правила выключателей.
+    /// </summary>
+    /// <param name="mode">Режим, если он не тот, что в настройках (запуск движков решает свой).</param>
+    /// <param name="userPath">Свои правила; <c>null</c> — <see cref="UserRulesFile.DefaultPath"/>. Для тестов.</param>
+    /// <remarks>
+    /// Одна загрузка на всех: движки, «Маршруты», «Куда пойдёт соединение»,
+    /// проверка блокировок. Правило выключателя, добавленное только при
+    /// сборке конфига, разошлось бы с «Куда пойдёт» — а тот обещает отвечать
+    /// тем же движком, что решает судьбу настоящих соединений.
+    /// Правила выключателей встают после своих и перед базовыми.
+    /// </remarks>
+    public static RuleEngine LoadFor(AppSettings settings, OperatingMode? mode = null, string? userPath = null)
+    {
+        var engine = LoadLayered(settings.RulesPath, userPath ?? UserRulesFile.DefaultPath, mode ?? settings.Mode);
+
+        if (!settings.HideVpnFromRussianApps)
+            return engine;
+
+        var rules = engine.RuleSet.Rules;
+        var own = rules.Where(r => r.Source == RuleSource.User).ToList();
+        var rest = rules.Where(r => r.Source != RuleSource.User);
+
+        return RuleEngine.Build(
+                own.Concat(VpnHiding.Rules()).Concat(rest).ToList(),
+                engine.RuleSet.DefaultMode,
+                engine.RuleSet.DefaultServer,
+                engine.RuleSet.Operating)
+            .WithCapture(engine.RuleSet.CaptureEntries.ToList());
+    }
+
     /// <summary>Пересобирает движок под другой режим.</summary>
     private static RuleEngine WithMode(RuleEngine engine, OperatingMode mode) =>
         RuleEngine.Build(

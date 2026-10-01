@@ -366,8 +366,7 @@ public partial class RoutesView : UserControl
                 // просто скажет, что чинить имя нечем.
             }
 
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+            var engine = RuleSetLoader.LoadFor(settings);
 
             var problems = RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
 

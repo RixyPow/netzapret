@@ -66,7 +66,7 @@ public static class RuleSetExpander
     public static (RuleEngine Engine, string? ZapretRoot) LoadFor(Core.AppSettings settings)
     {
         var mode = settings.Engines.Mode;
-        var loaded = RuleSetLoader.LoadLayered(settings.RulesPath, UserRulesFile.DefaultPath, mode);
+        var loaded = RuleSetLoader.LoadFor(settings, mode);
         var ruleSet = loaded.RuleSet with { Operating = mode };
         var zapretRoot = ZapretPaths.Discover()?.Root;
 

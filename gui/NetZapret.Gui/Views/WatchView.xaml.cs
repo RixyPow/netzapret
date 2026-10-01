@@ -111,8 +111,7 @@ public partial class WatchView : UserControl
             // правило применилось бы, и читать он обязан ровно то же, что
             // читает сборка конфига. Иначе он не диагностика, а источник
             // ложных выводов.
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+            var engine = RuleSetLoader.LoadFor(settings);
 
             RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
 

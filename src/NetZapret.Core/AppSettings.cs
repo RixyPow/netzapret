@@ -267,6 +267,17 @@ public sealed record AppSettings
     public bool StableFirst { get; init; } = true;
 
     /// <summary>
+    /// Прятать VPN от российских приложений: имена, по которым они узнают
+    /// свой адрес, — всегда напрямую (<see cref="Rules.VpnHiding"/>).
+    /// </summary>
+    /// <remarks>
+    /// Выключено по умолчанию: в режиме «всё через VPN» человек, проверяя
+    /// туннель на ifconfig.me, увидел бы домашний адрес и решил бы, что VPN
+    /// не работает.
+    /// </remarks>
+    public bool HideVpnFromRussianApps { get; init; }
+
+    /// <summary>
     /// Туннель через Cloudflare WARP вместо подписок (с 01.10 — выбор пути).
     /// </summary>
     /// <remarks>

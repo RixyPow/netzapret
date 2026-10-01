@@ -61,6 +61,39 @@
                                       Click="OnRussian" VerticalAlignment="Center" />
                     </Grid>
 
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
+                        Владелец 01.10 после разбора Zapret KVN. Напрямую,
+                        а не блокировкой, как у KVN, — почему, см. VpnHiding.
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Прятать VPN от российских приложений" VerticalAlignment="Center"
+                                           TextWrapping="Wrap" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Приложения Яндекса, VK, MAX и 2ГИС узнают свой адрес у нескольких сервисов — ifconfig.me, api.ipify.org, проверок Яндекса и своих счётчиков. С включённым выключателем эти двенадцать имён всегда идут напрямую, и приложения видят домашний адрес, а не зарубежный.&#x0a;&#x0a;Блокировать их, как делают другие клиенты, мы не стали: среди них адрес входа в Яндекс, и блокировка могла бы его сломать.&#x0a;&#x0a;Заметно в режиме «всё через VPN»: проверка своего адреса на ifconfig.me покажет домашний, хотя туннель работает. Не действует при «Игнорировать исключения»." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="HideVpnLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="HideVpnWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="HideVpn" Style="{StaticResource Switch}"
+                                      Click="OnHideVpn" VerticalAlignment="Center" />
+                    </Grid>
+
                 </StackPanel>
             </Border>
 

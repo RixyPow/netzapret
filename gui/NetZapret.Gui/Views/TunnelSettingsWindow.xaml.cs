@@ -64,6 +64,17 @@ public partial class TunnelSettingsWindow : Window
 
         Status.Text = engines.Complaint ?? string.Empty;
 
+        Word(HideVpnWord, settings.HideVpnFromRussianApps);
+        HideVpn.IsChecked = settings.HideVpnFromRussianApps;
+
+        // Сказать, когда включённое ничего не делает: «без исключений»
+        // отбрасывает все правила «напрямую», а без туннеля прятать не от чего.
+        HideVpnLine.Text = !engines.Tunnel
+            ? "Действует, когда туннель включён."
+            : engines.IgnoreExclusions && settings.HideVpnFromRussianApps
+                ? "Сейчас не действует: включено «Игнорировать исключения»."
+                : string.Empty;
+
 
         Word(ReplaceWord, settings.ReplaceSilentServer);
         Replace.IsChecked = settings.ReplaceSilentServer;
@@ -183,6 +194,12 @@ public partial class TunnelSettingsWindow : Window
             Russian.IsChecked == true
                 ? "Всё пойдёт через туннель, исключения не действуют."
                 : "Исключения снова действуют: «напрямую» и «десинк» — мимо туннеля.");
+
+    private void OnHideVpn(object sender, RoutedEventArgs e) =>
+        Save(s => s with { HideVpnFromRussianApps = HideVpn.IsChecked == true },
+            HideVpn.IsChecked == true
+                ? "Адрес у российских приложений будет домашним: двенадцать имён пойдут напрямую."
+                : "Имена, по которым приложения узнают адрес, снова идут по общим правилам.");
 
     private void OnReplace(object sender, RoutedEventArgs e) =>
         Save(s => s with { ReplaceSilentServer = Replace.IsChecked == true },

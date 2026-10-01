@@ -380,8 +380,7 @@ public partial class DoctorView : UserControl
 
         try
         {
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+            var engine = RuleSetLoader.LoadFor(settings);
 
             var problems = RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
 
@@ -685,8 +684,7 @@ public partial class DoctorView : UserControl
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-            var engine = RuleSetLoader.LoadLayered(
-                settings.RulesPath, UserRulesFile.DefaultPath, settings.Mode);
+            var engine = RuleSetLoader.LoadFor(settings);
 
             RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
 
@@ -733,7 +731,13 @@ public partial class DoctorView : UserControl
             Answer($"{string.Join(" · ", asked)} → {mode}", key, decision.Rule is { } rule
                 ? $"Сработало правило: {rule.Match.ToString().ToLowerInvariant()} «{rule.Value}»"
                   + (decision.Reason is null ? "." : $" — {decision.Reason}.")
-                  + (rule.Source == RuleSource.User ? " Это ваше правило." : " Это правило из поставки.")
+                  + rule.Source switch
+                  {
+                      RuleSource.User => " Это ваше правило.",
+                      RuleSource.Setting => " Это выключатель «Прятать VPN от российских приложений» "
+                          + "в «Настройках туннеля».",
+                      _ => " Это правило из поставки.",
+                  }
                 : $"Ни одно правило не совпало, применён режим по умолчанию — {mode}."
                   + (decision.HadUnevaluableDomainRules
                       ? " Часть доменных правил проверить было нечем: имя не задано."

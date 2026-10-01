@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
@@ -235,10 +234,6 @@ public sealed class NewProtocolsTests
     [Fact]
     public void Everything_new_passes_sing_box_check()
     {
-        var singBox = FindSingBox();
-        if (singBox is null)
-            return;
-
         Assert.True(WireGuardConf.TryParse(AmneziaConf, "AWG файлом", out var fromConf, out _));
 
         var servers = new[] { Parse(Tuic), Parse(Hysteria), Parse(AnyTls), Parse(Amnezia), fromConf! };
@@ -247,45 +242,7 @@ public sealed class NewProtocolsTests
 
         Assert.Equal(5, result.UsedServers.Count);
 
-        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
-
-        try
-        {
-            SingBoxConfigCompiler.WriteToFile(path, result.Json);
-
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = singBox,
-                ArgumentList = { "check", "-c", path },
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            })!;
-
-            var said = process.StandardError.ReadToEnd() + process.StandardOutput.ReadToEnd();
-            process.WaitForExit();
-
-            Assert.True(process.ExitCode == 0, said);
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    private static string? FindSingBox()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            var tools = Path.Combine(directory.FullName, "tools");
-
-            if (Directory.Exists(tools)
-                && Directory.EnumerateFiles(tools, "sing-box.exe", SearchOption.AllDirectories).FirstOrDefault() is { } found)
-            {
-                return found;
-            }
-        }
-
-        return null;
+        var check = SingBoxCheck.Run(result.Json);
+        Assert.True(check.Ok, check.Said);
     }
 }
