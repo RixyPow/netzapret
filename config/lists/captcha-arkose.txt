@@ -1,0 +1,8 @@
+# Arkose Labs (FunCaptcha) — капча Roblox, Microsoft, EA, GitHub и OpenAI
+# при входе и регистрации.
+#
+# Отдельная часть «Капч» с 01.10. Оба имени лежат и в roblox.txt: пока у этой
+# части нет своего выбора, решает правило Roblox; выбранная, она встаёт
+# раньше него (Within).
+arkoselabs.com
+arkoselabs.co

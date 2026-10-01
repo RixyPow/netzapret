@@ -139,6 +139,28 @@ public sealed class OwnListsTests
         Assert.Contains("itch.zone", itch);
     }
 
+    /// <summary>
+    /// Капчи остались и в прежних списках — без своего выбора они идут как раньше.
+    /// </summary>
+    /// <remarks>
+    /// «Пока оставь всё как есть» (владелец, 01.10, заводя «Капчи»). Базовых
+    /// правил у частей «Капч» нет, и путь невыбранной капчи решает список,
+    /// где её имя лежало прежде. Выбрось его оттуда «как дубль» — и капча
+    /// Discord молча уйдёт с пути Discord, ровно как до 30.09.
+    /// </remarks>
+    [Theory]
+    [InlineData("discord.txt", "hcaptcha.com")]
+    [InlineData("google.txt", "recaptcha.net")]
+    [InlineData("roblox.txt", "arkoselabs.com")]
+    public void Captchas_stay_in_their_old_lists(string list, string name)
+    {
+        var root = Root();
+
+        Assert.True(root is not null, "Рабочая копия не найдена: config/lists не лежит ни в одном каталоге выше.");
+
+        Assert.Contains(name, File.ReadAllLines(Path.Combine(root!, "config", "lists", list)).Select(l => l.Trim()));
+    }
+
     [Fact]
     public void AnOldReferenceToAZapretListIsUnderstood()
     {

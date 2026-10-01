@@ -35,13 +35,46 @@ public sealed class ServicePartOrderTests
         }
     }
 
+    /// <remarks>
+    /// До 01.10 широкий список обязан был быть того же сервиса. «Капчи»
+    /// лежат в чужих: hCaptcha — в списке Discord, Turnstile — в Cloudflare,
+    /// Arkose — в Roblox. Важно же другое: чтобы широкий список вообще был
+    /// в каталоге — иначе «раньше его правила» не найдёт ничего, и часть
+    /// встанет в конец, где до неё не дойдёт очередь.
+    /// </remarks>
     [Fact]
-    public void Every_within_names_a_list_of_the_same_service()
+    public void Every_within_names_a_list_of_the_catalog()
     {
-        foreach (var service in ServiceCatalog.All)
+        var lists = ServiceCatalog.All.SelectMany(s => s.Parts).Select(p => p.List).ToHashSet();
+
+        foreach (var part in ServiceCatalog.All.SelectMany(s => s.Parts).Where(p => p.Within is not null))
+            Assert.Contains(part.Within!, lists);
+    }
+
+    /// <summary>
+    /// Капча, выбранная отдельно, встаёт раньше списка, где её имя лежало прежде.
+    /// </summary>
+    [Fact]
+    public void A_chosen_captcha_is_written_before_its_old_list()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-rules-{Guid.NewGuid():N}.yaml");
+
+        try
         {
-            foreach (var part in service.Parts.Where(p => p.Within is not null))
-                Assert.Contains(service.Parts, p => p.List == part.Within);
+            var file = UserRulesFile.Load(path);
+            file.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Proxy);
+
+            // Капчу выбрали отдельно — она встаёт раньше Discord и решает сама.
+            file.Set(MatchKind.HostList, "config/lists/captcha-hcaptcha.txt", RoutingMode.Direct,
+                before: "config/lists/discord.txt");
+
+            Assert.Equal(
+                ["config/lists/captcha-hcaptcha.txt", "config/lists/discord.txt"],
+                file.Entries.Select(e => e.Value));
+        }
+        finally
+        {
+            File.Delete(path);
         }
     }
 }

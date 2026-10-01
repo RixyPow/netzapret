@@ -778,6 +778,62 @@ public static class ServiceCatalog
             ],
         },
 
+        // Владелец 01.10: «капча подозрительно отваливается, и не только
+        // reCAPTCHA, помнишь тот прикол с Discord?» Капча идёт путём того
+        // списка, где её имя оказалось, а не путём сайта, который её
+        // показывает: у VirusTotal сайт через VPN, а reCAPTCHA — с Google
+        // напрямую; у Discord 30.09 hCaptcha шла напрямую при Discord через
+        // VPN, и капча отказывала. Почему именно — не выяснено, догадка:
+        // сверка адреса.
+        //
+        // «Пока оставь всё как есть» — поэтому базовых правил у частей нет,
+        // а имена остались и в прежних списках. Без выбора капча идёт как
+        // раньше; выбранная, её правило встаёт раньше широкого списка
+        // (Within) — и действует для всех сайтов на этой капче.
+        new ServiceDefinition
+        {
+            Name = "Капчи",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "reCAPTCHA (Google)",
+                    List = "config/lists/captcha-recaptcha.txt",
+                    Within = "config/lists/google.txt",
+                    Probe = "www.recaptcha.net",
+                    Note = "только запасное имя recaptcha.net: основная капча Google живёт на www.google.com "
+                        + "и идёт путём Google — правила по пути не бывает",
+                },
+                new ServicePart
+                {
+                    Name = "hCaptcha",
+                    List = "config/lists/captcha-hcaptcha.txt",
+                    Within = "config/lists/discord.txt",
+                    Note = "Discord и многие сайты; без своего выбора идёт как Discord",
+                },
+                new ServicePart
+                {
+                    Name = "Cloudflare Turnstile",
+                    List = "config/lists/captcha-turnstile.txt",
+                    Within = "config/lists/cloudflare.txt",
+                    Note = "проверка «вы человек?» перед сайтами за Cloudflare; без своего выбора идёт как Cloudflare",
+                },
+                new ServicePart
+                {
+                    Name = "Arkose Labs (FunCaptcha)",
+                    List = "config/lists/captcha-arkose.txt",
+                    Within = "config/lists/roblox.txt",
+                    Note = "вход и регистрация в Roblox, Microsoft, EA, GitHub, OpenAI; без своего выбора идёт как Roblox",
+                },
+                new ServicePart
+                {
+                    Name = "GeeTest",
+                    List = "config/lists/captcha-geetest.txt",
+                    Note = "вход HoYoverse и китайских сервисов",
+                },
+            ],
+        },
+
         new ServiceDefinition
         {
             Name = "Speedtest",

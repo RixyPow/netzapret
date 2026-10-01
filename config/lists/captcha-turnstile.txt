@@ -1,0 +1,6 @@
+# Cloudflare Turnstile и проверка «вы человек?» перед сайтами за Cloudflare.
+#
+# Отдельная часть «Капч» с 01.10. Имя лежит внутри зоны cloudflare.com
+# из cloudflare.txt: пока у этой части нет своего выбора, решает правило
+# Cloudflare; выбранная, она встаёт раньше него (Within).
+challenges.cloudflare.com
