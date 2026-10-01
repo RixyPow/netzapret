@@ -648,7 +648,7 @@ public partial class VpnView : UserControl
             var parts = new List<string>
             {
                 read.Source == SubscriptionReadSource.Reserve
-                    ? $"панель подвела ({read.Error}) — серверы из запаса {when}"
+                    ? $"{read.Error ?? "панель подвела"} — серверы из запаса {when}"
                     : $"обновлена {when}",
                 $"{usable.Count} серверов",
             };
@@ -678,7 +678,7 @@ public partial class VpnView : UserControl
             Redraw();
 
             if (read.Source == SubscriptionReadSource.Reserve)
-                Journal.Write("подписка", $"«{row.Entry.Name}» панель подвела ({read.Error}), взят запас {when}");
+                Journal.Write("подписка", $"«{row.Entry.Name}»: {read.Error ?? "панель подвела"}, взят запас {when}");
 
             // Ответила, но не разобралась — не прочиталась: её серверы
             // никуда не делись, и их замеры трогать нельзя. Запас — тоже
@@ -1521,11 +1521,16 @@ public partial class VpnView : UserControl
         Redraw();
 
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        await FillAsync(row, settings, CancellationToken.None, force: true);
+        bool fresh = await FillAsync(row, settings, CancellationToken.None, force: true);
 
         // Метки пула зависят от соседей — пересчитываем для всех.
         ApplyPool(settings);
-        Status.Text = $"«{name}» перечитана.";
+
+        // «Перечитана» — только если панель и правда ответила (01.10: при 502
+        // писалось «перечитана», а под ней — «серверы из запаса»).
+        Status.Text = fresh
+            ? $"«{name}» перечитана."
+            : $"«{name}» не перечиталась — оставлен прежний список, причина в строке подписки.";
     }
 
     /// <summary>

@@ -185,7 +185,7 @@ public static class SubscriptionPool
         {
             error = ex is OperationCanceledException
                 ? $"панель не ответила за {SubscriptionClient.DefaultTimeout.TotalSeconds:0} с"
-                : ex.GetBaseException().Message;
+                : PanelError.Describe(ex);
         }
 
         if (LoadReserve(folder, url) is { } reserve && reserve.Info.Servers.Count > 0)
