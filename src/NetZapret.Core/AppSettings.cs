@@ -471,6 +471,15 @@ public sealed record AppSettings
     /// </remarks>
     public bool Animations { get; init; } = true;
 
+    /// <summary>«Главная» на всю ширину окна, без колонки под арт темы.</summary>
+    /// <remarks>
+    /// Владелец 01.10: «для тех, кто сидит с базовыми темами». Содержимое
+    /// «Главной» не шире 940 точек, а справа колонка под картинку темы;
+    /// у тем без картинки она стоит пустой. Выключено по умолчанию — вид
+    /// по макету 30.09 остаётся прежним.
+    /// </remarks>
+    public bool HomeFullWidth { get; init; }
+
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
     private static readonly JsonSerializerOptions Options = new()

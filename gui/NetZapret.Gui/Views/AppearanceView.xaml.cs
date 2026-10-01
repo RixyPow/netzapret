@@ -57,6 +57,7 @@ public partial class AppearanceView : UserControl
         ShowFonts(settings);
         ShowTray(settings);
         ShowAnimations(settings);
+        HomeWidthSwitch.IsChecked = settings.HomeFullWidth;
     }
 
     private void ShowAnimations(AppSettings settings)
@@ -68,6 +69,27 @@ public partial class AppearanceView : UserControl
         if (!SystemParameters.ClientAreaAnimation)
             AnimationsNote.Text = "Выключены в самой Windows (Параметры → Специальные возможности → "
                 + "Визуальные эффекты) — пока они там выключены, окно не анимирует ничего.";
+    }
+
+    private void OnHomeWidth(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings with { HomeFullWidth = !settings.HomeFullWidth };
+
+            next.Save(AppSettings.DefaultPath);
+            HomeWidthSwitch.IsChecked = next.HomeFullWidth;
+
+            // «Главная» читает это при каждом показе: перезапускать ничего не надо.
+            Status.Text = next.HomeFullWidth
+                ? "«Главная» — на всю ширину окна."
+                : "«Главная» — как прежде: карточки слева, справа место под картинку темы.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
+        }
     }
 
     private void OnAnimations(object sender, RoutedEventArgs e)

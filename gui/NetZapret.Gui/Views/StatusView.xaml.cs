@@ -284,6 +284,7 @@ public partial class StatusView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             ShowModes(settings);
             ShowAutostart();
+            ShowWidth(settings);
 
             // Проверка обновлений идёт при запуске окна и может закончиться
             // уже после того, как «Главная» показана, — поэтому и подписка.
@@ -1387,4 +1388,25 @@ public partial class StatusView : UserControl
         Update();
     }
 
+
+    /// <summary>
+    /// «На всю ширину» (Оформление, 01.10): без предела у содержимого и без колонки под арт.
+    /// </summary>
+    /// <remarks>
+    /// Колонка арта в ноль — и PlaceArt сам кладёт картинку под карточки,
+    /// как на узком окне.
+    /// </remarks>
+    private void ShowWidth(AppSettings settings)
+    {
+        if (settings.HomeFullWidth)
+        {
+            ContentColumn.MaxWidth = double.PositiveInfinity;
+            ArtColumn.Width = new GridLength(0);
+        }
+        else
+        {
+            ContentColumn.MaxWidth = 940;
+            ArtColumn.Width = new GridLength(1, GridUnitType.Star);
+        }
+    }
 }

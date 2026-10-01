@@ -252,6 +252,25 @@
                             </Grid>
                         </Button>
 
+                        <!-- «Главная» во всю ширину (владелец, 01.10: для тем без картинки). -->
+                        <TextBlock Text="Главная" FontWeight="SemiBold" Margin="0,18,0,8" />
+
+                        <Button Style="{StaticResource Choice}" Click="OnHomeWidth" Margin="0,0,0,7">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="На всю ширину окна" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
+                                               Text="Карточки «Главной» растягиваются до правого края. Колонки под картинку темы нет — у тем с картинкой она ляжет под карточки, как на прочих вкладках." />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1" x:Name="HomeWidthSwitch" Style="{StaticResource Switch}"
+                                              IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+
                         <TextBlock Text="Меню в трее" FontWeight="SemiBold" Margin="0,18,0,8" />
 
                         <Button Style="{StaticResource Choice}" Click="OnTrayBlur" Margin="0,0,0,7">
