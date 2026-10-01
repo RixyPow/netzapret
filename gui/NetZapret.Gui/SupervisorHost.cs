@@ -159,10 +159,15 @@ internal static class SupervisorHost
 
             var services = new List<SupervisedService>();
 
+            // Десинк — первым: надзор поднимает службы по порядку и ждёт
+            // готовности каждой, а готов winws2, когда начал перехват
+            // (WinwsService.Ready). Всё, что туннель откроет следом, — уже
+            // под десинком. Прежде sing-box шёл первым, и первое соединение
+            // WARP уходило мимо десинка и замерзало (01.10).
+            AddWinws(options, services);
+
             if (!options.NoProxy && !TryAddSingBox(options, services))
                 return 2;
-
-            AddWinws(options, services);
 
             if (services.Count == 0)
             {

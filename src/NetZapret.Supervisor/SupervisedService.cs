@@ -271,7 +271,10 @@ public abstract class SupervisedService
             try
             {
                 while (await reader.ReadLineAsync() is { } line)
+                {
+                    Observe(line);
                     RecordOutput(line);
+                }
             }
             catch (Exception)
             {
@@ -289,6 +292,11 @@ public abstract class SupervisedService
     /// исходникам, а ищут причину обычно как раз по журналу.
     /// </remarks>
     protected void Note(string line) => RecordOutput($"[супервизор] {line}");
+
+    /// <summary>Строка вывода движка — для тех, кто по ней судит о готовности.</summary>
+    protected virtual void Observe(string line)
+    {
+    }
 
     /// <remarks>
     /// Зовётся на каждую строку вывода движка, а winws2 пишет строку
@@ -1141,6 +1149,48 @@ public sealed class WinwsService : SupervisedService
         return startInfo;
     }
 
+    /// <summary>
+    /// Перехват уже идёт: winws2 сказал «capture is started».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Готовность winws2 — не живой процесс, а начатый перехват: прежде чем
+    /// снимать пакеты, он читает списки (в V10 — 117 тысяч имён), и это
+    /// секунды. Надзор поднимал sing-box первым, и всё, что туннель открывал
+    /// в эти секунды, шло мимо десинка. У WARP это первое соединение с узлом:
+    /// без десинка оно замерзает (замер 01.10), и на каждом запуске WARP
+    /// около полуминуты молчал — до обрыва на 19-й секунде и нового
+    /// соединения, уже под десинком. Отдельный WARP, поднятый при работающем
+    /// десинке, ответил с первых пяти секунд.
+    /// </para>
+    /// <para>
+    /// Строки может не оказаться в другой сборке winws2 — тогда готовым
+    /// считается живой процесс через <see cref="CaptureGrace"/>: лучше поздно,
+    /// чем никогда.
+    /// </para>
+    /// </remarks>
+    private volatile bool _capturing;
+
+    /// <summary>Сколько ждать строки о перехвате, прежде чем поверить живому процессу.</summary>
+    public static readonly TimeSpan CaptureGrace = TimeSpan.FromSeconds(10);
+
+    /// <summary>Строка winws2 о начатом перехвате.</summary>
+    public const string CaptureStarted = "capture is started";
+
+    protected override void Observe(string line)
+    {
+        if (line.Contains(CaptureStarted, StringComparison.OrdinalIgnoreCase))
+            _capturing = true;
+    }
+
+    protected override void ForgetRunState() => _capturing = false;
+
     public override Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(IsProcessAlive ? ServiceCheck.Healthy : ServiceCheck.Broken);
+        Task.FromResult(Ready(IsProcessAlive, _capturing, StartedAt, DateTimeOffset.Now)
+            ? ServiceCheck.Healthy
+            : ServiceCheck.Broken);
+
+    /// <summary>Готов ли winws2: жив и перехват начат — либо жив дольше срока.</summary>
+    public static bool Ready(bool alive, bool capturing, DateTimeOffset? started, DateTimeOffset now) =>
+        alive && (capturing || started is null || now - started >= CaptureGrace);
 }
