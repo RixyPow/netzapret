@@ -68,7 +68,13 @@ internal static class EngineControl
     {
         try
         {
-            return await StartCoreAsync(turn);
+            // В пуле, а не в потоке окна. Разбор правил идёт дважды (конфиг
+            // и списки десинка), по 43–143 мс, исключения десинка — 31–60 мс,
+            // и после ответа подписки продолжение возвращалось в поток окна
+            // вместе со сборкой конфига (замер 01.10). Сторож подвисаний
+            // писал в миг «Запустить» «поток окна был занят 400 мс» при
+            // стольких же мс процессора.
+            return await Task.Run(() => StartCoreAsync(turn), turn);
         }
         catch (OperationCanceledException) when (!caller.IsCancellationRequested)
         {

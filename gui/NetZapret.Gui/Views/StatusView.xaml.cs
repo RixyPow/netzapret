@@ -377,7 +377,20 @@ public partial class StatusView : UserControl
         UpdateCard.Visibility = Visibility.Collapsed;
     }
 
-    private void Update()
+    /// <summary>То, что «Главная» читает с диска и у системы на каждом тике.</summary>
+    /// <param name="Problem">Настройки не прочитались — почему; тогда прочее пусто.</param>
+    /// <param name="SingBoxUp">Есть ли процесс sing-box — для фазы запуска, только пока он идёт.</param>
+    /// <param name="ConfigBuilt">Когда собран конфиг туннеля; <c>null</c> — файла нет.</param>
+    private sealed record Seen(
+        AppSettings? Settings,
+        string? Problem,
+        string Subscriptions,
+        SupervisorState? State,
+        bool Running,
+        bool SingBoxUp,
+        DateTime? ConfigBuilt);
+
+    private static Seen Read(bool starting)
     {
         AppSettings settings;
 
@@ -387,7 +400,97 @@ public partial class StatusView : UserControl
         }
         catch (Exception ex)
         {
-            ShowProblem($"Настройки не читаются: {ex.Message}");
+            return new Seen(null, $"Настройки не читаются: {ex.Message}", string.Empty, null, false, false, null);
+        }
+
+        // Ссылки на подписки — пароли, и в окне им не место. Показываем лишь
+        // счёт: его хватает, чтобы понять, почему нет серверов.
+        string subscriptions;
+
+        try
+        {
+            subscriptions = SubscriptionBook.Load().Describe(settings);
+        }
+        catch (Exception)
+        {
+            subscriptions = string.Empty;
+        }
+
+        var state = SupervisorState.Load(SupervisorState.DefaultPath);
+        bool running = state is not null && state.IsSupervisorAlive();
+
+        DateTime? built = null;
+
+        try
+        {
+            // Конфиг собирается при каждом запуске, и серверы подписок берутся
+            // тогда же, — поэтому время файла и есть время, когда их взяли.
+            // Отдельного «подписки обновлены» программа не хранит.
+            var config = new FileInfo(Path.Combine("runtime", "singbox.json"));
+
+            if (config.Exists)
+                built = config.LastWriteTime;
+        }
+        catch (Exception)
+        {
+        }
+
+        return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built);
+    }
+
+    private bool _updating;
+    private bool _updateAgain;
+
+    /// <summary>
+    /// Перечитывает состояние в пуле и показывает его.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Чтение — не в потоке окна. Сторож подвисаний 01.10 писал на «Главной»
+    /// при запуске движков 300–860 мс «занят» при 0–80 мс процессора: поток
+    /// окна ждал. В покое замер того же чтения — единицы миллисекунд, но
+    /// в нём есть ожидания: занятый файл настроек читается повтором через
+    /// 60 мс до пяти раз, процессы перебираются системой, а при запуске
+    /// файлы пишут сразу надзор и движки. Какое из ожиданий подвешивало
+    /// окно, не выяснено — уведены все.
+    /// </para>
+    /// <para>
+    /// Вызов посреди идущего чтения не теряется и не множит чтения:
+    /// отмечается, и чтение повторяется по окончании.
+    /// </para>
+    /// </remarks>
+    private async void Update()
+    {
+        if (_updating)
+        {
+            _updateAgain = true;
+            return;
+        }
+
+        _updating = true;
+
+        try
+        {
+            do
+            {
+                _updateAgain = false;
+
+                bool starting = _startingSince is not null;
+                Show(await Task.Run(() => Read(starting)));
+            }
+            while (_updateAgain);
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    private void Show(Seen seen)
+    {
+        if (seen.Settings is not { } settings)
+        {
+            ShowProblem(seen.Problem!);
             return;
         }
 
@@ -397,16 +500,13 @@ public partial class StatusView : UserControl
         ShowPresetNote(settings.PresetName);
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
         DnsValue.Text = settings.DnsServer;
+        SubscriptionValue.Text = seen.Subscriptions;
 
-        // Ссылки на подписки — пароли, и в окне им не место. Показываем лишь
-        // счёт: его хватает, чтобы понять, почему нет серверов.
-        SubscriptionValue.Text = SubscriptionBook.Load().Describe(settings);
+        var state = seen.State;
+        bool running = seen.Running;
 
-        var state = SupervisorState.Load(SupervisorState.DefaultPath);
-        bool running = state is not null && state.IsSupervisorAlive();
-
-        ShowState(settings, state, running);
-        ShowFooter(state, running);
+        ShowState(settings, state, running, seen.SingBoxUp);
+        ShowFooter(state, running, seen.ConfigBuilt);
         ShowWarnings(settings);
 
         _ = ReadExitAsync(settings, running && state!.Services.Any(s => s.Name == "sing-box"));
@@ -442,7 +542,10 @@ public partial class StatusView : UserControl
 
         try
         {
-            var (server, _) = await TunnelStatus.CurrentExitAsync(CancellationToken.None);
+            // В пуле целиком: до первого ожидания запрос идёт синхронно
+            // (клиент, поиск прокси системы), а ответ пишется в журнал
+            // недавних выходов — файлом.
+            var (server, _) = await Task.Run(() => TunnelStatus.CurrentExitAsync(CancellationToken.None));
 
             if (server is null || server == _exit)
                 return;
@@ -456,11 +559,11 @@ public partial class StatusView : UserControl
         }
     }
 
-    private void ShowState(AppSettings settings, SupervisorState? state, bool running)
+    private void ShowState(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp)
     {
         // Запуск показывается своим чередом: пока он идёт, «остановлено»
         // означает не отказ, а то, что супервизор ещё не дописал состояние.
-        if (_startingSince is not null && ShowStarting(settings, state, running))
+        if (_startingSince is not null && ShowStarting(settings, state, running, singBoxUp))
             return;
 
         StartButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
@@ -525,7 +628,7 @@ public partial class StatusView : UserControl
     /// либо исчерпанное терпение — иначе окно объявляло бы отказ, пока
     /// внизу ещё идут попытки.
     /// </remarks>
-    private bool ShowStarting(AppSettings settings, SupervisorState? state, bool running)
+    private bool ShowStarting(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp)
     {
         var since = _startingSince!.Value;
         var services = running ? state!.Services : [];
@@ -549,7 +652,7 @@ public partial class StatusView : UserControl
         StateLine.Text = "Запускается…";
 
         var seconds = (int)(DateTimeOffset.Now - since).TotalSeconds;
-        StateHint.Text = $"{DescribePhase(settings, running, services)} — {seconds} с";
+        StateHint.Text = $"{DescribePhase(settings, running, singBoxUp, services)} — {seconds} с";
 
         // Пока супервизор не дописал состояние, движки показываются жёлтыми
         // и «запускается». Прежде список опустошался, и они пропадали ровно
@@ -575,11 +678,12 @@ public partial class StatusView : UserControl
     private static string DescribePhase(
         AppSettings settings,
         bool running,
+        bool singBoxUp,
         IReadOnlyList<ServiceState> services)
     {
         if (!running)
         {
-            if (!IsRunning("sing-box"))
+            if (!singBoxUp)
                 return "Собираем конфиг и поднимаем супервизор";
 
             // Проверка прохода трафика уходит в сеть и занимает основную часть
@@ -705,27 +809,15 @@ public partial class StatusView : UserControl
     /// <summary>
     /// Строка внизу: состояние с длительностью и время сборки конфига туннеля.
     /// </summary>
-    private void ShowFooter(SupervisorState? state, bool running)
+    private void ShowFooter(SupervisorState? state, bool running, DateTime? configBuilt)
     {
         FooterState.Text = running && _startingSince is null
             ? $"{StateLine.Text} · {Span(DateTimeOffset.Now - state!.StartedAt)}"
             : StateLine.Text;
 
-        // Конфиг собирается при каждом запуске, и серверы подписок берутся
-        // тогда же, — поэтому время файла и есть время, когда их взяли.
-        // Отдельного «подписки обновлены» программа не хранит.
-        try
-        {
-            var config = new FileInfo(Path.Combine("runtime", "singbox.json"));
-
-            FooterConfig.Text = config.Exists
-                ? $"Конфиг туннеля собран {config.LastWriteTime:dd.MM.yyyy} в {config.LastWriteTime:HH:mm}"
-                : string.Empty;
-        }
-        catch (Exception)
-        {
-            FooterConfig.Text = string.Empty;
-        }
+        FooterConfig.Text = configBuilt is { } at
+            ? $"Конфиг туннеля собран {at:dd.MM.yyyy} в {at:HH:mm}"
+            : string.Empty;
     }
 
     /// <summary>«23 дня, 4 часа», «4 ч 12 мин», «7 мин».</summary>
