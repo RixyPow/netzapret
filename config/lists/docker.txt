@@ -4,3 +4,10 @@
 # отдельно от чтения документации.
 docker.com
 docker.io
+
+# Добавлено 01.10 по сверке с v2fly (docker), вживую не наблюдалось.
+# Слои образов Docker Hub отдаёт из хранилища на Cloudflare R2 — этим
+# адресом, а не зоной r2.cloudflarestorage.com (там чужие хранилища).
+# dockerstatic.com — статика сайта.
+docker-images-prod.6aa30f8b08e16409b46e0173d6de2f56.r2.cloudflarestorage.com
+dockerstatic.com

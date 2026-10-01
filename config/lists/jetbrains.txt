@@ -1,2 +1,8 @@
 # JetBrains: загрузки, плагины, лицензии.
 jetbrains.com
+
+# Добавлено 01.10 по сверке с v2fly (jetbrains-ai), вживую не наблюдалось:
+# AI Assistant ходит не на jetbrains.com, а сюда.
+jetbrains.ai
+grazie.ai
+grazie.aws.intellij.net

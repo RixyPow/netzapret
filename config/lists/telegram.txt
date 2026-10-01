@@ -14,3 +14,10 @@ tdesktop.com
 telegram.tips
 telegram.me
 telegram.dog
+
+# Добавлено 01.10 по сверке с v2fly (telegram), вживую не наблюдалось:
+# Telegraph (статьи по ссылкам из каналов), Fragment (имена и звёзды)
+# и ещё одна зона раздачи. graph.org — зеркало Telegraph, не взято.
+telegra.ph
+fragment.com
+cdn-telegram.org

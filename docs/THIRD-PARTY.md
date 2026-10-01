@@ -184,6 +184,14 @@ Zapret GUI называет, что взял у bol-van.
 репозитория zapret2). Лицензия у обоих одна — MIT, и оба уведомления едут
 рядом с файлами.
 
+### v2fly/domain-list-community
+
+Открытый каталог доменов по сервисам —
+[github.com/v2fly/domain-list-community](https://github.com/v2fly/domain-list-community),
+MIT. Кода из него нет; 01.10 по сверке с ним в наши списки `config/lists/`
+добавлены около сорока имён (Gemini, ChatGPT, Notion, Perplexity, JetBrains AI,
+Telegram, Docker, Minecraft, Spotify) — каждое подписано в своём файле.
+
 ### Zapret KVN
 
 VPN-клиент той же команды —

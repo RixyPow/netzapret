@@ -13,3 +13,11 @@
 scdn.co
 spotifycdn.com
 spotifycdn.net
+
+# Добавлено 01.10 по сверке с v2fly (spotify), вживую не наблюдалось:
+# запасная раздача звука и обложек на Akamai. Отдельные адреса,
+# а не зона akamaized.net — та чужая сеть доставки.
+audio-ak-spotify-com.akamaized.net
+audio4-ak-spotify-com.akamaized.net
+heads-ak-spotify-com.akamaized.net
+heads4-ak-spotify-com.akamaized.net

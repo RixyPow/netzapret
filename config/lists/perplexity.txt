@@ -1,2 +1,8 @@
 # Perplexity.
 perplexity.ai
+
+# Добавлено 01.10 по сверке с v2fly (perplexity), вживую не наблюдалось:
+# картинки ответов и загрузка файлов. Отдельные адреса, а не зоны
+# cloudinary.com и amazonaws.com — те чужие сети доставки.
+pplx-res.cloudinary.com
+ppl-ai-file-upload.s3.amazonaws.com

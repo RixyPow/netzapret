@@ -4,3 +4,10 @@
 # в оффлайне, и выглядит это как «слетела учётка».
 minecraft.net
 mojang.com
+
+# Добавлено 01.10 по сверке с v2fly (mojang), вживую не наблюдалось:
+# minecraftservices.com — вход и профиль Java Edition (api.minecraftservices.com),
+# minecraft-services.net — сервисы Bedrock. Без них «слетает учётка» так же,
+# как без mojang.com.
+minecraftservices.com
+minecraft-services.net

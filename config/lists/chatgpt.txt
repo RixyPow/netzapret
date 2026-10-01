@@ -11,3 +11,13 @@ chatgpt.com
 openai.com
 oaistatic.com
 oaiusercontent.com
+
+# Добавлено 01.10 по сверке с v2fly (openai), вживую не наблюдалось.
+# livekit.cloud — голосовой режим: без него чат пишет, но не говорит.
+# oaistatsig.com — настройки и эксперименты, которые страница ждёт при загрузке.
+# chat.com не взят: он только перенаправляет на chatgpt.com.
+sora.com
+oaistatsig.com
+chatgpt.livekit.cloud
+host.livekit.cloud
+turn.livekit.cloud

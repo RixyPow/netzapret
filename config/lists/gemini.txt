@@ -4,3 +4,27 @@
 # то есть документация для разработчиков, а не сам чат.
 gemini.google.com
 ai.google.dev
+
+# Добавлено 01.10 по сверке с v2fly (google-deepmind), вживую не наблюдалось.
+# Gemini закрыт от России по стране, и любое его имя, ушедшее мимо туннеля,
+# получает отказ. Чат ходит к своим серверам на googleapis.com и clients6,
+# AI Studio и API — к своим; NotebookLM и Code Assist — те же модели.
+# Перенаправители (bard, makersuite, notebook.google) не взяты.
+gemini.google
+gemini.gstatic.com
+proactivebackend-pa.googleapis.com
+robinfrontend-pa.googleapis.com
+geminiweb-pa.clients.google.com
+geminiweb-pa.clients6.google.com
+aistudio.google.com
+ai.studio
+alkalimakersuite-pa.clients6.google.com
+webchannel-alkalimakersuite-pa.clients6.google.com
+alkalicore-pa.clients6.google.com
+generativelanguage.googleapis.com
+notebooklm.google.com
+notebooklm.google
+notebooklm-pa.googleapis.com
+notebooklm.googleapis.com
+cloudaicompanion.googleapis.com
+cloudcode-pa.googleapis.com
