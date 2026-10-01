@@ -47,6 +47,25 @@ public sealed record PartRow
     /// уже посчитано.
     /// </remarks>
     public required string Mode { get; set; }
+
+    /// <summary>
+    /// Куда идёт часть, одним словом — для шапки папки.
+    /// </summary>
+    /// <remarks>
+    /// Без приёма: «десинк», а не «десинк: hostfakesplit_multi». Приём
+    /// назван в строке самой части. В шапке он делил одну дорогу на столько
+    /// групп, сколько у сервиса разных приёмов, и итог Discord не влезал
+    /// в строку (владелец, 01.10: «уже по конкретным маршрутам пиши»).
+    /// По маршруту на момент сборки, как и <see cref="Mode"/>: шапка
+    /// пересобирается вместе с разделом, а не по выбору в списке.
+    /// </remarks>
+    public string Route => Applied switch
+    {
+        0 => HasPin ? "прибит в hosts" : "напрямую",
+        1 => "десинк",
+        _ => "VPN",
+    };
+
     public required Brush Color { get; init; }
     /// <summary>
     /// Что выбрано в списке.
@@ -228,12 +247,13 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public string Count => Parts.Count + " " + Ending(Parts.Count);
 
     /// <summary>Куда идут части: одним словом, если все одинаково.</summary>
+    /// <remarks>Без приёмов десинка — см. <see cref="PartRow.Route"/>.</remarks>
     public string Summary
     {
         get
         {
             var modes = Parts
-                .GroupBy(p => p.Mode)
+                .GroupBy(p => p.Route)
                 .OrderByDescending(g => g.Count())
                 .ToList();
 
@@ -248,7 +268,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 
     /// <summary>Цвет итога; при расхождении — приглушённый, чтобы не выдавать одну часть за весь сервис.</summary>
     public Brush Color =>
-        Parts.Select(p => p.Mode).Distinct().Count() == 1 && Parts.Count > 0
+        Parts.Select(p => p.Route).Distinct().Count() == 1 && Parts.Count > 0
             ? Parts[0].Color
             : (Brush)Application.Current.FindResource("Muted");
 
