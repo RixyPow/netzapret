@@ -56,7 +56,8 @@
             <TextBox x:Name="NameBox" gui:Hint.Text="Пусто — назовём сами" />
 
             <TextBlock Text="Ссылка подписки" FontWeight="SemiBold" Margin="0,16,0,6" />
-            <PasswordBox x:Name="UrlBox" gui:Hint.Text="https://… либо happ://, clash://, sn://" />
+            <PasswordBox x:Name="UrlBox" gui:Hint.Text="https://… либо happ://, clash://, sn://"
+                         LostKeyboardFocus="OnUrlLeft" />
         </StackPanel>
 
         <StackPanel x:Name="KeyFields" Visibility="Collapsed">

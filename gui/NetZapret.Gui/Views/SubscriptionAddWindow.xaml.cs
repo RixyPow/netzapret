@@ -199,12 +199,104 @@ public partial class SubscriptionAddWindow : Window
             if (NameBox.Text.Trim().Length == 0 && name is not null)
                 NameBox.Text = name;
 
-            Show($"{where}: ссылка подписки. Дайте ей имя и нажмите «Добавить».");
-            NameBox.Focus();
+            Show($"{where}: ссылка подписки. Спрашиваю у панели название…");
+            _ = LookupAsync(url);
             return;
         }
 
         Say($"{where} {found.Problem}.");
+    }
+
+    /// <summary>Ссылка, о которой уже спрашивали, — чтобы не спрашивать дважды.</summary>
+    private string? _askedUrl;
+
+    /// <summary>Имя, подставленное по ответу панели: его можно заменить, а вписанное руками — нет.</summary>
+    private string? _autoName;
+
+    private CancellationTokenSource? _lookup;
+
+    /// <summary>Ссылку вписали руками — спросить панель, как и о найденной в буфере.</summary>
+    private void OnUrlLeft(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (KeyImport.FromText(UrlBox.Password).SubscriptionUrl is { } url && url != _askedUrl)
+            _ = LookupAsync(url);
+    }
+
+    /// <summary>
+    /// Спрашивает панель о подписке: название — в имя, число серверов — в строку.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 01.10: «из буфера не может автоматически взять название
+    /// подписки?» Может: панели присылают его заголовком profile-title,
+    /// и программа его уже читает (SubscriptionInfo.Title) — для окна
+    /// добавления его просто не спрашивали.
+    /// </para>
+    /// <para>
+    /// Имя ставится, только если человек не вписал своё. Отказ панели — не
+    /// запрет добавить: панели лежат минутами, а программа у добавленной
+    /// подписки переспросит сама. Чтение ничего не пишет на диск, так что
+    /// «Отмена» не оставляет ответа панели — а в нём ключи.
+    /// </para>
+    /// </remarks>
+    private async Task LookupAsync(string url)
+    {
+        _lookup?.Cancel();
+        var cancel = _lookup = new CancellationTokenSource();
+        _askedUrl = url;
+
+        try
+        {
+            using var client = new SubscriptionClient();
+            var info = await client.FetchAsync(new Uri(url), cancel.Token);
+
+            if (cancel.IsCancellationRequested)
+                return;
+
+            var title = info.Title?.Trim();
+            var current = NameBox.Text.Trim();
+
+            if (!string.IsNullOrEmpty(title) && (current.Length == 0 || current == _autoName))
+            {
+                _autoName = Unique(title);
+                NameBox.Text = _autoName;
+            }
+
+            int usable = info.Servers.Count(s => s.IsUsableOutbound);
+
+            Show((string.IsNullOrEmpty(title) ? "Подписка отвечает" : $"Подписка «{title}»")
+                + $": серверов {usable}. Нажмите «Добавить».");
+        }
+        catch (OperationCanceledException) when (cancel.IsCancellationRequested)
+        {
+            // Спросили о другой ссылке или закрыли окно — ответ уже не нужен.
+        }
+        catch (Exception ex)
+        {
+            if (!cancel.IsCancellationRequested)
+                Say("Панель не ответила: " + PanelError.Describe(ex) + ". Добавить всё равно можно — программа переспросит сама.");
+        }
+    }
+
+    /// <summary>Название панели, если оно ещё не занято; иначе с номером.</summary>
+    private string Unique(string title)
+    {
+        if (!_taken.Contains(title, StringComparer.OrdinalIgnoreCase))
+            return title;
+
+        for (int n = 2; ; n++)
+        {
+            var candidate = $"{title} {n}";
+
+            if (!_taken.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                return candidate;
+        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _lookup?.Cancel();
+        base.OnClosed(e);
     }
 
     private void OnAdd(object sender, RoutedEventArgs e)
