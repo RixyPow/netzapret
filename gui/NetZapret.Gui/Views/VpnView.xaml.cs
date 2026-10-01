@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NetZapret.Core;
@@ -36,6 +37,32 @@ public sealed record ServerRow(
 
     /// <summary>Пункт меню строки: убрать из автоподбора или вернуть.</summary>
     string AutoPickLabel = "Не брать в автоподбор");
+
+/// <summary>Плитка быстрой смены сервера (макет владельца 01.10); тег <c>null</c> — «Авто».</summary>
+public sealed record QuickTile(
+    string? Tag,
+    string Title,
+    string Latency,
+    Brush Color,
+    BitmapImage? Flag,
+    Visibility FlagShown,
+    string Mark,
+    FontFamily MarkFont,
+    Visibility MarkShown,
+    Brush Edge,
+    Brush Fill,
+    string Tip);
+
+/// <summary>Строка «Недавних серверов».</summary>
+public sealed record RecentRow(
+    string Name,
+    string Country,
+    Visibility CountryShown,
+    BitmapImage? Flag,
+    Visibility FlagShown,
+    string Latency,
+    Brush Color,
+    FontWeight Weight);
 
 /// <summary>Папка одной подписки.</summary>
 public sealed class SubRow
@@ -314,13 +341,14 @@ public partial class VpnView : UserControl
         // про него «держит закреплённый, перезапустите движки» было неправдой.
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
+        // Сам выход — в карточке выше; здесь только расхождение с выбором.
         PickLine.Text = server is null
             ? _pickBase + " Движок не ответил, какой выход держит."
-            : TunnelStatus.Standing(server, settings.PreferredServer) != ExitStanding.Other
-                ? $"{_pickBase} Сейчас: {server}."
+            : TunnelStatus.Standing(server, Warp.PreferredExit(settings)) != ExitStanding.Other
+                ? _pickBase
                 : StandInRemark() is { } remark
-                    ? $"{_pickBase} Сейчас: {server} — {remark}."
-                    : $"{_pickBase} Но движок сейчас держит {server} — перезапустите движки, чтобы закрепление применилось.";
+                    ? $"{_pickBase} Сейчас {server} — {remark}."
+                    : $"{_pickBase} Но движок сейчас держит {server} — перезапустите движки, чтобы выбор применился.";
     }
 
     /// <summary>Примечание надзора о туннеле: «временная замена…»; <c>null</c> — нет.</summary>
@@ -343,8 +371,10 @@ public partial class VpnView : UserControl
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var (running, live, automatic) = _live;
 
-        bool pinned = !string.IsNullOrWhiteSpace(settings.PreferredServer);
-        var tag = running ? live : settings.PreferredServer;
+        // При включённом WARP закреплён он (Warp.PreferredExit).
+        var preferred = Warp.PreferredExit(settings);
+        bool pinned = !string.IsNullOrWhiteSpace(preferred);
+        var tag = running ? live : preferred;
 
         // Имя группы вместо сервера: автоподбор ещё не выбрал — до первого
         // своего замера ему выбирать не из чего. Показывать «auto-latency»
@@ -381,38 +411,72 @@ public partial class VpnView : UserControl
             CurrentName.Text = name.Length > 0 ? name : tag;
             ShowFlag(country);
 
-            var parts = new List<string>();
-
-            if (found.Server is { } server)
-            {
-                parts.Add(found.Owner == "WARP" ? "WARP" : $"из «{found.Owner}»");
-                parts.Add(server.Protocol.ToString());
-            }
-
-            if (Seen(tag) is { Success: true, LatencyMs: { } ms })
-                parts.Add($"{ms:0} мс");
-
+            // Только как выход выбран: подписка, протокол и задержка — цифрами
+            // ниже (макет 01.10), повторять их строкой незачем.
+            //
             // Закреплён ли сервер, знают настройки, а не селектор: сторож ставит
             // серверы прямо в него и при автоподборе (TunnelStatus.Standing).
             // Замену выбранному серверу называет надзор: со стороны её
             // не отличить от выбора, который ещё не применился.
-            parts.Add(!running
-                ? "закреплён"
-                : TunnelStatus.Standing(tag, settings.PreferredServer) switch
+            CurrentDetail.Text = !running
+                ? string.Empty
+                : TunnelStatus.Standing(tag, preferred) switch
                 {
-                    ExitStanding.Pinned => "закреплён",
-                    ExitStanding.Other => StandInRemark() ?? "выбор в настройках ещё не применён",
-                    _ => "выбран автоподбором",
-                });
-
-            CurrentDetail.Text = string.Join(" · ", parts);
+                    ExitStanding.Pinned => tag == Warp.MasqueTag ? "Включён WARP." : "Закреплён вами.",
+                    ExitStanding.Other => StandInRemark() is { } remark
+                        ? char.ToUpper(remark[0]) + remark[1..] + "."
+                        : "Выбор в настройках ещё не применён — перезапустите движки.",
+                    _ => "Выбран автоподбором.",
+                };
         }
 
         // Метка состояния: зелёная, пока движки работают.
         var key = running ? "Accent" : "Faint";
         CurrentDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, key);
-        CurrentPill.SetResourceReference(Border.BorderBrushProperty, key);
-        CurrentState.Text = running ? "в работе" : "движки остановлены";
+        CurrentState.SetResourceReference(TextBlock.ForegroundProperty, key);
+        CurrentState.Text = running ? "В работе" : "Движки остановлены";
+
+        ShowStats(tag, found.Owner, found.Server);
+        ShowRecent(running ? live : null);
+    }
+
+    /// <summary>
+    /// Цифры выхода под его именем: задержка, протокол, реализация, источник (макет 01.10).
+    /// </summary>
+    private void ShowStats(string? tag, string? owner, ProxyServer? server)
+    {
+        StatLatency.Text = tag is not null && Seen(tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—";
+        StatProtocol.Text = server is null ? "—" : Transport(server);
+        StatKind.Text = server?.Protocol.ToString() ?? "—";
+
+        var source = owner is null ? null : owner == "WARP" ? "Cloudflare WARP" : owner;
+        StatSource.Text = source ?? "—";
+
+        CurrentSource.Text = source ?? string.Empty;
+        CurrentSourcePill.Visibility = source is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Защита и транспорт словами, как их пишут продавцы: «TLS XHTTP», «Reality TCP».</summary>
+    private static string Transport(ProxyServer server)
+    {
+        var security = server.Security?.ToLowerInvariant() switch
+        {
+            "tls" => "TLS",
+            "reality" => "Reality",
+            null or "" or "none" => null,
+            var other => other,
+        };
+
+        var transport = string.IsNullOrWhiteSpace(server.Transport) ? null : server.Transport.ToUpperInvariant();
+
+        // У Hysteria2 и MASQUE транспорт свой и словом не называется.
+        if (server.Protocol is ProxyProtocol.Hysteria2 or ProxyProtocol.Masque)
+            transport = server.Protocol == ProxyProtocol.Masque ? "HTTP/2" : "QUIC";
+
+        var parts = new[] { security, transport }.Where(p => !string.IsNullOrEmpty(p));
+        var text = string.Join(" ", parts);
+
+        return text.Length > 0 ? text : "—";
     }
 
     /// <summary>Флаг картинкой, а нет картинки — буквами страны.</summary>
@@ -540,9 +604,10 @@ public partial class VpnView : UserControl
 
             int servers = _rows.Sum(r => r.Servers.Count);
 
-            Status.Text = servers == 0
+            // Числа — в сводке у заголовка; здесь только беда.
+            Status.Text = servers == 0 && _rows.Count > 0
                 ? "Ни одна подписка не отдала серверов."
-                : $"Подписок: {_rows.Count}, серверов: {servers}.";
+                : string.Empty;
         }
         catch (OperationCanceledException)
         {
@@ -828,6 +893,10 @@ public partial class VpnView : UserControl
     {
         Subscriptions.ItemsSource = null;
         Subscriptions.ItemsSource = _rows;
+
+        // Лента и сводка строятся из тех же строк — вместе с ними.
+        ShowQuick(AppSettings.Load(AppSettings.DefaultPath));
+        ShowSummary();
     }
 
     /// <summary>Пересобирает строки серверов, не перечитывая подписки.</summary>
@@ -1034,21 +1103,22 @@ public partial class VpnView : UserControl
 
         bool auto = string.IsNullOrWhiteSpace(pinned);
 
-        _pickBase = auto
-            ? "Включён: трафик идёт через быстрейший из живых серверов."
-            : $"Выключен: закреплён {pinned}. Нажмите, чтобы вернуть автоподбор.";
+        _pickBase = settings.WarpEnabled
+            ? "На паузе: туннель идёт через WARP."
+            : auto
+                ? "Автоподбор: трафик идёт через быстрейший из живых серверов."
+                : $"Закреплён {pinned}. Плитка «Авто» вернёт автоподбор.";
 
         // Сторож выключен настройкой — сказать здесь, а не только в окне настроек.
         // 30.09 у владельца стояло «не проверять», заминки сервера никто
         // не замечал, а вкладка обещала «быстрейший из живых».
-        if (settings.ExitCheckSeconds <= 0)
+        if (settings.ExitCheckSeconds <= 0 && !settings.WarpEnabled)
         {
             _pickBase += " Проверка подключённого сервера выключена: замолчит — сам не сменится. "
                 + "Включается в «Настройках» наверху.";
         }
 
         PickLine.Text = _pickBase;
-        AutoSwitch.IsChecked = auto;
 
         // Выход — следом, не дожидаясь таймера: иначе первые четверть минуты
         // на вкладке строка была бы без него.
@@ -1056,46 +1126,35 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>
-    /// Показывает состояние выключателя WARP и его выходы.
+    /// Карточка WARP: выключатель пути и что он сейчас значит.
     /// </summary>
     /// <remarks>
-    /// Выключатель, а не строка списка: выходы WARP подмешиваются к серверам
-    /// действующей подписки. Отдельной подпиской он занимал её место — выбор
-    /// его выхода делал действующим его и отключал рабочий VPN целиком.
+    /// С 01.10 WARP — выбор пути, а не запасной выход (Warp.TunnelExits):
+    /// включён — подписки на паузе, лента серверов и список тускнеют.
     /// </remarks>
     private void ShowWarp(AppSettings settings)
     {
         bool on = settings.WarpEnabled;
 
-        // Выключенный — не показываем вовсе (владелец, 28.09): включается он
-        // в «Настройках», и карточка «выключен» только занимала место.
-        WarpCard.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        WarpSwitch.IsChecked = on;
+        WarpWord.Text = on ? "Включён" : "Выключен";
+        WarpDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, on ? "Accent" : "Faint");
 
-        // Выключатель уехал в настройки, и строка теперь говорит не только
-        // состояние, но и где его менять: иначе выключенный WARP выглядит
-        // как показанное без всякой причины.
+        var exit = Warp.Exits()[0];
+        var measured = Seen(exit.Tag) is { Success: true, LatencyMs: { } ms } ? $" · {ms:0} мс" : string.Empty;
+
         WarpLine.Text = on
-            ? "Добавлен к серверам подписок в работе. Учётную запись движок "
-              + "заводит себе сам — от вас не требуется ничего."
-            : "Выключен. Включается в «Настройках»: ни почты, ни оплаты, ни ключей.";
+            ? $"Туннель идёт только через WARP, подписки на паузе. Выход в Москве{measured}."
+            : "Бесплатный выход через сеть Cloudflare. Включите — и туннель пойдёт через него вместо подписок.";
 
-        WarpExits.ItemsSource = on ? Rows(Warp.Exits(), WarpOwner, settings) : null;
-        WarpExits.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        // Замер — руками движка, а он знает WARP, только когда тот в конфиге.
+        WarpCheckButton.Visibility = on && EnginesRunning ? Visibility.Visible : Visibility.Collapsed;
 
-        // Замер есть, пока есть у кого спросить. Отдельным пробником MASQUE
-        // не берётся — его меряет сам движок, и значит при остановленных
-        // движках мерить нечем. Прежде здесь стояло условие «есть хоть один
-        // замеряемый пробником», и с уходом выхода по WireGuard кнопка
-        // пропала совсем.
-        WarpCheckButton.Visibility = on && EnginesRunning
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-
-        // «Попробовать» есть только при работающих движках: оно переключает
-        // живой селектор, а выключенному движку переключать нечего.
-        WarpTryButton.Visibility = on && EnginesRunning
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        // Подписки и лента на паузе — видно сразу, а не только в подписи.
+        PausedLine.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        Subscriptions.Opacity = on ? 0.55 : 1;
+        QuickCard.Opacity = on ? 0.55 : 1;
+        QuickServers.IsEnabled = !on;
     }
 
     /// <summary>
@@ -1145,9 +1204,12 @@ public partial class VpnView : UserControl
             ShowWarp(next);
 
             Status.Text = next.WarpEnabled
-                ? "WARP добавлен к серверам подписок в работе. Пока те живы, "
-                  + "автоподбор берёт их. Применится при следующем запуске движков."
-                : "WARP выключен. Применится при следующем запуске движков.";
+                ? "WARP включён: туннель пойдёт только через него, подписки на паузе. "
+                  + "Применится при следующем запуске движков."
+                : "WARP выключен: туннель вернётся к подпискам. Применится при следующем запуске движков.";
+
+            ShowPick(next);
+            ShowQuick(next);
 
             this.Offer("WARP переключён");
         }
@@ -1157,13 +1219,13 @@ public partial class VpnView : UserControl
         }
     }
 
-    private void OnAuto(object sender, RoutedEventArgs e)
+    private void ChooseAuto()
     {
-        // Выключить тумблером нечем: чтобы закрепить сервер, надо знать
-        // какой. Говорим, где это делается, а не делаем вид, что выключили.
+        // Выключить автоподбор плиткой «Авто» нечем: чтобы закрепить сервер,
+        // надо знать какой. Говорим, где это делается.
         if (string.IsNullOrWhiteSpace(AppSettings.Load(AppSettings.DefaultPath).PreferredServer))
         {
-            Status.Text = "Автоподбор выключается выбором сервера: нажмите «выбрать» у нужного в списке ниже.";
+            Status.Text = "Автоподбор уже включён. Закрепить сервер — плиткой этого сервера или «выбрать» в списке.";
             return;
         }
 
@@ -2025,76 +2087,6 @@ public partial class VpnView : UserControl
     /// <summary>Тег группы, которой движок выбирает выход.</summary>
     private const string SelectorGroup = "auto";
 
-    /// <summary>
-    /// Пробует WARP на живом движке и возвращает всё обратно.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Через Clash API, а не через настройки. Закрепление сервера правит
-    /// <c>PreferredServer</c>, а оно применяется только при следующем запуске
-    /// движков — то есть «попробовать» стоило бы обрыва всего трафика
-    /// на полминуты, дважды: туда и обратно. Переключение группы в работающем
-    /// движке происходит мгновенно и ничего не роняет.
-    /// </para>
-    /// <para>
-    /// Возврат делается всегда, в том числе когда проба не удалась. Оставить
-    /// человека на неработающем выходе, потому что мы не смогли его проверить,
-    /// — худшее, чем может кончиться кнопка с надписью «попробовать».
-    /// </para>
-    /// </remarks>
-    private async void OnTryWarp(object sender, RoutedEventArgs e)
-    {
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
-        using var api = new ClashApi();
-
-        WarpTryButton.IsEnabled = false;
-        WarpTryButton.Content = "пробую…";
-
-        var previous = await api.SelectedAsync(SelectorGroup, CancellationToken.None);
-
-        try
-        {
-            var exit = Warp.Exits().FirstOrDefault();
-
-            if (exit is null || !await api.SelectAsync(SelectorGroup, exit.Tag, CancellationToken.None))
-            {
-                Status.Text = "Движок не отозвался. Проверьте, что он работает — «Главная».";
-                return;
-            }
-
-            Status.Text = $"Весь трафик временно идёт через «{exit.Tag}». Проверяю…";
-
-            // Через сам движок, а не мимо него: вопрос ровно в том, дойдёт ли
-            // трафик тем путём, которым пойдёт всё остальное.
-            var delay = await api.MeasureAsync(
-                exit.Tag,
-                "http://cp.cloudflare.com/generate_204",
-                TimeSpan.FromSeconds(20),
-                CancellationToken.None);
-
-            Status.Text = delay is { } ms
-                ? $"{exit.Tag} работает: {ms.TotalMilliseconds:0} мс. Выход вернулся на прежний — "
-                  + "чтобы оставить WARP насовсем, выберите его в списке."
-                : $"{exit.Tag} не отозвался за двадцать секунд. Туннель MASQUE поднимается "
-                  + "не мгновенно: если движки только что запущены, повторите через полминуты.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось попробовать: " + ex.GetBaseException().Message;
-        }
-        finally
-        {
-            // Возврат в любом случае, и без оглядки на исход пробы.
-            if (!string.IsNullOrEmpty(previous))
-                await api.SelectAsync(SelectorGroup, previous, CancellationToken.None);
-
-            WarpTryButton.IsEnabled = true;
-            WarpTryButton.Content = "попробовать сейчас";
-
-            Reshow();
-        }
-    }
-
     /// <summary>Замеряет выходы WARP.</summary>
     /// <remarks>
     /// Отдельной кнопкой, потому что они живут в карточке, а не в папке
@@ -2163,9 +2155,12 @@ public partial class VpnView : UserControl
     /// </remarks>
     private void OnChoose(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: ServerRow row })
-            return;
+        if (sender is Button { DataContext: ServerRow row })
+            Choose(row);
+    }
 
+    private void Choose(ServerRow row)
+    {
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
@@ -2273,4 +2268,218 @@ public partial class VpnView : UserControl
 
     /// <summary>Панель подвела, а запаса нет — причина уже словами.</summary>
     private sealed class SubscriptionUnreadException(string message) : Exception(message);
+
+    /// <summary>
+    /// Лента быстрой смены: «Авто» и серверы подписок в работе, быстрые первыми.
+    /// </summary>
+    private void ShowQuick(AppSettings settings)
+    {
+        bool auto = string.IsNullOrWhiteSpace(settings.PreferredServer);
+        var icons = (FontFamily)FindResource("IconFont");
+        var text = (FontFamily)FindResource("UiFont");
+
+        var tiles = new List<QuickTile>
+        {
+            new(null, "Авто", "быстрейший", (Brush)FindResource("Muted"),
+                null, Visibility.Collapsed, "", icons, Visibility.Visible,
+                Edge(auto), Fill(auto), "Автоподбор: быстрейший из живых"),
+        };
+
+        // Мёртвые и незамеренные — в конце: лента для быстрого выбора, а не перечень.
+        var servers = _rows
+            .Where(r => r.Active)
+            .SelectMany(r => r.Servers)
+            .DistinctBy(s => s.Tag)
+            .OrderBy(s => Seen(s.Tag) is { Success: true, LatencyMs: { } ms } ? ms : double.MaxValue)
+            .Take(24);
+
+        foreach (var server in servers)
+        {
+            var (country, name) = CountryTag.Split(server.Tag);
+            var flag = country.Length == 2 ? FlagImages.For(country) : null;
+            bool chosen = server.Tag == settings.PreferredServer;
+
+            tiles.Add(new QuickTile(
+                server.Tag,
+                Short(name.Length > 0 ? name : server.Tag),
+                Seen(server.Tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—",
+                (Brush)FindResource(Key(server.Tag)),
+                flag,
+                flag is null ? Visibility.Collapsed : Visibility.Visible,
+                flag is null ? (country.Length == 2 ? country : "•") : string.Empty,
+                text,
+                flag is null ? Visibility.Visible : Visibility.Collapsed,
+                Edge(chosen),
+                Fill(chosen),
+                server.Tag));
+        }
+
+        QuickServers.ItemsSource = tiles;
+
+        Brush Edge(bool on) => (Brush)FindResource(on ? "Accent" : "Border");
+        Brush Fill(bool on) => (Brush)FindResource(on ? "AccentFill" : "Surface");
+    }
+
+    /// <summary>Короткое имя для плитки: «Эстония — TLS XHTTP» → «Эстония».</summary>
+    private static string Short(string name)
+    {
+        foreach (var cut in new[] { " — ", " | ", " - ", " · " })
+        {
+            int at = name.IndexOf(cut, StringComparison.Ordinal);
+
+            if (at > 0)
+                return name[..at].Trim();
+        }
+
+        return name;
+    }
+
+    private void OnQuick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button)
+            return;
+
+        if (button.Tag is not string tag)
+        {
+            ChooseAuto();
+            return;
+        }
+
+        var row = _rows.SelectMany(r => r.Servers).FirstOrDefault(s => s.Tag == tag);
+
+        if (row is not null)
+            Choose(row);
+    }
+
+    /// <summary>Сдвиг ленты на три плитки.</summary>
+    private void OnQuickLeft(object sender, RoutedEventArgs e) =>
+        QuickScroll.ScrollToHorizontalOffset(Math.Max(0, QuickScroll.HorizontalOffset - 3 * 124));
+
+    private void OnQuickRight(object sender, RoutedEventArgs e) =>
+        QuickScroll.ScrollToHorizontalOffset(QuickScroll.HorizontalOffset + 3 * 124);
+
+    /// <summary>
+    /// Колесо над лентой листает страницу, а не ленту; с Shift — ленту.
+    /// </summary>
+    /// <remarks>
+    /// Вложенная прокрутка забирает колесо себе, даже когда ей листать
+    /// по вертикали нечего, — и страница вставала, стоило мыши оказаться над лентой.
+    /// </remarks>
+    private void OnQuickWheel(object sender, MouseWheelEventArgs e)
+    {
+        e.Handled = true;
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            QuickScroll.ScrollToHorizontalOffset(QuickScroll.HorizontalOffset - e.Delta);
+            return;
+        }
+
+        if (QuickScroll.Parent is UIElement parent)
+        {
+            parent.RaiseEvent(new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+            {
+                RoutedEvent = MouseWheelEvent,
+                Source = sender,
+            });
+        }
+    }
+
+    /// <summary>«Показать все» — раскрыть папки подписок и прокрутить к ним; раскрыты — свернуть.</summary>
+    private void OnShowAll(object sender, RoutedEventArgs e)
+    {
+        bool open = !_rows.All(r => r.Open);
+
+        foreach (var row in _rows)
+        {
+            row.Open = open;
+            row.Entry.Open = open;
+        }
+
+        try
+        {
+            _book.Save();
+        }
+        catch (Exception)
+        {
+            // Состояние показа не стоит жалобы.
+        }
+
+        Redraw();
+        ShowAllButton.Content = open ? "Свернуть все" : "Показать все";
+
+        if (open)
+            Subscriptions.BringIntoView();
+    }
+
+    private string _recentShown = string.Empty;
+
+    /// <summary>«Недавние серверы»: последние разные выходы из журнала, свежие первыми.</summary>
+    private void ShowRecent(string? current)
+    {
+        var recent = ExitHistory.Recent(5);
+
+        // Перерисовка — только когда что-то поменялось: карточка выхода
+        // обновляется раз в три секунды, а список — редко.
+        var shown = string.Join("|", recent.Select(r => r.Tag + "·" + Latency(r.Tag) + "·" + (r.Tag == current)));
+
+        if (shown == _recentShown)
+            return;
+
+        _recentShown = shown;
+
+        RecentList.ItemsSource = recent.Select(seen =>
+        {
+            var (country, name) = CountryTag.Split(seen.Tag);
+
+            // У WARP флага в имени нет, а выход — в Москве (замер 01.10).
+            if (seen.Tag == Warp.MasqueTag && country.Length == 0)
+                country = "RU";
+
+            var flag = country.Length == 2 ? FlagImages.For(country) : null;
+
+            return new RecentRow(
+                Short(name.Length > 0 ? name : seen.Tag),
+                country,
+                flag is null ? Visibility.Visible : Visibility.Collapsed,
+                flag,
+                flag is null ? Visibility.Collapsed : Visibility.Visible,
+                Seen(seen.Tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—",
+                (Brush)FindResource(Key(seen.Tag)),
+                seen.Tag == current ? FontWeights.SemiBold : FontWeights.Normal);
+        }).ToList();
+
+        RecentEmpty.Visibility = recent.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Сводка у заголовка подписок: сколько в работе и серверов.</summary>
+    private void ShowSummary()
+    {
+        int working = _rows.Count(r => r.Active);
+        int servers = _rows.Sum(r => r.Servers.Count);
+
+        SubsSummary.Text = _rows.Count == 0
+            ? "нет подписок"
+            : $"{working} в работе · {servers} {Plural(servers, "сервер", "сервера", "серверов")}";
+    }
+
+    private static string Plural(int n, string one, string few, string many) =>
+        (n % 100) is >= 11 and <= 14 ? many : (n % 10) switch
+        {
+            1 => one,
+            >= 2 and <= 4 => few,
+            _ => many,
+        };
+
+    /// <summary>«Добавить подписку» раскрывает форму; повторное нажатие — прячет.</summary>
+    private void OnAddToggle(object sender, RoutedEventArgs e)
+    {
+        bool show = AddCard.Visibility != Visibility.Visible;
+
+        AddCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        AddToggle.Content = show ? "Скрыть" : "Добавить подписку";
+
+        if (show)
+            NewName.Focus();
+    }
 }

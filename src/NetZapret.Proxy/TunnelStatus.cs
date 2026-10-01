@@ -104,12 +104,12 @@ public static class TunnelStatus
                 // из тех, что меряют задержку, и до первого замера ей выбирать
                 // не из чего. Возвращаем имя самой группы, а не пустоту —
                 // по нему хотя бы можно спросить состояние.
-                return (group.RootElement.TryGetProperty("now", out var chosen)
+                return Remember((group.RootElement.TryGetProperty("now", out var chosen)
                     ? Named(chosen) ?? name
-                    : name, true);
+                    : name, true));
             }
 
-            return (name, false);
+            return Remember((name, false));
         }
         catch (Exception)
         {
@@ -117,6 +117,23 @@ public static class TunnelStatus
             // честнее выдуманного имени сервера.
             return (null, false);
         }
+    }
+
+    /// <summary>Отмечает выход в журнале недавних (ExitHistory) и отдаёт ответ как есть.</summary>
+    /// <remarks>
+    /// Служебные имена — не выходы: группа, ещё не выбравшая сервер, и обход
+    /// мимо туннеля (<c>direct</c>).
+    /// </remarks>
+    private static (string? Server, bool Automatic) Remember((string? Server, bool Automatic) answer)
+    {
+        if (answer.Server is { } server
+            && !server.StartsWith("auto", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(server, "direct", StringComparison.OrdinalIgnoreCase))
+        {
+            ExitHistory.Note(server, DateTimeOffset.Now);
+        }
+
+        return answer;
     }
 
     /// <summary>Запрос к Clash API с секретом движка (с 27.09 без него — 401).</summary>
