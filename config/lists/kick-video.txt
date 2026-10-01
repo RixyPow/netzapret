@@ -1,9 +1,11 @@
-# Видео Kick — Amazon IVS.
+# Видео Amazon IVS — общее у Twitch и Kick.
 #
 # Ссылка на поток из API Kick ведёт на *.playback.live-video.net, плейлист
 # качества — на *.playlist.live-video.net, куски — на
-# *.hls.live-video.net (CloudFront); замер 01.10 на живом канале.
-# Тот же IVS у Twitch, и зона лежит и в twitch.txt: Kick в маршрутах
-# не находился, а его видео шло путём Twitch — и под рецептом секции
-# Twitch пресета (жалоба 01.10: с NetZapret поток Kick не играет).
+# *.hls.live-video.net (CloudFront); замер 01.10 на живом канале. Тот же IVS
+# у Twitch, и приём трансляции OBS — *.contribute.live-video.net.
+#
+# Одна часть на два сервиса (ServiceCatalog, Twitch и Kick): правило пишется
+# по файлу, так что путь, выбранный в одном, действует и в другом. Имя файла
+# прежнее — на него ссылаются правила у тех, кто уже выбирал путь видео Kick.
 live-video.net

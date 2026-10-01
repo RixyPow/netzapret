@@ -161,6 +161,23 @@ public sealed record ServiceDefinition
 /// </remarks>
 public static class ServiceCatalog
 {
+    /// <summary>
+    /// Видео Amazon IVS (live-video.net) — одна часть у Twitch и Kick.
+    /// </summary>
+    /// <remarks>
+    /// До 02.10 имя лежало и в списке Twitch, и в списке видео Kick, и у двух
+    /// правил выходили разные пути: у пользователя Twitch через VPN, видео Kick
+    /// напрямую — имя заходило в туннель и выходило из движка напрямую, видео
+    /// Kick и трансляция на Twitch рвались (отчёт 02.10). Правило пишется по
+    /// файлу списка, так что один файл в двух сервисах — один путь на оба.
+    /// </remarks>
+    private static ServicePart AmazonIvs(string note) => new()
+    {
+        Name = "Видео (Amazon IVS)",
+        List = "config/lists/kick-video.txt",
+        Note = note,
+    };
+
     public static IReadOnlyList<ServiceDefinition> All { get; } =
     [
         new ServiceDefinition
@@ -304,25 +321,22 @@ public static class ServiceCatalog
         new ServiceDefinition
         {
             Name = "Twitch",
-            Parts = [new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" }],
+            Parts =
+            [
+                new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" },
+                AmazonIvs("общая с Kick: видео и приём трансляции OBS"),
+            ],
         },
 
         // Не заблокирован — по умолчанию «напрямую» (config/rules.yaml,
-        // владелец 01.10). Видео — у Amazon IVS, на live-video.net из списка
-        // Twitch, поэтому частью внутри Twitch: выбранный путь пишется раньше.
+        // владелец 01.10). Видео — у Amazon IVS, той же частью, что у Twitch.
         new ServiceDefinition
         {
             Name = "Kick",
             Parts =
             [
                 new ServicePart { Name = "Сайт и чат", List = "config/lists/kick.txt" },
-                new ServicePart
-                {
-                    Name = "Видео (Amazon IVS)",
-                    List = "config/lists/kick-video.txt",
-                    Within = "config/lists/twitch.txt",
-                    Note = "те же серверы IVS у части видео Twitch",
-                },
+                AmazonIvs("общая с Twitch: те же серверы видео"),
             ],
         },
 

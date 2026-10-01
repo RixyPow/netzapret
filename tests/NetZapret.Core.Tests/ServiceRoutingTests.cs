@@ -288,14 +288,23 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     [Fact]
-    public void NoListBelongsToTwoServices()
+    public void NoListBelongsToTwoServicesUnlessSaidSo()
     {
         // Один список в двух местах означает, что человек направит его
         // в одном разделе, а другой покажет изменение как своё — и оба
         // будут выглядеть так, будто настройка живёт где-то ещё.
-        var lists = ServiceCatalog.All.SelectMany(s => s.Parts).Select(p => p.List).ToList();
+        //
+        // Исключение одно и намеренное (02.10): видео Amazon IVS у Twitch
+        // и Kick — одно имя, и два разных пути для него рвали оба сервиса.
+        // Тогда общая часть обязана сказать об этом сама, в обоих местах.
+        var shared = ServiceCatalog.All
+            .SelectMany(s => s.Parts)
+            .GroupBy(p => p.List, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .ToList();
 
-        Assert.Equal(lists.Count, lists.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(["config/lists/kick-video.txt"], shared.Select(g => g.Key));
+        Assert.All(shared.SelectMany(g => g), p => Assert.StartsWith("общая с ", p.Note));
     }
 
     private static UserRulesFile EmptyUserRules() =>
