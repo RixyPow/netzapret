@@ -527,4 +527,25 @@ public class BlockCheckTests
     {
         Assert.Equal(expected, TunnelHealth.IsFakeIp(System.Net.IPAddress.Parse(address)));
     }
+
+    /// <summary>
+    /// Подменный адрес без туннеля на машине — от роутера, и совет — про роутер.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение #8: Podkop на роутере, на ПК ни одного VPN-клиента, а проверка
+    /// советовала закрыть VPN-клиент.
+    /// </remarks>
+    [Fact]
+    public void A_fakeip_with_no_tunnel_on_the_machine_comes_from_the_router()
+    {
+        Assert.Equal(BlockKind.RouterFakeIp, BlockCheck.FakeIpSource([]));
+        Assert.Equal(BlockKind.ForeignFakeIp,
+            BlockCheck.FakeIpSource([new NetZapret.Core.Diagnostics.OtherTunnel("Happ", "sing-tun Tunnel")]));
+
+        var remedy = Report(BlockKind.RouterFakeIp).Remedy();
+
+        Assert.Contains("роутер", remedy);
+        Assert.DoesNotContain("VPN-клиент", remedy);
+        Assert.True(Report(BlockKind.RouterFakeIp).Actionable);
+    }
 }

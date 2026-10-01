@@ -193,6 +193,17 @@ public enum BlockKind
     /// предлагалось сервер подписки, которой у человека не было вовсе.
     /// </remarks>
     ForeignFakeIp,
+
+    /// <summary>
+    /// Подменный адрес, а туннеля на этой машине нет ни нашего, ни чужого.
+    /// </summary>
+    /// <remarks>
+    /// Значит, его выдал резолвер за пределами машины — обычно роутер
+    /// с Podkop или другим sing-box. В том же обсуждении #8 человек и сказал:
+    /// стоит поднять VPN в Podkop'е — и всё открывается. Совет «закройте
+    /// VPN-клиент» ему был не по адресу: на ПК клиента не было (01.10).
+    /// </remarks>
+    RouterFakeIp,
 }
 
 /// <summary>Исход одной пробы.</summary>
@@ -372,6 +383,7 @@ public sealed record TargetReport
         BlockKind.TlsDpi => "DPI по TLS",
         BlockKind.TunnelFailed => "туннель не доставил",
         BlockKind.ForeignFakeIp => "подменный адрес не от NetZapret",
+        BlockKind.RouterFakeIp => "подменный адрес от роутера",
         BlockKind.Stall => "обрыв после рукопожатия",
         BlockKind.HttpsPort => "порт 443 закрыт",
         BlockKind.Full => "закрыт полностью",
@@ -427,7 +439,8 @@ public sealed record TargetReport
                 BlockKind.TlsDpi or BlockKind.Handshake => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
-                BlockKind.TunnelFailed or BlockKind.ForeignFakeIp => Data.Detail is not null ? Data : Tls,
+                BlockKind.TunnelFailed or BlockKind.ForeignFakeIp or BlockKind.RouterFakeIp
+                    => Data.Detail is not null ? Data : Tls,
                 _ => null,
             };
 
@@ -483,6 +496,8 @@ public sealed record TargetReport
         BlockKind.TlsDpi => "десинк",
         BlockKind.TunnelFailed => "другой сервер подписки — десинк тут ни при чём",
         BlockKind.ForeignFakeIp => "закрыть другой VPN-клиент или выключить в нём TUN",
+        BlockKind.RouterFakeIp => "на роутере (Podkop и подобные): поднять в нём VPN либо выключить подмену DNS — "
+            + "десинк на ПК тут ни при чём",
         BlockKind.Stall => "другой рецепт десинка, иначе VPN",
         BlockKind.HttpsPort => "только VPN",
         BlockKind.Full => "только VPN",
@@ -736,6 +751,18 @@ public static class BlockCheck
         };
     }
 
+    /// <summary>
+    /// Кто выдал подменный адрес, когда нашего TUN нет.
+    /// </summary>
+    /// <remarks>
+    /// Чужой туннель на машине — его клиент. Нет и чужого — адрес пришёл
+    /// снаружи, от резолвера роутера: на самой машине подменному адресу
+    /// без TUN деваться некуда.
+    /// </remarks>
+    /// <param name="foreignTunnels">Поднятые туннели, кроме нашего (<see cref="NetZapret.Core.Diagnostics.OtherVpnScan.Tunnels"/>).</param>
+    public static BlockKind FakeIpSource(IReadOnlyList<NetZapret.Core.Diagnostics.OtherTunnel> foreignTunnels) =>
+        foreignTunnels.Count > 0 ? BlockKind.ForeignFakeIp : BlockKind.RouterFakeIp;
+
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
@@ -881,7 +908,7 @@ public static class BlockCheck
         // Подменный адрес, а нашего TUN нет — его выдал чужой клиент,
         // и судить по такому замеру ни о туннеле, ни о сайте нельзя.
         if (viaTunnel && kind != BlockKind.None && !TunnelHealth.OwnTunnelUp())
-            kind = BlockKind.ForeignFakeIp;
+            kind = FakeIpSource(NetZapret.Core.Diagnostics.OtherVpnScan.Tunnels(new SingBoxOptions().TunInterfaceName));
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
         // Маркер зоны, спрятанный за fakeip.
