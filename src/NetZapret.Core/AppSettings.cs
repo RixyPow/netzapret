@@ -510,6 +510,53 @@ public sealed record AppSettings
     /// паузой, прежде чем сдаться.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Имя выхода WARP — то же, что <c>Warp.MasqueTag</c>: библиотека настроек
+    /// о подписках не знает, а сверить выбор с ним надо здесь.
+    /// </summary>
+    private const string WarpTag = "Cloudflare WARP";
+
+    /// <summary>
+    /// Переведён ли WARP в «выбор пути» (01.10); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? WarpIsPath { get; init; }
+
+    /// <summary>
+    /// Разовый перевод WARP из запасного в выбор пути (01.10).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// До 01.10 включённый WARP подмешивался к подпискам запасным; с 01.10 он
+    /// ставит их на паузу. Прочитанный как есть, старый выключатель увёл бы
+    /// в WARP целиком каждого, кто включал его запасным, — молча, с выходом
+    /// в Москве вместо его серверов.
+    /// </para>
+    /// <para>
+    /// Поэтому один раз: WARP был выбран сервером — он и есть путь, а выбор
+    /// снимается (с выключением WARP туннель вернётся к автоподбору подписок);
+    /// включён лишь запасным — выключается. Дальше выключатель значит то,
+    /// что значит.
+    /// </para>
+    /// </remarks>
+    private static AppSettings WarpAsPath(AppSettings read)
+    {
+        if (read.WarpIsPath == true)
+            return read;
+
+        bool chosen = read.PreferredServer == WarpTag;
+
+        return read with
+        {
+            WarpEnabled = chosen || (read.WarpEnabled && !read.HasSubscriptionExit),
+            PreferredServer = chosen ? null : read.PreferredServer,
+            WarpIsPath = true,
+        };
+    }
+
+    /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
+    [JsonIgnore]
+    private bool HasSubscriptionExit => !string.IsNullOrWhiteSpace(SubscriptionUrl) || KeysEnabled;
+
     public static AppSettings TryLoad(string? path, out ReadResult result)
     {
         var target = path ?? DefaultPath;
@@ -561,11 +608,11 @@ public sealed record AppSettings
             // сертификатом, а записан он почти у всех потому, что стоял
             // по умолчанию, а не потому, что выбран. Без перевода смена
             // умолчания 27.09 досталась бы только новым установкам.
-            return read with
+            return WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer == "8.8.8.8" ? GoogleDns : read.DnsServer,
-            };
+            });
         }
         catch (Exception)
         {

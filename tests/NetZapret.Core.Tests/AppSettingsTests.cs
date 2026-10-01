@@ -61,6 +61,29 @@ public sealed class AppSettingsTests : IDisposable
         Assert.False(File.Exists(_path + ".tmp"));
     }
 
+    /// <summary>
+    /// WARP из запасного в выбор пути (01.10) — один раз и по смыслу прежнего выбора.
+    /// </summary>
+    [Theory]
+    // Запасной при подписке — выключается, выбранный сервер остаётся.
+    [InlineData("""{ "WarpEnabled": true, "SubscriptionUrl": "https://p/s", "PreferredServer": "NL" }""", false, "NL")]
+    // Выбран сервером WARP — он и есть путь, выбор снимается.
+    [InlineData("""{ "WarpEnabled": true, "SubscriptionUrl": "https://p/s", "PreferredServer": "Cloudflare WARP" }""", true, null)]
+    // Без подписок WARP и был единственным выходом — остаётся.
+    [InlineData("""{ "WarpEnabled": true }""", true, null)]
+    // Уже переведённые — как записаны: включённый человеком WARP не сбрасывается.
+    [InlineData("""{ "WarpIsPath": true, "WarpEnabled": true, "SubscriptionUrl": "https://p/s", "PreferredServer": "NL" }""", true, "NL")]
+    public void WarpBecomesAPathOnce(string json, bool warp, string? preferred)
+    {
+        File.WriteAllText(_path, json);
+
+        var read = AppSettings.Load(_path);
+
+        Assert.Equal(warp, read.WarpEnabled);
+        Assert.Equal(preferred, read.PreferredServer);
+        Assert.True(read.WarpIsPath);
+    }
+
     [Fact]
     public void SettingsSurviveRoundTrip()
     {
