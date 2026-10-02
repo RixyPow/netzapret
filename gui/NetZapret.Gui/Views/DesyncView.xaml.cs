@@ -163,6 +163,9 @@ public partial class DesyncView : UserControl
             next.Save(AppSettings.DefaultPath);
             GameFilterSwitch.IsChecked = next.GameFilter;
 
+            // Game filter расширяет перехват — подсказка перехвата о нём говорит.
+            ShowCapture(next);
+
             Status.Text = next.GameFilter
                 ? "Game filter включён. Проверьте игру на клиенте, открытом после перезапуска движков."
                 : "Game filter выключен.";
@@ -545,6 +548,97 @@ public partial class DesyncView : UserControl
         // Открывать нечего, пока пресет не выбран: карточка в этом состоянии
         // описывает отсутствие выбора, а не файл.
         EditButton.IsEnabled = settings.PresetName is not null;
+
+        // Подсказка перехвата говорит о выбранном пресете — сменился он,
+        // сменилось и то, какие его секции останутся без трафика.
+        ShowCapture(settings);
+    }
+
+    /// <summary>Уровни перехвата в порядке списка: от узкого к широкому.</summary>
+    private static readonly CaptureWidth[] CaptureOrder = [CaptureWidth.Sites, CaptureWidth.Preset, CaptureWidth.All];
+
+    /// <summary>Идёт заполнение списка — выбор не записывать.</summary>
+    private bool _fillingCapture;
+
+    private void OnCapture(object sender, SelectionChangedEventArgs e)
+    {
+        if (_fillingCapture || CaptureBox.SelectedIndex < 0)
+            return;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var width = CaptureOrder[CaptureBox.SelectedIndex];
+
+            // Выбор того же самого — не выбор.
+            if (settings.Capture == width)
+                return;
+
+            var next = settings with { Capture = width };
+
+            next.Save(AppSettings.DefaultPath);
+            ShowCapture(next);
+
+            Status.Text = $"Перехват: {PresetCapture.Word(width)}. Действует со следующего запуска движков.";
+            this.Offer($"Перехват: {PresetCapture.Word(width)}");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Ставит выбор в списке и пишет, что выйдет на деле с выбранным пресетом.</summary>
+    private void ShowCapture(AppSettings settings)
+    {
+        // Заполняем, не поднимая события выбора: иначе показ тут же
+        // записал бы состояние обратно и предложил перезапуск.
+        _fillingCapture = true;
+        CaptureBox.SelectedIndex = Array.IndexOf(CaptureOrder, settings.Capture);
+        _fillingCapture = false;
+
+        CaptureHint.Text = DescribeCapture(settings);
+    }
+
+    /// <summary>
+    /// Порты перехвата и секции, которые при этом уровне потеряют трафик.
+    /// </summary>
+    /// <remarks>
+    /// Секция, чьи порты вне перехвата, не получает трафика на них вовсе,
+    /// а снаружи это неотличимо от неработающего рецепта. Сказать об этом
+    /// должно окно, до запуска, а не человек через вечер разбора.
+    /// </remarks>
+    private static string DescribeCapture(AppSettings settings)
+    {
+        if (settings.PresetName is not { } name)
+            return "Пресет не выбран — десинк не запускается.";
+
+        if (ZapretPaths.FindPreset(name) is not { } path)
+            return $"Пресет «{name}» не найден в папке пресетов — что выйдет с перехватом, сказать нечем.";
+
+        ZapretPreset preset;
+
+        try
+        {
+            preset = new PresetReader().Load(path);
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
+
+        if (PresetCapture.Effective(preset, settings.Capture) is not { } ports)
+            return $"У пресета «{preset.Name}» полный фильтр перехвата (--wf-raw) — уровень к нему не применяется.";
+
+        var text = $"Сейчас: TCP {ports.Tcp}, UDP {ports.Udp}"
+            + (settings.GameFilter ? $"; game filter добавит {GameFilter.Ports}." : ".");
+
+        var lost = PresetCapture.Unreached(preset, settings.Capture);
+
+        if (lost.Count > 0)
+            text += $"\nСекции «{preset.Name}», которые не получат трафик на этих портах: {string.Join("; ", lost)}.";
+
+        return text;
     }
 
     /// <summary>

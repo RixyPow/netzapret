@@ -225,6 +225,16 @@ public sealed record AppSettings
     public bool GameFilter { get; init; }
 
     /// <summary>
+    /// Ширина перехвата десинка поверх пресета — см. <see cref="CaptureWidth"/>.
+    /// </summary>
+    /// <remarks>
+    /// Настройка — по слову владельца 03.10. По умолчанию — как в пресете:
+    /// кто её не трогал, у того запуск winws2 тот же, что был. Game filter,
+    /// если включён, расширяет перехват поверх выбранного уровня.
+    /// </remarks>
+    public CaptureWidth Capture { get; init; }
+
+    /// <summary>
     /// Вести журнал супервизора.
     /// </summary>
     /// <remarks>

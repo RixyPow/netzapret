@@ -83,6 +83,10 @@ public static class WinwsCommandLine
     /// Адреса нашего TUN: пакеты по дороге в туннель и из него десинк не видит,
     /// они пройдут через него на выходе из sing-box.
     /// </param>
+    /// <param name="capture">
+    /// Ширина перехвата поверх пресета (<see cref="PresetCapture"/>). Ставится
+    /// до game filter: тот расширяет уже выбранный уровень, а не наоборот.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
@@ -91,9 +95,12 @@ public static class WinwsCommandLine
         IReadOnlyList<IPAddress>? tunnelServers = null,
         string? tunnelFakeRange = null,
         IReadOnlyList<string>? udpOff = null,
-        IReadOnlyList<IPAddress>? tunAddresses = null)
+        IReadOnlyList<IPAddress>? tunAddresses = null,
+        Core.CaptureWidth capture = Core.CaptureWidth.Preset)
     {
         var arguments = BuildPreset(preset, excludeList, own);
+
+        PresetCapture.Apply(arguments, capture);
 
         if (gameFilter)
             GameFilter.Apply(arguments);

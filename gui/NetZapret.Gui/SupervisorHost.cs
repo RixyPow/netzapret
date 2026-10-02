@@ -511,7 +511,16 @@ internal static class SupervisorHost
             ? []
             : TunnelEndpoints.TunAddresses(options.ProxyConfig);
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun);
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture);
+
+        // Ширина перехвата (PresetCapture): в журнал — что вышло на деле,
+        // а не что выбрано: пресет с полным фильтром уровню не поддаётся.
+        if (settings.Capture != CaptureWidth.Preset)
+        {
+            Console.WriteLine(PresetCapture.Applies(preset.GlobalArguments)
+                ? $"Перехват: {PresetCapture.Word(settings.Capture)} — TCP {PresetCapture.PortsOf(settings.Capture)!.Value.Tcp}, UDP {PresetCapture.PortsOf(settings.Capture)!.Value.Udp}."
+                : "Перехват: у пресета полный фильтр (--wf-raw), уровень не применён.");
+        }
 
         bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff, tun);
 

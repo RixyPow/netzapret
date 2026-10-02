@@ -154,7 +154,9 @@ public static class SupportReport
         text.AppendLine($"Режим: {settings.Engines.Describe()}");
         text.AppendLine($"Игнорировать исключения: {YesNo(settings.Engines.IgnoreExclusions)}");
         text.AppendLine($"Пресет: {settings.PresetName ?? "не выбран"}");
-        text.AppendLine($"DNS: {settings.DnsServer}, {(settings.DnsThroughTunnel ? "через туннель" : "напрямую")}");
+        text.AppendLine($"Перехват: {NetZapret.Zapret.PresetCapture.Word(settings.Capture)}; game filter: {YesNo(settings.GameFilter)}");
+        text.AppendLine($"DNS: {settings.DnsServer}, {(settings.DnsThroughTunnel ? "через туннель" : "напрямую")}"
+            + (settings.NeedsDnsEngine ? " (туннеля нет — отвечает движок без выхода)" : string.Empty));
         text.AppendLine($"WARP: {YesNo(settings.WarpEnabled)}");
         text.AppendLine($"Подписок: {subscriptions} (ссылки в отчёт не входят)");
         text.AppendLine($"Проверка прохода трафика: {YesNo(settings.VerifyTraffic)}");
