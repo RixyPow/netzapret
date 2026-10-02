@@ -187,7 +187,44 @@ public sealed class SupervisorArgumentsTests
         Assert.Equal("Universal V8", read.Preset);
         Assert.True(read.VerifyTraffic);
         Assert.False(read.NoProxy);
+        Assert.False(read.DnsOnly);
         Assert.EndsWith("singbox.json", read.ProxyConfig);
         Assert.EndsWith("supervisor.log", read.LogPath);
+    }
+
+    /// <summary>
+    /// Один десинк с DNS «через туннель» — движок ради DNS доезжает до надзора (03.10).
+    /// </summary>
+    [Fact]
+    public void Desync_alone_with_DNS_through_the_tunnel_asks_for_the_DNS_engine()
+    {
+        var settings = new AppSettings
+        {
+            PresetName = "Universal V10",
+            ProxyConfigPath = Path.Combine("Мои документы", "конфиг движка", "singbox.json"),
+            DnsThroughTunnel = true,
+        }.With(new EngineChoice { Desync = true, Tunnel = false });
+
+        var read = RoundTrip(settings);
+
+        Assert.True(read.DnsOnly);
+        Assert.False(read.NoProxy);
+        Assert.Equal(Path.GetFullPath(settings.ProxyConfigPath), read.ProxyConfig);
+        Assert.Equal("Universal V10", read.Preset);
+    }
+
+    /// <summary>
+    /// Конфиг движка ради DNS не собрался — надзор поднимает один десинк, как до 03.10.
+    /// </summary>
+    [Fact]
+    public void A_DNS_config_that_did_not_build_leaves_desync_alone()
+    {
+        var settings = new AppSettings { PresetName = "Universal V10", DnsThroughTunnel = true }
+            .With(new EngineChoice { Desync = true, Tunnel = false });
+
+        var read = SupervisorHost.Parse(SplitLikeWindows(SupervisorHost.BuildArguments(settings, dnsEngine: false)));
+
+        Assert.True(read.NoProxy);
+        Assert.False(read.DnsOnly);
     }
 }

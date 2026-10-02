@@ -361,6 +361,10 @@ public sealed class SingBoxService : SupervisedService
     /// <param name="replacePinned">
     /// Подменять ли закреплённый выход, пока он молчит (AppSettings.ReplaceSilentServer).
     /// </param>
+    /// <param name="dnsOnly">
+    /// Движок без выхода, только ради DNS (<see cref="DnsEngine"/>): группы выбора
+    /// нет, прогревать и сторожить нечего, живость — по Clash API.
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
@@ -370,8 +374,10 @@ public sealed class SingBoxService : SupervisedService
         bool bypassWhenDead = true,
         string? preferredExit = null,
         int exitCheckSeconds = 30,
-        bool replacePinned = false)
+        bool replacePinned = false,
+        bool dnsOnly = false)
     {
+        _dnsOnly = dnsOnly;
         _exitCheckSeconds = exitCheckSeconds;
         _executablePath = executablePath;
         _configPath = configPath;
@@ -384,6 +390,9 @@ public sealed class SingBoxService : SupervisedService
     }
 
     private readonly string? _preferredExit;
+
+    /// <summary>Движок только ради DNS — см. параметр конструктора.</summary>
+    private readonly bool _dnsOnly;
 
     /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
     private readonly ExitWatch _watch;
@@ -436,6 +445,14 @@ public sealed class SingBoxService : SupervisedService
     protected override async Task OnReadyAsync(CancellationToken cancellationToken)
     {
         ForgetFakeAddresses();
+
+        // Без выхода ставить и прогревать нечего: группы выбора в конфиге нет,
+        // и попытка лишь записала бы в журнал отказ, которого не было.
+        if (_dnsOnly)
+        {
+            _warm = true;
+            return;
+        }
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
@@ -598,7 +615,8 @@ public sealed class SingBoxService : SupervisedService
         _trafficPortMissingNoted = false;
     }
 
-    public override string Name => "sing-box";
+    // Ради DNS — своё имя: по «sing-box» окно узнаёт туннель (DnsEngine.ServiceName).
+    public override string Name => _dnsOnly ? DnsEngine.ServiceName : "sing-box";
 
     public override IReadOnlyList<string> EngineProcessNames => ["sing-box"];
 
@@ -644,7 +662,8 @@ public sealed class SingBoxService : SupervisedService
         if (!await SingBoxRunner.IsPortAcceptingAsync(_healthPort, TimeSpan.FromSeconds(2), cancellationToken))
             return ServiceCheck.Broken;
 
-        if (!_warm)
+        // Ради DNS сторожить выход и проверять проход трафика нечем: выхода нет.
+        if (!_warm || _dnsOnly)
             return ServiceCheck.Healthy;
 
         await WatchExitAsync(cancellationToken);

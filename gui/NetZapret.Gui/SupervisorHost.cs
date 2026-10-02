@@ -48,9 +48,15 @@ internal static class SupervisorHost
     /// и <see cref="Parse"/> лежит шов, где строку расщепляет система,
     /// и проверять надо ровно то, что этот шов переживает.
     /// </remarks>
+    /// <summary>Ключ: движок туннеля поднимается только ради DNS (<see cref="DnsEngine"/>).</summary>
+    public const string DnsOnlySwitch = "--dns-only";
+
     internal sealed record Options
     {
         public bool NoProxy { get; init; }
+
+        /// <summary>Движок без выхода, только ради DNS — см. <see cref="DnsOnlySwitch"/>.</summary>
+        public bool DnsOnly { get; init; }
 
         public string ProxyConfig { get; init; } = Path.Combine("runtime", "singbox.json");
 
@@ -69,16 +75,24 @@ internal static class SupervisorHost
     /// читают рядом с консольным, и расхождение в словах стоило бы лишнего
     /// вопроса при первом же разборе.
     /// </remarks>
-    public static string BuildArguments(AppSettings settings)
+    /// <param name="dnsEngine">
+    /// Поднять движок только ради DNS (<see cref="AppSettings.NeedsDnsEngine"/>);
+    /// <c>null</c> — по настройке. Окно передаёт, собрался ли его конфиг:
+    /// не собрался — движок не поднимается.
+    /// </param>
+    public static string BuildArguments(AppSettings settings, bool? dnsEngine = null)
     {
         var arguments = Switch;
 
         if (settings.LogsEnabled)
             arguments += $" --log \"{Path.GetFullPath(Path.Combine("runtime", "supervisor.log"))}\"";
 
-        arguments += settings.NeedsProxy
-            ? $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\""
-            : " --no-proxy";
+        if (settings.NeedsProxy)
+            arguments += $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\"";
+        else if (dnsEngine ?? settings.NeedsDnsEngine)
+            arguments += $" --proxy-config \"{Path.GetFullPath(settings.ProxyConfigPath)}\" {DnsOnlySwitch}";
+        else
+            arguments += " --no-proxy";
 
         if (settings.NeedsDesync)
             arguments += $" --preset \"{settings.PresetName}\"";
@@ -399,6 +413,25 @@ internal static class SupervisorHost
             return false;
         }
 
+        // Только ради DNS: выхода нет, так что ни проверки трафика, ни обхода,
+        // ни сторожа выхода — им нечего мерить (DnsEngine).
+        if (options.DnsOnly)
+        {
+            Console.WriteLine("Движок туннеля — только ради DNS: запросы Windows к её резолверам уходят на DoH, выхода VPN нет.");
+
+            services.Add(new SingBoxService(
+                singBox, options.ProxyConfig, 9090,
+                trafficPort: null,
+                bypassWhenDead: false,
+                exitCheckSeconds: 0,
+                dnsOnly: true)
+            {
+                OutputLogPath = Path.Combine("runtime", "sing-box.log"),
+            });
+
+            return true;
+        }
+
         // Порт берётся оттуда же, откуда его берёт компилятор конфига:
         // разъехавшись, эти два значения дают вечно проваливающуюся проверку,
         // а выглядит она как неисправный движок.
@@ -545,6 +578,10 @@ internal static class SupervisorHost
             {
                 case "--no-proxy":
                     options = options with { NoProxy = true };
+                    break;
+
+                case DnsOnlySwitch:
+                    options = options with { DnsOnly = true };
                     break;
 
                 case "--verify-traffic":

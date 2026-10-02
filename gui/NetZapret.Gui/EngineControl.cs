@@ -106,6 +106,20 @@ internal static class EngineControl
             }
         }
 
+        // При одном десинке и DNS «через туннель» — движок только ради DNS
+        // (AppSettings.NeedsDnsEngine). Не собрался — десинк поднимается без
+        // него, как до 03.10: хуже задуманного, но не хуже прежнего.
+        bool dnsEngine = false;
+
+        if (settings.NeedsDnsEngine)
+        {
+            var built = TunnelConfig.BuildDnsOnly(settings);
+            dnsEngine = built.Ok;
+
+            if (!built.Ok)
+                note += built.Message + " ";
+        }
+
         // Списки десинка — при каждом его запуске, с туннелем или без.
         // Прежде они писались одной сборкой туннеля, и с выключенным
         // туннелем winws2 брал вчерашние (issue #1).
@@ -137,7 +151,7 @@ internal static class EngineControl
             using var started = Process.Start(new ProcessStartInfo
             {
                 FileName = exe,
-                Arguments = SupervisorHost.BuildArguments(settings),
+                Arguments = SupervisorHost.BuildArguments(settings, dnsEngine),
                 WorkingDirectory = Directory.GetCurrentDirectory(),
                 UseShellExecute = false,
                 CreateNoWindow = true,

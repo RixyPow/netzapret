@@ -103,6 +103,17 @@ public sealed record SupervisorState
         }
     }
 
+    /// <summary>
+    /// Отвечает ли на DNS Windows наш движок — туннель либо движок только ради DNS.
+    /// </summary>
+    /// <remarks>
+    /// Вопрос «поднят ли туннель» на это не отвечает с 03.10: при одном десинке
+    /// sing-box может работать без выхода, ради DNS (<see cref="Proxy.DnsEngine"/>).
+    /// </remarks>
+    public bool EngineAnswersDns() =>
+        IsSupervisorAlive()
+        && Services.Any(s => s.Name is "sing-box" or Proxy.DnsEngine.ServiceName);
+
     /// <summary>Жив ли процесс супервизора, записавший это состояние.</summary>
     public bool IsSupervisorAlive()
     {

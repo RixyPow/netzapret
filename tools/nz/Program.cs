@@ -167,7 +167,7 @@ int Where(string target)
             name,
             NetZapret.Proxy.HostsFile.Read(),
             ReadEngineConfig(),
-            TunnelRunning(),
+            EngineAnswersDns(),
             NetZapret.Proxy.SystemResolvers.Discover());
 
         for (int i = 0; i < steps.Count; i++)
@@ -239,9 +239,9 @@ int DnsMode(string? choice)
     // Что делает работающий движок — может отставать от настроек до перезапуска.
     var config = ReadEngineConfig();
 
-    if (!TunnelRunning() || config is null)
+    if (!EngineAnswersDns() || config is null)
     {
-        Console.WriteLine("движок:       туннель не поднят — имена разрешает Windows сама");
+        Console.WriteLine("движок:       не поднят — имена разрешает Windows сама");
         return 0;
     }
 
@@ -263,11 +263,9 @@ System.Text.Json.Nodes.JsonNode? ReadEngineConfig()
     }
 }
 
-bool TunnelRunning()
-{
-    var state = SupervisorState.Load(SupervisorState.DefaultPath);
-    return state is not null && state.IsSupervisorAlive() && state.Services.Any(s => s.Name == "sing-box");
-}
+// Отвечает ли на DNS наш движок — туннель или движок только ради DNS (03.10).
+bool EngineAnswersDns() =>
+    SupervisorState.Load(SupervisorState.DefaultPath)?.EngineAnswersDns() == true;
 
 // Обзор резолверов: задержки, кто отвечает на самом деле, подмена.
 // Сокеты привязаны к физическому адаптеру — меряется сеть провайдера,

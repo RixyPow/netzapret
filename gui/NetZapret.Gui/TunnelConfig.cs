@@ -268,6 +268,38 @@ internal static class TunnelConfig
         }
     }
 
+    /// <summary>
+    /// Собирает конфиг движка, который при одном десинке только отвечает на DNS.
+    /// </summary>
+    /// <remarks>
+    /// Когда — <see cref="AppSettings.NeedsDnsEngine"/>, как — <see cref="DnsEngine"/>.
+    /// Пишется в тот же файл, что конфиг туннеля: при одном десинке тот
+    /// не нужен, а следующий запуск с туннелем соберёт его заново.
+    /// </remarks>
+    public static BuildOutcome BuildDnsOnly(AppSettings settings)
+    {
+        try
+        {
+            var resolvers = SystemResolvers.Discover();
+
+            // Без адресов резолверов движку нечего ловить: TUN поднялся бы
+            // впустую, а Windows спрашивала бы мимо него.
+            if (resolvers.Count == 0)
+                return new BuildOutcome(false, "DNS через движок не поднят: резолверы Windows не нашлись.");
+
+            var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
+            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate());
+
+            SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
+
+            return new BuildOutcome(true, $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.");
+        }
+        catch (Exception ex)
+        {
+            return new BuildOutcome(false, "DNS через движок не поднят: " + ex.GetBaseException().Message);
+        }
+    }
+
     /// <summary>Правила так, как их увидят движки, — общим кодом с nz.</summary>
     private static (RuleSet RuleSet, string? ZapretRoot) LoadRules(AppSettings settings)
     {

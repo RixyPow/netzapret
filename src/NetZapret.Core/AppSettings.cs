@@ -825,6 +825,29 @@ public sealed record AppSettings
     [JsonIgnore]
     public bool NeedsDesync => Engines.DesyncRuns && PresetName is not null;
 
+    /// <summary>
+    /// Поднимать ли движок туннеля ради одного DNS — при десинке без туннеля.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Замер 03.10 у владельца: открытый DNS (UDP/53) к 8.8.4.4 и 1.0.0.1
+    /// подменяется — <c>whoami.akamai.net</c> отвечает 193.232.93.x, а
+    /// www.youtube.com и rutracker.org получают NXDOMAIN с флагом aa (по вики
+    /// Zapret GUI — DNAT ТСПУ на резолверы НСДИ, с августа 2026). Без туннеля
+    /// имена разрешает сама Windows, и десинку тогда нечего чинить: имя
+    /// не разрешилось.
+    /// </para>
+    /// <para>
+    /// Владелец 03.10: пробовать, если DNS стоит «через туннель». Туннеля здесь
+    /// нет, поэтому «через туннель» значит «через движок»: sing-box ловит
+    /// запросы Windows к её же резолверам в узком TUN и спрашивает выбранный
+    /// резолвер по DoH напрямую. Выхода VPN в таком конфиге нет, системный
+    /// DNS не трогается. По умолчанию выключено вместе с «через туннель».
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public bool NeedsDnsEngine => !NeedsProxy && NeedsDesync && DnsThroughTunnel;
+
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 
     public string DescribePreset() => PresetName ?? "не запускать";
