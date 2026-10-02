@@ -13,6 +13,9 @@ public sealed record UpdatePlan
 
     /// <summary>Что останется нетронутым.</summary>
     public required IReadOnlyList<string> Kept { get; init; }
+
+    /// <summary>Дописанное человеком в наши списки и перенесённое в новые: файл → строк.</summary>
+    public IReadOnlyDictionary<string, int> CarriedLists { get; init; } = new Dictionary<string, int>();
 }
 
 /// <summary>
@@ -30,7 +33,8 @@ public sealed record UpdatePlan
 /// Настройки не трогаются. Не «стараемся не трогать», а перечислены поимённо:
 /// обновление, стирающее подписку, хуже отсутствия обновления. Свои списки
 /// в <c>config\lists\</c>, наоборот, обновляются — их ведём мы, и починки
-/// вроде адреса для превью Roblox должны доезжать.
+/// вроде адреса для превью Roblox должны доезжать. Дописанное в них человеком
+/// с 03.10 переносится в новые (<see cref="ListCarry"/>).
 /// </para>
 /// </remarks>
 public static class UpdateInstaller
@@ -143,13 +147,40 @@ public static class UpdateInstaller
                 ? Directory.GetDirectories(unpacked)[0]
                 : unpacked;
 
+        // Дописанное человеком в наши списки — в списки новой версии, пока
+        // подмена их не перезаписала (ListCarry). Не вышло — обновляемся
+        // как прежде: правки пропадут, но обновление не встанет.
+        IReadOnlyDictionary<string, int> carried;
+
+        try
+        {
+            carried = CarryListEdits(Path.GetFullPath("."), root);
+        }
+        catch (Exception)
+        {
+            carried = new Dictionary<string, int>();
+        }
+
         return new UpdatePlan
         {
             StagedAt = root,
             Files = Directory.GetFiles(root, "*", SearchOption.AllDirectories).Length,
             Kept = Preserved.Where(File.Exists).ToList(),
+            CarriedLists = carried,
         };
     }
+
+    /// <summary>
+    /// Переносит дописанное в наши списки из установки в распакованную новую версию.
+    /// </summary>
+    /// <param name="installedAt">Корень установки: там <c>config\lists</c> и <c>engines\zapret\lists</c>.</param>
+    /// <param name="stagedAt">Корень распакованной новой версии.</param>
+    public static IReadOnlyDictionary<string, int> CarryListEdits(string installedAt, string stagedAt) =>
+        ListCarry.Apply(
+            ListCarry.Additions(
+                Path.Combine(installedAt, "config", "lists"),
+                Path.Combine(installedAt, "engines", "zapret", "lists")),
+            Path.Combine(stagedAt, "config", "lists"));
 
     private static async Task DownloadAsync(
         ReleaseInfo release,

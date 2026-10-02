@@ -172,7 +172,18 @@ public partial class UpdatePanel : UserControl
             var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None);
             var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
 
-            Say($"Скачано {plan.Files} файлов. Закрываюсь для подмены…");
+            // Что дописано руками в наши списки, переносится в новые — сказать
+            // об этом сейчас: после подмены окна, которое могло бы сказать, нет.
+            var carried = plan.CarriedLists.Count == 0
+                ? string.Empty
+                : " Ваши дописки в списки перенесены: "
+                    + string.Join(", ", plan.CarriedLists.Select(c => $"{c.Key} — {c.Value}")) + ".";
+
+            Say($"Скачано {plan.Files} файлов.{carried} Закрываюсь для подмены…");
+
+            // Окно сейчас закроется, и строка выше проживёт секунду — в журнале она останется.
+            if (carried.Length > 0)
+                Journal.Write("обновление", $"{_release.Version}:{carried}");
 
             Process.Start(new ProcessStartInfo
             {
