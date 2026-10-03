@@ -122,7 +122,9 @@ public static class WinwsCommandLine
         // глобальные ключи и его первый профиль; глобальные от места не зависят,
         // поэтому идут вперёд, а первый профиль — после щита, своим --new.
         // Без щита голова остаётся ровно как в файле.
-        if (HasEntries(excludeList))
+        bool shielded = HasEntries(excludeList);
+
+        if (shielded)
         {
             var (globals, firstProfile) = SplitGlobals(preset.GlobalArguments);
 
@@ -181,7 +183,9 @@ public static class WinwsCommandLine
             arguments.Add($"--hostlist={Forward(profile.HostListPath)}");
             arguments.Add(OutRange);
 
-            if (!string.IsNullOrWhiteSpace(excludeList))
+            // Свой профиль — весь TCP и QUIC, то есть под щитом целиком
+            // (NeedsOwnExclude); копия списка нужна, только когда щита нет.
+            if (!string.IsNullOrWhiteSpace(excludeList) && !shielded)
                 arguments.Add($"--hostlist-exclude={Forward(excludeList)}");
 
             foreach (var step in profile.Steps)
@@ -211,7 +215,17 @@ public static class WinwsCommandLine
             //
             // Это и оказалось единственным, чем наш запуск отличался от чужих
             // на том же пресете: 51 лишний ключ и ни одной потерянной строки.
-            if (!string.IsNullOrWhiteSpace(excludeList) && FiltersByName(section))
+            //
+            // И не там, где секцию накрывает щит (NeedsOwnExclude, 03.10).
+            // Щит стоит первым и забирает имя раньше любой секции, так что
+            // копия списка в ней ничего не решает — а стоит дорого: winws2
+            // v1.0.3–1.0.5.2 при каждом поиске профиля проверяет время изменения
+            // каждого файла списков у подходящих профилей, под Cygwin это
+            // ~0,3 мс на файл, и наша копия удваивала число таких проверок
+            // в секциях по именам. Замер 03.10: новое соединение стоило
+            // winws2 28–38 мс процессора на V10 и 1,6–2 мс на пресете
+            // из семи профилей.
+            if (!string.IsNullOrWhiteSpace(excludeList) && FiltersByName(section) && NeedsOwnExclude(section, shielded))
                 arguments.Add($"--hostlist-exclude={Forward(excludeList)}");
 
             arguments.AddRange(section.RawArguments);
@@ -321,6 +335,29 @@ public static class WinwsCommandLine
     /// </remarks>
     public static bool FiltersByName(ZapretSection section) =>
         section.HostListPaths.Count > 0 || section.InlineDomains.Count > 0;
+
+    /// <summary>
+    /// Нужна ли секции своя копия списка «не трогать» — или её трафик целиком под щитом.
+    /// </summary>
+    /// <remarks>
+    /// Щит (<see cref="Shield"/>) берёт весь TCP и UDP 443. Секция, чей трафик
+    /// в этих пределах, получает имя только после щита, и копия ей не нужна.
+    /// Нужна она там, куда щит не дотягивается, — по UDP вне 443, — и всюду,
+    /// когда щита нет вовсе: список был пуст при запуске, а «Сайт не
+    /// открывается?» дописывает в него имена на ходу, и winws2 перечитывает
+    /// файл сам. Тогда только копии в секциях эти имена и увидят.
+    /// </remarks>
+    internal static bool NeedsOwnExclude(ZapretSection section, bool shielded)
+    {
+        if (!shielded)
+            return true;
+
+        var udp = string.Join(',', section.RawArguments
+            .Where(a => a.StartsWith("--filter-udp=", StringComparison.OrdinalIgnoreCase))
+            .Select(a => a["--filter-udp=".Length..]));
+
+        return PresetCapture.Ranges(udp).Any(r => r.First != 443 || r.Last != 443);
+    }
 
     /// <summary>
     /// Насколько глубоко в соединение пускать рецепт.

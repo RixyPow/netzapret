@@ -269,14 +269,19 @@ public sealed class DirectShieldTests : IDisposable
                 shielded.First(a => a.StartsWith("--lua-desync=", StringComparison.Ordinal)));
 
             // Сверка по составу: убрать щит и один --new — получится то же,
-            // что без щита, до последнего ключа.
+            // что без щита, до последнего ключа. Кроме копий списка исключений
+            // в секциях: со щитом их там, где он накрывает трафик, нет
+            // (03.10, WinwsCommandLine.NeedsOwnExclude) — их места проверяет
+            // ExcludePlacementTests.
             var rest = new List<string>(shielded);
             rest.RemoveRange(shield, 6);
+            rest.Remove("--new");
 
-            if (rest.Count != plain.Count)
-                rest.Remove("--new");
+            static bool Copy(string a) => a.StartsWith("--hostlist-exclude=", StringComparison.Ordinal);
 
-            Assert.Equal(plain.Order(StringComparer.Ordinal), rest.Order(StringComparer.Ordinal));
+            Assert.Equal(
+                plain.Where(a => !Copy(a)).Order(StringComparer.Ordinal),
+                rest.Where(a => !Copy(a)).Order(StringComparer.Ordinal));
         }
     }
 

@@ -158,4 +158,111 @@ public class ExcludePlacementTests
 
         Assert.DoesNotContain(arguments, a => a.StartsWith("--hostlist-exclude="));
     }
+
+    /// <summary>Профили, получившие копию списка исключений, — по именам.</summary>
+    private static List<string> ProfilesWithExclude(IReadOnlyList<string> arguments)
+    {
+        var withExclude = new List<string>();
+        string? name = null;
+        bool seen = false;
+
+        foreach (var a in arguments.Append("--new"))
+        {
+            if (a == "--new")
+            {
+                if (seen && name is not null)
+                    withExclude.Add(name);
+
+                name = null;
+                seen = false;
+                continue;
+            }
+
+            if (a.StartsWith("--name="))
+                name = a[7..];
+
+            if (a.StartsWith("--hostlist-exclude="))
+                seen = true;
+        }
+
+        return withExclude;
+    }
+
+    /// <summary>
+    /// Со щитом копия списка не нужна никому, кого щит накрывает (03.10).
+    /// </summary>
+    /// <remarks>
+    /// Щит стоит первым и берёт весь TCP и UDP 443 — имя из списка он забирает
+    /// раньше любой секции. Копия в секции стоила winws2 лишней проверки файла
+    /// на каждом поиске профиля (замер 03.10 — в WinwsCommandLine). Остаётся
+    /// она там, куда щит не дотягивается: у секции по именам с UDP вне 443.
+    /// </remarks>
+    [Fact]
+    public void WithTheShieldOnlyWhatItCannotReachKeepsACopy()
+    {
+        var exclude = Path.Combine(Path.GetTempPath(), $"netzapret-exclude-{Guid.NewGuid():N}.txt");
+        var preset = Path.Combine(Path.GetTempPath(), $"netzapret-preset-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(exclude, "example.org\n");
+            File.WriteAllText(preset, Preset + """
+
+
+                --new
+                --name=По именам и UDP
+                --filter-udp=50000-50100
+                --hostlist=lists/voice.txt
+                --lua-desync=fake:blob=quic_google
+                """);
+
+            var arguments = WinwsCommandLine.Build(
+                new PresetReader().Load(preset),
+                exclude,
+                own:
+                [
+                    new OwnDesyncProfile
+                    {
+                        Name = "Свой",
+                        Steps = ["split:pos=2"],
+                        HostListPath = @"C:\runtime\desync\own.txt",
+                    },
+                ]);
+
+            Assert.Contains("--name=NetZapret: не трогать", arguments);
+            Assert.Equal(["По именам и UDP"], ProfilesWithExclude(arguments));
+        }
+        finally
+        {
+            File.Delete(exclude);
+            File.Delete(preset);
+        }
+    }
+
+    /// <summary>
+    /// Щита нет (список пуст при запуске) — копии остаются, как прежде.
+    /// </summary>
+    /// <remarks>
+    /// «Сайт не открывается?» дописывает имя в этот файл на ходу, и winws2
+    /// перечитывает его сам; без щита только копии в секциях это имя и увидят.
+    /// </remarks>
+    [Fact]
+    public void WithoutTheShieldTheCopiesStay()
+    {
+        var exclude = Path.Combine(Path.GetTempPath(), $"netzapret-exclude-{Guid.NewGuid():N}.txt");
+
+        try
+        {
+            File.WriteAllText(exclude, string.Empty);
+
+            var arguments = WinwsCommandLine.Build(Load(), exclude, own: []);
+
+            Assert.DoesNotContain("--name=NetZapret: не трогать", arguments);
+            Assert.Equal(["По именам", "Именами прямо в строке"], ProfilesWithExclude(arguments));
+        }
+        finally
+        {
+            File.Delete(exclude);
+        }
+    }
 }
