@@ -96,6 +96,58 @@ public sealed class ShippedRulesTests
     }
 
     /// <summary>
+    /// «Эфиры» на «десинке», сайт — как был: видео и hermes под десинк, сайт в щите
+    /// (03.10: у пользователя с #2000 Amazon напрямую не доходит, сайт на Fastly — да).
+    /// </summary>
+    [Fact]
+    public void Twitch_streams_can_take_their_own_path()
+    {
+        var config = Config();
+        if (config is null)
+            return;
+
+        var user = Path.Combine(Path.GetTempPath(), $"rules-user-{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            File.WriteAllText(user, """
+                rules:
+                  - match: hostlist
+                    value: "config/lists/twitch-video.txt"
+                    mode: desync
+                """);
+
+            var engine = RuleSetLoader.LoadLayered(Path.Combine(config, "rules.yaml"), user);
+            NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, Path.GetDirectoryName(config));
+
+            static Connections.ConnectionEvent To(string host) => new()
+            {
+                Timestamp = DateTimeOffset.UnixEpoch,
+                Protocol = Connections.ProtocolKind.Tcp,
+                RemoteAddress = System.Net.IPAddress.Parse("203.0.113.7"),
+                RemotePort = 443,
+                Hostname = host,
+            };
+
+            Assert.Equal(RoutingMode.Desync, engine.Evaluate(To("usher.ttvnw.net")).Mode);
+            Assert.Equal(RoutingMode.Desync, engine.Evaluate(To("hermes.twitch.tv")).Mode);
+            Assert.Equal(RoutingMode.Direct, engine.Evaluate(To("www.twitch.tv")).Mode);
+
+            var shield = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(
+                engine.RuleSet, hostsPath: Path.Combine(Path.GetTempPath(), $"no-hosts-{Guid.NewGuid():N}"));
+            var holes = NetZapret.Proxy.HostsFile.CollectShieldHoles(engine.RuleSet, shield);
+
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.None, NetZapret.Proxy.HostsFile.BypassFor(shield, "usher.ttvnw.net", holes));
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.None, NetZapret.Proxy.HostsFile.BypassFor(shield, "hermes.twitch.tv", holes));
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.Direct, NetZapret.Proxy.HostsFile.BypassFor(shield, "www.twitch.tv", holes));
+        }
+        finally
+        {
+            File.Delete(user);
+        }
+    }
+
+    /// <summary>
     /// Зоны Akamai — в щите «напрямую», а имена Spotify и TikTok на них —
     /// за своими частями (03.10, картинки Battle.net под приёмом секции Fortnite).
     /// </summary>

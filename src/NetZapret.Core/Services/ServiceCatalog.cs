@@ -171,9 +171,14 @@ public static class ServiceCatalog
     /// Kick и трансляция на Twitch рвались (отчёт 02.10). Правило пишется по
     /// файлу списка, так что один файл в двух сервисах — один путь на оба.
     /// </remarks>
-    private static ServicePart AmazonIvs(string note) => new()
+    /// <param name="name">
+    /// Название в сервисе: у Kick это само видео, у Twitch — приём трансляции
+    /// из OBS (смотрят Twitch с ttvnw.net, часть «Эфиры»). Файл один — путь один.
+    /// </param>
+    /// <param name="note">Пояснение под названием.</param>
+    private static ServicePart AmazonIvs(string name, string note) => new()
     {
-        Name = "Видео (Amazon IVS)",
+        Name = name,
         List = "config/lists/kick-video.txt",
         Note = note,
     };
@@ -318,13 +323,23 @@ public static class ServiceCatalog
             ],
         },
 
+        // Эфиры отдельно от сайта (03.10): сайт и gql на Fastly, а плейлисты,
+        // видео и hermes — на Amazon, и у пользователя с ошибкой #2000 Amazon
+        // напрямую не доходил и без NetZapret, когда сайт открывался.
         new ServiceDefinition
         {
             Name = "Twitch",
             Parts =
             [
-                new ServicePart { Name = "Всё", List = "config/lists/twitch.txt" },
-                AmazonIvs("общая с Kick: видео и приём трансляции OBS"),
+                new ServicePart { Name = "Сайт и чат", List = "config/lists/twitch.txt" },
+                new ServicePart
+                {
+                    Name = "Эфиры",
+                    List = "config/lists/twitch-video.txt",
+                    Within = "config/lists/twitch.txt",
+                    Note = "плейлисты и видео; при ошибке #2000 — «десинк» или VPN, сайт не трогая",
+                },
+                AmazonIvs("Приём трансляции (Amazon IVS)", "общая с Kick: трансляция из OBS"),
             ],
         },
 
@@ -336,7 +351,7 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "Сайт и чат", List = "config/lists/kick.txt" },
-                AmazonIvs("общая с Twitch: те же серверы видео"),
+                AmazonIvs("Видео (Amazon IVS)", "общая с Twitch: те же серверы, у Twitch — приём трансляции"),
             ],
         },
 
