@@ -370,18 +370,8 @@ public partial class MainWindow : Window
     private void OnToastLater(object sender, RoutedEventArgs e) => HideToast();
 
     /// <summary>
-    /// Показано ли в этот запуск уведомление после обновления. Пока да,
-    /// «Главная» прячет свою карточку со звездой: та же просьба дважды
-    /// на одном экране (снимок 03.10) читается как назойливость. И после
-    /// «Закрыть» не возвращает — просьба в этот запуск уже прозвучала.
-    /// </summary>
-    internal static bool GreetingShown { get; private set; }
-
-    /// <summary>Уведомление появилось — «Главная», открытая раньше, прячет карточку.</summary>
-    internal static event Action? GreetingChanged;
-
-    /// <summary>
-    /// Уведомление после обновления — звезда и канал, один раз на версию (UpdateGreeting, 03.10).
+    /// Уведомление после обновления — звезда и канал, один раз на версию
+    /// и только тем, кто скрыл карточку на «Главной» (UpdateGreeting, 03.10).
     /// </summary>
     /// <remarks>
     /// Версия запоминается при каждом запуске, где она сменилась, — и когда
@@ -407,8 +397,6 @@ public partial class MainWindow : Window
             await Task.Delay(TimeSpan.FromSeconds(1.5));
 
             GreetingTitle.Text = $"NetZapret обновлён до {current}";
-            GreetingShown = true;
-            GreetingChanged?.Invoke();
             GreetingToast.BeginAnimation(OpacityProperty, null);
             GreetingToast.Visibility = Visibility.Visible;
             Motion.Arrive(GreetingToast, dy: 18);

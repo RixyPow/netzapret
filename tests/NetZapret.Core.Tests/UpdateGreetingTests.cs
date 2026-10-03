@@ -4,12 +4,12 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Уведомление со звездой и каналом — после каждого обновления (владелец, 03.10).
+/// Уведомление со звездой и каналом — после каждого обновления, тем, кто скрыл карточку (владелец, 03.10).
 /// </summary>
 public sealed class UpdateGreetingTests
 {
     private static AppSettings Done(string? last) =>
-        new AppSettings { OnboardingDone = true, LastRunVersion = last };
+        new AppSettings { OnboardingDone = true, SupportCardHidden = true, LastRunVersion = last };
 
     [Fact]
     public void A_new_version_is_greeted()
@@ -35,6 +35,13 @@ public sealed class UpdateGreetingTests
     public void A_fresh_install_is_not_greeted()
     {
         Assert.False(UpdateGreeting.Due(new AppSettings { OnboardingDone = false }, "0.11.3"));
+    }
+
+    /// <summary>Карточка на «Главной» ещё стоит — та же просьба уже перед глазами (владелец, 03.10).</summary>
+    [Fact]
+    public void Not_greeted_while_the_home_card_is_shown()
+    {
+        Assert.False(UpdateGreeting.Due(Done("0.11.2") with { SupportCardHidden = false }, "0.11.3"));
     }
 
     [Fact]
