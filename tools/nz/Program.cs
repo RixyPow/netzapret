@@ -364,7 +364,7 @@ async Task<int> Catalog()
     return result.Working > 0 ? 0 : 1;
 }
 
-// Тот же отчёт, что кнопка «Собрать» в «Ещё»: сборка и вычистка — в библиотеке.
+// Тот же отчёт, что кнопка «Собрать» в «Диагностике»: сборка и вычистка — в библиотеке.
 int Report()
 {
     var version = typeof(SupportReport).Assembly

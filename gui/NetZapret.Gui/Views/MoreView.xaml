@@ -21,30 +21,10 @@
 
                 <!--
                     Первым в разделе (владелец 26.09: «подними разбор неисправностей
-                    выше») и отдельно от «Обслуживания»: там необратимое, а отчёт
-                    ничего не меняет и нажимается по первой просьбе.
+                    выше») и отдельно от «Обслуживания»: там необратимое. Отчёт
+                    для разбора отсюда переехал в «Диагностику» (владелец 03.10).
                 -->
                 <TextBlock Text="Разбор неисправностей" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
-
-                <Border Style="{StaticResource Card}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Собрать отчёт для разбора" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его и прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
-                            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                       TextWrapping="Wrap" Visibility="Collapsed" />
-                        </StackPanel>
-
-                        <Button Grid.Column="1" x:Name="ReportButton" Style="{StaticResource Ghost}"
-                                Content="Собрать" Click="OnReport" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
 
                 <!--
                     «Сайт не открывается» — в «Ещё», пока в тестовом режиме
@@ -52,7 +32,7 @@
                     Пробует как есть, напрямую, через VPN и записывает
                     сработавший маршрут. Решение целиком в SiteFixer.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
+                <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Сайт не открывается?" FontWeight="SemiBold" VerticalAlignment="Center" />

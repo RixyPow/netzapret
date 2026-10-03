@@ -30,11 +30,36 @@
                 </Grid>
 
                 <!--
+                    Отчёт для разбора — здесь, первым под шапкой (владелец 03.10;
+                    прежде жил в «Ещё»). За ним идут с той же неполадкой, с какой
+                    открывают диагностику, и просят его первым же сообщением.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Собрать отчёт для разбора" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его и прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" Visibility="Collapsed" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" x:Name="ReportButton" Style="{StaticResource Ghost}"
+                                Content="Собрать" Click="OnReport" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
+                <!--
                     «Куда пойдёт имя» рядом с диагностикой, а не в маршрутах.
                     Вопрос задают, когда сервис уходит не туда, — то есть
                     в ту же минуту, когда открывают этот раздел.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
                     <StackPanel>
                         <TextBlock Text="Куда пойдёт соединение" FontWeight="SemiBold" />
 
