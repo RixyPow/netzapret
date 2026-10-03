@@ -117,14 +117,11 @@ public static class UpdateInstaller
         IProgress<double>? progress,
         CancellationToken cancellationToken)
     {
-        var staging = Path.GetFullPath(StagingDirectory);
+        var staging = PrepareStaging(StagingDirectory);
 
-        if (Directory.Exists(staging))
-            Directory.Delete(staging, recursive: true);
-
-        Directory.CreateDirectory(staging);
-
-        var archive = Path.Combine(staging, "release.zip");
+        // Имя своё на каждую попытку: архив прошлой мог остаться в отстойнике
+        // занятым (см. PrepareStaging), и писать поверх него было бы нельзя.
+        var archive = Path.Combine(staging, $"release-{Guid.NewGuid():N}.zip");
 
         await DownloadAsync(release, archive, progress, cancellationToken);
 
@@ -136,16 +133,7 @@ public static class UpdateInstaller
                 $"Скачано {actual} Б вместо обещанных {release.ArchiveSize} Б — закачка оборвалась.");
         }
 
-        var unpacked = Path.Combine(staging, "files");
-        ZipFile.ExtractToDirectory(archive, unpacked);
-        File.Delete(archive);
-
-        // Архив разворачивается в папку NetZapret\; нам нужно её содержимое,
-        // а не она сама, иначе при замене получится NetZapret\NetZapret\.
-        var root = Directory.GetDirectories(unpacked).Length == 1
-            && Directory.GetFiles(unpacked).Length == 0
-                ? Directory.GetDirectories(unpacked)[0]
-                : unpacked;
+        var root = await UnpackAsync(archive, staging, cancellationToken);
 
         // Дописанное человеком в наши списки — в списки новой версии, пока
         // подмена их не перезаписала (ListCarry). Не вышло — обновляемся
@@ -168,6 +156,128 @@ public static class UpdateInstaller
             Kept = Preserved.Where(File.Exists).ToList(),
             CarriedLists = carried,
         };
+    }
+
+    /// <summary>Сколько ждать, пока чужой процесс отпустит скачанный архив.</summary>
+    internal static TimeSpan ArchivePatience { get; set; } = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// Готовит отстойник: убирает остатки прошлой попытки, сколько выйдет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Не падает на занятом файле (жалоба 03.10: «Обновиться не вышло: The process
+    /// cannot access the file 'release.zip' because it is being used by another
+    /// process» — с коротким именем файла, такое .NET пишет при рекурсивном удалении
+    /// каталога). Свежий архив на сотню мегабайт держат антивирус и индексатор,
+    /// пока проверяют, а повторное нажатие «Обновить» начиналось с удаления
+    /// отстойника целиком — и обновление вставало, хотя скачать и распаковать
+    /// было можно.
+    /// </para>
+    /// <para>
+    /// Занятое остаётся лежать: новая попытка пишет архив под своим именем
+    /// и распаковывает в свой каталог, а остаток уберёт CleanUp при следующем
+    /// запуске.
+    /// </para>
+    /// </remarks>
+    internal static string PrepareStaging(string directory)
+    {
+        var staging = Path.GetFullPath(directory);
+
+        try
+        {
+            if (Directory.Exists(staging))
+                Directory.Delete(staging, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(staging))
+            {
+                try
+                {
+                    if (Directory.Exists(entry))
+                        Directory.Delete(entry, recursive: true);
+                    else
+                        File.Delete(entry);
+                }
+                catch (Exception inner) when (inner is IOException or UnauthorizedAccessException)
+                {
+                    // Держит кто-то другой — пусть лежит.
+                }
+            }
+        }
+
+        Directory.CreateDirectory(staging);
+        return staging;
+    }
+
+    /// <summary>
+    /// Распаковывает архив в свой каталог отстойника; возвращает корень новой версии.
+    /// </summary>
+    /// <remarks>
+    /// Открыть архив пробует несколько раз: антивирус, проверяющий свежий файл,
+    /// держит его считанные секунды, и отказ с первого раза ронял обновление
+    /// без нужды. Сам архив после распаковки удаляется по возможности — занятый
+    /// остаётся до CleanUp.
+    /// </remarks>
+    internal static async Task<string> UnpackAsync(string archive, string staging, CancellationToken cancellationToken)
+    {
+        var unpacked = Path.Combine(staging, $"files-{Guid.NewGuid():N}");
+        var deadline = DateTime.UtcNow + ArchivePatience;
+
+        while (true)
+        {
+            try
+            {
+                ZipFile.ExtractToDirectory(archive, unpacked);
+                break;
+            }
+            catch (IOException) when (DateTime.UtcNow < deadline && IsHeld(archive))
+            {
+                // Частично распакованное — убрать: следующая попытка пишет туда же.
+                try
+                {
+                    if (Directory.Exists(unpacked))
+                        Directory.Delete(unpacked, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    unpacked = Path.Combine(staging, $"files-{Guid.NewGuid():N}");
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+            }
+        }
+
+        try
+        {
+            File.Delete(archive);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Занят — уберёт CleanUp при следующем запуске.
+        }
+
+        // Архив разворачивается в папку NetZapret\; нам нужно её содержимое,
+        // а не она сама, иначе при замене получится NetZapret\NetZapret\.
+        return Directory.GetDirectories(unpacked).Length == 1
+            && Directory.GetFiles(unpacked).Length == 0
+                ? Directory.GetDirectories(unpacked)[0]
+                : unpacked;
+    }
+
+    /// <summary>Держит ли архив кто-то: открыть на чтение не выходит.</summary>
+    private static bool IsHeld(string path)
+    {
+        try
+        {
+            using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return false;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
     }
 
     /// <summary>
