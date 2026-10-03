@@ -485,6 +485,11 @@ internal static class SupervisorHost
             ? Path.GetFullPath(WinwsCommandLine.DefaultExcludeListPath)
             : null;
 
+        // Дыры в щите — тем же порядком: пишет сборка конфига, здесь подбирают.
+        var keep = File.Exists(WinwsCommandLine.DefaultKeepListPath)
+            ? Path.GetFullPath(WinwsCommandLine.DefaultKeepListPath)
+            : null;
+
         // Свои профили: имена, которым рецепт выбран руками в «Маршрутах».
         // Списки под них пишет сборка конфига — здесь их только подбирают,
         // потому что правила читаются там, а запуск живёт тут.
@@ -511,7 +516,7 @@ internal static class SupervisorHost
             ? []
             : TunnelEndpoints.TunAddresses(options.ProxyConfig);
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture);
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture, keep);
 
         // Ширина перехвата (PresetCapture): в журнал — что вышло на деле,
         // а не что выбрано: пресет с полным фильтром уровню не поддаётся.
@@ -553,6 +558,9 @@ internal static class SupervisorHost
 
         if (exclude is not null)
             Console.WriteLine($"Десинк не трогает прибитые имена: {exclude}");
+
+        if (exclude is not null && keep is not null)
+            Console.WriteLine($"Десинк оставлен именам внутри «напрямую»: {keep}");
 
         foreach (var profile in own)
             Console.WriteLine($"Свой рецепт «{profile.Name}»: {profile.HostListPath}");

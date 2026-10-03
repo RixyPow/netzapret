@@ -342,9 +342,15 @@ internal static class TunnelConfig
             // Туннель считается поднятым, только если он вправду поднимется:
             // выключатель без выхода TUN не даёт, и «через VPN» тогда тоже
             // идёт напрямую.
-            var excluded = HostsFile.CollectDesyncExclusions(ruleSet, tunnelUp: settings.NeedsProxy);
+            var described = HostsFile.DescribeDesyncExclusions(ruleSet, tunnelUp: settings.NeedsProxy);
+            var excluded = described.Select(each => each.Name).ToList();
 
             WinwsCommandLine.WriteExcludeList(excluded);
+
+            // Дыры в щите: имена внутри его зон, которым человек выбрал десинк
+            // (HostsFile.CollectShieldHoles). Пишется всегда — снятый выбор
+            // иначе остался бы дырой из вчерашнего файла.
+            WinwsCommandLine.WriteKeepList(HostsFile.CollectShieldHoles(ruleSet, described));
 
             // Имена, которым рецепт выбран руками, уходят в свои профили
             // winws2. Без этого «десинк» в маршрутах означал только «мимо

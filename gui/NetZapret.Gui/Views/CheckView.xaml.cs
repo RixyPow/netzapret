@@ -762,6 +762,11 @@ public partial class CheckView : UserControl
             ? []
             : HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelInUse);
 
+        // И дыры в щите — имена внутри его зон, которым оставлен десинк.
+        IReadOnlyList<string> holes = engine is null
+            ? []
+            : HostsFile.CollectShieldHoles(engine.RuleSet, bypassed);
+
         var running = targets.Select(async target =>
         {
             await slots.WaitAsync(cancellationToken);
@@ -800,7 +805,7 @@ public partial class CheckView : UserControl
 
                     _reports.Add(report);
 
-                    Collected.Add(Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host)));
+                    Collected.Add(Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host, holes)));
                     Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
             }

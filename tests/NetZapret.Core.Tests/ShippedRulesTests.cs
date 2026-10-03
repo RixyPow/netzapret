@@ -124,6 +124,27 @@ public sealed class ShippedRulesTests
 
             Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("audio-ak-spotify-com.akamaized.net")).Mode);
             Assert.Equal(RoutingMode.Direct, layered.Evaluate(To("blz-contentstack-images.akamaized.net")).Mode);
+
+            // «Десинк», выбранный человеком, — дыра в щите зоны: приём к нему вернётся.
+            File.WriteAllText(user, """
+                rules:
+                  - match: hostlist
+                    value: "config/lists/spotify-cdn.txt"
+                    mode: desync
+                """);
+
+            var kept = RuleSetLoader.LoadLayered(Path.Combine(config, "rules.yaml"), user);
+            NetZapret.Zapret.RuleSetExpander.Expand(kept.RuleSet, Path.GetDirectoryName(config));
+
+            var exclusions = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(
+                kept.RuleSet, hostsPath: Path.Combine(Path.GetTempPath(), $"no-hosts-{Guid.NewGuid():N}"));
+            var holes = NetZapret.Proxy.HostsFile.CollectShieldHoles(kept.RuleSet, exclusions);
+
+            Assert.Contains("audio-ak-spotify-com.akamaized.net", holes);
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.None,
+                NetZapret.Proxy.HostsFile.BypassFor(exclusions, "audio-ak-spotify-com.akamaized.net", holes));
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.Direct,
+                NetZapret.Proxy.HostsFile.BypassFor(exclusions, "blz-contentstack-images.akamaized.net", holes));
         }
         finally
         {

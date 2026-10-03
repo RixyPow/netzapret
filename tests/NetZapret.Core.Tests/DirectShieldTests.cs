@@ -97,6 +97,38 @@ public sealed class DirectShieldTests : IDisposable
     }
 
     /// <summary>
+    /// Дыры в щите — <c>--hostlist-exclude</c> его же профиля, до действия
+    /// (владелец 03.10: оставить «десинк» именам внутри зоны «напрямую»).
+    /// </summary>
+    [Fact]
+    public void KeptNamesAreExcludedFromTheShield()
+    {
+        var exclude = Exclude("akamaized.net");
+        var keep = Path.Combine(_root, "desync-keep.txt");
+        File.WriteAllLines(keep, ["audio-ak-spotify-com.akamaized.net"]);
+
+        var shield = Profiles(WinwsCommandLine.Build(Load(), exclude, own: [], keepList: keep))[0];
+        var hole = $"--hostlist-exclude={WinwsCommandLine.Forward(keep)}";
+
+        Assert.Contains(ShieldName, shield);
+        Assert.Contains(hole, shield);
+        Assert.True(shield.IndexOf(hole) < shield.IndexOf("--lua-desync=pass"));
+    }
+
+    /// <summary>Пустой файл дыр щита не меняет — строка та же, что без него.</summary>
+    [Fact]
+    public void AnEmptyKeepListChangesNothing()
+    {
+        var exclude = Exclude("akamaized.net");
+        var keep = Path.Combine(_root, "desync-keep.txt");
+        File.WriteAllLines(keep, ["# пусто"]);
+
+        Assert.Equal(
+            WinwsCommandLine.Build(Load(), exclude, own: []),
+            WinwsCommandLine.Build(Load(), exclude, own: [], keepList: keep));
+    }
+
+    /// <summary>
     /// Щит — первый профиль, раньше пресета и своих рецептов; первый профиль
     /// пресета переезжает за него целиком и в прежнем порядке.
     /// </summary>

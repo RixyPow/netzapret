@@ -251,4 +251,65 @@ public sealed class DesyncExclusionTests : IDisposable
         Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, "notcanva.com"));
         Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(found, "youtube.com"));
     }
+
+    /// <summary>
+    /// «Десинк», выбранный человеком имени внутри зоны «напрямую», — дыра
+    /// в щите (владелец 03.10: зоны Akamai «напрямую», а у Spotify там свои имена).
+    /// </summary>
+    [Fact]
+    public void DesyncChosenInsideADirectZoneIsAHole()
+    {
+        Write(string.Empty);
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "audio.cdn.example"
+                mode: desync
+              - match: domain
+                value: "*.cdn.example"
+                mode: direct
+            """);
+
+        var exclusions = HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts);
+        var holes = HostsFile.CollectShieldHoles(engine.RuleSet, exclusions);
+
+        Assert.Equal(["audio.cdn.example"], holes);
+
+        // Как у winws2: дыра берёт и поддомены, а остальная зона — по-прежнему щит.
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(exclusions, "audio.cdn.example", holes));
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(exclusions, "eu.audio.cdn.example", holes));
+        Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(exclusions, "images.cdn.example", holes));
+    }
+
+    /// <summary>Дыр нет, где щит имя и так не берёт или где «десинк» перекрыт.</summary>
+    [Fact]
+    public void OnlyAWinningDesyncInsideTheShieldMakesAHole()
+    {
+        Write("203.0.113.9 pinned.cdn.example");
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.cdn.example"
+                mode: direct
+              - match: domain
+                value: "late.cdn.example"
+                mode: desync
+              - match: domain
+                value: "pinned.cdn.example"
+                mode: desync
+              - match: domain
+                value: "elsewhere.example"
+                mode: desync
+            """);
+
+        var exclusions = HostsFile.DescribeDesyncExclusions(engine.RuleSet, _hosts);
+
+        // late — перекрыт зоной выше; pinned — прибит в hosts, пин бьёт выбор;
+        // elsewhere — щит его и так не берёт.
+        Assert.Empty(HostsFile.CollectShieldHoles(engine.RuleSet, exclusions));
+    }
 }

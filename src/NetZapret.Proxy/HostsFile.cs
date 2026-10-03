@@ -387,8 +387,14 @@ public static class HostsFile
     /// </remarks>
     public static DesyncBypass BypassFor(
         IReadOnlyList<(string Name, DesyncBypass Why)> exclusions,
-        string host)
+        string host,
+        IReadOnlyList<string>? holes = null)
     {
+        // Дыра в щите — как у winws2: --hostlist-exclude профиля щита берёт
+        // и поддомены, и такое имя до щита не доходит вовсе.
+        if (holes is not null && holes.Any(hole => Covers(hole, host)))
+            return DesyncBypass.None;
+
         foreach (var (name, why) in exclusions)
         {
             var zone = name.TrimStart('*', '.');
@@ -401,6 +407,68 @@ public static class HostsFile
         }
 
         return DesyncBypass.None;
+    }
+
+    /// <summary>
+    /// Имена, которым человек оставил десинк внутри зоны щита, — дыры в щите.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Щит берёт имя вместе с поддоменами: так winws2 читает файловый список.
+    /// Правило «напрямую» на зону поэтому снимало десинк и с тех имён в ней,
+    /// которым человек сам выбрал «десинк» или рецепт. Владелец 03.10, после
+    /// базового правила на зоны Akamai: «оставить возможность для
+    /// редактирования» — у Spotify и TikTok свои имена на akamaized.net.
+    /// </para>
+    /// <para>
+    /// Дыра — имя правила «десинк», которому это правило и достаётся
+    /// (первое совпадение, как у движка), лежащее строго внутри имени щита.
+    /// Прибитое в hosts дырой не становится: пин бьёт любой выбор, и рецепт,
+    /// выверенный на настоящей сети доставки, порвал бы рукопожатие с чужим
+    /// узлом.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> CollectShieldHoles(
+        Core.Rules.RuleSet ruleSet,
+        IReadOnlyList<(string Name, DesyncBypass Why)> exclusions)
+    {
+        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+        var holes = new List<string>();
+
+        foreach (var (mode, domains) in order)
+        {
+            if (mode != Core.Rules.RoutingMode.Desync)
+                continue;
+
+            foreach (var domain in domains)
+            {
+                if (FirstMatch(order, domain) != Core.Rules.RoutingMode.Desync)
+                    continue;
+
+                if (exclusions.Any(each => each.Why == DesyncBypass.Pin
+                        && string.Equals(each.Name, domain, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                bool inside = exclusions.Any(each =>
+                    domain.EndsWith("." + each.Name.TrimStart('*', '.'), StringComparison.OrdinalIgnoreCase));
+
+                if (inside && !holes.Contains(domain, StringComparer.OrdinalIgnoreCase))
+                    holes.Add(domain);
+            }
+        }
+
+        return holes;
+    }
+
+    /// <summary>Покрывает ли запись списка имя: сама она или её поддомен.</summary>
+    private static bool Covers(string entry, string host)
+    {
+        var zone = entry.TrimStart('*', '.');
+
+        return string.Equals(zone, host, StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Пометка для отчёта; пусто — имя десинку доступно.</summary>

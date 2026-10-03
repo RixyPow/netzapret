@@ -87,6 +87,10 @@ public static class WinwsCommandLine
     /// Ширина перехвата поверх пресета (<see cref="PresetCapture"/>). Ставится
     /// до game filter: тот расширяет уже выбранный уровень, а не наоборот.
     /// </param>
+    /// <param name="keepList">
+    /// Дыры в щите: имена внутри его зон, которым человек оставил десинк
+    /// (<see cref="DefaultKeepListPath"/>). Пустой или <c>null</c> — щит как был.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
@@ -96,9 +100,10 @@ public static class WinwsCommandLine
         string? tunnelFakeRange = null,
         IReadOnlyList<string>? udpOff = null,
         IReadOnlyList<IPAddress>? tunAddresses = null,
-        Core.CaptureWidth capture = Core.CaptureWidth.Preset)
+        Core.CaptureWidth capture = Core.CaptureWidth.Preset,
+        string? keepList = null)
     {
-        var arguments = BuildPreset(preset, excludeList, own);
+        var arguments = BuildPreset(preset, excludeList, own, keepList);
 
         PresetCapture.Apply(arguments, capture);
 
@@ -113,7 +118,8 @@ public static class WinwsCommandLine
     private static List<string> BuildPreset(
         ZapretPreset preset,
         string? excludeList,
-        IReadOnlyList<OwnDesyncProfile>? own)
+        IReadOnlyList<OwnDesyncProfile>? own,
+        string? keepList = null)
     {
         var arguments = new List<string>();
 
@@ -129,7 +135,7 @@ public static class WinwsCommandLine
             var (globals, firstProfile) = SplitGlobals(preset.GlobalArguments);
 
             arguments.AddRange(globals);
-            arguments.AddRange(Shield(excludeList!));
+            arguments.AddRange(Shield(excludeList!, HasEntries(keepList) ? keepList : null));
 
             if (firstProfile.Count > 0)
             {
@@ -259,16 +265,30 @@ public static class WinwsCommandLine
     /// все порты TCP вместо <c>80,443-65535</c> и QUIC. По справке winws2
     /// заданные вместе фильтры TCP и UDP пропускают оба протокола.
     /// </para>
+    /// <para>
+    /// Дыры (<paramref name="keepList"/>) — <c>--hostlist-exclude</c> того же
+    /// профиля: имя из них щит не берёт, и оно идёт дальше, к своему рецепту
+    /// или секции пресета (владелец 03.10, см. HostsFile.CollectShieldHoles).
+    /// </para>
     /// </remarks>
-    private static IReadOnlyList<string> Shield(string excludeList) =>
-    [
-        "--name=NetZapret: не трогать",
-        "--filter-tcp=*",
-        "--filter-udp=443",
-        $"--hostlist={Forward(excludeList)}",
-        OutRange,
-        "--lua-desync=pass",
-    ];
+    private static IReadOnlyList<string> Shield(string excludeList, string? keepList = null)
+    {
+        var shield = new List<string>
+        {
+            "--name=NetZapret: не трогать",
+            "--filter-tcp=*",
+            "--filter-udp=443",
+            $"--hostlist={Forward(excludeList)}",
+        };
+
+        if (keepList is not null)
+            shield.Add($"--hostlist-exclude={Forward(keepList)}");
+
+        shield.Add(OutRange);
+        shield.Add("--lua-desync=pass");
+
+        return shield;
+    }
 
     /// <summary>
     /// Есть ли в списке хоть одно имя.
@@ -399,6 +419,9 @@ public static class WinwsCommandLine
     /// <summary>Где лежит список имён, которые десинку трогать нельзя.</summary>
     public static string DefaultExcludeListPath => Path.Combine("runtime", "desync-exclude.txt");
 
+    /// <summary>Где лежат дыры в щите: имена внутри его зон, которым оставлен десинк.</summary>
+    public static string DefaultKeepListPath => Path.Combine("runtime", "desync-keep.txt");
+
     /// <summary>Каталог для списков своих профилей.</summary>
     public static string OwnListsDirectory => Path.Combine("runtime", "desync");
 
@@ -525,9 +548,16 @@ public static class WinwsCommandLine
     /// в командной строке потом читался бы как «исключения настроены» — тогда
     /// как их нет. Отсутствие файла честнее.
     /// </remarks>
-    public static string? WriteExcludeList(IReadOnlyList<string> names, string? path = null)
+    public static string? WriteExcludeList(IReadOnlyList<string> names, string? path = null) =>
+        WriteList(names, path ?? DefaultExcludeListPath);
+
+    /// <summary>Пишет дыры в щите; <c>null</c> — дыр нет, и файла тоже.</summary>
+    public static string? WriteKeepList(IReadOnlyList<string> names, string? path = null) =>
+        WriteList(names, path ?? DefaultKeepListPath);
+
+    private static string? WriteList(IReadOnlyList<string> names, string path)
     {
-        var target = Path.GetFullPath(path ?? DefaultExcludeListPath);
+        var target = Path.GetFullPath(path);
 
         try
         {

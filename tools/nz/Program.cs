@@ -150,9 +150,11 @@ int Where(string target)
 
     if (connection.Hostname is { } host && settings.NeedsDesync)
     {
+        var exclusions = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelUp);
         var bypass = NetZapret.Proxy.HostsFile.BypassFor(
-            NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelUp),
-            host);
+            exclusions,
+            host,
+            NetZapret.Proxy.HostsFile.CollectShieldHoles(engine.RuleSet, exclusions));
 
         if (bypass != NetZapret.Proxy.DesyncBypass.None)
             Console.WriteLine($"  десинк:            {NetZapret.Proxy.HostsFile.DescribeBypass(bypass)}");

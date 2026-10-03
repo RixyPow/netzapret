@@ -110,6 +110,7 @@ public static class SupportReport
         AddLog(parts, "winws2.log", At(root, Path.Combine("runtime", "winws2.log")));
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
+        AddFile(parts, "desync-keep.txt", At(root, Path.Combine("runtime", "desync-keep.txt")));
 
         if (blockcheck is not null)
             AddFile(parts, blockcheck.Name, blockcheck.FullName);
