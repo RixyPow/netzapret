@@ -55,6 +55,31 @@ public class SingBoxConfigCompilerTests
         return JsonDocument.Parse(result.Json).RootElement.Clone();
     }
 
+    /// <summary>
+    /// У адаптера TUN — только DNS по IPv4 (03.10): Java с TLauncher'овским
+    /// preferIPv4Stack падала на нашем IPv6-адресе DNS, первом в её списке.
+    /// </summary>
+    [Fact]
+    public void TunAnnouncesOnlyAnIpv4Resolver()
+    {
+        var root = CompileProxyOnly(ProxyOnlyRules, "192.168.1.1");
+        var tun = root.GetProperty("inbounds").EnumerateArray()
+            .Single(inbound => inbound.GetProperty("type").GetString() == "tun");
+
+        Assert.Equal(["172.19.0.2"], tun.GetProperty("dns_address").EnumerateArray().Select(a => a.GetString()));
+
+        // Сам TUN остаётся двухстековым: без IPv6-адреса auto_route не ставит маршрутов IPv6.
+        Assert.Contains("fdfe:dcba:9876::1/126", tun.GetProperty("address").EnumerateArray().Select(a => a.GetString()));
+    }
+
+    [Theory]
+    [InlineData("172.19.0.1/30", "172.19.0.2")]
+    [InlineData("10.0.0.255/24", "10.0.1.0")]
+    public void TunDnsIsTheAddressAfterTheTun(string tun, string dns)
+    {
+        Assert.Equal(dns, SingBoxConfigCompiler.TunDnsAddress(tun));
+    }
+
     private const string ProxyOnlyRules = """
         mode: selective
         rules:

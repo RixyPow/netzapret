@@ -943,6 +943,41 @@ public sealed class SingBoxConfigCompiler
         return inbounds;
     }
 
+    /// <summary>
+    /// Адрес DNS адаптера TUN: следующий за адресом самого TUN, как и без ключа.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Задаётся явно и только IPv4 (03.10). sing-tun 0.9.3 без
+    /// <c>dns_address</c> ставит адаптеру DNS и по IPv4, и по IPv6
+    /// (<c>fdfe:dcba:9876::2</c>); с ним — только перечисленные, по семействам.
+    /// IPv6-адрес самого TUN и маршруты остаются как были.
+    /// </para>
+    /// <para>
+    /// Зачем: Java (JNDI) берёт DNS со всех адаптеров, IPv6 вперёд, и наш TUN
+    /// в этом списке первый. TLauncher запускает Minecraft с
+    /// <c>-Djava.net.preferIPv4Stack=true</c>, и с ним поиск SRV падает на первом
+    /// же IPv6-сервере — игра молча идёт на порт 25565 и получает «Connection
+    /// refused» (замер jshell'ом из рантайма игры у владельца, 03.10). У кого
+    /// дома IPv6 нет, эту поломку вносили мы.
+    /// </para>
+    /// <para>
+    /// Цена: с заданным адресом sing-box не перехватывает DNS к нему по адресу
+    /// (dnsHijackAddress пуст), и запрос идёт через маршрут — где правило
+    /// hijack-dns и так стоит первым после sniff.
+    /// </para>
+    /// </remarks>
+    internal static string TunDnsAddress(string tunAddress)
+    {
+        var address = System.Net.IPAddress.Parse(tunAddress.Split('/')[0]).GetAddressBytes();
+
+        for (int i = address.Length - 1; i >= 0 && ++address[i] == 0; i--)
+        {
+        }
+
+        return new System.Net.IPAddress(address).ToString();
+    }
+
     private static JsonArray BuildTunInbound(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
         var tun = new JsonObject
@@ -958,6 +993,11 @@ public sealed class SingBoxConfigCompiler
             // и desync спокойно уходили на реальный интерфейс к WinDivert.
             ["strict_route"] = false,
             ["stack"] = "gvisor",
+
+            // Адаптеру TUN — только DNS по IPv4 (TunDnsAddress). Без ключа
+            // sing-tun ставит ему и IPv6-адрес DNS, а Java берёт DNS со всех
+            // адаптеров, IPv6 вперёд, и наш TUN в этом списке первый.
+            ["dns_address"] = new JsonArray { TunDnsAddress(options.TunAddress) },
         };
 
         if (options.Scope == TunnelScope.ProxyOnly)
