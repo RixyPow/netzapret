@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
@@ -98,9 +97,6 @@ public sealed record PresetRow(string Name, string Version, string Fake) : INoti
 
     public bool Chosen { get; set; }
 
-    /// <summary>Над строкой держат перетаскиваемую — подсвечиваем место высадки.</summary>
-    public bool Over { get; set; }
-
     /// <summary>
     /// Наш пресет, а не доставшийся от Zapret.
     /// </summary>
@@ -113,9 +109,11 @@ public sealed record PresetRow(string Name, string Version, string Fake) : INoti
         Name.StartsWith("Universal", StringComparison.OrdinalIgnoreCase);
 
     public Brush Edge =>
-        (Brush)Application.Current.FindResource(Over ? "Warn" : Chosen ? "Accent" : "Border");
+        (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
 
     public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ApplyShown => Chosen ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility VersionShown => Version.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
 
@@ -206,19 +204,18 @@ public partial class DesyncView : UserControl
                 return;
             }
 
-            var rows = PresetOrder.Apply(
+            var rows = PresetNewness.Order(
                 new PresetReader()
                     .Read(files)
-                    .Select(preset => Row(preset, settings.PresetName))
-                    .ToList(),
-                row => row.File);
+                    .Select(preset => Row(preset, settings.PresetName)),
+                row => row.Name,
+                row => row.Version);
 
             _rows = rows;
             Redraw();
 
             Status.Text = $"Пресетов: {rows.Count}, из них наших {rows.Count(r => r.Official)}. "
-                + "Выбор применяется при следующем запуске движков; порядок внутри списка "
-                + "меняется перетаскиванием за ручку слева.";
+                + "Выбор применяется при следующем запуске движков.";
 
             StartCounting(rows);
         }
@@ -381,16 +378,23 @@ public partial class DesyncView : UserControl
     private static string Covered(int domains, int addresses) => $" · {domains} доменов, {addresses} подсетей";
 
     /// <summary>
-    /// Раскладывает строки по двум спискам.
+    /// Раскладывает строки по двум спискам — с поиском, если он задан.
     /// </summary>
     /// <remarks>
     /// Пустая половина скрывается вместе с заголовком: подпись «Пресеты
-    /// сообщества» над пустотой обещает то, чего нет.
+    /// сообщества» над пустотой обещает то, чего нет. Заголовок наших при
+    /// поиске остаётся: поле поиска стоит рядом с ним.
     /// </remarks>
     private void Redraw()
     {
-        var ours = _rows.Where(row => row.Official).ToList();
-        var theirs = _rows.Where(row => !row.Official).ToList();
+        var needle = Search.Text.Trim();
+        bool searching = needle.Length > 0;
+
+        bool Fits(PresetRow row) =>
+            !searching || row.Name.Contains(needle, StringComparison.OrdinalIgnoreCase);
+
+        var ours = _rows.Where(row => row.Official && Fits(row)).ToList();
+        var theirs = _rows.Where(row => !row.Official && Fits(row)).ToList();
 
         Own.ItemsSource = null;
         Own.ItemsSource = ours;
@@ -398,8 +402,36 @@ public partial class DesyncView : UserControl
         Others.ItemsSource = null;
         Others.ItemsSource = theirs;
 
-        Show(OwnHeader, OwnNote, ours.Count > 0);
+        Show(OwnHeader, OwnNote, searching || ours.Count > 0);
         Show(OthersHeader, OthersNote, theirs.Count > 0);
+
+        NothingFound.Text = $"Пресетов с «{needle}» в имени нет.";
+        NothingFound.Visibility = searching && ours.Count == 0 && theirs.Count == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void OnSearch(object sender, TextChangedEventArgs e) => Redraw();
+
+    /// <summary>Ширина, ниже которой плитки параметров встают друг под друга.</summary>
+    private const double ParamsSideBySide = 760;
+
+    /// <summary>
+    /// Плитки «Параметров работы» рядом или друг под другом.
+    /// </summary>
+    /// <remarks>
+    /// По ширине самой сетки, а не окна: окно масштабируется («Шрифт и размер»),
+    /// и считать надо в тех точках, в которых плитки и раскладываются.
+    /// </remarks>
+    private void OnParamsSize(object sender, SizeChangedEventArgs e)
+    {
+        bool side = ParamsGrid.ActualWidth >= ParamsSideBySide;
+
+        Grid.SetRow(CaptureTile, side ? 0 : 1);
+        Grid.SetColumn(CaptureTile, side ? 2 : 0);
+        Grid.SetColumnSpan(CaptureTile, side ? 1 : 3);
+        Grid.SetColumnSpan(GameFilterTile, side ? 1 : 3);
+        CaptureTile.Margin = new Thickness(0, side ? 0 : 12, 0, 0);
     }
 
     private static void Show(UIElement header, UIElement note, bool visible)
@@ -543,7 +575,10 @@ public partial class DesyncView : UserControl
                 ? "Пакеты не правятся. Всё, что закрыто по имени, останется закрытым — кроме того, что уведено через VPN."
                 : "Применяется при запуске движков в разделе «Состояние».";
 
-        OffButton.IsEnabled = settings.PresetName is not null;
+        Recommended.Visibility = string.Equals(settings.PresetName, AppSettings.DefaultPresetName,
+            StringComparison.OrdinalIgnoreCase)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         // Открывать нечего, пока пресет не выбран: карточка в этом состоянии
         // описывает отсутствие выбора, а не файл.
@@ -669,108 +704,49 @@ public partial class DesyncView : UserControl
               + "Возможно, антивирус увёз его в карантин: WinDivert рядом с ним помечается как RiskTool.";
     }
 
-    /// <summary>
-    /// Начинает перенос строки.
-    /// </summary>
-    /// <remarks>
-    /// От ручки, а не от всей строки: строка нажатием выбирает пресет,
-    /// и совмещать в одном месте выбор и перенос значит промахиваться
-    /// то одним, то другим.
-    /// </remarks>
-    private void OnHandleDown(object sender, MouseButtonEventArgs e)
+    /// <summary>Меню «…» у строки пресета.</summary>
+    private void OnRowMore(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: PresetRow row })
-            return;
-
-        // Событие съедается, иначе нажатие дойдёт до кнопки и выберет пресет,
-        // который человек всего лишь собирался переставить.
         e.Handled = true;
 
-        DragDrop.DoDragDrop((DependencyObject)sender, row, DragDropEffects.Move);
+        if (sender is not FrameworkElement { Tag: string file } anchor)
+            return;
+
+        var path = Path.Combine(ZapretPaths.PresetDirectory, file);
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        menu.Items.Add(MenuEntry("", "Открыть в редакторе", () =>
+        {
+            Open(path);
+            Status.Text = $"Открыт {file}. Правка подействует после перезапуска движков.";
+        }));
+
+        menu.Items.Add(MenuEntry("", "Показать файл в папке", () =>
+            Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = $"/select,\"{path}\"" })));
+
+        menu.IsOpen = true;
     }
 
-    private void OnRowDragOver(object sender, DragEventArgs e)
+    private MenuItem MenuEntry(string glyph, string text, Action act)
     {
-        if (sender is not FrameworkElement { DataContext: PresetRow row }
-            || e.Data.GetData(typeof(PresetRow)) is not PresetRow moving)
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        var item = new MenuItem { Header = text, Icon = icon };
+
+        item.Click += (_, _) =>
         {
-            return;
-        }
+            try
+            {
+                act();
+            }
+            catch (Exception ex)
+            {
+                Status.Text = "Не вышло: " + ex.GetBaseException().Message;
+            }
+        };
 
-        e.Handled = true;
-
-        // Через границу списков не переставляем: место строки задаётся именем
-        // пресета, и «перенесённая» вернулась бы к своим на первом же заходе.
-        bool same = row.Official == moving.Official;
-
-        e.Effects = same ? DragDropEffects.Move : DragDropEffects.None;
-
-        bool over = same && !ReferenceEquals(row, moving);
-
-        if (row.Over == over)
-            return;
-
-        row.Over = over;
-        Redraw();
-    }
-
-    private void OnRowDragLeave(object sender, DragEventArgs e)
-    {
-        if (sender is not FrameworkElement { DataContext: PresetRow row } || !row.Over)
-            return;
-
-        row.Over = false;
-        Redraw();
-    }
-
-    /// <summary>
-    /// Ставит перенесённую строку на место той, на которую её уронили.
-    /// </summary>
-    /// <remarks>
-    /// Порядок сохраняется сразу: перетаскивание — жест без кнопки
-    /// «применить», и разложенный список, вернувшийся при следующем заходе
-    /// к прежнему виду, выглядел бы поломкой.
-    /// </remarks>
-    private void OnRowDrop(object sender, DragEventArgs e)
-    {
-        foreach (var each in _rows)
-            each.Over = false;
-
-        if (sender is not FrameworkElement { DataContext: PresetRow target }
-            || e.Data.GetData(typeof(PresetRow)) is not PresetRow moving
-            || ReferenceEquals(target, moving)
-            || target.Official != moving.Official)
-        {
-            Redraw();
-            return;
-        }
-
-        e.Handled = true;
-
-        var rows = _rows.ToList();
-        int from = rows.IndexOf(moving);
-        int to = rows.IndexOf(target);
-
-        if (from < 0 || to < 0)
-            return;
-
-        rows.RemoveAt(from);
-        rows.Insert(to, moving);
-
-        _rows = rows;
-        Redraw();
-
-        try
-        {
-            PresetOrder.Save(rows.Select(row => row.File));
-
-            int place = rows.Where(row => row.Official == moving.Official).ToList().IndexOf(moving) + 1;
-            Status.Text = $"Порядок сохранён: «{moving.Name}» теперь {place}-й в своём списке.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Порядок не записался: " + ex.GetBaseException().Message;
-        }
+        return item;
     }
 
     private void OnOpenFolder(object sender, RoutedEventArgs e)
@@ -978,9 +954,7 @@ public partial class DesyncView : UserControl
             Save(name);
     }
 
-    private void OnOff(object sender, RoutedEventArgs e) => Save(null);
-
-    private void Save(string? name)
+    private void Save(string name)
     {
         try
         {
@@ -989,18 +963,17 @@ public partial class DesyncView : UserControl
 
             ShowChosen(settings);
 
-            {
-                foreach (var row in _rows)
-                    row.Chosen = string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase);
+            // Каталог говорит о выбранном пресете — сменился он, сменился и счёт.
+            ShowCatalog(settings);
 
-                Redraw();
-            }
+            foreach (var row in _rows)
+                row.Chosen = string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase);
 
-            Status.Text = name is null
-                ? "Десинк выключен. Применится при следующем запуске движков."
-                : $"Выбран «{name}». Применится при следующем запуске движков.";
+            Redraw();
 
-            this.Offer(name is null ? "Десинк выключен" : $"Выбран пресет «{name}»");
+            Status.Text = $"Выбран «{name}». Применится при следующем запуске движков.";
+
+            this.Offer($"Выбран пресет «{name}»");
         }
         catch (Exception ex)
         {

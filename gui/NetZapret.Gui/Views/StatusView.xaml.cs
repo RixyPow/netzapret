@@ -936,7 +936,7 @@ public partial class StatusView : UserControl
     /// Выпадающий список пресетов у «Изменить».
     /// </summary>
     /// <remarks>
-    /// Список тот же и в том же порядке, что в «Десинке» (PresetOrder), и запись
+    /// Список тот же и в том же порядке, что в «Десинке» (PresetNewness), и запись
     /// та же — PresetName. Последним пунктом — сам раздел: там видно, чем
     /// пресеты отличаются, а здесь только имена.
     /// </remarks>
@@ -949,13 +949,14 @@ public partial class StatusView : UserControl
         {
             chosen = AppSettings.Load(AppSettings.DefaultPath).PresetName;
 
-            var names = PresetOrder.Apply(
-                NetZapret.Zapret.ZapretPaths.PresetFiles.Select(Path.GetFileName).OfType<string>().ToList(),
-                file => file);
+            var presets = NetZapret.Zapret.PresetNewness.Order(
+                new NetZapret.Zapret.PresetReader().Read(NetZapret.Zapret.ZapretPaths.PresetFiles),
+                preset => Path.GetFileNameWithoutExtension(preset.FilePath),
+                preset => preset.BuiltinVersion);
 
-            foreach (var file in names)
+            foreach (var preset in presets)
             {
-                var name = Path.GetFileNameWithoutExtension(file);
+                var name = Path.GetFileNameWithoutExtension(preset.FilePath);
                 var item = new MenuItem { Header = name, Tag = name };
 
                 if (string.Equals(name, chosen, StringComparison.OrdinalIgnoreCase))
