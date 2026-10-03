@@ -75,6 +75,27 @@ public sealed class ShippedRulesTests
     }
 
     /// <summary>
+    /// Twitch — напрямую по умолчанию: под секцией «Twitch» пресета эфиры не играют
+    /// (ошибка #2000, жалоба и замер 03.10).
+    /// </summary>
+    [Fact]
+    public void Twitch_goes_around_the_desync_by_default()
+    {
+        var config = Config();
+        if (config is null)
+            return;
+
+        var engine = RuleSetLoader.LoadFromFile(Path.Combine(config, "rules.yaml"));
+        NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, Path.GetDirectoryName(config));
+
+        var shield = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(
+            engine.RuleSet, hostsPath: Path.Combine(Path.GetTempPath(), $"no-hosts-{Guid.NewGuid():N}"));
+
+        foreach (var host in new[] { "www.twitch.tv", "usher.ttvnw.net", "eun12.playlist.ttvnw.net", "static-cdn.jtvnw.net" })
+            Assert.Equal(NetZapret.Proxy.DesyncBypass.Direct, NetZapret.Proxy.HostsFile.BypassFor(shield, host));
+    }
+
+    /// <summary>
     /// Зоны Akamai — в щите «напрямую», а имена Spotify и TikTok на них —
     /// за своими частями (03.10, картинки Battle.net под приёмом секции Fortnite).
     /// </summary>

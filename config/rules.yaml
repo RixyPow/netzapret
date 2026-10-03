@@ -109,6 +109,18 @@ rules:
     value: config/lists/kick.txt
     mode: direct
 
+  # Twitch — напрямую (03.10). Жалоба того же дня: эфиры не играют,
+  # ошибка #2000. У пользователя Twitch шёл по умолчанию на десинк, и его
+  # «Сайт не открывается?» записал: «как есть (десинк) — нет, DPI по TLS;
+  # напрямую — да». Замер A/B/A у владельца через щит: под секцией «Twitch»
+  # пресета (V11 Lite) www.twitch.tv, static-cdn.jtvnw.net и плейлист эфира
+  # на *.playlist.ttvnw.net висят 6 из 6, напрямую — 6 из 6 за 0,07–0,19 с.
+  # Весь путь эфира напрямую цел: токен, плейлист за 0,16 с, кусок видео
+  # 1,8 МБ за 0,34 с. Не заблокирован — десинку здесь чинить нечего.
+  - match: hostlist
+    value: config/lists/twitch.txt
+    mode: direct
+
   - match: hostlist
     value: config/lists/kick-video.txt
     mode: direct
