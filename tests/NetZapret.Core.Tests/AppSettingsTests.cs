@@ -58,7 +58,7 @@ public sealed class AppSettingsTests : IDisposable
     [Fact]
     public void SavingWaitsForAReaderAndLeavesNoTemp()
     {
-        new AppSettings { PresetName = "до" }.Save(_path);
+        (AppSettings.Fresh with { PresetName = "до" }).Save(_path);
 
         var reader = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var release = new Thread(() =>
@@ -69,7 +69,7 @@ public sealed class AppSettingsTests : IDisposable
 
         release.Start();
 
-        new AppSettings { PresetName = "после" }.Save(_path);
+        (AppSettings.Fresh with { PresetName = "после" }).Save(_path);
         release.Join();
 
         Assert.Equal("после", AppSettings.Load(_path).PresetName);
@@ -114,6 +114,33 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Всех переводят на V11 Lite один раз (03.10); выключенный десинк так и остаётся.
+    /// </summary>
+    [Theory]
+    [InlineData("""{ "PresetName": "Universal V10" }""", "Universal V11 Lite")]
+    [InlineData("""{ "PresetName": "Default v1 (game filter)" }""", "Universal V11 Lite")]
+    [InlineData("""{ "PresetName": null }""", null)]
+    [InlineData("""{ "PresetV11Lite": true, "PresetName": "Universal V10" }""", "Universal V10")]
+    public void PresetIsMovedToV11LiteOnce(string json, string? expected)
+    {
+        File.WriteAllText(_path, json);
+
+        var read = AppSettings.Load(_path);
+
+        Assert.Equal(expected, read.PresetName);
+        Assert.True(read.PresetV11Lite);
+    }
+
+    /// <summary>Свежие настройки с выбранным потом V10 ещё раз не переводятся.</summary>
+    [Fact]
+    public void FreshSettingsKeepAPresetChosenLater()
+    {
+        (AppSettings.Fresh with { PresetName = "Universal V10" }).Save(_path);
+
+        Assert.Equal("Universal V10", AppSettings.Load(_path).PresetName);
+    }
+
+    /// <summary>
     /// Настройки с нуля, сохранённые с включённым game filter, не переводятся ещё раз.
     /// </summary>
     [Fact]
@@ -127,7 +154,9 @@ public sealed class AppSettingsTests : IDisposable
     [Fact]
     public void SettingsSurviveRoundTrip()
     {
-        var settings = new AppSettings
+        // С отметками разовых переводов, как у настроек этой версии: без них
+        // чтение перевело бы пресет на V11 Lite (PresetIsMovedToV11LiteOnce).
+        var settings = AppSettings.Fresh with
         {
             SubscriptionUrl = "https://example.com/sub/token",
             Mode = OperatingMode.ProxyAll,

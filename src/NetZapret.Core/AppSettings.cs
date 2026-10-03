@@ -621,6 +621,37 @@ public sealed record AppSettings
         read.GameFilterReset == true ? read : read with { GameFilter = false, GameFilterReset = true };
 
     /// <summary>
+    /// Переведён ли пресет на Universal V11 Lite разовым переводом (03.10); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? PresetV11Lite { get; init; }
+
+    /// <summary>
+    /// Разовый перевод всех на Universal V11 Lite (владелец, 03.10).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Умолчание сменилось в тот же день (см. <see cref="PresetName"/>), но оно
+    /// касается только новых установок, а замеры того дня — у всех: на V10
+    /// игровой UDP платил winws2 за каждый новый поток, а сайты Cloudflare
+    /// забирала по адресу секция IP fallback.
+    /// </para>
+    /// <para>
+    /// Переводится всякий выбранный пресет. «Не запускать десинк»
+    /// (<c>null</c>) остаётся как был: перевод молча включил бы десинк тому,
+    /// кто его выключил. Один раз: выбравший после перевода другой пресет
+    /// его и сохраняет.
+    /// </para>
+    /// </remarks>
+    private static AppSettings PresetOnce(AppSettings read) =>
+        read.PresetV11Lite == true
+            ? read
+            : read with
+            {
+                PresetName = read.PresetName is null ? null : DefaultPresetName,
+                PresetV11Lite = true,
+            };
+
+    /// <summary>
     /// Настройки с нуля — с отметками разовых переводов.
     /// </summary>
     /// <remarks>
@@ -628,7 +659,7 @@ public sealed record AppSettings
     /// и следующее чтение перевело бы их ещё раз: включённый человеком game
     /// filter молча выключился бы.
     /// </remarks>
-    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true };
+    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true };
 
     /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
     [JsonIgnore]
@@ -685,11 +716,11 @@ public sealed record AppSettings
             // сертификатом, а записан он почти у всех потому, что стоял
             // по умолчанию, а не потому, что выбран. Без перевода смена
             // умолчания 27.09 досталась бы только новым установкам.
-            return GameFilterOnce(WarpAsPath(read with
+            return PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer == "8.8.8.8" ? GoogleDns : read.DnsServer,
-            }));
+            })));
         }
         catch (Exception)
         {
