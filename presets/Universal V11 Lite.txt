@@ -312,19 +312,6 @@
 
 --new
 
---name=discord.com (IP fallback)
---filter-tcp=80,443-65535
-# V11 Lite (03.10): свой список — сети Discord и WARP, а не весь ipset-discord.
-# В нём Google, Google Cloud, Cloudflare с чужими сайтами, AWS, игровой хостинг
-# i3D.net, МГТС, и эта секция забирала их сайты по адресу раньше их секций
-# по именам. Замер A/B 03.10 — в config\lists\ipset-discord-tcp.txt.
---ipset=lists/nz-ipset-discord-tcp.txt
---out-range=-d10
---lua-desync=send:repeats=3
---lua-desync=syndata:blob=tls_google
-
---new
-
 --name=Голосовые звонки/чаты
 --filter-l7=stun,discord
 --out-range=-n8
@@ -864,3 +851,25 @@
 --out-range=-d8
 --lua-desync=fake:blob=tls_google:ip_autottl=-1,3-20:ip6_autottl=-1,3-20:repeats=6:tcp_ack=-66000
 --lua-desync=multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1
+--new
+
+# V11 Lite (03.10): последней, под всеми секциями по именам, а не на 24-м
+# месте, как в V10. Секция по адресу подходит без имени и после ClientHello
+# выигрывала у всех секций по именам ниже себя: в её ipset-discord лежат
+# Google, Google Cloud, Cloudflare с чужими сайтами, AWS, игровой хостинг
+# i3D.net, МГТС (RIPEstat), и случайная выборка — 22 % «Russia blacklist»
+# и 21 % «Моих сайтов» — доставалась ей. Отсюда, снизу, она по-прежнему
+# берёт SYN (имени на нём ещё нет, секции по именам его пропускают) — и это
+# нужно: замер A/B/C 03.10 на сайтах Cloudflare 104.x, 172.x и Google Cloud.
+#   на своём месте (V10)            — i.ua, ukr.net, alestongroup.ru: 0 из 3;
+#   последней, список полный        — те же: 3 из 3, segodnya, fandom: 3 из 3;
+#   на месте, без этих сетей вовсе  — все пятеро: 0 из 3.
+# То есть сайтам Cloudflare нужна её подделка SYN, а ClientHello — рецепт
+# их секции по имени. Держится на ней и рукопожатие WARP (162.159.198.x).
+--name=discord.com (IP fallback)
+--filter-tcp=80,443-65535
+--ipset=lists/ipset-discord.txt
+--out-range=-d10
+--lua-desync=send:repeats=3
+--lua-desync=syndata:blob=tls_google
+
