@@ -132,7 +132,7 @@ public sealed record AppSettings
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
     /// <remarks>
     /// <para>
-    /// По умолчанию — Universal V10: он идёт в сборке и покрывает больше всего
+    /// По умолчанию — Universal V11 Lite: он идёт в сборке и покрывает больше всего
     /// случаев. Пустое значение означало бы, что при первом запуске десинк
     /// молча не работает, а человек об этом узнаёт по неоткрывающимся сайтам.
     /// Если такого пресета нет, обзор состояния скажет об этом прямо.
@@ -151,6 +151,16 @@ public sealed record AppSettings
     /// Плюс GitHub и приложение Bluesky, которым рецепт выбран после V9.
     /// </para>
     /// <para>
+    /// Был V10, стал V11 Lite (владелец, 03.10) — по замерам того же дня.
+    /// UDP в winws2 — только QUIC, голос Discord и AnyDesk: всё прочее под
+    /// перехватом платило winws2 за каждый новый поток, игры в том числе.
+    /// «discord.com (IP fallback)» стоит последней — её подделка SYN нужна
+    /// сайтам Cloudflare, а ClientHello достаётся их секциям по именам; и своя
+    /// секция для Cloudflare 8.6.112.x. На 14 нейтральных сайтах — 31 удачное
+    /// рукопожатие из 42 против 12–18 у V10; полная проверка блокировок —
+    /// 149 имён из 153.
+    /// </para>
+    /// <para>
     /// Смена касается только новых установок. Настройки переживают обновление
     /// намеренно — в них работа человека, — поэтому у тех, кто уже запускался,
     /// останется прежний выбор, и меняется он в меню.
@@ -158,7 +168,7 @@ public sealed record AppSettings
     /// </remarks>
     public string? PresetName { get; init; } = DefaultPresetName;
 
-    public const string DefaultPresetName = "Universal V10";
+    public const string DefaultPresetName = "Universal V11 Lite";
 
     /// <summary>Тег сервера либо <c>null</c> для автоподбора по задержке.</summary>
     public string? PreferredServer { get; init; }
