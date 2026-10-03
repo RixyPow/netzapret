@@ -280,6 +280,35 @@ for %%D in (exe lists lua bin windivert.filter) do (
         )
     )
 )
+
+rem ---------------------------------------------------------------------------
+rem winws2 itself from bol-van's release, over the copy from the Zapret GUI.
+rem
+rem The Zapret GUI ships winws2 v1.0.3. In it every profile search checks the
+rem modification time of every hostlist file of every profile before it even
+rem looks at the port, and under Cygwin that is ~0.3 ms of kernel time a file.
+rem Measured 03.10 on Universal V10: a new connection cost winws2 28-38 ms of
+rem CPU in its single thread. v1.0.5.1 checks the port first ("optimize
+rem profile search. fast checks first"); on port 444 the cost fell from 34-39
+rem to 14-22 ms, and the desync opened the same sites.
+rem
+rem Only the executable: cygwin1.dll is byte-identical between the two, and
+rem WinDivert.dll stays the Zapret GUI one, which loads Monkey64.sys. Put the
+rem release's binaries\windows-x86_64\winws2.exe anywhere under tools\; without
+rem it the build keeps the Zapret GUI copy.
+rem ---------------------------------------------------------------------------
+set "WINWS2="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\winws2.exe" 2^>nul') do set "WINWS2=%%F"
+
+if defined WINWS2 (
+    echo Bundling winws2 from %WINWS2%
+    copy /y "%WINWS2%" "%ENGINES%\zapret\exe\winws2.exe" >nul
+    if errorlevel 1 (
+        echo Failed to bundle winws2
+        exit /b 1
+    )
+)
+
 rem ---------------------------------------------------------------------------
 rem Our own lists, delivered where the engine looks for them.
 rem

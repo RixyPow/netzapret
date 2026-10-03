@@ -13,6 +13,15 @@
 | --- | --- | --- |
 | `engines\sing-box\` | каталог с `sing-box.exe` из `tools\` | ~53 МБ |
 | `engines\zapret\` | `exe`, `lists`, `lua`, `bin`, `windivert.filter` | ~15 МБ |
+| `engines\zapret\exe\winws2.exe` | `winws2.exe` из `tools\` (любая подпапка) поверх копии из Zapret GUI; нет его — остаётся та | ~1 МБ |
+
+Свой `winws2.exe` с 03.10: Zapret GUI везёт 1.0.3, а в ней каждый поиск профиля
+проверял время изменения всех файлов списков у всех профилей ещё до порта —
+новое соединение стоило winws2 28–38 мс процессора (замер на Universal V10).
+В 1.0.5.1 сначала проверяется порт. Берётся `binaries\windows-x86_64\winws2.exe`
+из выпуска [bol-van/zapret2](https://github.com/bol-van/zapret2/releases),
+сейчас — `tools\zapret2-v1.0.5.2\`. `cygwin1.dll` у них одинаковый,
+`WinDivert.dll` остаётся от Zapret GUI: он грузит `Monkey64.sys`.
 | `presets\` | `presets\` этого репозитория | 40 КБ |
 
 Каталог sing-box копируется целиком, а не одним файлом: рядом лежит `wintun.dll`,

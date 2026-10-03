@@ -171,6 +171,17 @@ for %%D in (exe lists lua bin windivert.filter) do (
         if errorlevel 8 exit /b 1
     )
 )
+
+rem winws2 from bol-van's release over the Zapret GUI copy - same as build.cmd,
+rem see the reasoning there (profile search cost, measured 03.10).
+set "WINWS2="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\winws2.exe" 2^>nul') do set "WINWS2=%%F"
+
+if defined WINWS2 (
+    echo Bundling winws2 from %WINWS2%
+    copy /y "%WINWS2%" "%ENGINES%\zapret\exe\winws2.exe" >nul
+    if errorlevel 1 exit /b 1
+)
 rem Our own lists, delivered where the engine looks for them. Preset sections
 rem name hostlists as "lists/<name>" relative to the Zapret root, and winws2
 rem resolves them there - not next to our config, so a section pointing at

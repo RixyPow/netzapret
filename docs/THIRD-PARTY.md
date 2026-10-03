@@ -110,10 +110,13 @@ Red Hat.
 
 ## Zapret
 
-`engines/zapret/exe/winws2.exe` — версия 1.0.3 — и шесть модулей его библиотеки
-в `engines/zapret/lua/`: `zapret-lib.lua`, `zapret-antidpi.lua`,
-`zapret-auto.lua`, `zapret-obfs.lua`, `zapret-pcap.lua`, `zapret-tests.lua`.
-Оттуда же часть образцов пакетов в `bin/` и частей фильтра в `windivert.filter/`.
+`engines/zapret/exe/winws2.exe` — версия 1.0.5.2 (коммит `6b6c63e3`), с 03.10
+прямо из выпуска bol-van: сборка кладёт его поверх копии из Zapret GUI, где
+версия 1.0.3. И шесть модулей его библиотеки в `engines/zapret/lua/`:
+`zapret-lib.lua`, `zapret-antidpi.lua`, `zapret-auto.lua`, `zapret-obfs.lua`,
+`zapret-pcap.lua`, `zapret-tests.lua` — эти по-прежнему из Zapret GUI, то есть
+от версии 1.0.3; номер совместимости Lua у обеих версий один (6). Оттуда же
+часть образцов пакетов в `bin/` и частей фильтра в `windivert.filter/`.
 
 Всё остальное в `engines/zapret/` — не его, а Zapret GUI, о нём следующий
 раздел. До 30.09 этот документ приписывал bol-van папку целиком, и это было
