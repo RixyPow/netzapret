@@ -314,7 +314,11 @@
 
 --name=discord.com (IP fallback)
 --filter-tcp=80,443-65535
---ipset=lists/ipset-discord.txt
+# V11 Lite (03.10): свой список — сети Discord и WARP, а не весь ipset-discord.
+# В нём Google, Google Cloud, Cloudflare с чужими сайтами, AWS, игровой хостинг
+# i3D.net, МГТС, и эта секция забирала их сайты по адресу раньше их секций
+# по именам. Замер A/B 03.10 — в config\lists\ipset-discord-tcp.txt.
+--ipset=lists/nz-ipset-discord-tcp.txt
 --out-range=-d10
 --lua-desync=send:repeats=3
 --lua-desync=syndata:blob=tls_google
@@ -733,6 +737,20 @@
 --name=AnyDesk TCP
 --filter-tcp=80,443,6568
 --ipset=lists/ipset-anydesk.txt
+--out-range=-d8
+--lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
+
+--new
+
+# V11 Lite (03.10): соседняя сеть Cloudflare с тем же рецептом, что у секции
+# выше, — в ipset-anydesk лежит 8.47.0.0/16, и сайты там он открывает (замер:
+# jut.su, oxu.az, element.io, f.ua — 3 из 3 через 8.47.69.6), а через
+# 8.6.112.6 те же сайты — 0 из 3: этой сети не было ни в одном списке.
+# Стоит там же, где «AnyDesk TCP», — после секций по именам, кроме трёх
+# последних, как и она.
+--name=Cloudflare 8.6 (рецепт AnyDesk TCP)
+--filter-tcp=80,443
+--ipset=lists/nz-ipset-cloudflare-8.txt
 --out-range=-d8
 --lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-1000:tcp_md5:repeats=4
 
