@@ -286,6 +286,7 @@ public partial class StatusView : UserControl
             ShowAutostart();
             ShowWidth(settings);
             ShowSupport(settings);
+            MainWindow.GreetingChanged += OnGreetingChanged;
 
             // Проверка обновлений идёт при запуске окна и может закончиться
             // уже после того, как «Главная» показана, — поэтому и подписка.
@@ -305,6 +306,7 @@ public partial class StatusView : UserControl
         Unloaded += (_, _) =>
         {
             UpdateNotice.Changed -= OnUpdateChanged;
+            MainWindow.GreetingChanged -= OnGreetingChanged;
             _refresh.Stop();
 
             // Анимация на скрытом виде продолжала бы будить композитор
@@ -316,9 +318,11 @@ public partial class StatusView : UserControl
     private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
 
     private void ShowSupport(AppSettings settings) =>
-        SupportCard.Visibility = settings.OnboardingDone && !settings.SupportCardHidden
+        SupportCard.Visibility = settings.OnboardingDone && !settings.SupportCardHidden && !MainWindow.GreetingShown
             ? Visibility.Visible
             : Visibility.Collapsed;
+
+    private void OnGreetingChanged() => ShowSupport(AppSettings.Load(AppSettings.DefaultPath));
 
     /// <summary>Звезда ставится на странице репозитория — на неё и ведём.</summary>
     private void OnStar(object sender, RoutedEventArgs e) => OpenLink(About.Repository);

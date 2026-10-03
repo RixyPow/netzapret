@@ -102,15 +102,60 @@
             </ContentControl>
 
             <!--
+                Всплывающие карточки — стопкой внизу справа, чтобы две разом
+                не легли одна на другую.
+            -->
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,28,24">
+
+            <!--
+                После обновления (владелец, 03.10): звезда на GitHub и канал.
+                Один раз на каждую новую версию (UpdateGreeting) и сама
+                не уходит — закрывается кнопкой: кнопки в ней и есть смысл.
+            -->
+            <Border x:Name="GreetingToast" Visibility="Collapsed" MaxWidth="460" Margin="0,0,0,12"
+                    Background="{DynamicResource Surface}"
+                    BorderBrush="{DynamicResource Warn}" BorderThickness="1.5"
+                    CornerRadius="14" Padding="18,15">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE735;" FontSize="16"
+                                   Foreground="{DynamicResource Warn}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock x:Name="GreetingTitle" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Если программа помогает — поставьте звезду на GitHub и подпишитесь на канал: так о ней узнают другие, а вы — о новых версиях." />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Style="{StaticResource Ghost}" Content="Закрыть"
+                                Padding="16,7" Margin="0,0,8,0" Click="OnGreetingClose" />
+                        <Button Style="{StaticResource Ghost}" Padding="14,7" Margin="0,0,8,0" Click="OnGreetingTelegram"
+                                ToolTip="Новости в телеграм-канале">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="Канал" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource Primary}" Padding="16,8" Click="OnGreetingStar"
+                                ToolTip="Страница NetZapret на GitHub — звезда справа вверху">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE734;" Margin="0,0,8,0"
+                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <TextBlock Text="Звезда на GitHub" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!--
                 Предложение перезапустить движки. Внизу справа и само уходит:
                 почти всё, что меняется в окне, применяется перезапуском,
                 и говорить об этом строкой в глубине раздела значит не сказать
                 вовсе. Но и держать перед глазами нельзя — правок за один
                 заход бывает десяток.
             -->
-            <Border x:Name="Toast" Visibility="Collapsed"
-                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,28,24" MaxWidth="460"
+            <Border x:Name="Toast" Visibility="Collapsed" MaxWidth="460"
                     Background="{DynamicResource Surface}"
                     BorderBrush="{DynamicResource Accent}" BorderThickness="1.5"
                     CornerRadius="14" Padding="18,15">
@@ -127,6 +172,8 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

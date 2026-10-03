@@ -652,6 +652,15 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// Версия программы, запущенная последней, — для уведомления после обновления (03.10).
+    /// </summary>
+    /// <remarks>
+    /// Без сборки, одни три числа (<see cref="Updates.UpdateCheck.Current"/>): своя
+    /// пересборка обновлением не считается. Решение — в <see cref="Updates.UpdateGreeting"/>.
+    /// </remarks>
+    public string? LastRunVersion { get; init; }
+
+    /// <summary>
     /// Настройки с нуля — с отметками разовых переводов.
     /// </summary>
     /// <remarks>

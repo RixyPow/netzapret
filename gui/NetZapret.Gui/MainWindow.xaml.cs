@@ -25,6 +25,7 @@ public partial class MainWindow : Window
 
         VersionLabel.Text = "версия " + Version();
         ShowOnboardingIfNeeded();
+        Loaded += (_, _) => ShowGreetingIfDue();
 
         SourceInitialized += (_, _) =>
         {
@@ -367,6 +368,76 @@ public partial class MainWindow : Window
     }
 
     private void OnToastLater(object sender, RoutedEventArgs e) => HideToast();
+
+    /// <summary>
+    /// Показано ли в этот запуск уведомление после обновления. Пока да,
+    /// «Главная» прячет свою карточку со звездой: та же просьба дважды
+    /// на одном экране (снимок 03.10) читается как назойливость. И после
+    /// «Закрыть» не возвращает — просьба в этот запуск уже прозвучала.
+    /// </summary>
+    internal static bool GreetingShown { get; private set; }
+
+    /// <summary>Уведомление появилось — «Главная», открытая раньше, прячет карточку.</summary>
+    internal static event Action? GreetingChanged;
+
+    /// <summary>
+    /// Уведомление после обновления — звезда и канал, один раз на версию (UpdateGreeting, 03.10).
+    /// </summary>
+    /// <remarks>
+    /// Версия запоминается при каждом запуске, где она сменилась, — и когда
+    /// уведомление показано, и когда нет (после мастера первого запуска):
+    /// иначе следующий запуск той же версии принял бы её за новую.
+    /// </remarks>
+    private async void ShowGreetingIfDue()
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var current = UpdateCheck.Current;
+            bool due = UpdateGreeting.Due(settings, current);
+
+            if (settings.LastRunVersion != current)
+                UpdateGreeting.Seen(settings, current).Save(AppSettings.DefaultPath);
+
+            if (!due)
+                return;
+
+            // Чуть погодя: при запуске окно и так двигается, и карточка,
+            // выехавшая вместе с ним, потерялась бы среди прочего.
+            await Task.Delay(TimeSpan.FromSeconds(1.5));
+
+            GreetingTitle.Text = $"NetZapret обновлён до {current}";
+            GreetingShown = true;
+            GreetingChanged?.Invoke();
+            GreetingToast.BeginAnimation(OpacityProperty, null);
+            GreetingToast.Visibility = Visibility.Visible;
+            Motion.Arrive(GreetingToast, dy: 18);
+
+            Journal.Write("окно", $"уведомление после обновления до {current}");
+        }
+        catch (Exception)
+        {
+            // Не прочиталось или не записалось — без уведомления: программе оно не нужно.
+        }
+    }
+
+    private void OnGreetingClose(object sender, RoutedEventArgs e) => Motion.Leave(GreetingToast);
+
+    private void OnGreetingStar(object sender, RoutedEventArgs e) => OpenLink(About.Repository);
+
+    private void OnGreetingTelegram(object sender, RoutedEventArgs e) => OpenLink(About.Telegram);
+
+    private static void OpenLink(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // Нет браузера по умолчанию — те же ссылки есть на «Главной» и в «О программе».
+        }
+    }
 
     private void HideToast()
     {
