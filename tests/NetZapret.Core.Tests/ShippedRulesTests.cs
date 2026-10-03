@@ -73,4 +73,61 @@ public sealed class ShippedRulesTests
 
         Assert.NotEmpty(RuleSetLoader.LoadFromFile(Path.Combine(config, "rules.yaml")).RuleSet.Rules);
     }
+
+    /// <summary>
+    /// Зоны Akamai — в щите «напрямую», а имена Spotify и TikTok на них —
+    /// за своими частями (03.10, картинки Battle.net под приёмом секции Fortnite).
+    /// </summary>
+    [Fact]
+    public void Akamai_zones_are_shielded_but_named_services_keep_their_parts()
+    {
+        var config = Config();
+        if (config is null)
+            return;
+
+        var engine = RuleSetLoader.LoadFromFile(Path.Combine(config, "rules.yaml"));
+        NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, Path.GetDirectoryName(config));
+
+        var shield = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(
+            engine.RuleSet, hostsPath: Path.Combine(Path.GetTempPath(), $"no-hosts-{Guid.NewGuid():N}"));
+
+        Assert.Contains(shield, each => each.Name == "akamaized.net" && each.Why == NetZapret.Proxy.DesyncBypass.Direct);
+        Assert.Contains(shield, each => each.Name == "akamaihd.net" && each.Why == NetZapret.Proxy.DesyncBypass.Direct);
+
+        static Connections.ConnectionEvent To(string host) => new()
+        {
+            Timestamp = DateTimeOffset.UnixEpoch,
+            Protocol = Connections.ProtocolKind.Tcp,
+            RemoteAddress = System.Net.IPAddress.Parse("203.0.113.7"),
+            RemotePort = 443,
+            Hostname = host,
+        };
+
+        Assert.Equal(RoutingMode.Direct, engine.Evaluate(To("blz-contentstack-images.akamaized.net")).Mode);
+        Assert.Equal(RoutingMode.Direct, engine.Evaluate(To("bnetcmsus-a.akamaihd.net")).Mode);
+
+        // Путь, выбранный человеком части со своими именами на Akamai, бьёт зону:
+        // слой человека проверяется раньше базового.
+        var user = Path.Combine(Path.GetTempPath(), $"rules-user-{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            File.WriteAllText(user, """
+                rules:
+                  - match: hostlist
+                    value: "config/lists/spotify-cdn.txt"
+                    mode: proxy
+                """);
+
+            var layered = RuleSetLoader.LoadLayered(Path.Combine(config, "rules.yaml"), user);
+            NetZapret.Zapret.RuleSetExpander.Expand(layered.RuleSet, Path.GetDirectoryName(config));
+
+            Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("audio-ak-spotify-com.akamaized.net")).Mode);
+            Assert.Equal(RoutingMode.Direct, layered.Evaluate(To("blz-contentstack-images.akamaized.net")).Mode);
+        }
+        finally
+        {
+            File.Delete(user);
+        }
+    }
 }
