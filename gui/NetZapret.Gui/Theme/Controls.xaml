@@ -591,7 +591,13 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <Border Background="Transparent" Padding="6,4">
+                    <!--
+                        Щелчком тоже (InfoTip) и без секундной паузы: жалоба
+                        03.10 — значок нажимали, а подсказка не открывалась.
+                    -->
+                    <Border Background="Transparent" Padding="6,4"
+                            local:InfoTip.OpensOnClick="True"
+                            ToolTipService.InitialShowDelay="200">
                         <Border.ToolTip>
                             <ToolTip>
                                 <TextBlock TextWrapping="Wrap"
