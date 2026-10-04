@@ -43,7 +43,8 @@ public sealed class TrayMenuTests
                 AllHealthy: false,
                 Tunnel: ServiceHealth.Healthy,
                 Desync: null,
-                Busy: true));
+                Busy: true,
+                Stopping: true));
 
             var warn = (SolidColorBrush)Application.Current.FindResource("Warn");
 
@@ -72,6 +73,38 @@ public sealed class TrayMenuTests
 
             Assert.Equal("Запустить", ((Button)menu.FindName("Toggle")).Content);
             Assert.Equal("—", ((TextBlock)menu.FindName("Tunnel")).Text);
+
+            menu.Close();
+        });
+    }
+
+    /// <summary>
+    /// Пока надзор поднимает движки, трей говорит «Запускается…» и не предлагает
+    /// запустить второй раз (владелец 04.10: «несколько раз нажимаю на него»).
+    /// </summary>
+    [Fact]
+    public void StartingSaysSoAndOffersToStop()
+    {
+        var status = new TrayStatus(Running: false, AllHealthy: false, Tunnel: null, Desync: null, Busy: false, Starting: true);
+
+        Assert.Equal("Запускается…", status.Headline);
+        Assert.Equal("Перезапускается…", (status with { Running = true, Busy = true, Starting = false }).Headline);
+        Assert.Equal("Останавливается…", (status with { Running = true, Busy = true, Stopping = true }).Headline);
+
+        Sta.Run(() =>
+        {
+            var menu = new TrayMenu(() => { }, _ => { }, () => { }, _ => { });
+            menu.Render(status);
+
+            var toggle = (Button)menu.FindName("Toggle");
+
+            Assert.Equal("Остановить", toggle.Content);
+            Assert.True(toggle.IsEnabled);
+            Assert.Equal("запускается", ((TextBlock)menu.FindName("Tunnel")).Text);
+
+            menu.Render(status with { Busy = true });
+            Assert.Equal("Запускаю…", toggle.Content);
+            Assert.False(toggle.IsEnabled);
 
             menu.Close();
         });

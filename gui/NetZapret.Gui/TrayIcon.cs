@@ -79,6 +79,9 @@ internal sealed class TrayIcon : IDisposable
 
     private bool _busy;
 
+    /// <summary>Трей сам гасит движки — «Останавливается…», а не «Работает» до последней секунды.</summary>
+    private bool _stopping;
+
     public TrayIcon()
     {
         // Меню — своё окно WPF (TrayMenu), а не ContextMenuStrip. Системное
@@ -186,7 +189,7 @@ internal sealed class TrayIcon : IDisposable
             Readd();
         }
 
-        var status = TrayStatus.Read(_busy);
+        var status = TrayStatus.Read(_busy, _stopping);
 
         // Меню перерисовывается, только пока его видно: спрятанному
         // незачем, а открытое обязано показывать живое состояние.
@@ -214,7 +217,7 @@ internal sealed class TrayIcon : IDisposable
         try
         {
             _menu ??= new TrayMenu(Toggle, ChooseMode, Show, Quit);
-            _menu.Render(TrayStatus.Read(_busy));
+            _menu.Render(TrayStatus.Read(_busy, _stopping));
 
             try
             {
@@ -231,7 +234,7 @@ internal sealed class TrayIcon : IDisposable
                 Discard(_menu);
 
                 _menu = new TrayMenu(Toggle, ChooseMode, Show, Quit);
-                _menu.Render(TrayStatus.Read(_busy));
+                _menu.Render(TrayStatus.Read(_busy, _stopping));
                 _menu.PopUp();
             }
         }
@@ -258,14 +261,15 @@ internal sealed class TrayIcon : IDisposable
         if (_busy)
             return;
 
+        // Не по одному файлу состояния: он появляется, лишь когда движки
+        // подняты, и посреди подъёма трей предлагал запустить второй раз.
         _busy = true;
+        _stopping = EngineControl.IsRunning;
         Update();
 
         try
         {
-            // Не по одному файлу состояния: он появляется, лишь когда движки
-            // подняты, и посреди подъёма трей предлагал запустить второй раз.
-            if (EngineControl.IsRunning)
+            if (_stopping)
                 await EngineControl.StopAsync("меню трея", CancellationToken.None);
             else
                 await EngineControl.StartAsync("меню трея", CancellationToken.None);
@@ -277,6 +281,7 @@ internal sealed class TrayIcon : IDisposable
         finally
         {
             _busy = false;
+            _stopping = false;
             Update();
         }
     }
@@ -356,6 +361,7 @@ internal sealed class TrayIcon : IDisposable
         if (stopEngines)
         {
             _busy = true;
+            _stopping = true;
             Update();
 
             try

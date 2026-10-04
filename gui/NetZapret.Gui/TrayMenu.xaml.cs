@@ -14,21 +14,35 @@ using NetZapret.Supervisor;
 namespace NetZapret.Gui;
 
 /// <summary>Что показать в меню трея — снимок состояния движков.</summary>
+/// <param name="Starting">
+/// Надзор поднят, а движки ещё не готовы. До 04.10 трей этого не знал:
+/// файл состояния появляется, лишь когда движки подняты (до 20 с), и всё
+/// это время меню писало «Остановлено» и снова предлагало «Запустить» —
+/// владелец нажимал по нескольку раз.
+/// </param>
+/// <param name="Stopping">Трей сам сейчас гасит движки.</param>
 internal sealed record TrayStatus(
     bool Running,
     bool AllHealthy,
     ServiceHealth? Tunnel,
     ServiceHealth? Desync,
-    bool Busy)
+    bool Busy,
+    bool Starting = false,
+    bool Stopping = false)
 {
-    public string Headline => !Running
-        ? "Остановлено"
-        : AllHealthy
-            ? "Работает"
-            : Tunnel == ServiceHealth.Degraded ? "Выходы VPN не отвечают" : "Работает с оговорками";
+    /// <summary>Сколько после подъёма ждать здоровья движков — как «Главная» (StatusView.StartupPatience).</summary>
+    private static readonly TimeSpan StartupPatience = TimeSpan.FromSeconds(90);
 
-    /// <summary>Из файла состояния надзора — того же, что читает «Главная».</summary>
-    public static TrayStatus Read(bool busy)
+    public string Headline =>
+        Stopping ? "Останавливается…"
+        : Busy && Running ? "Перезапускается…"
+        : Starting ? "Запускается…"
+        : !Running ? "Остановлено"
+        : AllHealthy ? "Работает"
+        : Tunnel == ServiceHealth.Degraded ? "Выходы VPN не отвечают" : "Работает с оговорками";
+
+    /// <summary>Из файла состояния надзора — того же, что читает «Главная», — и из живого надзора.</summary>
+    public static TrayStatus Read(bool busy, bool stopping = false)
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         bool running = state is not null && state.IsSupervisorAlive();
@@ -37,12 +51,18 @@ internal sealed record TrayStatus(
             ? state!.Services.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Health
             : null;
 
-        return new TrayStatus(
-            running,
-            running && state!.Services.All(s => s.Health == ServiceHealth.Healthy),
-            Of("sing-box"),
-            Of("winws2"),
-            busy);
+        bool healthy = running && state!.Services.All(s => s.Health == ServiceHealth.Healthy);
+
+        // Запуск идёт, пока надзор жив, а состояния нет, — и после, пока
+        // движки не прошли проверку, но не дольше, чем ждёт «Главная»:
+        // сдавшийся движок — уже не запуск.
+        bool starting = !stopping && (running
+            ? !healthy
+              && state!.Services.All(s => s.Health != ServiceHealth.Faulted)
+              && DateTimeOffset.Now - state.StartedAt < StartupPatience
+            : busy || EngineControl.IsRunning);
+
+        return new TrayStatus(running, healthy, Of("sing-box"), Of("winws2"), busy, starting, stopping);
     }
 
     /// <param name="tunnel">
@@ -103,14 +123,20 @@ public partial class TrayMenu : Window
         State.Text = status.Headline;
         Dot.SetResourceReference(
             Shape.FillProperty,
-            !status.Running ? "Faint" : status.AllHealthy ? "Accent" : "Warn");
+            status.Starting || status.Stopping || status.Busy ? "Warn"
+            : !status.Running ? "Faint"
+            : status.AllHealthy ? "Accent" : "Warn");
 
-        Tunnel.Text = status.Running ? TrayStatus.Describe(status.Tunnel, tunnel: true) : "—";
-        Desync.Text = status.Running ? TrayStatus.Describe(status.Desync) : "—";
+        // До файла состояния движков в нём нет — пока надзор их поднимает,
+        // так и говорится, а не «—», как у остановленных.
+        Tunnel.Text = status.Running ? TrayStatus.Describe(status.Tunnel, tunnel: true) : status.Starting ? "запускается" : "—";
+        Desync.Text = status.Running ? TrayStatus.Describe(status.Desync) : status.Starting ? "запускается" : "—";
 
+        // Пока идёт запуск, кнопка — «Остановить», как на «Главной»: второй
+        // «Запустить» тут не нужен, а остановить запуск можно.
         Toggle.Content = status.Busy
-            ? (status.Running ? "Останавливаю…" : "Запускаю…")
-            : status.Running ? "Остановить" : "Запустить";
+            ? (status.Stopping ? "Останавливаю…" : status.Running ? "Перезапускаю…" : "Запускаю…")
+            : status.Running || status.Starting ? "Остановить" : "Запустить";
         Toggle.IsEnabled = !status.Busy;
 
         ShowModes(status);
