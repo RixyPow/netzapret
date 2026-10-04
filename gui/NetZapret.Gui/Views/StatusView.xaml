@@ -4,6 +4,37 @@
              xmlns:views="clr-namespace:NetZapret.Gui.Views"
              Background="{DynamicResource Backdrop}">
 
+    <UserControl.Resources>
+        <!--
+            Плитка режима: как строка выбора, выбранная обведена цветом темы.
+            Выбор — обводкой, а не заливкой (см. Choice в Controls.xaml).
+        -->
+        <Style x:Key="ModeTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shape" Background="{DynamicResource Surface}"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                CornerRadius="14" Padding="16,13">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Shape" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <!--
         Подложка сплошная, а не прозрачная, как у прочих разделов (Chrome):
         окно кладёт картинку темы под всё, а здесь она своя, сдвинутая
@@ -383,16 +414,58 @@
                            Margin="4,4,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
                 <!--
-                    Два прямоугольника вместо списка режимов — решение владельца
-                    21.09. Движка два, и человек думает именно о них: что у меня
-                    сейчас работает. В строку, а не столбцом: они равноправны.
-
-                    Состояние каждого — прямо в его карточке, рядом с выключателем,
-                    с номером процесса (владелец 26.09). Состояние у каждого своё —
-                    sing-box может подняться, а winws2 упасть, — поэтому и отметка
-                    у каждого своя, а не одна лампочка на двоих.
+                    Режим — выбором из трёх (владелец 04.10, docs/ideas.md №12):
+                    «Десинк», «Туннель», «NZ Route». С 21.09 до 04.10 здесь были
+                    два выключателя движков: осмысленных сочетаний у них три,
+                    но третье — ради которого программа и написана — из двух
+                    рычагов не читалось. Хранится по-прежнему выключателями
+                    (Rules.WorkModes): переносить настройки не нужно.
                 -->
-                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
+                <TextBlock Text="Режим" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
+
+                <Grid x:Name="ModeGrid">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <RadioButton x:Name="ModeDesync" Grid.Column="0" Style="{StaticResource ModeTile}"
+                                 GroupName="WorkMode" Tag="Desync" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock x:Name="ModeDesyncName" FontWeight="SemiBold" FontSize="15" />
+                            <TextBlock x:Name="ModeDesyncText" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="ModeTunnel" Grid.Column="2" Style="{StaticResource ModeTile}"
+                                 GroupName="WorkMode" Tag="Tunnel" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock x:Name="ModeTunnelName" FontWeight="SemiBold" FontSize="15" />
+                            <TextBlock x:Name="ModeTunnelText" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="ModeRoute" Grid.Column="4" Style="{StaticResource ModeTile}"
+                                 GroupName="WorkMode" Tag="Route" Click="OnMode">
+                        <StackPanel>
+                            <TextBlock x:Name="ModeRouteName" FontWeight="SemiBold" FontSize="15" />
+                            <TextBlock x:Name="ModeRouteText" Style="{StaticResource Caption}"
+                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </RadioButton>
+                </Grid>
+
+                <!--
+                    Движки — состояние, а не выбор. Карточка у каждого своя:
+                    sing-box может подняться, а winws2 упасть, — поэтому и отметка
+                    у каждого своя, с номером процесса (владелец 26.09).
+                -->
+                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,8" />
 
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -438,8 +511,6 @@
                                         </Border>
                                     </WrapPanel>
 
-                                    <ToggleButton Grid.Column="1" x:Name="DesyncSwitch" Style="{StaticResource Switch}"
-                                                  Click="OnDesync" VerticalAlignment="Top" Margin="10,0,0,0" />
                                 </Grid>
 
                                 <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
@@ -497,8 +568,6 @@
                                         </Border>
                                     </WrapPanel>
 
-                                    <ToggleButton Grid.Column="1" x:Name="TunnelSwitch" Style="{StaticResource Switch}"
-                                                  Click="OnTunnel" VerticalAlignment="Top" Margin="10,0,0,0" />
                                 </Grid>
 
                                 <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"

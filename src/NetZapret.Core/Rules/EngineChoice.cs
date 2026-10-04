@@ -203,14 +203,14 @@ public sealed record EngineChoice
         }
     }
 
-    /// <summary>Как это называется словами.</summary>
+    /// <summary>Как это называется словами — режимом (<see cref="WorkModes"/>, 04.10) и смыслом.</summary>
     public string Describe() => (Desync, Tunnel) switch
     {
         (false, false) => "ничего не поднято",
-        (true, false) => "только десинк",
-        (_, true) when IgnoreExclusions => "только VPN, весь трафик без исключений",
-        (false, true) => "только VPN, весь трафик",
-        (true, true) => "десинк и VPN по маршрутам",
+        (true, false) => "«Десинк» — только десинк",
+        (_, true) when IgnoreExclusions => "«Туннель» — весь трафик через VPN без исключений",
+        (false, true) => "«Туннель» — весь трафик через VPN",
+        (true, true) => $"«{WorkModes.RouteName}» — десинк и VPN по маршрутам",
     };
 
     /// <summary>

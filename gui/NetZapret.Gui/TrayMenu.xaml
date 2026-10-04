@@ -139,7 +139,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Всё через VPN" Foreground="{DynamicResource Text}" />
+                            <TextBlock Text="Режим «Туннель» — всё через VPN" Foreground="{DynamicResource Text}" />
                             <TextBlock x:Name="VpnOnlyNote" FontSize="10.5" Margin="0,1,0,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Muted}"
                                        Text="Десинк выключится, движки перезапустятся" />

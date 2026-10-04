@@ -1213,15 +1213,30 @@ public partial class StatusView : UserControl
     private void ShowModes(AppSettings settings)
     {
         var engines = settings.Engines;
+        var mode = WorkModes.Of(engines);
 
-        DesyncSwitch.IsChecked = engines.Desync;
-        TunnelSwitch.IsChecked = engines.Tunnel;
+        ModeDesyncName.Text = WorkModes.Name(WorkMode.Desync);
+        ModeTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
+        ModeRouteName.Text = WorkModes.Name(WorkMode.Route);
+
+        ModeDesyncText.Text = WorkModes.Explain(WorkMode.Desync);
+        ModeRouteText.Text = WorkModes.Explain(WorkMode.Route);
+
+        // «Без исключений» — настройка внутри «Туннеля»: включённая, она
+        // меняет и смысл режима, и молчать о ней на плитке нельзя.
+        ModeTunnelText.Text = WorkModes.Explain(WorkMode.Tunnel)
+            + (engines.IgnoreExclusions ? " Сейчас без исключений: в VPN идёт и «напрямую»." : string.Empty);
+
+        // «Ничего не поднято» режимом не считается — ни одна плитка не выбрана.
+        ModeDesync.IsChecked = mode == WorkMode.Desync;
+        ModeTunnel.IsChecked = mode == WorkMode.Tunnel;
+        ModeRoute.IsChecked = mode == WorkMode.Route;
 
         // Третье состояние — включён, а не поднимается: при игнорируемых
         // исключениях всё уходит в туннель. Промолчать значило бы показать
         // включённым то, чего в диспетчере задач не будет.
         DesyncLine.Text = !engines.Desync
-            ? "Выключен. Закрытые по имени сайты останутся закрытыми."
+            ? $"Не поднимается: в режиме «{WorkModes.Name(WorkMode.Tunnel)}» всё идёт через VPN."
             : !engines.DesyncRuns
                 ? "Не поднимается: исключения игнорируются, и всё идёт в туннель."
                 : engines.Tunnel
@@ -1235,7 +1250,7 @@ public partial class StatusView : UserControl
         // «Напрямую» при одном туннеле остаётся напрямую — таблица владельца
         // 23.09; «весь трафик» без оговорки обещал бы и его.
         TunnelLine.Text = !engines.Tunnel
-            ? "Не поднимается. Адрес остаётся домашним."
+            ? $"Не поднимается в режиме «{WorkModes.Name(WorkMode.Desync)}». Адрес остаётся домашним."
             : engines.IgnoreExclusions
                 ? "Забирает весь трафик, исключения не действуют."
                 : engines.TunnelTakesAll
@@ -1245,8 +1260,18 @@ public partial class StatusView : UserControl
         DesyncCard.BorderBrush = (Brush)FindResource(engines.DesyncRuns ? "Accent" : "Border");
         TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
 
-        EnginesLine.Text = engines.Complaint ?? string.Empty;
-        EnginesLine.Visibility = engines.Complaint is null ? Visibility.Collapsed : Visibility.Visible;
+        // Режиму с туннелем без выхода везти некуда: «Туннель» не поднимет
+        // ничего, «NZ Route» сработает как «Десинк». Сказать об этом здесь,
+        // у выбора, а не узнавать по неработающему VPN.
+        var complaint = engines.Complaint
+            ?? (engines.Tunnel && !settings.HasTunnelExit
+                ? (engines.Desync
+                    ? $"VPN не задан — «{WorkModes.RouteName}» работает как «{WorkModes.Name(WorkMode.Desync)}». Подписка или WARP — на вкладке VPN."
+                    : $"Для «{WorkModes.Name(WorkMode.Tunnel)}» нужна подписка или WARP — вкладка VPN.")
+                : null);
+
+        EnginesLine.Text = complaint ?? string.Empty;
+        EnginesLine.Visibility = complaint is null ? Visibility.Collapsed : Visibility.Visible;
 
         // Автозапуск поднимает ровно это. Сказано здесь же, где задано:
         // иначе про связь пришлось бы догадываться, а догадка — источник
@@ -1274,7 +1299,7 @@ public partial class StatusView : UserControl
             ShowModes(next);
             Update();
 
-            this.Offer("Движки: " + next.Engines.Describe());
+            this.Offer("Режим: " + next.Engines.Describe());
         }
         catch (Exception ex)
         {
@@ -1282,11 +1307,12 @@ public partial class StatusView : UserControl
         }
     }
 
-    private void OnDesync(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { Desync = DesyncSwitch.IsChecked == true });
-
-    private void OnTunnel(object sender, RoutedEventArgs e) =>
-        Choose(c => c with { Tunnel = TunnelSwitch.IsChecked == true });
+    /// <summary>Выбран режим — выключатели под него (Rules.WorkModes) и предложение перезапустить.</summary>
+    private void OnMode(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<WorkMode>(tag, out var mode))
+            Choose(c => WorkModes.Apply(c, mode));
+    }
 
     /// <summary>Что планировщик ответил в прошлый раз — на время работы окна.</summary>
     private static (bool Installed, bool Stale)? _autostart;

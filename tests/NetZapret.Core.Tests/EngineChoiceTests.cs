@@ -144,9 +144,9 @@ public sealed class EngineChoiceTests
     }
 
     [Theory]
-    [InlineData(true, true, "десинк и VPN по маршрутам")]
-    [InlineData(true, false, "только десинк")]
-    [InlineData(false, true, "только VPN, весь трафик")]
+    [InlineData(true, true, "«NZ Route» — десинк и VPN по маршрутам")]
+    [InlineData(true, false, "«Десинк» — только десинк")]
+    [InlineData(false, true, "«Туннель» — весь трафик через VPN")]
     [InlineData(false, false, "ничего не поднято")]
     public void It_says_what_it_is(bool desync, bool tunnel, string said)
     {
