@@ -21,6 +21,18 @@ namespace NetZapret.Gui;
 /// filter на «Десинке», карточки движков), и прежде нажатие на него
 /// переключало саму плитку.
 /// </para>
+/// <para>
+/// Щелчком открывается своя подсказка, а не та, что висит на значке
+/// (ToolTipService). До 04.10 открывалась та же самая, руками и
+/// с <c>StaysOpen=false</c>, — и это роняло окно (владелец, при смене
+/// режимов, gui.log 13:51:59 и 13:52:05): служба подсказок WPF, показывая
+/// её затем по наведению, падала на <c>StaysOpen=false</c>
+/// (NotSupportedException) посреди своей настройки — подсказка оставалась
+/// у неё текущей, но без владельца, и следующий щелчок мыши, закрывая её,
+/// падал в <c>GetBetweenShowDelay(null)</c> (ArgumentNullException). Своя
+/// подсказка службе не видна, а наведённую на это время выключаем,
+/// чтобы не вышло двух сразу.
+/// </para>
 /// </remarks>
 public static class InfoTip
 {
@@ -31,6 +43,13 @@ public static class InfoTip
 
     public static void SetOpensOnClick(DependencyObject element, bool value) => element.SetValue(OpensOnClickProperty, value);
 
+    /// <summary>Подсказка, открытая щелчком, — у каждого значка своя.</summary>
+    private static readonly DependencyProperty ClickTipProperty = DependencyProperty.RegisterAttached(
+        "ClickTip", typeof(ToolTip), typeof(InfoTip), new PropertyMetadata(null));
+
+    /// <summary>Открытая щелчком подсказка значка; <c>null</c> — не открыта. Для тестов.</summary>
+    internal static ToolTip? ClickTipOf(DependencyObject element) => (ToolTip?)element.GetValue(ClickTipProperty);
+
     private static void OnOpensOnClick(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not FrameworkElement element)
@@ -38,11 +57,15 @@ public static class InfoTip
 
         element.PreviewMouseLeftButtonDown -= OnDown;
         element.PreviewMouseLeftButtonUp -= OnUp;
+        element.MouseLeave -= OnLeave;
+        element.Unloaded -= OnLeave;
 
         if (e.NewValue is true)
         {
             element.PreviewMouseLeftButtonDown += OnDown;
             element.PreviewMouseLeftButtonUp += OnUp;
+            element.MouseLeave += OnLeave;
+            element.Unloaded += OnLeave;
         }
     }
 
@@ -53,32 +76,45 @@ public static class InfoTip
     {
         e.Handled = true;
 
-        if (sender is not FrameworkElement { ToolTip: ToolTip tip } element)
+        if (sender is not FrameworkElement element)
             return;
 
-        if (tip.IsOpen)
+        if (element.GetValue(ClickTipProperty) is ToolTip { IsOpen: true })
         {
-            tip.IsOpen = false;
+            Close(element);
             return;
         }
 
-        tip.PlacementTarget = element;
-        tip.Placement = PlacementMode.Bottom;
+        // Текст — тот же, что у наведённой подсказки значка (стиль Info).
+        if (element.ToolTip is not ToolTip { Content: TextBlock { Text: { Length: > 0 } text } })
+            return;
 
-        // Открытая щелчком закрывается щелчком мимо, а не через пять секунд.
-        tip.StaysOpen = false;
+        var tip = new ToolTip
+        {
+            Content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+            PlacementTarget = element,
+            Placement = PlacementMode.Bottom,
+        };
+
+        ToolTipService.SetIsEnabled(element, false);
+        element.SetValue(ClickTipProperty, tip);
         tip.IsOpen = true;
-
-        element.MouseLeave -= OnLeave;
-        element.MouseLeave += OnLeave;
     }
 
-    private static void OnLeave(object sender, MouseEventArgs e)
+    // Открытая щелчком живёт, пока мышь над значком: так же, как наведённая.
+    private static void OnLeave(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { ToolTip: ToolTip tip } element)
-        {
-            element.MouseLeave -= OnLeave;
-            tip.IsOpen = false;
-        }
+        if (sender is FrameworkElement element)
+            Close(element);
+    }
+
+    private static void Close(FrameworkElement element)
+    {
+        if (element.GetValue(ClickTipProperty) is not ToolTip tip)
+            return;
+
+        element.ClearValue(ClickTipProperty);
+        element.ClearValue(ToolTipService.IsEnabledProperty);
+        tip.IsOpen = false;
     }
 }

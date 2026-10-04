@@ -20,7 +20,6 @@ public sealed class InfoTipTests
     {
         Sta.Run(() =>
         {
-
             var info = new ContentControl { Content = "Пояснение" };
             info.SetResourceReference(FrameworkElement.StyleProperty, "Info");
 
@@ -44,11 +43,19 @@ public sealed class InfoTipTests
             var up = Press(UIElement.PreviewMouseLeftButtonUpEvent);
             border.RaiseEvent(up);
             Assert.True(up.Handled);
-            Assert.True(tip.IsOpen);
+            Assert.True(InfoTip.ClickTipOf(border) is { IsOpen: true, Content: TextBlock { Text: "Пояснение" } });
 
-            // Второй щелчок закрывает.
-            border.RaiseEvent(Press(UIElement.PreviewMouseLeftButtonUpEvent));
+            // Открыта своя подсказка, а не та, что висит на значке: ту ведёт
+            // служба подсказок WPF, и StaysOpen=false на ней ронял окно (04.10).
+            // Наведённая на это время выключена — двух сразу не будет.
             Assert.False(tip.IsOpen);
+            Assert.True(tip.StaysOpen);
+            Assert.False(ToolTipService.GetIsEnabled(border));
+
+            // Второй щелчок закрывает и возвращает наведённую.
+            border.RaiseEvent(Press(UIElement.PreviewMouseLeftButtonUpEvent));
+            Assert.Null(InfoTip.ClickTipOf(border));
+            Assert.True(ToolTipService.GetIsEnabled(border));
 
             window.Close();
         });
