@@ -77,12 +77,14 @@ internal sealed record TrayStatus(
 public partial class TrayMenu : Window
 {
     private readonly Action _toggle;
+    private readonly Action _vpnOnly;
     private readonly Action _showWindow;
     private readonly Action<bool> _quit;
 
-    internal TrayMenu(Action toggle, Action showWindow, Action<bool> quit)
+    internal TrayMenu(Action toggle, Action vpnOnly, Action showWindow, Action<bool> quit)
     {
         _toggle = toggle;
+        _vpnOnly = vpnOnly;
         _showWindow = showWindow;
         _quit = quit;
 
@@ -105,7 +107,39 @@ public partial class TrayMenu : Window
             ? (status.Running ? "Останавливаю…" : "Запускаю…")
             : status.Running ? "Остановить" : "Запустить";
         Toggle.IsEnabled = !status.Busy;
+
+        ShowVpnOnly(status.Busy);
     }
+
+    /// <summary>Выключатель «Всё через VPN» — по настройкам, как бы ни было набрано это сочетание.</summary>
+    private void ShowVpnOnly(bool busy)
+    {
+        AppSettings settings;
+
+        try
+        {
+            settings = AppSettings.Load(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            VpnOnlyRow.IsEnabled = false;
+            return;
+        }
+
+        bool on = Core.Rules.VpnOnly.IsOn(settings);
+        bool can = on || Core.Rules.VpnOnly.CanTurnOn(settings);
+
+        VpnOnlySwitch.IsChecked = on;
+        VpnOnlyRow.IsEnabled = !busy && can;
+
+        VpnOnlyNote.Text = !can
+            ? "Нужна подписка или WARP на вкладке VPN"
+            : on
+                ? "Выключить — вернуть десинк, движки перезапустятся"
+                : "Десинк выключится, движки перезапустятся";
+    }
+
+    private void OnVpnOnly(object sender, RoutedEventArgs e) => _vpnOnly();
 
     /// <summary>Показывает меню у указателя, в пределах рабочей области его экрана.</summary>
     internal void PopUp()

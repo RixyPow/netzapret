@@ -18,7 +18,7 @@ public sealed class TrayMenuTests
     {
         Sta.Run(() =>
         {
-            var menu = new TrayMenu(() => { }, () => { }, _ => { });
+            var menu = new TrayMenu(() => { }, () => { }, () => { }, _ => { });
 
             menu.Render(new TrayStatus(
                 Running: true,
@@ -65,7 +65,7 @@ public sealed class TrayMenuTests
 
         Sta.Run(() =>
         {
-            var menu = new TrayMenu(() => { }, () => { }, _ => { });
+            var menu = new TrayMenu(() => { }, () => { }, () => { }, _ => { });
             menu.Render(status);
 
             Assert.Equal("Запустить", ((Button)menu.FindName("Toggle")).Content);

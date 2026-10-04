@@ -607,6 +607,14 @@ public sealed record AppSettings
     public bool? GameFilterReset { get; init; }
 
     /// <summary>
+    /// Выключатель десинка до «Всё через VPN» из трея (Rules.VpnOnly); <c>null</c> — переключатель не нажат.
+    /// </summary>
+    public bool? DesyncBeforeVpnOnly { get; init; }
+
+    /// <summary>Выключатель туннеля до «Всё через VPN» из трея; <c>null</c> — переключатель не нажат.</summary>
+    public bool? TunnelBeforeVpnOnly { get; init; }
+
+    /// <summary>
     /// Разовое выключение game filter у всех (владелец, 01.10).
     /// </summary>
     /// <remarks>

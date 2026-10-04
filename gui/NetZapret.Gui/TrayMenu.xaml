@@ -45,6 +45,29 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- Та же строка, но с разметкой внутри: подпись и выключатель. -->
+        <Style x:Key="SwitchRow" TargetType="Button" BasedOn="{StaticResource MenuRow}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Plate" Background="{TemplateBinding Background}"
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Stretch" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Plate" Property="Background" Value="{DynamicResource Raised}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Plate" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <!--
@@ -102,6 +125,30 @@
                     <TextBlock x:Name="Desync" Grid.Row="1" Grid.Column="1" Margin="10,0,0,0" FontSize="11.5"
                                Foreground="{DynamicResource Muted}" Text="—" />
                 </Grid>
+
+                <!--
+                    «Всё через VPN» (обсуждение №17, 04.10): на минуту пустить всё
+                    через туннель, не открывая окна, — и вернуть, как было.
+                    Нажатие само перезапускает движки (Rules.VpnOnly, TrayIcon).
+                -->
+                <Button x:Name="VpnOnlyRow" Style="{StaticResource SwitchRow}" Margin="-6,8,-6,0"
+                        Click="OnVpnOnly">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Всё через VPN" Foreground="{DynamicResource Text}" />
+                            <TextBlock x:Name="VpnOnlyNote" FontSize="10.5" Margin="0,1,0,0" TextWrapping="Wrap"
+                                       Foreground="{DynamicResource Muted}"
+                                       Text="Десинк выключится, движки перезапустятся" />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1" x:Name="VpnOnlySwitch" Style="{StaticResource Switch}"
+                                      IsHitTestVisible="False" Focusable="False"
+                                      VerticalAlignment="Center" Margin="10,0,0,0" />
+                    </Grid>
+                </Button>
 
                 <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>

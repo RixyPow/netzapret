@@ -213,7 +213,7 @@ internal sealed class TrayIcon : IDisposable
 
         try
         {
-            _menu ??= new TrayMenu(Toggle, Show, Quit);
+            _menu ??= new TrayMenu(Toggle, ToggleVpnOnly, Show, Quit);
             _menu.Render(TrayStatus.Read(_busy));
 
             try
@@ -230,7 +230,7 @@ internal sealed class TrayIcon : IDisposable
                 // состояния, так что его не жалко собрать заново.
                 Discard(_menu);
 
-                _menu = new TrayMenu(Toggle, Show, Quit);
+                _menu = new TrayMenu(Toggle, ToggleVpnOnly, Show, Quit);
                 _menu.Render(TrayStatus.Read(_busy));
                 _menu.PopUp();
             }
@@ -269,6 +269,48 @@ internal sealed class TrayIcon : IDisposable
                 await EngineControl.StopAsync("меню трея", CancellationToken.None);
             else
                 await EngineControl.StartAsync("меню трея", CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // Разбор — в окне: там есть куда написать причину.
+        }
+        finally
+        {
+            _busy = false;
+            Update();
+        }
+    }
+
+    /// <summary>
+    /// «Всё через VPN» из меню: переключить выключатели и сразу перезапустить движки.
+    /// </summary>
+    /// <remarks>
+    /// Перезапуском, а не просьбой перезапустить: ради этого переключатель
+    /// и просили (обсуждение №17) — семь шагов через окно свести к одному.
+    /// Остановленные движки поднимаются: человек нажал «всё через VPN»,
+    /// а не «запомни на потом».
+    /// </remarks>
+    private async void ToggleVpnOnly()
+    {
+        if (_busy)
+            return;
+
+        _busy = true;
+        Update();
+
+        try
+        {
+            var next = NetZapret.Core.Rules.VpnOnly.Toggle(NetZapret.Core.AppSettings.Load(NetZapret.Core.AppSettings.DefaultPath));
+            next.Save(NetZapret.Core.AppSettings.DefaultPath);
+
+            var who = NetZapret.Core.Rules.VpnOnly.IsOn(next)
+                ? "меню трея: всё через VPN"
+                : "меню трея: всё через VPN выключено";
+
+            if (EngineControl.IsRunning)
+                await EngineControl.RestartAsync(who, CancellationToken.None);
+            else
+                await EngineControl.StartAsync(who, CancellationToken.None);
         }
         catch (Exception)
         {
