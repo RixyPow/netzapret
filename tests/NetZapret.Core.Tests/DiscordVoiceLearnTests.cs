@@ -112,4 +112,18 @@ public sealed class DiscordVoiceLearnTests : IDisposable
 
         Assert.Equal(["35.217.0.0/20", "35.217.16.0/20", "35.217.32.0/20", "35.217.48.0/20"], missing);
     }
+
+    /// <summary>Выключатель включён и у настроек, где его ещё нет, и выключается.</summary>
+    [Fact]
+    public void Learning_is_on_by_default_and_can_be_turned_off()
+    {
+        var path = Path.Combine(_dir, "netzapret.json");
+        File.WriteAllText(path, "{}");
+
+        Assert.True(AppSettings.Load(path).LearnDiscordVoice);
+
+        (AppSettings.Load(path) with { LearnDiscordVoice = false }).Save(path);
+
+        Assert.False(AppSettings.Load(path).LearnDiscordVoice);
+    }
 }

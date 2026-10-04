@@ -466,6 +466,11 @@ public partial class MoreView : UserControl
                 + "Сам он не перезапускается никогда: посреди звонка это хуже задержки.")
             { On = settings.OfferDiscordRestart },
 
+            new("voice", "Дописывать адреса голоса Discord",
+                "Пока голос Discord стоит «через VPN», новые адреса его серверов берутся из журнала "
+                + "Discord и дописываются в список голоса. Заработают после перезапуска движков.")
+            { On = settings.LearnDiscordVoice },
+
             new("updates", "Искать обновления при запуске",
                 "Только искать. Установка остаётся отдельным действием с отдельным согласием.")
             { On = settings.CheckForUpdates },
@@ -488,12 +493,23 @@ public partial class MoreView : UserControl
                 "logs" => settings with { LogsEnabled = !settings.LogsEnabled },
                 "verify" => settings with { VerifyTraffic = !settings.VerifyTraffic },
                 "discord" => settings with { OfferDiscordRestart = !settings.OfferDiscordRestart },
+                "voice" => settings with { LearnDiscordVoice = !settings.LearnDiscordVoice },
                 _ => settings with { CheckForUpdates = !settings.CheckForUpdates },
             };
 
             settings.Save(AppSettings.DefaultPath);
 
             ShowFlags(settings);
+
+            // Сторож голоса читает настройку сам на каждом круге — движкам
+            // она безразлична, и перезапуск предлагать незачем.
+            if (key == "voice")
+            {
+                Status.Text = settings.LearnDiscordVoice
+                    ? "Записано: адреса голоса Discord дописываются, пока голос «через VPN»."
+                    : "Записано: список голоса Discord больше не пополняется сам.";
+                return;
+            }
 
             Status.Text = "Записано. Применится при следующем запуске движков.";
             this.Offer("Настройка изменена");

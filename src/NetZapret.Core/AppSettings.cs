@@ -265,6 +265,16 @@ public sealed record AppSettings
     public bool OfferDiscordRestart { get; init; }
 
     /// <summary>
+    /// Дописывать адреса звука из журнала Discord в список голоса (<see cref="Services.DiscordVoiceLearn"/>).
+    /// </summary>
+    /// <remarks>
+    /// Включено по умолчанию (владелец, 04.10: «сделать эту настройку
+    /// переключаемой»). Действует только пока голос стоит «через VPN» —
+    /// выключают те, кто хочет держать список руками.
+    /// </remarks>
+    public bool LearnDiscordVoice { get; init; } = true;
+
+    /// <summary>
     /// Держать автоподбор сервера подальше от отечественных выходов.
     /// </summary>
     /// <remarks>
