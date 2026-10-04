@@ -176,6 +176,9 @@ public partial class App : Application
         _tray = new TrayIcon();
         UiStallWatch.Start(Dispatcher);
 
+        // Правый щелчок по тексту — «Копировать», во всех вкладках сразу.
+        TextCopy.Register();
+
         // Новые адреса голоса Discord — в список голоса, пока он «через VPN».
         DiscordVoiceWatch.Start(Dispatcher);
         SingleInstance.OnShowRequested(TrayIcon.Show);
