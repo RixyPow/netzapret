@@ -114,9 +114,28 @@
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
+                                            <!--
+                                                Имя — ссылка на его маршрут (владелец, 04.10):
+                                                щелчок открывает «Маршруты» на той части, чьё
+                                                правило решает это имя (RoutesView.Reveal).
+                                                Правым щелчком — копировать (TextCopy).
+                                            -->
                                             <TextBlock Grid.Column="0" Text="{Binding Host}"
                                                        TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center" />
+                                                       VerticalAlignment="Center"
+                                                       Cursor="Hand" MouseLeftButtonUp="OnHostClick"
+                                                       ToolTip="Открыть маршрут этого имени">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Style.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter Property="TextDecorations" Value="Underline" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+                                                            </Trigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
 
                                             <Border Grid.Column="1" Background="{DynamicResource Raised}"
                                                     CornerRadius="4" Padding="5,1" Margin="8,0,0,0"

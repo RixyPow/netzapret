@@ -452,6 +452,15 @@ public partial class RoutesView : UserControl
 
             ShowShare();
             StartIcons(services);
+
+            _engine = engine;
+
+            // Пришли сюда щелчком по имени в проверке блокировок — показать его часть.
+            if (PendingReveal is { } wanted)
+            {
+                PendingReveal = null;
+                Reveal(wanted);
+            }
         }
         catch (Exception ex)
         {
@@ -1310,8 +1319,64 @@ public partial class RoutesView : UserControl
     private void OnRouteFilter(object sender, RoutedEventArgs e)
     {
         _route = sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var route) ? route : null;
+        _reveal = null;
         Filter();
     }
+
+    /// <summary>
+    /// Имя, чью часть показать при следующей сборке раздела, — заявка из проверки блокировок.
+    /// </summary>
+    /// <remarks>
+    /// Заявкой, а не вызовом: раздел создаётся заново при переходе и собирает
+    /// список после загрузки, а до того показывать нечего.
+    /// </remarks>
+    public static string? PendingReveal { get; set; }
+
+    /// <summary>Движок правил последней сборки — им ищется часть для имени.</summary>
+    private RuleEngine? _engine;
+
+    /// <summary>Показ одной части: сервис и ключ части; <c>null</c> — список как обычно.</summary>
+    private (string Service, string Key, string Host)? _reveal;
+
+    /// <summary>
+    /// Показывает часть, чьё правило решает это имя (владелец, 04.10: «имена
+    /// в блокчеке кликабельными, ведущими на их маршрут»).
+    /// </summary>
+    /// <remarks>
+    /// Тем же движком правил, что <c>nz where</c>: первое совпавшее правило —
+    /// и та часть, что стоит на его списке, домене или сети. Не попало ни в
+    /// одно — имя ставится в поиск: «Маршруты» сами предложат добавить его
+    /// своим доменом.
+    /// </remarks>
+    private void Reveal(string host)
+    {
+        _route = null;
+        FilterAll.IsChecked = true;
+
+        if (_engine is not null
+            && _engine.Evaluate(NetZapret.Core.Connections.ConnectionEvent.Describe(host)).Rule is { } rule)
+        {
+            foreach (var service in _all)
+            {
+                var part = service.Parts.FirstOrDefault(p =>
+                    RouteKeys.Parse(p.Key) is (_, var value) && SameValue(value, rule.Value));
+
+                if (part is null)
+                    continue;
+
+                _reveal = (service.Name, part.Key, host);
+                Search.Text = string.Empty;
+                Filter();
+                return;
+            }
+        }
+
+        _reveal = null;
+        Search.Text = host;
+    }
+
+    private static bool SameValue(string a, string b) =>
+        string.Equals(a.Replace('\\', '/').Trim(), b.Replace('\\', '/').Trim(), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Числа на кнопках отбора — частей на каждом маршруте, по всему списку, без поиска.</summary>
     private void ShowRouteCounts()
@@ -1353,6 +1418,29 @@ public partial class RoutesView : UserControl
         var needle = Search.Text.Trim();
 
         ShowRouteCounts();
+
+        // Показ одной части — пока его не сменили поиском или отбором.
+        if (_reveal is { } reveal && needle.Length == 0)
+        {
+            var shown = _all
+                .Where(s => s.Name == reveal.Service)
+                .Select(s => s with { Parts = s.Parts.Where(p => p.Key == reveal.Key).ToList(), Open = true })
+                .Where(s => s.Parts.Count > 0)
+                .ToList();
+
+            if (shown.Count > 0)
+            {
+                AddOffer.Visibility = Visibility.Collapsed;
+                Services.ItemsSource = shown;
+
+                var part = shown[0].Parts[0];
+                Status.Text = $"«{reveal.Host}» решает «{reveal.Service} → {part.Title}»: {part.Mode}. "
+                    + "Весь список — кнопкой «Все» или поиском.";
+                return;
+            }
+        }
+
+        _reveal = null;
 
         if (needle.Length == 0 && _route is null)
         {

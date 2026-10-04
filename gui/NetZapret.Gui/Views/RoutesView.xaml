@@ -221,7 +221,7 @@
                             HorizontalAlignment="Left"
                             Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
                         <StackPanel Orientation="Horizontal">
-                            <RadioButton Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="" IsChecked="True" Click="OnRouteFilter">
+                            <RadioButton x:Name="FilterAll" Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="" IsChecked="True" Click="OnRouteFilter">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Все" />
                                     <TextBlock x:Name="CountAll" Margin="6,0,0,0" FontWeight="SemiBold" />

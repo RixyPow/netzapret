@@ -171,6 +171,20 @@ public partial class CheckView : UserControl
     /// <summary>Пока список заполняется, выбор в нём не считается выбором человека.</summary>
     private bool _filling;
 
+    /// <summary>Щелчок по имени — «Маршруты» на его части (RoutesView.Reveal).</summary>
+    private void OnHostClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not TextBlock { Text: { Length: > 0 } host })
+            return;
+
+        // Имя из строки вида «instagram.com [чз]» — без пометки в скобках.
+        var name = host.Split(' ', 2)[0];
+
+        RoutesView.PendingReveal = name;
+        (Window.GetWindow(this) as MainWindow)?.Open("routes");
+        e.Handled = true;
+    }
+
     public CheckView()
     {
         InitializeComponent();
