@@ -4,6 +4,35 @@
              xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
+    <UserControl.Resources>
+        <!-- Кнопка отбора по маршруту: выбранная залита цветом темы, прочие — голый текст. -->
+        <Style x:Key="RouteFilter" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shape" Background="Transparent" CornerRadius="8" Padding="12,0" MinHeight="30">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
+                                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource AccentFill}" />
+                                <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <!--
         Три полосы вместо одного свитка на весь раздел, и это вынужденно,
         а не ради вида. Свиток снаружи отдаёт вложенному списку бесконечную
@@ -159,9 +188,59 @@
                     «напрямую» — самым безобидным — и правится в своей строке
                     списка, как любая часть: режим, рецепт, пин.
                 -->
-                <TextBox x:Name="Search" Margin="0,10,0,0" TextChanged="OnSearch"
-                         KeyDown="OnSearchKey"
-                         gui:Hint.Text="Сервис, сайт или программа (.exe) — найти или добавить" />
+                <!--
+                    Отбор по маршруту рядом с поиском (макет владельца 04.10):
+                    «Все», «Через VPN», «Десинк», «Напрямую» — с числом частей.
+                    Отбираются части, а не сервисы: у YouTube три части на
+                    разных путях, и папка в отборе показывает только
+                    подходящие, раскрытой, как при поиске. Отбор и поиск
+                    складываются. В узком окне отбор уходит под поле
+                    (OnSearchRowSize): рядом поле сжималось до пары слов.
+                -->
+                <Grid x:Name="SearchRow" Margin="0,10,0,0" SizeChanged="OnSearchRowSize">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBox x:Name="Search" TextChanged="OnSearch" KeyDown="OnSearchKey"
+                             gui:Hint.Text="Сервис, сайт или .exe — найти или добавить" />
+
+                    <Border x:Name="RouteFilters" Grid.Column="1" Margin="10,0,0,0" CornerRadius="11" Padding="3"
+                            HorizontalAlignment="Left"
+                            Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="" IsChecked="True" Click="OnRouteFilter">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Все" />
+                                    <TextBlock x:Name="CountAll" Margin="6,0,0,0" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="2" Click="OnRouteFilter" Margin="3,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Через VPN" />
+                                    <TextBlock x:Name="CountVpn" Margin="6,0,0,0" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="1" Click="OnRouteFilter" Margin="3,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Десинк" />
+                                    <TextBlock x:Name="CountDesync" Margin="6,0,0,0" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </RadioButton>
+                            <RadioButton Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="0" Click="OnRouteFilter" Margin="3,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Напрямую" />
+                                    <TextBlock x:Name="CountDirect" Margin="6,0,0,0" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </RadioButton>
+                        </StackPanel>
+                    </Border>
+                </Grid>
 
                 <Border x:Name="AddOffer" Style="{StaticResource Card}" Margin="0,10,0,0"
                         Padding="16,11" Visibility="Collapsed">

@@ -445,7 +445,7 @@ public partial class RoutesView : UserControl
                 // у заголовка: строка эта стояла над списком постоянно,
                 // а нужна была один раз. Счёт сервисов остался — он
                 // меняется и отвечает на вопрос «всё ли прочиталось».
-                ? $"Сервисов: {services.Count}."
+                ? $"Сервисов: {services.Count}, частей в них: {services.Sum(s => s.Parts.Count)}."
                 : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
 
             ShowOrder(engine);
@@ -1304,12 +1304,57 @@ public partial class RoutesView : UserControl
 
     private void OnSearch(object sender, TextChangedEventArgs e) => Filter();
 
-    /// <summary>Показывает то, что подходит под поиск.</summary>
+    /// <summary>Отбор по маршруту: <c>null</c> — все, иначе <see cref="PartRow.Applied"/> (0 — напрямую, 1 — десинк, 2 — VPN).</summary>
+    private int? _route;
+
+    private void OnRouteFilter(object sender, RoutedEventArgs e)
+    {
+        _route = sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var route) ? route : null;
+        Filter();
+    }
+
+    /// <summary>Числа на кнопках отбора — частей на каждом маршруте, по всему списку, без поиска.</summary>
+    private void ShowRouteCounts()
+    {
+        var parts = _all.SelectMany(s => s.Parts).ToList();
+
+        CountAll.Text = parts.Count.ToString();
+        CountVpn.Text = parts.Count(p => p.Applied == 2).ToString();
+        CountDesync.Text = parts.Count(p => p.Applied == 1).ToString();
+        CountDirect.Text = parts.Count(p => p.Applied == 0).ToString();
+    }
+
+    /// <summary>Узко — отбор под полем поиска, широко — рядом с ним.</summary>
+    private void OnSearchRowSize(object sender, SizeChangedEventArgs e)
+    {
+        // Порог — чтобы полю рядом с отбором осталось место под подсказку
+        // хотя бы наполовину: отбор шириной около четырёхсот точек.
+        bool below = e.NewSize.Width < 760;
+
+        Grid.SetRow(RouteFilters, below ? 1 : 0);
+        Grid.SetColumn(RouteFilters, below ? 0 : 1);
+        RouteFilters.Margin = below ? new Thickness(0, 8, 0, 0) : new Thickness(10, 0, 0, 0);
+    }
+
+    /// <summary>«в 1 сервисе», «в 21 сервисе», иначе «сервисах».</summary>
+    private static string InServices(int count) =>
+        count % 10 == 1 && count % 100 != 11 ? "сервисе" : "сервисах";
+
+    private static string RouteWords(int route) => route switch
+    {
+        0 => "напрямую",
+        1 => "на десинке",
+        _ => "через VPN",
+    };
+
+    /// <summary>Показывает то, что подходит под поиск и под отбор по маршруту.</summary>
     private void Filter()
     {
         var needle = Search.Text.Trim();
 
-        if (needle.Length == 0)
+        ShowRouteCounts();
+
+        if (needle.Length == 0 && _route is null)
         {
             AddOffer.Visibility = Visibility.Collapsed;
             Services.ItemsSource = InChosenOrder(_all);
@@ -1325,13 +1370,26 @@ public partial class RoutesView : UserControl
         var found = _all
             .Select(s => s with
             {
-                Parts = s.Parts.Where(p => Matches(s.Name, p, needle)).ToList(),
+                Parts = s.Parts
+                    .Where(p => needle.Length == 0 || Matches(s.Name, p, needle))
+                    .Where(p => _route is null || p.Applied == _route)
+                    .ToList(),
                 Open = true,
             })
             .Where(s => s.Parts.Count > 0)
             .ToList();
 
         Services.ItemsSource = InChosenOrder(found);
+
+        // Один отбор, без поиска: предлагать добавить нечего, сказать — сколько.
+        if (needle.Length == 0)
+        {
+            AddOffer.Visibility = Visibility.Collapsed;
+            Status.Text = found.Count > 0
+                ? $"Частей {RouteWords(_route!.Value)}: {found.Sum(s => s.Parts.Count)} — в {found.Count} {InServices(found.Count)}."
+                : $"Ничего не идёт {RouteWords(_route!.Value)}.";
+            return;
+        }
 
         // Добавить предлагается, только когда искать больше нечего: вписанное
         // похоже на имя сайта, а в списке оно не нашлось ни частью, ни доменом.
