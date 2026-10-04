@@ -721,7 +721,7 @@ sing-box удерживает TUN-адаптер, осиротевший winws2 
 
 ## Поддержать
 
-[boosty.to/rixypow](https://boosty.to/rixypow/donate)
+[donationalerts.com/r/netzapret](https://www.donationalerts.com/r/netzapret)
 
 Программа бесплатная и останется такой: лицензия MIT это и закрепляет.
 

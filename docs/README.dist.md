@@ -86,7 +86,7 @@ Windows вдобавок покажет SmartScreen: программа не п�
 
 ## Поддержать
 
-Если программа пригодилась — [boosty.to/rixypow](https://boosty.to/rixypow/donate).
+Если программа пригодилась — [donationalerts.com/r/netzapret](https://www.donationalerts.com/r/netzapret).
 
 Она бесплатная и останется такой.
 
