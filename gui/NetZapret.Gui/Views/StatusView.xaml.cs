@@ -1088,15 +1088,11 @@ public partial class StatusView : UserControl
 
         _engines = rows;
 
-        // Движки — в плитках режимов (04.10): у «Десинка» и «Туннеля» по своему,
-        // у «Гибрида» оба. Видна строка только у выбранной плитки (ShowModes).
-        var desync = rows.FirstOrDefault(r => r.Name == "winws2");
-        var tunnel = rows.FirstOrDefault(r => r.Name == "sing-box");
-
-        ShowEngine(desync, DesyncDot, DesyncState, DesyncPid);
-        ShowEngine(tunnel, TunnelDot, TunnelState, TunnelPid);
-        ShowEngine(desync, RouteDesyncDot, RouteDesyncState, RouteDesyncPid);
-        ShowEngine(tunnel, RouteTunnelDot, RouteTunnelState, RouteTunnelPid);
+        // Движки — в карточке «Режим» (04.10), оба при любом режиме (владелец:
+        // «пусть эти движки будут и в десинке, и в туннеле»): не нужный режиму
+        // скажет «не поднимается», а высота карточки от режима не зависит.
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid);
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
     }
 
     /// <summary>Строка состояния движка в его карточке.</summary>
@@ -1228,25 +1224,20 @@ public partial class StatusView : UserControl
         ModeTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
         ModeRouteName.Text = WorkModes.Name(WorkMode.Route);
 
-        ModeDesyncText.Text = WorkModes.Explain(WorkMode.Desync);
-        ModeRouteText.Text = WorkModes.Explain(WorkMode.Route);
+        // Пояснение — выбранного режима. «Без исключений» — настройка внутри
+        // «Туннеля»: включённая, она меняет смысл режима, и молчать о ней нельзя.
+        ModeText.Text = mode is not { } chosen
+            ? "Режим не выбран — движки не поднимутся."
+            : WorkModes.Explain(chosen)
+                + (chosen == WorkMode.Tunnel && engines.IgnoreExclusions
+                    ? " Сейчас без исключений: в VPN идёт и «напрямую»."
+                    : string.Empty);
+        ModeText.ToolTip = ModeText.Text;
 
-        // «Без исключений» — настройка внутри «Туннеля»: включённая, она
-        // меняет и смысл режима, и молчать о ней на плитке нельзя.
-        ModeTunnelText.Text = WorkModes.Explain(WorkMode.Tunnel)
-            + (engines.IgnoreExclusions ? " Сейчас без исключений: в VPN идёт и «напрямую»." : string.Empty);
-
-        // «Ничего не поднято» режимом не считается — ни одна плитка не выбрана.
+        // «Ничего не поднято» режимом не считается — ни один сегмент не выбран.
         ModeDesync.IsChecked = mode == WorkMode.Desync;
         ModeTunnel.IsChecked = mode == WorkMode.Tunnel;
         ModeRoute.IsChecked = mode == WorkMode.Route;
-
-        // Строки движков — только у выбранной плитки: у прочих режимов движки
-        // и так не подняты, и «не поднимается» там было бы шумом. Что десинк
-        // при «без исключений» не поднимается, скажет его же строка в «Гибриде».
-        ModeDesyncEngines.Visibility = mode == WorkMode.Desync ? Visibility.Visible : Visibility.Collapsed;
-        ModeTunnelEngines.Visibility = mode == WorkMode.Tunnel ? Visibility.Visible : Visibility.Collapsed;
-        ModeRouteEngines.Visibility = mode == WorkMode.Route ? Visibility.Visible : Visibility.Collapsed;
 
         // Режиму с туннелем без выхода везти некуда: «Туннель» не поднимет
         // ничего, «Гибрид» сработает как «Десинк». Сказать об этом здесь,
