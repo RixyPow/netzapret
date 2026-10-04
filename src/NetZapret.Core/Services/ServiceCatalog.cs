@@ -270,6 +270,13 @@ public static class ServiceCatalog
                 {
                     Name = "Видеопоток",
                     List = "config/lists/googlevideo.txt",
+
+                    // Голое googlevideo.com — не сервер видео: уводит на
+                    // google.com или отдаёт чужой сертификат, и окно «Чем
+                    // чинить» отвечало про каждый рецепт «страницы нет»
+                    // (снимок пользователя 03.10). redirector — те же
+                    // фронтенды видео: 404 за 0,18 с напрямую (замер 04.10).
+                    Probe = "redirector.googlevideo.com",
                     Note = "сам просмотр; отдельно от страницы",
                 },
                 new ServicePart
