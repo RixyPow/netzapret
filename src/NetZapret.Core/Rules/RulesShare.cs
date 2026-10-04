@@ -34,12 +34,20 @@ public static class RulesShare
     /// Читает чужой файл маршрутов; не разобрался — исключение с причиной.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Не <see cref="UserRulesFile.Load"/>: тот испорченный файл отодвигает
     /// в <c>.broken</c>, а файл, выбранный для загрузки, — чужой, и трогать
     /// его нельзя.
+    /// </para>
+    /// <para>
+    /// Правила по программе не загружаются: обход по программе на
+    /// переработке, и у себя мы их сняли (<see cref="ProgramRulesOff"/>).
+    /// Чужой файл вернул бы их в обход этого.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<UserRuleEntry> Read(string path) =>
         RuleSetLoader.LoadRawRules(path)
+            .Where(r => r.Match != MatchKind.Process)
             .Select(r => new UserRuleEntry
             {
                 Match = r.Match,

@@ -652,6 +652,16 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// Сняты ли правила по программе разовым переводом (04.10, <see cref="Rules.ProgramRulesOff"/>); <c>null</c> — ещё нет.
+    /// </summary>
+    public bool? ProgramRulesRemoved { get; init; }
+
+    /// <summary>
+    /// Какие правила по программе сняты — словами, «Diablo IV.exe → VPN»: вернуть их, когда обход по программе переделают.
+    /// </summary>
+    public IReadOnlyList<string>? RemovedProgramRules { get; init; }
+
+    /// <summary>
     /// Версия программы, запущенная последней, — для уведомления после обновления (03.10).
     /// </summary>
     /// <remarks>

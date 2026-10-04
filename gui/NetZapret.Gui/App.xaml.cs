@@ -154,6 +154,21 @@ public partial class App : Application
         // удалении консоли.
         Core.Updates.UpdateInstaller.CleanUp();
 
+        // Правила по программе — сняты, пока обход по программе на переработке
+        // (Rules.ProgramRulesOff, владелец 04.10). Один раз, до окна и до
+        // движков: автозапуск поднял бы их со старыми правилами.
+        try
+        {
+            var removed = Core.Rules.ProgramRulesOff.RemoveOnce(AppSettings.DefaultPath, Core.Rules.UserRulesFile.DefaultPath);
+
+            if (removed.Count > 0)
+                Journal.Write("маршруты", "сняты правила по программе (на переработке): " + string.Join(", ", removed));
+        }
+        catch (Exception ex)
+        {
+            Journal.Write("маршруты", "снять правила по программе не вышло: " + ex.GetBaseException().Message);
+        }
+
         // Закрытие окна больше не закрывает программу: крестик прячет её
         // в трей. Выход остаётся явным — пунктом в меню значка.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;

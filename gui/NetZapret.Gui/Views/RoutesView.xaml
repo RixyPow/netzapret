@@ -141,9 +141,16 @@
                             (владелец 01.10, снимки): из запущенных или файлом.
                             Вписать имя в поле по-прежнему можно, но угадать
                             это было нельзя.
+
+                            С 04.10 выключена, с подсказкой «На переработке»
+                            (владелец: «мы их обманываем»): в «Гибриде» правило
+                            по программе не уводило её в VPN — см.
+                            Rules.ProgramRulesOff. Подсказка видна и у
+                            неактивной (ShowOnDisabled).
                         -->
                         <Button Grid.Column="1" x:Name="AddProgramButton" Style="{StaticResource Ghost}"
-                                Margin="12,0,0,0" VerticalAlignment="Center" Click="OnAddProgram">
+                                Margin="12,0,0,0" VerticalAlignment="Center" Click="OnAddProgram"
+                                IsEnabled="False" ToolTip="На переработке" ToolTipService.ShowOnDisabled="True">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE710;" FontSize="13"
                                            VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -170,7 +177,7 @@
                                 текста, который читают однажды.
                             -->
                             <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
-                                            Content="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com.&#x0a;&#x0a;Программа — по имени файла: впишите «Diablo IV.exe» или полный путь. «Через VPN» для программы заводит в туннель весь трафик машины, а куда что идёт, решают маршруты.&#x0a;&#x0a;«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего.&#x0a;&#x0a;«Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts.&#x0a;&#x0a;Проверить, что применится, можно в «Проверке блокировок»." />
+                                            Content="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com.&#x0a;&#x0a;Правила по программе — на переработке: в «Гибриде» «через VPN» для программы уводило в туннель только то, что и так шло туда по другим правилам, а серверы игр шли мимо. Добавить программу сейчас нельзя, прежние такие правила сняты.&#x0a;&#x0a;«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего.&#x0a;&#x0a;«Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts.&#x0a;&#x0a;Проверить, что применится, можно в «Проверке блокировок»." />
                         </StackPanel>
 
                         <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
@@ -208,7 +215,7 @@
                     </Grid.RowDefinitions>
 
                     <TextBox x:Name="Search" TextChanged="OnSearch" KeyDown="OnSearchKey"
-                             gui:Hint.Text="Сервис, сайт или .exe — найти или добавить" />
+                             gui:Hint.Text="Сервис или сайт — найти или добавить" />
 
                     <Border x:Name="RouteFilters" Grid.Column="1" Margin="10,0,0,0" CornerRadius="11" Padding="3"
                             HorizontalAlignment="Left"

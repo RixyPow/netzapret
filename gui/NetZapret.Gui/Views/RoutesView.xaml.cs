@@ -1398,18 +1398,21 @@ public partial class RoutesView : UserControl
         var program = found.Count == 0 ? ProgramInput(needle) : null;
         var domain = found.Count == 0 && program is null ? DomainInput.Normalize(needle) : null;
 
-        AddOffer.Visibility = domain is null && program is null ? Visibility.Collapsed : Visibility.Visible;
+        // Программу добавить не предлагаем: обход по программе на переработке
+        // (Rules.ProgramRulesOff, владелец 04.10) — правило обещало бы то, чего
+        // в «Гибриде» не делает. Вписанное «.exe» не ищется и сайтом.
+        AddOffer.Visibility = domain is null ? Visibility.Collapsed : Visibility.Visible;
 
-        if (program is not null)
-            AddOfferText.Text = $"«{program}» в списке нет. Добавить программу — сперва «напрямую», дальше правится в её строке. «Через VPN» для программы заводит в туннель весь трафик машины: куда что идёт, решают маршруты.";
-        else if (domain is not null)
+        if (domain is not null)
             AddOfferText.Text = $"«{domain}» в списке нет. Добавить своим доменом — сперва «напрямую», дальше правится в его строке.";
 
         Status.Text = found.Count > 0
             ? $"Найдено частей: {found.Sum(s => s.Parts.Count)}."
-            : domain is null
-                ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com."
-                : string.Empty;
+            : program is not null
+                ? $"«{program}» — программа. Правила по программе на переработке: добавить её сейчас нельзя."
+                : domain is null
+                    ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com."
+                    : string.Empty;
     }
 
     private void OnSearchKey(object sender, System.Windows.Input.KeyEventArgs e)
@@ -1635,10 +1638,15 @@ public partial class RoutesView : UserControl
             .ToList();
 
         OwnSummary.Text = own.Count == 0
-            ? "Впишите сайт или программу — например, Diablo IV.exe — в поле ниже: если их нет в списке, появится «Добавить»."
+            ? "Впишите сайт в поле ниже: если его нет в списке, появится «Добавить»."
             : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
               + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
               + ". Они стоят в списке ниже вместе с сервисами.";
+
+        // Снятые правила по программе (Rules.ProgramRulesOff, 04.10) — словами,
+        // а не молча: человек ставил игру «через VPN», и правило пропало.
+        if (AppSettings.Load(AppSettings.DefaultPath).RemovedProgramRules is { Count: > 0 } removed)
+            OwnSummary.Text += $" Правила по программе сняты — обход по программе на переработке: {string.Join(", ", removed)}.";
     }
 
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
@@ -1744,9 +1752,11 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void AddOwn()
     {
+        // Программы — на переработке (Rules.ProgramRulesOff, 04.10): «Добавить»
+        // под полем для них и не появляется, но Enter не должен обойти это.
         if (ProgramInput(Search.Text) is { } program)
         {
-            AddProgram(program);
+            Status.Text = $"«{program}» — программа. Правила по программе на переработке: добавить её сейчас нельзя.";
             return;
         }
 

@@ -36,9 +36,17 @@ public sealed class RulesShareTests : IDisposable
         return path;
     }
 
-    /// <summary>Правила для программ едут с файлом — книга их теряла.</summary>
+    /// <summary>
+    /// Правила для программ с файлом не едут, пока обход по программе на
+    /// переработке (04.10, Rules.ProgramRulesOff); прочее едет как было.
+    /// </summary>
+    /// <remarks>
+    /// До 04.10 этот тест требовал обратного: книга теряла правила программ,
+    /// и их стали возить. Теперь их сняли у всех, и чужой файл не должен
+    /// возвращать их в обход.
+    /// </remarks>
     [Fact]
-    public void A_shared_file_carries_program_routes()
+    public void A_shared_file_leaves_program_routes_behind()
     {
         var path = Write("routes.yaml", """
             rules:
@@ -53,9 +61,9 @@ public sealed class RulesShareTests : IDisposable
 
         var rules = RulesShare.Read(path);
 
-        Assert.Equal(2, rules.Count);
-        Assert.Equal(MatchKind.Process, rules[0].Match);
-        Assert.Equal("multisplit", rules[1].Recipe);
+        Assert.Single(rules);
+        Assert.Equal(MatchKind.HostList, rules[0].Match);
+        Assert.Equal("multisplit", rules[0].Recipe);
     }
 
     /// <summary>
