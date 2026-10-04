@@ -79,7 +79,7 @@
             <Rectangle x:Name="ArtShade" />
         </Grid>
 
-        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,22,32,14">
+        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,16,32,10">
             <StackPanel>
 
                 <!-- Шапка: заголовок и ссылки. Ссылки справа, как в макете. -->
@@ -90,9 +90,8 @@
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <!-- Без подзаголовка: «Главная» помещается без прокрутки (владелец 04.10). -->
                         <TextBlock Text="Главная" Style="{StaticResource Title}" FontSize="28" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                   Text="Идёт ли обход, что для него настроено, и главные ручки." />
                     </StackPanel>
 
                     <!--
@@ -214,7 +213,7 @@
                     Точка со свечением её же цвета (макет 30.09): свечение
                     красится вместе с точкой, в ShowDot, и разойтись им нечем.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,18,0,0" Padding="22,16,22,14">
+                <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,12,20,12">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -247,7 +246,7 @@
                                 той же кнопкой через секунду.
                             -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="34,14"
+                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="30,11"
                                         MinWidth="210" Click="OnStart" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
@@ -256,7 +255,7 @@
                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="34,14"
+                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="30,11"
                                         MinWidth="210" Click="OnStop" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
@@ -279,7 +278,7 @@
                             Бегущая засечка только при подъёме, и она неопределённая
                             намеренно: сколько он займёт, заранее не известно.
                         -->
-                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,14,0,0"
+                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,10,0,0"
                                 Background="{DynamicResource Border}" ClipToBounds="True"
                                 HorizontalAlignment="Stretch">
                             <Grid>
@@ -299,7 +298,7 @@
                 </Border>
 
                 <!-- Пресет и параметры подключения — рядом, как в макете. -->
-                <Grid Margin="0,12,0,0">
+                <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -415,15 +414,21 @@
 
                 <!--
                     Режим — выбором из трёх (владелец 04.10, docs/ideas.md №12):
-                    «Десинк», «Туннель», «NZ Route». С 21.09 до 04.10 здесь были
+                    «Десинк», «Туннель», «Гибрид». С 21.09 до 04.10 здесь были
                     два выключателя движков: осмысленных сочетаний у них три,
                     но третье — ради которого программа и написана — из двух
                     рычагов не читалось. Хранится по-прежнему выключателями
                     (Rules.WorkModes): переносить настройки не нужно.
-                -->
-                <TextBlock Text="Режим" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
 
-                <Grid x:Name="ModeGrid">
+                    Движки — внутри плиток (владелец 04.10: «встрой отображение
+                    движков в плитки», вся «Главная» без прокрутки): у выбранной
+                    плитки — строки её движков с состоянием, процессом и
+                    настройками; у «Гибрида» их две. Отдельного блока «Движки»
+                    больше нет — он повторял то же самое ещё раз.
+                -->
+                <!-- Заголовка «Режим» нет: плитки говорят сами за себя, а «Главная» должна помещаться без прокрутки (04.10). -->
+
+                <Grid x:Name="ModeGrid" Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="12" />
@@ -435,159 +440,123 @@
                     <RadioButton x:Name="ModeDesync" Grid.Column="0" Style="{StaticResource ModeTile}"
                                  GroupName="WorkMode" Tag="Desync" Click="OnMode">
                         <StackPanel>
-                            <TextBlock x:Name="ModeDesyncName" FontWeight="SemiBold" FontSize="15" />
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}" Width="34" Height="34" CornerRadius="10"
+                                        Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileGlyph}" FontSize="16" Text="&#xE9E9;"
+                                               Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <TextBlock x:Name="ModeDesyncName" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
+                            </StackPanel>
                             <TextBlock x:Name="ModeDesyncText" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                                       Margin="0,7,0,0" TextWrapping="Wrap" />
+
+                            <StackPanel x:Name="ModeDesyncEngines" Margin="0,8,0,0" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock x:Name="DesyncState" Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" />
+                                        <TextBlock x:Name="DesyncPid" Margin="8,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
+                                            Padding="5,2" MinWidth="0" Click="OnDesyncSettings"
+                                            ToolTip="Пресеты и рецепты — раздел «Десинк»" />
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="ModeTunnel" Grid.Column="2" Style="{StaticResource ModeTile}"
                                  GroupName="WorkMode" Tag="Tunnel" Click="OnMode">
                         <StackPanel>
-                            <TextBlock x:Name="ModeTunnelName" FontWeight="SemiBold" FontSize="15" />
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}" Width="34" Height="34" CornerRadius="10"
+                                        Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileGlyph}" FontSize="16" Text="&#xE774;"
+                                               Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <TextBlock x:Name="ModeTunnelName" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="sing-box: поднимает сетевой адаптер и уводит через него трафик. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;В этом режиме забирает всё, кроме поставленного «напрямую», — как обычный VPN. Без исключений (настройки туннеля) — вообще всё.&#x0a;&#x0a;Требует подписки или WARP: без них поднимать нечего." />
+                            </StackPanel>
                             <TextBlock x:Name="ModeTunnelText" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
+                                       Margin="0,7,0,0" TextWrapping="Wrap" />
+
+                            <StackPanel x:Name="ModeTunnelEngines" Margin="0,8,0,0" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock x:Name="TunnelState" Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" />
+                                        <TextBlock x:Name="TunnelPid" Margin="8,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
+                                            Padding="5,2" MinWidth="0" Click="OnTunnelSettings"
+                                            ToolTip="Настройки туннеля" />
+                                </Grid>
+                            </StackPanel>
                         </StackPanel>
                     </RadioButton>
 
                     <RadioButton x:Name="ModeRoute" Grid.Column="4" Style="{StaticResource ModeTile}"
                                  GroupName="WorkMode" Tag="Route" Click="OnMode">
                         <StackPanel>
-                            <TextBlock x:Name="ModeRouteName" FontWeight="SemiBold" FontSize="15" />
+                            <StackPanel Orientation="Horizontal">
+                                <Border Style="{StaticResource IconTile}" Width="34" Height="34" CornerRadius="10"
+                                        Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileGlyph}" FontSize="16" Text="&#xE8AB;"
+                                               Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <TextBlock x:Name="ModeRouteName" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Оба движка сразу. Что названо в маршрутах «через VPN», уходит в туннель; остальное идёт напрямую, и закрытое по имени чинит десинк.&#x0a;&#x0a;Адрес для сайтов из маршрутов — зарубежный, для прочих — домашний: российские сервисы не видят VPN." />
+                            </StackPanel>
                             <TextBlock x:Name="ModeRouteText" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </RadioButton>
-                </Grid>
+                                       Margin="0,7,0,0" TextWrapping="Wrap" />
 
-                <!--
-                    Движки — состояние, а не выбор. Карточка у каждого своя:
-                    sing-box может подняться, а winws2 упасть, — поэтому и отметка
-                    у каждого своя, с номером процесса (владелец 26.09).
-                -->
-                <TextBlock Text="Движки" FontWeight="SemiBold" FontSize="16" Margin="2,18,0,8" />
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="14" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" x:Name="DesyncCard" Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
-                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE82D;" />
-                            </Border>
-
-                            <StackPanel Grid.Column="1">
+                            <StackPanel x:Name="ModeRouteEngines" Margin="0,8,0,0" Visibility="Collapsed">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-
-                                    <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="Десинк" FontWeight="SemiBold" FontSize="15"
-                                                   VerticalAlignment="Center" />
-
-                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,6,0"
-                                                        Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
-
-                                        <!-- Отметка состояния: точка и слова, цветом состояния. -->
-                                        <Border CornerRadius="8" Padding="8,3" Background="{DynamicResource Raised}"
-                                                VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center"
-                                                         Fill="{DynamicResource Faint}" />
-                                                <TextBlock x:Name="DesyncState" Margin="6,0,0,0" FontSize="12"
-                                                           Foreground="{DynamicResource Muted}" Text="—" />
-                                            </StackPanel>
-                                        </Border>
-                                    </WrapPanel>
-
-                                </Grid>
-
-                                <TextBlock x:Name="DesyncLine" Style="{StaticResource Caption}"
-                                           Margin="0,9,0,0" TextWrapping="Wrap" />
-
-                                <Grid Margin="0,12,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock x:Name="DesyncPid" Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
-
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse x:Name="RouteDesyncDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Десинк" />
+                                        <TextBlock x:Name="RouteDesyncState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" />
+                                        <TextBlock x:Name="RouteDesyncPid" Margin="8,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" />
+                                    </StackPanel>
                                     <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
-                                            Padding="7,6" MinWidth="0" Click="OnDesyncSettings"
+                                            Padding="5,2" MinWidth="0" Click="OnDesyncSettings"
                                             ToolTip="Пресеты и рецепты — раздел «Десинк»" />
                                 </Grid>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
-
-                    <Border Grid.Column="2" x:Name="TunnelCard" Style="{StaticResource Card}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
-                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE72D;" />
-                            </Border>
-
-                            <StackPanel Grid.Column="1">
-                                <Grid>
+                                <Grid Margin="0,4,0,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-
-                                    <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="Туннель" FontWeight="SemiBold" FontSize="15"
-                                                   VerticalAlignment="Center" />
-
-                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,6,0"
-                                                        Content="sing-box: поднимает сетевой адаптер и уводит через него то, что названо в маршрутах. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;Без десинка забирает весь трафик — как обычный VPN. Вместе с ним уводит только названное, оставляя десинку остальное.&#x0a;&#x0a;Требует подписки: без неё поднимать нечего." />
-
-                                        <Border CornerRadius="8" Padding="8,3" Background="{DynamicResource Raised}"
-                                                VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center"
-                                                         Fill="{DynamicResource Faint}" />
-                                                <TextBlock x:Name="TunnelState" Margin="6,0,0,0" FontSize="12"
-                                                           Foreground="{DynamicResource Muted}" Text="—" />
-                                            </StackPanel>
-                                        </Border>
-                                    </WrapPanel>
-
-                                </Grid>
-
-                                <TextBlock x:Name="TunnelLine" Style="{StaticResource Caption}"
-                                           Margin="0,9,0,0" TextWrapping="Wrap" />
-
-                                <Grid Margin="0,12,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock x:Name="TunnelPid" Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
-
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse x:Name="RouteTunnelDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Туннель" />
+                                        <TextBlock x:Name="RouteTunnelState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" />
+                                        <TextBlock x:Name="RouteTunnelPid" Margin="8,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" />
+                                    </StackPanel>
                                     <Button Grid.Column="1" Style="{StaticResource IconGhost}" Content="&#xE713;"
-                                            Padding="7,6" MinWidth="0" Click="OnTunnelSettings"
+                                            Padding="5,2" MinWidth="0" Click="OnTunnelSettings"
                                             ToolTip="Настройки туннеля" />
                                 </Grid>
                             </StackPanel>
-                        </Grid>
-                    </Border>
+                        </StackPanel>
+                    </RadioButton>
                 </Grid>
 
                 <!-- Жалоба на сочетание движков; пусто — строки нет вовсе, и отступа тоже. -->
@@ -595,7 +564,7 @@
                            Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
                 <!-- Автозапуск и обновление — рядом, как в макете. -->
-                <Grid Margin="0,12,0,0">
+                <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -657,28 +626,28 @@
                     Быстрые действия (макет 30.09): переходы в разделы разбора
                     и папка настроек — то, за чем идут, когда что-то не так.
                 -->
-                <TextBlock Text="Быстрые действия" FontWeight="SemiBold" FontSize="16" Margin="2,14,0,8" />
+                <!-- Без заголовка «Быстрые действия» — ради «Главной» без прокрутки (04.10). -->
 
-                <UniformGrid Rows="1">
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickCheck">
+                <UniformGrid Rows="1" Margin="0,10,0,0">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="10,8" Click="OnQuickCheck">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" Margin="0,0,10,0" />
+                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" Margin="0,0,8,0" />
                             <TextBlock Text="Проверить блокировки" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickLog">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="10,8" Click="OnQuickLog">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,10,0" />
                             <TextBlock Text="Открыть журнал" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="12,9" Click="OnQuickDoctor">
+                    <Button Style="{StaticResource Ghost}" Margin="0,0,8,0" Padding="10,8" Click="OnQuickDoctor">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE756;" Margin="0,0,10,0" />
                             <TextBlock Text="Диагностика" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                     </Button>
-                    <Button Style="{StaticResource Ghost}" Padding="12,9" Click="OnQuickConfig"
+                    <Button Style="{StaticResource Ghost}" Padding="10,8" Click="OnQuickConfig"
                             ToolTip="Папка config в проводнике, файл настроек выделен">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8B7;" Margin="0,0,10,0" />
@@ -694,7 +663,7 @@
                     обновления подписок программа не хранит. Время файла конфига —
                     то, что известно наверняка, им и названо.
                 -->
-                <Grid Margin="4,14,0,0">
+                <Grid Margin="4,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />

@@ -1088,9 +1088,15 @@ public partial class StatusView : UserControl
 
         _engines = rows;
 
-        // Каждый движок — в своей карточке, рядом с выключателем (26.09).
-        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid);
-        ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
+        // Движки — в плитках режимов (04.10): у «Десинка» и «Туннеля» по своему,
+        // у «Гибрида» оба. Видна строка только у выбранной плитки (ShowModes).
+        var desync = rows.FirstOrDefault(r => r.Name == "winws2");
+        var tunnel = rows.FirstOrDefault(r => r.Name == "sing-box");
+
+        ShowEngine(desync, DesyncDot, DesyncState, DesyncPid);
+        ShowEngine(tunnel, TunnelDot, TunnelState, TunnelPid);
+        ShowEngine(desync, RouteDesyncDot, RouteDesyncState, RouteDesyncPid);
+        ShowEngine(tunnel, RouteTunnelDot, RouteTunnelState, RouteTunnelPid);
     }
 
     /// <summary>Строка состояния движка в его карточке.</summary>
@@ -1113,10 +1119,13 @@ public partial class StatusView : UserControl
 
         // Номер процесса — чтобы найти движок в диспетчере задач (владелец,
         // 26.09). У движка не в порядке на его месте причина надзора: она
-        // важнее номера, и места под обе строки в карточке нет.
+        // важнее номера. В строке плитки места мало — целиком она в подсказке.
         pid.Text = row.Detail.Length > 0
             ? row.Detail
-            : row.ProcessId is { } id ? $"Процесс: {id}" : string.Empty;
+            : row.ProcessId is { } id ? $"№{id}" : string.Empty;
+        pid.ToolTip = row.Detail.Length > 0
+            ? row.Detail
+            : row.ProcessId is { } shown ? $"Процесс {shown} — так его ищут в диспетчере задач" : null;
     }
 
     /// <summary>
@@ -1232,36 +1241,15 @@ public partial class StatusView : UserControl
         ModeTunnel.IsChecked = mode == WorkMode.Tunnel;
         ModeRoute.IsChecked = mode == WorkMode.Route;
 
-        // Третье состояние — включён, а не поднимается: при игнорируемых
-        // исключениях всё уходит в туннель. Промолчать значило бы показать
-        // включённым то, чего в диспетчере задач не будет.
-        DesyncLine.Text = !engines.Desync
-            ? $"Не поднимается: в режиме «{WorkModes.Name(WorkMode.Tunnel)}» всё идёт через VPN."
-            : !engines.DesyncRuns
-                ? "Не поднимается: исключения игнорируются, и всё идёт в туннель."
-                : engines.Tunnel
-                    ? "Чинит имена в рукопожатии. Трафик идёт напрямую."
-                    : "Чинит имена в рукопожатии. «Через VPN» без туннеля идёт напрямую.";
-
-        // Туннель говорит и про охват, потому что тот выводится из пары:
-        // без десинка он забирает всё, вместе с ним — только названное.
-        // Человек, щёлкнувший один выключатель, вправе узнать, что этим
-        // изменилось у второго.
-        // «Напрямую» при одном туннеле остаётся напрямую — таблица владельца
-        // 23.09; «весь трафик» без оговорки обещал бы и его.
-        TunnelLine.Text = !engines.Tunnel
-            ? $"Не поднимается в режиме «{WorkModes.Name(WorkMode.Desync)}». Адрес остаётся домашним."
-            : engines.IgnoreExclusions
-                ? "Забирает весь трафик, исключения не действуют."
-                : engines.TunnelTakesAll
-                    ? "Забирает всё, кроме поставленного «напрямую»."
-                    : "Уводит то, что названо в маршрутах.";
-
-        DesyncCard.BorderBrush = (Brush)FindResource(engines.DesyncRuns ? "Accent" : "Border");
-        TunnelCard.BorderBrush = (Brush)FindResource(engines.Tunnel ? "Accent" : "Border");
+        // Строки движков — только у выбранной плитки: у прочих режимов движки
+        // и так не подняты, и «не поднимается» там было бы шумом. Что десинк
+        // при «без исключений» не поднимается, скажет его же строка в «Гибриде».
+        ModeDesyncEngines.Visibility = mode == WorkMode.Desync ? Visibility.Visible : Visibility.Collapsed;
+        ModeTunnelEngines.Visibility = mode == WorkMode.Tunnel ? Visibility.Visible : Visibility.Collapsed;
+        ModeRouteEngines.Visibility = mode == WorkMode.Route ? Visibility.Visible : Visibility.Collapsed;
 
         // Режиму с туннелем без выхода везти некуда: «Туннель» не поднимет
-        // ничего, «NZ Route» сработает как «Десинк». Сказать об этом здесь,
+        // ничего, «Гибрид» сработает как «Десинк». Сказать об этом здесь,
         // у выбора, а не узнавать по неработающему VPN.
         var complaint = engines.Complaint
             ?? (engines.Tunnel && !settings.HasTunnelExit
@@ -1276,7 +1264,9 @@ public partial class StatusView : UserControl
         // Автозапуск поднимает ровно это. Сказано здесь же, где задано:
         // иначе про связь пришлось бы догадываться, а догадка — источник
         // того самого «трей запускается, а движки нужно поднимать кнопкой».
-        AutostartRaises.Text = "При входе в систему под этим пользователем поднимется: " + engines.Describe() + ".";
+        AutostartRaises.Text = mode is { } raised
+            ? $"При входе в Windows поднимется режим «{WorkModes.Name(raised)}»."
+            : "При входе в Windows ничего не поднимется: режим не выбран.";
     }
 
     /// <summary>
@@ -1366,7 +1356,7 @@ public partial class StatusView : UserControl
 
         if (state.Stale)
         {
-            AutostartValue.Text = "Задача устарела и запускает прежнюю программу — выключите и включите снова.";
+            AutostartValue.Text = "Задача устарела — выключите и включите снова.";
             AutostartValue.Visibility = Visibility.Visible;
 
             ShowProblem(

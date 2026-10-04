@@ -144,7 +144,7 @@ public sealed class EngineChoiceTests
     }
 
     [Theory]
-    [InlineData(true, true, "«NZ Route» — десинк и VPN по маршрутам")]
+    [InlineData(true, true, "«Гибрид» — десинк и VPN по маршрутам")]
     [InlineData(true, false, "«Десинк» — только десинк")]
     [InlineData(false, true, "«Туннель» — весь трафик через VPN")]
     [InlineData(false, false, "ничего не поднято")]

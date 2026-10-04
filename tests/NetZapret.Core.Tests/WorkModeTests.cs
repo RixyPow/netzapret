@@ -4,7 +4,7 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Три режима вместо двух выключателей (владелец, 04.10): «Десинк», «Туннель», «NZ Route».
+/// Три режима вместо двух выключателей (владелец, 04.10): «Десинк», «Туннель», «Гибрид».
 /// </summary>
 public sealed class WorkModeTests
 {
@@ -48,6 +48,6 @@ public sealed class WorkModeTests
             Assert.False(string.IsNullOrWhiteSpace(WorkModes.Explain(mode)));
         }
 
-        Assert.Equal("NZ Route", WorkModes.Name(WorkMode.Route));
+        Assert.Equal("Гибрид", WorkModes.Name(WorkMode.Route));
     }
 }

@@ -6,7 +6,7 @@ namespace NetZapret.Core.Rules;
 /// <remarks>
 /// <para>
 /// Владелец 04.10: вместо двух выключателей — три режима: «Десинк»,
-/// «Туннель» и общий, «NZ Route». Осмысленных сочетаний у выключателей
+/// «Туннель» и общий — «Гибрид» (сперва звался «NZ Route», в тот же день переименован). Осмысленных сочетаний у выключателей
 /// и было три, но человек видел два независимых рычага и не видел,
 /// что вместе они дают третий режим — тот, ради которого программа
 /// написана (docs/ideas.md, №12).
@@ -34,7 +34,7 @@ public enum WorkMode
 public static class WorkModes
 {
     /// <summary>Название общего режима. Одно место — чтобы переименовать одной строкой.</summary>
-    public const string RouteName = "NZ Route";
+    public const string RouteName = "Гибрид";
 
     public static IReadOnlyList<WorkMode> All { get; } = [WorkMode.Desync, WorkMode.Tunnel, WorkMode.Route];
 
@@ -48,9 +48,9 @@ public static class WorkModes
     /// <summary>Что режим делает с трафиком — одной фразой для выбора.</summary>
     public static string Explain(WorkMode mode) => mode switch
     {
-        WorkMode.Desync => "Чинит блокировки по имени. Трафик идёт напрямую, адрес домашний, VPN не поднимается.",
-        WorkMode.Tunnel => "Весь трафик через VPN, кроме поставленного «напрямую». Десинк не нужен и не поднимается.",
-        _ => "Десинк и VPN вместе: что идёт через VPN, а что напрямую с десинком, решают маршруты.",
+        WorkMode.Desync => "Чинит блокировки по имени. Трафик напрямую, адрес домашний.",
+        WorkMode.Tunnel => "Весь трафик через VPN, кроме поставленного «напрямую».",
+        _ => "Что через VPN, а что напрямую с десинком, — решают маршруты.",
     };
 
     /// <summary>Какой режим сейчас; <c>null</c> — ничего не поднято.</summary>
