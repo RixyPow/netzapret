@@ -136,6 +136,39 @@ public partial class DnsView : UserControl
 {
     private CancellationTokenSource? _work;
 
+    /// <summary>Последний обзор за сеанс: строки, итог словами и время.</summary>
+    private sealed record LastSurvey(IReadOnlyList<DnsSurveyRow> Rows, string Status, DateTime At);
+
+    /// <summary>
+    /// Последний обзор — общий для всех заходов на вкладку.
+    /// </summary>
+    /// <remarks>
+    /// Вкладка пересоздаётся при каждом заходе, и задержки, намеренные
+    /// обзором, пропадали, стоило уйти на другую вкладку и вернуться
+    /// (владелец, 04.10). Только на время работы окна: задержка с прошлого
+    /// запуска уже ни о чём не говорит.
+    /// </remarks>
+    private static LastSurvey? _last;
+
+    /// <summary>Показывает последний обзор: таблицу и задержки в списке.</summary>
+    private void ShowLast()
+    {
+        if (_last is not { } last)
+            return;
+
+        var choices = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+
+        foreach (var row in last.Rows)
+            Fill(choices, row);
+
+        Survey.ItemsSource = last.Rows.Select(SurveyRow.From).ToList();
+        SurveyHead.Visibility = Visibility.Visible;
+        SurveyStatus.Text = $"{last.Status} Проверено в {last.At:HH:mm}.";
+        Status.Text = $"Задержка — из обзора в {last.At:HH:mm}.";
+
+        Redraw();
+    }
+
     private CancellationTokenSource? _logos;
 
     /// <summary>
@@ -254,6 +287,8 @@ public partial class DnsView : UserControl
             .ToList();
 
         Status.Text = "Задержку покажет обзор выше.";
+
+        ShowLast();
 
         StartLogos();
     }
@@ -633,6 +668,7 @@ public partial class DnsView : UserControl
         _work = new CancellationTokenSource();
 
         var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>();
+        var done = new List<DnsSurveyRow>();
         Survey.ItemsSource = rows;
         SurveyStatus.Text = "Проверяю… Запросы идут мимо туннеля, через адаптер.";
 
@@ -651,6 +687,7 @@ public partial class DnsView : UserControl
             var progress = new Progress<DnsSurveyRow>(row =>
             {
                 rows.Add(SurveyRow.From(row));
+                done.Add(row);
                 Fill(choices, row);
                 Redraw();
             });
@@ -668,10 +705,16 @@ public partial class DnsView : UserControl
                 ? "Подмены по UDP не найдено."
                 : $"По UDP подменяют ответы: {string.Join(", ", intercepted)}. "
                   + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.";
+
+            _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now);
         }
         catch (OperationCanceledException)
         {
             SurveyStatus.Text = "Обзор прерван.";
+
+            // Прерван уходом с вкладки — что успели, то и запомнили.
+            if (done.Count > 0)
+                _last = new LastSurvey(done.ToList(), $"Обзор прерван: проверено {done.Count} из {DnsSurvey.All.Count}.", DateTime.Now);
         }
         catch (Exception ex)
         {
