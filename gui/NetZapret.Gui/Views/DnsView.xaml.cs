@@ -37,6 +37,26 @@ public sealed class ResolverRow
     public Brush Edge => (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
 
     public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Ярлыки из пояснения провайдера: «надёжный, без фильтрации» — два ярлыка.
+    /// </summary>
+    public IReadOnlyList<string> Tags => Note
+        .Split(", ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(tag => char.ToUpper(tag[0]) + tag[1..])
+        .ToList();
+
+    /// <summary>Логотип с сайта резолвера; <c>null</c> — вместо него буква.</summary>
+    public System.Windows.Media.Imaging.BitmapImage? Icon { get; set; }
+
+    /// <summary>Сайт, с которого берётся логотип; <c>null</c> — брать неоткуда.</summary>
+    public string? Site { get; init; }
+
+    public string Letter => Name.Length > 0 ? Name[..1].ToUpperInvariant() : "·";
+
+    public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
 }
 
 /// <summary>Строка обзора резолверов.</summary>
@@ -116,12 +136,92 @@ public partial class DnsView : UserControl
 {
     private CancellationTokenSource? _work;
 
+    private CancellationTokenSource? _logos;
+
+    /// <summary>
+    /// Сайт, чей значок — логотип резолвера.
+    /// </summary>
+    /// <remarks>
+    /// Значок берётся у самого сайта (SiteIcons), как у сервисов в «Маршрутах».
+    /// Имя DoH для этого годится не всегда: у dns.quad9.net и
+    /// common.dot.dns.yandex.net значка нет, он на главном сайте. Неизвестным
+    /// и своим — по имени DoH без первой части; нет и его — буква.
+    /// </remarks>
+    private static string? LogoSite(DnsProvider provider)
+    {
+        var name = provider.Name;
+
+        if (name.StartsWith("Google", StringComparison.OrdinalIgnoreCase)) return "dns.google";
+        if (name.StartsWith("Cloudflare", StringComparison.OrdinalIgnoreCase)) return "one.one.one.one";
+        if (name.StartsWith("Quad9", StringComparison.OrdinalIgnoreCase)) return "quad9.net";
+        if (name.StartsWith("AdGuard", StringComparison.OrdinalIgnoreCase)) return "adguard-dns.io";
+        if (name.StartsWith("Yandex", StringComparison.OrdinalIgnoreCase)) return "dns.yandex.ru";
+        if (name.StartsWith("OpenDNS", StringComparison.OrdinalIgnoreCase)) return "opendns.com";
+        if (name.StartsWith("CleanBrowsing", StringComparison.OrdinalIgnoreCase)) return "cleanbrowsing.org";
+        if (name.StartsWith("Mullvad", StringComparison.OrdinalIgnoreCase)) return "mullvad.net";
+        if (name.StartsWith("NextDNS", StringComparison.OrdinalIgnoreCase)) return "nextdns.io";
+        if (name.StartsWith("ControlD", StringComparison.OrdinalIgnoreCase)) return "controld.com";
+        if (name.StartsWith("Alibaba", StringComparison.OrdinalIgnoreCase)) return "alidns.com";
+
+        if (provider.TlsName is not { } tls)
+            return null;
+
+        var labels = tls.Split('.');
+
+        return labels.Length > 2 ? string.Join('.', labels[^2..]) : tls;
+    }
+
+    /// <summary>Логотипы: из кэша сразу, остальные — в фоне, по одному.</summary>
+    private void StartLogos()
+    {
+        _logos?.Cancel();
+        _logos = new CancellationTokenSource();
+
+        var token = _logos.Token;
+        var rows = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+
+        foreach (var row in rows)
+            row.Icon = row.Site is { } site ? SiteIcons.Cached(site) : null;
+
+        Redraw();
+
+        _ = Task.Run(async () =>
+        {
+            foreach (var row in rows)
+            {
+                if (token.IsCancellationRequested)
+                    return;
+
+                if (row.Site is not { } site || SiteIcons.Known(site))
+                    continue;
+
+                var icon = await SiteIcons.ForAsync(site, token);
+
+                if (icon is null || token.IsCancellationRequested)
+                    continue;
+
+                _ = Dispatcher.BeginInvoke(() =>
+                {
+                    if (token.IsCancellationRequested)
+                        return;
+
+                    row.Icon = icon;
+                    Redraw();
+                });
+            }
+        }, token);
+    }
+
     public DnsView()
     {
         InitializeComponent();
 
         Loaded += (_, _) => Reload();
-        Unloaded += (_, _) => _work?.Cancel();
+        Unloaded += (_, _) =>
+        {
+            _work?.Cancel();
+            _logos?.Cancel();
+        };
     }
 
     private void Reload()
@@ -149,10 +249,13 @@ public partial class DnsView : UserControl
                 Own = p.Own,
                 Choosable = p.Choosable,
                 Udp = p.Udp.Count > 0 ? p.Udp[0] : string.Empty,
+                Site = LogoSite(p),
             })
             .ToList();
 
         Status.Text = "Задержку покажет обзор выше.";
+
+        StartLogos();
     }
 
     private void ShowChosen(AppSettings settings)

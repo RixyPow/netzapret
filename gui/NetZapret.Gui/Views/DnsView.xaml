@@ -4,28 +4,48 @@
              xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
+    <!--
+        Плитками по макету владельца (04.10): четыре карточки два на два —
+        обзор, адреса в hosts, апстрим туннеля, резолверы системы, — у каждой
+        значок слева, как у карточек «Главной». Под ними автовыбор и список
+        резолверов туннеля с логотипами. Правая колонка макета («Текущий
+        резолвер», «Быстрые действия», «Справка») не взята: её кнопки
+        повторяют кнопки плиток, а текущий резолвер виден в плитке апстрима
+        и выделен в списке.
+    -->
+    <UserControl.Resources>
+        <!-- Ярлык свойства резолвера: «Надёжный», «Без фильтрации». -->
+        <Style x:Key="Tag" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="8,2,8,3" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="Background" Value="{DynamicResource Raised}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <StackPanel>
 
-            <StackPanel Grid.Column="0">
+            <StackPanel>
+                <TextBlock Text="DNS" Style="{StaticResource Title}" />
+                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="Через кого туннель узнаёт адреса имён. Настройки Windows мы не трогаем — этот выбор действует внутри sing-box." />
+            </StackPanel>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="DNS" Style="{StaticResource Title}" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                   Text="Через кого туннель узнаёт адреса имён. Настройки Windows мы не трогаем — этот выбор действует внутри sing-box." />
-                    </StackPanel>
-
-                </Grid>
+            <Grid Margin="0,20,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="14" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
                 <!--
                     Обзор резолверов, 23.09, по снимку владельца. Отвечает на то,
@@ -34,74 +54,32 @@
                     Cloudflare и OpenDNS по UDP отвечали из RIPN-NS5-RU-MSK
                     и подменяли четыре закрытых имени из пяти, по DoH и DoT — сами.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Обзор резолверов" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE9D9;" />
+                        </Border>
 
-                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Задержка по DoH, DoT и обычному UDP — лучшая из трёх.&#x0a;&#x0a;«Кто отвечает» — адрес, с которого на самом деле ходит наружу тот, кто ответил на UDP, и его сеть. Если спрашивали 8.8.8.8, а ответил резолвер российской сети, запрос перехвачен по дороге.&#x0a;&#x0a;«Подмена» — сколько из пяти давно закрытых имён резолвер по UDP разрешил не туда: в заглушку, в пустоту или в один адрес на всех. Одно расхождение адресов подменой не считается — у сетей доставки узлов десятки.&#x0a;&#x0a;Мерится сеть провайдера: запросы идут через адаптер мимо нашего туннеля." />
-                                </StackPanel>
-
-                                <TextBlock x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
-                                           TextWrapping="Wrap"
-                                           Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Обзор резолверов" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Задержка по DoH, DoT и обычному UDP — лучшая из трёх.&#x0a;&#x0a;«Кто отвечает» — адрес, с которого на самом деле ходит наружу тот, кто ответил на UDP, и его сеть. Если спрашивали 8.8.8.8, а ответил резолвер российской сети, запрос перехвачен по дороге.&#x0a;&#x0a;«Подмена» — сколько из пяти давно закрытых имён резолвер по UDP разрешил не туда: в заглушку, в пустоту или в один адрес на всех. Одно расхождение адресов подменой не считается — у сетей доставки узлов десятки.&#x0a;&#x0a;Мерится сеть провайдера: запросы идут через адаптер мимо нашего туннеля." />
                             </StackPanel>
+                            <TextBlock x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
+                                       TextWrapping="Wrap"
+                                       Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
+                        </StackPanel>
 
-                            <Button Grid.Column="1" x:Name="SurveyButton" Style="{StaticResource Primary}"
-                                    Content="Проверить" Click="OnSurvey" VerticalAlignment="Center" />
-                        </Grid>
-
-                        <Grid x:Name="SurveyHead" Margin="0,14,0,6" Visibility="Collapsed">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="120" />
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="92" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="64" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBlock Grid.Column="0" Text="ПРОВАЙДЕР" Style="{StaticResource Caption}" />
-                            <TextBlock Grid.Column="1" Text="DoH" Style="{StaticResource Caption}" />
-                            <TextBlock Grid.Column="2" Text="DoT" Style="{StaticResource Caption}" />
-                            <TextBlock Grid.Column="3" Text="UDP" Style="{StaticResource Caption}" />
-                            <TextBlock Grid.Column="4" Text="КТО ОТВЕЧАЕТ НА UDP" Style="{StaticResource Caption}" />
-                            <TextBlock Grid.Column="5" Text="ПОДМЕНА" Style="{StaticResource Caption}" />
-                        </Grid>
-
-                        <ItemsControl x:Name="Survey">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,3,0,3">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="120" />
-                                            <ColumnDefinition Width="80" />
-                                            <ColumnDefinition Width="80" />
-                                            <ColumnDefinition Width="92" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="64" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <TextBlock Grid.Column="1" Text="{Binding Doh}" Style="{StaticResource Mono}" Foreground="{Binding DohColor}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Dot}" Style="{StaticResource Mono}" Foreground="{Binding DotColor}" />
-                                        <TextBlock Grid.Column="3" Text="{Binding Udp}" Style="{StaticResource Mono}" Foreground="{Binding UdpColor}" />
-                                        <TextBlock Grid.Column="4" Text="{Binding Real}" Style="{StaticResource Mono}" Foreground="{Binding RealColor}"
-                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Real}" Margin="0,0,8,0" />
-                                        <TextBlock Grid.Column="5" Text="{Binding Spoof}" Style="{StaticResource Mono}" Foreground="{Binding SpoofColor}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                        <Button Grid.Column="2" x:Name="SurveyButton" Style="{StaticResource Primary}" Padding="18,9"
+                                Content="Проверить" Click="OnSurvey" VerticalAlignment="Top" />
+                    </Grid>
                 </Border>
 
                 <!--
@@ -111,51 +89,55 @@
                     проверка это соединение на каждый прибитый адрес, и при
                     мёртвых ещё опрос всех посредников.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Адреса посредников в hosts" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE718;" />
+                        </Border>
 
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Адреса в hosts" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
                                                 Content="Посредники — XBOX DNS, Comss — время от времени меняют адреса, и пин на умерший адрес кладёт сайт целиком: 28.09 так легли Claude и ChatGPT.&#x0a;&#x0a;Проверка стучится в каждый прибитый адрес одним соединением. Умерший заменяется живым, который посредник отдаёт сейчас; перед записью hosts сохраняется копия. Работающие пины не трогаются.&#x0a;&#x0a;Если не ответило больше половины адресов разом — это сбой сети, а не смерть адресов, и ничего не меняется.&#x0a;&#x0a;С поднятыми движками точнее: часть посредников без десинка не отвечает." />
                             </StackPanel>
-
                             <TextBlock x:Name="PinsStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
                                        TextWrapping="Wrap"
                                        Text="Живы ли адреса, к которым прибиты имена, и что посредники отдают сейчас." />
                         </StackPanel>
 
-                        <Button Grid.Column="1" x:Name="PinsButton" Style="{StaticResource Ghost}"
-                                Content="Проверить актуальные адреса" Click="OnPins" VerticalAlignment="Center" />
+                        <Button Grid.Column="2" x:Name="PinsButton" Style="{StaticResource Ghost}" Padding="18,9"
+                                Content="Проверить" Click="OnPins" VerticalAlignment="Top"
+                                ToolTip="Проверить актуальные адреса посредников и заменить умершие пины" />
                     </Grid>
                 </Border>
 
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                    <StackPanel>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Апстрим туннеля" Style="{StaticResource Caption}"
-                                               VerticalAlignment="Center" />
+                        <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE968;" />
+                        </Border>
 
-                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Речь только о резолвере, которого спрашивает sing-box. Настройки DNS самой Windows не трогаются ни здесь, ни где-либо ещё.&#x0a;&#x0a;ЧЕРЕЗ ТУННЕЛЬ — запрос уходит внутри зашифрованного потока к серверу подписки. Оператору он неотличим от прочего трафика, перекрыть его отдельно нельзя. Цена: пока туннель не поднялся, имена не разрешаются вовсе — включая те, что открывались одним десинком.&#x0a;&#x0a;НАПРЯМУЮ — запрос уходит к выбранному резолверу своим соединением, по DoH. Работает независимо от туннеля, но виден оператору как обращение к известному резолверу, и его можно перекрыть. В августе 2026 несколько российских операторов так и сделали." />
-                                </StackPanel>
-
-                                <TextBlock x:Name="ChosenName" FontSize="16" FontWeight="SemiBold"
-                                           Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Grid.Column="1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Апстрим туннеля" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Речь только о резолвере, которого спрашивает sing-box. Настройки DNS самой Windows не трогаются ни здесь, ни где-либо ещё.&#x0a;&#x0a;ЧЕРЕЗ ТУННЕЛЬ — запрос уходит внутри зашифрованного потока к серверу подписки. Оператору он неотличим от прочего трафика, перекрыть его отдельно нельзя. Цена: пока туннель не поднялся, имена не разрешаются вовсе — включая те, что открывались одним десинком.&#x0a;&#x0a;НАПРЯМУЮ — запрос уходит к выбранному резолверу своим соединением, по DoH. Работает независимо от туннеля, но виден оператору как обращение к известному резолверу, и его можно перекрыть. В августе 2026 несколько российских операторов так и сделали." />
                             </StackPanel>
+
+                            <TextBlock x:Name="ChosenName" FontSize="15" FontWeight="SemiBold"
+                                       Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
 
                             <!--
                                 Список, а не выключатель. Кнопка подписывалась
@@ -165,17 +147,16 @@
                                 У списка оба варианта на виду, и видно, какой
                                 стоит сейчас.
                             -->
-                            <ComboBox Grid.Column="1" x:Name="TunnelMode" Width="188"
-                                      VerticalAlignment="Center"
+                            <ComboBox x:Name="TunnelMode" Margin="0,10,0,0" HorizontalAlignment="Stretch"
                                       SelectionChanged="OnThroughTunnel">
                                 <ComboBoxItem Content="спрашивать напрямую" />
                                 <ComboBoxItem Content="спрашивать через туннель" />
                             </ComboBox>
-                        </Grid>
 
-                        <TextBlock x:Name="TunnelHint" Style="{StaticResource Caption}"
-                                   Margin="0,10,0,0" TextWrapping="Wrap" />
-                    </StackPanel>
+                            <TextBlock x:Name="TunnelHint" Style="{StaticResource Caption}"
+                                       Margin="0,10,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!--
@@ -183,99 +164,217 @@
                     не трогаем, — а чтобы было видно, кому уходят запросы всего,
                     что мимо туннеля.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,10,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Резолверы системы" Style="{StaticResource Caption}" />
-                        <TextBlock x:Name="SystemValue" Style="{StaticResource Mono}" Margin="0,6,0,0"
-                                   TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,7,0,0" TextWrapping="Wrap"
-                                   Text="Их выдаёт сеть или задаёт адаптер. Мы их только читаем: подмена системного DNS ломает то, что от него зависит, и переживает удаление программы." />
-                    </StackPanel>
-                </Border>
-
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
-
-                <!--
-                    Автовыбор (отзыв пользователя и решение владельца, 25.09):
-                    программа сама ставит быстрейший по DoH из тех, что годятся
-                    в туннель, — после каждого обзора. Выбор строкой ниже
-                    автовыбор выключает.
-                -->
-                <Button Style="{StaticResource Choice}" Margin="0,12,0,0" Click="OnAutoDns">
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="Автовыбор по задержке" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AutoDnsLine" Style="{StaticResource Caption}" Margin="0,3,0,0"
-                                       TextWrapping="Wrap"
-                                       Text="Программа сама замерит резолверы из вашего места и поставит самый быстрый по DoH. Замер повторяется при каждой проверке выше; выбор строкой ниже автовыбор выключает." />
-                        </StackPanel>
-                        <ToggleButton Grid.Column="1" x:Name="AutoDnsSwitch" Style="{StaticResource Switch}"
-                                      IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
-                    </Grid>
-                </Button>
 
-                <ItemsControl x:Name="Resolvers" Margin="0,8,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
-                                    Tag="{Binding Address}" Click="OnChoose">
-                                <Grid>
+                        <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE7F8;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Резолверы системы" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Кому Windows отдаёт запросы всего, что идёт мимо туннеля. Их выдаёт сеть или задаёт адаптер." />
+                            </StackPanel>
+
+                            <Border Margin="0,10,0,0" CornerRadius="9" Padding="10,7"
+                                    Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                <TextBlock x:Name="SystemValue" Style="{StaticResource Mono}" TextWrapping="Wrap" />
+                            </Border>
+
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                                       Text="Мы их только читаем: подмена системного DNS ломает то, что от него зависит, и переживает удаление программы." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Таблица обзора — во всю ширину, когда есть что показать. -->
+            <Border x:Name="SurveyHead" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="80" />
+                            <ColumnDefinition Width="92" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="64" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="ПРОВАЙДЕР" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="1" Text="DoH" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="2" Text="DoT" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="3" Text="UDP" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="4" Text="КТО ОТВЕЧАЕТ НА UDP" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="5" Text="ПОДМЕНА" Style="{StaticResource Caption}" />
+                    </Grid>
+
+                    <ItemsControl x:Name="Survey">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3,0,3">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="80" />
+                                        <ColumnDefinition Width="92" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="64" />
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"
-                                               FontSize="14" VerticalAlignment="Center" MinWidth="112" />
-
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,12,0">
-                                        <TextBlock Text="{Binding Address}" Style="{StaticResource Mono}"
-                                                   Foreground="{DynamicResource Muted}" />
-                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
-                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-
-                                    <TextBlock Grid.Column="2" Text="{Binding Latency}"
-                                               Style="{StaticResource Mono}"
-                                               Foreground="{Binding Color}"
-                                               TextAlignment="Right" MinWidth="96"
-                                               VerticalAlignment="Center" />
-
-                                    <TextBlock Grid.Column="3" Text="сейчас" Style="{StaticResource Mono}"
-                                               Foreground="{DynamicResource Accent}"
-                                               Margin="14,0,0,0" MinWidth="48"
-                                               VerticalAlignment="Center"
-                                               Visibility="{Binding MarkShown}" />
-
-                                    <!-- Только у своих: встроенные убирать нечем и незачем. -->
-                                    <Button Grid.Column="4" Style="{StaticResource Ghost}"
-                                            Content="убрать" Padding="12,5" Margin="12,0,0,0"
-                                            Foreground="{DynamicResource Danger}"
-                                            Visibility="{Binding RemoveShown}"
-                                            Tag="{Binding Udp}" Click="OnRemoveOwn" />
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Doh}" Style="{StaticResource Mono}" Foreground="{Binding DohColor}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Dot}" Style="{StaticResource Mono}" Foreground="{Binding DotColor}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Udp}" Style="{StaticResource Mono}" Foreground="{Binding UdpColor}" />
+                                    <TextBlock Grid.Column="4" Text="{Binding Real}" Style="{StaticResource Mono}" Foreground="{Binding RealColor}"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Real}" Margin="0,0,8,0" />
+                                    <TextBlock Grid.Column="5" Text="{Binding Spoof}" Style="{StaticResource Mono}" Foreground="{Binding SpoofColor}" />
                                 </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
 
-                <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                           Text="Задержка — по DoH из обзора выше. Нажмите на строку, чтобы туннель спрашивал этого резолвера." />
+            <!--
+                Автовыбор (отзыв пользователя и решение владельца, 25.09):
+                программа сама ставит быстрейший по DoH из тех, что годятся
+                в туннель, — после каждого обзора. Выбор строкой ниже
+                автовыбор выключает.
+            -->
+            <Button Style="{StaticResource Choice}" Margin="0,14,0,0" Click="OnAutoDns">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <!--
-                    Свой резолвер (владелец, 26.09, после отзыва в обсуждении #7).
-                    Перед записью меряется тем же обзором: не ответивший
-                    не записывается, подменяющий — записывается с предупреждением.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                    <StackPanel>
+                    <Border Style="{StaticResource IconTile}" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE916;" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="0,0,16,0" VerticalAlignment="Center">
+                        <TextBlock Text="Автовыбор по задержке" FontWeight="SemiBold" />
+                        <TextBlock x:Name="AutoDnsLine" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                   TextWrapping="Wrap"
+                                   Text="Программа сама замерит резолверы из вашего места и поставит самый быстрый по DoH. Замер повторяется при каждой проверке выше; выбор строкой ниже автовыбор выключает." />
+                    </StackPanel>
+                    <ToggleButton Grid.Column="2" x:Name="AutoDnsSwitch" Style="{StaticResource Switch}"
+                                  IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
+                </Grid>
+            </Button>
+
+            <TextBlock Text="Резолверы туннеля" FontWeight="SemiBold" FontSize="16" Margin="2,22,0,0" />
+            <TextBlock Style="{StaticResource Caption}" Margin="2,4,0,0" TextWrapping="Wrap"
+                       Text="Задержка — по DoH из обзора выше. Нажмите на строку, чтобы туннель спрашивал этого резолвера." />
+
+            <ItemsControl x:Name="Resolvers" Margin="0,10,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
+                                Tag="{Binding Address}" Click="OnChoose">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Логотип с сайта резолвера (SiteIcons); нет — первая буква. -->
+                                <Grid Grid.Column="0" Width="30" Height="30" Margin="0,0,14,0" VerticalAlignment="Center">
+                                    <Border CornerRadius="8" Background="{DynamicResource Raised}"
+                                            Visibility="{Binding LetterShown}">
+                                        <TextBlock Text="{Binding Letter}" FontWeight="SemiBold" FontSize="14"
+                                                   Foreground="{DynamicResource Muted}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <Image Source="{Binding Icon}" Width="24" Height="24"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="{Binding IconShown}" />
+                                </Grid>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="150" Margin="0,0,12,0">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"
+                                               TextTrimming="CharacterEllipsis" MaxWidth="190" />
+                                    <TextBlock Text="{Binding Address}" Style="{StaticResource Mono}"
+                                               Foreground="{DynamicResource Muted}" Margin="0,2,0,0" />
+                                </StackPanel>
+
+                                <!-- Чем он отличается — ярлыками, из пояснения провайдера. -->
+                                <ItemsControl Grid.Column="2" ItemsSource="{Binding Tags}" VerticalAlignment="Center"
+                                              ClipToBounds="True">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource Tag}" Margin="0,2,6,2">
+                                                <TextBlock Text="{Binding}" FontSize="11.5"
+                                                           Foreground="{DynamicResource Muted}"
+                                                           TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0" MinWidth="92">
+                                    <TextBlock Text="Задержка" Style="{StaticResource Caption}" FontSize="11"
+                                               HorizontalAlignment="Right" />
+                                    <TextBlock Text="{Binding Latency}" Style="{StaticResource Mono}"
+                                               Foreground="{Binding Color}" HorizontalAlignment="Right"
+                                               Margin="0,2,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                                </StackPanel>
+
+                                <!-- Выбранный — заполненный кружок, как у переключателя. -->
+                                <Grid Grid.Column="4" Width="20" Height="20" Margin="16,0,0,0" VerticalAlignment="Center">
+                                    <Ellipse Stroke="{Binding Edge}" StrokeThickness="1.6" />
+                                    <Ellipse Width="10" Height="10" Fill="{DynamicResource Accent}"
+                                             Visibility="{Binding MarkShown}" />
+                                </Grid>
+
+                                <!-- Только у своих: встроенные убирать нечем и незачем. -->
+                                <Button Grid.Column="5" Style="{StaticResource Ghost}"
+                                        Content="убрать" Padding="12,5" Margin="12,0,0,0"
+                                        Foreground="{DynamicResource Danger}"
+                                        Visibility="{Binding RemoveShown}"
+                                        Tag="{Binding Udp}" Click="OnRemoveOwn" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap" />
+
+            <!--
+                Свой резолвер (владелец, 26.09, после отзыва в обсуждении #7).
+                Перед записью меряется тем же обзором: не ответивший
+                не записывается, подменяющий — записывается с предупреждением.
+            -->
+            <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                        <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE710;" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1">
                         <TextBlock Text="Свой резолвер" FontWeight="SemiBold" />
                         <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                    Text="Адрес цифрами. Имя для DoH — если резолвер его умеет: без него туннелю такой резолвер не выбрать, его можно только измерить в обзоре." />
@@ -310,9 +409,9 @@
                         <TextBlock x:Name="OwnStatus" Style="{StaticResource Caption}" Margin="0,8,0,0"
                                    TextWrapping="Wrap" Visibility="Collapsed" />
                     </StackPanel>
-                </Border>
+                </Grid>
+            </Border>
 
-            </StackPanel>
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </UserControl>
