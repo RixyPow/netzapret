@@ -107,15 +107,31 @@ public static class UpdateInstaller
     /// Скачивает архив и распаковывает его в отстойник.
     /// </summary>
     /// <param name="progress">Доля скачанного, от нуля до единицы.</param>
+    /// <param name="tunnel">
+    /// Вход в туннель (health-in движка) — если напрямую медленно; <c>null</c> — только напрямую.
+    /// </param>
+    /// <param name="note">Что сказать человеку, когда закачка ушла в туннель.</param>
     /// <remarks>
+    /// <para>
     /// Размер сверяется с обещанным. Оборванная закачка даёт архив, который
     /// распакуется частично и заменит половину файлов — состояние хуже,
     /// чем обе версии по отдельности.
+    /// </para>
+    /// <para>
+    /// Сперва напрямую: так не тратится трафик подписки, а у большинства
+    /// GitHub отдаёт быстро. Медленнее <see cref="SlowBytesPerSecond"/> за первые
+    /// <see cref="SlowJudgeAfter"/> — заново через туннель. 04.10 у Максима
+    /// (Telegram) обновление 0.12.0 → 0.12.2 за 5–10 минут дошло до 2 %:
+    /// его оператор режет файлы GitHub, а GitHub у нас по умолчанию идёт мимо
+    /// туннеля.
+    /// </para>
     /// </remarks>
     public static async Task<UpdatePlan> StageAsync(
         ReleaseInfo release,
         IProgress<double>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        System.Net.IWebProxy? tunnel = null,
+        IProgress<string>? note = null)
     {
         var staging = PrepareStaging(StagingDirectory);
 
@@ -123,7 +139,18 @@ public static class UpdateInstaller
         // занятым (см. PrepareStaging), и писать поверх него было бы нельзя.
         var archive = Path.Combine(staging, $"release-{Guid.NewGuid():N}.zip");
 
-        await DownloadAsync(release, archive, progress, cancellationToken);
+        bool fast = await DownloadAsync(release, archive, progress, proxy: null, giveUpIfSlow: tunnel is not null, cancellationToken);
+
+        if (!fast)
+        {
+            note?.Report("напрямую GitHub отдаёт медленно — качаю через туннель");
+            progress?.Report(0);
+
+            // Недокачанный остаётся в отстойнике — его уберёт следующая уборка.
+            archive = Path.Combine(staging, $"release-{Guid.NewGuid():N}.zip");
+
+            await DownloadAsync(release, archive, progress, tunnel, giveUpIfSlow: false, cancellationToken);
+        }
 
         var actual = new FileInfo(archive).Length;
 
@@ -292,42 +319,90 @@ public static class UpdateInstaller
                 Path.Combine(installedAt, "engines", "zapret", "lists")),
             Path.Combine(stagedAt, "config", "lists"));
 
-    private static async Task DownloadAsync(
+    /// <summary>Когда судить о скорости прямой закачки.</summary>
+    public static readonly TimeSpan SlowJudgeAfter = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Медленнее этого напрямую — уходим в туннель.
+    /// </summary>
+    /// <remarks>
+    /// Архив около 110 МБ: на 200 КБ/с это девять минут, медленнее — дольше,
+    /// чем человек согласен ждать с кнопкой «Обновить».
+    /// </remarks>
+    public const long SlowBytesPerSecond = 200 * 1024;
+
+    /// <summary>Скачанное — общее для потока закачки и сторожа скорости.</summary>
+    private sealed class Counter
+    {
+        public long Bytes;
+    }
+
+    /// <returns><c>false</c> — бросили: напрямую медленнее <see cref="SlowBytesPerSecond"/>.</returns>
+    private static async Task<bool> DownloadAsync(
         ReleaseInfo release,
         string destination,
         IProgress<double>? progress,
+        System.Net.IWebProxy? proxy,
+        bool giveUpIfSlow,
         CancellationToken cancellationToken)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        using var handler = proxy is null ? new HttpClientHandler() : new HttpClientHandler { Proxy = proxy, UseProxy = true };
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
         http.DefaultRequestHeaders.Add("User-Agent", "NetZapret");
 
-        using var response = await http.GetAsync(
-            release.ArchiveUrl,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        // Сторож скорости — таймером, а не в цикле чтения: на заморозке
+        // чтение не возвращается вовсе, и судить в цикле было бы некому.
+        using var slow = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var done = new Counter();
 
-        response.EnsureSuccessStatusCode();
-
-        var total = response.Content.Headers.ContentLength ?? release.ArchiveSize;
-
-        await using var source = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var target = File.Create(destination);
-
-        var buffer = new byte[81920];
-        long done = 0;
-
-        while (true)
+        if (giveUpIfSlow)
         {
-            int read = await source.ReadAsync(buffer, cancellationToken);
+            _ = Task.Delay(SlowJudgeAfter, slow.Token).ContinueWith(
+                waited =>
+                {
+                    if (!waited.IsCanceled
+                        && Interlocked.Read(ref done.Bytes) < SlowBytesPerSecond * (long)SlowJudgeAfter.TotalSeconds)
+                        slow.Cancel();
+                },
+                TaskScheduler.Default);
+        }
 
-            if (read == 0)
-                break;
+        try
+        {
+            using var response = await http.GetAsync(
+                release.ArchiveUrl,
+                HttpCompletionOption.ResponseHeadersRead,
+                slow.Token);
 
-            await target.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
-            done += read;
+            response.EnsureSuccessStatusCode();
 
-            if (total > 0)
-                progress?.Report((double)done / total);
+            var total = response.Content.Headers.ContentLength ?? release.ArchiveSize;
+
+            await using var source = await response.Content.ReadAsStreamAsync(slow.Token);
+            await using var target = File.Create(destination);
+
+            var buffer = new byte[81920];
+
+            while (true)
+            {
+                int read = await source.ReadAsync(buffer, slow.Token);
+
+                if (read == 0)
+                    break;
+
+                await target.WriteAsync(buffer.AsMemory(0, read), slow.Token);
+                long now = Interlocked.Add(ref done.Bytes, read);
+
+                if (total > 0)
+                    progress?.Report((double)now / total);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException
+            && giveUpIfSlow && slow.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            return false;
         }
     }
 

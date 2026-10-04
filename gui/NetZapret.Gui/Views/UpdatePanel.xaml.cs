@@ -122,14 +122,42 @@ public partial class UpdatePanel : UserControl
     }
 
     /// <summary>
+    /// Вход в туннель для закачки — если туннель поднят и ему есть куда вести.
+    /// </summary>
+    /// <remarks>
+    /// Вход проверки движка (health-in) ведёт в селектор выхода первым
+    /// правилом. В «Десинке» движок туннеля поднят только ради DNS, и такой
+    /// вход вёл бы напрямую — поэтому смотрим, нужен ли туннель настройкам.
+    /// Пароль входа — из конфига работающего движка; нет его — без туннеля.
+    /// </remarks>
+    private static System.Net.IWebProxy? TunnelForDownload()
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (!settings.NeedsProxy || !settings.HasTunnelExit || !EngineControl.IsRunning)
+                return null;
+
+            return Proxy.EngineKeys.Current()?.Proxy(Proxy.SingBoxOptions.DefaultHealthPort);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Скачивает обновление и передаёт подмену внешнему сценарию.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Движки останавливаются до, а не после. С 0.5.0 супервизор — это та же
+    /// Движки останавливаются до подмены, а не после. С 0.5.0 супервизор — это та же
     /// программа с ключом, и пока он работает, Windows держит её файл: подмена
     /// сорвалась бы на самом главном файле, а сценарий сообщил бы об этом уже
     /// после того, как окно закрылось.
+    /// Но после закачки, а не до неё (04.10): закачка идёт с обходом,
+    /// а без обхода человек остаётся на секунды подмены.
     /// </para>
     /// <para>
     /// Подменяет внешний сценарий, потому что заменить нужно и себя. Кто-то
@@ -144,7 +172,8 @@ public partial class UpdatePanel : UserControl
 
         var answer = MessageBox.Show(
             $"Обновить до {_release.Version}?\n\n"
-            + "Движки будут остановлены, соединения оборвутся. Программа закроется, "
+            + "Сперва скачается архив — обход в это время работает. Потом движки "
+            + "остановятся, программа закроется, "
             + "файлы заменятся и она откроется снова.\n\n"
             + "Настройки, свои маршруты и подставленные адреса сохранятся.",
             "NetZapret",
@@ -160,16 +189,26 @@ public partial class UpdatePanel : UserControl
 
         try
         {
-            Say("Останавливаю движки…");
-            await EngineControl.StopAsync("обновление программы", CancellationToken.None);
+            // Качаем при работающих движках, гасим — только перед подменой.
+            // До 04.10 движки гасились первыми, и архив в 110 МБ шёл голой
+            // сетью без десинка и туннеля: у Максима (Telegram) за 5–10 минут —
+            // 2 %, и всё это время обхода не было. Теперь без обхода человек
+            // остаётся на секунды подмены, а не на время закачки.
+            string via = string.Empty;
 
-            var progress = new Progress<double>(fraction => 
+            var progress = new Progress<double>(fraction =>
             {
-                Say($"Скачиваю {_release.Version}… {fraction * 100:0} %");
+                Say($"Скачиваю {_release.Version}{via}… {fraction * 100:0} %");
                 InstallButton.Content = $"{fraction * 100:0} %";
             });
 
-            var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None);
+            var note = new Progress<string>(_ => via = " через туннель");
+
+            var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None, TunnelForDownload(), note);
+
+            Say("Останавливаю движки…");
+            await EngineControl.StopAsync("обновление программы", CancellationToken.None);
+
             var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
 
             // Что дописано руками в наши списки, переносится в новые — сказать
