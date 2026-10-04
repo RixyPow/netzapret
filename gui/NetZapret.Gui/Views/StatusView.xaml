@@ -244,7 +244,7 @@
                     Точка со свечением её же цвета (макет 30.09): свечение
                     красится вместе с точкой, в ShowDot, и разойтись им нечем.
                 -->
-                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,12,20,12">
+                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,18,0,0" Padding="22,16,22,14">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -277,7 +277,7 @@
                                 той же кнопкой через секунду.
                             -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="30,11"
+                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="34,14"
                                         MinWidth="210" Click="OnStart" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
@@ -286,7 +286,7 @@
                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </StackPanel>
                                 </Button>
-                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="30,11"
+                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="34,14"
                                         MinWidth="210" Click="OnStop" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
@@ -309,7 +309,7 @@
                             Бегущая засечка только при подъёме, и она неопределённая
                             намеренно: сколько он займёт, заранее не известно.
                         -->
-                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,10,0,0"
+                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,14,0,0"
                                 Background="{DynamicResource Border}" ClipToBounds="True"
                                 HorizontalAlignment="Stretch">
                             <Grid>
@@ -461,6 +461,9 @@
                 -->
                 <Border Grid.Row="10" Style="{StaticResource Card}" Margin="0,10,0,0" Padding="14,12,14,12">
                     <StackPanel>
+                        <!-- Подпись — как «Текущий пресет» у соседних карточек и с тем же отступом слева. -->
+                        <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,8" />
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
