@@ -213,7 +213,7 @@ internal sealed class TrayIcon : IDisposable
 
         try
         {
-            _menu ??= new TrayMenu(Toggle, ToggleVpnOnly, Show, Quit);
+            _menu ??= new TrayMenu(Toggle, ChooseMode, Show, Quit);
             _menu.Render(TrayStatus.Read(_busy));
 
             try
@@ -230,7 +230,7 @@ internal sealed class TrayIcon : IDisposable
                 // состояния, так что его не жалко собрать заново.
                 Discard(_menu);
 
-                _menu = new TrayMenu(Toggle, ToggleVpnOnly, Show, Quit);
+                _menu = new TrayMenu(Toggle, ChooseMode, Show, Quit);
                 _menu.Render(TrayStatus.Read(_busy));
                 _menu.PopUp();
             }
@@ -282,15 +282,15 @@ internal sealed class TrayIcon : IDisposable
     }
 
     /// <summary>
-    /// «Всё через VPN» из меню: переключить выключатели и сразу перезапустить движки.
+    /// Режим из меню: записать его и сразу перезапустить движки.
     /// </summary>
     /// <remarks>
-    /// Перезапуском, а не просьбой перезапустить: ради этого переключатель
-    /// и просили (обсуждение №17) — семь шагов через окно свести к одному.
-    /// Остановленные движки поднимаются: человек нажал «всё через VPN»,
-    /// а не «запомни на потом».
+    /// Перезапуском, а не просьбой перезапустить: переключатель в трее
+    /// и просили (обсуждение №17), чтобы семь шагов через окно свести к одному.
+    /// Остановленные движки поднимаются: человек выбрал, как работать сейчас,
+    /// а не «запомни на потом». Тот же режим ещё раз — ничего не трогает.
     /// </remarks>
-    private async void ToggleVpnOnly()
+    private async void ChooseMode(NetZapret.Core.Rules.WorkMode mode)
     {
         if (_busy)
             return;
@@ -300,12 +300,15 @@ internal sealed class TrayIcon : IDisposable
 
         try
         {
-            var next = NetZapret.Core.Rules.VpnOnly.Toggle(NetZapret.Core.AppSettings.Load(NetZapret.Core.AppSettings.DefaultPath));
-            next.Save(NetZapret.Core.AppSettings.DefaultPath);
+            var settings = NetZapret.Core.AppSettings.Load(NetZapret.Core.AppSettings.DefaultPath);
 
-            var who = NetZapret.Core.Rules.VpnOnly.IsOn(next)
-                ? "меню трея: всё через VPN"
-                : "меню трея: всё через VPN выключено";
+            if (NetZapret.Core.Rules.WorkModes.Of(settings.Engines) == mode
+                || !NetZapret.Core.Rules.WorkModes.CanChoose(settings, mode))
+                return;
+
+            NetZapret.Core.Rules.WorkModes.Choose(settings, mode).Save(NetZapret.Core.AppSettings.DefaultPath);
+
+            var who = $"меню трея: режим «{NetZapret.Core.Rules.WorkModes.Name(mode)}»";
 
             if (EngineControl.IsRunning)
                 await EngineControl.RestartAsync(who, CancellationToken.None);

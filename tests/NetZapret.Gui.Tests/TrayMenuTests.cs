@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using NetZapret.Core.Rules;
 using NetZapret.Supervisor;
 using Xunit;
 
@@ -18,7 +20,7 @@ public sealed class TrayMenuTests
     {
         Sta.Run(() =>
         {
-            var menu = new TrayMenu(() => { }, () => { }, () => { }, _ => { });
+            var menu = new TrayMenu(() => { }, _ => { }, () => { }, _ => { });
 
             menu.Render(new TrayStatus(
                 Running: true,
@@ -65,11 +67,30 @@ public sealed class TrayMenuTests
 
         Sta.Run(() =>
         {
-            var menu = new TrayMenu(() => { }, () => { }, () => { }, _ => { });
+            var menu = new TrayMenu(() => { }, _ => { }, () => { }, _ => { });
             menu.Render(status);
 
             Assert.Equal("Запустить", ((Button)menu.FindName("Toggle")).Content);
             Assert.Equal("—", ((TextBlock)menu.FindName("Tunnel")).Text);
+
+            menu.Close();
+        });
+    }
+
+    /// <summary>Режим выбирается в трее теми же тремя названиями, что на «Главной» (04.10).</summary>
+    [Fact]
+    public void ModesAreChosenByTheirNames()
+    {
+        Sta.Run(() =>
+        {
+            WorkMode? chosen = null;
+            var menu = new TrayMenu(() => { }, mode => chosen = mode, () => { }, _ => { });
+            menu.Render(new TrayStatus(Running: false, AllHealthy: false, Tunnel: null, Desync: null, Busy: false));
+
+            Assert.Equal(WorkModes.RouteName, ((TextBlock)menu.FindName("ModeRouteName")).Text);
+
+            ((RadioButton)menu.FindName("ModeRoute")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Assert.Equal(WorkMode.Route, chosen);
 
             menu.Close();
         });

@@ -1090,7 +1090,7 @@ public partial class StatusView : UserControl
 
         // Движки — в карточке «Режим» (04.10), оба при любом режиме (владелец:
         // «пусть эти движки будут и в десинке, и в туннеле»): не нужный режиму
-        // скажет «не поднимается», а высота карточки от режима не зависит.
+        // скажет «выключен», как в трее, а высота карточки от режима не зависит.
         ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid);
         ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
     }
@@ -1105,7 +1105,7 @@ public partial class StatusView : UserControl
         if (row is null)
         {
             dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
-            state.Text = "не поднимается";
+            state.Text = "выключен";
             pid.Text = string.Empty;
             return;
         }

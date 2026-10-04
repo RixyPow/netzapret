@@ -50,4 +50,28 @@ public sealed class WorkModeTests
 
         Assert.Equal("Гибрид", WorkModes.Name(WorkMode.Route));
     }
+
+    /// <summary>В трее выбор сразу поднимает движки — «Туннелю» без выхода поднимать нечего.</summary>
+    [Fact]
+    public void Tunnel_needs_an_exit_to_be_chosen()
+    {
+        var noExit = AppSettings.Fresh with { SubscriptionUrl = null, WarpEnabled = false, KeysEnabled = false };
+        var withExit = noExit with { SubscriptionUrl = "https://example.invalid/sub" };
+
+        Assert.False(WorkModes.CanChoose(noExit, WorkMode.Tunnel));
+        Assert.True(WorkModes.CanChoose(noExit, WorkMode.Desync));
+        Assert.True(WorkModes.CanChoose(noExit, WorkMode.Route));
+        Assert.True(WorkModes.CanChoose(withExit, WorkMode.Tunnel));
+    }
+
+    [Fact]
+    public void Choosing_a_mode_rewrites_only_the_switches()
+    {
+        var settings = AppSettings.Fresh.With(new EngineChoice { Desync = true, Tunnel = false }) with { PresetName = "X" };
+
+        var next = WorkModes.Choose(settings, WorkMode.Tunnel);
+
+        Assert.Equal(WorkMode.Tunnel, WorkModes.Of(next.Engines));
+        Assert.Equal("X", next.PresetName);
+    }
 }

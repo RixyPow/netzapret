@@ -69,4 +69,19 @@ public static class WorkModes
         WorkMode.Tunnel => choice with { Desync = false, Tunnel = true },
         _ => choice with { Desync = true, Tunnel = true },
     };
+
+    /// <summary>
+    /// Можно ли выбрать режим там, где выбор сразу поднимает движки, — в трее.
+    /// </summary>
+    /// <remarks>
+    /// «Туннелю» без подписки и WARP поднимать нечего: движки встали бы
+    /// без единого движка. «Гибрид» без них работает как «Десинк» —
+    /// это не поломка, и «Главная» об этом говорит словами.
+    /// </remarks>
+    public static bool CanChoose(AppSettings settings, WorkMode mode) =>
+        mode != WorkMode.Tunnel || settings.HasTunnelExit;
+
+    /// <summary>Настройки с выбранным режимом.</summary>
+    public static AppSettings Choose(AppSettings settings, WorkMode mode) =>
+        settings.With(Apply(settings.Engines, mode));
 }

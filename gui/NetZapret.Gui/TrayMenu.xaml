@@ -46,22 +46,34 @@
             </Setter>
         </Style>
 
-        <!-- Та же строка, но с разметкой внутри: подпись и выключатель. -->
-        <Style x:Key="SwitchRow" TargetType="Button" BasedOn="{StaticResource MenuRow}">
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <!--
+            Сегмент режима — как на «Главной» (StatusView, ModeSegment), только
+            мельче: выбранный обведён цветом темы и чуть подсвечен подложкой.
+        -->
+        <Style x:Key="ModeSegment" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Plate" Background="{TemplateBinding Background}"
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Stretch" />
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shape" Background="Transparent"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="1.2"
+                                CornerRadius="8" Padding="4,6">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Plate" Property="Background" Value="{DynamicResource Raised}" />
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Shape" Property="BorderThickness" Value="1.6" />
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Plate" Property="Opacity" Value="0.5" />
+                                <Setter TargetName="Shape" Property="Opacity" Value="0.45" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -88,7 +100,7 @@
             фоне одна рамка терялась (владелец 24.09: «более выраженные края»),
             а кромка отделяет карточку и на тёмной теме, и на светлой.
         -->
-        <Border x:Name="Plate" Width="256" CornerRadius="10.5" BorderThickness="1">
+        <Border x:Name="Plate" Width="280" CornerRadius="10.5" BorderThickness="1">
             <Border.BorderBrush>
                 <SolidColorBrush Color="{DynamicResource TextColor}" Opacity="0.12" />
             </Border.BorderBrush>
@@ -127,28 +139,53 @@
                 </Grid>
 
                 <!--
-                    «Всё через VPN» (обсуждение №17, 04.10): на минуту пустить всё
-                    через туннель, не открывая окна, — и вернуть, как было.
-                    Нажатие само перезапускает движки (Rules.VpnOnly, TrayIcon).
+                    Режим работы — тем же выбором из трёх, что на «Главной»
+                    (владелец 04.10). Утром 04.10 здесь был один выключатель
+                    «Всё через VPN» (обсуждение №17) с возвратом к прежнему
+                    сочетанию; с тремя режимами возврат — то же одно нажатие
+                    на прежний. Выбор сам перезапускает движки (TrayIcon.ChooseMode):
+                    ради этого переключатель в трее и просили — не открывать окно.
                 -->
-                <Button x:Name="VpnOnlyRow" Style="{StaticResource SwitchRow}" Margin="-6,8,-6,0"
-                        Click="OnVpnOnly">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="Режим «Туннель» — всё через VPN" Foreground="{DynamicResource Text}" />
-                            <TextBlock x:Name="VpnOnlyNote" FontSize="10.5" Margin="0,1,0,0" TextWrapping="Wrap"
-                                       Foreground="{DynamicResource Muted}"
-                                       Text="Десинк выключится, движки перезапустятся" />
+                <TextBlock Text="Режим работы NZ" Margin="0,11,0,6" FontSize="11.5"
+                           Foreground="{DynamicResource Muted}" />
+
+                <Grid x:Name="Modes">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="5" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="5" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <RadioButton x:Name="ModeDesync" Grid.Column="0" Style="{StaticResource ModeSegment}"
+                                 GroupName="TrayMode" Tag="Desync" Click="OnMode">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Style="{StaticResource LineGlyph}" FontSize="12.5" Text="&#xE9E9;"
+                                       Foreground="{DynamicResource Accent}" Margin="0,0,5,0" />
+                            <TextBlock x:Name="ModeDesyncName" VerticalAlignment="Center" />
                         </StackPanel>
-                        <ToggleButton Grid.Column="1" x:Name="VpnOnlySwitch" Style="{StaticResource Switch}"
-                                      IsHitTestVisible="False" Focusable="False"
-                                      VerticalAlignment="Center" Margin="10,0,0,0" />
-                    </Grid>
-                </Button>
+                    </RadioButton>
+                    <RadioButton x:Name="ModeTunnel" Grid.Column="2" Style="{StaticResource ModeSegment}"
+                                 GroupName="TrayMode" Tag="Tunnel" Click="OnMode">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Style="{StaticResource LineGlyph}" FontSize="12.5" Text="&#xE774;"
+                                       Foreground="{DynamicResource Accent}" Margin="0,0,5,0" />
+                            <TextBlock x:Name="ModeTunnelName" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton x:Name="ModeRoute" Grid.Column="4" Style="{StaticResource ModeSegment}"
+                                 GroupName="TrayMode" Tag="Route" Click="OnMode">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <TextBlock Style="{StaticResource LineGlyph}" FontSize="12.5" Text="&#xE8AB;"
+                                       Foreground="{DynamicResource Accent}" Margin="0,0,5,0" />
+                            <TextBlock x:Name="ModeRouteName" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </RadioButton>
+                </Grid>
+
+                <TextBlock x:Name="ModeNote" FontSize="10.5" Margin="1,6,0,0" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Muted}" />
 
                 <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>

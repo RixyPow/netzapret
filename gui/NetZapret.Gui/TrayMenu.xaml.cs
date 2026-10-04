@@ -8,6 +8,7 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using NetZapret.Core;
+using NetZapret.Core.Rules;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui;
@@ -77,20 +78,24 @@ internal sealed record TrayStatus(
 public partial class TrayMenu : Window
 {
     private readonly Action _toggle;
-    private readonly Action _vpnOnly;
+    private readonly Action<WorkMode> _chooseMode;
     private readonly Action _showWindow;
     private readonly Action<bool> _quit;
 
-    internal TrayMenu(Action toggle, Action vpnOnly, Action showWindow, Action<bool> quit)
+    internal TrayMenu(Action toggle, Action<WorkMode> chooseMode, Action showWindow, Action<bool> quit)
     {
         _toggle = toggle;
-        _vpnOnly = vpnOnly;
+        _chooseMode = chooseMode;
         _showWindow = showWindow;
         _quit = quit;
 
         InitializeComponent();
 
         Version.Text = MainWindow.Version();
+
+        ModeDesyncName.Text = WorkModes.Name(WorkMode.Desync);
+        ModeTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
+        ModeRouteName.Text = WorkModes.Name(WorkMode.Route);
     }
 
     internal void Render(TrayStatus status)
@@ -108,11 +113,11 @@ public partial class TrayMenu : Window
             : status.Running ? "Остановить" : "Запустить";
         Toggle.IsEnabled = !status.Busy;
 
-        ShowVpnOnly(status.Busy);
+        ShowModes(status);
     }
 
-    /// <summary>Выключатель «Всё через VPN» — по настройкам, как бы ни было набрано это сочетание.</summary>
-    private void ShowVpnOnly(bool busy)
+    /// <summary>Выбранный режим — по настройкам, как бы он ни был выбран: здесь, на «Главной» или руками в файле.</summary>
+    private void ShowModes(TrayStatus status)
     {
         AppSettings settings;
 
@@ -122,24 +127,33 @@ public partial class TrayMenu : Window
         }
         catch (Exception)
         {
-            VpnOnlyRow.IsEnabled = false;
+            Modes.IsEnabled = false;
+            ModeNote.Text = "Настройки не прочитались — режим выбирается в окне";
             return;
         }
 
-        bool on = Core.Rules.VpnOnly.IsOn(settings);
-        bool can = on || Core.Rules.VpnOnly.CanTurnOn(settings);
+        var current = WorkModes.Of(settings.Engines);
 
-        VpnOnlySwitch.IsChecked = on;
-        VpnOnlyRow.IsEnabled = !busy && can;
+        foreach (var (button, mode) in new[] { (ModeDesync, WorkMode.Desync), (ModeTunnel, WorkMode.Tunnel), (ModeRoute, WorkMode.Route) })
+        {
+            button.IsChecked = current == mode;
+            button.IsEnabled = current == mode || WorkModes.CanChoose(settings, mode);
+        }
 
-        VpnOnlyNote.Text = !can
-            ? "Нужна подписка или WARP на вкладке VPN"
-            : on
-                ? "Выключить — вернуть прежний режим, движки перезапустятся"
-                : "Десинк выключится, движки перезапустятся";
+        Modes.IsEnabled = !status.Busy;
+
+        ModeNote.Text = !settings.HasTunnelExit
+            ? "«Туннелю» нужна подписка или WARP на вкладке VPN"
+            : status.Running
+                ? "Выбор сразу перезапускает движки"
+                : "Выбор сразу запускает движки";
     }
 
-    private void OnVpnOnly(object sender, RoutedEventArgs e) => _vpnOnly();
+    private void OnMode(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<WorkMode>(tag, out var mode))
+            _chooseMode(mode);
+    }
 
     /// <summary>Показывает меню у указателя, в пределах рабочей области его экрана.</summary>
     internal void PopUp()
