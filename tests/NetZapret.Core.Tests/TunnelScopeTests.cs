@@ -59,6 +59,47 @@ public class TunnelScopeTests
         Assert.Contains("203.0.113.0/24", captured);
     }
 
+    /// <summary>
+    /// Сети игровых серверов Roblox (обсуждение №16, ошибка 279) через VPN —
+    /// в route_address, включая IPv6: матч идёт по голым адресам.
+    /// </summary>
+    [Fact]
+    public void RobloxGameServersGoIntoTheTunnelWhenRoutedThere()
+    {
+        string? root = null;
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "NetZapret.sln")))
+            {
+                root = dir.FullName;
+                break;
+            }
+        }
+
+        if (root is null)
+            return;
+
+        var engine = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: ipset
+                value: "config/lists/roblox-network.txt"
+                mode: proxy
+            """);
+
+        NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, root);
+
+        var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()],
+            new SingBoxOptions { Scope = TunnelScope.ProxyOnly }).Json;
+
+        var captured = JsonDocument.Parse(json).RootElement
+            .GetProperty("inbounds")[0].GetProperty("route_address")
+            .EnumerateArray().Select(e => e.GetString()).ToList();
+
+        Assert.Contains("128.116.0.0/17", captured);
+        Assert.Contains("2620:135:6000::/40", captured);
+    }
+
     [Fact]
     public void ProxyOnlyCapturesAddressListsGoingThroughTheTunnel()
     {
