@@ -175,6 +175,9 @@ public partial class App : Application
 
         _tray = new TrayIcon();
         UiStallWatch.Start(Dispatcher);
+
+        // Новые адреса голоса Discord — в список голоса, пока он «через VPN».
+        DiscordVoiceWatch.Start(Dispatcher);
         SingleInstance.OnShowRequested(TrayIcon.Show);
 
         // Выход по просьбе --quit — тем же путём, что пункт меню трея:
