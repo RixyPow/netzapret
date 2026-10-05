@@ -188,14 +188,17 @@ public partial class OnboardingView : UserControl
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Три дороги — как три пути в программе (владелец 05.10, по своему
-    /// макету: «интереснее и понятнее, но не нарушай логику»). Пакеты выходят
+    /// Четыре дороги — как четыре пути в программе (владелец 05.10, по своему
+    /// макету: «интереснее и понятнее, но не нарушай логику»; пин и порядок
+    /// «напрямую, десинк, VPN, пин» — его же поправка). Пакеты выходят
     /// из компьютера одинаковыми, «Маршруты» раскладывают их по правилам —
     /// у человека на машине, а не у провайдера, — и дальше каждый идёт
-    /// своим путём сквозь ТСПУ. Десинк: пакет разрезан надвое, и ТСПУ
-    /// пропускает его неузнанным. VPN: пакет завёрнут в туннель до сервера
-    /// за границей, и ТСПУ видит туннель, а не сайт. Как есть: сайт
-    /// не заблокирован, трогать нечего.
+    /// своим путём сквозь ТСПУ. Напрямую: сайт не заблокирован, трогать
+    /// нечего. Десинк: пакет разрезан надвое, и ТСПУ пропускает его
+    /// неузнанным. VPN: пакет завёрнут в туннель до сервера за границей,
+    /// и ТСПУ видит туннель, а не сайт. Пин: hosts даёт имени адрес
+    /// посредника, пакет идёт к нему как есть (щит пропускает его мимо
+    /// десинка), и сайт видит адрес посредника — без подписки.
     /// </para>
     /// <para>
     /// Из макета не взято «Анализ трафика» посередине: в пакеты смотрит ТСПУ,
@@ -216,17 +219,20 @@ public partial class OnboardingView : UserControl
 
         // Холст 700 точек: мастер не шире 680 (OnboardingView.xaml), и холст
         // шире ужимался бы вместе с подписями — при 880 они выходили по 8 точек.
-        const double pcX = 44, sortX = 150, wallX = 382, vpnX = 466, siteX = 536, mid = 135;
-        double[] lane = [62, mid, 208];
+        const double pcX = 44, sortX = 150, wallX = 382, relayX = 466, siteX = 536, mid = 160;
+        double[] lane = [64, 128, 192, 256];
 
+        // Порядок дорог — владелец 05.10: напрямую, десинк, VPN, пин.
         HeroLane[] lanes =
         [
-            new("Accent", "Десинк", "разрезан — ТСПУ не узнаёт",
-                "", "Под блокировкой", "открывается напрямую"),
-            new("Text", "VPN", "в шифрованном туннеле",
-                "", "Закрыт по стране", "видит адрес VPN"),
-            new("Muted", "Как есть", "NetZapret их не трогает",
-                "", "Обычные сайты", "банки, игры, Рунет"),
+            new(HeroWay.Direct, "Muted", "Напрямую", "NetZapret его не трогает",
+                Glyph(0xE825), "Обычные сайты", "банки, игры, Рунет"),
+            new(HeroWay.Desync, "Accent", "Десинк", "разрезан — ТСПУ не узнаёт",
+                Glyph(0xE774), "Под блокировкой", "без VPN и подписки"),
+            new(HeroWay.Tunnel, "Text", "VPN", "в шифрованном туннеле",
+                Glyph(0xE774), "Закрыт по стране", "видит адрес VPN"),
+            new(HeroWay.Pin, "Warn", "Пин", "hosts ведёт к посреднику",
+                Glyph(0xE774), "ChatGPT, Claude…", "видит адрес посредника"),
         ];
 
         // Ствол: от компьютера до «Маршрутов» пакеты идут вперемешку.
@@ -235,69 +241,92 @@ public partial class OnboardingView : UserControl
         for (int i = 0; i < lanes.Length; i++)
         {
             var y = lane[i];
-            var color = lanes[i].Color;
+            var way = lanes[i];
 
-            if (i == 1)
+            switch (way.Way)
             {
-                // Туннель — трубой до сервера VPN: ТСПУ видит трубу, но не то, что в ней.
-                double from = sortX + 17, to = vpnX - 18;
+                case HeroWay.Tunnel:
+                {
+                    // Туннель — трубой до сервера VPN: ТСПУ видит трубу, но не то, что в ней.
+                    double from = sortX + 17, to = relayX - 18;
 
-                var fill = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, Opacity = 0.08 };
-                fill.SetResourceReference(Shape.FillProperty, color);
-                Place(fill, from, y - 8, z: 0);
+                    var fill = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, Opacity = 0.08 };
+                    fill.SetResourceReference(Shape.FillProperty, way.Color);
+                    Place(fill, from, y - 8, z: 0);
 
-                var shell = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, StrokeThickness = 1.2, Opacity = 0.45 };
-                shell.SetResourceReference(Shape.StrokeProperty, color);
-                Place(shell, from, y - 8, z: 0);
+                    var shell = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, StrokeThickness = 1.2, Opacity = 0.45 };
+                    shell.SetResourceReference(Shape.StrokeProperty, way.Color);
+                    Place(shell, from, y - 8, z: 0);
 
-                Stroke(new Point(vpnX + 18, y), new Point(siteX - 25, y), color, 1.5, opacity: 0.45);
+                    Stroke(new Point(relayX + 18, y), new Point(siteX - 25, y), way.Color, 1.5, opacity: 0.45);
+                    Box(new Point(relayX, y), 36, 36, way.Color, Glyph(0xE72E), 14, round: true);
+                    Label("сервер VPN", relayX, y + 22, "Muted", size: 11);
+                    break;
+                }
+
+                case HeroWay.Pin:
+                    // Пин: имя в hosts указывает на посредника, и пакет идёт к нему
+                    // как есть — щит пропускает его мимо десинка, а посредник
+                    // открывает сайт со своего адреса.
+                    Stroke(new Point(sortX + 17, y), new Point(relayX - 18, y), way.Color, 8, opacity: 0.08);
+                    Stroke(new Point(sortX + 17, y), new Point(relayX - 18, y), way.Color, 2, opacity: 0.6);
+                    Stroke(new Point(relayX + 18, y), new Point(siteX - 25, y), way.Color, 1.5, opacity: 0.45);
+                    Box(new Point(relayX, y), 36, 36, way.Color, Glyph(0xE968), 14, round: true);
+                    Label("посредник", relayX, y + 22, "Muted", size: 11);
+                    break;
+
+                default:
+                    // Мягкое свечение — толстой полупрозрачной линией, а не эффектом:
+                    // эффект на дороге, по которой бегут пакеты, перерисовывался бы
+                    // с каждым кадром.
+                    Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), way.Color, 8, opacity: 0.08);
+                    Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), way.Color, 2, opacity: 0.6, dashed: way.Way == HeroWay.Direct);
+                    break;
             }
-            else
-            {
-                // Мягкое свечение — толстой полупрозрачной линией, а не эффектом:
-                // эффект на дороге, по которой бегут пакеты, перерисовывался бы
-                // с каждым кадром.
-                Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), color, 8, opacity: 0.08);
-                Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), color, 2, opacity: 0.6, dashed: i == 2);
-            }
 
-            Chip(lanes[i].Name, (sortX + 17 + wallX) / 2, y - 32, color);
-            Label(lanes[i].Hint, (sortX + 17 + wallX) / 2, y + 11, "Muted", size: 11);
+            Chip(way.Name, (sortX + 17 + wallX) / 2, y - 32, way.Color, glyph: way.Way == HeroWay.Pin ? Glyph(0xE718) : null);
+            Label(way.Hint, (sortX + 17 + wallX) / 2, y + 11, "Muted", size: 11);
 
-            Box(new Point(siteX, y), 46, 46, color, lanes[i].Glyph, 20);
-            Label(lanes[i].Site, siteX + 31, y - 18, "Text", bold: true, left: true);
-            Label(lanes[i].SiteHint, siteX + 31, y + 1, "Muted", size: 11, left: true);
+            Box(new Point(siteX, y), 46, 46, way.Color, way.Glyph, 20);
+            Label(way.Site, siteX + 31, y - 18, "Text", bold: true, left: true);
+            Label(way.SiteHint, siteX + 31, y + 1, "Muted", size: 11, left: true);
         }
 
-        Box(new Point(pcX, mid), 72, 60, "Border", "", 26, glyphColor: "Text");
+        Box(new Point(pcX, mid), 64, 56, "Border", Glyph(0xE7F8), 24, glyphColor: "Text");
         Label("Компьютер", pcX, mid + 33, "Text", bold: true);
 
         // «Маршруты» — раскладка по правилам; гнёзда окрашены цветом своей дороги.
-        var sorter = new Border { Width = 34, Height = 198, CornerRadius = new CornerRadius(17), BorderThickness = new Thickness(1.5) };
+        var sorter = new Border { Width = 34, Height = 244, CornerRadius = new CornerRadius(17), BorderThickness = new Thickness(1.5) };
         sorter.SetResourceReference(Border.BackgroundProperty, "Surface");
         sorter.SetResourceReference(Border.BorderBrushProperty, "Border");
-        Place(sorter, sortX - 17, 36);
+        Place(sorter, sortX - 17, 38);
         Chip("Маршруты", sortX, 8, "Muted");
 
         for (int i = 0; i < lanes.Length; i++)
             Place(Slot(lanes[i].Color, 0.35), sortX - 10, lane[i] - 10, z: 3);
 
-        var wall = new Rectangle { Width = 10, Height = 198, RadiusX = 4, RadiusY = 4 };
+        var wall = new Rectangle { Width = 10, Height = 244, RadiusX = 4, RadiusY = 4 };
         wall.SetResourceReference(Shape.FillProperty, "Danger");
-        Place(wall, wallX - 5, 36);
-        Chip("ТСПУ", wallX, 8, "Danger", glyph: "");
-
-        Box(new Point(vpnX, lane[1]), 36, 36, lanes[1].Color, "", 14, round: true);
-        Label("сервер VPN", vpnX, lane[1] + 22, "Muted", size: 11);
+        Place(wall, wallX - 5, 38);
+        Chip("ТСПУ", wallX, 8, "Danger", glyph: Glyph(0xE721));
 
         if (!Moving)
         {
             // Без движения — по пакету на дороге, уже за «Маршрутами».
             Still(Packet("Text"), (pcX + sortX) / 2 + 10, mid);
-            Still(Half(lanes[0].Color), wallX - 46, lane[0]);
-            Still(Half(lanes[0].Color), wallX - 36, lane[0]);
-            Still(Wrapped(lanes[1].Color), wallX - 40, lane[1]);
-            Still(Packet(lanes[2].Color), wallX - 40, lane[2]);
+
+            for (int i = 0; i < lanes.Length; i++)
+            {
+                if (lanes[i].Way == HeroWay.Desync)
+                {
+                    Still(Half(lanes[i].Color), wallX - 46, lane[i]);
+                    Still(Half(lanes[i].Color), wallX - 36, lane[i]);
+                }
+                else
+                {
+                    Still(lanes[i].Way == HeroWay.Tunnel ? Wrapped(lanes[i].Color) : Packet(lanes[i].Color), wallX - 40, lane[i]);
+                }
+            }
 
             foreach (UIElement card in Features.Children)
                 card.Opacity = 1;
@@ -307,54 +336,57 @@ public partial class OnboardingView : UserControl
 
         for (int i = 0; i < lanes.Length; i++)
         {
-            Point[] route = i == 1
-                ? [new(pcX + 32, mid), new(siteX - 25, mid)]
-                : [new(pcX + 32, mid), new(sortX, mid), new(sortX, lane[i]), new(siteX - 25, lane[i])];
-
+            Point[] route = [new(pcX + 32, mid), new(sortX, mid), new(sortX, lane[i]), new(siteX - 25, lane[i])];
             var trip = TimeSpan.FromSeconds(Length(route) / HeroSpeed);
+            var color = lanes[i].Color;
 
-            // Доли пути: вошёл в «Маршруты», вышел из них, дошёл до ТСПУ, до сервера VPN.
+            // Доли пути: вошёл в «Маршруты», вышел из них, дошёл до ТСПУ, до сервера VPN или посредника.
             double inside = FractionAtX(route, sortX);
             double sorted = FractionAtX(route, sortX + 17);
             double tspu = FractionAtX(route, wallX);
-            double server = FractionAtX(route, vpnX);
+            double relay = FractionAtX(route, relayX);
 
             for (int k = 0; k < 2; k++)
             {
-                var start = TimeSpan.FromSeconds(0.55 * i + k * trip.TotalSeconds / 2);
+                var start = TimeSpan.FromSeconds(0.5 * i + k * trip.TotalSeconds / 2);
 
                 // До «Маршрутов» все пакеты одинаковы — раскладка ещё не случилась.
-                // Подмена вида — внутри «Маршрутов», за их телом, и её не видно.
-                switch (i)
+                // Подмена вида — внутри «Маршрутов» и узлов, за их телом, и её не видно.
+                switch (lanes[i].Way)
                 {
-                    case 0:
+                    case HeroWay.Desync:
                         Runner(route, trip, start, Packet("Text"), (0, inside));
-                        Runner(route, trip, start, Half(lanes[0].Color), (inside, 1));
-                        Runner(route, trip, start + TimeSpan.FromMilliseconds(70), Half(lanes[0].Color), (inside, 1));
+                        Runner(route, trip, start, Half(color), (inside, 1));
+                        Runner(route, trip, start + TimeSpan.FromMilliseconds(70), Half(color), (inside, 1));
                         break;
 
-                    case 1:
-                        Runner(route, trip, start, Packet("Text"), (0, inside), (server, 1));
-                        Runner(route, trip, start, Wrapped(lanes[1].Color), (inside, server));
+                    case HeroWay.Tunnel:
+                        Runner(route, trip, start, Packet("Text"), (0, inside), (relay, 1));
+                        Runner(route, trip, start, Wrapped(color), (inside, relay));
+                        break;
+
+                    case HeroWay.Pin:
+                        Runner(route, trip, start, Packet("Text"), (0, inside), (relay, 1));
+                        Runner(route, trip, start, Packet(color), (inside, relay));
                         break;
 
                     default:
                         Runner(route, trip, start, Packet("Text"), (0, inside));
-                        Runner(route, trip, start, Packet(lanes[2].Color), (inside, 1));
+                        Runner(route, trip, start, Packet(color), (inside, 1));
                         break;
                 }
 
-                var slot = Slot(lanes[i].Color, 0);
+                var slot = Slot(color, 0);
                 Place(slot, sortX - 10, lane[i] - 10, z: 3);
                 Flash(slot, trip, start + trip * sorted, 1);
 
                 var pass = new Ellipse { Width = 30, Height = 30, Opacity = 0 };
-                pass.SetResourceReference(Shape.FillProperty, lanes[i].Color);
+                pass.SetResourceReference(Shape.FillProperty, color);
                 Place(pass, wallX - 15, lane[i] - 15, z: 3);
                 Flash(pass, trip, start + trip * tspu, 0.55);
 
                 var glow = new Border { Width = 60, Height = 60, CornerRadius = new CornerRadius(17), Opacity = 0 };
-                glow.SetResourceReference(Border.BackgroundProperty, lanes[i].Color);
+                glow.SetResourceReference(Border.BackgroundProperty, color);
                 Place(glow, siteX - 30, lane[i] - 30, z: 1);
                 Flash(glow, trip, start + trip * 0.96, 0.35);
             }
@@ -373,11 +405,17 @@ public partial class OnboardingView : UserControl
         }
     }
 
+    /// <summary>Знак шрифта значков по коду — в исходнике видно, какой именно.</summary>
+    private static string Glyph(int code) => ((char)code).ToString();
+
+    /// <summary>Как дорога проходит ТСПУ.</summary>
+    private enum HeroWay { Direct, Desync, Tunnel, Pin }
+
     /// <summary>Скорость пакета, точек в секунду: у всех дорог одна, длина у них разная.</summary>
     private const double HeroSpeed = 160;
 
     /// <summary>Дорога схемы: цвет, подпись на ней и сайт в её конце.</summary>
-    private sealed record HeroLane(string Color, string Name, string Hint, string Glyph, string Site, string SiteHint);
+    private sealed record HeroLane(HeroWay Way, string Color, string Name, string Hint, string Glyph, string Site, string SiteHint);
 
     /// <summary>
     /// Запущенные анимации схемы — чтобы остановить их, уходя с шага.

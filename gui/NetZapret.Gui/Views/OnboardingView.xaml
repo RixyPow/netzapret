@@ -72,19 +72,18 @@
                 <StackPanel x:Name="Step1">
                     <TextBlock Text="Что делает NetZapret" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Каждому сайту — свой путь. Где хватает десинка, трафик идёт напрямую и неузнанным; где сайт закрыт по стране — через ваш VPN; остальное не трогается вовсе." />
+                               Text="Каждому сайту — свой путь. Незаблокированное идёт напрямую и не трогается; где хватает десинка — напрямую, но неузнанным; закрытое по стране — через ваш VPN или через посредника по пину." />
 
                     <!--
                         Схема пути, живая. Рисуется в коде (StartHero): пакеты
                         выходят из компьютера одинаковыми, «Маршруты» раскладывают
-                        их по трём дорогам — десинк, VPN, как есть — и каждая
-                        по-своему проходит ТСПУ. С 05.10 дорог три, а не две:
-                        «остальное не трогается» стоит в подписи выше, и схема
-                        теперь это показывает.
+                        их по четырём дорогам — напрямую, десинк, VPN, пин — и
+                        каждая по-своему проходит ТСПУ. Подпись выше называет
+                        дороги в том же порядке.
                     -->
                     <Border Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0,6">
-                        <Viewbox Stretch="Uniform" MaxHeight="262">
-                            <Canvas x:Name="Hero" Width="700" Height="250" ClipToBounds="True" />
+                        <Viewbox Stretch="Uniform" MaxHeight="300">
+                            <Canvas x:Name="Hero" Width="700" Height="298" ClipToBounds="True" />
                         </Viewbox>
                     </Border>
 
