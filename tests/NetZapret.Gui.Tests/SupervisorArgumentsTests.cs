@@ -202,7 +202,7 @@ public sealed class SupervisorArgumentsTests
         {
             PresetName = "Universal V10",
             ProxyConfigPath = Path.Combine("Мои документы", "конфиг движка", "singbox.json"),
-            DnsThroughTunnel = true,
+            DnsVia = DnsRoute.Tunnel,
         }.With(new EngineChoice { Desync = true, Tunnel = false });
 
         var read = RoundTrip(settings);
@@ -219,12 +219,38 @@ public sealed class SupervisorArgumentsTests
     [Fact]
     public void A_DNS_config_that_did_not_build_leaves_desync_alone()
     {
-        var settings = new AppSettings { PresetName = "Universal V10", DnsThroughTunnel = true }
+        var settings = new AppSettings { PresetName = "Universal V10", DnsVia = DnsRoute.Tunnel }
             .With(new EngineChoice { Desync = true, Tunnel = false });
 
         var read = SupervisorHost.Parse(SplitLikeWindows(SupervisorHost.BuildArguments(settings, dnsEngine: false)));
 
         Assert.True(read.NoProxy);
         Assert.False(read.DnsOnly);
+    }
+
+    /// <summary>DNS «авто» доходит до надзора ключом — только когда есть туннель.</summary>
+    [Theory]
+    [InlineData(DnsRoute.Auto, true)]
+    [InlineData(DnsRoute.Direct, false)]
+    [InlineData(DnsRoute.Tunnel, false)]
+    public void Auto_DNS_reaches_the_supervisor_with_a_tunnel(DnsRoute route, bool expected)
+    {
+        var settings = new AppSettings
+        {
+            SubscriptionUrl = "https://example.invalid/sub",
+            PresetName = "Universal V10",
+            DnsVia = route,
+        }.With(new EngineChoice { Desync = true, Tunnel = true });
+
+        Assert.Equal(expected, RoundTrip(settings).DnsViaAuto);
+    }
+
+    [Fact]
+    public void Auto_DNS_without_a_tunnel_has_no_switch()
+    {
+        var settings = new AppSettings { PresetName = "Universal V10", DnsVia = DnsRoute.Auto }
+            .With(new EngineChoice { Desync = true, Tunnel = false });
+
+        Assert.False(RoundTrip(settings).DnsViaAuto);
     }
 }

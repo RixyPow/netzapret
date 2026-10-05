@@ -316,6 +316,49 @@ public class SingBoxConfigCompilerTests
             root.GetProperty("route").GetProperty("default_domain_resolver").GetProperty("server").GetString());
     }
 
+    /// <summary>
+    /// DNS «авто» (05.10): резолвер ходит через свой переключатель пути, при
+    /// запуске стоящий «напрямую», а имена серверов — через bootstrap.
+    /// </summary>
+    [Fact]
+    public void AutoDnsGoesThroughItsOwnSwitchStartingDirect()
+    {
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsViaAuto = true,
+        });
+
+        Assert.Equal(SingBoxOptions.DnsPathTag, DnsServer(root, "remote").GetProperty("detour").GetString());
+
+        var path = root.GetProperty("outbounds").EnumerateArray()
+            .Single(o => o.GetProperty("tag").GetString() == SingBoxOptions.DnsPathTag);
+
+        Assert.Equal("selector", path.GetProperty("type").GetString());
+        Assert.Equal("direct", path.GetProperty("default").GetString());
+        Assert.Equal(["auto", "direct"], path.GetProperty("outbounds").EnumerateArray().Select(o => o.GetString()));
+        Assert.True(path.GetProperty("interrupt_exist_connections").GetBoolean());
+
+        Assert.Equal("bootstrap",
+            root.GetProperty("route").GetProperty("default_domain_resolver").GetProperty("server").GetString());
+    }
+
+    /// <summary>«Напрямую» — без переключателя: резолвер мимо туннеля, как прежде.</summary>
+    [Fact]
+    public void DirectDnsHasNoSwitch()
+    {
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+        });
+
+        Assert.False(DnsServer(root, "remote").TryGetProperty("detour", out _));
+        Assert.DoesNotContain(root.GetProperty("outbounds").EnumerateArray(),
+            o => o.GetProperty("tag").GetString() == SingBoxOptions.DnsPathTag);
+    }
+
     [Fact]
     public void ThroughTunnelTheResolverIsHiddenFromTheOperator()
     {
@@ -914,6 +957,52 @@ public class SingBoxConfigCompilerTests
                 ],
                 DnsThroughTunnel = true,
                 PanelHosts = ["panel.example.net", "sub.example.org"],
+            });
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, result.Json);
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, $"sing-box check не пройден: {stderr}");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>DNS «авто» — тем же настоящим sing-box: переключатель пути и detour на него.</summary>
+    [Fact]
+    public void AutoDnsPassesSingBoxCheck()
+    {
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server("vl", ProxyProtocol.Vless, "tcp")],
+            new SingBoxOptions
+            {
+                Scope = TunnelScope.ProxyOnly,
+                DnsServerAddresses = ["8.8.8.8/32"],
+                DnsViaAuto = true,
+                PanelHosts = ["panel.example.net"],
             });
 
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");

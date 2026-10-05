@@ -133,6 +133,20 @@ public sealed class SingBoxOptions
     public bool DnsThroughTunnel { get; init; }
 
     /// <summary>
+    /// «Авто»: резолвер ходит через переключатель пути DNS (<c>dns-path</c>) —
+    /// напрямую при запуске, через туннель, когда надзор увидит, что тот жив.
+    /// </summary>
+    /// <remarks>
+    /// Переключает надзор через Clash API (SingBoxService), а не пересборкой:
+    /// пересборка значила бы перезапуск движка. Имена серверов подписки и
+    /// панелей разрешаются через <c>bootstrap</c>, как при «через туннель».
+    /// </remarks>
+    public bool DnsViaAuto { get; init; }
+
+    /// <summary>Тег переключателя пути DNS при «авто».</summary>
+    public const string DnsPathTag = "dns-path";
+
+    /// <summary>
     /// Имена панелей подписок: при <see cref="DnsThroughTunnel"/> они
     /// разрешаются через <c>bootstrap</c>, в обход туннеля.
     /// </summary>
@@ -768,8 +782,16 @@ public sealed class SingBoxConfigCompiler
         // умерло бы целиком.
         bool throughTunnel = options.DnsThroughTunnel && haveServers;
 
+        // «Авто» — через переключатель пути DNS, который ставит надзор.
+        bool viaPath = options.DnsViaAuto && !options.DnsThroughTunnel && haveServers;
+
+        // Имена серверов подписки и панелей — мимо туннеля в обоих случаях.
+        bool bootstrap = throughTunnel || viaPath;
+
         if (throughTunnel)
             remote["detour"] = options.SelectorTag;
+        else if (viaPath)
+            remote["detour"] = SingBoxOptions.DnsPathTag;
 
         var servers = new JsonArray
         {
@@ -783,7 +805,7 @@ public sealed class SingBoxConfigCompiler
             },
         };
 
-        if (throughTunnel)
+        if (bootstrap)
         {
             // Имена самих серверов подписки разрешаются в обход туннеля,
             // иначе замкнутый круг: чтобы поднять туннель, нужно разрешить
@@ -875,7 +897,7 @@ public sealed class SingBoxConfigCompiler
         // в VPN, — а часть панелей в РФ закрыта, — должна получить fakeip
         // и уйти в туннель, как он решил; иначе мы молча отменили бы его
         // выбор ради случая, когда этот выбор и так не работает.
-        if (throughTunnel && options.PanelHosts.Count > 0)
+        if (bootstrap && options.PanelHosts.Count > 0)
         {
             var panels = new JsonArray();
 
@@ -1181,6 +1203,23 @@ public sealed class SingBoxConfigCompiler
             ["outbounds"] = selectorMembers,
             ["default"] = pinned ?? LatencyTag,
         });
+
+        // «Авто» для DNS (владелец, 05.10): резолвер ходит через свой
+        // переключатель — при запуске напрямую, пока туннель не прогрет,
+        // дальше куда поставит надзор. Обрывать идущие соединения при
+        // переключении обязательно: DoH держит одно соединение HTTP/2
+        // часами, и без обрыва запросы так и шли бы прежним путём.
+        if (options.DnsViaAuto && !options.DnsThroughTunnel && tags.Count > 0)
+        {
+            outbounds.Add(new JsonObject
+            {
+                ["type"] = "selector",
+                ["tag"] = SingBoxOptions.DnsPathTag,
+                ["outbounds"] = new JsonArray { options.SelectorTag, "direct" },
+                ["default"] = "direct",
+                ["interrupt_exist_connections"] = true,
+            });
+        }
 
         return outbounds;
     }
@@ -1747,7 +1786,7 @@ public sealed class SingBoxConfigCompiler
             // Для этого и заведён bootstrap.
             ["default_domain_resolver"] = new JsonObject
             {
-                ["server"] = options.DnsThroughTunnel && haveServers ? BootstrapTag : "remote",
+                ["server"] = (options.DnsThroughTunnel || options.DnsViaAuto) && haveServers ? BootstrapTag : "remote",
 
                 // Сперва IPv4, IPv6 — запасным. Журнал владельца 25.09: сотни
                 // «dial tcp [2001:4860:…]:443: unreachable network» за 1 мс —

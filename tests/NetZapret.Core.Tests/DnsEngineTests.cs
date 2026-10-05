@@ -18,7 +18,7 @@ public sealed class DnsEngineTests
     private static readonly IReadOnlyList<string> Resolvers = ["8.8.8.8/32", "192.168.1.1/32"];
 
     private static AppSettings DesyncOnly(bool throughTunnel) =>
-        new AppSettings { PresetName = "Universal V10", DnsThroughTunnel = throughTunnel }
+        new AppSettings { PresetName = "Universal V10", DnsVia = throughTunnel ? DnsRoute.Tunnel : DnsRoute.Direct }
             .With(new EngineChoice { Desync = true, Tunnel = false });
 
     [Fact]
@@ -43,7 +43,7 @@ public sealed class DnsEngineTests
         {
             SubscriptionUrl = "https://example.invalid/sub",
             PresetName = "Universal V10",
-            DnsThroughTunnel = true,
+            DnsVia = DnsRoute.Tunnel,
         }.With(new EngineChoice { Desync = true, Tunnel = true });
 
         Assert.True(settings.NeedsProxy);
@@ -53,7 +53,7 @@ public sealed class DnsEngineTests
     [Fact]
     public void Without_desync_there_is_nothing_to_guard()
     {
-        var settings = new AppSettings { PresetName = null, DnsThroughTunnel = true }
+        var settings = new AppSettings { PresetName = null, DnsVia = DnsRoute.Tunnel }
             .With(new EngineChoice { Desync = true, Tunnel = false });
 
         Assert.False(settings.NeedsDnsEngine);
@@ -65,7 +65,7 @@ public sealed class DnsEngineTests
     [Fact]
     public void Selective_without_an_exit_is_desync_alone_too()
     {
-        var settings = new AppSettings { SubscriptionUrl = null, PresetName = "Universal V10", DnsThroughTunnel = true }
+        var settings = new AppSettings { SubscriptionUrl = null, PresetName = "Universal V10", DnsVia = DnsRoute.Tunnel }
             .With(new EngineChoice { Desync = true, Tunnel = true });
 
         Assert.False(settings.NeedsProxy);

@@ -204,7 +204,7 @@ async Task<int> Fix(string target)
 }
 
 // Как движок спрашивает имена, и переключение — то же, что список на
-// вкладке DNS: пишется DnsThroughTunnel, применяется при следующем запуске
+// вкладке DNS: пишется DnsVia (авто, напрямую, туннель), применяется при следующем запуске
 // движков. Перезапустить их nz не может — прав администратора он не просит.
 int DnsMode(string? choice)
 {
@@ -212,22 +212,17 @@ int DnsMode(string? choice)
 
     if (choice is { Length: > 0 })
     {
-        bool? through = choice.ToLowerInvariant() switch
-        {
-            "напрямую" or "direct" => false,
-            "туннель" or "через-туннель" or "tunnel" => true,
-            _ => null,
-        };
+        var route = DnsRoutes.Parse(choice.Replace('-', ' '));
 
-        if (through is null)
+        if (route is null)
         {
-            Console.Error.WriteLine("nz dns-mode напрямую | туннель");
+            Console.Error.WriteLine("nz dns-mode авто | напрямую | туннель");
             return 2;
         }
 
-        if (settings.DnsThroughTunnel != through)
+        if (settings.DnsVia != route)
         {
-            settings = settings with { DnsThroughTunnel = through.Value };
+            settings = settings with { DnsVia = route.Value };
             settings.Save(AppSettings.DefaultPath);
             Console.WriteLine("записано; применится при следующем запуске движков");
         }
@@ -237,7 +232,7 @@ int DnsMode(string? choice)
         }
     }
 
-    Console.WriteLine($"в настройках: {settings.DnsServer}, {(settings.DnsThroughTunnel ? "через туннель" : "напрямую")}");
+    Console.WriteLine($"в настройках: {settings.DnsServer}, {DnsRoutes.Word(settings.DnsVia)}");
 
     // Что делает работающий движок — может отставать от настроек до перезапуска.
     var config = ReadEngineConfig();
@@ -481,7 +476,7 @@ int Help()
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
     Console.WriteLine("  nz voice     голос Discord: адреса звука из его журнала против списка голоса —");
     Console.WriteLine("               что сторож окна дописал бы; ничего не пишет");
-    Console.WriteLine("  nz dns-mode [напрямую|туннель]");
+    Console.WriteLine("  nz dns-mode [авто|напрямую|туннель]");
     Console.WriteLine("               как движок спрашивает имена; с аргументом — переключить");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");

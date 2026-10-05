@@ -51,7 +51,7 @@ public sealed class SupportReportTests : IDisposable
             "\u001b[31mERROR\u001b[0m dial: {\"password\": \"hunter2\", \"private_key\": \"AAAA\"}\n");
 
         File.WriteAllText(Path.Combine(_root, "config", "netzapret.json"),
-            $"{{ \"SubscriptionUrl\": \"{Subscription}\", \"DnsThroughTunnel\": true }}");
+            $"{{ \"SubscriptionUrl\": \"{Subscription}\", \"DnsVia\": \"Tunnel\" }}");
 
         File.WriteAllText(Path.Combine(_root, "config", "rules.user.yaml"),
             "rules:\n  - match: domain\n    value: \"*.example.org\"\n    mode: proxy\n");

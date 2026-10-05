@@ -184,7 +184,8 @@ internal static class TunnelConfig
                 // Адрес, вписанный руками, идёт как прежде: без имени.
                 DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
                 DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
-                DnsThroughTunnel = settings.DnsThroughTunnel,
+                DnsThroughTunnel = settings.DnsVia == DnsRoute.Tunnel,
+                DnsViaAuto = settings.DnsVia == DnsRoute.Auto,
 
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.

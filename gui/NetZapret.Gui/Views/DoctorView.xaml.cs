@@ -451,7 +451,7 @@ public partial class DoctorView : UserControl
         var lines = new List<DoctorLine>
         {
             Ok($"Апстрим туннеля: {settings.DnsServer}"
-                + (settings.DnsThroughTunnel ? ", запросы идут внутри туннеля." : ".")),
+                + $", путь — {DnsRoutes.Word(settings.DnsVia)}."),
         };
 
         try

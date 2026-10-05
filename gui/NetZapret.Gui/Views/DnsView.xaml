@@ -149,8 +149,9 @@
                             -->
                             <ComboBox x:Name="TunnelMode" Margin="0,10,0,0" HorizontalAlignment="Stretch"
                                       SelectionChanged="OnThroughTunnel">
-                                <ComboBoxItem Content="спрашивать напрямую" />
-                                <ComboBoxItem Content="спрашивать через туннель" />
+                                <ComboBoxItem Content="авто: через туннель, пока он жив" Tag="Auto" />
+                                <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
+                                <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
                             </ComboBox>
 
                             <TextBlock x:Name="TunnelHint" Style="{StaticResource Caption}"

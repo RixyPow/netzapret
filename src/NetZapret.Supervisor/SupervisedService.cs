@@ -365,6 +365,10 @@ public sealed class SingBoxService : SupervisedService
     /// Движок без выхода, только ради DNS (<see cref="DnsEngine"/>): группы выбора
     /// нет, прогревать и сторожить нечего, живость — по Clash API.
     /// </param>
+    /// <param name="dnsViaAuto">
+    /// DNS «авто» (AppSettings.DnsVia): переключатель пути DNS в конфиге ставится
+    /// по проходу трафика через туннель — см. <see cref="ApplyDnsPathAsync"/>.
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
@@ -375,9 +379,11 @@ public sealed class SingBoxService : SupervisedService
         string? preferredExit = null,
         int exitCheckSeconds = 30,
         bool replacePinned = false,
-        bool dnsOnly = false)
+        bool dnsOnly = false,
+        bool dnsViaAuto = false)
     {
         _dnsOnly = dnsOnly;
+        _dnsViaAuto = dnsViaAuto;
         _exitCheckSeconds = exitCheckSeconds;
         _executablePath = executablePath;
         _configPath = configPath;
@@ -393,6 +399,59 @@ public sealed class SingBoxService : SupervisedService
 
     /// <summary>Движок только ради DNS — см. параметр конструктора.</summary>
     private readonly bool _dnsOnly;
+
+    /// <summary>DNS «авто»: путь резолвера ставит надзор (<see cref="ApplyDnsPathAsync"/>).</summary>
+    private readonly bool _dnsViaAuto;
+
+    /// <summary>Куда сейчас смотрит переключатель пути DNS; <c>null</c> — не ставили, в конфиге «напрямую».</summary>
+    private bool? _dnsViaTunnel;
+
+    /// <summary>Счёт опросов для своей проверки «авто», когда «Проверка прохода» выключена.</summary>
+    private int _dnsCheckCounter;
+
+    /// <summary>Итог своей проверки «авто».</summary>
+    private bool _dnsLastOk;
+
+    /// <summary>
+    /// Ставит путь DNS: через туннель, пока он пропускает трафик, иначе напрямую.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 05.10: «апстрим туннеля — режим авто, который ведёт напрямую,
+    /// если туннель не работает или мёртв, и через туннель, если с ним всё
+    /// в порядке». 30.09 при «через туннель» заминка выхода клала DNS всей
+    /// машины, а при «напрямую» оператор может перекрыть DoH.
+    /// </para>
+    /// <para>
+    /// При запуске переключатель стоит «напрямую» (так собран конфиг), и
+    /// туннель получает DNS только после настоящей проверки прохода — пока
+    /// он прогревается, имена разрешаются. Неудача переключения не беда:
+    /// попробуем на следующем опросе, состояние не запоминается.
+    /// </para>
+    /// </remarks>
+    private async Task ApplyDnsPathAsync(bool tunnelWorks, CancellationToken cancellationToken)
+    {
+        // Ещё не ставили и туннель молчит — переключатель и так «напрямую».
+        if (_dnsViaTunnel is null && !tunnelWorks)
+        {
+            _dnsViaTunnel = false;
+            return;
+        }
+
+        if (_dnsViaTunnel == tunnelWorks)
+            return;
+
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+        if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, tunnelWorks ? SelectorGroup : "direct", cancellationToken))
+            return;
+
+        _dnsViaTunnel = tunnelWorks;
+
+        Note(tunnelWorks
+            ? "DNS (авто): туннель пропускает трафик — имена спрашиваются через него."
+            : "DNS (авто): туннель не пропускает трафик — имена спрашиваются напрямую, пока он не оживёт.");
+    }
 
     /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
     private readonly ExitWatch _watch;
@@ -613,6 +672,8 @@ public sealed class SingBoxService : SupervisedService
         _upstreamNoted = false;
         _trafficPortMissingSince = null;
         _trafficPortMissingNoted = false;
+        _dnsViaTunnel = null;
+        _dnsCheckCounter = 0;
     }
 
     // Ради DNS — своё имя: по «sing-box» окно узнаёт туннель (DnsEngine.ServiceName).
@@ -669,7 +730,20 @@ public sealed class SingBoxService : SupervisedService
         await WatchExitAsync(cancellationToken);
 
         if (_trafficPort is null)
+        {
+            // «Авто» для DNS решает по проходу трафика и без «Проверки
+            // прохода» в настройках: своей проверкой через вход health-in,
+            // так же редко. Здоровья службы она не меняет.
+            if (_dnsViaAuto)
+            {
+                if (_dnsCheckCounter++ % _trafficCheckEvery == 0)
+                    _dnsLastOk = await CheckTrafficAsync(SingBoxOptions.DefaultHealthPort, cancellationToken);
+
+                await ApplyDnsPathAsync(_dnsLastOk, cancellationToken);
+            }
+
             return ServiceCheck.Healthy;
+        }
 
         // Порт проверки есть не во всяком конфиге: собранный прежней версией
         // или руками, он может не содержать входа вовсе. Настаивать в таком
@@ -701,7 +775,12 @@ public sealed class SingBoxService : SupervisedService
         // Глубокая проверка делается редко: она уходит в сеть и стоит секунды.
         // Между проверками используется её последний результат.
         if (_checkCounter++ % _trafficCheckEvery != 0)
+        {
+            if (_dnsViaAuto)
+                await ApplyDnsPathAsync(_lastTrafficOk && !_bypass.Engaged, cancellationToken);
+
             return _lastTrafficOk ? ServiceCheck.Healthy : ServiceCheck.UpstreamDown;
+        }
 
         // Пока обход включён, общая проверка отвечать на наш вопрос перестаёт:
         // она идёт через прямой выход и удаётся всегда. Мерить надо сами
@@ -712,6 +791,9 @@ public sealed class SingBoxService : SupervisedService
             : await CheckTrafficAsync(_trafficPort.Value, cancellationToken);
 
         await ApplyBypassAsync(_lastTrafficOk, cancellationToken);
+
+        if (_dnsViaAuto)
+            await ApplyDnsPathAsync(_lastTrafficOk && !_bypass.Engaged, cancellationToken);
 
         if (_lastTrafficOk)
             return ServiceCheck.Healthy;

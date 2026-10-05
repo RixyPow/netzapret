@@ -64,6 +64,9 @@ internal static class SupervisorHost
 
         public bool VerifyTraffic { get; init; }
 
+        /// <summary>DNS «авто» — путь резолвера ставит надзор (SingBoxService).</summary>
+        public bool DnsViaAuto { get; init; }
+
         public string? LogPath { get; init; }
     }
 
@@ -96,6 +99,9 @@ internal static class SupervisorHost
 
         if (settings.NeedsDesync)
             arguments += $" --preset \"{settings.PresetName}\"";
+
+        if (settings.NeedsProxy && settings.DnsVia == DnsRoute.Auto)
+            arguments += " --dns-via-auto";
 
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";
@@ -448,7 +454,8 @@ internal static class SupervisorHost
             bypassWhenDead: settings.BypassWhenTunnelDead,
             preferredExit: Warp.PreferredExit(settings),
             exitCheckSeconds: settings.ExitCheckSeconds,
-            replacePinned: settings.ReplaceSilentServer)
+            replacePinned: settings.ReplaceSilentServer,
+            dnsViaAuto: options.DnsViaAuto)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         });
@@ -599,6 +606,10 @@ internal static class SupervisorHost
 
                 case DnsOnlySwitch:
                     options = options with { DnsOnly = true };
+                    break;
+
+                case "--dns-via-auto":
+                    options = options with { DnsViaAuto = true };
                     break;
 
                 case "--verify-traffic":
