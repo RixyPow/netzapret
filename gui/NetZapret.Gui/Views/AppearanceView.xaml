@@ -45,8 +45,6 @@
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
                             </StackPanel>
 
-                            <Button Grid.Column="1" Style="{StaticResource Ghost}" VerticalAlignment="Top"
-                                    Content="Папка тем" Click="OnThemesFolder" />
                         </Grid>
 
                         <ItemsControl x:Name="ThemeList" Margin="0,16,0,0" Focusable="False">
@@ -110,6 +108,8 @@
                             <Button x:Name="EditThemeButton" Style="{StaticResource Ghost}" Content="Изменить" Click="OnEditTheme" Margin="0,0,8,8" />
                             <Button Style="{StaticResource Ghost}" Content="Выгрузить в файл…" Click="OnExportTheme" Margin="0,0,8,8" />
                             <Button Style="{StaticResource Ghost}" Content="Загрузить из файла…" Click="OnImportTheme" Margin="0,0,8,8" />
+                            <!-- Рядом с прочими действиями над темами (владелец, 05.10), а не отдельно в шапке. -->
+                            <Button Style="{StaticResource Ghost}" Content="Папка тем" Click="OnThemesFolder" Margin="0,0,8,8" />
                         </WrapPanel>
 
                         <!--
