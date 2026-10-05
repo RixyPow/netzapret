@@ -194,6 +194,38 @@
 
             <Border Style="{StaticResource SettingsGroup}">
                 <StackPanel>
+                    <!--
+                        Переехало из «Ещё → Прочее» (владелец, 05.10): проверка
+                        прохода — про то, жив ли туннель, ей место здесь.
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Проверять проход трафика" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Не только открытость порта, но и то, что через туннель что-то проходит. Без неё молчащий сервер выглядит живым: «Главная» пишет «Работает», а обход при мёртвом туннеле не включается." />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Дороже по времени, зато ловит молчащую трубу." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="VerifyWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Verify" Style="{StaticResource Switch}"
+                                      Click="OnVerify" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
                     <Grid Margin="16,13">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

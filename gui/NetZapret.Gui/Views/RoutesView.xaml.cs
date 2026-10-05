@@ -1291,6 +1291,10 @@ public partial class RoutesView : UserControl
     private IReadOnlyList<ServiceRow> InChosenOrder(IEnumerable<ServiceRow> rows) =>
         RouteOrder.Apply(rows, _order);
 
+    /// <summary>«Настройки маршрутов» — отдельным окном, как у вкладки VPN.</summary>
+    private void OnSettings(object sender, RoutedEventArgs e) =>
+        new RoutesSettingsWindow { Owner = Window.GetWindow(this) }.ShowDialog();
+
     private void OnExpandAll(object sender, RoutedEventArgs e)
     {
         bool open = ExpandButton.Content as string == "Раскрыть всё";

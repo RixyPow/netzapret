@@ -30,9 +30,27 @@ public partial class UpdatePanel : UserControl
         Unloaded += (_, _) => _work?.Cancel();
     }
 
+    /// <summary>«Искать обновления при запуске» — тумблер в заголовке карточки.</summary>
+    private void OnCheckOnStart(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { CheckForUpdates = CheckOnStart.IsChecked == true };
+
+            settings.Save(AppSettings.DefaultPath);
+            ShowVersion(settings);
+        }
+        catch (Exception ex)
+        {
+            CheckOnStart.IsChecked = !CheckOnStart.IsChecked;
+            Say("Не удалось записать: " + ex.GetBaseException().Message, failed: true);
+        }
+    }
+
     public void ShowVersion(AppSettings settings)
     {
         VersionValue.Text = "Текущая версия: " + UpdateCheck.Current;
+        CheckOnStart.IsChecked = settings.CheckForUpdates;
 
         // Найденное при запуске окна (UpdateNotice) показывается сразу —
         // вместе с кнопкой установки, без повторного вопроса GitHub.

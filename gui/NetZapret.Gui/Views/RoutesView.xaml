@@ -105,6 +105,10 @@
                                 Content="Раскрыть всё" Click="OnExpandAll" Margin="0,0,8,0"
                                 ToolTip="Раскрывает все папки разом. Разворачиваются только те пять сервисов, у которых части ломаются врозь." />
 
+                        <!-- Как «Настройки» у вкладки VPN (владелец, 05.10): то, что задают однажды. -->
+                        <Button Style="{StaticResource Ghost}" Content="Настройки" Click="OnSettings" Margin="0,0,8,0"
+                                ToolTip="Перезапуск Discord после смены маршрута, пополнение адресов его голоса." />
+
                         <Button x:Name="ReloadButton" Style="{StaticResource Ghost}"
                                 Content="Перечитать" Click="OnReload"
                                 ToolTip="Перечитывает правила, пресет и файл hosts с диска. Нужно, если правили их снаружи программы." />

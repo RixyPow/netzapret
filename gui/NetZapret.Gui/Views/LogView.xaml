@@ -24,6 +24,17 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <!--
+                    Переехало из «Ещё → Прочее» (владелец, 05.10): выключают
+                    журнал, глядя на сам журнал. Движки читают настройку при
+                    запуске — отсюда и предложение перезапустить.
+                -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0"
+                            ToolTip="Без журнала разбор сбоя сводится к догадкам. Выключают те, кого смущает рост файла: winws2 пишет строку на соединение. Применится при следующем запуске движков.">
+                    <TextBlock Text="Вести журнал" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <ToggleButton x:Name="LogsSwitch" Style="{StaticResource Switch}" Click="OnLogsSwitch" VerticalAlignment="Center" />
+                </StackPanel>
+
                 <ComboBox x:Name="Source" Width="176" SelectedIndex="0"
                           SelectionChanged="OnSource" Margin="0,0,8,0">
                     <ComboBoxItem Content="sing-box" />

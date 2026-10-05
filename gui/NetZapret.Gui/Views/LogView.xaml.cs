@@ -31,7 +31,29 @@ public partial class LogView : UserControl
     {
         InitializeComponent();
 
-        Loaded += (_, _) => Reload();
+        Loaded += (_, _) =>
+        {
+            LogsSwitch.IsChecked = Core.AppSettings.Load(Core.AppSettings.DefaultPath).LogsEnabled;
+            Reload();
+        };
+    }
+
+    /// <summary>«Вести журнал» — записать и предложить перезапуск: движки читают её при запуске.</summary>
+    private void OnLogsSwitch(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = Core.AppSettings.Load(Core.AppSettings.DefaultPath);
+            var next = settings with { LogsEnabled = LogsSwitch.IsChecked == true };
+
+            next.Save(Core.AppSettings.DefaultPath);
+            this.Offer(next.LogsEnabled ? "Журнал включён" : "Журнал выключен");
+        }
+        catch (Exception ex)
+        {
+            LogsSwitch.IsChecked = !LogsSwitch.IsChecked;
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
     }
 
     private static string Path(int source) => source switch

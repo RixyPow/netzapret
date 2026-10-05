@@ -11,23 +11,6 @@ using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Выключатель без своего раздела.</summary>
-public sealed record FlagRow(string Key, string Name, string Note)
-{
-    public bool On { get; set; }
-
-    /// <summary>
-    /// Состояние словом рядом с тумблером.
-    /// </summary>
-    /// <remarks>
-    /// Короче прежнего — «вкл.» вместо «включено», — потому что рядом
-    /// теперь стоит тумблер и слово его лишь подтверждает. Подтверждение
-    /// нужно: положение кружка и оттенок теряются при беглом взгляде
-    /// и исчезают вовсе у тех, кто плохо различает цвета.
-    /// </remarks>
-    public string State => On ? "вкл." : "выкл.";
-}
-
 /// <summary>
 /// Всё, что не заслужило своего раздела, но нужно.
 /// </summary>
@@ -78,7 +61,6 @@ public partial class MoreView : UserControl
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        ShowFlags(settings);
         ShowRoutes();
 
         RootValue.Text = Path.GetFullPath(".");
@@ -444,79 +426,6 @@ public partial class MoreView : UserControl
         catch (Exception)
         {
             return -1;
-        }
-    }
-
-    private void ShowFlags(AppSettings settings)
-    {
-        var rows = new List<FlagRow>
-        {
-            new("logs", "Вести журнал",
-                "Без него разбор сбоя сводится к догадкам. Выключают те, кого смущает рост "
-                + "файла: winws2 пишет строку на соединение.")
-            { On = settings.LogsEnabled },
-
-            new("verify", "Проверять проход трафика",
-                "Не только открытость порта, но и то, что через него что-то проходит. "
-                + "Дороже по времени, зато ловит молчащую трубу.")
-            { On = settings.VerifyTraffic },
-
-            new("discord", "Предлагать перезапуск Discord",
-                "Он запоминает голосовые серверы на сеанс и до перезапуска ходит по-старому. "
-                + "Сам он не перезапускается никогда: посреди звонка это хуже задержки.")
-            { On = settings.OfferDiscordRestart },
-
-            new("voice", "Дописывать адреса голоса Discord",
-                "Пока голос Discord стоит «через VPN», новые адреса его серверов берутся из журнала "
-                + "Discord и дописываются в список голоса. Заработают после перезапуска движков.")
-            { On = settings.LearnDiscordVoice },
-
-            new("updates", "Искать обновления при запуске",
-                "Только искать. Установка остаётся отдельным действием с отдельным согласием.")
-            { On = settings.CheckForUpdates },
-        };
-
-        Flags.ItemsSource = rows;
-    }
-
-    private void OnFlag(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string key })
-            return;
-
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            settings = key switch
-            {
-                "logs" => settings with { LogsEnabled = !settings.LogsEnabled },
-                "verify" => settings with { VerifyTraffic = !settings.VerifyTraffic },
-                "discord" => settings with { OfferDiscordRestart = !settings.OfferDiscordRestart },
-                "voice" => settings with { LearnDiscordVoice = !settings.LearnDiscordVoice },
-                _ => settings with { CheckForUpdates = !settings.CheckForUpdates },
-            };
-
-            settings.Save(AppSettings.DefaultPath);
-
-            ShowFlags(settings);
-
-            // Сторож голоса читает настройку сам на каждом круге — движкам
-            // она безразлична, и перезапуск предлагать незачем.
-            if (key == "voice")
-            {
-                Status.Text = settings.LearnDiscordVoice
-                    ? "Записано: адреса голоса Discord дописываются, пока голос «через VPN»."
-                    : "Записано: список голоса Discord больше не пополняется сам.";
-                return;
-            }
-
-            Status.Text = "Записано. Применится при следующем запуске движков.";
-            this.Offer("Настройка изменена");
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
         }
     }
 

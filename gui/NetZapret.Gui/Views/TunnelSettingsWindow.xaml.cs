@@ -115,6 +115,9 @@ public partial class TunnelSettingsWindow : Window
         Word(BypassWord, settings.BypassWhenTunnelDead);
         Bypass.IsChecked = settings.BypassWhenTunnelDead;
 
+        Word(VerifyWord, settings.VerifyTraffic);
+        Verify.IsChecked = settings.VerifyTraffic;
+
         ShowBypass(settings.BypassWhenTunnelDead);
         ShowChecks(settings);
     }
@@ -225,6 +228,16 @@ public partial class TunnelSettingsWindow : Window
             Replace.IsChecked == true
                 ? "Выбранному серверу будет искаться замена, пока он молчит."
                 : "Выбранный сервер не подменяется: молчит — туннель ждёт его.");
+
+    private void OnVerify(object sender, RoutedEventArgs e)
+    {
+        bool on = Verify.IsChecked == true;
+
+        Save(s => s with { VerifyTraffic = on },
+            on
+                ? "Проверка прохода включена: молчащий туннель будет виден."
+                : "Проверка прохода выключена: туннель судится по открытому порту.");
+    }
 
     private void OnBypass(object sender, RoutedEventArgs e)
     {
