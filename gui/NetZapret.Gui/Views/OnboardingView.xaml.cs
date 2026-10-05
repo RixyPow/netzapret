@@ -195,10 +195,11 @@ public partial class OnboardingView : UserControl
     /// у человека на машине, а не у провайдера, — и дальше каждый идёт
     /// своим путём сквозь ТСПУ. Напрямую: сайт не заблокирован, трогать
     /// нечего. Десинк: пакет разрезан надвое, и ТСПУ пропускает его
-    /// неузнанным. VPN: пакет завёрнут в туннель до сервера за границей,
-    /// и ТСПУ видит туннель, а не сайт. Пин: hosts даёт имени адрес
-    /// посредника, пакет идёт к нему как есть (щит пропускает его мимо
-    /// десинка), и сайт видит адрес посредника — без подписки.
+    /// неузнанным. VPN — против бана по IP: пакет завёрнут в туннель
+    /// до сервера VPN, и ТСПУ видит адрес сервера, а не забаненный. Пин —
+    /// против закрытого по стране: hosts даёт имени адрес посредника, пакет
+    /// идёт к нему как есть (щит пропускает его мимо десинка), и сайт видит
+    /// адрес посредника — без подписки.
     /// </para>
     /// <para>
     /// Из макета не взято «Анализ трафика» посередине: в пакеты смотрит ТСПУ,
@@ -222,17 +223,19 @@ public partial class OnboardingView : UserControl
         const double pcX = 44, sortX = 150, wallX = 382, relayX = 466, siteX = 536, mid = 160;
         double[] lane = [64, 128, 192, 256];
 
-        // Порядок дорог — владелец 05.10: напрямую, десинк, VPN, пин.
+        // Порядок дорог и чему какая служит — владелец 05.10: напрямую, десинк,
+        // VPN, пин; VPN — против бана по IP, пин — против закрытого по стране.
+        // У сайта в конце дороги — род блокировки и примеры.
         HeroLane[] lanes =
         [
             new(HeroWay.Direct, "Muted", "Напрямую", "NetZapret его не трогает",
                 Glyph(0xE825), "Обычные сайты", "банки, игры, Рунет"),
             new(HeroWay.Desync, "Accent", "Десинк", "разрезан — ТСПУ не узнаёт",
-                Glyph(0xE774), "Под блокировкой", "без VPN и подписки"),
+                Glyph(0xE774), "Под блокировкой", "YouTube, Discord"),
             new(HeroWay.Tunnel, "Text", "VPN", "в шифрованном туннеле",
-                Glyph(0xE774), "Закрыт по стране", "видит адрес VPN"),
+                Glyph(0xE774), "Бан по IP", "Telegram, Instagram"),
             new(HeroWay.Pin, "Warn", "Пин", "hosts ведёт к посреднику",
-                Glyph(0xE774), "ChatGPT, Claude…", "видит адрес посредника"),
+                Glyph(0xE774), "Закрыт по стране", "ChatGPT, Claude"),
         ];
 
         // Ствол: от компьютера до «Маршрутов» пакеты идут вперемешку.
@@ -299,7 +302,7 @@ public partial class OnboardingView : UserControl
         var sorter = new Border { Width = 34, Height = 244, CornerRadius = new CornerRadius(17), BorderThickness = new Thickness(1.5) };
         sorter.SetResourceReference(Border.BackgroundProperty, "Surface");
         sorter.SetResourceReference(Border.BorderBrushProperty, "Border");
-        Place(sorter, sortX - 17, 38);
+        Place(Opaque(sorter), sortX - 17, 38);
         Chip("Маршруты", sortX, 8, "Muted");
 
         for (int i = 0; i < lanes.Length; i++)
@@ -477,7 +480,22 @@ public partial class OnboardingView : UserControl
         box.SetResourceReference(Border.BackgroundProperty, "Surface");
         box.SetResourceReference(Border.BorderBrushProperty, color);
 
-        Place(box, at.X - width / 2, at.Y - height / 2);
+        Place(Opaque(box), at.X - width / 2, at.Y - height / 2);
+    }
+
+    /// <summary>
+    /// Узел на непрозрачной подложке цвета фона окна.
+    /// </summary>
+    /// <remarks>
+    /// У тем с картинкой Surface полупрозрачен (у «Слойки 1» — на 60 %),
+    /// и пакет, меняющий вид внутри «Маршрутов» или узла, просвечивал
+    /// сквозь него (снимок 05.10) — подмена вида выходила на виду.
+    /// </remarks>
+    private static Border Opaque(Border node)
+    {
+        var under = new Border { CornerRadius = node.CornerRadius, Child = node };
+        under.SetResourceReference(Border.BackgroundProperty, "Backdrop");
+        return under;
     }
 
     private void Chip(string text, double centerX, double top, string color, string? glyph = null)
