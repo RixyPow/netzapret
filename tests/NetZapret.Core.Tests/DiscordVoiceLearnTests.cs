@@ -126,4 +126,23 @@ public sealed class DiscordVoiceLearnTests : IDisposable
 
         Assert.False(AppSettings.Load(path).LearnDiscordVoice);
     }
+
+    /// <summary>Обзор для nz voice: по адресу — сколько раз, последний раз и чем покрыт.</summary>
+    [Fact]
+    public void The_survey_counts_dates_and_coverage()
+    {
+        // Строки — как в журнале владельца 05.10.
+        const string log = """
+            [2026-10-03 09:03:14.100] [info]  [Connection(default)] Creating connection to 35.217.45.215:50003 with audio ssrc: 1
+            [2026-10-05 00:37:31.461] [info]  [Connection(default)] Creating connection to 104.29.146.252:19298 with audio ssrc: 3523
+            [2026-10-05 00:40:02.000] [info]  [Connection(default)] Creating connection to 35.217.45.215:50005 with audio ssrc: 2
+            """;
+
+        var survey = DiscordVoiceLearn.Survey(log, ["104.29.128.0/19"]);
+
+        Assert.Equal(2, survey.Count);
+        Assert.Equal(("35.217.45.215", 2, "2026-10-05 00:40:02", (string?)null),
+            (survey[0].Address.ToString(), survey[0].Seen, survey[0].LastSeen, survey[0].CoveredBy));
+        Assert.Equal("104.29.128.0/19", survey[1].CoveredBy);
+    }
 }

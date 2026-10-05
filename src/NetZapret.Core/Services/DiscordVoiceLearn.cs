@@ -62,10 +62,10 @@ public static class DiscordVoiceLearn
     /// <summary>Длина префикса дописываемой сети.</summary>
     public const int LearnPrefix = 20;
 
-    /// <summary>Сети /<see cref="LearnPrefix"/> для адресов, которых список не покрывает.</summary>
-    public static IReadOnlyList<string> Missing(IEnumerable<IPAddress> addresses, IEnumerable<string> listLines)
+    /// <summary>Сети списка: строка как написана и разобранная.</summary>
+    private static List<(string Text, IpCidrRange Range)> Ranges(IEnumerable<string> listLines)
     {
-        var ranges = new List<IpCidrRange>();
+        var ranges = new List<(string, IpCidrRange)>();
 
         foreach (var line in listLines)
         {
@@ -76,13 +76,71 @@ public static class DiscordVoiceLearn
 
             try
             {
-                ranges.Add(IpCidrRange.Parse(text));
+                ranges.Add((text, IpCidrRange.Parse(text)));
             }
             catch (RuleConfigurationException)
             {
                 // Чужая строка в списке — не наша забота; её и движок пропустит.
             }
         }
+
+        return ranges;
+    }
+
+    /// <summary>Адрес звука из журнала: сколько раз, когда последний, чем покрыт.</summary>
+    /// <param name="CoveredBy">Строка списка, которая его покрывает; <c>null</c> — вне списка.</param>
+    public sealed record VoiceAddress(IPAddress Address, int Seen, string? LastSeen, string? CoveredBy);
+
+    // «[2026-10-05 00:37:31.461] [info]  [Connection(default)] Creating connection to
+    // 104.29.146.252:19298 with audio ssrc: 3523» — журнал владельца 05.10.
+    private static readonly Regex TimedConnection = new(
+        @"^\[(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[^\]]*\][^\n]*?Creating connection to (?<ip>\d{1,3}(?:\.\d{1,3}){3}):\d+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Multiline);
+
+    /// <summary>
+    /// Обзор адресов звука в журнале против списка — для <c>nz voice</c>, ничего не пишет.
+    /// </summary>
+    /// <remarks>
+    /// По порядку первого появления. Время — из начала строки; строки без него
+    /// (в другом виде журнала) считаются, но без времени.
+    /// </remarks>
+    public static IReadOnlyList<VoiceAddress> Survey(string log, IEnumerable<string> listLines)
+    {
+        var ranges = Ranges(listLines);
+        var seen = new Dictionary<IPAddress, (int Count, string? Last)>();
+        var order = new List<IPAddress>();
+
+        foreach (Match match in TimedConnection.Matches(log))
+            Count(match.Groups["ip"].Value, match.Groups["time"].Value);
+
+        // Строки без времени в начале — тем же разбором, что у сторожа.
+        if (seen.Count == 0)
+        {
+            foreach (var address in Connection.Matches(log).Select(m => m.Groups[1].Value))
+                Count(address, null);
+        }
+
+        return order
+            .Select(a => new VoiceAddress(a, seen[a].Count, seen[a].Last,
+                ranges.FirstOrDefault(r => r.Range.Contains(a)).Text))
+            .ToList();
+
+        void Count(string text, string? time)
+        {
+            if (!IPAddress.TryParse(text, out var address) || address.AddressFamily != AddressFamily.InterNetwork)
+                return;
+
+            if (!seen.TryGetValue(address, out var was))
+                order.Add(address);
+
+            seen[address] = (was.Count + 1, time ?? was.Last);
+        }
+    }
+
+    /// <summary>Сети /<see cref="LearnPrefix"/> для адресов, которых список не покрывает.</summary>
+    public static IReadOnlyList<string> Missing(IEnumerable<IPAddress> addresses, IEnumerable<string> listLines)
+    {
+        var ranges = Ranges(listLines).Select(r => r.Range).ToList();
 
         var missing = new List<string>();
 
