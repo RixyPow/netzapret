@@ -415,6 +415,8 @@ public partial class MainWindow : Window
 
     private void OnGreetingTelegram(object sender, RoutedEventArgs e) => OpenLink(About.Telegram);
 
+    private void OnGreetingDonate(object sender, RoutedEventArgs e) => OpenLink(About.Support);
+
     private static void OpenLink(string url)
     {
         try
