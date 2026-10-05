@@ -72,7 +72,7 @@ public partial class OnboardingView : UserControl
         Unloaded += (_, _) =>
         {
             _poll.Stop();
-            Hero.Children.Clear();
+            StopHero();
         };
 
         for (int i = 0; i < LastStep; i++)
@@ -118,7 +118,7 @@ public partial class OnboardingView : UserControl
         if (step == 1)
             StartHero();
         else
-            Hero.Children.Clear();
+            StopHero();
 
         if (step == 2)
             ShowThemes();
@@ -184,59 +184,180 @@ public partial class OnboardingView : UserControl
     private void OnIntroNext(object sender, RoutedEventArgs e) => Show(2);
 
     /// <summary>
-    /// Рисует схему: компьютер, ТСПУ, туннель и сайт, и пускает по ним точки.
+    /// Рисует схему и пускает по ней пакеты.
     /// </summary>
     /// <remarks>
-    /// Нижняя дорога — десинк: пакет идёт напрямую сквозь ТСПУ, разрезанный
-    /// на две части, и поэтому точек две, одна вплотную за другой. Верхняя —
-    /// туннель, в обход ТСПУ через VPN. Цвета — ресурсами темы, не числами:
-    /// смена темы на следующем шаге перекрасит схему, если вернуться.
+    /// <para>
+    /// Три дороги — как три пути в программе (владелец 05.10, по своему
+    /// макету: «интереснее и понятнее, но не нарушай логику»). Пакеты выходят
+    /// из компьютера одинаковыми, «Маршруты» раскладывают их по правилам —
+    /// у человека на машине, а не у провайдера, — и дальше каждый идёт
+    /// своим путём сквозь ТСПУ. Десинк: пакет разрезан надвое, и ТСПУ
+    /// пропускает его неузнанным. VPN: пакет завёрнут в туннель до сервера
+    /// за границей, и ТСПУ видит туннель, а не сайт. Как есть: сайт
+    /// не заблокирован, трогать нечего.
+    /// </para>
+    /// <para>
+    /// Из макета не взято «Анализ трафика» посередине: в пакеты смотрит ТСПУ,
+    /// а программа раскладывает их по правилам, — поэтому лупа стоит у ТСПУ.
+    /// И десинк там вёл к «обычному сайту напрямую», а он нужен как раз
+    /// заблокированному.
+    /// </para>
+    /// <para>
+    /// Вспышки у «Маршрутов», у ТСПУ и у сайта приходятся ровно на проход
+    /// пакета: период у них тот же, что у пакета, а начало сдвинуто на долю
+    /// пути до этой точки. Цвета — ресурсами темы, не числами: смена темы
+    /// на следующем шаге перекрасит схему, если вернуться.
+    /// </para>
     /// </remarks>
     private void StartHero()
     {
-        Hero.Children.Clear();
+        StopHero();
 
-        var pc = new Point(70, 140);
-        var site = new Point(550, 140);
-        var vpn = new Point(310, 44);
-        const double tspu = 310;
+        // Холст 700 точек: мастер не шире 680 (OnboardingView.xaml), и холст
+        // шире ужимался бы вместе с подписями — при 880 они выходили по 8 точек.
+        const double pcX = 44, sortX = 150, wallX = 382, vpnX = 466, siteX = 536, mid = 135;
+        double[] lane = [62, mid, 208];
 
-        var direct = new PathGeometry([new PathFigure(pc, [new LineSegment(site, true)], false)]);
-        var tunnel = new PathGeometry([new PathFigure(pc,
-            [new BezierSegment(new Point(150, 44), new Point(220, 44), vpn, true),
-             new BezierSegment(new Point(400, 44), new Point(470, 44), site, true)], false)]);
+        HeroLane[] lanes =
+        [
+            new("Accent", "Десинк", "разрезан — ТСПУ не узнаёт",
+                "", "Под блокировкой", "открывается напрямую"),
+            new("Text", "VPN", "в шифрованном туннеле",
+                "", "Закрыт по стране", "видит адрес VPN"),
+            new("Muted", "Как есть", "NetZapret их не трогает",
+                "", "Обычные сайты", "банки, игры, Рунет"),
+        ];
 
-        Road(direct);
-        Road(tunnel);
+        // Ствол: от компьютера до «Маршрутов» пакеты идут вперемешку.
+        Stroke(new Point(pcX + 32, mid), new Point(sortX - 17, mid), "Border", 2, dashed: true);
 
-        // ТСПУ — преграда поперёк прямой дороги.
-        var wall = new Rectangle { Width = 8, Height = 74, RadiusX = 3, RadiusY = 3 };
+        for (int i = 0; i < lanes.Length; i++)
+        {
+            var y = lane[i];
+            var color = lanes[i].Color;
+
+            if (i == 1)
+            {
+                // Туннель — трубой до сервера VPN: ТСПУ видит трубу, но не то, что в ней.
+                double from = sortX + 17, to = vpnX - 18;
+
+                var fill = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, Opacity = 0.08 };
+                fill.SetResourceReference(Shape.FillProperty, color);
+                Place(fill, from, y - 8, z: 0);
+
+                var shell = new Rectangle { Width = to - from, Height = 16, RadiusX = 8, RadiusY = 8, StrokeThickness = 1.2, Opacity = 0.45 };
+                shell.SetResourceReference(Shape.StrokeProperty, color);
+                Place(shell, from, y - 8, z: 0);
+
+                Stroke(new Point(vpnX + 18, y), new Point(siteX - 25, y), color, 1.5, opacity: 0.45);
+            }
+            else
+            {
+                // Мягкое свечение — толстой полупрозрачной линией, а не эффектом:
+                // эффект на дороге, по которой бегут пакеты, перерисовывался бы
+                // с каждым кадром.
+                Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), color, 8, opacity: 0.08);
+                Stroke(new Point(sortX + 17, y), new Point(siteX - 25, y), color, 2, opacity: 0.6, dashed: i == 2);
+            }
+
+            Chip(lanes[i].Name, (sortX + 17 + wallX) / 2, y - 32, color);
+            Label(lanes[i].Hint, (sortX + 17 + wallX) / 2, y + 11, "Muted", size: 11);
+
+            Box(new Point(siteX, y), 46, 46, color, lanes[i].Glyph, 20);
+            Label(lanes[i].Site, siteX + 31, y - 18, "Text", bold: true, left: true);
+            Label(lanes[i].SiteHint, siteX + 31, y + 1, "Muted", size: 11, left: true);
+        }
+
+        Box(new Point(pcX, mid), 72, 60, "Border", "", 26, glyphColor: "Text");
+        Label("Компьютер", pcX, mid + 33, "Text", bold: true);
+
+        // «Маршруты» — раскладка по правилам; гнёзда окрашены цветом своей дороги.
+        var sorter = new Border { Width = 34, Height = 198, CornerRadius = new CornerRadius(17), BorderThickness = new Thickness(1.5) };
+        sorter.SetResourceReference(Border.BackgroundProperty, "Surface");
+        sorter.SetResourceReference(Border.BorderBrushProperty, "Border");
+        Place(sorter, sortX - 17, 36);
+        Chip("Маршруты", sortX, 8, "Muted");
+
+        for (int i = 0; i < lanes.Length; i++)
+            Place(Slot(lanes[i].Color, 0.35), sortX - 10, lane[i] - 10, z: 3);
+
+        var wall = new Rectangle { Width = 10, Height = 198, RadiusX = 4, RadiusY = 4 };
         wall.SetResourceReference(Shape.FillProperty, "Danger");
-        Place(wall, tspu - 4, 104);
-        Label("ТСПУ", tspu, 184, "Danger");
+        Place(wall, wallX - 5, 36);
+        Chip("ТСПУ", wallX, 8, "Danger", glyph: "");
 
-        Node(pc, "Компьютер", "Muted");
-        Node(site, "Сайт", "Accent", pulse: true);
-        Node(vpn, "VPN", "Text", radius: 17);
-
-        // Под прямой дорогой, между компьютером и ТСПУ: над ней идёт дуга туннеля.
-        Label("десинк: пакет разрезан", 200, 150, "Muted", size: 11);
-        Label("туннель: то, что закрыто по стране", 310, 10, "Muted", size: 11);
+        Box(new Point(vpnX, lane[1]), 36, 36, lanes[1].Color, "", 14, round: true);
+        Label("сервер VPN", vpnX, lane[1] + 22, "Muted", size: 11);
 
         if (!Moving)
-            return;
-
-        var trip = TimeSpan.FromSeconds(2.6);
-
-        for (int i = 0; i < 3; i++)
         {
-            var start = TimeSpan.FromSeconds(i * trip.TotalSeconds / 3);
+            // Без движения — по пакету на дороге, уже за «Маршрутами».
+            Still(Packet("Text"), (pcX + sortX) / 2 + 10, mid);
+            Still(Half(lanes[0].Color), wallX - 46, lane[0]);
+            Still(Half(lanes[0].Color), wallX - 36, lane[0]);
+            Still(Wrapped(lanes[1].Color), wallX - 40, lane[1]);
+            Still(Packet(lanes[2].Color), wallX - 40, lane[2]);
 
-            // Две половины одного пакета — вторая вплотную за первой.
-            Runner(direct, trip, start, "Accent", 5);
-            Runner(direct, trip, start + TimeSpan.FromMilliseconds(110), "Accent", 5);
+            foreach (UIElement card in Features.Children)
+                card.Opacity = 1;
 
-            Runner(tunnel, trip + TimeSpan.FromSeconds(0.6), start + TimeSpan.FromMilliseconds(400), "Text", 6);
+            return;
+        }
+
+        for (int i = 0; i < lanes.Length; i++)
+        {
+            Point[] route = i == 1
+                ? [new(pcX + 32, mid), new(siteX - 25, mid)]
+                : [new(pcX + 32, mid), new(sortX, mid), new(sortX, lane[i]), new(siteX - 25, lane[i])];
+
+            var trip = TimeSpan.FromSeconds(Length(route) / HeroSpeed);
+
+            // Доли пути: вошёл в «Маршруты», вышел из них, дошёл до ТСПУ, до сервера VPN.
+            double inside = FractionAtX(route, sortX);
+            double sorted = FractionAtX(route, sortX + 17);
+            double tspu = FractionAtX(route, wallX);
+            double server = FractionAtX(route, vpnX);
+
+            for (int k = 0; k < 2; k++)
+            {
+                var start = TimeSpan.FromSeconds(0.55 * i + k * trip.TotalSeconds / 2);
+
+                // До «Маршрутов» все пакеты одинаковы — раскладка ещё не случилась.
+                // Подмена вида — внутри «Маршрутов», за их телом, и её не видно.
+                switch (i)
+                {
+                    case 0:
+                        Runner(route, trip, start, Packet("Text"), (0, inside));
+                        Runner(route, trip, start, Half(lanes[0].Color), (inside, 1));
+                        Runner(route, trip, start + TimeSpan.FromMilliseconds(70), Half(lanes[0].Color), (inside, 1));
+                        break;
+
+                    case 1:
+                        Runner(route, trip, start, Packet("Text"), (0, inside), (server, 1));
+                        Runner(route, trip, start, Wrapped(lanes[1].Color), (inside, server));
+                        break;
+
+                    default:
+                        Runner(route, trip, start, Packet("Text"), (0, inside));
+                        Runner(route, trip, start, Packet(lanes[2].Color), (inside, 1));
+                        break;
+                }
+
+                var slot = Slot(lanes[i].Color, 0);
+                Place(slot, sortX - 10, lane[i] - 10, z: 3);
+                Flash(slot, trip, start + trip * sorted, 1);
+
+                var pass = new Ellipse { Width = 30, Height = 30, Opacity = 0 };
+                pass.SetResourceReference(Shape.FillProperty, lanes[i].Color);
+                Place(pass, wallX - 15, lane[i] - 15, z: 3);
+                Flash(pass, trip, start + trip * tspu, 0.55);
+
+                var glow = new Border { Width = 60, Height = 60, CornerRadius = new CornerRadius(17), Opacity = 0 };
+                glow.SetResourceReference(Border.BackgroundProperty, lanes[i].Color);
+                Place(glow, siteX - 30, lane[i] - 30, z: 1);
+                Flash(glow, trip, start + trip * 0.96, 0.35);
+            }
         }
 
         // Карточки под схемой проявляются по очереди.
@@ -252,81 +373,265 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    private void Road(Geometry geometry)
+    /// <summary>Скорость пакета, точек в секунду: у всех дорог одна, длина у них разная.</summary>
+    private const double HeroSpeed = 160;
+
+    /// <summary>Дорога схемы: цвет, подпись на ней и сайт в её конце.</summary>
+    private sealed record HeroLane(string Color, string Name, string Hint, string Glyph, string Site, string SiteHint);
+
+    /// <summary>
+    /// Запущенные анимации схемы — чтобы остановить их, уходя с шага.
+    /// </summary>
+    /// <remarks>
+    /// Убрать элементы из холста мало: часы анимаций идут и без него, и окно
+    /// перерисовывалось бы каждый кадр, пока мастер стоит на другом шаге
+    /// (тот же род ошибки, что с «Замером скорости» 30.09).
+    /// </remarks>
+    private readonly List<(IAnimatable Target, DependencyProperty Property)> _heroClocks = [];
+
+    private void Animate(IAnimatable target, DependencyProperty property, AnimationTimeline animation)
     {
-        var road = new Path { Data = geometry, StrokeThickness = 2, StrokeDashArray = [3, 3] };
-        road.SetResourceReference(Shape.StrokeProperty, "Border");
-        Hero.Children.Add(road);
+        target.BeginAnimation(property, animation);
+        _heroClocks.Add((target, property));
     }
 
-    private void Node(Point at, string name, string color, double radius = 24, bool pulse = false)
+    private void StopHero()
     {
-        if (pulse && Moving)
-        {
-            var ring = new Ellipse { Width = radius * 2, Height = radius * 2, StrokeThickness = 2, RenderTransformOrigin = new Point(0.5, 0.5) };
-            ring.SetResourceReference(Shape.StrokeProperty, color);
-            var scale = new ScaleTransform();
-            ring.RenderTransform = scale;
-            Place(ring, at.X - radius, at.Y - radius);
+        foreach (var (target, property) in _heroClocks)
+            target.BeginAnimation(property, null);
 
-            var grow = new DoubleAnimation(1, 1.7, TimeSpan.FromSeconds(1.6)) { RepeatBehavior = RepeatBehavior.Forever };
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
-            ring.BeginAnimation(OpacityProperty, new DoubleAnimation(0.7, 0, TimeSpan.FromSeconds(1.6)) { RepeatBehavior = RepeatBehavior.Forever });
+        _heroClocks.Clear();
+        Hero.Children.Clear();
+    }
+
+    private void Stroke(Point from, Point to, string color, double thickness, double opacity = 1, bool dashed = false)
+    {
+        var line = new System.Windows.Shapes.Line
+        {
+            X1 = from.X, Y1 = from.Y, X2 = to.X, Y2 = to.Y,
+            StrokeThickness = thickness, Opacity = opacity,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+        };
+
+        if (dashed)
+            line.StrokeDashArray = [3, 3];
+
+        line.SetResourceReference(Shape.StrokeProperty, color);
+        Place(line, 0, 0, z: 0);
+    }
+
+    /// <summary>Узел схемы: плитка со значком, как плитки окна.</summary>
+    private void Box(Point at, double width, double height, string color, string glyph, double size, string? glyphColor = null, bool round = false)
+    {
+        var icon = new TextBlock
+        {
+            Text = glyph, FontSize = size,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+        icon.SetResourceReference(TextBlock.ForegroundProperty, glyphColor ?? color);
+
+        var box = new Border
+        {
+            Width = width, Height = height, BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(round ? width / 2 : 13), Child = icon,
+        };
+        box.SetResourceReference(Border.BackgroundProperty, "Surface");
+        box.SetResourceReference(Border.BorderBrushProperty, color);
+
+        Place(box, at.X - width / 2, at.Y - height / 2);
+    }
+
+    private void Chip(string text, double centerX, double top, string color, string? glyph = null)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+
+        if (glyph is not null)
+        {
+            var icon = new TextBlock { Text = glyph, FontSize = 11, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+            icon.SetResourceReference(TextBlock.ForegroundProperty, color);
+            row.Children.Add(icon);
         }
 
-        var circle = new Ellipse { Width = radius * 2, Height = radius * 2, StrokeThickness = 2.5 };
-        circle.SetResourceReference(Shape.FillProperty, "Surface");
-        circle.SetResourceReference(Shape.StrokeProperty, color);
-        Place(circle, at.X - radius, at.Y - radius);
+        var word = new TextBlock { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        word.SetResourceReference(TextBlock.FontFamilyProperty, "UiFont");
+        word.SetResourceReference(TextBlock.ForegroundProperty, color);
+        row.Children.Add(word);
 
-        Label(name, at.X, at.Y + radius + 6, "Text", bold: true);
+        var chip = new Border
+        {
+            CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.2),
+            Padding = new Thickness(9, 2, 9, 3), Child = row,
+        };
+        chip.SetResourceReference(Border.BackgroundProperty, "Surface");
+        chip.SetResourceReference(Border.BorderBrushProperty, color);
+        chip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+
+        Place(chip, centerX - chip.DesiredSize.Width / 2, top, z: 3);
     }
 
-    private void Runner(PathGeometry road, TimeSpan trip, TimeSpan start, string color, double radius)
+    private static Border Slot(string color, double opacity)
     {
-        var dot = new Ellipse { Width = radius * 2, Height = radius * 2, Opacity = 0 };
-        dot.SetResourceReference(Shape.FillProperty, color);
+        var slot = new Border { Width = 20, Height = 20, CornerRadius = new CornerRadius(6), Opacity = opacity };
+        slot.SetResourceReference(Border.BackgroundProperty, color);
+        return slot;
+    }
+
+    /// <summary>Пакет целиком.</summary>
+    private static FrameworkElement Packet(string color)
+    {
+        var packet = new Rectangle { Width = 12, Height = 12, RadiusX = 3, RadiusY = 3 };
+        packet.SetResourceReference(Shape.FillProperty, color);
+        return packet;
+    }
+
+    /// <summary>Половина разрезанного пакета — их идёт две, одна за другой.</summary>
+    private static FrameworkElement Half(string color)
+    {
+        var half = new Rectangle { Width = 6, Height = 12, RadiusX = 2, RadiusY = 2 };
+        half.SetResourceReference(Shape.FillProperty, color);
+        return half;
+    }
+
+    /// <summary>Пакет в туннеле: тот же пакет, завёрнутый в оболочку.</summary>
+    private static FrameworkElement Wrapped(string color)
+    {
+        var core = new Rectangle { Width = 6, Height = 6, RadiusX = 1.5, RadiusY = 1.5 };
+        core.SetResourceReference(Shape.FillProperty, color);
+
+        var shell = new Border
+        {
+            Width = 16, Height = 16, CornerRadius = new CornerRadius(5),
+            BorderThickness = new Thickness(2), Child = core,
+        };
+        shell.SetResourceReference(Border.BorderBrushProperty, color);
+        shell.SetResourceReference(Border.BackgroundProperty, "Surface");
+        return shell;
+    }
+
+    private void Still(FrameworkElement packet, double x, double y) =>
+        Place(packet, x - packet.Width / 2, y - packet.Height / 2, z: 1);
+
+    /// <summary>
+    /// Пакет на дороге; виден только на отрезках <paramref name="shown"/> (доли пути).
+    /// </summary>
+    /// <remarks>
+    /// Вид пакета меняется по дороге — одинаковый до «Маршрутов», разрезанный
+    /// или завёрнутый после, — и каждый вид бежит своим элементом тем же
+    /// путём и в такт, а виден лишь на своём отрезке.
+    /// </remarks>
+    private void Runner(Point[] route, TimeSpan trip, TimeSpan start, FrameworkElement packet, params (double From, double To)[] shown)
+    {
+        var road = new PathGeometry([new PathFigure(route[0], [new PolyLineSegment(route.Skip(1), true)], false)]);
 
         var move = new TranslateTransform();
-        dot.RenderTransform = move;
-        Place(dot, -radius, -radius);
+        packet.RenderTransform = move;
+        packet.Opacity = 0;
+        Place(packet, -packet.Width / 2, -packet.Height / 2, z: 1);
 
-        move.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimationUsingPath
+        Animate(move, TranslateTransform.XProperty, new DoubleAnimationUsingPath
         {
             PathGeometry = road, Source = PathAnimationSource.X, Duration = trip,
             BeginTime = start, RepeatBehavior = RepeatBehavior.Forever,
         });
 
-        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimationUsingPath
+        Animate(move, TranslateTransform.YProperty, new DoubleAnimationUsingPath
         {
             PathGeometry = road, Source = PathAnimationSource.Y, Duration = trip,
             BeginTime = start, RepeatBehavior = RepeatBehavior.Forever,
         });
 
-        // Проявляется в начале пути и гаснет у сайта: иначе точка
-        // висела бы в углу, пока не пришло её время.
-        var fade = new DoubleAnimationUsingKeyFrames { Duration = trip, BeginTime = start, RepeatBehavior = RepeatBehavior.Forever };
-        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)));
-        fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.08)));
-        fade.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.88)));
-        fade.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
-        dot.BeginAnimation(OpacityProperty, fade);
+        // Проявляется в начале пути и гаснет у сайта: иначе пакет
+        // висел бы в углу, пока не пришло его время.
+        var seen = new DoubleAnimationUsingKeyFrames { Duration = trip, BeginTime = start, RepeatBehavior = RepeatBehavior.Forever };
+        seen.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(0)));
+
+        foreach (var (from, to) in shown)
+        {
+            seen.KeyFrames.Add(from <= 0
+                ? new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.04))
+                : new DiscreteDoubleKeyFrame(1, KeyTime.FromPercent(from)));
+
+            if (to >= 1)
+            {
+                seen.KeyFrames.Add(new LinearDoubleKeyFrame(1, KeyTime.FromPercent(0.95)));
+                seen.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromPercent(1)));
+            }
+            else
+            {
+                seen.KeyFrames.Add(new DiscreteDoubleKeyFrame(0, KeyTime.FromPercent(to)));
+            }
+        }
+
+        Animate(packet, OpacityProperty, seen);
     }
 
-    private void Label(string text, double centerX, double top, string color, double size = 12, bool bold = false)
+    /// <summary>Вспышка раз в период, начиная с <paramref name="at"/>, — в такт пакету.</summary>
+    private void Flash(UIElement target, TimeSpan trip, TimeSpan at, double peak)
+    {
+        var flash = new DoubleAnimationUsingKeyFrames { Duration = trip, BeginTime = at, RepeatBehavior = RepeatBehavior.Forever };
+        flash.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        flash.KeyFrames.Add(new LinearDoubleKeyFrame(peak, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(90))));
+        flash.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(650))));
+
+        Animate(target, OpacityProperty, flash);
+    }
+
+    private static double Length(Point[] route)
+    {
+        double length = 0;
+
+        for (int i = 1; i < route.Length; i++)
+            length += (route[i] - route[i - 1]).Length;
+
+        return length;
+    }
+
+    /// <summary>Доля пути, на которой пакет впервые доходит до <paramref name="x"/>.</summary>
+    private static double FractionAtX(Point[] route, double x)
+    {
+        double total = Length(route), walked = 0;
+
+        for (int i = 1; i < route.Length; i++)
+        {
+            Point a = route[i - 1], b = route[i];
+
+            if (a.X >= x)
+                return walked / total;
+
+            var segment = (b - a).Length;
+
+            if (b.X >= x)
+                return (walked + segment * (x - a.X) / (b.X - a.X)) / total;
+
+            walked += segment;
+        }
+
+        return 1;
+    }
+
+    private void Label(string text, double x, double top, string color, double size = 12, bool bold = false, bool left = false)
     {
         var label = new TextBlock { Text = text, FontSize = size, FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal };
         label.SetResourceReference(TextBlock.ForegroundProperty, color);
         label.SetResourceReference(TextBlock.FontFamilyProperty, "UiFont");
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Place(label, centerX - label.DesiredSize.Width / 2, top);
+        Place(label, left ? x : x - label.DesiredSize.Width / 2, top, z: 3);
     }
 
-    private void Place(UIElement element, double left, double top)
+    /// <summary>
+    /// На холст; <paramref name="z"/> — слой: дороги, пакеты, узлы, подписи и вспышки.
+    /// </summary>
+    /// <remarks>
+    /// Пакеты ниже узлов намеренно: смена вида пакета случается внутри
+    /// «Маршрутов» и сервера VPN, и тело узла её прячет.
+    /// </remarks>
+    private void Place(UIElement element, double left, double top, int z = 2)
     {
         Canvas.SetLeft(element, left);
         Canvas.SetTop(element, top);
+        Canvas.SetZIndex(element, z);
         Hero.Children.Add(element);
     }
 
