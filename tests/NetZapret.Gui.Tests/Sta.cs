@@ -45,6 +45,17 @@ internal static class Sta
             {
                 failure = ex;
             }
+            finally
+            {
+                // Диспетчер потока гасится, пока поток жив. Иначе окна теста,
+                // подсказки и скрытое окно отрисовки переживают поток: Windows
+                // разрушает их уже на выходе из него, их оконная процедура
+                // зовёт управляемый код на разобранном потоке, и процесс тестов
+                // падает целиком (FailFast в HwndSubclass.SubclassWndProc).
+                // Так CI упал дважды подряд 05.10 на 192-м тесте, а соседний
+                // коммит с тем же кодом прошёл — падение плавающее.
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            }
         });
 
         thread.SetApartmentState(ApartmentState.STA);
