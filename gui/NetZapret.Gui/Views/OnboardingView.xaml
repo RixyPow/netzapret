@@ -3,6 +3,38 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{DynamicResource Chrome}">
 
+    <UserControl.Resources>
+        <!-- Карточка режима на шаге «Режим работы NZ»: выбранная обведена цветом темы. -->
+        <Style x:Key="ModeCard" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shape" Background="{DynamicResource Surface}"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                CornerRadius="12" Padding="16,13">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Shape" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Shape" Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
         <Grid HorizontalAlignment="Center" MaxWidth="680">
             <Grid.RowDefinitions>
@@ -172,7 +204,80 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 4: пробный запуск -->
+                <!--
+                    Шаг 4: режим работы (владелец, 05.10: «шаг с режимом работы НЗ,
+                    который объясняет, как работает каждый»). После подписки —
+                    «Туннелю» нужен выход, и без подписки он недоступен.
+                    Выбор пишется при «Дальше» (WorkModes.Choose).
+                -->
+                <StackPanel x:Name="StepMode" Visibility="Collapsed">
+                    <TextBlock Text="Режим работы NZ" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Как программа обходит блокировки. Режим меняется в любой момент — на «Главной» и в меню значка в трее." />
+
+                    <StackPanel Margin="0,18,0,0">
+                        <RadioButton x:Name="PickDesync" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Desync">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE9E9;" Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock x:Name="PickDesyncName" FontWeight="SemiBold" FontSize="15" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Text="Чинит блокировки прямо в вашем соединении: портит рукопожатие так, что фильтр оператора не узнаёт имя сайта. Трафик идёт напрямую, адрес остаётся домашним, подписка не нужна. Не поможет там, где отказывают по стране (ChatGPT) или режут по адресу (Telegram, Instagram)." />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="PickTunnel" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Tunnel">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE774;" Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock x:Name="PickTunnelName" FontWeight="SemiBold" FontSize="15" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Text="Весь трафик — через VPN, кроме поставленного «напрямую». Как обычный VPN-клиент: адрес зарубежный, открывается всё, что открывается через ваш сервер. Российские сайты тоже увидят зарубежный адрес. Нужна подписка или WARP." />
+                                    <TextBlock x:Name="PickTunnelNote" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                               TextWrapping="Wrap" Foreground="{DynamicResource Warn}" Visibility="Collapsed"
+                                               Text="Подписки нет — этот режим поднимать нечем. Подключить её можно на вкладке VPN." />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+
+                        <RadioButton x:Name="PickRoute" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Route">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE8AB;" Foreground="{DynamicResource Accent}" />
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock x:Name="PickRouteName" FontWeight="SemiBold" FontSize="15" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Text="Оба сразу. Что в «Маршрутах» стоит «через VPN», уходит в туннель — с зарубежным адресом; остальное идёт напрямую, и закрытое по имени чинит десинк. Российские сервисы видят домашний адрес. Без подписки работает как «Десинк»." />
+                                </StackPanel>
+                            </Grid>
+                        </RadioButton>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+                        <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Шаг 5: пробный запуск -->
                 <StackPanel x:Name="Step4" Visibility="Collapsed">
                     <TextBlock Text="Пробный запуск" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock x:Name="Step4Detail" Style="{StaticResource Caption}"
@@ -192,7 +297,7 @@
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Шаг 5: результат и куда дальше -->
+                <!-- Шаг 6: результат и куда дальше -->
                 <StackPanel x:Name="Step5" Visibility="Collapsed">
                     <TextBlock Text="Результат" FontSize="17" FontWeight="SemiBold" />
 

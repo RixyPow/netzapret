@@ -34,6 +34,11 @@ namespace NetZapret.Gui.Views;
 /// темы и перекрашивается вместе с ней.
 /// </para>
 /// <para>
+/// 05.10 (владелец) — шестой шаг, четвёртым: режим работы NZ с объяснением
+/// каждого. После подписки — «Туннелю» нужен выход, — до пробного запуска,
+/// который поднимает ровно выбранное.
+/// </para>
+/// <para>
 /// Шага «что у вас не работает» здесь нет — он был первым в исходном
 /// варианте и просил выбрать сервис из полусотни, ничего не решая.
 /// Результат меряет сеть в целом, а не одно выбранное имя.
@@ -47,7 +52,7 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class OnboardingView : UserControl
 {
-    private const int LastStep = 5;
+    private const int LastStep = 6;
 
     /// <summary>Мастер закрыт — завершением или пропуском.</summary>
     public event EventHandler? Completed;
@@ -84,7 +89,8 @@ public partial class OnboardingView : UserControl
         1 => Step1,
         2 => Step2,
         3 => Step3,
-        4 => Step4,
+        4 => StepMode,
+        5 => Step4,
         _ => Step5,
     };
 
@@ -118,9 +124,12 @@ public partial class OnboardingView : UserControl
             ShowThemes();
 
         if (step == 4)
-            PrepareTrial();
+            ShowModeStep();
 
         if (step == 5)
+            PrepareTrial();
+
+        if (step == 6)
             _ = RunCheckAsync();
     }
 
@@ -141,9 +150,9 @@ public partial class OnboardingView : UserControl
                 SkipSubscription();
                 break;
 
-            case 4:
+            case 5:
                 _poll.Stop();
-                Show(5);
+                Show(6);
                 break;
 
             case LastStep:
@@ -469,7 +478,61 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    // --- Шаг 4: пробный запуск ---------------------------------------------
+    // --- Шаг 4: режим работы -------------------------------------------------
+
+    /// <summary>
+    /// Три режима с объяснением; выбран тот, что стоит сейчас.
+    /// </summary>
+    /// <remarks>
+    /// «Туннель» без подписки и WARP недоступен (<see cref="WorkModes.CanChoose"/>):
+    /// поднимать нечем, и выбор вёл бы к пробному запуску, который ничего
+    /// не поднимет. Стоял он, а выхода нет — отмечается «Десинк».
+    /// </remarks>
+    private void ShowModeStep()
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        PickDesyncName.Text = WorkModes.Name(WorkMode.Desync);
+        PickTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
+        PickRouteName.Text = WorkModes.Name(WorkMode.Route);
+
+        bool tunnel = WorkModes.CanChoose(settings, WorkMode.Tunnel);
+        PickTunnel.IsEnabled = tunnel;
+        PickTunnelNote.Visibility = tunnel ? Visibility.Collapsed : Visibility.Visible;
+
+        var current = WorkModes.Of(settings.Engines) is { } mode && WorkModes.CanChoose(settings, mode)
+            ? mode
+            : WorkMode.Desync;
+
+        PickDesync.IsChecked = current == WorkMode.Desync;
+        PickTunnel.IsChecked = current == WorkMode.Tunnel;
+        PickRoute.IsChecked = current == WorkMode.Route;
+    }
+
+    private void OnModeNext(object sender, RoutedEventArgs e)
+    {
+        var picked = new[] { PickDesync, PickTunnel, PickRoute }
+            .FirstOrDefault(p => p.IsChecked == true)?.Tag as string;
+
+        if (Enum.TryParse<WorkMode>(picked, out var mode))
+        {
+            try
+            {
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+                if (WorkModes.CanChoose(settings, mode))
+                    WorkModes.Choose(settings, mode).Save(AppSettings.DefaultPath);
+            }
+            catch (Exception)
+            {
+                // Не записалось — мастер идёт дальше со старым режимом; он виден на «Главной».
+            }
+        }
+
+        Show(5);
+    }
+
+    // --- Шаг 5: пробный запуск ---------------------------------------------
 
     private void PrepareTrial()
     {
@@ -546,10 +609,10 @@ public partial class OnboardingView : UserControl
     private void OnStep4Next(object sender, RoutedEventArgs e)
     {
         _poll.Stop();
-        Show(5);
+        Show(6);
     }
 
-    // --- Шаг 5: результат ----------------------------------------------------
+    // --- Шаг 6: результат ----------------------------------------------------
 
     private void OnRecheck(object sender, RoutedEventArgs e) => _ = RunCheckAsync();
 
