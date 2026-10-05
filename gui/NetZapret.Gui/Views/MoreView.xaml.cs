@@ -63,6 +63,8 @@ public partial class MoreView : UserControl
 
         ShowRoutes();
 
+        ShowUpdates(settings);
+
         RootValue.Text = Path.GetFullPath(".");
 
         Status.Text = "Изменения записываются сразу, а действовать начинают при следующем "
@@ -224,6 +226,34 @@ public partial class MoreView : UserControl
             File.Delete(backup);
 
         File.Move(path, backup);
+    }
+
+    /// <summary>«Искать обновления при запуске» — тумблер и слово рядом.</summary>
+    private void ShowUpdates(AppSettings settings)
+    {
+        UpdatesSwitch.IsChecked = settings.CheckForUpdates;
+        UpdatesWord.Text = settings.CheckForUpdates ? "вкл." : "выкл.";
+    }
+
+    private void OnUpdatesSwitch(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var next = AppSettings.Load(AppSettings.DefaultPath) with { CheckForUpdates = UpdatesSwitch.IsChecked == true };
+
+            next.Save(AppSettings.DefaultPath);
+            ShowUpdates(next);
+
+            // Движкам безразлично: читается окном при его запуске.
+            Status.Text = next.CheckForUpdates
+                ? "Записано: обновления будут искаться при запуске программы."
+                : "Записано: при запуске обновления не ищутся — проверить можно кнопкой на «Главной».";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+            ShowUpdates(AppSettings.Load(AppSettings.DefaultPath));
+        }
     }
 
     private void OnResetSettings(object sender, RoutedEventArgs e)

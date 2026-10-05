@@ -223,6 +223,34 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
 
+                        <!--
+                            «Искать обновления при запуске» — здесь (владелец, 05.10).
+                            Утром того же дня переехала тумблером в заголовок карточки
+                            «Обновление» на «Главной» и там выглядела странно: тумблер
+                            теснил кнопку «Проверить».
+                        -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Искать обновления при запуске" FontWeight="SemiBold" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           Text="Только искать. Установка остаётся отдельным действием с отдельным согласием — кнопкой в карточке «Обновление» на «Главной»." />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1" x:Name="UpdatesWord" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                            <ToggleButton Grid.Column="2" x:Name="UpdatesSwitch" Style="{StaticResource Switch}"
+                                          Click="OnUpdatesSwitch" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,16" />
+
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
