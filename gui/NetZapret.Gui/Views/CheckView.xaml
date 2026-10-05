@@ -119,6 +119,12 @@
                                                 щелчок открывает «Маршруты» на той части, чьё
                                                 правило решает это имя (RoutesView.Reveal).
                                                 Правым щелчком — копировать (TextCopy).
+
+                                                Стиль — от общего стиля TextBlock: свой стиль без
+                                                BasedOn сбрасывал цвет и шрифт темы, и имена
+                                                выходили чёрными на тёмном фоне (снимок владельца
+                                                05.10). Подчёркивания нет и при наведении — его
+                                                слово; ссылку выдаёт цвет и курсор.
                                             -->
                                             <TextBlock Grid.Column="0" Text="{Binding Host}"
                                                        TextTrimming="CharacterEllipsis"
@@ -126,10 +132,9 @@
                                                        Cursor="Hand" MouseLeftButtonUp="OnHostClick"
                                                        ToolTip="Открыть маршрут этого имени">
                                                 <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                                                         <Style.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="TextDecorations" Value="Underline" />
                                                                 <Setter Property="Foreground" Value="{DynamicResource Accent}" />
                                                             </Trigger>
                                                         </Style.Triggers>

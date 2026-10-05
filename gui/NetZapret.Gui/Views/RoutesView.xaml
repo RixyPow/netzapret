@@ -464,6 +464,7 @@
                                                             <Run Text=" · " />
                                                             <Hyperlink Click="OnOpenList"
                                                                        Foreground="{DynamicResource Accent}"
+                                                                       TextDecorations="{x:Null}"
                                                                        ToolTip="{Binding ListPath}">список</Hyperlink>
                                                         </TextBlock>
                                                     </StackPanel>
