@@ -685,7 +685,7 @@ public partial class PinWindow : Window
         // Что посредники отдают этим именам сейчас. Снимок каталога стареет:
         // 28.09 он знал у XBOX DNS только мёртвые .195 и .204, а живые .201
         // и .203 владелец нашёл в чужом GUI (IntermediaryDns).
-        Status.Text = "Спрашиваю у XBOX DNS и Comss, какие адреса они отдают сейчас…";
+        Status.Text = "Спрашиваю у XBOX DNS, Comss, AstraCat и GeoHide, какие адреса они отдают сейчас…";
         var live = await IntermediaryDns.AskManyAsync(names, CancellationToken.None);
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
