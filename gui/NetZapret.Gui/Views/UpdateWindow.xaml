@@ -153,8 +153,8 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource Ghost}" Content="Пропустить версию" Click="OnSkip" Padding="14,8" />
-                <Button Style="{StaticResource Ghost}" Content="Позже" Click="OnLater" Padding="14,8" Margin="8,0,0,0" />
+                <Button x:Name="SkipButton" Style="{StaticResource Ghost}" Content="Пропустить версию" Click="OnSkip" Padding="14,8" Margin="0,0,8,0" />
+                <Button x:Name="LaterButton" Style="{StaticResource Ghost}" Content="Позже" Click="OnLater" Padding="14,8" />
                 <Button x:Name="InstallButton" Style="{StaticResource Primary}" Click="OnInstall"
                         Padding="18,9" Margin="8,0,0,0" IsDefault="True" ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">

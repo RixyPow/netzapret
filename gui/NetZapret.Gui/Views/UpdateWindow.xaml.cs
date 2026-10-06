@@ -58,6 +58,8 @@ public partial class UpdateWindow : Window
     /// Открывается и при последней версии — кнопкой «Проверить» (владелец,
     /// 06.10: «там такой же чейнджлог, только кнопка обновить некликабельная»).
     /// Тогда в «Что нового» — примечания последнего выпуска, а «Обновить» погашена.
+    /// «Пропустить версию» тогда нет, а «Позже» — «Закрыть» (владелец, 06.10, по
+    /// снимку сборки 7): пропускать нечего, и напоминать не о чем.
     /// </remarks>
     public UpdateWindow(ReleaseInfo latest)
     {
@@ -73,6 +75,8 @@ public partial class UpdateWindow : Window
             Heading.Text = "Установлена последняя версия";
             InstallButton.IsEnabled = false;
             InstallButton.ToolTip = "Ставить нечего: новее этой версии на GitHub нет.";
+            SkipButton.Visibility = Visibility.Collapsed;
+            LaterButton.Content = "Закрыть";
         }
 
         BadgeVersion.Text = "v" + latest.Version;
