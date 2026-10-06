@@ -199,6 +199,7 @@ public partial class UpdateWindow : Window
     {
         Timeline.Children.Clear();
         _items.Clear();
+        _dots.Clear();
         _shown = null;
 
         for (int i = 0; i < ordered.Count; i++)
@@ -292,17 +293,23 @@ public partial class UpdateWindow : Window
             Grid.SetColumn(text, 1);
             row.Children.Add(text);
 
+            // Рамка есть у всех пунктов, у невыбранных прозрачная. Прежде она
+            // появлялась только у выбранного, и его содержимое съезжало на точку
+            // вбок — линия ленты на нём косила (снимок владельца 06.10).
             var item = new Border
             {
                 Child = row,
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(6, 0, 0, 0),
                 Background = Brushes.Transparent,
+                BorderBrush = Brushes.Transparent,
+                BorderThickness = new Thickness(1),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 ToolTip = "Читать чейнджлог этой версии",
             };
 
             var version = release.Version;
+            _dots[version] = (dot, newer || installed ? "Accent" : "Muted", size);
             item.MouseLeftButtonUp += (_, _) => Select(version);
             item.MouseEnter += (_, _) => { if (_shown != version) item.SetResourceReference(Border.BackgroundProperty, "Raised"); };
             item.MouseLeave += (_, _) => { if (_shown != version) item.Background = Brushes.Transparent; };
@@ -397,15 +404,29 @@ public partial class UpdateWindow : Window
     /// <summary>Выбранная в ленте версия — для проверок.</summary>
     internal string? Selected => _shown;
 
+    /// <summary>Точка каждой версии и её обычный цвет — чтобы погасить свечение при смене выбора.</summary>
+    private readonly Dictionary<string, (System.Windows.Shapes.Ellipse Dot, string Fill, double Size)> _dots =
+        new(StringComparer.OrdinalIgnoreCase);
+
     private void Highlight(string version)
     {
         if (string.Equals(version, _shown, StringComparison.OrdinalIgnoreCase))
             return;
 
-        if (_shown is not null && _items.TryGetValue(_shown, out var was))
+        if (_shown is not null)
         {
-            was.Background = Brushes.Transparent;
-            was.BorderThickness = new Thickness(0);
+            if (_items.TryGetValue(_shown, out var was))
+            {
+                was.Background = Brushes.Transparent;
+                was.BorderBrush = Brushes.Transparent;
+            }
+
+            if (_dots.TryGetValue(_shown, out var dim))
+            {
+                dim.Dot.Effect = null;
+                dim.Dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, dim.Fill);
+                Size(dim.Dot, dim.Size);
+            }
         }
 
         _shown = version;
@@ -413,10 +434,33 @@ public partial class UpdateWindow : Window
         if (_items.TryGetValue(version, out var now))
         {
             now.SetResourceReference(Border.BackgroundProperty, "Raised");
-            now.BorderThickness = new Thickness(1);
             now.SetResourceReference(Border.BorderBrushProperty, "Border");
             now.BringIntoView();
         }
+
+        // Точка выбранной версии светится цветом темы (владелец 06.10) и чуть
+        // крупнее своей: на мелкой точке в восемь пунктов свечение терялось.
+        if (_dots.TryGetValue(version, out var lit))
+        {
+            lit.Dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Accent");
+            Size(lit.Dot, lit.Size + 4);
+
+            lit.Dot.Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = TryFindResource("AccentColor") is Color accent ? accent : Colors.White,
+                BlurRadius = 22,
+                ShadowDepth = 0,
+                Opacity = 1,
+            };
+        }
+    }
+
+    /// <summary>Размер точки — с тем же центром на линии.</summary>
+    private static void Size(System.Windows.Shapes.Ellipse dot, double size)
+    {
+        dot.Width = size;
+        dot.Height = size;
+        dot.Margin = new Thickness(0, Center - size / 2, 0, 0);
     }
 
     /// <summary>Строка из кусков: полужирное, код моноширинным на подложке.</summary>

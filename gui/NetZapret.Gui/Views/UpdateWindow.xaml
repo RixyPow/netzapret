@@ -66,15 +66,15 @@
                 <TextBlock x:Name="Subtitle" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
-            <!-- Плашка версии справа в шапке — по макету владельца 06.10. -->
-            <Border Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0" CornerRadius="12"
-                    Padding="18,8,18,9" BorderThickness="1.5"
+            <!-- Плашка версии справа в шапке — по макету владельца 06.10; крупнее — его же просьба. -->
+            <Border Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0" CornerRadius="16"
+                    Padding="30,12,30,14" BorderThickness="2" MinWidth="190"
                     Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Accent}">
                 <StackPanel>
-                    <TextBlock x:Name="BadgeVersion" HorizontalAlignment="Center" FontSize="20" FontWeight="SemiBold"
+                    <TextBlock x:Name="BadgeVersion" HorizontalAlignment="Center" FontSize="30" FontWeight="SemiBold"
                                Foreground="{DynamicResource Accent}" />
                     <TextBlock x:Name="BadgeDate" Style="{StaticResource Caption}" HorizontalAlignment="Center"
-                               Margin="0,2,0,0" />
+                               FontSize="14" Margin="0,3,0,0" />
                 </StackPanel>
             </Border>
         </Grid>
@@ -123,7 +123,7 @@
                     <TextBlock Text="ВЕРСИИ" Style="{StaticResource GroupHead}" Margin="18,14,0,6" />
 
                     <ScrollViewer Grid.Row="1" Style="{StaticResource PageScroll}" Padding="8,0,8,12">
-                        <StackPanel x:Name="Timeline" />
+                        <StackPanel x:Name="Timeline" UseLayoutRounding="True" SnapsToDevicePixels="True" />
                     </ScrollViewer>
                 </Grid>
             </Border>
