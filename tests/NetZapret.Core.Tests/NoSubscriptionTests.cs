@@ -153,7 +153,23 @@ public sealed class NoSubscriptionTests
         };
 
         Assert.Contains("только десинк", without.DescribeMode());
-        Assert.Equal("выборочно", with.DescribeMode());
+        Assert.Equal("Гибрид", with.DescribeMode());
+    }
+
+    /// <summary>
+    /// Имена режима — те же, что в окне (отчёт владельца 06.10: сводка писала
+    /// «Гибрид», «Диагностика» — «выборочно»).
+    /// </summary>
+    [Fact]
+    public void The_mode_is_named_as_in_the_window()
+    {
+        var settings = new AppSettings { SubscriptionUrl = "https://panel.example/sub" };
+
+        Assert.Equal("Десинк", settings.With(new EngineChoice { Desync = true, Tunnel = false }).DescribeMode());
+        Assert.Equal("Туннель", settings.With(new EngineChoice { Desync = false, Tunnel = true }).DescribeMode());
+        Assert.Equal("Туннель без исключений",
+            settings.With(new EngineChoice { Desync = false, Tunnel = true, IgnoreExclusions = true }).DescribeMode());
+        Assert.Equal("выключено", settings.With(new EngineChoice { Desync = false, Tunnel = false }).DescribeMode());
     }
 
     /// <summary>

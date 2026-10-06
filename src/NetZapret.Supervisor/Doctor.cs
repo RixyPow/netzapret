@@ -304,7 +304,7 @@ public static class Doctor
 
             int own = engine.RuleSet.Rules.Count(r => r.Source == RuleSource.User);
 
-            lines.Add(Ok($"Режим {settings.DescribeMode()}, правил {engine.RuleSet.Rules.Count}"
+            lines.Add(Ok($"Режим «{settings.DescribeMode()}», правил {engine.RuleSet.Rules.Count}"
                 + (own > 0 ? $", из них ваших {own}." : ".")));
 
             // Ненайденный список не совпадает ни с чем, оставаясь на вид живым:

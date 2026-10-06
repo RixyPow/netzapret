@@ -804,20 +804,33 @@ public sealed record AppSettings
     }
 
     /// <remarks>
-    /// Выборочный без выхода называется тем, чем он на деле и является.
-    /// Иначе выходит обман в одну строку: человек читает «выборочно»,
-    /// ждёт, что часть имён пойдёт через VPN, а туннеля нет вовсе — и
-    /// не понимает, почему правило «через VPN» ничего не меняет.
+    /// <para>
+    /// Имена — те же, что в окне с 04.10 (<see cref="WorkModes"/>). До 06.10
+    /// здесь стояли прежние пять («выборочно», «всё через VPN, кроме РФ»), и
+    /// отчёт владельца 06.10 называл один режим двумя языками: сводка —
+    /// «Гибрид», «Диагностика» и проверка блокировок — «выборочно».
+    /// </para>
+    /// <para>
+    /// Режим с туннелем без выхода называется тем, чем он на деле и является.
+    /// Иначе выходит обман в одну строку: человек читает «Гибрид», ждёт, что
+    /// часть имён пойдёт через VPN, а туннеля нет вовсе — и не понимает,
+    /// почему правило «через VPN» ничего не меняет.
+    /// </para>
     /// </remarks>
-    public string DescribeMode() => Mode switch
+    public string DescribeMode()
     {
-        OperatingMode.Off => "выключено",
-        OperatingMode.DesyncOnly => "только десинк",
-        OperatingMode.ProxyAll => "всё через VPN, кроме РФ",
-        OperatingMode.ProxyStrict => "всё через VPN без исключений",
-        OperatingMode.Selective when !HasTunnelExit => "только десинк — VPN не задан",
-        _ => "выборочно",
-    };
+        var engines = Engines;
+
+        if (WorkModes.Of(engines) is not { } mode)
+            return "выключено";
+
+        var name = WorkModes.Name(mode);
+
+        if (engines.Tunnel && !HasTunnelExit)
+            return engines.Desync ? $"{name} — VPN не задан, работает только десинк" : $"{name} — VPN не задан";
+
+        return engines.Tunnel && engines.IgnoreExclusions ? $"{name} без исключений" : name;
+    }
 
     /// <summary>Нужен ли в этом режиме туннель.</summary>
     /// <remarks>
