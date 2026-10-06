@@ -291,6 +291,20 @@
                         </ComboBox>
                         <ContentControl x:Name="DnsInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
                     </StackPanel>
+
+                    <!--
+                        Прокси Telegram (владелец, 07.10: «по аналогии с настройкой днс
+                        так же и включение тг вс прокси на вкладке с выбором режима»).
+                        Стоит то, что в настройках; пишется при «Дальше» вместе с режимом
+                        и DNS (TgWsProxy.Switch). Под «i» — нужен ли он при выбранном режиме.
+                    -->
+                    <StackPanel Orientation="Horizontal" Margin="4,10,0,0">
+                        <TextBlock Text="Прокси Telegram" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ToggleButton x:Name="TgPick" Style="{StaticResource Switch}" VerticalAlignment="Center"
+                                      ToolTipService.ShowOnDisabled="True"
+                                      ToolTip="Telegram Desktop без VPN. Сменить можно на вкладке «TG Proxy»." />
+                        <ContentControl x:Name="TgInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Шаг 5: пробный запуск -->

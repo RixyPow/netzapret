@@ -891,6 +891,14 @@ public partial class OnboardingView : UserControl
         PickTunnel.IsChecked = current == WorkMode.Tunnel;
         PickRoute.IsChecked = current == WorkMode.Route;
 
+        // Прокси нет в поставке (сборка без tools\…\tg-ws-proxy.exe) — включать
+        // нечего; уже включённый можно выключить.
+        TgPick.IsChecked = settings.TelegramProxy;
+        TgPick.IsEnabled = settings.TelegramProxy || System.IO.File.Exists(TgWsProxy.Executable());
+
+        if (!TgPick.IsEnabled)
+            TgPick.ToolTip = "Прокси Telegram нет в этой сборке.";
+
         ShowDnsHint();
     }
 
@@ -928,6 +936,9 @@ public partial class OnboardingView : UserControl
             // Настройки не прочитались — пояснения нет, выбор остаётся.
             DnsInfo.Content = null;
         }
+
+        // Нужен ли прокси Telegram — тоже по выбранному режиму.
+        TgInfo.Content = TgWsProxy.Explain(PickedMode() ?? WorkMode.Desync);
     }
 
     // Список и карточки поднимают события, пока ShowModeStep их заполняет, —
@@ -957,13 +968,16 @@ public partial class OnboardingView : UserControl
             if (PickedDns() is { } route)
                 next = next with { DnsVia = route };
 
+            if (TgPick.IsChecked is bool telegram && telegram != next.TelegramProxy)
+                next = TgWsProxy.Switch(next, telegram);
+
             if (next != settings)
                 next.Save(AppSettings.DefaultPath);
         }
         catch (Exception)
         {
-            // Не записалось — мастер идёт дальше со старым режимом и DNS; они видны
-            // на «Главной» и вкладке DNS.
+            // Не записалось — мастер идёт дальше со старым режимом, DNS и прокси;
+            // они видны на «Главной» и вкладках DNS и «TG Proxy».
         }
 
         Show(5);
@@ -983,13 +997,20 @@ public partial class OnboardingView : UserControl
         if (settings.NeedsProxy)
             planned.Add("VPN");
 
-        Step4Detail.Text = planned.Count == 0
+        // Прокси Telegram едет с движками, но сам по себе их не поднимает:
+        // без десинка и VPN запускать по-прежнему нечего.
+        bool startable = planned.Count > 0;
+
+        if (startable && settings.TelegramProxy)
+            planned.Add("прокси Telegram");
+
+        Step4Detail.Text = !startable
             ? "Запускать пока нечего: ни пресет, ни подписка не заданы. Можно вернуться шагом назад "
               + "или просто посмотреть результат — там же будет сказано, что чинить."
-            : "Поднимутся: " + string.Join(" и ", planned) + ". "
+            : "Поднимутся: " + (planned.Count > 1 ? string.Join(", ", planned.SkipLast(1)) + " и " + planned[^1] : planned[0]) + ". "
               + "Пара секунд на десинк, до полуминуты на туннель.";
 
-        Step4Start.IsEnabled = planned.Count > 0;
+        Step4Start.IsEnabled = startable;
         Step4Status.Text = "Ничего ещё не запускалось.";
     }
 

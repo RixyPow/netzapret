@@ -69,17 +69,7 @@ public partial class TgProxyView : UserControl
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            var next = settings with
-            {
-                TelegramProxy = on,
-                TelegramProxySecret = TgWsProxy.IsSecret(settings.TelegramProxySecret)
-                    ? settings.TelegramProxySecret
-                    : TgWsProxy.NewSecret(),
-            };
-
-            next.Save(AppSettings.DefaultPath);
+            TgWsProxy.Switch(AppSettings.Load(AppSettings.DefaultPath), on).Save(AppSettings.DefaultPath);
 
             Status.Text = on
                 ? "Прокси включён: поднимется после перезапуска движков. Потом — «Подключить Telegram»."

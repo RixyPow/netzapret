@@ -91,4 +91,35 @@ public sealed class TgWsProxyTests
         var stopped = new SupervisorState { SupervisorProcessId = -1, StartedAt = DateTimeOffset.Now, Services = [] };
         Assert.Equal(DoctorLevel.Ok, Assert.Single(Doctor.TelegramProxy(settings, executable: here, state: stopped)).Level);
     }
+
+    /// <summary>
+    /// Секрет — при первом включении и навсегда: Telegram помнит прокси с ним.
+    /// Так включают и вкладка «TG Proxy», и мастер (07.10).
+    /// </summary>
+    [Fact]
+    public void TheSecretIsMadeOnceAndKept()
+    {
+        var on = TgWsProxy.Switch(new AppSettings(), on: true);
+
+        Assert.True(on.TelegramProxy);
+        Assert.True(TgWsProxy.IsSecret(on.TelegramProxySecret));
+
+        var off = TgWsProxy.Switch(on, on: false);
+        var again = TgWsProxy.Switch(off, on: true);
+
+        Assert.False(off.TelegramProxy);
+        Assert.Equal(on.TelegramProxySecret, off.TelegramProxySecret);
+        Assert.Equal(on.TelegramProxySecret, again.TelegramProxySecret);
+
+        // Выключенный ни разу не включённый секрета не заводит.
+        Assert.Null(TgWsProxy.Switch(new AppSettings(), on: false).TelegramProxySecret);
+    }
+
+    [Fact]
+    public void WithoutVpnTheProxyIsWhatMakesTelegramWork()
+    {
+        Assert.Contains("не подключится", TgWsProxy.Explain(Rules.WorkMode.Desync));
+        Assert.Contains("не обязателен", TgWsProxy.Explain(Rules.WorkMode.Route));
+        Assert.Contains("не обязателен", TgWsProxy.Explain(Rules.WorkMode.Tunnel));
+    }
 }

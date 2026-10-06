@@ -61,6 +61,39 @@ public static class TgWsProxy
     public static string Link(int port, string secret) =>
         $"tg://proxy?server=127.0.0.1&port={port}&secret=dd{secret}";
 
+    /// <summary>
+    /// Настройки с включённым или выключенным прокси.
+    /// </summary>
+    /// <remarks>
+    /// Секрет создаётся при первом включении и дальше не меняется: Telegram
+    /// помнит прокси с ним, и новый секрет на каждое включение заставлял бы
+    /// подключать его заново. Одно место для вкладки «TG Proxy» и мастера.
+    /// </remarks>
+    public static AppSettings Switch(AppSettings settings, bool on) => settings with
+    {
+        TelegramProxy = on,
+        TelegramProxySecret = on && !IsSecret(settings.TelegramProxySecret)
+            ? NewSecret()
+            : settings.TelegramProxySecret,
+    };
+
+    /// <summary>
+    /// Нужен ли прокси при таком режиме — пояснение для выбора в мастере.
+    /// </summary>
+    /// <remarks>
+    /// Без VPN адреса Telegram закрыты (замер 07.10, «Десинк»: без прокси
+    /// медиа не шло ни разу), а в режимах с туннелем Telegram идёт через VPN
+    /// по адресам списка, и прокси там запасной путь.
+    /// </remarks>
+    public static string Explain(Rules.WorkMode mode) => mode == Rules.WorkMode.Desync
+        ? "В «Десинке» VPN нет, а адреса Telegram закрыты: без прокси Telegram Desktop "
+          + "не подключится. С ним работает целиком, с фото и видео. Только Telegram Desktop "
+          + "на этом компьютере — телефон через него не подключить. Подключить Telegram к нему — "
+          + "кнопкой на вкладке «TG Proxy»."
+        : "В «Гибриде» и «Туннеле» Telegram идёт через VPN — прокси не обязателен, но и не мешает: "
+          + "Telegram Desktop, подключённый к нему, ходит мимо VPN. Только Telegram Desktop "
+          + "на этом компьютере. Подключить Telegram к нему — кнопкой на вкладке «TG Proxy».";
+
     /// <summary>Ключи запуска; секрет — не здесь, а в <see cref="SecretVariable"/>.</summary>
     public static IReadOnlyList<string> Arguments(int port) =>
     [
