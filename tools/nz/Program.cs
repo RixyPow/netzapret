@@ -48,6 +48,7 @@ return command switch
     "report" or "отчёт" => Report(),
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     "voice" or "голос" => Voice(),
+    "doctor" or "диагностика" => DoctorCommand(),
     null or "help" or "--help" or "-h" => Help(),
     _ => Unknown(command),
 };
@@ -96,13 +97,7 @@ int Status()
         // выбранному серверу называет надзор.
         var remark = state.Services.First(s => s.Name == "sing-box").Remark;
 
-        var word = NetZapret.Proxy.TunnelStatus.Standing(server, settings.PreferredServer) switch
-        {
-            NetZapret.Proxy.ExitStanding.Pinned => "закреплён",
-            NetZapret.Proxy.ExitStanding.Other =>
-                remark ?? $"в настройках выбран «{settings.PreferredServer}» — применится при запуске движков",
-            _ => automatic ? "автоподбор" : "автоподбор, поставлен сторожем",
-        };
+        var word = NetZapret.Proxy.TunnelStatus.StandingWord(server, automatic, settings.PreferredServer, remark);
 
         Console.WriteLine();
         Console.WriteLine(server is null
@@ -296,6 +291,30 @@ async Task<int> Dns()
     return 0;
 }
 
+// Голос Discord: адреса звука из журнала Discord против списка голоса —
+// что сторож окна (DiscordVoiceWatch) дописал бы. Ничего не пишет: чтобы
+// проверить без звонков и попросить запустить того, у кого голос не идёт.
+// Тот же текст уходит в отчёт (voice.txt).
+int Voice()
+{
+    var (text, found) = NetZapret.Core.Services.DiscordVoiceLearn.Report();
+
+    Console.Write(text);
+
+    return found ? 0 : 1;
+}
+
+// Те же проверки, что раздел «Диагностика» окна и doctor.txt в отчёте.
+// Права не проверяются: nz идёт без администратора намеренно.
+int DoctorCommand()
+{
+    var sections = Doctor.Run(AppSettings.Load(AppSettings.DefaultPath), elevation: false);
+
+    Console.Write(Doctor.Describe(sections));
+
+    return sections.SelectMany(s => s.Lines).Any(l => l.Level == DoctorLevel.Bad) ? 1 : 0;
+}
+
 // Противоречия в своих маршрутах и пинах.
 //
 // Нужна затем, что 21.09 разбор «почему инста не грузится» занял час,
@@ -303,90 +322,6 @@ async Task<int> Dns()
 // выведено из-под десинка. Тем же RouteClashes.FromRules, что и карточка
 // на вкладке «Маршруты». До 30.09 читала файл книги маршрутов, которого
 // программа сама не заводила, и отвечала «книги нет».
-// Голос Discord: адреса звука из журнала Discord против списка голоса —
-// что сторож окна (DiscordVoiceWatch) дописал бы. Ничего не пишет: чтобы
-// проверить без звонков и попросить запустить того, у кого голос не идёт.
-int Voice()
-{
-    var logs = NetZapret.Core.Services.DiscordVoiceLearn.LogPaths().Where(File.Exists).ToList();
-
-    Console.WriteLine("Голос Discord — по журналу Discord, ничего не записывается");
-    Console.WriteLine();
-
-    if (logs.Count == 0)
-    {
-        Console.WriteLine("  журнала Discord нет — ни обычного, ни PTB, ни Canary");
-        Console.WriteLine(@"  (%APPDATA%\discord\logs\renderer_js.log)");
-        return 1;
-    }
-
-    var text = new StringBuilder();
-
-    foreach (var log in logs)
-    {
-        Console.WriteLine($"  журнал: {log} ({new FileInfo(log).Length / 1024.0 / 1024.0:0.0} МБ)");
-
-        try
-        {
-            // Discord держит журнал открытым на запись — читаем, не мешая ему.
-            using var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            using var reader = new StreamReader(stream, Encoding.UTF8);
-            text.AppendLine(reader.ReadToEnd());
-        }
-        catch (IOException ex)
-        {
-            Console.WriteLine($"    не читается: {ex.Message}");
-        }
-    }
-
-    var listPath = NetZapret.Core.Services.DiscordVoiceLearn.ListPath;
-    var list = File.Exists(listPath) ? File.ReadAllLines(listPath) : [];
-    var rules = File.Exists(UserRulesFile.DefaultPath) ? RulesShare.Read(UserRulesFile.DefaultPath) : [];
-    bool vpn = NetZapret.Core.Services.DiscordVoiceLearn.RoutedToVpn(rules);
-    bool learn = AppSettings.Load(AppSettings.DefaultPath).LearnDiscordVoice;
-
-    Console.WriteLine($"  часть «Звук голоса (адреса)»: {(vpn ? "через VPN" : "не через VPN — сторож не дописывает")}");
-    Console.WriteLine($"  «Дописывать адреса голоса Discord»: {(learn ? "включено" : "выключено (Ещё → Прочее)")}");
-    Console.WriteLine();
-
-    var survey = NetZapret.Core.Services.DiscordVoiceLearn.Survey(text.ToString(), list);
-
-    if (survey.Count == 0)
-    {
-        Console.WriteLine("  звонков в журнале нет: строк «Creating connection to» не нашлось");
-        return 0;
-    }
-
-    var outside = survey.Where(a => a.CoveredBy is null).ToList();
-
-    Console.WriteLine($"  адресов звука: {survey.Count}");
-
-    foreach (var group in survey.Where(a => a.CoveredBy is not null).GroupBy(a => a.CoveredBy))
-        Console.WriteLine($"    в списке по {group.Key}: {group.Count()}, последний {group.MaxBy(a => a.LastSeen)?.LastSeen ?? "—"}");
-
-    if (outside.Count > 0)
-    {
-        Console.WriteLine($"    вне списка: {outside.Count}");
-
-        foreach (var address in outside.OrderByDescending(a => a.LastSeen).Take(20))
-            Console.WriteLine($"      {address.Address,-16} ×{address.Seen,-3} последний {address.LastSeen ?? "—"}");
-
-        if (outside.Count > 20)
-            Console.WriteLine($"      … и ещё {outside.Count - 20}");
-    }
-
-    var missing = NetZapret.Core.Services.DiscordVoiceLearn.Missing(survey.Select(a => a.Address), list);
-
-    Console.WriteLine();
-    Console.WriteLine(missing.Count == 0
-        ? "  дописывать нечего: все адреса покрыты списком"
-        : $"  сторож дописал бы: {string.Join(", ", missing)}");
-    Console.WriteLine("  (сторож читает только новые строки журнала, пока голос «через VPN»;");
-    Console.WriteLine("   здесь — журнал целиком, со всеми прошлыми звонками)");
-
-    return 0;
-}
-
 int Routes()
 {
     var rules = UserRulesFile.Load().Entries;
@@ -454,7 +389,7 @@ int Report()
         .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
         .FirstOrDefault()?.InformationalVersion.Split('+')[0] ?? "—";
 
-    var result = SupportReport.Create(version + " (nz)", network: true);
+    var result = SupportReport.Create(version + " (nz)", machine: true);
 
     Console.WriteLine($"записано: {result.Path}");
     Console.WriteLine($"внутри: {string.Join(", ", result.Files)}");
@@ -467,6 +402,7 @@ int Help()
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
     Console.WriteLine();
     Console.WriteLine("  nz status    что сейчас поднято");
+    Console.WriteLine("  nz doctor    те же проверки, что раздел «Диагностика» окна");
     Console.WriteLine("  nz where <имя|программа.exe|адрес>");
     Console.WriteLine("               куда пойдёт и через что разрешится имя: по правилам,");
     Console.WriteLine("               выключателям, hosts и конфигу работающего движка");
@@ -480,7 +416,8 @@ int Help()
     Console.WriteLine("               как движок спрашивает имена; с аргументом — переключить");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
-    Console.WriteLine("  nz report    отчёт для разбора: журналы и настройки архивом в reports\\,");
+    Console.WriteLine("  nz report    отчёт для разбора архивом в reports\\: журналы, настройки, сеть,");
+    Console.WriteLine("               диагностика, голос Discord, hosts, сторож серверов —");
     Console.WriteLine("               без ссылок подписок и ключей");
     Console.WriteLine();
     Console.WriteLine("Поднять и погасить движки можно самой программой:");

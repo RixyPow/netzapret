@@ -145,4 +145,41 @@ public sealed class DiscordVoiceLearnTests : IDisposable
             (survey[0].Address.ToString(), survey[0].Seen, survey[0].LastSeen, survey[0].CoveredBy));
         Assert.Equal("104.29.128.0/19", survey[1].CoveredBy);
     }
+
+    /// <summary>
+    /// Текст для nz voice и отчёта: журнал из выдуманного %APPDATA%, список и правила
+    /// из выдуманного корня — ничего не дописывается.
+    /// </summary>
+    [Fact]
+    public void The_report_reads_the_log_and_writes_nothing()
+    {
+        var appData = Path.Combine(_dir, "appdata");
+        var root = Path.Combine(_dir, "root");
+        Directory.CreateDirectory(Path.Combine(appData, "discord", "logs"));
+        Directory.CreateDirectory(Path.Combine(root, "config", "lists"));
+
+        File.WriteAllText(Path.Combine(appData, "discord", "logs", "renderer_js.log"), Log);
+
+        var list = Path.Combine(root, DiscordVoiceLearn.ListPath);
+        File.WriteAllText(list, "104.29.128.0/19\n");
+
+        var (text, found) = DiscordVoiceLearn.Report(appData, root);
+
+        Assert.True(found);
+        Assert.Contains("адресов звука: 3", text);
+        Assert.Contains("в списке по 104.29.128.0/19: 1", text);
+        Assert.Contains("вне списка: 2", text);
+        Assert.Contains("сторож дописал бы: 35.217.0.0/20", text);
+        Assert.Contains("не через VPN — сторож не дописывает", text);
+        Assert.Equal("104.29.128.0/19\n", File.ReadAllText(list));
+    }
+
+    [Fact]
+    public void Without_a_log_the_report_says_so()
+    {
+        var (text, found) = DiscordVoiceLearn.Report(Path.Combine(_dir, "empty"), _dir);
+
+        Assert.False(found);
+        Assert.Contains("журнала Discord нет", text);
+    }
 }

@@ -191,6 +191,103 @@ public static class DiscordVoiceLearn
     }
 
     /// <summary>
+    /// Обзор голоса текстом: журнал Discord против списка — что сторож окна
+    /// (DiscordVoiceWatch) дописал бы. Ничего не пишет.
+    /// </summary>
+    /// <remarks>
+    /// Один текст для <c>nz voice</c> и отчёта для разбора: чтобы проверить
+    /// без звонков у того, у кого голос не идёт, и не просить его отдельно
+    /// запускать nz (владелец 06.10).
+    /// </remarks>
+    /// <param name="appData">Папка, где лежат журналы Discord; <c>null</c> — %APPDATA%.</param>
+    /// <param name="root">Корень установки; <c>null</c> — рабочий каталог.</param>
+    /// <returns>Текст и нашёлся ли журнал вообще.</returns>
+    public static (string Text, bool LogFound) Report(string? appData = null, string? root = null)
+    {
+        var text = new StringBuilder();
+        var logs = LogPaths(appData).Where(File.Exists).ToList();
+
+        text.AppendLine("Голос Discord — по журналу Discord, ничего не записывается");
+        text.AppendLine();
+
+        if (logs.Count == 0)
+        {
+            text.AppendLine("  журнала Discord нет — ни обычного, ни PTB, ни Canary");
+            text.AppendLine(@"  (%APPDATA%\discord\logs\renderer_js.log)");
+            return (text.ToString(), false);
+        }
+
+        var log = new StringBuilder();
+
+        foreach (var path in logs)
+        {
+            text.AppendLine($"  журнал: {path} ({new FileInfo(path).Length / 1024.0 / 1024.0:0.0} МБ)");
+
+            try
+            {
+                // Discord держит журнал открытым на запись — читаем, не мешая ему.
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream, Encoding.UTF8);
+                log.AppendLine(reader.ReadToEnd());
+            }
+            catch (IOException ex)
+            {
+                text.AppendLine($"    не читается: {ex.Message}");
+            }
+        }
+
+        string At(string relative) => string.IsNullOrEmpty(root) ? relative : Path.Combine(root, relative);
+
+        var listPath = At(ListPath);
+        var rulesPath = At(UserRulesFile.DefaultPath);
+        var list = File.Exists(listPath) ? File.ReadAllLines(listPath) : [];
+        var rules = File.Exists(rulesPath) ? RulesShare.Read(rulesPath) : [];
+        bool vpn = RoutedToVpn(rules);
+        bool learn = AppSettings.Load(At(AppSettings.DefaultPath)).LearnDiscordVoice;
+
+        text.AppendLine($"  часть «Звук голоса (адреса)»: {(vpn ? "через VPN" : "не через VPN — сторож не дописывает")}");
+        text.AppendLine($"  «Дописывать адреса голоса Discord»: {(learn ? "включено" : "выключено (Ещё → Прочее)")}");
+        text.AppendLine();
+
+        var survey = Survey(log.ToString(), list);
+
+        if (survey.Count == 0)
+        {
+            text.AppendLine("  звонков в журнале нет: строк «Creating connection to» не нашлось");
+            return (text.ToString(), true);
+        }
+
+        var outside = survey.Where(a => a.CoveredBy is null).ToList();
+
+        text.AppendLine($"  адресов звука: {survey.Count}");
+
+        foreach (var group in survey.Where(a => a.CoveredBy is not null).GroupBy(a => a.CoveredBy))
+            text.AppendLine($"    в списке по {group.Key}: {group.Count()}, последний {group.MaxBy(a => a.LastSeen)?.LastSeen ?? "—"}");
+
+        if (outside.Count > 0)
+        {
+            text.AppendLine($"    вне списка: {outside.Count}");
+
+            foreach (var address in outside.OrderByDescending(a => a.LastSeen).Take(20))
+                text.AppendLine($"      {address.Address,-16} ×{address.Seen,-3} последний {address.LastSeen ?? "—"}");
+
+            if (outside.Count > 20)
+                text.AppendLine($"      … и ещё {outside.Count - 20}");
+        }
+
+        var missing = Missing(survey.Select(a => a.Address), list);
+
+        text.AppendLine();
+        text.AppendLine(missing.Count == 0
+            ? "  дописывать нечего: все адреса покрыты списком"
+            : $"  сторож дописал бы: {string.Join(", ", missing)}");
+        text.AppendLine("  (сторож читает только новые строки журнала, пока голос «через VPN»;");
+        text.AppendLine("   здесь — журнал целиком, со всеми прошлыми звонками)");
+
+        return (text.ToString(), true);
+    }
+
+    /// <summary>
     /// Стоит ли голос «через VPN» — только тогда дописанное что-то меняет.
     /// </summary>
     /// <remarks>

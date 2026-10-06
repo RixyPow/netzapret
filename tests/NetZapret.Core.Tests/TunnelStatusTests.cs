@@ -237,4 +237,15 @@ public sealed class TunnelStatusTests
         Assert.Equal(ExitStanding.Other, TunnelStatus.Standing("🇩🇪 Германия", "🇪🇪 Эстония"));
         Assert.Equal(ExitStanding.Other, TunnelStatus.Standing(null, "🇪🇪 Эстония"));
     }
+
+    /// <summary>Слова nz status и отчёта — одни: замену называет надзор.</summary>
+    [Fact]
+    public void The_standing_is_worded_once_for_nz_and_the_report()
+    {
+        Assert.Equal("закреплён", TunnelStatus.StandingWord("🇪🇪 Эстония", false, "🇪🇪 Эстония", null));
+        Assert.Equal("автоподбор", TunnelStatus.StandingWord("🇪🇪 Эстония", true, null, null));
+        Assert.Equal("автоподбор, поставлен сторожем", TunnelStatus.StandingWord("🇪🇪 Эстония", false, null, null));
+        Assert.Equal("замена молчащему", TunnelStatus.StandingWord("🇩🇪 Германия", false, "🇪🇪 Эстония", "замена молчащему"));
+        Assert.StartsWith("в настройках выбран «🇪🇪 Эстония»", TunnelStatus.StandingWord("🇩🇪 Германия", false, "🇪🇪 Эстония", null));
+    }
 }

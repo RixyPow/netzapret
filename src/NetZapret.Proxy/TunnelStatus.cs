@@ -55,6 +55,21 @@ public static class TunnelStatus
             : server == preferred ? ExitStanding.Pinned : ExitStanding.Other;
 
     /// <summary>
+    /// Как назвать выход в <c>nz status</c> и в отчёте: закреплён, автоподбор
+    /// или временная замена — теми словами, что выведены из <see cref="Standing"/>.
+    /// </summary>
+    /// <param name="automatic">Селектор движка стоит на группе автоподбора, а не прямо на сервере.</param>
+    /// <param name="remark">Примечание надзора к sing-box — им он называет замену выбранному серверу.</param>
+    public static string StandingWord(string? server, bool automatic, string? preferred, string? remark) =>
+        Standing(server, preferred) switch
+        {
+            ExitStanding.Pinned => "закреплён",
+            ExitStanding.Other =>
+                remark ?? $"в настройках выбран «{preferred}» — применится при запуске движков",
+            _ => automatic ? "автоподбор" : "автоподбор, поставлен сторожем",
+        };
+
+    /// <summary>
     /// Строка «Сервер» на «Главной»: имя выхода, а при автоподборе — «(авто)» следом.
     /// </summary>
     /// <remarks>

@@ -157,6 +157,94 @@ public sealed class SupportReportTests : IDisposable
         Assert.Contains("Замер скорости: не проводился", ReadAll(result.Path));
     }
 
+    /// <summary>
+    /// Сторож серверов и прошлое поколение журналов — в отчёте (владелец 06.10:
+    /// «всё, что может помочь в диагностике»); прочитанное с машины — только по просьбе.
+    /// </summary>
+    [Fact]
+    public void ServersAndThePreviousLogGenerationAreInTheReport()
+    {
+        var now = new DateTimeOffset(2026, 10, 6, 21, 31, 22, DateTimeOffset.Now.Offset);
+
+        File.WriteAllText(Path.Combine(_root, "runtime", "server-health.json"), $$"""
+            [
+              { "Tag": "Бельгия", "Success": true, "LatencyMs": 183, "CheckedAt": "{{now:O}}",
+                "Failures": 0, "Recent": [true, true, false, true] },
+              { "Tag": "Эстония", "Success": false, "CheckedAt": "{{now.AddMinutes(-2):O}}",
+                "Failures": 2, "Recent": [true, false, false, false, true, false] },
+              { "Tag": "Россия", "Success": false, "CheckedAt": "{{now.AddMinutes(-3):O}}",
+                "Failures": 5, "Recent": [false, false, false, false, false] }
+            ]
+            """);
+
+        ExitHistory.Note("Бельгия", now, Path.Combine(_root, "runtime", "exit-history.json"));
+
+        File.WriteAllText(Path.Combine(_root, "runtime", "sing-box.log"), "свежий запуск\n");
+        File.WriteAllText(Path.Combine(_root, "runtime", "sing-box.log.1"), "первая ошибка прошлого запуска\n");
+
+        var result = SupportReport.Create("0.13.1 (3)", root: _root);
+
+        Assert.Contains("servers.txt", result.Files);
+        Assert.Contains("sing-box.1.log", result.Files);
+
+        // Читается с машины, а не из корня — без просьбы этого нет.
+        Assert.DoesNotContain("doctor.txt", result.Files);
+        Assert.DoesNotContain("voice.txt", result.Files);
+        Assert.DoesNotContain("hosts.txt", result.Files);
+
+        var text = ReadAll(result.Path);
+
+        Assert.Contains("Бельгия: ответил за 183 мс, 06.10 21:31:22; ++−+", text);
+        Assert.Contains("Эстония: не ответил", text);
+        Assert.Contains("промахов подряд 2; мигающий", text);
+
+        // Молчащий совсем — не «мигающий», хоть сторож и отбирает их одинаково.
+        Assert.Contains("−−−−−; промахов подряд 5", text);
+        Assert.DoesNotContain("промахов подряд 5; мигающий", text);
+        Assert.Contains("06.10 21:31:22  Бельгия", text);
+        Assert.Contains("первая ошибка прошлого запуска", text);
+    }
+
+    /// <summary>Из hosts — строки с адресами и наш блок, без пояснений Microsoft.</summary>
+    [Fact]
+    public void TheHostsExcerptKeepsPinsAndOurBlock()
+    {
+        var hosts = string.Join("\r\n",
+            "# Copyright (c) 1993-2009 Microsoft Corp.",
+            "#\t127.0.0.1       localhost",
+            "",
+            "149.154.167.220 web.telegram.org",
+            HostsEditor.BlockBegin,
+            $"57.144.218.34 instagram.com # {HostsEditor.DesyncMark}",
+            HostsEditor.BlockEnd);
+
+        var excerpt = SupportReport.HostsExcerpt(hosts);
+
+        Assert.Contains("Строк с адресами: 2", excerpt);
+        Assert.Contains("149.154.167.220 web.telegram.org", excerpt);
+        Assert.Contains($"57.144.218.34 instagram.com # {HostsEditor.DesyncMark}", excerpt);
+        Assert.Contains(HostsEditor.BlockBegin + "\n", excerpt);
+        Assert.DoesNotContain("Copyright", excerpt);
+        Assert.DoesNotContain("localhost", excerpt);
+    }
+
+    /// <summary>Проверки «Диагностики» текстом: итог первым, поломка видна словом.</summary>
+    [Fact]
+    public void DoctorTextStartsWithTheVerdict()
+    {
+        var text = Doctor.Describe(
+        [
+            new("Десинк", [new("winws2.exe на месте.", DoctorLevel.Ok)]),
+            new("Браузеры и сертификаты", [new("Chrome резолвит имена сам.", DoctorLevel.Warn)]),
+            new("Супервизор", [new("sing-box: процесс умер.", DoctorLevel.Bad)]),
+        ]);
+
+        Assert.StartsWith("Проверок 3: поломок 1, оговорок 1.", text);
+        Assert.Contains("  [ок] winws2.exe на месте.", text);
+        Assert.Contains("  [оговорка] Chrome резолвит имена сам.", text);
+        Assert.Contains("  [ПОЛОМКА] sing-box: процесс умер.", text);
+    }
+
     [Fact]
     public void ALinkKeepsItsHostButNotItsPath()
     {

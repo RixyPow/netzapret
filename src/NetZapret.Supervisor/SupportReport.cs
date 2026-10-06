@@ -48,13 +48,19 @@ public static class SupportReport
     /// подписок отчёт находит сам — забыть их передать нельзя.
     /// </param>
     /// <param name="root">Корень установки; <c>null</c> — рабочий каталог (окно уходит в корень при запуске).</param>
+    /// <param name="machine">
+    /// Читать ли саму машину, а не только корень установки: сеть и чужие
+    /// обходы, проверки «Диагностики», журнал Discord, hosts, работающий движок.
+    /// Тестам — выключено: они собирают отчёт из выдуманного корня, а это
+    /// читалось бы с машины, на которой их гоняют.
+    /// </param>
     public static SupportReportResult Create(
         string version,
         IEnumerable<string?>? secrets = null,
         string? directory = null,
         string? root = null,
         DateTime? now = null,
-        bool network = false)
+        bool machine = false)
     {
         var when = now ?? DateTime.Now;
         var settings = AppSettings.Load(At(root, AppSettings.DefaultPath));
@@ -84,7 +90,8 @@ public static class SupportReport
             // Имена файлов — латиницей. Русские в архиве у части распаковщиков
             // выходят кракозябрами — так показал unzip из Git 25.09. Отчёт уходит
             // к чужим людям с чужими распаковщиками.
-            ("summary.txt", Summary(version, settings, state, book.Count, blockcheck, speed, when)),
+            ("summary.txt", Summary(version, settings, state, book.Count, blockcheck, speed, when)
+                + (machine ? Live(settings, state, root) : string.Empty)),
 
             // Ссылку из настроек убираем до сериализации, а не надеемся
             // на вычистку: поле ради того и названо.
@@ -95,7 +102,7 @@ public static class SupportReport
 
         // Что вокруг: чужие обходы, VPN-клиенты, адаптеры, DNS. Без этого
         // три отчёта подряд 28.09 кончались просьбой прислать вывод команд.
-        if (network)
+        if (machine)
         {
             var ours = (state?.Services ?? [])
                 .Where(s => s.ProcessId is not null)
@@ -103,11 +110,36 @@ public static class SupportReport
                 .ToHashSet();
 
             parts.Add(("network.txt", NetworkSnapshot.Describe(ours)));
+
+            // Проверки «Диагностики» — те же, что человек видит в окне. №18
+            // (05.10): безопасный DNS Chrome и служба Flowseal были жёлтыми
+            // у него на экране, а в отчёт не попадали — пересказывал словами.
+            // Права не проверяются: отчёт собирает и nz без администратора.
+            parts.Add(("doctor.txt", Section(() => Doctor.Describe(Doctor.Run(settings, elevation: false)))));
+
+            // Голос Discord: что сторож дописал бы — тот же текст, что nz voice.
+            parts.Add(("voice.txt", Section(() => Core.Services.DiscordVoiceLearn.Report(root: root).Text)));
+
+            // hosts целиком решает, куда уходит имя и трогает ли его десинк.
+            // №18: Instagram был прибит к адресам Meta, а узнали об этом
+            // из вложения, которое человек догадался прислать сам.
+            if (Read(HostsFile.DefaultPath) is { } hosts)
+                parts.Add(("hosts.txt", HostsExcerpt(hosts)));
         }
 
-        AddLog(parts, "supervisor.log", At(root, Path.Combine("runtime", "supervisor.log")));
-        AddLog(parts, "sing-box.log", At(root, Path.Combine("runtime", "sing-box.log")));
-        AddLog(parts, "winws2.log", At(root, Path.Combine("runtime", "winws2.log")));
+        // Сторож серверов и недавние выходы: что отвечало и когда — для жалоб
+        // «туннель отваливается», где журнал движка показывает только ошибки.
+        if (Servers(root) is { } servers)
+            parts.Add(("servers.txt", servers));
+
+        // Журналы сменяются по размеру (RollingLog, 4 МБ), а не по запуску:
+        // winws2 пишет строку на соединение, и начало запуска с его первой
+        // ошибкой к сбору отчёта нередко уже в прошлом поколении.
+        foreach (var log in new[] { "supervisor.log", "sing-box.log", "winws2.log" })
+        {
+            AddLog(parts, log, At(root, Path.Combine("runtime", log)));
+            AddLog(parts, Path.GetFileNameWithoutExtension(log) + ".1.log", At(root, Path.Combine("runtime", log + ".1")));
+        }
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
         AddFile(parts, "desync-keep.txt", At(root, Path.Combine("runtime", "desync-keep.txt")));
@@ -219,6 +251,173 @@ public static class SupportReport
     }
 
     private static string YesNo(bool value) => value ? "да" : "нет";
+
+    /// <summary>Часть отчёта, которая может не собраться: тогда — почему, а не пропуск архива.</summary>
+    private static string Section(Func<string> build)
+    {
+        try
+        {
+            return build();
+        }
+        catch (Exception ex)
+        {
+            return "не собралось: " + ex.GetBaseException().Message + Environment.NewLine;
+        }
+    }
+
+    /// <summary>
+    /// Что сейчас у работающих движков и чем они запущены — дополнение к сводке.
+    /// </summary>
+    /// <remarks>
+    /// Выход — у самого движка, а не из настроек: там «авто», а движок мог
+    /// держаться другого (так же, как nz status). DNS — по конфигу работающего
+    /// движка (nz dns-mode): 30.09 имена мимо VPN разрешались через туннель.
+    /// Отпечатки движков — потому что их подменяют: в №18 человек положил
+    /// рядом winws.exe и WinDivert.dll от Flowseal «на авось».
+    /// </remarks>
+    private static string Live(AppSettings settings, SupervisorState? state, string? root)
+    {
+        var text = new StringBuilder();
+
+        text.AppendLine();
+        text.AppendLine($"Установка: {Path.GetFullPath(At(root, "."))}");
+
+        if (state is not null && state.IsSupervisorAlive())
+        {
+            if (state.Services.FirstOrDefault(s => s.Name == "sing-box") is { } singBoxService)
+            {
+                var remark = singBoxService.Remark;
+
+                var exit = Section(() =>
+                {
+                    var (server, automatic) = TunnelStatus.CurrentExitAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+                    return server is null
+                        ? "движок не ответил"
+                        : $"{server} ({TunnelStatus.StandingWord(server, automatic, settings.PreferredServer, remark)})";
+                });
+
+                text.AppendLine($"Выход сейчас: {exit.Trim()}");
+            }
+
+            if (state.EngineAnswersDns())
+            {
+                var dns = Section(() =>
+                {
+                    var config = System.Text.Json.Nodes.JsonNode.Parse(
+                        File.ReadAllText(At(root, EngineKeys.DefaultConfigPath)));
+
+                    var final = (string?)config?["dns"]?["final"] ?? "?";
+
+                    return DnsPath.Describe(config?["dns"], final, string.Empty);
+                });
+
+                text.AppendLine($"DNS движка: {dns.Trim()}");
+            }
+        }
+
+        var winws = NetZapret.Zapret.ZapretPaths.Discover()?.ExecutablePath;
+        var singBox = Path.Combine(AppContext.BaseDirectory, "engines", "sing-box", "sing-box.exe");
+
+        text.AppendLine($"winws2.exe: {Fingerprint(winws)}");
+        text.AppendLine($"sing-box.exe: {Fingerprint(singBox)}");
+
+        return text.ToString();
+    }
+
+    /// <summary>Размер и начало SHA-256 — сверить с архивом выпуска.</summary>
+    private static string Fingerprint(string? path)
+    {
+        try
+        {
+            if (path is null || !File.Exists(path))
+                return "нет";
+
+            using var stream = File.OpenRead(path);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream));
+
+            return $"{new FileInfo(path).Length} байт, SHA-256 {hash[..16].ToLowerInvariant()}…";
+        }
+        catch (Exception ex)
+        {
+            return "не читается: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Сторож серверов и недавние выходы; <c>null</c> — нет ни того, ни другого.
+    /// </summary>
+    /// <remarks>
+    /// В файлах только имена серверов, задержки и время — ни адресов, ни ключей.
+    /// </remarks>
+    private static string? Servers(string? root)
+    {
+        var health = ServerHealthCache.Load(At(root, ServerHealthCache.DefaultPath)).Entries.Values
+            .OrderByDescending(h => h.CheckedAt)
+            .ToList();
+
+        var exits = ExitHistory.Read(At(root, ExitHistory.DefaultPath))
+            .OrderByDescending(e => e.At)
+            .ToList();
+
+        if (health.Count == 0 && exits.Count == 0)
+            return null;
+
+        var text = new StringBuilder();
+
+        text.AppendLine("Проверки серверов (сторож), свежие первыми; последние исходы — от старого к новому, + ответил, − нет");
+
+        foreach (var h in health)
+        {
+            text.Append($"  {h.Tag}: {(h.Success ? $"ответил{(h.LatencyMs is { } ms ? $" за {ms:0} мс" : string.Empty)}" : "не ответил")}, "
+                + $"{h.CheckedAt.ToLocalTime():dd.MM HH:mm:ss}; {string.Concat(h.Recent.Select(ok => ok ? '+' : '−'))}");
+
+            if (h.Failures > 0)
+                text.Append($"; промахов подряд {h.Failures}");
+
+            // Flaky сторожа берёт и молчащие совсем — для отбора это одно,
+            // а читающему «мигающий» у сервера без единого ответа соврёт.
+            if (h.Flaky && h.Recent.Any(ok => ok))
+                text.Append("; мигающий");
+
+            text.AppendLine();
+        }
+
+        if (health.Count == 0)
+            text.AppendLine("  не проверялись");
+
+        text.AppendLine();
+        text.AppendLine("Недавние выходы туннеля, свежие первыми");
+
+        foreach (var exit in exits)
+            text.AppendLine($"  {exit.At.ToLocalTime():dd.MM HH:mm:ss}  {exit.Tag}");
+
+        if (exits.Count == 0)
+            text.AppendLine("  не записывались");
+
+        return text.ToString();
+    }
+
+    /// <summary>
+    /// Строки hosts с адресами и границы нашего блока — без пояснений Microsoft.
+    /// </summary>
+    public static string HostsExcerpt(string hosts)
+    {
+        var lines = hosts.Replace("\r", string.Empty).Split('\n');
+
+        var kept = lines
+            .Where(line => line.Trim().Length > 0)
+            .Where(line => !line.TrimStart().StartsWith('#')
+                || line.Contains(HostsEditor.BlockBegin, StringComparison.Ordinal)
+                || line.Contains(HostsEditor.BlockEnd, StringComparison.Ordinal))
+            .ToList();
+
+        int pins = kept.Count(line => !line.TrimStart().StartsWith('#'));
+
+        return $"Строк с адресами: {pins}. Блок NetZapret — между отметками {HostsEditor.BlockBegin} и {HostsEditor.BlockEnd}; "
+            + $"«# {HostsEditor.DesyncMark}» — пин на адрес самого сервиса, десинк к нему применяется.\n\n"
+            + string.Join('\n', kept) + "\n";
+    }
 
     /// <summary>Самый свежий отчёт проверки блокировок; <c>null</c> — проверок не было.</summary>
     private static FileInfo? LatestBlockcheck(string folder)
