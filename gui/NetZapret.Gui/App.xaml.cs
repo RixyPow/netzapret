@@ -154,6 +154,28 @@ public partial class App : Application
         // удалении консоли.
         Core.Updates.UpdateInstaller.CleanUp();
 
+        // Подмена не встала целиком — в журнал, с именами файлов и кодами:
+        // чёрное окно сценария человек закрывает, а отчёту нужна причина
+        // (жалоба 07.10: «Update failed», и больше ни слова). Журнал подмены
+        // откладывается под другим именем, чтобы не повторять это при
+        // каждом запуске, и едет в отчёт для разбора.
+        try
+        {
+            var failed = Core.Updates.UpdateInstaller.FailedFiles();
+
+            if (failed.Count > 0)
+            {
+                Journal.Write("обновление", $"прошлая подмена не заменила файлы ({failed.Count}): "
+                    + string.Join(" | ", failed.Take(5)));
+
+                File.Move(Core.Updates.UpdateInstaller.LogFile, Core.Updates.UpdateInstaller.FailedLogFile, overwrite: true);
+            }
+        }
+        catch (Exception)
+        {
+            // Журнал подмены не прочитался — это не повод не запускаться.
+        }
+
         // Правила по программе — сняты, пока обход по программе на переработке
         // (Rules.ProgramRulesOff, владелец 04.10). Один раз, до окна и до
         // движков: автозапуск поднял бы их со старыми правилами.

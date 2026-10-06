@@ -448,6 +448,8 @@ public static class UpdateInstaller
             "",
             $"set \"SOURCE={plan.StagedAt}\"",
             $"set \"TARGET={installedAt.TrimEnd('\\')}\"",
+            $"set \"LAUNCH={executable}\"",
+            $"set \"LOG=%TARGET%\\{LogFile}\"",
             "",
             "rem Wait for the program to release its own executable. By process id",
             "rem rather than a fixed pause: a pause can expire while the file is",
@@ -460,8 +462,23 @@ public static class UpdateInstaller
             "    goto wait",
             ")",
             "",
-            "echo Updating...",
+
+            // Окно — не единственный, кто держит файлы папки: надзор — та же
+            // программа, рядом winws2 и sing-box, и пережившая остановку их
+            // копия держит свой файл до конца. Гасится всё, что запущено
+            // именно отсюда, по пути, а не по имени: чужой winws2 из Zapret
+            // GUI здесь ни при чём. Драйвер WinDivert держит свой .sys, пока
+            // загружен, — та же выгрузка, что у остановки движков.
+            "echo Stopping what is left running from this folder...",
+            "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($env:TARGET + '\\', [StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue\" >nul 2>&1",
         };
+
+        foreach (var service in DriverServices)
+            lines.Add($"sc stop {service} >nul 2>&1");
+
+        lines.Add("timeout /t 2 /nobreak >nul");
+        lines.Add("");
+        lines.Add("echo Updating...");
 
         // Настройки исключаются из копирования поимённо. /XF по имени файла
         // надёжнее, чем надежда на то, что их не окажется в архиве: архив
@@ -469,15 +486,14 @@ public static class UpdateInstaller
         // означает однажды его нарушить.
         var exclude = string.Join(' ', Preserved.Select(p => $"\"{Path.GetFileName(p)}\""));
 
-        lines.Add($"robocopy \"%SOURCE%\" \"%TARGET%\" /E /R:3 /W:2 /NJH /NJS /NP /NDL /NFL /XF {exclude} >nul");
-        lines.Add("if errorlevel 8 (");
-        lines.Add("    echo Update failed. The previous version is untouched.");
-        lines.Add("    pause");
-        lines.Add("    exit /b 1");
-        lines.Add(")");
+        // Журнал robocopy — в файл и на экран (/TEE). До 07.10 вывод уходил
+        // в nul, и у пользователя с «Update failed» не осталось ни слова о том,
+        // какой файл не заменился и почему: занят, отказано, исчез из отстойника.
+        // Попыток десять, а не три: файл отпускают секундами, а не мгновенно.
+        lines.Add($"robocopy \"%SOURCE%\" \"%TARGET%\" /E /R:10 /W:2 /NJH /NP /NDL /NFL /XF {exclude} /UNILOG:\"%LOG%\" /TEE");
+        lines.Add("if errorlevel 8 goto failed");
         lines.Add("");
         lines.Add("echo Done.");
-        lines.Add($"set \"LAUNCH={executable}\"");
 
         // Окно звалось NetZapret.Gui.exe до 0.5.3. robocopy добавляет файлы,
         // но не убирает, поэтому прежний остаётся лежать рядом — и перезапуск
@@ -501,8 +517,62 @@ public static class UpdateInstaller
         // отказу и мусору вместо обещанной чистоты. Остаток убирает
         // программа при следующем запуске, когда никто его уже не держит.
         lines.Add($"rd /s /q \"{plan.StagedAt}\" 2>nul");
+        lines.Add("exit /b 0");
+        lines.Add("");
+
+        // Прежде здесь стояло «The previous version is untouched» — неправда:
+        // robocopy заменяет файл за файлом, и всё, что успело до сбоя, уже
+        // новое. И программа не открывалась вовсе: человек оставался без
+        // обхода, пока не запустит её сам. Теперь — честно и с запуском.
+        lines.Add(":failed");
+        lines.Add("echo.");
+        lines.Add("echo Update failed: some files could not be replaced.");
+        lines.Add("echo Files copied before the error are new already, the rest are old.");
+        lines.Add("echo Details: %LOG%");
+        lines.Add("echo NetZapret starts again. Restart Windows and update once more.");
+        lines.Add("start \"\" \"%TARGET%\\%LAUNCH%\"");
+        lines.Add("pause");
+        lines.Add("exit /b 1");
 
         File.WriteAllLines(script, lines, System.Text.Encoding.ASCII);
         return script;
+    }
+
+    /// <summary>Журнал подмены в корне установки — для разбора, едет в отчёт.</summary>
+    public static string LogFile => Path.Combine("runtime", "update.log");
+
+    /// <summary>Журнал неудачной подмены, отложенный окном после записи в свой журнал.</summary>
+    public static string FailedLogFile => Path.Combine("runtime", "update-failed.log");
+
+    /// <summary>Службы драйвера WinDivert, выгружаемые перед подменой (как в WinDivertDriver).</summary>
+    internal static IReadOnlyList<string> DriverServices { get; } = ["Monkey", "WinDivert"];
+
+    /// <summary>
+    /// Что не заменилось при прошлой подмене — строки ошибок из её журнала; пусто, если всё встало.
+    /// </summary>
+    /// <remarks>
+    /// Окно зовёт это при запуске и пишет найденное в журнал: человек видит
+    /// «Update failed» в чёрном окне и закрывает его, а нам при разборе
+    /// отчёта нужна строка с именем файла и кодом ошибки.
+    /// </remarks>
+    public static IReadOnlyList<string> FailedFiles(string? root = null)
+    {
+        var path = Path.Combine(root ?? ".", LogFile);
+
+        try
+        {
+            if (!File.Exists(path))
+                return [];
+
+            return File.ReadAllLines(path)
+                .Where(l => l.Contains("ERROR ", StringComparison.Ordinal))
+                .Select(l => l[l.IndexOf("ERROR ", StringComparison.Ordinal)..].Trim())
+                .Distinct()
+                .ToList();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 }
