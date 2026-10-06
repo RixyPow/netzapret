@@ -122,8 +122,8 @@
 
                     <TextBlock Text="ВЕРСИИ" Style="{StaticResource GroupHead}" Margin="18,14,0,6" />
 
-                    <ScrollViewer Grid.Row="1" Style="{StaticResource PageScroll}" Padding="8,0,8,12">
-                        <StackPanel x:Name="Timeline" UseLayoutRounding="True" SnapsToDevicePixels="True" />
+                    <ScrollViewer Grid.Row="1" Style="{StaticResource PageScroll}" Padding="8,0,18,12">
+                        <StackPanel x:Name="Timeline" />
                     </ScrollViewer>
                 </Grid>
             </Border>
