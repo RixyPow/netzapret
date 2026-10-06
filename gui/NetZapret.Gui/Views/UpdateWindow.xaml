@@ -61,7 +61,7 @@
             </Border>
 
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock Text="Доступно обновление" Style="{StaticResource Title}" />
+                <TextBlock x:Name="Heading" Text="Доступно обновление" Style="{StaticResource Title}" />
                 <TextBlock x:Name="Subtitle" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
@@ -116,7 +116,7 @@
                 <Button Style="{StaticResource Ghost}" Content="Пропустить версию" Click="OnSkip" Padding="14,8" />
                 <Button Style="{StaticResource Ghost}" Content="Позже" Click="OnLater" Padding="14,8" Margin="8,0,0,0" />
                 <Button x:Name="InstallButton" Style="{StaticResource Primary}" Click="OnInstall"
-                        Padding="18,9" Margin="8,0,0,0" IsDefault="True">
+                        Padding="18,9" Margin="8,0,0,0" IsDefault="True" ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xE896;" Margin="0,0,8,0" VerticalAlignment="Center"
                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />

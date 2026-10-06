@@ -45,20 +45,44 @@ public partial class UpdateWindow : Window
     private readonly ReleaseInfo _latest;
     private readonly CancellationTokenSource _work = new();
 
+    /// <summary>
+    /// Выпуск новее установленного; <c>false</c> — окно открыто кнопкой
+    /// «Проверить» при последней версии.
+    /// </summary>
+    private readonly bool _newer;
+
     public UpdateChoice Choice { get; private set; } = UpdateChoice.Later;
 
+    /// <remarks>
+    /// Открывается и при последней версии — кнопкой «Проверить» (владелец,
+    /// 06.10: «там такой же чейнджлог, только кнопка обновить некликабельная»).
+    /// Тогда в «Что нового» — примечания последнего выпуска, а «Обновить» погашена.
+    /// </remarks>
     public UpdateWindow(ReleaseInfo latest)
     {
         InitializeComponent();
 
         _latest = latest;
+        _newer = UpdateCheck.IsNewer(latest.Version, UpdateCheck.Current);
         MaxHeight = SystemParameters.WorkArea.Height - 40;
+
+        if (!_newer)
+        {
+            Title = "Обновлений нет";
+            Heading.Text = "Установлена последняя версия";
+            InstallButton.IsEnabled = false;
+            InstallButton.ToolTip = "Ставить нечего: новее этой версии на GitHub нет.";
+        }
 
         ShowReleases([latest]);
         ShowDetails();
 
         Loaded += async (_, _) =>
         {
+            // Промежуточные версии есть только у настоящего обновления.
+            if (!_newer)
+                return;
+
             var all = await UpdateCheck.ReleasesAsync(_work.Token);
             var between = UpdateCheck.Between(all, UpdateCheck.Current, latest.Version);
 
@@ -69,11 +93,18 @@ public partial class UpdateWindow : Window
         Closed += (_, _) => _work.Cancel();
     }
 
+    /// <summary>Установка доступна — окно предлагает новее установленного.</summary>
+    internal bool OffersInstall => InstallButton.IsEnabled;
+
     /// <summary>Шапка и «Что нового» по списку выпусков, новые сверху.</summary>
     private void ShowReleases(IReadOnlyList<ReleaseInfo> releases)
     {
-        Subtitle.Text = $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {releases.Count}"
-            + "  ·  источник: GitHub";
+        Subtitle.Text = !_newer
+            ? string.Equals(_latest.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase)
+                ? $"{UpdateCheck.Current} — последняя версия  ·  источник: GitHub"
+                : $"Установлена {UpdateCheck.Current}  ·  последняя на GitHub — {_latest.Version}  ·  источник: GitHub"
+            : $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {releases.Count}"
+                + "  ·  источник: GitHub";
 
         Notes.Children.Clear();
 
@@ -162,7 +193,7 @@ public partial class UpdateWindow : Window
         }
 
         Line("Установлена", UpdateCheck.Current);
-        Line("Новая", _latest.Version
+        Line(_newer ? "Новая" : "Последняя на GitHub", _latest.Version
             + (_latest.Published is { } when ? ", вышла " + when.ToLocalTime().ToString("d MMMM yyyy", Russian) : string.Empty));
 
         var archive = Uri.TryCreate(_latest.ArchiveUrl, UriKind.Absolute, out var url)

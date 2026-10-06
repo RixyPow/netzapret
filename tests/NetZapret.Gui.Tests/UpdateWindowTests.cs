@@ -28,6 +28,30 @@ public sealed class UpdateWindowTests
             Assert.Equal(UpdateChoice.Later, window.Choice);
             Assert.NotEmpty(window.Notes.Children);
             Assert.NotEmpty(window.Details.Children);
+            Assert.True(window.OffersInstall);
+
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void AtTheLatestVersionInstallIsOff()
+    {
+        // «Проверить» при последней версии открывает то же окно с тем же
+        // чейнджлогом, но «Обновить» погашена (владелец, 06.10).
+        Sta.Run(() =>
+        {
+            var window = new UpdateWindow(new ReleaseInfo
+            {
+                Version = UpdateCheck.Current,
+                Tag = "v" + UpdateCheck.Current,
+                ArchiveUrl = "https://example/NetZapret.zip",
+                Notes = "## Новое:\n\n**Проверка.** Текст.",
+            });
+
+            Assert.False(window.OffersInstall);
+            Assert.Equal("Установлена последняя версия", window.Heading.Text);
+            Assert.NotEmpty(window.Notes.Children);
 
             window.Close();
         });

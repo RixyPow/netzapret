@@ -85,6 +85,15 @@ public partial class UpdatePanel : UserControl
         BringIntoView();
     }
 
+    /// <summary>
+    /// Спрашивает GitHub и открывает окно обновления — и когда ставить нечего.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 06.10: «пусть кнопка проверить открывает окно обновления, там
+    /// такой же чейнджлог, только кнопка обновить некликабельная». Строка
+    /// под версией остаётся: окно закрыли — итог проверки виден и так.
+    /// GitHub не ответил — окна нет, открывать его не с чем.
+    /// </remarks>
     private async void OnCheckUpdate(object sender, RoutedEventArgs e)
     {
         _work?.Cancel();
@@ -93,9 +102,12 @@ public partial class UpdatePanel : UserControl
         UpdateButton.IsEnabled = false;
         Say("Спрашиваю GitHub…");
 
+        ReleaseInfo? found = null;
+
         try
         {
             var release = await UpdateCheck.LatestAsync(_work.Token);
+            found = release;
 
             UpdateNotice.Remember(release);
 
@@ -123,6 +135,9 @@ public partial class UpdatePanel : UserControl
         {
             UpdateButton.IsEnabled = true;
         }
+
+        if (found is not null)
+            (Window.GetWindow(this) as MainWindow)?.ShowUpdateWindow(found);
     }
 
     /// <summary>
