@@ -55,4 +55,25 @@ public sealed class DnsRouteTests : IDisposable
     [InlineData("tunnel", DnsRoute.Tunnel)]
     public void Words_from_nz_are_understood(string word, DnsRoute route) =>
         Assert.Equal(route, DnsRoutes.Parse(word));
+
+    /// <summary>
+    /// Цена пути — одна для вкладки DNS и мастера (06.10). Через туннель имена мимо VPN
+    /// получают адреса у выхода — это названо; без туннеля «через туннель» — движок без выхода.
+    /// </summary>
+    [Fact]
+    public void Each_route_names_its_price()
+    {
+        var hybrid = new AppSettings { PresetName = "Universal V10", SubscriptionUrl = "https://panel.example/sub" }
+            .With(new EngineChoice { Desync = true, Tunnel = true });
+
+        Assert.Contains("рядом с сервером VPN", DnsRoutes.Explain(hybrid with { DnsVia = DnsRoute.Auto }));
+        Assert.Contains("рядом с сервером VPN", DnsRoutes.Explain(hybrid with { DnsVia = DnsRoute.Tunnel }));
+        Assert.Contains("рядом с вами", DnsRoutes.Explain(hybrid with { DnsVia = DnsRoute.Direct }));
+        Assert.DoesNotContain("рядом с сервером VPN", DnsRoutes.Explain(hybrid with { DnsVia = DnsRoute.Direct }));
+
+        var desync = hybrid.With(new EngineChoice { Desync = true, Tunnel = false });
+
+        Assert.Contains("движок без выхода", DnsRoutes.Explain(desync with { DnsVia = DnsRoute.Tunnel }));
+        Assert.Contains("сама Windows", DnsRoutes.Explain(desync with { DnsVia = DnsRoute.Auto }));
+    }
 }

@@ -218,7 +218,7 @@
                                Text="Как программа обходит блокировки. Режим меняется в любой момент — на «Главной» и в меню значка в трее." />
 
                     <StackPanel Margin="0,18,0,0">
-                        <RadioButton x:Name="PickDesync" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Desync">
+                        <RadioButton x:Name="PickDesync" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Desync" Checked="OnModePicked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -235,7 +235,7 @@
                             </Grid>
                         </RadioButton>
 
-                        <RadioButton x:Name="PickTunnel" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Tunnel">
+                        <RadioButton x:Name="PickTunnel" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Tunnel" Checked="OnModePicked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -255,7 +255,7 @@
                             </Grid>
                         </RadioButton>
 
-                        <RadioButton x:Name="PickRoute" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Route">
+                        <RadioButton x:Name="PickRoute" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Route" Checked="OnModePicked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -273,7 +273,40 @@
                         </RadioButton>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <!--
+                        Путь DNS (владелец, 06.10: «добавь в мастер выбор днс напрямую,
+                        через туннель или авто»). Здесь, а не отдельным шагом: цена пути
+                        зависит от режима — без туннеля «через туннель» значит «через
+                        движок», — и пояснение меняется вместе с выбранной карточкой.
+                        Те же три пункта и те же слова, что на вкладке DNS
+                        (DnsRoutes.Explain); пишется при «Дальше» вместе с режимом.
+                    -->
+                    <Border Style="{StaticResource Card}" Margin="0,4,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Style="{StaticResource IconTile}" Margin="0,0,14,0" VerticalAlignment="Top">
+                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE968;" Foreground="{DynamicResource Accent}" />
+                            </Border>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Как спрашивать имена сайтов" FontWeight="SemiBold" FontSize="15" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Text="DNS — через что программа узнаёт адрес сайта. Меняется потом на вкладке DNS." />
+                                <ComboBox x:Name="DnsPick" Margin="0,10,0,0" HorizontalAlignment="Stretch"
+                                          SelectionChanged="OnDnsPicked">
+                                    <ComboBoxItem Content="авто: через туннель, пока он жив" Tag="Auto" />
+                                    <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
+                                    <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
+                                </ComboBox>
+                                <TextBlock x:Name="DnsHint" Style="{StaticResource Caption}"
+                                           Margin="0,10,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                         <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
                         <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
                     </StackPanel>

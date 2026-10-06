@@ -865,29 +865,91 @@ public partial class OnboardingView : UserControl
             ? mode
             : WorkMode.Desync;
 
+        // Путь DNS — какой стоит сейчас; выбор списка не пишется до «Дальше».
+        DnsPick.SelectedIndex = settings.DnsVia switch
+        {
+            DnsRoute.Direct => 1,
+            DnsRoute.Tunnel => 2,
+            _ => 0,
+        };
+
         PickDesync.IsChecked = current == WorkMode.Desync;
         PickTunnel.IsChecked = current == WorkMode.Tunnel;
         PickRoute.IsChecked = current == WorkMode.Route;
+
+        ShowDnsHint();
+    }
+
+    private WorkMode? PickedMode() =>
+        Enum.TryParse<WorkMode>(new[] { PickDesync, PickTunnel, PickRoute }
+            .FirstOrDefault(p => p.IsChecked == true)?.Tag as string, out var mode)
+            ? mode
+            : null;
+
+    private DnsRoute? PickedDns() =>
+        DnsPick.SelectedItem is ComboBoxItem { Tag: string tag } && Enum.TryParse<DnsRoute>(tag, out var route)
+            ? route
+            : null;
+
+    /// <summary>
+    /// Цена выбранного пути DNS — при выбранном режиме: без туннеля «через
+    /// туннель» значит «через движок», и пояснение другое.
+    /// </summary>
+    private void ShowDnsHint()
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (PickedMode() is { } mode && WorkModes.CanChoose(settings, mode))
+                settings = WorkModes.Choose(settings, mode);
+
+            if (PickedDns() is { } route)
+                settings = settings with { DnsVia = route };
+
+            DnsHint.Text = DnsRoutes.Explain(settings);
+        }
+        catch (Exception)
+        {
+            // Настройки не прочитались — пояснения нет, выбор остаётся.
+            DnsHint.Text = string.Empty;
+        }
+    }
+
+    // Список и карточки поднимают события, пока ShowModeStep их заполняет, —
+    // и при разборе разметки, когда соседних элементов ещё нет.
+    private void OnModePicked(object sender, RoutedEventArgs e)
+    {
+        if (IsInitialized && DnsHint is not null)
+            ShowDnsHint();
+    }
+
+    private void OnDnsPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (IsInitialized && DnsHint is not null)
+            ShowDnsHint();
     }
 
     private void OnModeNext(object sender, RoutedEventArgs e)
     {
-        var picked = new[] { PickDesync, PickTunnel, PickRoute }
-            .FirstOrDefault(p => p.IsChecked == true)?.Tag as string;
-
-        if (Enum.TryParse<WorkMode>(picked, out var mode))
+        try
         {
-            try
-            {
-                var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var next = settings;
 
-                if (WorkModes.CanChoose(settings, mode))
-                    WorkModes.Choose(settings, mode).Save(AppSettings.DefaultPath);
-            }
-            catch (Exception)
-            {
-                // Не записалось — мастер идёт дальше со старым режимом; он виден на «Главной».
-            }
+            if (PickedMode() is { } mode && WorkModes.CanChoose(next, mode))
+                next = WorkModes.Choose(next, mode);
+
+            if (PickedDns() is { } route)
+                next = next with { DnsVia = route };
+
+            if (next != settings)
+                next.Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не записалось — мастер идёт дальше со старым режимом и DNS; они видны
+            // на «Главной» и вкладке DNS.
         }
 
         Show(5);
