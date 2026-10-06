@@ -484,6 +484,9 @@
                                                         <ComboBoxItem Content="напрямую" />
                                                         <ComboBoxItem Content="десинк" />
                                                         <ComboBoxItem Content="через VPN" />
+                                                        <!-- Владелец 06.10: правила частей пересекаются, и
+                                                             часть надо уметь снять целиком (RoutingRule.Off). -->
+                                                        <ComboBoxItem Content="выключено" />
                                                     </ComboBox>
 
                                                     <!--

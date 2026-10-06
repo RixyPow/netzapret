@@ -64,8 +64,12 @@ public sealed record PartRow
     {
         0 => HasPin ? "прибит в hosts" : "напрямую",
         1 => "десинк",
+        Off => "выключено",
         _ => "VPN",
     };
+
+    /// <summary>Номер пункта «выключено» в списке маршрутов (<see cref="RoutingRule.Off"/>).</summary>
+    public const int Off = 3;
 
     public required Brush Color { get; init; }
     /// <summary>
@@ -490,7 +494,7 @@ public partial class RoutesView : UserControl
         if (!part.Explicit)
             detail += " · по умолчанию";
 
-        var (color, choice) = part.Mode switch
+        var (color, choice) = part.Off ? ("Muted", PartRow.Off) : part.Mode switch
         {
             RoutingMode.Direct => ("Muted", 0),
             RoutingMode.Desync => ("Warn", 1),
@@ -908,7 +912,7 @@ public partial class RoutesView : UserControl
             var title = listed ? OwnLists.NameOf(entry.Value) : entry.Value.TrimStart('*', '.');
             var domain = listed ? zones.FirstOrDefault() ?? title : title;
 
-            var (color, choice) = entry.Mode switch
+            var (color, choice) = entry.Off ? ("Muted", PartRow.Off) : entry.Mode switch
             {
                 RoutingMode.Direct => ("Muted", 0),
                 RoutingMode.Desync => ("Warn", 1),
@@ -937,7 +941,7 @@ public partial class RoutesView : UserControl
                 // завести (OnOpenList); у списка — открывает его.
                 ListPath = listed ? ListFile(entry.Value) : null,
 
-                Mode = Describe(entry.Mode),
+                Mode = entry.Off ? "выключено — правило не действует" : Describe(entry.Mode),
                 Color = (Brush)Application.Current.FindResource(color),
                 Choice = choice,
                 Applied = choice,
@@ -955,7 +959,7 @@ public partial class RoutesView : UserControl
         // Пина у программы нет: у неё нет имени сайта, только процесс.
         foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.Process))
         {
-            var (color, choice) = entry.Mode switch
+            var (color, choice) = entry.Off ? ("Muted", PartRow.Off) : entry.Mode switch
             {
                 RoutingMode.Direct => ("Muted", 0),
                 RoutingMode.Desync => ("Warn", 1),
@@ -969,7 +973,7 @@ public partial class RoutesView : UserControl
                 Detail = entry.Mode == RoutingMode.Proxy
                     ? "программа · пока правило стоит, туннель забирает весь трафик машины: всё без маршрута идёт мимо VPN, но через движок туннеля. Сети Riot остаются мимо него"
                     : "программа",
-                Mode = Describe(entry.Mode),
+                Mode = entry.Off ? "выключено — правило не действует" : Describe(entry.Mode),
                 Color = (Brush)Application.Current.FindResource(color),
                 Choice = choice,
                 Applied = choice,
@@ -2064,14 +2068,20 @@ public partial class RoutesView : UserControl
         if (parts.Length != 2)
             return;
 
+        var match = RouteKeys.MatchOf(parts[0], parts[1]);
+
+        if (box.SelectedIndex == PartRow.Off)
+        {
+            WriteOff(key, match);
+            return;
+        }
+
         var mode = box.SelectedIndex switch
         {
             0 => RoutingMode.Direct,
             1 => RoutingMode.Desync,
             _ => RoutingMode.Proxy,
         };
-
-        var match = RouteKeys.MatchOf(parts[0], parts[1]);
 
         // Рецепт спрашиваем и у сервисов, а не только у своих доменов.
         // Именно здесь он и нужен чаще: сервис — это список из десятков имён,
@@ -2181,6 +2191,40 @@ public partial class RoutesView : UserControl
         }
     }
 
+    /// <summary>
+    /// Выключает часть: не действует ни своё правило, ни заводское (<see cref="RoutingRule.Off"/>).
+    /// </summary>
+    /// <remarks>
+    /// Запись ставится туда же, куда и выбор режима, — раньше более широкого
+    /// списка (<c>ServicePart.Within</c>): место в файле у неё ничего не решает,
+    /// но и прыгать по файлу при переключении туда-обратно незачем.
+    /// </remarks>
+    private void WriteOff(string key, MatchKind match)
+    {
+        var parts = key.Split('|', 2);
+
+        try
+        {
+            var file = UserRulesFile.Load();
+
+            var within = ServiceCatalog.All.SelectMany(s => s.Parts)
+                .FirstOrDefault(p => string.Equals(p.List, parts[1], StringComparison.OrdinalIgnoreCase))?.Within;
+
+            file.SetOff(match, parts[1], before: within);
+            file.Save();
+            Reload();
+
+            Status.Text = $"Выключено: {parts[1]}. Его имена теперь решают другие правила, "
+                + "а нет таких — умолчание режима. Применится при следующем запуске движков.";
+
+            this.Offer("Маршрут изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
     /// <summary>Имена, которые покрывает правило: список раскрывается, домен — как есть.</summary>
     /// <remarks>У правил по адресам имён нет — и пинов под ними быть не может.</remarks>
     private IReadOnlyList<string> ZonesOf(MatchKind match, string value) => match switch
@@ -2244,6 +2288,12 @@ public partial class RoutesView : UserControl
 
     private string Describe(ServiceRouting.PartStatus part)
     {
+        // Режим выключенной части — чужой: тот, куда её имена уводит
+        // следующее совпавшее правило или умолчание. Его и называем, иначе
+        // «выключено» читалось бы как «никуда».
+        if (part.Off)
+            return $"выключено — решают другие правила: {Describe(part.Mode)}";
+
         if (part.Mode != RoutingMode.Desync)
             return part.DescribeMode();
 

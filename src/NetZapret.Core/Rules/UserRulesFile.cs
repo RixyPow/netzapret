@@ -53,6 +53,7 @@ public sealed class UserRulesFile
                     Mode = r.Mode,
                     Recipe = r.Recipe,
                     Enabled = r.Enabled,
+                    Off = r.Off,
                 })
                 .ToList();
 
@@ -110,15 +111,11 @@ public sealed class UserRulesFile
     /// (<c>ServicePart.Within</c>), иначе встала бы после него и не сработала
     /// никогда: движок берёт первое совпавшее правило.
     /// </param>
-    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null)
-    {
-        var trimmed = value.Trim();
-        int index = _entries.FindIndex(e => e.Match == match && e.Matches(trimmed));
-
-        var entry = new UserRuleEntry
+    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null) =>
+        Put(new UserRuleEntry
         {
             Match = match,
-            Value = trimmed,
+            Value = value.Trim(),
             Mode = mode,
 
             // Рецепт хранится только у десинка: у прочих режимов ему нечего
@@ -126,7 +123,25 @@ public sealed class UserRulesFile
             // необъяснимой строкой в файле.
             Recipe = mode == RoutingMode.Desync ? recipe : null,
             Enabled = true,
-        };
+        }, before);
+
+    /// <summary>
+    /// Выключает часть: не действует ни своё правило, ни базовое на тот же список.
+    /// </summary>
+    /// <remarks>См. <see cref="RoutingRule.Off"/>. Место в файле — как у <see cref="Set"/>.</remarks>
+    public void SetOff(MatchKind match, string value, string? before = null) =>
+        Put(new UserRuleEntry
+        {
+            Match = match,
+            Value = value.Trim(),
+            Mode = RoutingMode.Direct,
+            Enabled = true,
+            Off = true,
+        }, before);
+
+    private void Put(UserRuleEntry entry, string? before)
+    {
+        int index = _entries.FindIndex(e => e.Match == entry.Match && e.Matches(entry.Value));
 
         if (index >= 0)
         {
@@ -134,7 +149,7 @@ public sealed class UserRulesFile
             return;
         }
 
-        int wider = before is null ? -1 : _entries.FindIndex(e => e.Match == match && e.Matches(before.Trim()));
+        int wider = before is null ? -1 : _entries.FindIndex(e => e.Match == entry.Match && e.Matches(before.Trim()));
 
         if (wider >= 0)
             _entries.Insert(wider, entry);
@@ -231,13 +246,14 @@ public sealed class UserRulesFile
 
         builder.AppendLine("# Ваши маршруты.");
         builder.AppendLine("#");
-        builder.AppendLine("# Файл ведёт программа: правьте его через меню или командой");
-        builder.AppendLine("#   nz route <что> <напрямую|десинк|vpn>");
+        builder.AppendLine("# Файл ведёт программа: правьте его на вкладке «Маршруты».");
         builder.AppendLine("# Комментарии, добавленные вручную, при следующей записи пропадут.");
         builder.AppendLine("#");
         builder.AppendLine("# Эти правила проверяются раньше базовых из rules.yaml, поэтому");
         builder.AppendLine("# ваш выбор перекрывает заводскую настройку. Выключенная запись");
-        builder.AppendLine("# сохраняется, но не применяется.");
+        builder.AppendLine("# (enabled: false) сохраняется, но не применяется — действует");
+        builder.AppendLine("# заводская. mode: off выключает часть целиком: не действует");
+        builder.AppendLine("# ни эта запись, ни заводское правило на тот же список.");
         builder.AppendLine();
 
         if (_entries.Count == 0)
@@ -252,7 +268,7 @@ public sealed class UserRulesFile
             {
                 builder.AppendLine($"  - match: {Describe(entry.Match)}");
                 builder.AppendLine($"    value: {Quote(entry.Value)}");
-                builder.AppendLine($"    mode: {Describe(entry.Mode)}");
+                builder.AppendLine($"    mode: {(entry.Off ? "off" : Describe(entry.Mode))}");
 
                 if (!string.IsNullOrWhiteSpace(entry.Recipe))
                     builder.AppendLine($"    recipe: {Quote(entry.Recipe)}");
@@ -306,10 +322,13 @@ public sealed record UserRuleEntry
 
     public bool Enabled { get; init; } = true;
 
+    /// <summary>Часть выключена целиком (<see cref="RoutingRule.Off"/>); <see cref="Mode"/> тогда не значит ничего.</summary>
+    public bool Off { get; init; }
+
     public bool Matches(string value) =>
         string.Equals(Value, value, StringComparison.OrdinalIgnoreCase);
 
-    public string DescribeMode() => Mode switch
+    public string DescribeMode() => Off ? "выключено" : Mode switch
     {
         RoutingMode.Proxy => "VPN",
         RoutingMode.Desync => "десинк",

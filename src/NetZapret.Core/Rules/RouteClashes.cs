@@ -83,7 +83,7 @@ public static class RouteClashes
     {
         var entries = new List<RouteEntry>();
 
-        foreach (var rule in rules.Where(r => r.Enabled))
+        foreach (var rule in rules.Where(r => r.Enabled && !r.Off))
         {
             var name = rule.Match switch
             {

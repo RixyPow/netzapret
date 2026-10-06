@@ -55,6 +55,7 @@ public static class RulesShare
                 Mode = r.Mode,
                 Recipe = r.Recipe,
                 Enabled = r.Enabled,
+                Off = r.Off,
             })
             .ToList();
 
@@ -90,6 +91,7 @@ public static class RulesShare
     private static bool Differs(UserRuleEntry one, UserRuleEntry other) =>
         one.Mode != other.Mode
         || one.Enabled != other.Enabled
+        || one.Off != other.Off
         || !string.Equals(one.Recipe ?? string.Empty, other.Recipe ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
@@ -121,7 +123,7 @@ public static class RulesShare
 
     /// <summary>Правило коротко, для перечня в вопросе: «discord → десинк».</summary>
     public static string Describe(UserRuleEntry entry) =>
-        $"{NameOf(entry)} → {entry.DescribeMode()}" + (entry.Enabled ? string.Empty : " (выключено)");
+        $"{NameOf(entry)} → {entry.DescribeMode()}" + (entry.Enabled ? string.Empty : " (запись отключена)");
 
     /// <summary>Смена коротко: «discord: десинк → VPN».</summary>
     public static string Describe(UserRuleEntry before, UserRuleEntry after)

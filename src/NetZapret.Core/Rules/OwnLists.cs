@@ -189,7 +189,7 @@ public static class OwnLists
     {
         var targets = new List<(string, string)>();
 
-        foreach (var entry in file.Entries.Where(e => e.Enabled))
+        foreach (var entry in file.Entries.Where(e => e.Enabled && !e.Off))
         {
             if (entry.Match == MatchKind.Domain)
             {

@@ -39,6 +39,12 @@ public static class ServiceRouting
         /// <summary>Правило задано человеком, а не унаследовано.</summary>
         public required bool Explicit { get; init; }
 
+        /// <summary>
+        /// Часть выключена (<see cref="RoutingRule.Off"/>): <see cref="Mode"/> тогда —
+        /// куда её имена уводят другие правила или умолчание.
+        /// </summary>
+        public bool Off { get; init; }
+
         /// <summary>Первый домен списка — чтобы было видно, о чём речь.</summary>
         public string? Example { get; init; }
 
@@ -53,7 +59,7 @@ public static class ServiceRouting
         /// </remarks>
         public IReadOnlyList<string> Domains { get; init; } = [];
 
-        public string DescribeMode() => Mode switch
+        public string DescribeMode() => Off ? "выключено" : Mode switch
         {
             RoutingMode.Proxy => "VPN",
             RoutingMode.Desync => "десинк",
@@ -97,7 +103,7 @@ public static class ServiceRouting
 
             var kind = part.ByAddress ? MatchKind.IpSet : MatchKind.HostList;
 
-            bool set = userRules.Entries.Any(e =>
+            var own = userRules.Entries.FirstOrDefault(e =>
                 e.Match == kind && e.Enabled && e.Matches(part.List));
 
             result.Add(new PartStatus
@@ -105,7 +111,8 @@ public static class ServiceRouting
                 Part = part,
                 Mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine),
                 DomainCount = entries.Count,
-                Explicit = set,
+                Explicit = own is not null,
+                Off = own is { Off: true },
                 Example = entries[0],
                 Domains = entries,
             });

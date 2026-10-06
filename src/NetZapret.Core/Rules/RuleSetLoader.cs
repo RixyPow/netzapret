@@ -72,7 +72,21 @@ public static class RuleSetLoader
         foreach (var rule in userEngine.RuleSet.Rules)
             rule.Source = RuleSource.User;
 
-        var merged = userEngine.RuleSet.Rules.Concat(baseEngine.RuleSet.Rules).ToList();
+        // «Выключено» гасит базовое правило того же типа на тот же список.
+        // Движок такие записи уже отбросил, поэтому они читаются из файла
+        // заново, сырыми.
+        static string Key(RoutingRule rule) => rule.Match + "|" + rule.Value.Replace('\\', '/');
+
+        var silenced = LoadRawRules(userPath)
+            .Where(r => r.Enabled && r.Off)
+            .Select(Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var kept = silenced.Count == 0
+            ? baseEngine.RuleSet.Rules
+            : baseEngine.RuleSet.Rules.Where(r => !silenced.Contains(Key(r))).ToList();
+
+        var merged = userEngine.RuleSet.Rules.Concat(kept).ToList();
 
         var operating = mode ?? baseEngine.RuleSet.Operating;
 
@@ -213,6 +227,7 @@ public static class RuleSetLoader
                 throw new RuleConfigurationException($"Правило #{i}: не задано поле 'value'.");
 
             var match = ParseMatchKind(raw.Match, i);
+            bool off = IsOff(raw.Mode);
 
             rules.Add(new RoutingRule
             {
@@ -220,7 +235,10 @@ public static class RuleSetLoader
                 Value = match is MatchKind.HostList or MatchKind.IpSet
                     ? Relocate(raw.Value.Trim())
                     : raw.Value.Trim(),
-                Mode = ParseMode(raw.Mode, $"правило #{i}"),
+
+                // У выключенной части режима нет: в движок она не идёт.
+                Mode = off ? RoutingMode.Direct : ParseMode(raw.Mode, $"правило #{i}"),
+                Off = off,
                 Server = string.IsNullOrWhiteSpace(raw.Server) ? null : raw.Server.Trim(),
                 Recipe = string.IsNullOrWhiteSpace(raw.Recipe) ? null : raw.Recipe.Trim(),
                 Enabled = raw.Enabled ?? true,
@@ -327,6 +345,10 @@ public static class RuleSetLoader
                 "Допустимы: process, domain, ip, ipset, hostlist."),
         };
 
+    /// <summary>Записана ли часть выключенной (<see cref="RoutingRule.Off"/>).</summary>
+    private static bool IsOff(string? value) =>
+        (value ?? string.Empty).Trim().ToLowerInvariant() is "off" or "выключено";
+
     private static RoutingMode ParseMode(string? value, string context) =>
         (value ?? string.Empty).Trim().ToLowerInvariant() switch
         {
@@ -335,7 +357,7 @@ public static class RuleSetLoader
             "desync" or "zapret" => RoutingMode.Desync,
             "" => throw new RuleConfigurationException($"{context}: не задано поле 'mode'."),
             var other => throw new RuleConfigurationException(
-                $"{context}: неизвестный режим '{other}'. Допустимы: direct, proxy, desync."),
+                $"{context}: неизвестный режим '{other}'. Допустимы: direct, proxy, desync, off."),
         };
 
     private sealed class RuleFileDto

@@ -41,8 +41,11 @@ public sealed class RuleEngine
         OperatingMode operating = OperatingMode.Selective)
     {
         // Выключенные правила отбрасываются здесь: дальше по конвейеру они
-        // только мешали бы — попадали в конфиг движка и в подсчёты.
-        var ordered = rules.Where(r => r.Enabled).ToList();
+        // только мешали бы — попадали в конфиг движка и в подсчёты. Правило
+        // «выключено» (RoutingRule.Off) — тоже: оно лишь гасит базовое
+        // правило того же списка (RuleSetLoader.LoadLayered), а само
+        // никуда не ведёт.
+        var ordered = rules.Where(r => r.Enabled && !r.Off).ToList();
 
         for (int i = 0; i < ordered.Count; i++)
         {
