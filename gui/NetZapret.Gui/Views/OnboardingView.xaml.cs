@@ -907,12 +907,12 @@ public partial class OnboardingView : UserControl
             if (PickedDns() is { } route)
                 settings = settings with { DnsVia = route };
 
-            DnsHint.Text = DnsRoutes.Explain(settings);
+            DnsInfo.Content = DnsRoutes.Explain(settings);
         }
         catch (Exception)
         {
             // Настройки не прочитались — пояснения нет, выбор остаётся.
-            DnsHint.Text = string.Empty;
+            DnsInfo.Content = null;
         }
     }
 
@@ -920,13 +920,13 @@ public partial class OnboardingView : UserControl
     // и при разборе разметки, когда соседних элементов ещё нет.
     private void OnModePicked(object sender, RoutedEventArgs e)
     {
-        if (IsInitialized && DnsHint is not null)
+        if (IsInitialized && DnsInfo is not null)
             ShowDnsHint();
     }
 
     private void OnDnsPicked(object sender, SelectionChangedEventArgs e)
     {
-        if (IsInitialized && DnsHint is not null)
+        if (IsInitialized && DnsInfo is not null)
             ShowDnsHint();
     }
 
