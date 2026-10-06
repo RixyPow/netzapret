@@ -77,6 +77,36 @@ public sealed class EngineHealthTests : IDisposable
                 .ToList(),
         };
 
+    /// <summary>
+    /// Прокси Telegram — довесок: его сбой не делает движки нерабочими.
+    /// </summary>
+    /// <remarks>
+    /// Иначе автозапуск, ждущий <c>Running</c>, снимал бы и поднимал все движки
+    /// по кругу из-за одного занятого порта 1443 (07.10, «TG Proxy»).
+    /// </remarks>
+    [Fact]
+    public void A_failed_telegram_proxy_does_not_sink_the_bypass()
+    {
+        var state = State(alive: true,
+            ("winws2", ServiceHealth.Healthy, null),
+            ("sing-box", ServiceHealth.Healthy, null),
+            ("tg-ws-proxy", ServiceHealth.Faulted, "порт занят"));
+
+        Assert.True(EngineHealth.AllHealthy(state));
+        Assert.True(EngineHealth.Running(state));
+        Assert.Contains("tg-ws-proxy: порт занят", EngineHealth.Complaint(state));
+    }
+
+    /// <summary>Один прокси Telegram без десинка и туннеля — это не обход.</summary>
+    [Fact]
+    public void A_telegram_proxy_alone_is_not_a_bypass()
+    {
+        var state = State(alive: true, ("tg-ws-proxy", ServiceHealth.Healthy, null));
+
+        Assert.False(EngineHealth.AllHealthy(state));
+        Assert.False(EngineHealth.Running(state));
+    }
+
     /// <summary>Все службы работают — вот это и есть успех.</summary>
     [Fact]
     public void Everything_running_is_healthy()

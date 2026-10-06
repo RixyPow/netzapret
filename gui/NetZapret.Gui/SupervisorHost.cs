@@ -67,8 +67,19 @@ internal static class SupervisorHost
         /// <summary>DNS «авто» — путь резолвера ставит надзор (SingBoxService).</summary>
         public bool DnsViaAuto { get; init; }
 
+        /// <summary>Поднять прокси Telegram (<see cref="TgWsProxyService"/>).</summary>
+        public bool TelegramProxy { get; init; }
+
         public string? LogPath { get; init; }
     }
+
+    /// <summary>Ключ: поднять прокси Telegram. Порт и секрет надзор берёт из настроек.</summary>
+    /// <remarks>
+    /// Секрет в командную строку надзора не идёт: её пишут журналы и показывает
+    /// диспетчер задач. Надзор читает его из config\netzapret.json сам —
+    /// рабочая папка у него корень установки.
+    /// </remarks>
+    public const string TelegramProxySwitch = "--telegram-proxy";
 
     /// <summary>
     /// Собирает командную строку для себя же.
@@ -105,6 +116,9 @@ internal static class SupervisorHost
 
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";
+
+        if (settings.TelegramProxy)
+            arguments += " " + TelegramProxySwitch;
 
         return arguments;
     }
@@ -188,6 +202,12 @@ internal static class SupervisorHost
 
             if (!options.NoProxy && !TryAddSingBox(options, services))
                 return 2;
+
+            // Прокси Telegram — последним: его соединения к Telegram и доменам
+            // за Cloudflare идут по правилам, и десинку с туннелем лучше
+            // уже стоять. Не поднялся — это не повод не поднимать остальное.
+            if (options.TelegramProxy)
+                AddTelegramProxy(services);
 
             if (services.Count == 0)
             {
@@ -589,6 +609,24 @@ internal static class SupervisorHost
         });
     }
 
+    /// <summary>Прокси Telegram — с портом и секретом из настроек.</summary>
+    private static void AddTelegramProxy(List<SupervisedService> services)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var executable = TgWsProxy.Executable();
+
+        Console.WriteLine($"Прокси Telegram: 127.0.0.1:{settings.TelegramProxyPort}, {executable}");
+
+        services.Add(new TgWsProxyService(
+            executable,
+            settings.TelegramProxyPort,
+            settings.TelegramProxySecret ?? string.Empty,
+            Path.GetFullPath("."))
+        {
+            OutputLogPath = Path.Combine("runtime", "tg-ws-proxy.log"),
+        });
+    }
+
     /// <summary>Читает то, что собрал <see cref="BuildArguments"/>.</summary>
     internal static Options Parse(string[] args)
     {
@@ -614,6 +652,10 @@ internal static class SupervisorHost
 
                 case "--verify-traffic":
                     options = options with { VerifyTraffic = true };
+                    break;
+
+                case TelegramProxySwitch:
+                    options = options with { TelegramProxy = true };
                     break;
 
                 case "--proxy-config" when next is not null:

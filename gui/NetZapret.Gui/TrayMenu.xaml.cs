@@ -51,15 +51,15 @@ internal sealed record TrayStatus(
             ? state!.Services.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Health
             : null;
 
-        bool healthy = running && state!.Services.All(s => s.Health == ServiceHealth.Healthy);
+        bool healthy = running && EngineHealth.Bypass(state!).All(s => s.Health == ServiceHealth.Healthy);
 
         // Запуск идёт, пока надзор жив, а состояния нет, — и после, пока
         // движки не прошли проверку, но не дольше, чем ждёт «Главная»:
         // сдавшийся движок — уже не запуск.
         bool starting = !stopping && (running
             ? !healthy
-              && state!.Services.All(s => s.Health != ServiceHealth.Faulted)
-              && DateTimeOffset.Now - state.StartedAt < StartupPatience
+              && EngineHealth.Bypass(state!).All(s => s.Health != ServiceHealth.Faulted)
+              && DateTimeOffset.Now - state!.StartedAt < StartupPatience
             : busy || EngineControl.IsRunning);
 
         return new TrayStatus(running, healthy, Of("sing-box"), Of("winws2"), busy, starting, stopping);

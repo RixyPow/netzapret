@@ -281,6 +281,20 @@ public sealed record AppSettings
     /// </remarks>
     public bool LearnDiscordVoice { get; init; } = true;
 
+    /// <summary>Поднимать прокси для Telegram Desktop вместе с движками (<see cref="TgWsProxy"/>).</summary>
+    /// <remarks>Выключен по умолчанию: Telegram надо ещё подключить к нему ссылкой.</remarks>
+    public bool TelegramProxy { get; init; }
+
+    /// <summary>Порт прокси Telegram на 127.0.0.1.</summary>
+    public int TelegramProxyPort { get; init; } = TgWsProxy.DefaultPort;
+
+    /// <summary>
+    /// Секрет прокси Telegram — один на всё время, иначе после каждого
+    /// перезапуска Telegram пришлось бы подключать заново.
+    /// </summary>
+    /// <remarks>Ключом к чему-то внешнему не служит: прокси слушает только эту машину.</remarks>
+    public string? TelegramProxySecret { get; init; }
+
     /// <summary>
     /// Держать автоподбор сервера подальше от отечественных выходов.
     /// </summary>

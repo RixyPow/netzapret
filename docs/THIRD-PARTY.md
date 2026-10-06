@@ -14,6 +14,7 @@ NetZapret не работает сам по себе: он управляет д
 | Zapret 2 (winws2 и его библиотека lua) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
 | Zapret GUI (сценарии lua, списки, пресеты, каталог адресов) | MIT, © 2025–2026 censorliber; автор — loop-uh | `engines/zapret/LICENSE-ZapretGUI.txt` |
 | zapret-discord-youtube (game filter, список ipset-all) | MIT, © 2024–2026 Flowseal, © 2016–2026 bol-van | `engines/zapret/LICENSE-Flowseal.txt` |
+| tg-ws-proxy-rs (прокси вкладки «TG Proxy», с 07.10) — порт tg-ws-proxy Flowseal | MIT, © 2026 valnesfjord; MIT, © 2026 Flowseal | `engines/tg-ws-proxy/LICENSE`, `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt` |
 | cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
 | ZXing.Net (чтение QR-кодов с ключами, с 01.10) | Apache-2.0, Michael Jahn | `LICENSE-ZXing.Net.txt` |
@@ -245,6 +246,22 @@ Flowseal** — обе строки стоят в его
 Исполняемых файлов из этой сборки в архиве нет: winws2 и WinDivert у нас свои,
 описанные выше. Остальные образцы пакетов в `bin/` с его репозиторием
 не сверялись.
+
+## tg-ws-proxy-rs и tg-ws-proxy
+
+Прокси вкладки «TG Proxy» (с 07.10) — **tg-ws-proxy-rs**, автор — **valnesfjord**:
+[github.com/valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs),
+порт на Rust программы **tg-ws-proxy** того же **Flowseal**:
+[github.com/Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy).
+Едет как есть, исполняемым файлом выпуска 2.5.2 (`engines/tg-ws-proxy/tg-ws-proxy.exe`,
+архив сверен с их `SHA256SUMS`); запускает его наш надзор. Список доменов
+за Cloudflare, через которые прокси ведёт Telegram, ведёт проект Flowseal:
+прокси берёт его из `.github/cfproxy-domains.txt` репозитория tg-ws-proxy,
+а не ответил GitHub — из копии, зашитой в сам прокси.
+
+**MIT License, Copyright (c) 2026 valnesfjord** и **MIT License, Copyright (c)
+2026 Flowseal** — строки из их файлов LICENSE, приводятся как есть. Тексты
+целиком — `engines/tg-ws-proxy/LICENSE` и `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt`.
 
 ## Сам NetZapret
 

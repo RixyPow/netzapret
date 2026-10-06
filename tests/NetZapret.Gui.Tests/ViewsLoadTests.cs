@@ -26,6 +26,7 @@ public sealed class ViewsLoadTests
     {
         { "Состояние", () => new StatusView() },
         { "Маршруты", () => new RoutesView() },
+        { "TG Proxy", () => new TgProxyView() },
         { "Проверка", () => new CheckView() },
         { "Десинк", () => new DesyncView() },
         { "Файл hosts", () => new HostsView() },

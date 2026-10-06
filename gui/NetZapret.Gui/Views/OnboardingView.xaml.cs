@@ -1035,7 +1035,7 @@ public partial class OnboardingView : UserControl
 
         _poll.Stop();
 
-        bool healthy = state!.Services.All(s => s.Health == ServiceHealth.Healthy);
+        bool healthy = EngineHealth.Bypass(state!).All(s => s.Health == ServiceHealth.Healthy);
 
         Step4Status.Text = healthy
             ? "Движки работают."

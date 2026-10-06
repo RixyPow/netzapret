@@ -135,7 +135,7 @@ public static class SupportReport
         // Журналы сменяются по размеру (RollingLog, 4 МБ), а не по запуску:
         // winws2 пишет строку на соединение, и начало запуска с его первой
         // ошибкой к сбору отчёта нередко уже в прошлом поколении.
-        foreach (var log in new[] { "supervisor.log", "sing-box.log", "winws2.log" })
+        foreach (var log in new[] { "supervisor.log", "sing-box.log", "winws2.log", "tg-ws-proxy.log" })
         {
             AddLog(parts, log, At(root, Path.Combine("runtime", log)));
             AddLog(parts, Path.GetFileNameWithoutExtension(log) + ".1.log", At(root, Path.Combine("runtime", log + ".1")));
@@ -551,6 +551,19 @@ public static class SupportReport
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>Прочие ссылки: имя узла оставляем — по нему и разбирают, — путь и запрос нет.</summary>
+    /// <summary>
+    /// Секрет прокси Telegram: прокси печатает его при запуске («Secret: …»)
+    /// и в ссылке («secret=dd…», в том числе tg://proxy).
+    /// </summary>
+    /// <remarks>
+    /// Снаружи он бесполезен — прокси слушает только 127.0.0.1, — но чужой
+    /// секрет в присланном архиве незачем, а со сменой адреса прослушивания
+    /// он перестал бы быть безобидным.
+    /// </remarks>
+    private static readonly Regex TelegramSecret = new(
+        @"((?:Secret:\s+|secret=)(?:dd|ee)?)[0-9a-fA-F]{32}",
+        RegexOptions.Compiled);
+
     private static readonly Regex WebLink = new(
         @"\b(https?://[^/\s""'<>]+)[/?][^\s""'<>]*",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -593,6 +606,7 @@ public static class SupportReport
             result = result.Replace(secret, "<ссылка подписки скрыта>", StringComparison.OrdinalIgnoreCase);
 
         result = ProxyLink.Replace(result, "<ссылка прокси скрыта>");
+        result = TelegramSecret.Replace(result, "$1<скрыт>");
         result = WebLink.Replace(result, "$1/…");
         result = KeyField.Replace(result, "$1\"<скрыто>\"");
         result = Uuid.Replace(result, "<uuid>");

@@ -349,6 +349,7 @@ public partial class MainWindow : Window
             "vpn" => new VpnView(),
             "desync" => new DesyncView(),
             "routes" => new RoutesView(),
+            "tgproxy" => new TgProxyView(),
             "check" => new CheckView(),
             "speed" => new SpeedView(),
             "dns" => new DnsView(),

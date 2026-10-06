@@ -31,8 +31,21 @@ public static class EngineHealth
     public static bool AllHealthy(SupervisorState? state) =>
         state is not null
         && state.IsSupervisorAlive()
-        && state.Services.Count > 0
-        && state.Services.All(s => s.Health == ServiceHealth.Healthy);
+        && Bypass(state).Any()
+        && Bypass(state).All(s => s.Health == ServiceHealth.Healthy);
+
+    /// <summary>
+    /// Службы, без которых обхода нет, — всё, кроме прокси Telegram.
+    /// </summary>
+    /// <remarks>
+    /// Прокси Telegram (TgWsProxyService) — довесок: не поднялся он (скажем,
+    /// порт 1443 занят чужим tg-ws-proxy) — десинк и туннель от этого не хуже.
+    /// Считай его наравне с ними, и автозапуск, ждущий <see cref="Running"/>,
+    /// снимал бы и поднимал все движки по кругу из-за одного Telegram.
+    /// В жалобах (<see cref="Complaint"/>) он виден, как прежде.
+    /// </remarks>
+    public static IEnumerable<ServiceState> Bypass(SupervisorState state) =>
+        state.Services.Where(s => !string.Equals(s.Name, TgWsProxyService.ServiceName, StringComparison.Ordinal));
 
     /// <summary>
     /// Движки подняты — пусть даже наружу не доходит.
@@ -56,8 +69,8 @@ public static class EngineHealth
     public static bool Running(SupervisorState? state) =>
         state is not null
         && state.IsSupervisorAlive()
-        && state.Services.Count > 0
-        && state.Services.All(s => s.Health is ServiceHealth.Healthy or ServiceHealth.Degraded);
+        && Bypass(state).Any()
+        && Bypass(state).All(s => s.Health is ServiceHealth.Healthy or ServiceHealth.Degraded);
 
     /// <summary>
     /// Чем кончилось — словами самих служб.

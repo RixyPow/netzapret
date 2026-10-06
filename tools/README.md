@@ -14,6 +14,16 @@
 | `engines\sing-box\` | каталог с `sing-box.exe` из `tools\` | ~53 МБ |
 | `engines\zapret\` | `exe`, `lists`, `lua`, `bin`, `windivert.filter` | ~15 МБ |
 | `engines\zapret\exe\winws2.exe` | `winws2.exe` из `tools\` (любая подпапка) поверх копии из Zapret GUI; нет его — остаётся та | ~1 МБ |
+| `engines\tg-ws-proxy\` | каталог с `tg-ws-proxy.exe` из `tools\` — прокси вкладки «TG Proxy»; `build.cmd` без него соберёт, `pack.cmd` — нет | ~4 МБ |
+| `presets\` | `presets\` этого репозитория | 40 КБ |
+
+Прокси Telegram с 07.10 — [valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs/releases),
+порт программы [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) на Rust, MIT.
+Сборка `tg-ws-proxy-x86_64-pc-windows-gnu.zip`, распакованная с файлом `LICENSE`
+в `tools\tg-ws-proxy-rs-<версия>\`; сейчас — 2.5.2 (архив сверен с их `SHA256SUMS`:
+`573ad9f4…cd1dcd`, сам exe — `739d8577…05caec`). Порт, а не оригинал: у оригинала
+под Windows есть только программа с треем и окнами, а этот консольный и встаёт
+под надзор, как winws2 и sing-box.
 
 Свой `winws2.exe` с 03.10: Zapret GUI везёт 1.0.3, а в ней каждый поиск профиля
 проверял время изменения всех файлов списков у всех профилей ещё до порта —
@@ -22,7 +32,6 @@
 из выпуска [bol-van/zapret2](https://github.com/bol-van/zapret2/releases),
 сейчас — `tools\zapret2-v1.0.5.2\`. `cygwin1.dll` у них одинаковый,
 `WinDivert.dll` остаётся от Zapret GUI: он грузит `Monkey64.sys`.
-| `presets\` | `presets\` этого репозитория | 40 КБ |
 
 Каталог sing-box копируется целиком, а не одним файлом: рядом лежит `wintun.dll`,
 без которого TUN не поднимется, и сборка с одним `.exe` собралась бы успешно,

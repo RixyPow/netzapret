@@ -147,6 +147,23 @@ echo Bundling sing-box
 robocopy "%SINGBOX_DIR%." "%ENGINES%\sing-box" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
 if errorlevel 8 exit /b 1
 
+rem The Telegram proxy (tg-ws-proxy-rs) for the "TG Proxy" tab. Required in the
+rem archive, like sing-box: the tab ships either way, and without the proxy it
+rem would be a switch that starts nothing.
+set "TGWS_DIR="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\tg-ws-proxy.exe" 2^>nul') do set "TGWS_DIR=%%~dpF"
+
+if not defined TGWS_DIR (
+    echo.
+    echo tg-ws-proxy not found in tools\ - the archive would ship an empty TG Proxy tab.
+    echo Download it from https://github.com/valnesfjord/tg-ws-proxy-rs/releases
+    exit /b 1
+)
+
+echo Bundling tg-ws-proxy
+robocopy "%TGWS_DIR%." "%ENGINES%\tg-ws-proxy" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+if errorlevel 8 exit /b 1
+
 set "ZAPRET="
 if exist "C:\Zapret\Dev\lists" set "ZAPRET=C:\Zapret\Dev"
 if not defined ZAPRET if exist "C:\Zapret\lists" set "ZAPRET=C:\Zapret"

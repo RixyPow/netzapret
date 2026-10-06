@@ -253,4 +253,24 @@ public sealed class SupervisorArgumentsTests
 
         Assert.False(RoundTrip(settings).DnsViaAuto);
     }
+
+    /// <summary>
+    /// Прокси Telegram доезжает до надзора ключом, а секрет — нет.
+    /// </summary>
+    /// <remarks>
+    /// Командную строку надзора пишут журналы и показывает диспетчер задач;
+    /// секрет надзор читает из настроек сам (TgWsProxyService, 07.10).
+    /// </remarks>
+    [Fact]
+    public void Telegram_proxy_travels_as_a_switch_without_its_secret()
+    {
+        var secret = NetZapret.Core.TgWsProxy.NewSecret();
+        var settings = new AppSettings { TelegramProxy = true, TelegramProxySecret = secret };
+
+        var arguments = SupervisorHost.BuildArguments(settings);
+
+        Assert.True(RoundTrip(settings).TelegramProxy);
+        Assert.DoesNotContain(secret, arguments);
+        Assert.False(RoundTrip(new AppSettings()).TelegramProxy);
+    }
 }

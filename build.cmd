@@ -251,6 +251,23 @@ if defined SINGBOX_DIR (
     echo sing-box not found in tools\ - VPN will be unavailable in this build.
 )
 
+rem The Telegram proxy (tg-ws-proxy-rs, the "TG Proxy" tab): one executable and
+rem its licence, from wherever its release was unpacked under tools\. Optional -
+rem without it the tab says the proxy is missing and nothing else changes.
+set "TGWS_DIR="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\tg-ws-proxy.exe" 2^>nul') do set "TGWS_DIR=%%~dpF"
+
+if defined TGWS_DIR (
+    echo Bundling tg-ws-proxy
+    robocopy "%TGWS_DIR%." "%ENGINES%\tg-ws-proxy" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 (
+        echo Failed to bundle tg-ws-proxy
+        exit /b 1
+    )
+) else (
+    echo tg-ws-proxy not found in tools\ - the TG Proxy tab will have no proxy.
+)
+
 rem xray is deliberately left out: it is not wired up yet, and its geoip and
 rem geosite databases alone are 27 MB of dead weight.
 

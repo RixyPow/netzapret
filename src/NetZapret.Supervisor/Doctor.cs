@@ -70,6 +70,9 @@ public static class Doctor
         sections.Add(new("Браузеры и сертификаты", Browsers()));
         sections.Add(new("Супервизор", Supervisor()));
 
+        if (settings.TelegramProxy)
+            sections.Add(new("Прокси Telegram", TelegramProxy(settings)));
+
         return sections;
     }
 
@@ -161,6 +164,46 @@ public static class Doctor
                 + "снова на «Главной». «Рабочий стол» тоже бывает внутри OneDrive — если включено "
                 + "его резервное копирование."),
         ];
+    }
+
+    /// <summary>Прокси для Telegram Desktop — есть ли он, есть ли секрет, поднят ли.</summary>
+    /// <param name="executable">Путь к прокси; <c>null</c> — рядом с программой. Для тестов.</param>
+    public static IReadOnlyList<DoctorCheck> TelegramProxy(AppSettings settings, string? executable = null, SupervisorState? state = null)
+    {
+        var lines = new List<DoctorCheck>();
+        var path = executable ?? TgWsProxy.Executable();
+
+        if (!File.Exists(path))
+        {
+            lines.Add(Bad($"Прокси включён, но его нет в поставке: {path}. Telegram через него не подключится."));
+            return lines;
+        }
+
+        if (!TgWsProxy.IsSecret(settings.TelegramProxySecret))
+        {
+            lines.Add(Bad("У прокси нет секрета — выключите и включите его на вкладке «TG Proxy»."));
+            return lines;
+        }
+
+        state ??= SupervisorState.Load(SupervisorState.DefaultPath);
+
+        if (state is null || !state.IsSupervisorAlive())
+        {
+            lines.Add(Ok($"Включён на 127.0.0.1:{settings.TelegramProxyPort}; поднимется вместе с движками."));
+            return lines;
+        }
+
+        var service = state.Services.FirstOrDefault(s => s.Name == TgWsProxyService.ServiceName);
+
+        lines.Add(service switch
+        {
+            null => Warn("Прокси включён, но движки запущены без него — перезапустите их."),
+            { Health: ServiceHealth.Healthy } => Ok($"Работает на 127.0.0.1:{settings.TelegramProxyPort}."),
+            _ => Warn($"127.0.0.1:{settings.TelegramProxyPort}: {EngineHealth.Status(service)}. "
+                + "Частая причина — порт занят другим tg-ws-proxy; журнал — runtime\\tg-ws-proxy.log."),
+        });
+
+        return lines;
     }
 
     private static IReadOnlyList<DoctorCheck> Engines()

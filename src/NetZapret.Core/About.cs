@@ -72,6 +72,14 @@ public static class About
             "MIT",
             "https://github.com/Flowseal/zapret-discord-youtube"),
 
+        // Вкладка «TG Proxy» с 07.10: порт на Rust едет исполняемым файлом
+        // выпуска, а оригинал Flowseal назван рядом — порт сделан с него.
+        new("tg-ws-proxy-rs",
+            "Прокси для Telegram Desktop без VPN — автор valnesfjord, порт tg-ws-proxy (Flowseal)",
+            "MIT",
+            "https://github.com/valnesfjord/tg-ws-proxy-rs",
+            "https://github.com/Flowseal/tg-ws-proxy"),
+
         new("WinDivert",
             "Перехват пакетов для winws2",
             "LGPL v3 / GPL v3",
