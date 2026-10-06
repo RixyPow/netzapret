@@ -57,6 +57,40 @@ public sealed class UpdateNoticeTests
             UpdateNotice.Highlights(notes));
     }
 
+    /// <summary>
+    /// С 0.14.0 «Новое» есть у каждого раздела программы — главное берётся
+    /// из всех по порядку, мимо их «Исправлений».
+    /// </summary>
+    [Fact]
+    public void HighlightsComeFromEverySectionsNew()
+    {
+        const string notes = """
+            # Что нового
+
+            ## Десинк
+
+            ### Исправления:
+
+            **Щит узнаёт имя.** Текст.
+
+            ### Новое:
+
+            **Новый рецепт.** Текст.
+
+            ## TG Proxy
+
+            ### Новое:
+
+            **Прокси для Telegram.** Текст.
+
+            **Кнопка «Подключить».** Текст.
+            """;
+
+        Assert.Equal(
+            ["Новый рецепт", "Прокси для Telegram", "Кнопка «Подключить»"],
+            UpdateNotice.Highlights(notes));
+    }
+
     [Fact]
     public void NoNotesNoHighlights()
     {

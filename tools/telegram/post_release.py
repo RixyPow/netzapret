@@ -49,13 +49,18 @@ def convert(body: str) -> list[str]:
     пояснения, в пост не идут.
     """
     notes = body.split(FOOTER, 1)[0]
-    blocks = []
-    items = []
 
-    def flush() -> None:
-        if items:
-            blocks.append("\n".join(items))
-            items.clear()
+    # Абзац поста — раздел (## …) со всем, что под ним: заголовок сразу
+    # над списком. С 0.14.0 разделы — части программы («## Десинк»), а вид
+    # изменений под ними — «### Новое:», «### Исправления:», «### Удаления:»;
+    # он идёт строкой курсивом внутри абзаца раздела. В чейнджлогах до 0.14.0
+    # «## Новое:» — сам раздел, и пост выходит прежним.
+    groups: list[list[str]] = []
+
+    def add(line: str, new_group: bool = False) -> None:
+        if new_group or not groups:
+            groups.append([])
+        groups[-1].append(line)
 
     for raw in re.split(r"\n\s*\n", notes.replace("\r\n", "\n")):
         block = raw.strip()
@@ -68,28 +73,25 @@ def convert(body: str) -> list[str]:
         if block.startswith("# "):
             continue
 
+        if block.startswith("### "):
+            add(f"<i>{inline(heading(block[4:]))}</i>")
+            continue
+
         if block.startswith("## "):
-            flush()
-            blocks.append(f"<b>{inline(block[3:].strip().rstrip(':'))}</b>")
+            add(f"<b>{inline(heading(block[3:]))}</b>", new_group=True)
             continue
 
         lead = re.match(r"\*\*(.+?)\*\*", block)
 
         if lead:
-            items.append("• " + inline(lead.group(1).strip().rstrip(".")))
+            add("• " + inline(lead.group(1).strip().rstrip(".")))
 
-    flush()
+    return ["\n".join(group) for group in groups]
 
-    # Раздел и его пункты — одним абзацем: заголовок сразу над списком.
-    merged = []
 
-    for block in blocks:
-        if merged and merged[-1].startswith("<b>") and "\n" not in merged[-1] and block.startswith("• "):
-            merged[-1] += "\n" + block
-        else:
-            merged.append(block)
-
-    return merged
+def heading(text: str) -> str:
+    """Заголовок без нумерации и двоеточия: «1.1 Новое:» — «Новое»."""
+    return re.sub(r"^\d+(\.\d+)*\.?\s+", "", text.strip()).rstrip(":").strip()
 
 
 def compose(body: str, tag: str, url: str) -> str:

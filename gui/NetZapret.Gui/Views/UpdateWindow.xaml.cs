@@ -175,19 +175,127 @@ public partial class UpdateWindow : Window
 
         Notes.Children.Add(head);
 
-        var blocks = ReleaseNotesText.Parse(release.Notes);
+        var sections = ReleaseNotesText.Sections(release.Notes);
 
-        if (blocks.Count == 0)
+        if (sections.Count == 0)
         {
             var none = new TextBlock { Text = "Примечаний к этой версии нет.", TextWrapping = TextWrapping.Wrap };
             none.SetResourceReference(StyleProperty, "Caption");
             Notes.Children.Add(none);
         }
 
-        foreach (var block in blocks)
-            Notes.Children.Add(Render(block));
+        foreach (var section in sections)
+        {
+            if (section.Category is { } category)
+            {
+                Notes.Children.Add(Card(category, section.Blocks));
+                continue;
+            }
+
+            foreach (var block in section.Blocks)
+                Notes.Children.Add(Render(block));
+        }
 
         NotesScroll.ScrollToTop();
+    }
+
+    /// <summary>
+    /// Значки разделов чейнджлога — те же, что у пунктов бокового меню.
+    /// </summary>
+    /// <remarks>
+    /// Ключ — <c>Tag</c> пункта меню. Окно обновления открывается и без главного
+    /// окна, поэтому знаки повторены здесь; что они совпадают с меню, сверяет тест.
+    /// </remarks>
+    internal static IReadOnlyDictionary<string, string> Glyphs { get; } = new Dictionary<string, string>
+    {
+        ["status"] = "",
+        ["vpn"] = "",
+        ["desync"] = "",
+        ["routes"] = "",
+        ["tgproxy"] = "",
+        ["check"] = "",
+        ["speed"] = "",
+        ["dns"] = "",
+        ["hosts"] = "",
+        ["watch"] = "",
+        ["log"] = "",
+        ["doctor"] = "",
+        ["look"] = "",
+        ["more"] = "",
+        ["general"] = "",
+    };
+
+    /// <summary>
+    /// Раздел программы карточкой: значок плиткой, как в меню, название
+    /// и под ним его «Новое», «Исправления», «Удаления».
+    /// </summary>
+    /// <remarks>По макету владельца 07.10: карточки со значками в плитках.</remarks>
+    private static Border Card(NotesCategory category, IReadOnlyList<NotesBlock> blocks)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+
+        var glyph = new TextBlock { Text = Glyphs.TryGetValue(category.Key, out var known) ? known : Glyphs["general"] };
+        glyph.SetResourceReference(StyleProperty, "TileGlyph");
+        glyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+
+        var tile = new Border { Child = glyph, Margin = new Thickness(0, 0, 14, 0) };
+        tile.SetResourceReference(StyleProperty, "IconTile");
+        grid.Children.Add(tile);
+
+        var body = new StackPanel();
+
+        // Высота плитки 44: название посередине её, а не у верхнего края.
+        var name = new TextBlock
+        {
+            Text = category.Name,
+            FontSize = 17,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 10, 0, 6),
+        };
+        body.Children.Add(name);
+
+        foreach (var block in blocks)
+            body.Children.Add(Render(block));
+
+        Grid.SetColumn(body, 1);
+        grid.Children.Add(body);
+
+        var card = new Border
+        {
+            Child = grid,
+            CornerRadius = new CornerRadius(12),
+            Padding = new Thickness(14, 14, 16, 4),
+            Margin = new Thickness(0, 6, 0, 8),
+            BorderThickness = new Thickness(1),
+            Background = Brushes.Transparent,
+        };
+        card.SetResourceReference(Border.BorderBrushProperty, "Border");
+        return card;
+    }
+
+    /// <summary>
+    /// «Новое», «Исправления», «Удаления» — плашкой, как метки в макете;
+    /// «Новое» цветом темы: ради него и обновляются.
+    /// </summary>
+    private static Border ChangeTag(string text, NotesChange change)
+    {
+        bool fresh = change == NotesChange.Added;
+
+        var label = new TextBlock { Text = text, FontSize = 12, FontWeight = FontWeights.SemiBold };
+        label.SetResourceReference(TextBlock.ForegroundProperty, fresh ? "OnAccent" : "Text");
+
+        var tag = new Border
+        {
+            Child = label,
+            CornerRadius = new CornerRadius(7),
+            Padding = new Thickness(9, 2, 9, 3),
+            Margin = new Thickness(0, 4, 0, 8),
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        tag.SetResourceReference(Border.BackgroundProperty, fresh ? "AccentFill" : "Raised");
+        return tag;
     }
 
     /// <summary>Пункты ленты версий по номеру.</summary>
@@ -290,14 +398,14 @@ public partial class UpdateWindow : Window
                 text.Children.Add(date);
             }
 
-            var (added, fixedCount) = ReleaseNotesText.Count(release.Notes);
-            var counts = Summary(added, fixedCount);
+            var tally = ReleaseNotesText.Count(release.Notes);
+            var counts = Summary(tally.Added, tally.Fixed, tally.Removed);
 
             if (counts.Length > 0)
             {
-                var tally = new TextBlock { Text = counts, Margin = new Thickness(0, 2, 0, 0), FontSize = 11.5 };
-                tally.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
-                text.Children.Add(tally);
+                var line = new TextBlock { Text = counts, Margin = new Thickness(0, 2, 0, 0), FontSize = 11.5, TextWrapping = TextWrapping.Wrap };
+                line.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
+                text.Children.Add(line);
             }
 
             Grid.SetColumn(text, 1);
@@ -371,16 +479,23 @@ public partial class UpdateWindow : Window
         return pill;
     }
 
-    /// <summary>«3 новых · 2 исправления» — что внутри версии, без чтения её целиком.</summary>
-    internal static string Summary(int added, int fixedCount)
+    /// <summary>«3 новых · 2 исправления · 1 удаление» — что внутри версии, без чтения её целиком.</summary>
+    /// <remarks>
+    /// Число со словом — через неразрывный пробел: в ленте шириной 262 три
+    /// счёта не влезают в строку, и перенос шёл между «1» и «удаление» (снимок 07.10).
+    /// </remarks>
+    internal static string Summary(int added, int fixedCount, int removed = 0)
     {
         var parts = new List<string>();
 
         if (added > 0)
-            parts.Add($"{added} {Plural(added, "новое", "новых", "новых")}");
+            parts.Add($"{added} {Plural(added, "новое", "новых", "новых")}");
 
         if (fixedCount > 0)
-            parts.Add($"{fixedCount} {Plural(fixedCount, "исправление", "исправления", "исправлений")}");
+            parts.Add($"{fixedCount} {Plural(fixedCount, "исправление", "исправления", "исправлений")}");
+
+        if (removed > 0)
+            parts.Add($"{removed} {Plural(removed, "удаление", "удаления", "удалений")}");
 
         return string.Join(" · ", parts);
     }
@@ -499,7 +614,10 @@ public partial class UpdateWindow : Window
     {
         switch (block.Kind)
         {
-            // Разделы — как заголовки групп в окнах настроек: малыми прописными.
+            case NotesBlockKind.Heading when NotesCategories.ChangeOf(block.Plain) is not NotesChange.None and var change:
+                return ChangeTag(block.Plain, change);
+
+            // Прочие заголовки — как заголовки групп в окнах настроек: малыми прописными.
             case NotesBlockKind.Heading:
                 var heading = new TextBlock { Text = block.Plain.ToUpperInvariant(), Margin = new Thickness(0, 14, 0, 8) };
                 heading.SetResourceReference(StyleProperty, "GroupHead");

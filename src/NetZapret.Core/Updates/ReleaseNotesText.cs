@@ -9,7 +9,7 @@ public sealed record NotesSpan(string Text, bool Bold, bool Code = false);
 /// <summary>Что за блок чейнджлога.</summary>
 public enum NotesBlockKind
 {
-    /// <summary>Заголовок раздела: «Новое», «Исправления».</summary>
+    /// <summary>Заголовок: раздел программы, «Новое», «Исправления», «Удаления», подвал.</summary>
     Heading,
 
     /// <summary>Абзац — у нас обычно полужирная фраза и пояснение.</summary>
@@ -44,6 +44,12 @@ public sealed record NotesBlock(NotesBlockKind Kind, IReadOnlyList<NotesSpan> Sp
     /// <summary>Всё после <see cref="Lead"/>; без неё — все куски.</summary>
     public IReadOnlyList<NotesSpan> Body => Lead is null ? Spans : Spans.Skip(1).ToList();
 }
+
+/// <summary>Часть чейнджлога одного раздела программы; <c>null</c> — вне разделов.</summary>
+public sealed record NotesSection(NotesCategory? Category, IReadOnlyList<NotesBlock> Blocks);
+
+/// <summary>Сколько в версии пунктов каждого вида.</summary>
+public sealed record NotesTally(int Added, int Fixed, int Removed);
 
 /// <summary>
 /// Разбирает примечания к выпуску — ту малую часть Markdown, что в них бывает.
@@ -127,7 +133,7 @@ public static class ReleaseNotesText
                 Flush();
 
                 var level = line.TakeWhile(c => c == '#').Count();
-                var text = line[level..].Trim().TrimEnd(':').Trim();
+                var text = NotesCategories.Clean(line[level..]);
 
                 // «# Что нового» — шапка всего файла: окно уже говорит это само.
                 if (level >= 2 && text.Length > 0)
@@ -157,27 +163,82 @@ public static class ReleaseNotesText
     }
 
     /// <summary>
-    /// Сколько пунктов в разделах «Новое» и «Исправления» — для ленты версий.
+    /// Чейнджлог по разделам программы: у каждого — его «Новое», «Исправления»,
+    /// «Удаления»; что вне разделов — частью без раздела.
     /// </summary>
     /// <remarks>
-    /// Пункт — абзац с полужирной фразой в начале либо строка списка: так
-    /// чейнджлог и пишется. Прочие разделы («Чем это собрано…») не считаются.
+    /// <para>
+    /// Раздел — заголовок с названием пункта меню (<see cref="NotesCategories"/>),
+    /// любого уровня: в файле это <c>## Десинк</c>, а под ним <c>### Новое:</c>.
+    /// Сам заголовок раздела в блоки не входит — окно рисует его карточкой
+    /// со значком.
+    /// </para>
+    /// <para>
+    /// Чейнджлоги до 0.14.0 разделов не знают: <c>## Новое:</c> прямо под
+    /// шапкой. Они приходят одной частью без раздела и показываются как прежде.
+    /// Чужой заголовок — «Чем это собрано и как сверить» из подвала — раздел
+    /// закрывает: хэши к последнему разделу не относятся.
+    /// </para>
     /// </remarks>
-    public static (int Added, int Fixed) Count(string? notes)
+    public static IReadOnlyList<NotesSection> Sections(string? notes)
     {
-        int added = 0, fixedCount = 0;
-        string? section = null;
+        var sections = new List<NotesSection>();
+        var blocks = new List<NotesBlock>();
+        NotesCategory? category = null;
+
+        void Close()
+        {
+            if (blocks.Count > 0)
+                sections.Add(new NotesSection(category, blocks.ToList()));
+
+            blocks.Clear();
+        }
 
         foreach (var block in Parse(notes))
         {
+            if (block.Kind == NotesBlockKind.Heading && NotesCategories.ChangeOf(block.Plain) == NotesChange.None)
+            {
+                if (NotesCategories.Find(block.Plain) is { } found)
+                {
+                    Close();
+                    category = found;
+                    continue;
+                }
+
+                if (category is not null)
+                {
+                    Close();
+                    category = null;
+                }
+            }
+
+            blocks.Add(block);
+        }
+
+        Close();
+        return sections;
+    }
+
+    /// <summary>
+    /// Сколько пунктов «Нового», «Исправлений» и «Удалений» — для ленты версий.
+    /// </summary>
+    /// <remarks>
+    /// Пункт — абзац с полужирной фразой в начале либо строка списка: так
+    /// чейнджлог и пишется. Считается по всем разделам программы вместе.
+    /// Прочие заголовки («Чем это собрано…») счёт прекращают.
+    /// </remarks>
+    public static NotesTally Count(string? notes)
+    {
+        int added = 0, fixedCount = 0, removed = 0;
+        var change = NotesChange.None;
+
+        foreach (var block in Parse(notes))
+        {
+            // Заголовок раздела программы — тоже «не вид изменений»: у каждого
+            // раздела свои «Новое» и «Исправления», и пункты до них не считаются.
             if (block.Kind == NotesBlockKind.Heading)
             {
-                var head = block.Plain.Trim();
-
-                section = head.StartsWith("Нов", StringComparison.OrdinalIgnoreCase) ? "added"
-                    : head.StartsWith("Исправ", StringComparison.OrdinalIgnoreCase) ? "fixed"
-                    : null;
-
+                change = NotesCategories.ChangeOf(block.Plain);
                 continue;
             }
 
@@ -186,13 +247,23 @@ public static class ReleaseNotesText
             if (!item)
                 continue;
 
-            if (section == "added")
-                added++;
-            else if (section == "fixed")
-                fixedCount++;
+            switch (change)
+            {
+                case NotesChange.Added:
+                    added++;
+                    break;
+
+                case NotesChange.Fixed:
+                    fixedCount++;
+                    break;
+
+                case NotesChange.Removed:
+                    removed++;
+                    break;
+            }
         }
 
-        return (added, fixedCount);
+        return new NotesTally(added, fixedCount, removed);
     }
 
     /// <summary>

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace NetZapret.Core.Updates;
 
 /// <summary>
@@ -63,36 +61,45 @@ public static class UpdateNotice
         && !string.Equals(release.Version, settings.DismissedUpdate, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Главное из «Что нового» — заголовки первых пунктов раздела «Новое».
+    /// Главное из «Что нового» — заголовки первых пунктов «Нового».
     /// </summary>
     /// <remarks>
     /// Чейнджлог пишется так, что каждый пункт начинается с полужирной
     /// фразы (CLAUDE.md, «Чейнджлог»): её одной хватает, чтобы решить,
     /// стоит ли обновляться, а целиком примечания открываются по ссылке.
-    /// Нет раздела «Новое» — берутся первые полужирные фразы вообще.
+    /// С 0.14.0 «Новое» есть у каждого раздела программы — берутся по порядку
+    /// разделов, а он по важности. Нет «Нового» вовсе — первые полужирные
+    /// фразы вообще.
     /// </remarks>
     public static IReadOnlyList<string> Highlights(string? notes, int count = 3)
     {
-        if (string.IsNullOrWhiteSpace(notes))
-            return [];
+        var fresh = new List<string>();
+        var any = new List<string>();
+        var change = NotesChange.None;
 
-        var text = notes;
-        var fresh = text.IndexOf("## Новое", StringComparison.OrdinalIgnoreCase);
-
-        if (fresh >= 0)
+        foreach (var block in ReleaseNotesText.Parse(notes))
         {
-            text = text[fresh..];
-            var next = text.IndexOf("\n## ", 3, StringComparison.Ordinal);
+            if (block.Kind == NotesBlockKind.Heading)
+            {
+                change = NotesCategories.ChangeOf(block.Plain);
+                continue;
+            }
 
-            if (next > 0)
-                text = text[..next];
+            if (block.Spans.FirstOrDefault(s => s.Bold) is not { } lead)
+                continue;
+
+            var text = lead.Text.Trim().TrimEnd('.', ':');
+
+            if (text.Length == 0)
+                continue;
+
+            any.Add(text);
+
+            if (change == NotesChange.Added)
+                fresh.Add(text);
         }
 
-        return Regex.Matches(text, @"\*\*(.+?)\*\*")
-            .Select(m => m.Groups[1].Value.Trim().TrimEnd('.', ':'))
-            .Where(s => s.Length > 0)
-            .Take(count)
-            .ToList();
+        return (fresh.Count > 0 ? fresh : any).Take(count).ToList();
     }
 
     /// <summary>Страница выпуска на GitHub — примечания целиком.</summary>

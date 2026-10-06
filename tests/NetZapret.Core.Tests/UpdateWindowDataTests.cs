@@ -150,7 +150,7 @@ public sealed class UpdateWindowDataTests
     [Fact]
     public void ItemsAreCountedPerSection()
     {
-        var (added, fixedCount) = ReleaseNotesText.Count("""
+        var (added, fixedCount, _) = ReleaseNotesText.Count("""
             # Что нового
 
             ## Новое:
@@ -172,8 +172,101 @@ public sealed class UpdateWindowDataTests
 
         Assert.Equal(3, added);
         Assert.Equal(1, fixedCount);
-        Assert.Equal((0, 0), ReleaseNotesText.Count(null));
+        Assert.Equal(new NotesTally(0, 0, 0), ReleaseNotesText.Count(null));
     }
+
+    /// <summary>
+    /// С 0.14.0 чейнджлог делится по разделам программы, а внутри — «Новое»,
+    /// «Исправления», «Удаления» (владелец 07.10).
+    /// </summary>
+    private const string ByCategory = """
+        # Что нового
+
+        ## Десинк
+
+        ### Новое:
+
+        **Новый рецепт.** Текст.
+
+        ### Исправления:
+
+        **Щит узнаёт имя.** Текст.
+
+        ## ВПН
+
+        ### Новое:
+
+        **Замер выхода.** Текст.
+
+        ### Исправления:
+
+        - мелочь пунктом
+
+        ### Удаления:
+
+        **Старый выключатель.** Текст.
+
+        ## Чем это собрано и как сверить
+
+        ```
+        NetZapret-0.14.0.zip   ABC
+        ```
+        """;
+
+    [Fact]
+    public void ChangelogIsSplitByProgramSections()
+    {
+        var sections = ReleaseNotesText.Sections(ByCategory);
+
+        Assert.Equal(["desync", "vpn", null], sections.Select(s => s.Category?.Key));
+
+        // Заголовок раздела в блоки не входит: окно рисует его карточкой.
+        Assert.Equal(
+            ["Новое", "Новый рецепт. Текст.", "Исправления", "Щит узнаёт имя. Текст."],
+            sections[0].Blocks.Select(b => b.Plain));
+
+        // «ВПН» владелец пишет по-русски, в меню — VPN.
+        Assert.Equal("VPN", sections[1].Category!.Name);
+        Assert.Equal(6, sections[1].Blocks.Count);
+
+        // Подвал с хэшами — не часть раздела VPN.
+        Assert.Equal([NotesBlockKind.Heading, NotesBlockKind.Code], sections[2].Blocks.Select(b => b.Kind));
+    }
+
+    [Fact]
+    public void ItemsAreCountedAcrossSections()
+    {
+        Assert.Equal(new NotesTally(2, 2, 1), ReleaseNotesText.Count(ByCategory));
+    }
+
+    [Fact]
+    public void OldChangelogsStayOnePieceWithoutSection()
+    {
+        // Чейнджлоги до 0.14.0 разделов не знают — окно показывает их как прежде.
+        var section = Assert.Single(ReleaseNotesText.Sections("# Что нового\n\n## Новое:\n\n**Пункт.** Текст.\n\n## Исправления:\n\n**Починено.** Текст."));
+
+        Assert.Null(section.Category);
+        Assert.Equal(4, section.Blocks.Count);
+    }
+
+    [Theory]
+    [InlineData("1. Десинк:", "desync")]
+    [InlineData("Файл hosts", "hosts")]
+    [InlineData("Прокси Telegram", "tgproxy")]
+    [InlineData("TG Proxy", "tgproxy")]
+    [InlineData("vpn", "vpn")]
+    [InlineData("Новое", null)]
+    [InlineData("Чем это собрано и как сверить", null)]
+    public void SectionsAreFoundByMenuNames(string heading, string? key) =>
+        Assert.Equal(key, NotesCategories.Find(heading)?.Key);
+
+    [Theory]
+    [InlineData("1.1 Новое:", NotesChange.Added)]
+    [InlineData("Исправления", NotesChange.Fixed)]
+    [InlineData("2.3 Удаления:", NotesChange.Removed)]
+    [InlineData("Десинк", NotesChange.None)]
+    public void ChangeKindsAreFoundEvenNumbered(string heading, NotesChange change) =>
+        Assert.Equal(change, NotesCategories.ChangeOf(heading));
 
     [Fact]
     public void EmptyNotesGiveNothing()
