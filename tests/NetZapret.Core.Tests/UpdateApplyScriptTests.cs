@@ -7,7 +7,7 @@ namespace NetZapret.Core.Tests;
 /// Сценарий подмены файлов после выхода программы.
 /// </summary>
 /// <remarks>
-/// Жалоба 07.10: чёрное окно «Update failed. The previous version is untouched.»
+/// Жалоба 06.10: чёрное окно «Update failed. The previous version is untouched.»
 /// — и ни слова о том, какой файл не заменился. Вывод robocopy уходил в nul,
 /// фраза о нетронутой версии была неправдой (robocopy меняет файл за файлом),
 /// а программа после сбоя не открывалась вовсе.

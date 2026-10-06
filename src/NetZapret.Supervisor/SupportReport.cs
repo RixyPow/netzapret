@@ -144,7 +144,7 @@ public static class SupportReport
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
         AddFile(parts, "desync-keep.txt", At(root, Path.Combine("runtime", "desync-keep.txt")));
 
-        // Журналы подмены: что robocopy не смог заменить и почему (жалоба 07.10).
+        // Журналы подмены: что robocopy не смог заменить и почему (жалоба 06.10).
         AddFile(parts, "update.log", At(root, Core.Updates.UpdateInstaller.LogFile));
         AddFile(parts, "update-failed.log", At(root, Core.Updates.UpdateInstaller.FailedLogFile));
 
