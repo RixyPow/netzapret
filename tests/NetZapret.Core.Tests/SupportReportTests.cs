@@ -67,7 +67,8 @@ public sealed class SupportReportTests : IDisposable
         File.WriteAllText(old, "старая проверка");
         File.SetLastWriteTime(old, DateTime.Now.AddDays(-5));
         File.WriteAllText(Path.Combine(_root, "reports", "blockcheck-2026-09-25-2327.txt"),
-            $"Проверка блокировок\nyoutube.com ок\nссылка {Subscription}\n");
+            $"Проверка блокировок\nyoutube.com ок\nссылка {Subscription}\n"
+            + "Выход: 203.0.113.77, RU — мимо туннеля\n");
 
         var result = SupportReport.Create("0.8.3 (1)", root: _root);
         var text = ReadAll(result.Path);
@@ -87,6 +88,10 @@ public sealed class SupportReportTests : IDisposable
         Assert.DoesNotContain("hunter2", text);
         Assert.DoesNotContain("AAAA", text);
         Assert.DoesNotContain("\u001b[", text);
+
+        // Выход мимо туннеля — домашний адрес человека (отчёт владельца 06.10).
+        Assert.DoesNotContain("203.0.113.77", text);
+        Assert.Contains("Выход: <адрес скрыт>, RU — мимо туннеля", text);
 
         if (profile.Length > 0)
             Assert.DoesNotContain(profile, text, StringComparison.OrdinalIgnoreCase);

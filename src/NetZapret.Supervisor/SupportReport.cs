@@ -565,6 +565,19 @@ public static class SupportReport
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
+    /// Адрес выхода из «Обстановки замера» проверки блокировок: мимо туннеля это
+    /// домашний адрес человека. Страна и путь остаются — по ним и разбирают.
+    /// </summary>
+    /// <remarks>
+    /// Найдено в отчёте владельца 06.10: проверка блокировок едет в архив
+    /// с 26.09, и всё это время с ней ехал адрес, который NetworkSnapshot
+    /// нарочно не пишет.
+    /// </remarks>
+    private static readonly Regex ExitAddress = new(
+        @"(Выход: )(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7})",
+        RegexOptions.Compiled);
+
+    /// <summary>
     /// Вычищает из текста то, чего в отчёте быть не должно.
     /// </summary>
     /// <remarks>
@@ -583,6 +596,7 @@ public static class SupportReport
         result = WebLink.Replace(result, "$1/…");
         result = KeyField.Replace(result, "$1\"<скрыто>\"");
         result = Uuid.Replace(result, "<uuid>");
+        result = ExitAddress.Replace(result, "$1<адрес скрыт>");
 
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
