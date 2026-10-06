@@ -380,9 +380,12 @@ public static class HostsEditor
     /// <remarks>
     /// Проверяется соединением к публичному резолверу Google по IPv6.
     /// Наличие адреса на адаптере не годится: Windows раздаёт себе локальные
-    /// адреса и без всякой связи наружу.
+    /// адреса и без всякой связи наружу. Открыт и решениям с пином
+    /// (<see cref="PinSolutions"/>): адрес IPv6 в hosts без IPv6 в сети — это
+    /// лишняя попытка соединения перед каждым IPv4, а решение, живущее только
+    /// на IPv6, не работает вовсе.
     /// </remarks>
-    private static async Task<bool> HasIpV6Async(CancellationToken cancellationToken)
+    public static async Task<bool> HasIpV6Async(CancellationToken cancellationToken)
     {
         try
         {
@@ -435,6 +438,94 @@ public static class HostsEditor
 
     /// <summary>Конец блока, который ведём мы.</summary>
     public const string BlockEnd = "# <<< netzapret end <<<";
+
+    /// <summary>
+    /// Пометка строки нашего блока: этому пину нужен десинк, щит его не берёт.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Пины бывают двух родов, и отличить их по самому файлу нельзя. Пин
+    /// на посредника (XBOX DNS, Comss) — чужой узел; рецепт, выверенный
+    /// на настоящей сети доставки, рвёт с ним соединение, и щит такой пин
+    /// держит правильно. Пин на собственный адрес сервиса (раздел «Напрямую»
+    /// Zapret GUI: Meta, Twitter, Google) только выбирает незакрытый адрес,
+    /// а имя в приветствии TLS провайдер режет и там — без десинка такой пин
+    /// мёртв, и щит его убивает.
+    /// </para>
+    /// <para>
+    /// Замер 06.10, A/B/A через дыру в щите на работающем winws2: chatgpt.com
+    /// и notion.so на прокси XBOX — со щитом 20 из 20, под рецептом своей
+    /// секции 0 из 10; www.instagram.com, scontent.cdninstagram.com
+    /// и abs-0.twimg.com на адресах из каталога — со щитом 0 из 22, под
+    /// рецептом 6 из 6. До 06.10 щит брал любой пин (у JohnnyTargo, №18,
+    /// Instagram на адресах Meta не открывался ни одним рецептом).
+    /// </para>
+    /// <para>
+    /// Род пина пишется в сам файл, а не в настройки: так его видят все,
+    /// кто читает hosts, — щит, «Куда пойдёт соединение», проверка
+    /// блокировок, — и пометка не расходится с записью, к которой относится.
+    /// Windows комментарий в строке hosts пропускает.
+    /// </para>
+    /// </remarks>
+    public const string DesyncMark = "nz:desync";
+
+    /// <summary>
+    /// Прибивает имена к адресам самого сервиса — с пометкой <see cref="DesyncMark"/>.
+    /// </summary>
+    public static PinResult PinWithDesync(
+        IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
+        string? path = null,
+        string? note = null) => PinMany(entries, path, note, desync: true);
+
+    /// <summary>
+    /// Имена нашего блока с пометкой <see cref="DesyncMark"/> — их пины десинку открыты.
+    /// </summary>
+    /// <remarks>
+    /// Только из нашего блока: чужую строку мы не ставили и о её адресе
+    /// ничего не знаем.
+    /// </remarks>
+    public static IReadOnlySet<string> DesyncPins(string? path = null)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var target = path ?? HostsFile.DefaultPath;
+
+        try
+        {
+            if (!File.Exists(target))
+                return result;
+
+            var lines = File.ReadAllLines(target);
+            var (start, end) = FindBlock(lines);
+
+            if (start < 0)
+                return result;
+
+            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            {
+                if (Split(line) is { } pair && Marked(line))
+                    result.Add(pair.Name);
+            }
+        }
+        catch (IOException)
+        {
+            // Не прочитался — значит пометок не видно, и щит поступит
+            // по-прежнему: возьмёт пин. Это безопасная сторона.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return result;
+    }
+
+    /// <summary>Несёт ли строка пометку <see cref="DesyncMark"/> в комментарии.</summary>
+    private static bool Marked(string line)
+    {
+        int hash = line.IndexOf('#');
+
+        return hash >= 0
+            && line[(hash + 1)..].Contains(DesyncMark, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Прибивает имена к адресам в собственном блоке файла.
@@ -508,10 +599,16 @@ public static class HostsEditor
         return result.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <param name="desync">
+    /// Род пина у имён из <paramref name="entries"/>: <c>true</c> — адрес самого
+    /// сервиса, строка получает <see cref="DesyncMark"/>. У прочих имён блока
+    /// пометка остаётся, какой была.
+    /// </param>
     private static PinResult PinMany(
         IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
         string? path,
-        string? note)
+        string? note,
+        bool desync = false)
     {
         var target = path ?? HostsFile.DefaultPath;
         var backup = File.Exists(target) ? Backup(target) : null;
@@ -519,6 +616,7 @@ public static class HostsEditor
 
         var (start, end) = FindBlock(lines);
         var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        var marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Без новой подписи блок сохраняет прежнюю: её пишет окно при закреплении
         // («Claude — XBOX DNS»), а само обновление пинов (PinRefresh) ничего
@@ -544,6 +642,9 @@ public static class HostsEditor
 
                 if (!list.Contains(pair.Address, StringComparer.OrdinalIgnoreCase))
                     list.Add(pair.Address);
+
+                if (Marked(line))
+                    marked.Add(pair.Name);
             }
 
             lines.RemoveRange(start, end - start + 1);
@@ -554,8 +655,14 @@ public static class HostsEditor
             var name = rawName.TrimStart('*', '.');
 
             // Закрепление заменяет прежний адрес имени: человек выбрал
-            // новый набор взамен старого.
+            // новый набор взамен старого. Род пина — тоже: посредник,
+            // прибитый поверх адреса сервиса, пометку терять обязан.
             var list = kept[name] = [];
+
+            if (desync)
+                marked.Add(name);
+            else
+                marked.Remove(name);
 
             foreach (var address in addresses)
             {
@@ -574,8 +681,10 @@ public static class HostsEditor
 
         foreach (var (name, addresses) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
+            var mark = marked.Contains(name) ? " # " + DesyncMark : string.Empty;
+
             foreach (var address in addresses)
-                block.Add($"{address} {name}");
+                block.Add($"{address} {name}{mark}");
         }
 
         block.Add(BlockEnd);

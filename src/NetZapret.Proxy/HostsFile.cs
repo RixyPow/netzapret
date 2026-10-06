@@ -326,9 +326,14 @@ public static class HostsFile
                 found.Add((name, why));
         }
 
+        // Пины на адреса самого сервиса щит не берёт: им десинк нужен
+        // (HostsEditor.DesyncMark, замер 06.10). Имя проходит дальше,
+        // к правилам, — «напрямую» или «через VPN» выведут его и так.
+        var ownAddress = HostsEditor.DesyncPins(hostsPath);
+
         foreach (var (name, addresses) in Read(hostsPath))
         {
-            if (addresses.Count == 0)
+            if (addresses.Count == 0 || ownAddress.Contains(name))
                 continue;
 
             // Все прибитые, и под VPN тоже: адрес такого пина заведён

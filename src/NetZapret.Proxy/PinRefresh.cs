@@ -47,7 +47,15 @@ public static class PinRefresh
 
         try
         {
-            pins = HostsEditor.PinsAll(path);
+            // Пины на адреса самого сервиса (пометка nz:desync, решения
+            // «Напрямую») не обновляются: посредники отдали бы им свой прокси,
+            // а живость такого адреса без десинка не видна — 06.10 у владельца
+            // TCP к адресам Meta из каталога без десинка не соединялся вовсе.
+            var own = HostsEditor.DesyncPins(path);
+
+            pins = HostsEditor.PinsAll(path)
+                .Where(p => !own.Contains(p.Key))
+                .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {

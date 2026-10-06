@@ -83,6 +83,58 @@
                         </Grid>
                     </StackPanel>
                 </Border>
+
+                <!--
+                    Владелец 06.10: «создадим раздел в настройках маршрутов с этими
+                    решениями» — раздел «Напрямую» каталога hosts Zapret GUI.
+                    Адрес прописывается как есть, десинк остаётся (PinSolutions).
+                -->
+                <TextBlock Text="ПИНЫ НАПРЯМУЮ" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
+
+                <TextBlock Style="{StaticResource Caption}" Margin="4,0,0,9" TextWrapping="Wrap"
+                           Text="Имя прибивается в hosts к адресу самого сервиса, а десинк продолжает работать: провайдер режет его имя и там. Из каталога Zapret GUI, раздел «Напрямую»." />
+
+                <Border Style="{StaticResource SettingsGroup}">
+                    <ItemsControl x:Name="Solutions">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <Border Style="{StaticResource RowLine}" Visibility="{Binding LineShown}" />
+
+                                    <Grid Margin="16,13">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0"
+                                                    Opacity="{Binding Fade}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+
+                                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                                Content="{Binding Info}" />
+                                            </StackPanel>
+
+                                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                                       Text="{Binding Caption}" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="1" Text="{Binding Word}" Style="{StaticResource Caption}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                                        <ToggleButton Grid.Column="2" Style="{StaticResource Switch}"
+                                                      IsChecked="{Binding On, Mode=OneWay}"
+                                                      IsEnabled="{Binding Available}"
+                                                      Tag="{Binding Id}"
+                                                      Click="OnSolution" VerticalAlignment="Center" />
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 

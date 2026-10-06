@@ -1,0 +1,572 @@
+# Готовые решения с пином: адрес прописывается в hosts как есть.
+#
+# Источник — раздел «Напрямую» каталога hosts Zapret GUI (loop-uh, MIT,
+# © censorliber), версия 2026.10.01.1; голос Discord — решение Flowseal.
+# Файл заменяется при обновлении программы: свои пины — в окне пина
+# или в catalog.yaml.
+#
+# desync: true — адрес принадлежит самому сервису или его сети доставки:
+# имя в приветствии TLS провайдер режет и там, и десинк такому пину нужен.
+# Строка в hosts получает пометку «# nz:desync», и щит её не берёт.
+# desync: false — адрес посредника: рецепт, выверенный на настоящей сети,
+# рвёт с ним соединение, и щит такой пин держит, как любой другой.
+# Замер 06.10, A/B/A на сети владельца: chatgpt.com и notion.so на прокси
+# XBOX — со щитом 20 из 20, под рецептом своей секции 0 из 10;
+# www.instagram.com, scontent.cdninstagram.com и abs-0.twimg.com на адресах
+# из этого файла — со щитом 0 из 22, под рецептом 6 из 6.
+#
+# needs: ipv6 — без IPv6 решение не предлагается. В остальных адреса IPv6
+# пишутся только там, где IPv6 есть.
+
+solutions:
+
+  - id: instagram
+    name: "Instagram"
+    note: "Адреса самой Meta."
+    desync: true
+    pins:
+      - addresses: [157.240.245.174]
+        names:
+          - b.i.instagram.com
+          - help.instagram.com
+          - z-p42-chat-e2ee-ig.facebook.com
+      - addresses: ["2a03:2880:f330:25:face:b00c:0:4420", "2a03:2880:f342:22:face:b00c:0:4420", 163.70.151.174]
+        names:
+          - instagram.com
+          - www.instagram.com
+      - addresses: [31.13.72.53]
+        names:
+          - static.instagram.com
+      - addresses: ["2a03:2880:f330:c0:face:b00c:0:43fe", "2a03:2880:f36f:c0:face:b00c:0:43fe", 157.240.224.63]
+        names:
+          - scontent.cdninstagram.com
+      - addresses: ["2a03:2880:f213:ca:face:b00c:0:43fe", 157.240.224.63]
+        names:
+          - scontent-hel3-1.cdninstagram.com
+
+  - id: x
+    name: "X (Twitter)"
+    note: "Адреса Twitter и его сетей доставки."
+    desync: true
+    pins:
+      - addresses: [151.101.130.146, 151.101.2.146, 151.101.66.146, 172.66.0.227, 162.159.140.229]
+        names:
+          - x.com
+      - addresses: [104.244.43.131]
+        names:
+          - abs-0.twimg.com
+          - abs-zero.twimg.com
+      - addresses: [199.232.172.159, 172.64.148.197, 104.18.39.59]
+        names:
+          - abs.twimg.com
+      - addresses: [162.159.140.229, 172.66.0.227]
+        names:
+          - api.x.com
+
+  - id: youtube
+    name: "YouTube"
+    note: "Адреса Google. Бывает, что с ним YouTube работает хуже, — тогда выключите."
+    desync: true
+    pins:
+      - addresses: [64.233.162.198, 216.58.201.206, 74.125.205.198, 142.251.14.93, 142.250.117.93, 216.58.206.78]
+        names:
+          - www.youtube.com
+
+  - id: discord
+    name: "Discord"
+    note: "Сайт и переписка — через узел Cloudflare."
+    desync: true
+    pins:
+      - addresses: [23.227.38.74]
+        names:
+          - discord.com
+          - gateway.discord.gg
+          - updates.discord.com
+          - cdn.discordapp.com
+          - cdn.prod.website-files.com
+          - status.discord.com
+
+  - id: discord-voice
+    name: "Голос Discord — решение Flowseal"
+    note: "Голосовые узлы discord.media — на один адрес Cloudflare."
+    desync: true
+    pins:
+      - addresses: [104.25.158.178]
+        names:
+          - finland10000.discord.media
+          - finland10001.discord.media
+          - finland10002.discord.media
+          - finland10003.discord.media
+          - finland10004.discord.media
+          - finland10005.discord.media
+          - finland10006.discord.media
+          - finland10007.discord.media
+          - finland10008.discord.media
+          - finland10009.discord.media
+          - finland10010.discord.media
+          - finland10011.discord.media
+          - finland10012.discord.media
+          - finland10013.discord.media
+          - finland10014.discord.media
+          - finland10015.discord.media
+          - finland10016.discord.media
+          - finland10017.discord.media
+          - finland10018.discord.media
+          - finland10019.discord.media
+          - finland10020.discord.media
+          - finland10021.discord.media
+          - finland10022.discord.media
+          - finland10023.discord.media
+          - finland10024.discord.media
+          - finland10025.discord.media
+          - finland10026.discord.media
+          - finland10027.discord.media
+          - finland10028.discord.media
+          - finland10029.discord.media
+          - finland10030.discord.media
+          - finland10031.discord.media
+          - finland10032.discord.media
+          - finland10033.discord.media
+          - finland10034.discord.media
+          - finland10035.discord.media
+          - finland10036.discord.media
+          - finland10037.discord.media
+          - finland10038.discord.media
+          - finland10039.discord.media
+          - finland10040.discord.media
+          - finland10041.discord.media
+          - finland10042.discord.media
+          - finland10043.discord.media
+          - finland10044.discord.media
+          - finland10045.discord.media
+          - finland10046.discord.media
+          - finland10047.discord.media
+          - finland10048.discord.media
+          - finland10049.discord.media
+          - finland10050.discord.media
+          - finland10051.discord.media
+          - finland10052.discord.media
+          - finland10053.discord.media
+          - finland10054.discord.media
+          - finland10055.discord.media
+          - finland10056.discord.media
+          - finland10057.discord.media
+          - finland10058.discord.media
+          - finland10059.discord.media
+          - finland10060.discord.media
+          - finland10061.discord.media
+          - finland10062.discord.media
+          - finland10063.discord.media
+          - finland10064.discord.media
+          - finland10065.discord.media
+          - finland10066.discord.media
+          - finland10067.discord.media
+          - finland10068.discord.media
+          - finland10069.discord.media
+          - finland10070.discord.media
+          - finland10071.discord.media
+          - finland10072.discord.media
+          - finland10073.discord.media
+          - finland10074.discord.media
+          - finland10075.discord.media
+          - finland10076.discord.media
+          - finland10077.discord.media
+          - finland10078.discord.media
+          - finland10079.discord.media
+          - finland10080.discord.media
+          - finland10081.discord.media
+          - finland10082.discord.media
+          - finland10083.discord.media
+          - finland10084.discord.media
+          - finland10085.discord.media
+          - finland10086.discord.media
+          - finland10087.discord.media
+          - finland10088.discord.media
+          - finland10089.discord.media
+          - finland10090.discord.media
+          - finland10091.discord.media
+          - finland10092.discord.media
+          - finland10093.discord.media
+          - finland10094.discord.media
+          - finland10095.discord.media
+          - finland10096.discord.media
+          - finland10097.discord.media
+          - finland10098.discord.media
+          - finland10099.discord.media
+          - finland10100.discord.media
+          - finland10101.discord.media
+          - finland10102.discord.media
+          - finland10103.discord.media
+          - finland10104.discord.media
+          - finland10105.discord.media
+          - finland10106.discord.media
+          - finland10107.discord.media
+          - finland10108.discord.media
+          - finland10109.discord.media
+          - finland10110.discord.media
+          - finland10111.discord.media
+          - finland10112.discord.media
+          - finland10113.discord.media
+          - finland10114.discord.media
+          - finland10115.discord.media
+          - finland10116.discord.media
+          - finland10117.discord.media
+          - finland10118.discord.media
+          - finland10119.discord.media
+          - finland10120.discord.media
+          - finland10121.discord.media
+          - finland10122.discord.media
+          - finland10123.discord.media
+          - finland10124.discord.media
+          - finland10125.discord.media
+          - finland10126.discord.media
+          - finland10127.discord.media
+          - finland10128.discord.media
+          - finland10129.discord.media
+          - finland10130.discord.media
+          - finland10131.discord.media
+          - finland10132.discord.media
+          - finland10133.discord.media
+          - finland10134.discord.media
+          - finland10135.discord.media
+          - finland10136.discord.media
+          - finland10137.discord.media
+          - finland10138.discord.media
+          - finland10139.discord.media
+          - finland10140.discord.media
+          - finland10141.discord.media
+          - finland10142.discord.media
+          - finland10143.discord.media
+          - finland10144.discord.media
+          - finland10145.discord.media
+          - finland10146.discord.media
+          - finland10147.discord.media
+          - finland10148.discord.media
+          - finland10149.discord.media
+          - finland10150.discord.media
+          - finland10151.discord.media
+          - finland10152.discord.media
+          - finland10153.discord.media
+          - finland10154.discord.media
+          - finland10155.discord.media
+          - finland10156.discord.media
+          - finland10157.discord.media
+          - finland10158.discord.media
+          - finland10159.discord.media
+          - finland10160.discord.media
+          - finland10161.discord.media
+          - finland10162.discord.media
+          - finland10163.discord.media
+          - finland10164.discord.media
+          - finland10165.discord.media
+          - finland10166.discord.media
+          - finland10167.discord.media
+          - finland10168.discord.media
+          - finland10169.discord.media
+          - finland10170.discord.media
+          - finland10171.discord.media
+          - finland10172.discord.media
+          - finland10173.discord.media
+          - finland10174.discord.media
+          - finland10175.discord.media
+          - finland10176.discord.media
+          - finland10177.discord.media
+          - finland10178.discord.media
+          - finland10179.discord.media
+          - finland10180.discord.media
+          - finland10181.discord.media
+          - finland10182.discord.media
+          - finland10183.discord.media
+          - finland10184.discord.media
+          - finland10185.discord.media
+          - finland10186.discord.media
+          - finland10187.discord.media
+          - finland10188.discord.media
+          - finland10189.discord.media
+          - finland10190.discord.media
+          - finland10191.discord.media
+          - finland10192.discord.media
+          - finland10193.discord.media
+          - finland10194.discord.media
+          - finland10195.discord.media
+          - finland10196.discord.media
+          - finland10197.discord.media
+          - finland10198.discord.media
+          - finland10199.discord.media
+          - finland14000.discord.media
+          - finland14001.discord.media
+          - finland14002.discord.media
+          - finland14003.discord.media
+          - finland14004.discord.media
+          - finland14005.discord.media
+          - finland14006.discord.media
+          - finland14007.discord.media
+          - finland14008.discord.media
+          - finland14009.discord.media
+          - finland14010.discord.media
+          - finland14011.discord.media
+          - finland14012.discord.media
+          - finland14013.discord.media
+          - finland14014.discord.media
+          - finland14015.discord.media
+          - finland14016.discord.media
+          - finland14017.discord.media
+          - finland14018.discord.media
+          - finland14019.discord.media
+          - finland14020.discord.media
+          - finland14021.discord.media
+          - finland14022.discord.media
+          - finland14023.discord.media
+          - finland14024.discord.media
+          - finland14025.discord.media
+          - finland14026.discord.media
+          - finland14027.discord.media
+          - finland14028.discord.media
+          - finland14029.discord.media
+          - finland14030.discord.media
+          - finland14031.discord.media
+          - finland14032.discord.media
+          - finland14033.discord.media
+          - finland14034.discord.media
+          - finland14035.discord.media
+          - finland14036.discord.media
+          - finland14037.discord.media
+          - finland14038.discord.media
+          - finland14039.discord.media
+          - finland14040.discord.media
+          - finland14041.discord.media
+          - finland14042.discord.media
+          - finland14043.discord.media
+          - finland14044.discord.media
+          - finland14045.discord.media
+          - finland14046.discord.media
+          - finland14047.discord.media
+          - finland14048.discord.media
+          - finland14049.discord.media
+          - finland14050.discord.media
+          - finland14051.discord.media
+          - finland14052.discord.media
+          - finland14053.discord.media
+          - finland14054.discord.media
+          - finland14055.discord.media
+          - finland14056.discord.media
+          - finland14057.discord.media
+          - finland14058.discord.media
+          - finland14059.discord.media
+          - finland14060.discord.media
+          - finland14061.discord.media
+          - finland14062.discord.media
+          - finland14063.discord.media
+          - finland14064.discord.media
+          - finland14065.discord.media
+          - finland14066.discord.media
+          - finland14067.discord.media
+          - finland14068.discord.media
+          - finland14069.discord.media
+          - finland14070.discord.media
+          - finland14071.discord.media
+          - finland14072.discord.media
+          - finland14073.discord.media
+          - finland14074.discord.media
+          - finland14075.discord.media
+          - finland14076.discord.media
+          - finland14077.discord.media
+          - finland14078.discord.media
+          - finland14079.discord.media
+          - finland14080.discord.media
+          - finland14081.discord.media
+          - finland14082.discord.media
+          - finland14083.discord.media
+          - finland14084.discord.media
+          - finland14085.discord.media
+          - finland14086.discord.media
+          - finland14087.discord.media
+          - finland14088.discord.media
+          - finland14089.discord.media
+          - finland14090.discord.media
+          - finland14091.discord.media
+          - finland14092.discord.media
+          - finland14093.discord.media
+          - finland14094.discord.media
+          - finland14095.discord.media
+          - finland14096.discord.media
+          - finland14097.discord.media
+          - finland14098.discord.media
+          - finland14099.discord.media
+          - finland14100.discord.media
+          - finland14101.discord.media
+          - finland14102.discord.media
+          - finland14103.discord.media
+          - finland14104.discord.media
+          - finland14105.discord.media
+          - finland14106.discord.media
+          - finland14107.discord.media
+          - finland14108.discord.media
+          - finland14109.discord.media
+          - finland14110.discord.media
+          - finland14111.discord.media
+          - finland14112.discord.media
+          - finland14113.discord.media
+          - finland14114.discord.media
+          - finland14115.discord.media
+          - finland14116.discord.media
+          - finland14117.discord.media
+          - finland14118.discord.media
+          - finland14119.discord.media
+          - finland14120.discord.media
+          - finland14121.discord.media
+          - finland14122.discord.media
+          - finland14123.discord.media
+          - finland14124.discord.media
+          - finland14125.discord.media
+          - finland14126.discord.media
+          - finland14127.discord.media
+          - finland14128.discord.media
+          - finland14129.discord.media
+          - finland14130.discord.media
+          - finland14131.discord.media
+          - finland14132.discord.media
+          - finland14133.discord.media
+          - finland14134.discord.media
+          - finland14135.discord.media
+          - finland14136.discord.media
+          - finland14137.discord.media
+          - finland14138.discord.media
+          - finland14139.discord.media
+          - finland14140.discord.media
+          - finland14141.discord.media
+          - finland14142.discord.media
+          - finland14143.discord.media
+          - finland14144.discord.media
+          - finland14145.discord.media
+          - finland14146.discord.media
+          - finland14147.discord.media
+
+  - id: whatsapp
+    name: "WhatsApp"
+    note: "Адреса самой Meta; работает, если есть IPv6."
+    desync: true
+    needs: ipv6
+    pins:
+      - addresses: ["2a03:2880:f37a:120:face:b00c:0:167", "2a03:2880:f36f:120:face:b00c:0:167", 57.144.245.32, 57.144.223.32]
+        names:
+          - www.whatsapp.com
+      - addresses: ["2a03:2880:f36f:120:face:b00c:0:167", "2a03:2880:f213:c3:face:b00c:0:167", 57.144.223.32, 57.144.245.32]
+        names:
+          - web.whatsapp.com
+      - addresses: ["2a03:2880:f37a:120:face:b00c:0:167", "2a03:2880:f20a:c5:face:b00c:0:167", "2a03:2880:f213:c3:face:b00c:0:167", 57.144.223.32, 57.144.245.32]
+        names:
+          - static.whatsapp.net
+      - addresses: ["2a03:2880:f20a:c5:face:b00c:0:167", "2a03:2880:f213:c3:face:b00c:0:167", 57.144.245.32, 57.144.241.32]
+        names:
+          - scontent.whatsapp.net
+
+  - id: github
+    name: "GitHub"
+    note: "Адреса самого GitHub."
+    desync: true
+    pins:
+      - addresses: [140.82.114.3]
+        names:
+          - github.com
+      - addresses: [185.199.110.154]
+        names:
+          - github.githubassets.com
+      - addresses: [185.199.110.133]
+        names:
+          - camo.githubassets.com
+
+  - id: github-content
+    name: "GitHub: загрузки и картинки"
+    note: "Только адреса IPv6."
+    desync: true
+    needs: ipv6
+    pins:
+      - addresses: ["2606:50c0:8000::154", "2606:50c0:8001::154", "2606:50c0:8002::154", "2606:50c0:8003::154"]
+        names:
+          - objects.githubusercontent.com
+          - raw.githubusercontent.com
+          - release-assets.githubusercontent.com
+          - private-user-images.githubusercontent.com
+          - gist.githubusercontent.com
+          - avatars.githubusercontent.com
+          - media.githubusercontent.com
+          - avatars0.githubusercontent.com
+          - avatars1.githubusercontent.com
+          - avatars2.githubusercontent.com
+          - avatars3.githubusercontent.com
+          - avatars4.githubusercontent.com
+          - avatars5.githubusercontent.com
+          - avatars6.githubusercontent.com
+          - avatars7.githubusercontent.com
+          - avatars8.githubusercontent.com
+          - camo.githubusercontent.com
+          - cloud.githubusercontent.com
+
+  - id: rutor
+    name: "Rutor"
+    note: "Через узлы Cloudflare."
+    desync: true
+    pins:
+      - addresses: [173.245.59.219]
+        names:
+          - rutor.info
+          - rutor.is
+      - addresses: [172.64.33.155]
+        names:
+          - d.rutor.info
+          - d.rutor.is
+      - addresses: [52.223.13.41]
+        names:
+          - tracker.openbittorrent.com
+
+  - id: ntc-party
+    name: "ntc.party"
+    note: "Ведёт по IPv4."
+    desync: true
+    pins:
+      - addresses: [130.255.77.28]
+        names:
+          - ntc.party
+
+  - id: render
+    name: "Render"
+    note: "Адрес самого Render."
+    desync: true
+    pins:
+      - addresses: [216.24.57.8]
+        names:
+          - render.com
+
+  - id: supercell
+    name: "Supercell"
+    note: "Адреса посредников: десинк к ним не применяется."
+    desync: false
+    pins:
+      - addresses: [144.31.14.104]
+        names:
+          - accounts.supercell.com
+          - cdn.id.supercell.com
+          - clashofclans.inbox.supercell.com
+          - game-assets.brawlstarsgame.com
+          - security.id.supercell.com
+          - store.supercell.com
+      - addresses: [185.246.223.127]
+        names:
+          - game-assets.clashofclans.com
+          - game-assets.clashroyaleapp.com
+      - addresses: [185.36.125.240]
+        names:
+          - game.brawlstarsgame.com
+      - addresses: [185.36.125.245]
+        names:
+          - game.clashroyaleapp.com
+      - addresses: [45.95.233.23]
+        names:
+          - game.mocogame.com
+      - addresses: [185.36.125.241]
+        names:
+          - game.squadbustersgame.com
+      - addresses: [185.36.125.244]
+        names:
+          - gamea.clashofclans.com

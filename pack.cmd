@@ -100,6 +100,10 @@ rem (nz catalog). Separate from catalog.yaml because that one is preserved
 rem on update and this one must be replaced, or its addresses go stale.
 copy /y "%ROOT%config\catalog.zapret.yaml" "%STAGE%\config\" >nul
 
+rem Ready pin solutions - the "Direct" section of the Zapret GUI hosts catalogue
+rem (Instagram, X, YouTube, Discord...). Replaced on update like the snapshot.
+copy /y "%ROOT%config\pin-solutions.yaml" "%STAGE%\config\" >nul
+
 rem Our domain and address lists - all of them now, not just the handful
 rem Zapret has no entry for. Rules reference them by path, so leaving them out
 rem gives rules that resolve to nothing: an absent list loads as empty, matches
