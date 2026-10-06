@@ -344,6 +344,9 @@ public partial class MainWindow : Window
         // задержка — создание раздела и есть частая её причина.
         UiStallWatch.Section = (sender as RadioButton)?.Content as string ?? name;
 
+        // Ушли из мастера в другой раздел — он закрыт, как «Пропустить».
+        (Section.Content as OnboardingView)?.Leave();
+
         Section.Content = name switch
         {
             "vpn" => new VpnView(),

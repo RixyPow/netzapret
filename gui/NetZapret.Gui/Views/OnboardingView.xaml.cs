@@ -1129,17 +1129,43 @@ public partial class OnboardingView : UserControl
     private void Finish()
     {
         _poll.Stop();
+        MarkDone();
+        Completed?.Invoke(this, EventArgs.Empty);
+    }
 
+    /// <summary>
+    /// Мастер покинут уходом в другой раздел — это тоже его закрытие.
+    /// </summary>
+    /// <remarks>
+    /// До 07.10 отметку ставили только «Готово» и «Пропустить», и ушедший
+    /// в другой раздел встречал мастер при каждом следующем запуске, хотя
+    /// с экрана он уходил «навсегда». Открыть его снова можно из «Ещё».
+    /// </remarks>
+    public void Leave()
+    {
+        _poll.Stop();
+
+        if (MarkDone())
+            Journal.Write("окно", "мастер первого запуска закрыт уходом в другой раздел");
+    }
+
+    /// <summary>Ставит отметку «пройден»; <c>true</c> — её не было и она записана.</summary>
+    private static bool MarkDone()
+    {
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (settings.OnboardingDone)
+                return false;
+
             (settings with { OnboardingDone = true }).Save(AppSettings.DefaultPath);
+            return true;
         }
         catch (Exception)
         {
             // Не записалось — мастер покажется снова при следующем запуске.
+            return false;
         }
-
-        Completed?.Invoke(this, EventArgs.Empty);
     }
 }

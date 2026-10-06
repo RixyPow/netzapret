@@ -35,18 +35,22 @@ public partial class MoreView : UserControl
     /// Открывает мастер первого запуска заново.
     /// </summary>
     /// <remarks>
-    /// Только снимает отметку «пройден» и просит окно показать мастер —
-    /// ничего из уже настроенного (подписку, режим, пресет) не трогает.
-    /// Тот же путь, каким мастер и заканчивается сам, только в обратную
-    /// сторону: <see cref="AppSettings.OnboardingDone"/> обратно в false.
+    /// <para>
+    /// Только просит окно показать мастер — ничего из уже настроенного
+    /// (подписку, режим, пресет) не трогает.
+    /// </para>
+    /// <para>
+    /// Отметку «пройден» (<see cref="AppSettings.OnboardingDone"/>) не снимает.
+    /// До 07.10 снимала, а ставилась она обратно только «Готово» или
+    /// «Пропустить»: открыл мастер посмотреть, ушёл в другой раздел — и он
+    /// встречал при каждом следующем запуске. Владелец 07.10: «почему опять
+    /// запускается мастер первого запуска при билде» — три сборки подряд.
+    /// </para>
     /// </remarks>
     private void OnRestartOnboarding(object sender, RoutedEventArgs e)
     {
         try
         {
-            (AppSettings.Load(AppSettings.DefaultPath) with { OnboardingDone = false })
-                .Save(AppSettings.DefaultPath);
-
             (Window.GetWindow(this) as MainWindow)?.RestartOnboarding();
 
             Status.Text = "Мастер открыт на «Главной».";
