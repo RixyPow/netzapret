@@ -192,6 +192,53 @@ public sealed class PinPickerTests
     }
 
     /// <summary>
+    /// Без IPv6 в сети каталог отдаёт имени первый IPv4, а не первый по приоритету.
+    /// </summary>
+    /// <remarks>
+    /// У instagram.com в разделе «Напрямую» первыми стоят два адреса IPv6,
+    /// и пин на них в сети без IPv6 мёртв (владелец 06.10: «делай учет ipv6»).
+    /// </remarks>
+    [Fact]
+    public void WithoutIpV6TheCatalogGivesTheFirstIpV4()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"netzapret-catalog-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "system"));
+        var path = Path.Combine(root, ZapretCatalog.RelativePath);
+
+        try
+        {
+            using (var db = new SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                db.Open();
+                using var command = db.CreateCommand();
+
+                command.CommandText = """
+                    create table services(service_id text primary key, name text, category text, kind text);
+                    create table dns_profiles(profile_id text primary key, name text);
+                    create table domains(domain_id integer primary key, service_id text, hostname text);
+                    create table dns_answers(domain_id integer, profile_id text, ip_address text, priority integer default 0);
+                    create table hosts_entries(entry_id integer primary key, service_id text, hostname text, ip_address text, priority integer default 0);
+                    insert into services values('hosts.instagram', 'Instagram', 'direct', 'hosts');
+                    insert into hosts_entries(service_id, hostname, ip_address, priority) values
+                        ('hosts.instagram', 'instagram.com', '2a03:2880:f330:25:face:b00c:0:4420', 2),
+                        ('hosts.instagram', 'instagram.com', '163.70.151.174', 4);
+                    """;
+                command.ExecuteNonQuery();
+            }
+
+            var catalog = ZapretCatalog.Discover(root)!;
+
+            Assert.Equal("2a03:2880:f330:25:face:b00c:0:4420", catalog.Answers(["hosts.instagram"], null)["instagram.com"]);
+            Assert.Equal("163.70.151.174", catalog.Answers(["hosts.instagram"], null, ipV6: false)["instagram.com"]);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Неудачный подбор объясняет себя в журнале: кто и чем отказал.
     /// </summary>
     /// <remarks>

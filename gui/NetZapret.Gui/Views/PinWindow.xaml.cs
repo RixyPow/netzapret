@@ -140,6 +140,9 @@ public partial class PinWindow : Window
     private readonly PinTarget _target;
 
     private ZapretCatalog? _catalog;
+
+    /// <summary>Есть ли в сети IPv6; спрашивается раз за окно, при первом выборе набора.</summary>
+    private bool? _ipV6;
     private IReadOnlyList<string> _catalogServices = [];
     private IReadOnlyList<OwnCatalogEntry> _mine = [];
 
@@ -590,7 +593,11 @@ public partial class PinWindow : Window
     {
         if (id.StartsWith("set:", StringComparison.Ordinal))
         {
-            return _catalog!.Answers(_catalogServices, id[4..])
+            // Без IPv6 в сети — первый IPv4 вместо первого по приоритету
+            // (ZapretCatalog.Answers): пин на IPv6 без IPv6 мёртв.
+            _ipV6 ??= await HostsEditor.HasIpV6Async(CancellationToken.None);
+
+            return _catalog!.Answers(_catalogServices, id[4..], _ipV6.Value)
                 .Where(pair => Covers(pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
         }

@@ -246,10 +246,17 @@ public sealed class ZapretCatalog
     /// При нескольких адресах на имя берётся первый по приоритету — так же,
     /// как поступает hosts, где действует первая совпавшая строка.
     /// </para>
+    /// <para>
+    /// Без IPv6 в сети (<paramref name="ipV6"/> = <c>false</c>) адреса IPv6
+    /// пропускаются, и имя получает первый IPv4. У сервисов вида <c>hosts</c>
+    /// IPv6 нередко стоит первым: у instagram.com из семи адресов первые два —
+    /// IPv6, и пин на него в сети без IPv6 мёртв (владелец 06.10: «делай учет ipv6»).
+    /// </para>
     /// </remarks>
     public IReadOnlyDictionary<string, string> Answers(
         IReadOnlyCollection<string> serviceIds,
-        string? profileId)
+        string? profileId,
+        bool ipV6 = true)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -308,15 +315,20 @@ public sealed class ZapretCatalog
                 command.Parameters.AddWithValue($"$s{i++}", id);
         }
 
-        static void Read(SqliteCommand command, Dictionary<string, string> into)
+        void Read(SqliteCommand command, Dictionary<string, string> into)
         {
             using var reader = command.ExecuteReader();
 
             while (reader.Read())
             {
+                var address = reader.GetString(1);
+
+                if (!ipV6 && address.Contains(':'))
+                    continue;
+
                 // Первый выигрывает: порядок задан приоритетом, и затирать
                 // его следующей строкой значит игнорировать этот приоритет.
-                into.TryAdd(reader.GetString(0), reader.GetString(1));
+                into.TryAdd(reader.GetString(0), address);
             }
         }
     }
