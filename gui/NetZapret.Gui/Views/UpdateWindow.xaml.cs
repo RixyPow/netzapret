@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
 using NetZapret.Core.Updates;
 
 namespace NetZapret.Gui.Views;
@@ -74,6 +75,12 @@ public partial class UpdateWindow : Window
             InstallButton.ToolTip = "Ставить нечего: новее этой версии на GitHub нет.";
         }
 
+        BadgeVersion.Text = "v" + latest.Version;
+        BadgeDate.Text = latest.Published is { } published
+            ? published.ToLocalTime().ToString("d MMMM yyyy", Russian)
+            : string.Empty;
+        BadgeDate.Visibility = BadgeDate.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
         ShowSubtitle(_newer ? 1 : 0);
         ShowReleases([latest]);
         ShowDetails();
@@ -88,9 +95,9 @@ public partial class UpdateWindow : Window
             if (_newer)
                 ShowSubtitle(UpdateCheck.Between(all, UpdateCheck.Current, latest.Version).Count);
 
-            // Ниже найденной — все прошлые выпуски, листать вниз (владелец
-            // 06.10: «возможность мотать вниз и видеть другие версии»).
-            // Выпуски новее найденной не показываются: окно о ней.
+            // В ленте — все прошлые выпуски, листаются они (владелец 06.10:
+            // «чтобы кликами на версии можно было читать чейнджлоги, и мотать
+            // можно было как раз эти версии»). Новее найденной — нет: окно о ней.
             ShowReleases(all.Where(r => !UpdateCheck.IsNewer(r.Version, latest.Version)).ToList());
         };
 
@@ -110,66 +117,305 @@ public partial class UpdateWindow : Window
                 + "  ·  источник: GitHub";
     }
 
-    /// <summary>«Что нового» по списку выпусков, новые сверху.</summary>
-    /// <remarks>
-    /// Версии новее установленной — цветом темы, установленная помечена,
-    /// прошлые — обычным цветом: видно, где кончается то, что принесёт
-    /// обновление.
-    /// </remarks>
+    /// <summary>Лента версий и чейнджлог выбранной в ней — сперва найденной.</summary>
     private void ShowReleases(IReadOnlyList<ReleaseInfo> releases)
     {
-        Notes.Children.Clear();
-
-        var ordered = releases
+        _releases = releases
             .OrderByDescending(r => Version.TryParse(r.Version, out var v) ? v : new Version(0, 0))
             .ToList();
 
-        foreach (var release in ordered)
+        ShowTimeline(_releases);
+
+        var start = _releases.FirstOrDefault(r => string.Equals(r.Version, _latest.Version, StringComparison.OrdinalIgnoreCase))
+            ?? _releases.FirstOrDefault();
+
+        if (start is not null)
+            Select(start.Version);
+    }
+
+    /// <summary>Выпуски в ленте, новые сверху.</summary>
+    private IReadOnlyList<ReleaseInfo> _releases = [];
+
+    /// <summary>
+    /// Чейнджлог одной версии — той, что выбрана в ленте.
+    /// </summary>
+    /// <remarks>
+    /// Версия новее установленной — цветом темы, установленная помечена:
+    /// видно, принесёт ли её обновление.
+    /// </remarks>
+    private void ShowNotes(ReleaseInfo release)
+    {
+        Notes.Children.Clear();
+
+        var head = new TextBlock { Margin = new Thickness(0, 0, 0, 4) };
+
+        var version = new Run("v" + release.Version) { FontSize = 22, FontWeight = FontWeights.SemiBold };
+        version.SetResourceReference(
+            TextElement.ForegroundProperty,
+            UpdateCheck.IsNewer(release.Version, UpdateCheck.Current) ? "Accent" : "Text");
+        head.Inlines.Add(version);
+
+        var tail = release.Published is { } when
+            ? "  ·  " + when.ToLocalTime().ToString("d MMMM yyyy", Russian)
+            : string.Empty;
+
+        if (string.Equals(release.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase))
+            tail += "  ·  установлена";
+
+        if (tail.Length > 0)
         {
-            bool first = Notes.Children.Count == 0;
+            var date = new Run(tail);
+            date.SetResourceReference(TextElement.ForegroundProperty, "Muted");
+            head.Inlines.Add(date);
+        }
 
-            if (!first)
+        Notes.Children.Add(head);
+
+        var blocks = ReleaseNotesText.Parse(release.Notes);
+
+        if (blocks.Count == 0)
+        {
+            var none = new TextBlock { Text = "Примечаний к этой версии нет.", TextWrapping = TextWrapping.Wrap };
+            none.SetResourceReference(StyleProperty, "Caption");
+            Notes.Children.Add(none);
+        }
+
+        foreach (var block in blocks)
+            Notes.Children.Add(Render(block));
+
+        NotesScroll.ScrollToTop();
+    }
+
+    /// <summary>Пункты ленты версий по номеру.</summary>
+    private readonly Dictionary<string, Border> _items = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Подсвеченная в ленте версия.</summary>
+    private string? _shown;
+
+    /// <summary>
+    /// Лента версий справа: точка на линии, номер, пометка, дата и счёт пунктов.
+    /// </summary>
+    private void ShowTimeline(IReadOnlyList<ReleaseInfo> ordered)
+    {
+        Timeline.Children.Clear();
+        _items.Clear();
+        _shown = null;
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            var release = ordered[i];
+            bool newer = UpdateCheck.IsNewer(release.Version, UpdateCheck.Current);
+            bool installed = string.Equals(release.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase);
+            bool found = string.Equals(release.Version, _latest.Version, StringComparison.OrdinalIgnoreCase) && _newer;
+
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+
+            // Линия — двумя кусками: сверху до точки и от точки вниз. У первой
+            // нет верхнего, у последней — нижнего, и лента не торчит за края.
+            var rail = new Grid();
+
+            if (i > 0)
+                rail.Children.Add(Line(top: true));
+
+            if (i < ordered.Count - 1)
+                rail.Children.Add(Line(top: false));
+
+            // Круглые версии (0.12.0, 0.13.0) — крупным кружком, вехами
+            // (владелец 06.10); новая и установленная — ещё и в обводке.
+            bool round = IsRound(release.Version);
+            bool marked = found || installed;
+            double size = round ? 14 : 8;
+
+            var dot = new System.Windows.Shapes.Ellipse
             {
-                var line = new Border { Margin = new Thickness(0, 22, 0, 18) };
-                line.SetResourceReference(StyleProperty, "RowLine");
-                Notes.Children.Add(line);
+                Width = size,
+                Height = size,
+                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, Center - size / 2, 0, 0),
+            };
+            dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, newer || installed ? "Accent" : "Muted");
+
+            if (marked)
+            {
+                double ring = size + 10;
+
+                var halo = new System.Windows.Shapes.Ellipse
+                {
+                    Width = ring,
+                    Height = ring,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    Margin = new Thickness(0, Center - ring / 2, 0, 0),
+                    StrokeThickness = 1.5,
+                };
+                halo.SetResourceReference(System.Windows.Shapes.Shape.StrokeProperty, "Accent");
+                halo.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Surface");
+                rail.Children.Add(halo);
             }
 
-            var head = new TextBlock { Margin = new Thickness(0, 0, 0, 4) };
+            rail.Children.Add(dot);
+            row.Children.Add(rail);
 
-            var version = new Run("v" + release.Version) { FontSize = 22, FontWeight = FontWeights.SemiBold };
-            version.SetResourceReference(
-                TextElement.ForegroundProperty,
-                UpdateCheck.IsNewer(release.Version, UpdateCheck.Current) ? "Accent" : "Text");
-            head.Inlines.Add(version);
+            var text = new StackPanel { Margin = new Thickness(4, 4, 8, 10) };
 
-            var tail = release.Published is { } when
-                ? "  ·  " + when.ToLocalTime().ToString("d MMMM yyyy", Russian)
-                : string.Empty;
+            var top = new StackPanel { Orientation = Orientation.Horizontal };
 
-            if (string.Equals(release.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase))
-                tail += "  ·  установлена";
+            var number = new TextBlock { Text = "v" + release.Version, FontSize = round ? 16 : 14, FontWeight = FontWeights.SemiBold };
+            number.SetResourceReference(TextBlock.ForegroundProperty, newer ? "Accent" : "Text");
+            top.Children.Add(number);
 
-            if (tail.Length > 0)
+            if (found || installed)
+                top.Children.Add(Pill(found ? "Новая" : "Установлена", accent: found));
+
+            text.Children.Add(top);
+
+            if (release.Published is { } when)
             {
-                var date = new Run(tail);
-                date.SetResourceReference(TextElement.ForegroundProperty, "Muted");
-                head.Inlines.Add(date);
+                var date = new TextBlock { Text = when.ToLocalTime().ToString("d MMMM yyyy", Russian), Margin = new Thickness(0, 2, 0, 0) };
+                date.SetResourceReference(StyleProperty, "Caption");
+                text.Children.Add(date);
             }
 
-            Notes.Children.Add(head);
+            var (added, fixedCount) = ReleaseNotesText.Count(release.Notes);
+            var counts = Summary(added, fixedCount);
 
-            var blocks = ReleaseNotesText.Parse(release.Notes);
-
-            if (blocks.Count == 0)
+            if (counts.Length > 0)
             {
-                var none = new TextBlock { Text = "Примечаний к этой версии нет.", TextWrapping = TextWrapping.Wrap };
-                none.SetResourceReference(StyleProperty, "Caption");
-                Notes.Children.Add(none);
+                var tally = new TextBlock { Text = counts, Margin = new Thickness(0, 2, 0, 0), FontSize = 11.5 };
+                tally.SetResourceReference(TextBlock.ForegroundProperty, "Faint");
+                text.Children.Add(tally);
             }
 
-            foreach (var block in blocks)
-                Notes.Children.Add(Render(block));
+            Grid.SetColumn(text, 1);
+            row.Children.Add(text);
+
+            var item = new Border
+            {
+                Child = row,
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(6, 0, 0, 0),
+                Background = Brushes.Transparent,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Читать чейнджлог этой версии",
+            };
+
+            var version = release.Version;
+            item.MouseLeftButtonUp += (_, _) => Select(version);
+            item.MouseEnter += (_, _) => { if (_shown != version) item.SetResourceReference(Border.BackgroundProperty, "Raised"); };
+            item.MouseLeave += (_, _) => { if (_shown != version) item.Background = Brushes.Transparent; };
+
+            _items[version] = item;
+            Timeline.Children.Add(item);
+        }
+    }
+
+    /// <summary>Середина точки от верха пункта — по ней ставятся точка, обводка и линия.</summary>
+    private const double Center = 15;
+
+    /// <summary>Круглая версия — x.y.0: веха, крупный кружок в ленте.</summary>
+    internal static bool IsRound(string version)
+    {
+        var parts = version.Trim().TrimStart('v', 'V').Split('.');
+
+        return parts.Length >= 3 && parts[2] == "0" && parts.Skip(3).All(p => p == "0");
+    }
+
+    private static Border Line(bool top)
+    {
+        var line = new Border
+        {
+            Width = 2,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = top ? VerticalAlignment.Top : VerticalAlignment.Stretch,
+            Height = top ? Center : double.NaN,
+            Margin = top ? new Thickness(0) : new Thickness(0, Center, 0, 0),
+        };
+        line.SetResourceReference(Border.BackgroundProperty, "Border");
+        return line;
+    }
+
+    private static Border Pill(string text, bool accent)
+    {
+        var label = new TextBlock { Text = text, FontSize = 11 };
+        label.SetResourceReference(TextBlock.ForegroundProperty, accent ? "OnAccent" : "Text");
+
+        var pill = new Border
+        {
+            Child = label,
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(7, 1, 7, 2),
+            Margin = new Thickness(8, 1, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        pill.SetResourceReference(Border.BackgroundProperty, accent ? "AccentFill" : "Raised");
+        return pill;
+    }
+
+    /// <summary>«3 новых · 2 исправления» — что внутри версии, без чтения её целиком.</summary>
+    internal static string Summary(int added, int fixedCount)
+    {
+        var parts = new List<string>();
+
+        if (added > 0)
+            parts.Add($"{added} {Plural(added, "новое", "новых", "новых")}");
+
+        if (fixedCount > 0)
+            parts.Add($"{fixedCount} {Plural(fixedCount, "исправление", "исправления", "исправлений")}");
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string Plural(int n, string one, string few, string many)
+    {
+        int tens = n % 100, ones = n % 10;
+
+        return tens is >= 11 and <= 14 ? many
+            : ones == 1 ? one
+            : ones is >= 2 and <= 4 ? few
+            : many;
+    }
+
+    /// <summary>Показывает чейнджлог версии и отмечает её в ленте — с «Подробностей» тоже.</summary>
+    private void Select(string version)
+    {
+        if (_releases.FirstOrDefault(r => string.Equals(r.Version, version, StringComparison.OrdinalIgnoreCase)) is not { } release)
+            return;
+
+        if (NotesTab.IsChecked != true)
+        {
+            NotesTab.IsChecked = true;
+            OnTab(NotesTab, new RoutedEventArgs());
+        }
+
+        ShowNotes(release);
+        Highlight(version);
+    }
+
+    /// <summary>Выбранная в ленте версия — для проверок.</summary>
+    internal string? Selected => _shown;
+
+    private void Highlight(string version)
+    {
+        if (string.Equals(version, _shown, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (_shown is not null && _items.TryGetValue(_shown, out var was))
+        {
+            was.Background = Brushes.Transparent;
+            was.BorderThickness = new Thickness(0);
+        }
+
+        _shown = version;
+
+        if (_items.TryGetValue(version, out var now))
+        {
+            now.SetResourceReference(Border.BackgroundProperty, "Raised");
+            now.BorderThickness = new Thickness(1);
+            now.SetResourceReference(Border.BorderBrushProperty, "Border");
+            now.BringIntoView();
         }
     }
 

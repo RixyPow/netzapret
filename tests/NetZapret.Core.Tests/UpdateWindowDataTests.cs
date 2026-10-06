@@ -148,6 +148,34 @@ public sealed class UpdateWindowDataTests
     }
 
     [Fact]
+    public void ItemsAreCountedPerSection()
+    {
+        var (added, fixedCount) = ReleaseNotesText.Count("""
+            # Что нового
+
+            ## Новое:
+
+            **Первое.** Текст.
+
+            **Второе.** Текст.
+
+            - третье пунктом
+
+            ## Исправления:
+
+            **Починено.** Текст.
+
+            ## Чем это собрано и как сверить
+
+            **Не пункт чейнджлога.** Хэши.
+            """);
+
+        Assert.Equal(3, added);
+        Assert.Equal(1, fixedCount);
+        Assert.Equal((0, 0), ReleaseNotesText.Count(null));
+    }
+
+    [Fact]
     public void EmptyNotesGiveNothing()
     {
         Assert.Empty(ReleaseNotesText.Parse(null));

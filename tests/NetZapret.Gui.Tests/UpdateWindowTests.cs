@@ -34,6 +34,47 @@ public sealed class UpdateWindowTests
         });
     }
 
+    [Theory]
+    [InlineData("0.13.0", true)]
+    [InlineData("v0.12.0", true)]
+    [InlineData("1.0.0", true)]
+    [InlineData("0.13.1", false)]
+    [InlineData("0.10", false)]
+    public void RoundVersionsAreMilestones(string version, bool round)
+    {
+        // Владелец 06.10: «круглые версии типа 0.12.0 и 0.13.0 — большими кружками».
+        Assert.Equal(round, UpdateWindow.IsRound(version));
+    }
+
+    [Theory]
+    [InlineData(0, 0, "")]
+    [InlineData(1, 0, "1 новое")]
+    [InlineData(3, 2, "3 новых · 2 исправления")]
+    [InlineData(0, 5, "5 исправлений")]
+    [InlineData(21, 11, "21 новое · 11 исправлений")]
+    public void SummaryCountsInRussian(int added, int fixedCount, string expected) =>
+        Assert.Equal(expected, UpdateWindow.Summary(added, fixedCount));
+
+    [Fact]
+    public void TheFoundVersionIsSelectedInTheTimeline()
+    {
+        Sta.Run(() =>
+        {
+            var window = new UpdateWindow(new ReleaseInfo
+            {
+                Version = "9.9.0",
+                Tag = "v9.9.0",
+                ArchiveUrl = "https://example/NetZapret-9.9.0.zip",
+                Notes = "## Новое:\n\n**Первое.** Текст.",
+            });
+
+            Assert.Equal("9.9.0", window.Selected);
+            Assert.Single(window.Timeline.Children);
+
+            window.Close();
+        });
+    }
+
     [Fact]
     public void AtTheLatestVersionInstallIsOff()
     {

@@ -157,6 +157,45 @@ public static class ReleaseNotesText
     }
 
     /// <summary>
+    /// Сколько пунктов в разделах «Новое» и «Исправления» — для ленты версий.
+    /// </summary>
+    /// <remarks>
+    /// Пункт — абзац с полужирной фразой в начале либо строка списка: так
+    /// чейнджлог и пишется. Прочие разделы («Чем это собрано…») не считаются.
+    /// </remarks>
+    public static (int Added, int Fixed) Count(string? notes)
+    {
+        int added = 0, fixedCount = 0;
+        string? section = null;
+
+        foreach (var block in Parse(notes))
+        {
+            if (block.Kind == NotesBlockKind.Heading)
+            {
+                var head = block.Plain.Trim();
+
+                section = head.StartsWith("Нов", StringComparison.OrdinalIgnoreCase) ? "added"
+                    : head.StartsWith("Исправ", StringComparison.OrdinalIgnoreCase) ? "fixed"
+                    : null;
+
+                continue;
+            }
+
+            bool item = block.Kind == NotesBlockKind.Bullet || block.Lead is not null;
+
+            if (!item)
+                continue;
+
+            if (section == "added")
+                added++;
+            else if (section == "fixed")
+                fixedCount++;
+        }
+
+        return (added, fixedCount);
+    }
+
+    /// <summary>
     /// Строка на куски: <c>**полужирное**</c>, <c>`код`</c>; ссылки <c>[текст](адрес)</c> — их текстом.
     /// </summary>
     /// <remarks>
