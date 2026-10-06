@@ -364,20 +364,18 @@ public partial class StatusView : UserControl
     // прежде кнопка уводила в «Ещё» ради одного вопроса «обновить?».
     private void OnUpdateNow(object sender, RoutedEventArgs e) => Updates.Install();
 
+    // «Что нового» — окно обновления (владелец, 06.10), а не страница выпуска:
+    // там примечания всех пропущенных версий, а браузер — одной кнопкой в нём.
     private void OnUpdateNotes(object sender, RoutedEventArgs e)
     {
         if (UpdateNotice.Available is not { } release)
             return;
 
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = UpdateNotice.PageOf(release), UseShellExecute = true });
-        }
-        catch (Exception)
-        {
-            // Нет браузера — те же примечания видны в «Ещё» при установке.
-        }
+        (Window.GetWindow(this) as MainWindow)?.ShowUpdateWindow(release);
     }
+
+    /// <summary>Перечитать карточку обновления — после «Пропустить версию» в окне.</summary>
+    internal void RefreshUpdate() => ShowUpdate();
 
     /// <summary>
     /// «Не сейчас»: об этой версии больше не напоминать. Точка у «Ещё»

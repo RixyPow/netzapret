@@ -50,13 +50,17 @@ public partial class UpdatePanel : UserControl
         }
     }
 
-    /// <summary>Установка с карточки «Вышла новая версия» — та же, со своим вопросом.</summary>
-    public void Install()
+    /// <summary>Установка с карточки «Вышла новая версия» или из окна обновления — та же.</summary>
+    /// <param name="askFirst">
+    /// <c>false</c> — из окна «Доступно обновление»: «Обновить» там и есть
+    /// согласие, а что произойдёт, сказано в его «Подробностях».
+    /// </param>
+    public void Install(bool askFirst = true)
     {
         if (_release is null && UpdateNotice.Available is { } found)
             _release = found;
 
-        OnInstallUpdate(this, new RoutedEventArgs());
+        _ = InstallAsync(askFirst);
     }
 
     /// <summary>
@@ -165,24 +169,29 @@ public partial class UpdatePanel : UserControl
     /// вариант.
     /// </para>
     /// </remarks>
-    private async void OnInstallUpdate(object sender, RoutedEventArgs e)
+    private void OnInstallUpdate(object sender, RoutedEventArgs e) => _ = InstallAsync(askFirst: true);
+
+    private async Task InstallAsync(bool askFirst)
     {
         if (_release is null)
             return;
 
-        var answer = MessageBox.Show(
-            $"Обновить до {_release.Version}?\n\n"
-            + "Сперва скачается архив — обход в это время работает. Потом движки "
-            + "остановятся, программа закроется, "
-            + "файлы заменятся и она откроется снова.\n\n"
-            + "Настройки, свои маршруты и подставленные адреса сохранятся.",
-            "NetZapret",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
+        if (askFirst)
+        {
+            var answer = MessageBox.Show(
+                $"Обновить до {_release.Version}?\n\n"
+                + "Сперва скачается архив — обход в это время работает. Потом движки "
+                + "остановятся, программа закроется, "
+                + "файлы заменятся и она откроется снова.\n\n"
+                + "Настройки, свои маршруты и подставленные адреса сохранятся.",
+                "NetZapret",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
 
-        if (answer != MessageBoxResult.Yes)
-            return;
+            if (answer != MessageBoxResult.Yes)
+                return;
+        }
 
         InstallButton.IsEnabled = false;
         UpdateButton.IsEnabled = false;

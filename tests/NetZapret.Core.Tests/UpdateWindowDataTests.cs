@@ -1,0 +1,105 @@
+using NetZapret.Core.Updates;
+using Xunit;
+
+namespace NetZapret.Core.Tests;
+
+/// <summary>
+/// Данные окна «Доступно обновление»: выпуски между версиями и разбор чейнджлога.
+/// </summary>
+/// <remarks>
+/// Владелец 06.10, по образцу Zapret GUI: окно показывает «Что нового»
+/// за каждую версию между установленной и новой, а не одну последнюю.
+/// </remarks>
+public sealed class UpdateWindowDataTests
+{
+    private const string Releases = """
+        [
+          { "tag_name": "v0.13.2", "draft": true, "prerelease": false, "body": "черновик", "assets": [] },
+          { "tag_name": "v0.13.1", "draft": false, "prerelease": false, "body": "## Новое:\n\n**Пины напрямую.** Раздел.",
+            "published_at": "2026-10-06T18:00:00Z",
+            "assets": [ { "name": "NetZapret-0.13.1.zip", "browser_download_url": "https://example/a.zip", "size": 110000000 } ] },
+          { "tag_name": "v0.13.0", "draft": false, "prerelease": false, "body": "## Исправления:\n\n**Мастер.**",
+            "assets": [ { "name": "NetZapret-0.13.0.zip", "browser_download_url": "https://example/b.zip", "size": 1 } ] },
+          { "tag_name": "v0.12.3", "draft": false, "prerelease": true, "body": "предварительный", "assets": [] },
+          { "tag_name": "v0.12.2", "draft": false, "prerelease": false, "body": "старое", "assets": [] }
+        ]
+        """;
+
+    [Fact]
+    public void DraftsAndPrereleasesAreSkipped()
+    {
+        var all = UpdateCheck.FromReleases(Releases);
+
+        Assert.Equal(["0.13.1", "0.13.0", "0.12.2"], all.Select(r => r.Version));
+        Assert.Equal("https://example/a.zip", all[0].ArchiveUrl);
+        Assert.Equal(110000000, all[0].ArchiveSize);
+        Assert.Equal(string.Empty, all[2].ArchiveUrl);
+    }
+
+    [Fact]
+    public void BetweenTakesNewerThanCurrentUpToLatest()
+    {
+        var all = UpdateCheck.FromReleases(Releases);
+
+        var between = UpdateCheck.Between(all, current: "0.12.2", latest: "0.13.1");
+
+        Assert.Equal(["0.13.1", "0.13.0"], between.Select(r => r.Version));
+        Assert.Empty(UpdateCheck.Between(all, current: "0.13.1", latest: "0.13.1"));
+    }
+
+    [Fact]
+    public void BetweenOrdersByNumberNotByText()
+    {
+        // «0.10.0» новее «0.9.2», хотя как строка меньше.
+        var all = new[] { "0.9.2", "0.10.0", "0.9.10" }
+            .Select(v => new ReleaseInfo { Version = v, Tag = "v" + v, ArchiveUrl = "" })
+            .ToList();
+
+        Assert.Equal(["0.10.0", "0.9.10", "0.9.2"], UpdateCheck.Between(all, "0.9.0", "0.10.0").Select(r => r.Version));
+    }
+
+    [Fact]
+    public void NotesAreSplitIntoHeadingsAndParagraphs()
+    {
+        var blocks = ReleaseNotesText.Parse("""
+            # Что нового
+
+            ## Новое:
+
+            **Пины напрямую.** Имя прибивается к адресу
+            самого сервиса.
+
+            - пункт со **словом**
+
+            ## Исправления:
+
+            **Карточки видны.** Прежде [не были](https://example).
+            """);
+
+        Assert.Equal(
+            [NotesBlockKind.Heading, NotesBlockKind.Paragraph, NotesBlockKind.Bullet, NotesBlockKind.Heading, NotesBlockKind.Paragraph],
+            blocks.Select(b => b.Kind));
+
+        Assert.Equal("Новое", blocks[0].Plain);
+        Assert.Equal("Пины напрямую. Имя прибивается к адресу самого сервиса.", blocks[1].Plain);
+        Assert.True(blocks[1].Spans[0].Bold);
+        Assert.False(blocks[1].Spans[1].Bold);
+        Assert.Equal(["пункт со ", "словом"], blocks[2].Spans.Select(s => s.Text));
+        Assert.Equal("Карточки видны. Прежде не были.", blocks[4].Plain);
+    }
+
+    [Fact]
+    public void UnclosedStarsStayPlain()
+    {
+        var block = Assert.Single(ReleaseNotesText.Parse("**Начато и не закрыто"));
+
+        Assert.All(block.Spans, s => Assert.False(s.Bold));
+    }
+
+    [Fact]
+    public void EmptyNotesGiveNothing()
+    {
+        Assert.Empty(ReleaseNotesText.Parse(null));
+        Assert.Empty(ReleaseNotesText.Parse("# Что нового\n\n"));
+    }
+}

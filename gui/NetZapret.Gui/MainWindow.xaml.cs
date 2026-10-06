@@ -35,7 +35,15 @@ public partial class MainWindow : Window
 
         _toastTimer.Tick += (_, _) => HideToast();
 
-        UpdateNotice.Changed += () => Dispatcher.InvokeAsync(ShowUpdateBadge);
+        UpdateNotice.Changed += () => Dispatcher.InvokeAsync(() =>
+        {
+            ShowUpdateBadge();
+            OfferUpdateOnce();
+        });
+
+        // Запуск в трей: окно появится позже — тогда и предложим.
+        IsVisibleChanged += (_, _) => OfferUpdateOnce();
+
         _ = CheckForUpdateAsync();
         _ = WarmRoutesAsync();
     }
@@ -97,6 +105,69 @@ public partial class MainWindow : Window
     /// <summary>Точка у «Главной», пока новая версия не поставлена: обновление живёт там.</summary>
     private void ShowUpdateBadge() =>
         RailBadge.SetShown(RailStatus, UpdateNotice.Available is not null);
+
+    /// <summary>Окно обновления уже предлагалось в этом запуске.</summary>
+    private bool _updateOffered;
+
+    /// <summary>
+    /// Показывает «Доступно обновление» один раз за запуск — когда окно на виду.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 06.10: «сделаем такое окно если найдены обновления» — по образцу
+    /// Zapret GUI. Не поверх мастера первого запуска и не о версии, которую
+    /// пропустили («Пропустить версию» и «не сейчас» карточки пишут одно поле,
+    /// DismissedUpdate). Окно, начавшее работу в трее, спросит при первом показе.
+    /// </remarks>
+    private void OfferUpdateOnce()
+    {
+        if (_updateOffered || !IsVisible || WindowState == WindowState.Minimized)
+            return;
+
+        var release = UpdateNotice.Available;
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (!settings.OnboardingDone || !UpdateNotice.ShouldOffer(release, settings))
+            return;
+
+        _updateOffered = true;
+
+        // Следующим ходом очереди: из IsVisibleChanged модальное окно
+        // поднимать рано — главное ещё не дорисовано.
+        Dispatcher.BeginInvoke(new Action(() => ShowUpdateWindow(release!)), DispatcherPriority.ApplicationIdle);
+    }
+
+    /// <summary>Окно «Доступно обновление» и то, что человек в нём выбрал.</summary>
+    public void ShowUpdateWindow(ReleaseInfo release)
+    {
+        var window = new UpdateWindow(release) { Owner = this };
+        window.ShowDialog();
+
+        switch (window.Choice)
+        {
+            case UpdateChoice.Skip:
+                try
+                {
+                    (AppSettings.Load(AppSettings.DefaultPath) with { DismissedUpdate = release.Version })
+                        .Save(AppSettings.DefaultPath);
+                }
+                catch (Exception)
+                {
+                    // Не сохранилось — окно предложит снова при следующем запуске.
+                }
+
+                (Section.Content as StatusView)?.RefreshUpdate();
+                break;
+
+            case UpdateChoice.Install:
+                // Ставит карточка «Обновление» на «Главной»: там прогресс
+                // закачки и ошибки, и путь установки один.
+                Open("status");
+                Dispatcher.BeginInvoke(new Action(() =>
+                    (Section.Content as StatusView)?.Updates.Install(askFirst: false)),
+                    DispatcherPriority.Loaded);
+                break;
+        }
+    }
 
     /// <summary>
     /// Подменяет «Главную» мастером первого запуска, пока он не пройден.
