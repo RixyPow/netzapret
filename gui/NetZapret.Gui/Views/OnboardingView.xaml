@@ -35,8 +35,20 @@
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid HorizontalAlignment="Center" MaxWidth="680">
+    <!--
+        Кнопки шагов — внизу, вне прокрутки (владелец, 06.10, по снимкам
+        сборки 7: в окне 1330×890 при масштабе 125 % «Начать» на первом шаге
+        и «Дальше» на шаге режима уходили под край). Прокручивается только
+        содержимое шага; ширина у обеих частей одна — 680.
+    -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+    <ScrollViewer Grid.Row="0" Style="{StaticResource PageScroll}" Padding="32,28,32,12">
+        <Grid MaxWidth="680">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -110,10 +122,6 @@
                             </StackPanel>
                         </Border>
                     </UniformGrid>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Primary}" Content="Начать" Click="OnIntroNext" />
-                    </StackPanel>
                 </StackPanel>
 
                 <!-- Шаг 2: оформление -->
@@ -174,11 +182,6 @@
                     </ItemsControl>
 
                     <TextBlock x:Name="ThemeStatus" Style="{StaticResource Caption}" Margin="4,6,0,0" TextWrapping="Wrap" />
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
-                        <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnThemeNext" />
-                    </StackPanel>
                 </StackPanel>
 
                 <!-- Шаг 3: подписка на VPN -->
@@ -197,13 +200,6 @@
 
                     <TextBlock x:Name="Step3Status" Style="{StaticResource Caption}"
                                Margin="4,10,0,0" TextWrapping="Wrap" />
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
-                        <Button Style="{StaticResource Ghost}" Content="Нет подписки" Margin="0,0,8,0" Click="OnNoSubscription" />
-                        <Button x:Name="Step3Next" Style="{StaticResource Primary}"
-                                Content="Загрузить и продолжить" Click="OnAddSubscription" />
-                    </StackPanel>
                 </StackPanel>
 
                 <!--
@@ -280,35 +276,21 @@
                         движок», — и пояснение меняется вместе с выбранной карточкой.
                         Те же три пункта и те же слова, что на вкладке DNS
                         (DnsRoutes.Explain); пишется при «Дальше» вместе с режимом.
-                        В одной строке с кнопками, цена пути — под «i»: карточкой,
-                        даже в одну строку, шаг выходил выше окна, и «Дальше» уходило
-                        под край (снимок владельца 06.10, сборка 7: окно 1330×890
-                        при масштабе 125 %).
+                        Строкой, цена пути — под «i»: карточкой шаг выходил выше окна
+                        (снимок владельца 06.10, сборка 7: окно 1330×890 при масштабе
+                        125 %), а с кнопками внизу строка короче и не спорит с режимами.
                     -->
-                    <Grid Margin="0,8,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Text="DNS" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0,10,0" />
-                        <ComboBox x:Name="DnsPick" Grid.Column="1" Width="260" VerticalAlignment="Center"
+                    <StackPanel Orientation="Horizontal" Margin="4,4,0,0">
+                        <TextBlock Text="DNS" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ComboBox x:Name="DnsPick" Width="260" VerticalAlignment="Center"
                                   SelectionChanged="OnDnsPicked"
                                   ToolTip="Через что программа узнаёт адреса сайтов. Сменить можно на вкладке DNS.">
                             <ComboBoxItem Content="авто: через туннель, пока он жив" Tag="Auto" />
                             <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
                             <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
                         </ComboBox>
-                        <ContentControl x:Name="DnsInfo" Grid.Column="2" Style="{StaticResource Info}" Margin="4,0,0,0" />
-
-                        <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
-                            <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
-                        </StackPanel>
-                    </Grid>
+                        <ContentControl x:Name="DnsInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Шаг 5: пробный запуск -->
@@ -321,14 +303,6 @@
                         <TextBlock x:Name="Step4Status" TextWrapping="Wrap"
                                    Text="Ничего ещё не запускалось." />
                     </Border>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnBack" />
-                        <Button x:Name="Step4Start" Style="{StaticResource Primary}"
-                                Content="Запустить" Margin="0,0,8,0" Click="OnStep4Start" />
-                        <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep4Next" />
-                    </StackPanel>
                 </StackPanel>
 
                 <!-- Шаг 6: результат и куда дальше -->
@@ -369,17 +343,50 @@
                                     Click="OnTelegram" VerticalAlignment="Center" />
                         </Grid>
                     </Border>
-
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
-                        <Button Style="{StaticResource Ghost}" Content="Назад"
-                                Margin="0,0,8,0" Click="OnBack" />
-                        <Button Style="{StaticResource Ghost}" Content="Проверить ещё раз"
-                                Margin="0,0,8,0" Click="OnRecheck" />
-                        <Button Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" />
-                    </StackPanel>
                 </StackPanel>
 
             </Grid>
         </Grid>
     </ScrollViewer>
+
+    <!-- Кнопки шага: видна полоса текущего (Show), прочие свёрнуты. -->
+    <Grid Grid.Row="1" MaxWidth="680" Margin="32,10,32,24">
+        <StackPanel x:Name="Step1Buttons" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Style="{StaticResource Primary}" Content="Начать" Click="OnIntroNext" />
+        </StackPanel>
+
+        <StackPanel x:Name="Step2Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+            <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnThemeNext" />
+        </StackPanel>
+
+        <StackPanel x:Name="Step3Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+            <Button Style="{StaticResource Ghost}" Content="Нет подписки" Margin="0,0,8,0" Click="OnNoSubscription" />
+            <Button x:Name="Step3Next" Style="{StaticResource Primary}"
+                    Content="Загрузить и продолжить" Click="OnAddSubscription" />
+        </StackPanel>
+
+        <StackPanel x:Name="StepModeButtons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
+            <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
+        </StackPanel>
+
+        <StackPanel x:Name="Step4Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Style="{StaticResource Ghost}" Content="Назад"
+                    Margin="0,0,8,0" Click="OnBack" />
+            <Button x:Name="Step4Start" Style="{StaticResource Primary}"
+                    Content="Запустить" Margin="0,0,8,0" Click="OnStep4Start" />
+            <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep4Next" />
+        </StackPanel>
+
+        <StackPanel x:Name="Step5Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
+            <Button Style="{StaticResource Ghost}" Content="Назад"
+                    Margin="0,0,8,0" Click="OnBack" />
+            <Button Style="{StaticResource Ghost}" Content="Проверить ещё раз"
+                    Margin="0,0,8,0" Click="OnRecheck" />
+            <Button Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" />
+        </StackPanel>
+    </Grid>
+    </Grid>
 </UserControl>

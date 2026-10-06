@@ -94,12 +94,26 @@ public partial class OnboardingView : UserControl
         _ => Step5,
     };
 
+    /// <summary>Кнопки шага — внизу, вне прокрутки, чтобы не уходили под край.</summary>
+    private StackPanel Buttons(int step) => step switch
+    {
+        1 => Step1Buttons,
+        2 => Step2Buttons,
+        3 => Step3Buttons,
+        4 => StepModeButtons,
+        5 => Step4Buttons,
+        _ => Step5Buttons,
+    };
+
     private void Show(int step)
     {
         _step = step;
 
         for (int i = 1; i <= LastStep; i++)
+        {
             Panel(i).Visibility = i == step ? Visibility.Visible : Visibility.Collapsed;
+            Buttons(i).Visibility = i == step ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         for (int i = 0; i < LastStep; i++)
         {
