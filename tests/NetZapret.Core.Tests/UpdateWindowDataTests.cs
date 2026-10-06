@@ -97,6 +97,57 @@ public sealed class UpdateWindowDataTests
     }
 
     [Fact]
+    public void CodeBlocksKeepTheirLines()
+    {
+        // Так release.cmd дописывает к чейнджлогу хэши: прежде строки блока
+        // склеивались в абзац вместе с обратными кавычками (снимок владельца 06.10).
+        var blocks = ReleaseNotesText.Parse("""
+            ## Чем это собрано и как сверить
+
+            ```
+            NetZapret-0.13.0.zip   3C467F94
+            NetZapret.exe   26A7F2FE
+            ```
+
+            Совпасть должен `NetZapret.exe`. Архив — нет.
+
+            ```Get-FileHash a.zip```
+            """);
+
+        Assert.Equal(
+            [NotesBlockKind.Heading, NotesBlockKind.Code, NotesBlockKind.Paragraph, NotesBlockKind.Code],
+            blocks.Select(b => b.Kind));
+
+        Assert.Equal("NetZapret-0.13.0.zip   3C467F94\nNetZapret.exe   26A7F2FE", blocks[1].Plain);
+        Assert.Equal("Get-FileHash a.zip", blocks[3].Plain);
+
+        var inline = blocks[2].Spans;
+        Assert.Equal(["Совпасть должен ", "NetZapret.exe", ". Архив — нет."], inline.Select(s => s.Text));
+        Assert.True(inline[1].Code);
+        Assert.False(inline[1].Bold);
+    }
+
+    [Fact]
+    public void StarsInsideCodeAreNotBold()
+    {
+        var spans = Assert.Single(ReleaseNotesText.Parse("Маска `**/*.cs` и всё.")).Spans;
+
+        Assert.Equal("**/*.cs", spans[1].Text);
+        Assert.All(spans, s => Assert.False(s.Bold));
+    }
+
+    [Fact]
+    public void BoldLeadIsSeparatedFromTheBody()
+    {
+        var block = Assert.Single(ReleaseNotesText.Parse("**Пины напрямую.** Имя прибивается к адресу."));
+
+        Assert.Equal("Пины напрямую.", block.Lead);
+        Assert.Equal(" Имя прибивается к адресу.", block.Body.Single().Text);
+
+        Assert.Null(Assert.Single(ReleaseNotesText.Parse("Просто текст.")).Lead);
+    }
+
+    [Fact]
     public void EmptyNotesGiveNothing()
     {
         Assert.Empty(ReleaseNotesText.Parse(null));

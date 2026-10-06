@@ -74,20 +74,24 @@ public partial class UpdateWindow : Window
             InstallButton.ToolTip = "Ставить нечего: новее этой версии на GitHub нет.";
         }
 
+        ShowSubtitle(_newer ? 1 : 0);
         ShowReleases([latest]);
         ShowDetails();
 
         Loaded += async (_, _) =>
         {
-            // Промежуточные версии есть только у настоящего обновления.
-            if (!_newer)
+            var all = await UpdateCheck.ReleasesAsync(_work.Token);
+
+            if (all.Count == 0 || !IsLoaded)
                 return;
 
-            var all = await UpdateCheck.ReleasesAsync(_work.Token);
-            var between = UpdateCheck.Between(all, UpdateCheck.Current, latest.Version);
+            if (_newer)
+                ShowSubtitle(UpdateCheck.Between(all, UpdateCheck.Current, latest.Version).Count);
 
-            if (between.Count > 0 && IsLoaded)
-                ShowReleases(between);
+            // Ниже найденной — все прошлые выпуски, листать вниз (владелец
+            // 06.10: «возможность мотать вниз и видеть другие версии»).
+            // Выпуски новее найденной не показываются: окно о ней.
+            ShowReleases(all.Where(r => !UpdateCheck.IsNewer(r.Version, latest.Version)).ToList());
         };
 
         Closed += (_, _) => _work.Cancel();
@@ -96,29 +100,59 @@ public partial class UpdateWindow : Window
     /// <summary>Установка доступна — окно предлагает новее установленного.</summary>
     internal bool OffersInstall => InstallButton.IsEnabled;
 
-    /// <summary>Шапка и «Что нового» по списку выпусков, новые сверху.</summary>
-    private void ShowReleases(IReadOnlyList<ReleaseInfo> releases)
+    private void ShowSubtitle(int versions)
     {
         Subtitle.Text = !_newer
             ? string.Equals(_latest.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase)
                 ? $"{UpdateCheck.Current} — последняя версия  ·  источник: GitHub"
                 : $"Установлена {UpdateCheck.Current}  ·  последняя на GitHub — {_latest.Version}  ·  источник: GitHub"
-            : $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {releases.Count}"
+            : $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {Math.Max(versions, 1)}"
                 + "  ·  источник: GitHub";
+    }
 
+    /// <summary>«Что нового» по списку выпусков, новые сверху.</summary>
+    /// <remarks>
+    /// Версии новее установленной — цветом темы, установленная помечена,
+    /// прошлые — обычным цветом: видно, где кончается то, что принесёт
+    /// обновление.
+    /// </remarks>
+    private void ShowReleases(IReadOnlyList<ReleaseInfo> releases)
+    {
         Notes.Children.Clear();
 
-        foreach (var release in releases)
+        var ordered = releases
+            .OrderByDescending(r => Version.TryParse(r.Version, out var v) ? v : new Version(0, 0))
+            .ToList();
+
+        foreach (var release in ordered)
         {
-            var head = new TextBlock { Margin = new Thickness(0, Notes.Children.Count == 0 ? 0 : 22, 0, 6) };
+            bool first = Notes.Children.Count == 0;
+
+            if (!first)
+            {
+                var line = new Border { Margin = new Thickness(0, 22, 0, 18) };
+                line.SetResourceReference(StyleProperty, "RowLine");
+                Notes.Children.Add(line);
+            }
+
+            var head = new TextBlock { Margin = new Thickness(0, 0, 0, 4) };
 
             var version = new Run("v" + release.Version) { FontSize = 22, FontWeight = FontWeights.SemiBold };
-            version.SetResourceReference(TextElement.ForegroundProperty, "Accent");
+            version.SetResourceReference(
+                TextElement.ForegroundProperty,
+                UpdateCheck.IsNewer(release.Version, UpdateCheck.Current) ? "Accent" : "Text");
             head.Inlines.Add(version);
 
-            if (release.Published is { } when)
+            var tail = release.Published is { } when
+                ? "  ·  " + when.ToLocalTime().ToString("d MMMM yyyy", Russian)
+                : string.Empty;
+
+            if (string.Equals(release.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase))
+                tail += "  ·  установлена";
+
+            if (tail.Length > 0)
             {
-                var date = new Run("  ·  " + when.ToLocalTime().ToString("d MMMM yyyy", Russian));
+                var date = new Run(tail);
                 date.SetResourceReference(TextElement.ForegroundProperty, "Muted");
                 head.Inlines.Add(date);
             }
@@ -139,36 +173,107 @@ public partial class UpdateWindow : Window
         }
     }
 
-    private static FrameworkElement Render(NotesBlock block)
+    /// <summary>Строка из кусков: полужирное, код моноширинным на подложке.</summary>
+    private static TextBlock Inline(IEnumerable<NotesSpan> spans)
     {
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, LineHeight = 20 };
 
-        foreach (var span in block.Spans)
-            text.Inlines.Add(new Run(span.Text) { FontWeight = span.Bold ? FontWeights.SemiBold : FontWeights.Normal });
+        foreach (var span in spans)
+        {
+            var run = new Run(span.Text) { FontWeight = span.Bold ? FontWeights.Bold : FontWeights.Normal };
 
+            if (span.Code)
+            {
+                run.SetResourceReference(TextElement.FontFamilyProperty, "MonoFont");
+                run.SetResourceReference(TextElement.BackgroundProperty, "Raised");
+                run.FontSize = 12;
+            }
+
+            text.Inlines.Add(run);
+        }
+
+        return text;
+    }
+
+    private static FrameworkElement Render(NotesBlock block)
+    {
         switch (block.Kind)
         {
+            // Разделы — как заголовки групп в окнах настроек: малыми прописными.
             case NotesBlockKind.Heading:
-                text.FontSize = 15;
-                text.FontWeight = FontWeights.SemiBold;
-                text.Margin = new Thickness(0, 10, 0, 4);
-                return text;
+                var heading = new TextBlock { Text = block.Plain.ToUpperInvariant(), Margin = new Thickness(0, 14, 0, 8) };
+                heading.SetResourceReference(StyleProperty, "GroupHead");
+                return heading;
+
+            case NotesBlockKind.Code:
+                var code = new TextBlock
+                {
+                    Text = block.Plain,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                    LineHeight = 19,
+                };
+                code.SetResourceReference(TextBlock.FontFamilyProperty, "MonoFont");
+
+                var frame = new Border
+                {
+                    Child = code,
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(12, 8, 12, 8),
+                    Margin = new Thickness(0, 2, 0, 10),
+                    BorderThickness = new Thickness(1),
+                };
+                frame.SetResourceReference(Border.BackgroundProperty, "Raised");
+                frame.SetResourceReference(Border.BorderBrushProperty, "Border");
+                return frame;
 
             case NotesBlockKind.Bullet:
-                var row = new Grid { Margin = new Thickness(4, 2, 0, 4) };
+                var row = new Grid { Margin = new Thickness(2, 0, 0, 6) };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                 row.ColumnDefinitions.Add(new ColumnDefinition());
 
-                var dot = new TextBlock { Text = "•", Margin = new Thickness(0, 0, 8, 0) };
+                var dot = new TextBlock { Text = "•", Margin = new Thickness(0, 0, 9, 0), FontWeight = FontWeights.Bold };
+                dot.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
                 row.Children.Add(dot);
 
-                Grid.SetColumn(text, 1);
-                row.Children.Add(text);
+                var item = Inline(block.Spans);
+                Grid.SetColumn(item, 1);
+                row.Children.Add(item);
                 return row;
 
             default:
-                text.Margin = new Thickness(0, 2, 0, 6);
-                return text;
+                // «**Что изменилось.** Пояснение» — фраза строкой над пояснением:
+                // в Bahnschrift полужирное на глаз почти не отличить (снимок
+                // владельца 06.10), а заголовок пункта — сразу.
+                if (block.Lead is { } lead)
+                {
+                    var pair = new StackPanel { Margin = new Thickness(0, 2, 0, 12) };
+
+                    var title = new TextBlock
+                    {
+                        Text = lead,
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize = 14,
+                        FontWeight = FontWeights.SemiBold,
+                    };
+                    pair.Children.Add(title);
+
+                    var body = block.Body.Where(s => s.Text.Trim().Length > 0).ToList();
+
+                    if (body.Count > 0)
+                    {
+                        var rest = Inline(body.Select((s, i) => i == 0 ? s with { Text = s.Text.TrimStart() } : s));
+                        rest.Margin = new Thickness(0, 3, 0, 0);
+                        rest.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
+                        pair.Children.Add(rest);
+                    }
+
+                    return pair;
+                }
+
+                var paragraph = Inline(block.Spans);
+                paragraph.Margin = new Thickness(0, 2, 0, 10);
+                return paragraph;
         }
     }
 
