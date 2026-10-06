@@ -80,6 +80,20 @@ public sealed record ServicePart
     public string? Note { get; init; }
 
     /// <summary>
+    /// Пока человек не выбрал режим, часть показана «выключено».
+    /// </summary>
+    /// <remarks>
+    /// Для частей, чей список шире самого сервиса. Заводского правила у таких
+    /// нет, и прежде «Маршруты» показывали режим, которым движок решает первый
+    /// адрес списка, — «напрямую» у запасного пути Discord, хотя части не
+    /// действовало ничего. Владелец 07.10, по разбору пересечений: запасной
+    /// путь — 3,4 млн адресов, из них ~791 тыс. Cloudflare и ~664 тыс. Google,
+    /// почти весь список YouTube QUIC и куски голоса Discord и X, — «вот это
+    /// выключи, остальное пока оставь».
+    /// </remarks>
+    public bool DefaultOff { get; init; }
+
+    /// <summary>
     /// Более широкий список, внутри которого лежат имена этой части.
     /// </summary>
     /// <remarks>
@@ -257,6 +271,7 @@ public static class ServiceCatalog
                     List = "config/lists/ipset-discord.txt",
                     ByAddress = true,
                     Note = "3,4 млн адресов, среди них куски Google Cloud и Amazon — включать в крайнем случае",
+                    DefaultOff = true,
                 },
             ],
         },

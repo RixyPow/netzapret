@@ -112,7 +112,10 @@ public static class ServiceRouting
                 Mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine),
                 DomainCount = entries.Count,
                 Explicit = own is not null,
-                Off = own is { Off: true },
+
+                // Своё «выключено» — либо ничего своего у части, выключенной
+                // по умолчанию (ServicePart.DefaultOff).
+                Off = own is { Off: true } || own is null && part.DefaultOff,
                 Example = entries[0],
                 Domains = entries,
             });

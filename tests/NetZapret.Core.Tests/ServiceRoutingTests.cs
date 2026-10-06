@@ -203,6 +203,70 @@ public sealed class ServiceRoutingTests : IDisposable
         Assert.True(parts[0].Explicit);
     }
 
+    /// <summary>
+    /// Часть, выключенная по умолчанию, показана «выключено», пока человек не выбрал режим.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 07.10 о запасном пути Discord: 3,4 млн адресов, из них ~791 тыс.
+    /// Cloudflare и ~664 тыс. Google — «вот это выключи». Прежде показывался режим,
+    /// которым движок решает первый адрес списка, хотя части не действовало ничего.
+    /// </remarks>
+    [Fact]
+    public void ADefaultOffPartIsOffUntilChosen()
+    {
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", "ipset-discord.txt"), ["34.0.48.0/24"]);
+
+        var service = new ServiceDefinition
+        {
+            Name = "Discord",
+            Parts = [new ServicePart { Name = "Запасной путь", List = "config/lists/ipset-discord.txt", ByAddress = true, DefaultOff = true }],
+        };
+
+        var off = ServiceRouting.Describe(service, Load("mode: selective"), _root, EmptyUserRules());
+
+        Assert.True(off[0].Off);
+        Assert.False(off[0].Explicit);
+        Assert.Equal("выключено", off[0].DescribeMode());
+
+        var users = Path.Combine(_root, "rules.user.yaml");
+        var file = UserRulesFile.Load(users);
+        file.Set(MatchKind.IpSet, "config/lists/ipset-discord.txt", RoutingMode.Proxy);
+        file.Save();
+
+        var chosen = ServiceRouting.Describe(service, Load("mode: selective"), _root, UserRulesFile.Load(users));
+
+        Assert.False(chosen[0].Off);
+        Assert.True(chosen[0].Explicit);
+    }
+
+    /// <summary>
+    /// У частей, выключенных по умолчанию, нет заводского правила.
+    /// </summary>
+    /// <remarks>
+    /// Иначе «Маршруты» показывали бы «выключено», а правило действовало:
+    /// заводское гасит только «выключено», выбранное человеком (mode: off).
+    /// </remarks>
+    [Fact]
+    public void DefaultOffPartsHaveNoFactoryRule()
+    {
+        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        {
+            var rules = Path.Combine(d.FullName, "config", "rules.yaml");
+
+            if (!File.Exists(rules))
+                continue;
+
+            var factory = RuleSetLoader.LoadRawRules(rules).Select(r => r.Value.Replace('\\', '/')).ToList();
+            var off = ServiceCatalog.All.SelectMany(s => s.Parts).Where(p => p.DefaultOff).ToList();
+
+            Assert.NotEmpty(off);
+            Assert.All(off, p => Assert.DoesNotContain(p.List, factory, StringComparer.OrdinalIgnoreCase));
+            return;
+        }
+
+        Assert.Fail("config/rules.yaml не найден");
+    }
+
     [Fact]
     public void ARuleWrittenByHandIsRecognisedInTheService()
     {
