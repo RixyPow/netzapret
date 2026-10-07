@@ -109,13 +109,20 @@ public static class BackdropVideo
         Show();
     }
 
+    /// <summary>Окно закрылось — его слой больше не держим (если он ещё наш).</summary>
+    public static void Detach(Shape layer)
+    {
+        if (ReferenceEquals(_layer, layer))
+            _layer = null;
+    }
+
     /// <summary>Тема легла: её видео играет, прежнее закрывается.</summary>
     internal static void Take(ResourceDictionary dictionary)
     {
         var next = dictionary.Contains(Key) ? dictionary[Key] as VideoBackdrop : null;
 
         if (_current is { } old && !ReferenceEquals(old, next))
-            old.Drawing.Player.Close();
+            Close(old);
 
         _current = next;
         Show();
@@ -126,6 +133,24 @@ public static class BackdropVideo
     internal static void Discard(ResourceDictionary dictionary)
     {
         if (dictionary.Contains(Key) && dictionary[Key] is VideoBackdrop video && !ReferenceEquals(video, _current))
+            Close(video);
+    }
+
+    /// <summary>
+    /// Проигрыватель и слой принадлежат потоку, где созданы, — трогать только из него.
+    /// </summary>
+    /// <remarks>
+    /// В программе поток окна один, а в тестах каждое окно — в своём потоке:
+    /// слой главного окна одного теста оставался в статическом поле, тема
+    /// следующего теста лезла к нему из своего потока, и тест падал через
+    /// раз («Вызывающий поток не может получить доступ к данному объекту»,
+    /// 08.10, ThemeWindowsOpen).
+    /// </remarks>
+    private static bool Mine(System.Windows.Threading.DispatcherObject item) => item.CheckAccess();
+
+    private static void Close(VideoBackdrop video)
+    {
+        if (Mine(video.Drawing.Player))
             video.Drawing.Player.Close();
     }
 
@@ -134,7 +159,7 @@ public static class BackdropVideo
     /// </summary>
     public static void Update()
     {
-        if (_current?.Drawing.Player is not { } player)
+        if (_current?.Drawing.Player is not { } player || !Mine(player))
             return;
 
         if (ShouldPlay)
@@ -151,10 +176,10 @@ public static class BackdropVideo
 
     private static void Show()
     {
-        if (_layer is null)
+        if (_layer is null || !Mine(_layer))
             return;
 
-        if (_current is { } video)
+        if (_current is { } video && Mine(video.Drawing))
             _layer.Fill = Themes.Stretch(video.Brush(), video.Fit, video.Size);
         else
             _layer.SetResourceReference(Shape.FillProperty, "BackdropImage");
@@ -162,5 +187,7 @@ public static class BackdropVideo
 
     private static bool ShouldPlay =>
         Motion.Enabled
-        && Application.Current?.MainWindow is { IsVisible: true, WindowState: not WindowState.Minimized };
+        && Application.Current is { } application
+        && Mine(application)
+        && application.MainWindow is { IsVisible: true, WindowState: not WindowState.Minimized };
 }

@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         // Живой фон темы ставится слою кистью напрямую, мимо словаря ресурсов
         // (BackdropVideo): кисть с проигрывателем словарь заморозил бы.
         BackdropVideo.Attach(BackdropLayer);
+        Closed += (_, _) => BackdropVideo.Detach(BackdropLayer);
 
         VersionLabel.Text = "версия " + Version();
         ShowOnboardingIfNeeded();
