@@ -260,6 +260,35 @@ public sealed class SupportReportTests : IDisposable
         Assert.DoesNotContain("releases", redacted);
     }
 
+    /// <summary>
+    /// Имя пользователя в путях скрыто, как бы движок их ни писал.
+    /// </summary>
+    /// <remarks>
+    /// winws2 под Cygwin пишет <c>/cygdrive/c/Users/имя/…</c>, родная сборка
+    /// (с 07.10) — <c>C:/Users/имя/…</c>: прямыми слэшами, как мы их ей и даём
+    /// (<c>WinwsCommandLine.Forward</c>). Второе до 07.10 не скрывалось.
+    /// </remarks>
+    [Fact]
+    public void TheProfileIsHiddenInEverySpelling()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(profile))
+            return;
+
+        var forward = profile.Replace('\\', '/');
+        var cygwin = "/cygdrive/" + char.ToLowerInvariant(profile[0]) + profile[2..].Replace('\\', '/');
+        var log = string.Join('\n',
+            $"Loading hostlist {profile}\\nz\\runtime\\desync-keep.txt",
+            $"Loading hostlist {forward}/nz/runtime/desync-keep.txt",
+            $"Loading hostlist {cygwin}/nz/runtime/desync-keep.txt");
+
+        var redacted = SupportReport.Redact(log, []);
+        var user = Path.GetFileName(profile);
+
+        Assert.DoesNotContain(user, redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(3, redacted.Split("%USERPROFILE%").Length - 1);
+    }
+
     [Fact]
     public void ALongLogKeepsItsBeginningAndEnd()
     {

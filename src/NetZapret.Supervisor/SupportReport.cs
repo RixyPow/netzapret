@@ -622,6 +622,10 @@ public static class SupportReport
             // /cygdrive/c/Users/имя — и имя в нём то же.
             var cygwin = "/cygdrive/" + char.ToLowerInvariant(profile[0]) + profile[2..].Replace('\\', '/');
             result = result.Replace(cygwin, "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
+
+            // А родная сборка winws2 (с 07.10) — прямыми слэшами, C:/Users/имя:
+            // так пути ей и передаются (WinwsCommandLine.Forward).
+            result = result.Replace(profile.Replace('\\', '/'), "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
         }
 
         return result;
