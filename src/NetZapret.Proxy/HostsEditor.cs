@@ -981,7 +981,65 @@ public static class HostsEditor
     {
         var backup = $"{path}.netzapret-{DateTime.Now:yyyyMMdd-HHmmss}.bak";
         File.Copy(path, backup, overwrite: true);
+        PruneBackups(path);
         return backup;
+    }
+
+    /// <summary>Сколько последних копий hosts хранить сверх самой первой.</summary>
+    internal const int BackupsKept = 3;
+
+    /// <summary>
+    /// Убирает лишние копии hosts: остаются самая первая и
+    /// <see cref="BackupsKept"/> последних.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Копия делается перед каждой записью, а убирать их было некому: каждый
+    /// поставленный или снятый пин добавлял файл в системную папку. 07.10
+    /// пользователь нашёл рядом с hosts шесть копий за 11 секунд — «кто все
+    /// эти хосты».
+    /// </para>
+    /// <para>
+    /// Первая — hosts до первой правки NetZapret, единственная, по которой
+    /// можно вернуть всё как было, поэтому она остаётся. Последние — откат
+    /// недавней правки. Промежуточные не нужны никому. Порядок — по имени:
+    /// метка времени в нём идёт от года к секунде, и порядок строк совпадает
+    /// с порядком времени. Удаляются только файлы ровно нашего вида, с меткой
+    /// времени: маска «hosts.netzapret-*» захватила бы любой файл с таким
+    /// началом, а папка системная.
+    /// </para>
+    /// <para>
+    /// Не удалось удалить — не беда: запись hosts важнее уборки.
+    /// </para>
+    /// </remarks>
+    internal static void PruneBackups(string path)
+    {
+        try
+        {
+            var name = Path.GetFileName(path);
+            var ours = new System.Text.RegularExpressions.Regex(
+                "^" + System.Text.RegularExpressions.Regex.Escape(name) + @"\.netzapret-\d{8}-\d{6}\.bak$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            var copies = Directory.GetFiles(Path.GetDirectoryName(Path.GetFullPath(path))!, name + ".netzapret-*")
+                .Where(file => ours.IsMatch(Path.GetFileName(file)))
+                .OrderBy(file => Path.GetFileName(file), StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var stale in copies.Skip(1).SkipLast(BackupsKept))
+            {
+                try
+                {
+                    File.Delete(stale);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     /// <summary>

@@ -140,4 +140,41 @@ public class HostsEditorTests : IDisposable
         Assert.True(File.Exists(backup));
         Assert.Contains("1.2.3.4 example.com", File.ReadAllText(backup));
     }
+
+    /// <summary>
+    /// Копии не копятся: остаются первая (hosts до NetZapret) и три последние.
+    /// </summary>
+    /// <remarks>
+    /// 07.10 у пользователя рядом с hosts лежало шесть копий за 11 секунд,
+    /// и их никто не убирал. Чужой файл с похожим именем не трогается.
+    /// </remarks>
+    [Fact]
+    public void OldBackupsAreRemovedButTheFirstStays()
+    {
+        Write("1.2.3.4 example.com", "5.6.7.8 other.example");
+
+        string Copy(string stamp)
+        {
+            var file = $"{_path}.netzapret-{stamp}.bak";
+            File.WriteAllText(file, stamp);
+            return file;
+        }
+
+        var first = Copy("20261001-010000");
+        var middle = new[] { Copy("20261002-010000"), Copy("20261003-010000"), Copy("20261004-010000") };
+        var recent = new[] { Copy("20261005-010000"), Copy("20261006-010000") };
+        var foreign = _path + ".netzapret-notes.bakup";
+        File.WriteAllText(foreign, "чужое");
+
+        var backup = HostsEditor.Remove([0], _path);
+
+        Assert.True(File.Exists(first), "первая копия — hosts до NetZapret — пропала");
+        Assert.All(middle, file => Assert.False(File.Exists(file), $"осталась лишняя {Path.GetFileName(file)}"));
+        Assert.All(recent, file => Assert.True(File.Exists(file), $"пропала недавняя {Path.GetFileName(file)}"));
+        Assert.True(File.Exists(backup), "пропала только что сделанная копия");
+        Assert.True(File.Exists(foreign), "тронут чужой файл");
+        Assert.Equal(1 + HostsEditor.BackupsKept,
+            Directory.GetFiles(Path.GetDirectoryName(_path)!, Path.GetFileName(_path) + ".netzapret-*.bak")
+                .Count(file => !file.EndsWith(".bakup", StringComparison.OrdinalIgnoreCase)));
+    }
 }
