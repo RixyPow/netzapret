@@ -193,8 +193,10 @@ for %%D in (exe lists lua bin windivert.filter) do (
     )
 )
 
-rem winws2 from bol-van's release over the Zapret GUI copy - same as build.cmd,
-rem see the reasoning there (profile search cost, measured 03.10).
+rem Our own winws2 from tools\ over the Zapret GUI copy - same as build.cmd,
+rem see the reasoning there (profile search cost, measured 03.10 and 07.10).
+rem The native build needs no cygwin1.dll, and then the archive does not
+rem carry it: an LGPL runtime nothing loads is 3 MB and a licence for nothing.
 set "WINWS2="
 for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\winws2.exe" 2^>nul') do set "WINWS2=%%F"
 
@@ -202,6 +204,7 @@ if defined WINWS2 (
     echo Bundling winws2 from %WINWS2%
     copy /y "%WINWS2%" "%ENGINES%\zapret\exe\winws2.exe" >nul
     if errorlevel 1 exit /b 1
+    findstr /m /i /c:"cygwin1.dll" "%WINWS2%" >nul || del /q "%ENGINES%\zapret\exe\cygwin1.dll" 2>nul
 )
 rem Our own lists, delivered where the engine looks for them. Preset sections
 rem name hostlists as "lists/<name>" relative to the Zapret root, and winws2
@@ -256,8 +259,10 @@ rem travel with the copies. The installation ships no licence file at all,
 rem so the text comes from upstream and is placed beside the engine.
 rem
 rem Two notices, because the folder holds two works. winws2 and six lua
-rem modules are bol-van's Zapret 2. Everything else in it - the other lua
-rem modules, lists, blobs, the address catalogue - comes from Zapret GUI by
+rem modules are bol-van's Zapret 2 - winws2 since 07.10 in loop-uh's native
+rem build, a fork whose only licence file is bol-van's MIT. Everything else
+rem in it - the other lua modules, lists, blobs, the address catalogue - comes
+rem from Zapret GUI by
 rem loop-uh (git.zapret.moe), also MIT. Until 30.09 only the first notice
 rem shipped, and the archive credited all of it to bol-van.
 rem

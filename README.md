@@ -40,12 +40,12 @@ VPN берёт то, что закрыто по стране, — а NetZapret �
 | --- | --- | --- | --- |
 | sing-box extended | туннель: серверы подписки и WARP | GPL v3 | [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended) |
 | Zapret 2 | десинк: winws2 и его библиотека lua | MIT | [bol-van/zapret2](https://github.com/bol-van/zapret2) |
+| zapret2-fork, автор — loop-uh | родная сборка winws2 под Windows, без Cygwin | MIT | [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork) |
 | Zapret GUI, автор — loop-uh | сценарии десинка на lua, списки доменов и адресов, пресеты, каталог адресов | MIT | [wiki.zapret.moe](https://wiki.zapret.moe/), [zapretgui](https://git.zapret.moe/zapretdiscordyoutube/zapretgui) |
 | zapret-discord-youtube, автор — Flowseal | game filter: секции игр, список адресов `ipset-all` и образцы пакетов к ним | MIT | [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) |
 | tg-ws-proxy-rs, автор — valnesfjord | прокси для Telegram Desktop без VPN; порт программы [tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) (Flowseal) | MIT | [valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs) |
 | WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
 | Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
-| Cygwin | среда, в которой работает winws2 | LGPL v3 | [cygwin.com](https://cygwin.com/) |
 | ZXing.Net | чтение QR-кодов с ключами | Apache 2.0 | [micjahn/ZXing.Net](https://github.com/micjahn/ZXing.Net) |
 
 То же самое показывает окно: «Ещё» → «О программе».
@@ -770,9 +770,11 @@ TUN. Нужна именно extended: обычный sing-box не знает x
 `C:\Zapret\Dev`; `build.cmd` берёт из установки только то, что читает движок:
 `exe`, `lists`, `lua`, `bin`, `windivert.filter`. Пресеты и свои списки
 из установки не берутся — они наши и лежат в `presets\` и `config\lists\`.
-`winws2.exe` новее, чем в установке, кладётся в `tools\` (сейчас —
-[bol-van/zapret2](https://github.com/bol-van/zapret2/releases) 1.0.5.2) и едет
-поверх.
+`winws2.exe` новее, чем в установке, кладётся в `tools\` и едет поверх.
+Сейчас это родная сборка без Cygwin —
+[zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork/releases)
+от loop-uh, выпуск `v1.0.5.2-41-g204fd66-native`; почему она и как проверять
+новый выпуск — в [tools/README.md](tools/README.md).
 
 **4. tg-ws-proxy-rs** — для вкладки «TG Proxy». Сборку
 `tg-ws-proxy-x86_64-pc-windows-gnu.zip` с
@@ -903,7 +905,7 @@ Object с `KILL_ON_JOB_CLOSE`: осиротевший sing-box удержива�
 об авторстве.
 
 Движки, входящие в сборку, остаются на своих условиях: sing-box — GPL v3,
-Zapret — MIT, tg-ws-proxy-rs — MIT, WinDivert и Cygwin — LGPL, `wintun.dll` —
+Zapret — MIT, tg-ws-proxy-rs — MIT, WinDivert — LGPL, `wintun.dll` —
 проприетарная лицензия WireGuard LLC. Они запускаются отдельными процессами
 и на лицензию NetZapret не влияют. Разбор — в [docs/THIRD-PARTY.md](docs/THIRD-PARTY.md).
 

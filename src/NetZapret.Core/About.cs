@@ -54,6 +54,13 @@ public static class About
             "MIT",
             "https://github.com/bol-van/zapret2"),
 
+        // С 07.10 winws2 в архиве — его сборка под Windows без Cygwin: исходники
+        // bol-van, прослойка вместо cygwin1.dll своя (docs/THIRD-PARTY.md).
+        new("zapret2-fork",
+            "Родная сборка winws2 под Windows, без Cygwin — автор loop-uh",
+            "MIT",
+            "https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork"),
+
         // До 30.09 всё, что едет рядом с winws2, было приписано bol-van.
         // Сценарии lua сверх шести его модулей, списки, пресеты и каталог
         // адресов — из Zapret GUI; автора назвал владелец, лицензия и подпись
@@ -89,10 +96,5 @@ public static class About
             "Сетевой адаптер туннеля",
             "Проприетарная, WireGuard LLC",
             "https://www.wintun.net/"),
-
-        new("Cygwin",
-            "Среда, в которой работает winws2",
-            "LGPL v3",
-            "https://cygwin.com/"),
     ];
 }

@@ -98,6 +98,20 @@ public sealed class AboutTests
     }
 
     /// <summary>
+    /// winws2 с 07.10 — сборка loop-uh без Cygwin: назван он, а Cygwin, которого
+    /// в архиве больше нет, не числится.
+    /// </summary>
+    [Fact]
+    public void NativeWinwsIsCredited()
+    {
+        var fork = Assert.Single(About.Components, c => c.Name == "zapret2-fork");
+
+        Assert.Contains("loop-uh", fork.Role);
+        Assert.StartsWith("https://git.zapret.moe/", fork.Source);
+        Assert.DoesNotContain(About.Components, c => c.Name == "Cygwin");
+    }
+
+    /// <summary>
     /// Все три лицензии едут в архив: уведомление об авторстве — условие MIT.
     /// </summary>
     [Fact]

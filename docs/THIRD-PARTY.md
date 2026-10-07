@@ -11,11 +11,10 @@ NetZapret не работает сам по себе: он управляет д
 | --- | --- | --- |
 | sing-box | GPL v3 или новее | `engines/sing-box/LICENSE` |
 | wintun.dll | проприетарная, © WireGuard LLC | см. wintun.net |
-| Zapret 2 (winws2 и его библиотека lua) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
+| Zapret 2 (winws2 и его библиотека lua; winws2 — родная сборка loop-uh, с 07.10) | MIT, © 2016–2024 bol-van | `engines/zapret/LICENSE.txt` |
 | Zapret GUI (сценарии lua, списки, пресеты, каталог адресов) | MIT, © 2025–2026 censorliber; автор — loop-uh | `engines/zapret/LICENSE-ZapretGUI.txt` |
 | zapret-discord-youtube (game filter, список ipset-all) | MIT, © 2024–2026 Flowseal, © 2016–2026 bol-van | `engines/zapret/LICENSE-Flowseal.txt` |
 | tg-ws-proxy-rs (прокси вкладки «TG Proxy», с 07.10) — порт tg-ws-proxy Flowseal | MIT, © 2026 valnesfjord; MIT, © 2026 Flowseal | `engines/tg-ws-proxy/LICENSE`, `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt` |
-| cygwin1.dll | LGPL v3 | см. cygwin.com |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
 | ZXing.Net (чтение QR-кодов с ключами, с 01.10) | Apache-2.0, Michael Jahn | `LICENSE-ZXing.Net.txt` |
 
@@ -76,15 +75,6 @@ GPLv3 прямо оговаривает такой случай: объедин�
 Запрета на коммерческое использование в лицензии нет. Изменять библиотеку
 и извлекать из неё что-либо запрещено — мы этого и не делаем.
 
-## Cygwin
-
-`engines/zapret/exe/cygwin1.dll`, версия 3.4.10, © Cygwin Authors 1996–2023,
-Red Hat.
-
-**GNU LGPL v3.** Cygwin перелицензирован с GPL на LGPL в 2016 году, начиная
-с версии 2.5.2. LGPL дополнительно требует, чтобы пользователь мог подменить
-библиотеку своей сборкой; динамическая загрузка DLL это обеспечивает сама.
-
 ## WinDivert
 
 `engines/zapret/exe/WinDivert.dll` и драйвер `engines/zapret/exe/Monkey64.sys` —
@@ -111,13 +101,28 @@ Red Hat.
 
 ## Zapret
 
-`engines/zapret/exe/winws2.exe` — версия 1.0.5.2 (коммит `6b6c63e3`), с 03.10
-прямо из выпуска bol-van: сборка кладёт его поверх копии из Zapret GUI, где
-версия 1.0.3. И шесть модулей его библиотеки в `engines/zapret/lua/`:
+`engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
+(автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
+выпуск `v1.0.5.2-41-g204fd66-native`. Это исходники bol-van без изменений,
+на 41 коммит новее выпуска 1.0.5.2, а вместо Cygwin — своя прослойка
+(`nfq2/winnative/` форка): файлы, пути, разбор командной строки, сигналы,
+пакетная отправка пакетов. Внутри статически собраны LuaJIT и zlib.
+Единственный файл лицензии форка — MIT bol-van (`docs/LICENSE.txt`, годы
+2016–2026); своего уведомления у прослойки нет. С 03.10 до 07.10 стоял выпуск
+bol-van 1.0.5.2 (коммит `6b6c63e3`), до того — копия из Zapret GUI, версия 1.0.3;
+сборка кладёт наш winws2 поверх неё.
+
+И шесть модулей его библиотеки в `engines/zapret/lua/`:
 `zapret-lib.lua`, `zapret-antidpi.lua`, `zapret-auto.lua`, `zapret-obfs.lua`,
 `zapret-pcap.lua`, `zapret-tests.lua` — эти по-прежнему из Zapret GUI, то есть
 от версии 1.0.3; номер совместимости Lua у обеих версий один (6). Оттуда же
 часть образцов пакетов в `bin/` и частей фильтра в `windivert.filter/`.
+
+**Cygwin больше не входит.** До 07.10 архив вёз `engines/zapret/exe/cygwin1.dll`
+(версия 3.4.10, © Cygwin Authors 1996–2023, Red Hat, GNU LGPL v3): winws2
+bol-van собран под Cygwin и без него не запускается. Упаковка кладёт его,
+только если выбранный `winws2.exe` на него ссылается; родная сборка — нет.
+У обновившихся старый файл может остаться в папке — его ничто не загружает.
 
 Всё остальное в `engines/zapret/` — не его, а Zapret GUI, о нём следующий
 раздел. До 30.09 этот документ приписывал bol-van папку целиком, и это было

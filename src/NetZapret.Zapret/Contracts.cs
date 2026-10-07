@@ -74,8 +74,8 @@ public sealed record ZapretPaths
     /// Путь к winws2.exe.
     /// </summary>
     /// <remarks>
-    /// Движок лежит в подкаталоге <c>exe</c> рядом с WinDivert.dll и cygwin1.dll,
-    /// а не в корне установки. Рабочим каталогом при запуске всё равно должен
+    /// Движок лежит в подкаталоге <c>exe</c> рядом с WinDivert.dll (и cygwin1.dll,
+    /// если сборка под Cygwin), а не в корне установки. Рабочим каталогом при запуске всё равно должен
     /// быть <see cref="Root"/>: пути к спискам в пресетах заданы относительно него.
     /// </remarks>
     public string ExecutablePath => Path.Combine(Root, "exe", "winws2.exe");

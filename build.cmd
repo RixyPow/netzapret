@@ -220,7 +220,7 @@ rem Copied at build time rather than committed. Two reasons. The lists are
 rem Zapret's data and change with it - a copy in git would be a stale fork of
 rem someone else's work within weeks. And they are third-party binaries: keeping
 rem them out of the repository keeps the licences out of it too, which matters
-rem because cygwin1.dll is GPLv3 and WinDivert is LGPL/GPL.
+rem because WinDivert is LGPL/GPL.
 rem
 rem Only what the engine actually reads gets copied. The installation is 219 MB,
 rem of which _internal is the GUI's Python runtime and logs\ is its history;
@@ -283,7 +283,7 @@ if not defined ZAPRET (
 
 echo Bundling Zapret from %ZAPRET%
 
-rem exe    - winws2 itself, WinDivert and the Cygwin runtime it links against
+rem exe    - winws2 itself, WinDivert and the Cygwin runtime the GUI's copy needs
 rem lists  - hostlists and ipsets the presets reference
 rem lua    - desync recipes loaded by --lua-init and --lua-desync
 rem bin    - blobs referenced by --blob=
@@ -299,7 +299,7 @@ for %%D in (exe lists lua bin windivert.filter) do (
 )
 
 rem ---------------------------------------------------------------------------
-rem winws2 itself from bol-van's release, over the copy from the Zapret GUI.
+rem Our own winws2 from tools\, over the copy from the Zapret GUI.
 rem
 rem The Zapret GUI ships winws2 v1.0.3. In it every profile search checks the
 rem modification time of every hostlist file of every profile before it even
@@ -309,10 +309,18 @@ rem CPU in its single thread. v1.0.5.1 checks the port first ("optimize
 rem profile search. fast checks first"); on port 444 the cost fell from 34-39
 rem to 14-22 ms, and the desync opened the same sites.
 rem
-rem Only the executable: cygwin1.dll is byte-identical between the two, and
-rem WinDivert.dll stays the Zapret GUI one, which loads Monkey64.sys. Put the
-rem release's binaries\windows-x86_64\winws2.exe anywhere under tools\; without
-rem it the build keeps the Zapret GUI copy.
+rem Since 07.10 it is loop-uh's native build of the same engine
+rem (git.zapret.moe/zapretdiscordyoutube/zapret2-fork): bol-van's sources with
+rem the Cygwin layer replaced, no cygwin1.dll. Measured 07.10 on V11 Lite
+rem against bol-van's v1.0.5.2, same rules: a new connection on port 443 cost
+rem 10-12 ms of CPU instead of 27-32, upload at ~200 Mbit/s held 46-47 % of
+rem the core instead of 69-77 %, speed the same.
+rem
+rem Only the executable; WinDivert.dll stays the Zapret GUI one, which loads
+rem Monkey64.sys. Put the winws2.exe anywhere under tools\ - one copy, since
+rem the last one listed wins; without it the build keeps the Zapret GUI copy.
+rem cygwin1.dll goes only when the chosen winws2 does not import it: bol-van's
+rem own release still needs it, and so does the Zapret GUI copy.
 rem ---------------------------------------------------------------------------
 set "WINWS2="
 for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\winws2.exe" 2^>nul') do set "WINWS2=%%F"
@@ -324,6 +332,7 @@ if defined WINWS2 (
         echo Failed to bundle winws2
         exit /b 1
     )
+    findstr /m /i /c:"cygwin1.dll" "%WINWS2%" >nul || del /q "%ENGINES%\zapret\exe\cygwin1.dll" 2>nul
 )
 
 rem ---------------------------------------------------------------------------
