@@ -14,5 +14,8 @@ namespace NetZapret.Gui.Views;
 public static class RestartOffer
 {
     public static void Offer(this UserControl view, string what) =>
-        (Window.GetWindow(view) as MainWindow)?.OfferRestart(what);
+        (Window.GetWindow(view) as MainWindow
+            // Раздел в своём окне (журнал, 07.10) — предложение показывает главное.
+            ?? Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault())
+        ?.OfferRestart(what);
 }

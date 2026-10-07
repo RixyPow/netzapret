@@ -128,6 +128,8 @@ public partial class DoctorView : UserControl
 
     private void OnAsk(object sender, RoutedEventArgs e) => Ask();
 
+    private void OnLog(object sender, RoutedEventArgs e) => LogWindow.Open();
+
     /// <summary>
     /// Собирает отчёт для разбора и показывает его в проводнике.
     /// </summary>

@@ -128,7 +128,7 @@ internal static class SupervisorHost
         var options = Parse(args);
 
         // Весь вывод уходит в файл: у окна консоли нет, и писать ему некуда.
-        // Раздел «Журнал» показывает этот файл отдельным пунктом.
+        // Окно «Журнал» (из «Диагностики») показывает этот файл отдельным пунктом.
         SharedLogWriter? log = null;
 
         if (!string.IsNullOrWhiteSpace(options.LogPath))

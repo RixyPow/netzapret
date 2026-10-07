@@ -55,6 +55,33 @@
                 </Border>
 
                 <!--
+                    Журнал — отдельным окном отсюда (владелец 07.10): пункт меню
+                    уступил место вкладке «TG Proxy». Рядом с отчётом: журнал
+                    читают с той же неполадкой, с которой собирают отчёт.
+                -->
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Журнал движков" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Что говорят sing-box, winws2, надзор и окно: через какой выход шло имя, что ответил сервер, где споткнулся запуск. Открывается отдельным окном — его можно держать рядом." />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Click="OnLog" VerticalAlignment="Center" Padding="12,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,8,0" />
+                                <TextBlock Text="Открыть журнал" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!--
                     «Куда пойдёт имя» рядом с диагностикой, а не в маршрутах.
                     Вопрос задают, когда сервис уходит не туда, — то есть
                     в ту же минуту, когда открывают этот раздел.

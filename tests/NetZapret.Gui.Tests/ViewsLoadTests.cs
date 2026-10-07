@@ -61,6 +61,18 @@ public sealed class ViewsLoadTests
     /// с эмодзи-флагами, когда <c>InvariantGlobalization</c> ещё не был
     /// отменён для этого проекта.
     /// </remarks>
+    /// <summary>Журнал — с 07.10 отдельным окном из «Диагностики», а не разделом.</summary>
+    [Fact]
+    public void The_log_window_is_created_without_throwing()
+    {
+        Sta.Run(() =>
+        {
+            var window = new LogWindow();
+            Assert.NotNull(window.Log);
+            window.Close();
+        });
+    }
+
     [Fact]
     public void The_window_itself_is_created_without_throwing()
     {

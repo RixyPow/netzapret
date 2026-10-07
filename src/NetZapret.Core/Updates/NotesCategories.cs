@@ -55,8 +55,8 @@ public static class NotesCategories
         new("dns", "DNS", []),
         new("hosts", "Файл hosts", ["hosts"]),
         new("watch", "Наблюдение", []),
-        new("log", "Журнал", []),
-        new("doctor", "Диагностика", []),
+        // Журнал с 07.10 — окно из «Диагностики», а не пункт меню.
+        new("doctor", "Диагностика", ["Журнал"]),
         new("look", "Оформление", []),
         new("more", "Ещё", []),
         new("general", "Общее", []),

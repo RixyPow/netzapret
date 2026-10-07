@@ -358,7 +358,6 @@ public partial class MainWindow : Window
             "dns" => new DnsView(),
             "hosts" => new HostsView(),
             "watch" => new WatchView(),
-            "log" => new LogView(),
             "doctor" => new DoctorView(),
             "look" => new AppearanceView(),
             "more" => new MoreView(),

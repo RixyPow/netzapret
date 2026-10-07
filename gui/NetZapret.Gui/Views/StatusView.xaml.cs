@@ -216,7 +216,7 @@ public partial class StatusView : UserControl
 
     private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
 
-    private void OnQuickLog(object sender, RoutedEventArgs e) => Open("log");
+    private void OnQuickLog(object sender, RoutedEventArgs e) => LogWindow.Open();
 
     private void OnQuickDoctor(object sender, RoutedEventArgs e) => Open("doctor");
 

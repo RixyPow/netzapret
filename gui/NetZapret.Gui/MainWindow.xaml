@@ -86,7 +86,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="DNS" Tag="dns" local:MenuIcon.Glyph="&#xE968;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Файл hosts" Tag="hosts" local:MenuIcon.Glyph="&#xE8A5;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Наблюдение" Tag="watch" local:MenuIcon.Glyph="&#xE9D2;" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="Журнал" Tag="log" local:MenuIcon.Glyph="&#xE8FD;" Checked="OnSection" />
+                        <!-- «Журнал» — с 07.10 окном из «Диагностики» (LogWindow): место в меню отдано «TG Proxy». -->
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" local:MenuIcon.Glyph="&#xE9D9;" Checked="OnSection" />
 
                         <Border Height="1" Background="{DynamicResource Border}" Margin="22,12,22,10" />
