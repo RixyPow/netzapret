@@ -19,14 +19,14 @@ namespace NetZapret.Proxy;
 /// страны — один вход с одним ключом, и пачка из 16–26 проверок разом
 /// закрывала его на минуту. Работающий движок меряет свои выходы сам —
 /// на вход не больше <see cref="PerEntry"/> разом, всего не больше восьми
-/// (<see cref="ClashApi.MeasureGentlyAsync"/>). Пробнику, которому раньше
-/// отдавалось до восьми серверов разом без оглядки на вход, серверы идут
-/// волнами — в волне не больше <see cref="PerEntry"/> с входа.
+/// (<see cref="ClashApi.MeasureGentlyAsync"/>). Пробнику — до восьми серверов
+/// разом без оглядки на вход: волны по два с входа владелец 07.10 вернул
+/// назад как слишком медленные.
 /// </para>
 /// </remarks>
 public static class ServerSweep
 {
-    /// <summary>Проверок одного входа разом.</summary>
+    /// <summary>Проверок одного входа разом — у замера руками движка.</summary>
     /// <remarks>
     /// Было по одному; владелец 07.10: «на двух он стабильно работал, просто
     /// не надо перебарщивать» — Trust держит две проверки разом. Вход ронял
@@ -137,16 +137,19 @@ public static class ServerSweep
             TotalTimeout = defaults.StartupTimeout + timeout,
         };
 
-        foreach (var wave in Waves(rest))
-        {
-            await probe.RunManyAsync(
-                wave,
-                options,
-                result => Record(result.ServerTag, result.Success, result.Latency?.TotalMilliseconds),
-                cancellationToken);
+        // Пробнику — все разом, до восьми одновременно (ProbeOptions.Parallelism),
+        // без оглядки на вход. С 07.10 (a931cc9) он шёл волнами, не больше двух
+        // с входа, и двадцать серверов Trust мерились десятью волнами; владелец
+        // в тот же вечер: «верни проверку как была, а то 2 за раз это очень
+        // медленно». Что восемь разом закрывают вход Trust, не замерено:
+        // закрывали 16–26 (28.09).
+        await probe.RunManyAsync(
+            rest,
+            options,
+            result => Record(result.ServerTag, result.Success, result.Latency?.TotalMilliseconds),
+            cancellationToken);
 
-            cancellationToken.ThrowIfCancellationRequested();
-        }
+        cancellationToken.ThrowIfCancellationRequested();
 
         health.Save();
 
@@ -194,30 +197,6 @@ public static class ServerSweep
         }
 
         health.Save();
-    }
-
-    /// <summary>
-    /// Серверы волнами: в каждой не больше <paramref name="perEntry"/> с одного входа.
-    /// </summary>
-    /// <remarks>
-    /// Вход — адрес и порт: у Trust все страны на одном, у других продавцов
-    /// у каждой страны свой. Первая волна — первые серверы всех входов, вторая —
-    /// следующие, и так далее; порядок внутри входа — как в подписке.
-    /// </remarks>
-    public static IReadOnlyList<IReadOnlyList<ProxyServer>> Waves(IReadOnlyList<ProxyServer> servers, int perEntry = PerEntry)
-    {
-        perEntry = Math.Max(1, perEntry);
-
-        var byEntry = servers
-            .GroupBy(Entry, StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.ToList())
-            .ToList();
-
-        int depth = byEntry.Count == 0 ? 0 : (byEntry.Max(g => g.Count) + perEntry - 1) / perEntry;
-
-        return Enumerable.Range(0, depth)
-            .Select(i => (IReadOnlyList<ProxyServer>)byEntry.SelectMany(g => g.Skip(i * perEntry).Take(perEntry)).ToList())
-            .ToList();
     }
 
     private static string Entry(ProxyServer server) => $"{server.Host}:{server.Port}";
