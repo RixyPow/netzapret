@@ -58,16 +58,32 @@ public sealed record ThemeTile
         {
             try
             {
-                var bitmap = new BitmapImage();
-                bitmap.BeginInit();
-                bitmap.UriSource = new Uri(background.Image);
-                bitmap.DecodePixelWidth = 240;
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.EndInit();
-                bitmap.Freeze();
+                BitmapSource? bitmap;
 
-                image = Frozen(new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill });
-                dim = background.Dim;
+                if (background.IsVideo)
+                {
+                    // Живой фон — кадром, который показывает проводник: mp4
+                    // картинкой не раскодируется, и плитка выходила пустой
+                    // (владелец 07.10: «нету рыбки»).
+                    bitmap = VideoPoster.Load(background.Image, size: 240);
+                }
+                else
+                {
+                    var picture = new BitmapImage();
+                    picture.BeginInit();
+                    picture.UriSource = new Uri(background.Image);
+                    picture.DecodePixelWidth = 240;
+                    picture.CacheOption = BitmapCacheOption.OnLoad;
+                    picture.EndInit();
+                    picture.Freeze();
+                    bitmap = picture;
+                }
+
+                if (bitmap is not null)
+                {
+                    image = Frozen(new ImageBrush(bitmap) { Stretch = Stretch.UniformToFill });
+                    dim = background.Dim;
+                }
             }
             catch (Exception)
             {
