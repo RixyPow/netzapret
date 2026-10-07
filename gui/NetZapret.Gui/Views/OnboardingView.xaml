@@ -280,31 +280,55 @@
                         (снимок владельца 06.10, сборка 7: окно 1330×890 при масштабе
                         125 %), а с кнопками внизу строка короче и не спорит с режимами.
                     -->
-                    <StackPanel Orientation="Horizontal" Margin="4,4,0,0">
-                        <TextBlock Text="DNS" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                        <ComboBox x:Name="DnsPick" Width="260" VerticalAlignment="Center"
+                    <!--
+                        Прокси Telegram (владелец, 07.10: «по аналогии с настройкой днс
+                        так же и включение тг вс прокси на вкладке с выбором режима»).
+                        Стоит то, что в настройках; пишется при «Дальше» вместе с режимом
+                        и DNS (TgWsProxy.Switch). Под «i» — нужен ли он при выбранном режиме.
+                        Выключатель на подложке той же ширины и вида, что список DNS
+                        (владелец 07.10: «сделай фон для прокси телеграм» — голый
+                        выключатель терялся на арте темы), подписи — одной колонкой,
+                        чтобы поле и подложка начинались с одного места.
+                    -->
+                    <Grid Margin="4,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="DNS" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <ComboBox Grid.Column="1" x:Name="DnsPick" Width="260" VerticalAlignment="Center"
                                   SelectionChanged="OnDnsPicked"
                                   ToolTip="Через что программа узнаёт адреса сайтов. Сменить можно на вкладке DNS.">
                             <ComboBoxItem Content="авто: через туннель, пока он жив" Tag="Auto" />
                             <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
                             <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
                         </ComboBox>
-                        <ContentControl x:Name="DnsInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
-                    </StackPanel>
+                        <ContentControl Grid.Column="2" x:Name="DnsInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
 
-                    <!--
-                        Прокси Telegram (владелец, 07.10: «по аналогии с настройкой днс
-                        так же и включение тг вс прокси на вкладке с выбором режима»).
-                        Стоит то, что в настройках; пишется при «Дальше» вместе с режимом
-                        и DNS (TgWsProxy.Switch). Под «i» — нужен ли он при выбранном режиме.
-                    -->
-                    <StackPanel Orientation="Horizontal" Margin="4,10,0,0">
-                        <TextBlock Text="Прокси Telegram" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
-                        <ToggleButton x:Name="TgPick" Style="{StaticResource Switch}" VerticalAlignment="Center"
-                                      ToolTipService.ShowOnDisabled="True"
-                                      ToolTip="Telegram Desktop без VPN. Сменить можно на вкладке «TG Proxy»." />
-                        <ContentControl x:Name="TgInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
-                    </StackPanel>
+                        <TextBlock Grid.Row="1" Text="Прокси Telegram" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,10,12,0" />
+                        <Border Grid.Row="1" Grid.Column="1" Width="260" Margin="0,10,0,0" Padding="12,4,8,4"
+                                Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}"
+                                BorderThickness="1.5" CornerRadius="10"
+                                ToolTip="Telegram Desktop без VPN. Сменить можно на вкладке «TG Proxy».">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="TgPickState" VerticalAlignment="Center" Text="выключен" />
+                                <ToggleButton Grid.Column="1" x:Name="TgPick" Style="{StaticResource Switch}" VerticalAlignment="Center"
+                                              ToolTipService.ShowOnDisabled="True"
+                                              Checked="OnTgPicked" Unchecked="OnTgPicked" />
+                            </Grid>
+                        </Border>
+                        <ContentControl Grid.Row="1" Grid.Column="2" x:Name="TgInfo" Style="{StaticResource Info}" Margin="4,10,0,0" />
+                    </Grid>
                 </StackPanel>
 
                 <!-- Шаг 5: пробный запуск -->

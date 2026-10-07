@@ -899,7 +899,21 @@ public partial class OnboardingView : UserControl
         if (!TgPick.IsEnabled)
             TgPick.ToolTip = "Прокси Telegram нет в этой сборке.";
 
+        ShowTgState();
         ShowDnsHint();
+    }
+
+    /// <summary>Подпись на подложке выключателя прокси — что сейчас выбрано.</summary>
+    private void ShowTgState() =>
+        TgPickState.Text = !TgPick.IsEnabled ? "нет в этой сборке"
+            : TgPick.IsChecked == true ? "включён"
+            : "выключен";
+
+    // Поднимается и при разборе разметки, когда подписи ещё нет.
+    private void OnTgPicked(object sender, RoutedEventArgs e)
+    {
+        if (IsInitialized && TgPickState is not null)
+            ShowTgState();
     }
 
     private WorkMode? PickedMode() =>
