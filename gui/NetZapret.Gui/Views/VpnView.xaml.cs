@@ -1865,10 +1865,41 @@ public partial class VpnView : UserControl
             await MeasureAsync([row]);
     }
 
-    private async void OnMeasure(object sender, RoutedEventArgs e) => await MeasureAsync(_rows);
+    /// <summary>Идёт замер — кнопка «Замерить все» его останавливает.</summary>
+    private bool _sweeping;
+
+    /// <summary>Замер остановлен кнопкой, а не уходом с вкладки.</summary>
+    private bool _stoppedByHand;
+
+    /// <remarks>
+    /// Пока идёт замер, кнопка — «Остановить» (владелец 07.10: «добавь
+    /// возможность остановить замер»). Прежде замер останавливал только уход
+    /// с вкладки, а при двадцати неработающих серверах он шёл минуты.
+    /// </remarks>
+    private async void OnMeasure(object sender, RoutedEventArgs e)
+    {
+        if (_sweeping)
+        {
+            _stoppedByHand = true;
+            _work?.Cancel();
+
+            MeasureButton.IsEnabled = false;
+            MeasureButton.Content = "Останавливаю…";
+            return;
+        }
+
+        await MeasureAsync(_rows);
+    }
 
     private async Task MeasureAsync(IReadOnlyList<SubRow> which)
     {
+        // Тест пинга одной подписки посреди общего замера оборвал бы его.
+        if (_sweeping)
+        {
+            Status.Text = "Идёт замер — дождитесь его или остановите.";
+            return;
+        }
+
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
         // Уже прочитанные серверы, с тегами пула, а не свежее чтение панели:
@@ -1913,8 +1944,10 @@ public partial class VpnView : UserControl
         _work?.Cancel();
         _work = new CancellationTokenSource();
 
-        MeasureButton.IsEnabled = false;
-        MeasureButton.Content = "Измеряю…";
+        _sweeping = true;
+        _stoppedByHand = false;
+
+        MeasureButton.Content = "Остановить";
 
         // Полоса и подписи у папок: замер идёт десятками секунд и до этого
         // выглядел зависанием. Строки оживали по одной, а понять, идёт ли
@@ -1958,7 +1991,8 @@ public partial class VpnView : UserControl
                         // Счёт и на кнопке тоже. Полоса и строка состояния
                         // стоят вверху раздела, а смотрят во время замера
                         // на список серверов — и оттуда их попросту не видно.
-                        MeasureButton.Content = $"{done} из {servers.Count}…";
+                        if (!_stoppedByHand)
+                            MeasureButton.Content = $"Остановить · {done} из {servers.Count}";
 
                         Status.Text = $"Измерено {done} из {servers.Count}…";
                         Reshow();
@@ -1969,6 +2003,14 @@ public partial class VpnView : UserControl
                 SelectorGroup);
 
             Status.Text = $"Отвечают {alive} из {servers.Count}. Замер сохранён — меню увидит те же цифры.";
+        }
+        catch (OperationCanceledException) when (_stoppedByHand)
+        {
+            // Остановлен кнопкой — замеренное до того не пропадает.
+            _health.Save();
+
+            Status.Text = $"Замер остановлен на {done} из {servers.Count}: замеренное сохранено, "
+                + "у остальных серверов — прежние замеры.";
         }
         catch (OperationCanceledException)
         {
@@ -1986,6 +2028,9 @@ public partial class VpnView : UserControl
         }
         finally
         {
+            _sweeping = false;
+            _stoppedByHand = false;
+
             MeasureButton.IsEnabled = true;
             MeasureButton.Content = "Замерить все";
 

@@ -114,6 +114,10 @@ public static class ServerSweep
             }
         }
 
+        // Остановлен посреди замера движком — дальше не идём, и итог не сохраняем:
+        // это решает зовущий («Остановить» сохраняет замеренное, уход с вкладки — нет).
+        cancellationToken.ThrowIfCancellationRequested();
+
         var probe = new ProxyProbe(singBox);
 
         // Внешний адрес здесь не нужен, а его поиск стоит секунд на каждом сервере.
