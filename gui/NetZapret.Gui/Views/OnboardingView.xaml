@@ -39,7 +39,9 @@
         Кнопки шагов — внизу, вне прокрутки (владелец, 06.10, по снимкам
         сборки 7: в окне 1330×890 при масштабе 125 % «Начать» на первом шаге
         и «Дальше» на шаге режима уходили под край). Прокручивается только
-        содержимое шага; ширина у обеих частей одна — 680.
+        содержимое шага. Обе части — на всю ширину окна (владелец 07.10:
+        «каждое окно что мы делаем должно растягиваться на весь экран»;
+        до того мастер был не шире 680, и на широком окне по бокам пустовало).
     -->
     <Grid>
         <Grid.RowDefinitions>
@@ -48,7 +50,7 @@
         </Grid.RowDefinitions>
 
     <ScrollViewer Grid.Row="0" Style="{StaticResource PageScroll}" Padding="32,28,32,12">
-        <Grid MaxWidth="680">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -388,7 +390,7 @@
     </ScrollViewer>
 
     <!-- Кнопки шага: видна полоса текущего (Show), прочие свёрнуты. -->
-    <Grid Grid.Row="1" MaxWidth="680" Margin="32,10,32,24">
+    <Grid Grid.Row="1" Margin="32,10,32,24">
         <StackPanel x:Name="Step1Buttons" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Style="{StaticResource Primary}" Content="Начать" Click="OnIntroNext" />
         </StackPanel>
