@@ -215,6 +215,7 @@ public partial class VpnView : UserControl
         _exitTimer.Tick += async (_, _) =>
         {
             await ShowExitAsync();
+            await ProbeExitAsync();
             await RefreshMeasuresAsync();
         };
     }
@@ -296,6 +297,82 @@ public partial class VpnView : UserControl
         // здесь одна короткая строка, чтобы карточка ленты не прыгала по высоте
         // (владелец, 01.10).
         ShowPickLine(_pickBase);
+    }
+
+    /// <summary>Живая проверка текущего выхода: тег, ответил ли, задержка и когда.</summary>
+    private (string Tag, bool Ok, double? Ms, DateTimeOffset At)? _probe;
+
+    private bool _probing;
+    private int _probeTick;
+
+    /// <summary>Каждый какой тик таймера выхода (3 с) проверять выход: раз в 15 с.</summary>
+    private const int ProbeEvery = 5;
+
+    /// <summary>
+    /// Пока вкладка открыта — один запрос через движок к текущему выходу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 08.10: карточка выхода «должна отображать сервер и его статус
+    /// в реальном времени». Имя движок называл и прежде (раз в 3 с), а «В работе»
+    /// значило только «движки запущены», задержка же была последним замером —
+    /// иной раз получасовой давности. Сторож, который проверяет выход сам,
+    /// у владельца выключен («Проверка сервера выключена»).
+    /// </para>
+    /// <para>
+    /// Один запрос к одному выходу раз в 15 с и сразу при смене выхода — не залп
+    /// (CLAUDE.md, «Продавцов не бить залпом»): сторож делает так же раз в 30 с,
+    /// Happ — 2–4 сервера в минуту. Пока идёт «Замерить все», не проверяем.
+    /// Удачный замер движок помнит и сам; неудачный — нет, поэтому ответ
+    /// держим здесь и накладываем поверх (<see cref="Seen"/>).
+    /// </para>
+    /// </remarks>
+    private async Task ProbeExitAsync()
+    {
+        var (running, tag, _) = _live;
+
+        if (!running || tag is null || _probing || _measuring.Count > 0
+            || tag.StartsWith("auto", StringComparison.OrdinalIgnoreCase) || tag == TunnelBypass.DirectTag)
+        {
+            return;
+        }
+
+        // Новый выход — сразу; тот же — раз в ProbeEvery тиков.
+        if (_probe?.Tag == tag && ++_probeTick % ProbeEvery != 0)
+            return;
+
+        _probeTick = 0;
+        _probing = true;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            using var api = new ClashApi();
+            var delay = await api.MeasureAsync(tag, Ping.UrlOf(settings), Ping.TimeoutOf(settings), CancellationToken.None);
+
+            if (!IsLoaded)
+                return;
+
+            _probe = (tag, delay is not null, delay?.TotalMilliseconds, DateTimeOffset.Now);
+            ShowCurrent();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            // Движок не ответил на сам вопрос — о выходе это ничего не говорит.
+        }
+        finally
+        {
+            _probing = false;
+        }
+    }
+
+    /// <summary>Сколько назад, с секундами: «8 с», «2 мин» — проверка идёт раз в 15 с.</summary>
+    private static string SecondsAgo(DateTimeOffset at)
+    {
+        var passed = DateTimeOffset.Now - at;
+
+        return passed.TotalSeconds < 60 ? $"{Math.Max(0, passed.TotalSeconds):0} с" : $"{passed.TotalMinutes:0} мин";
     }
 
     /// <summary>Примечание надзора о туннеле: «временная замена…»; <c>null</c> — нет.</summary>
@@ -386,11 +463,27 @@ public partial class VpnView : UserControl
                 };
         }
 
-        // Метка состояния: зелёная, пока движки работают.
-        var key = running ? "Accent" : "Faint";
+        // Живая проверка этого выхода (ProbeExitAsync) — если есть и свежая.
+        var probe = running && tag is not null && _probe is { } p && p.Tag == tag
+            && DateTimeOffset.Now - p.At < TimeSpan.FromMinutes(1)
+            ? p
+            : ((string Tag, bool Ok, double? Ms, DateTimeOffset At)?)null;
+
+        if (probe is { } checkedNow && CurrentDetail.Text.Length > 0)
+            CurrentDetail.Text += $" Проверен {SecondsAgo(checkedNow.At)} назад.";
+
+        // Метка состояния: зелёная, пока выход отвечает; красная — не ответил
+        // на последнюю проверку; без проверки — по тому, работают ли движки.
+        var key = probe is { Ok: false } ? "Danger" : running ? "Accent" : "Faint";
         CurrentDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, key);
         CurrentState.SetResourceReference(TextBlock.ForegroundProperty, key);
-        CurrentState.Text = running ? "В работе" : desyncOnly ? "Туннель выключен" : "Движки остановлены";
+        CurrentState.Text = probe switch
+        {
+            { Ok: true, Ms: { } ms } => $"Отвечает · {ms:0} мс",
+            { Ok: true } => "Отвечает",
+            { Ok: false } => "Не отвечает",
+            _ => running ? "В работе" : desyncOnly ? "Туннель выключен" : "Движки остановлены",
+        };
 
         ShowStats(tag, found.Owner, found.Server);
         ShowRecent(running ? live : null);
@@ -1012,11 +1105,21 @@ public partial class VpnView : UserControl
     {
         var known = _health.Find(tag);
 
-        if (!_engine.TryGetValue(tag, out var engine) || (known is not null && known.CheckedAt >= engine.At))
-            return known;
+        if (_engine.TryGetValue(tag, out var engine) && (known is null || known.CheckedAt < engine.At))
+        {
+            known = (known ?? new ServerHealth { Tag = tag, Success = true, CheckedAt = engine.At })
+                with { Success = true, LatencyMs = engine.Ms, CheckedAt = engine.At };
+        }
 
-        return (known ?? new ServerHealth { Tag = tag, Success = true, CheckedAt = engine.At })
-            with { Success = true, LatencyMs = engine.Ms, CheckedAt = engine.At };
+        // Живая проверка текущего выхода свежее всего прочего — и неудачная
+        // тоже: её движок не помнит (ProbeExitAsync).
+        if (_probe is { } live && live.Tag == tag && (known is null || known.CheckedAt < live.At))
+        {
+            known = (known ?? new ServerHealth { Tag = tag, Success = live.Ok, CheckedAt = live.At })
+                with { Success = live.Ok, LatencyMs = live.Ms, CheckedAt = live.At };
+        }
+
+        return known;
     }
 
     /// <summary>Каждый какой тик таймера выхода (3 с) перечитывать замеры.</summary>
