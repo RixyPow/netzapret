@@ -39,6 +39,10 @@ namespace NetZapret.Gui.Views;
 /// который поднимает ровно выбранное.
 /// </para>
 /// <para>
+/// 07.10 (владелец: «шаги 5 и 6 в мастере стоит объединить») — снова пять:
+/// пробный запуск и результат стали одним шагом «Запуск и проверка».
+/// </para>
+/// <para>
 /// Шага «что у вас не работает» здесь нет — он был первым в исходном
 /// варианте и просил выбрать сервис из полусотни, ничего не решая.
 /// Результат меряет сеть в целом, а не одно выбранное имя.
@@ -52,7 +56,7 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class OnboardingView : UserControl
 {
-    private const int LastStep = 6;
+    private const int LastStep = 5;
 
     /// <summary>Мастер закрыт — завершением или пропуском.</summary>
     public event EventHandler? Completed;
@@ -90,8 +94,7 @@ public partial class OnboardingView : UserControl
         2 => Step2,
         3 => Step3,
         4 => StepMode,
-        5 => Step4,
-        _ => Step5,
+        _ => Step4,
     };
 
     /// <summary>Кнопки шага — внизу, вне прокрутки, чтобы не уходили под край.</summary>
@@ -101,8 +104,7 @@ public partial class OnboardingView : UserControl
         2 => Step2Buttons,
         3 => Step3Buttons,
         4 => StepModeButtons,
-        5 => Step4Buttons,
-        _ => Step5Buttons,
+        _ => Step4Buttons,
     };
 
     private void Show(int step)
@@ -142,9 +144,6 @@ public partial class OnboardingView : UserControl
 
         if (step == 5)
             PrepareTrial();
-
-        if (step == 6)
-            _ = RunCheckAsync();
     }
 
     /// <summary>
@@ -162,11 +161,6 @@ public partial class OnboardingView : UserControl
         {
             case 3:
                 SkipSubscription();
-                break;
-
-            case 5:
-                _poll.Stop();
-                Show(6);
                 break;
 
             case LastStep:
@@ -999,11 +993,15 @@ public partial class OnboardingView : UserControl
         Show(5);
     }
 
-    // --- Шаг 5: пробный запуск ---------------------------------------------
+    // --- Шаг 5: запуск и проверка -------------------------------------------
+
+    /// <summary>Проверка сети после подъёма движков уже пошла — второй раз сама не идёт.</summary>
+    private bool _checkedAfterStart;
 
     private void PrepareTrial()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+        _checkedAfterStart = false;
 
         var planned = new List<string>();
 
@@ -1022,12 +1020,40 @@ public partial class OnboardingView : UserControl
 
         Step4Detail.Text = !startable
             ? "Запускать пока нечего: ни пресет, ни подписка не заданы. Можно вернуться шагом назад "
-              + "или просто посмотреть результат — там же будет сказано, что чинить."
+              + "или проверить сеть как есть — проверка скажет, что чинить."
             : "Поднимутся: " + (planned.Count > 1 ? string.Join(", ", planned.SkipLast(1)) + " и " + planned[^1] : planned[0]) + ". "
-              + "Пара секунд на десинк, до полуминуты на туннель.";
+              + "Пара секунд на десинк, до полуминуты на туннель. Как поднимутся — сеть проверится сама.";
 
         Step4Start.IsEnabled = startable;
         Step4Status.Text = "Ничего ещё не запускалось.";
+
+        ResultTitle.Text = "Проверка сети";
+        ResultVerdict.Visibility = Visibility.Collapsed;
+        ResultBody.Text = startable
+            ? "Пойдёт сама после запуска. Запускать не хотите — «Проверить» покажет, как сеть отвечает сейчас."
+            : "«Проверить» покажет, как сеть отвечает сейчас.";
+
+        ShowTrialButtons(started: false);
+
+        // Мастер открыт заново при работающих движках — запускать нечего,
+        // проверять можно сразу.
+        if (SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive())
+        {
+            Step4Detail.Text = "Движки уже работают — сеть проверяется под ними. Режим, выбранный на прошлом шаге, "
+                + "применится после перезапуска движков на «Главной».";
+            UpdateTrial();
+        }
+    }
+
+    /// <summary>
+    /// Пока движки не подняты, главная кнопка — «Запустить»; подняты — она
+    /// уходит, и главной становится «Готово».
+    /// </summary>
+    private void ShowTrialButtons(bool started)
+    {
+        Step4Start.Visibility = started ? Visibility.Collapsed : Visibility.Visible;
+        FinishButton.SetResourceReference(StyleProperty, started ? "Primary" : "Ghost");
+        RecheckButton.Content = started ? "Проверить ещё раз" : "Проверить";
     }
 
     /// <summary>
@@ -1077,16 +1103,18 @@ public partial class OnboardingView : UserControl
         Step4Status.Text = healthy
             ? "Движки работают."
             : "Движки запущены, но не все службы в порядке — подробности на «Главной». "
-              + "Можно идти дальше: проверка на следующем шаге покажет, помогло ли.";
-    }
+              + "Проверка ниже покажет, помогло ли.";
 
-    private void OnStep4Next(object sender, RoutedEventArgs e)
-    {
-        _poll.Stop();
-        Show(6);
-    }
+        ShowTrialButtons(started: true);
 
-    // --- Шаг 6: результат ----------------------------------------------------
+        // Прежде проверка была следующим шагом и шла по «Дальше»; теперь —
+        // сама, один раз, как только движки поднялись.
+        if (!_checkedAfterStart)
+        {
+            _checkedAfterStart = true;
+            _ = RunCheckAsync();
+        }
+    }
 
     private void OnRecheck(object sender, RoutedEventArgs e) => _ = RunCheckAsync();
 

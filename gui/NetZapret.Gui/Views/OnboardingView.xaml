@@ -333,23 +333,26 @@
                     </Grid>
                 </StackPanel>
 
-                <!-- Шаг 5: пробный запуск -->
+                <!--
+                    Шаг 5: запуск и проверка. До 07.10 — два шага, «Пробный запуск»
+                    и «Результат»; владелец: «шаги 5 и 6 в мастере стоит объединить».
+                    Проверка сети идёт сама, как только движки поднялись; не стали
+                    запускать — «Проверить» меряет сеть как есть.
+                -->
                 <StackPanel x:Name="Step4" Visibility="Collapsed">
-                    <TextBlock Text="Пробный запуск" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Text="Запуск и проверка" FontSize="17" FontWeight="SemiBold" />
                     <TextBlock x:Name="Step4Detail" Style="{StaticResource Caption}"
                                Margin="0,8,0,0" TextWrapping="Wrap" />
 
                     <Border Style="{StaticResource Card}" Margin="0,18,0,0">
-                        <TextBlock x:Name="Step4Status" TextWrapping="Wrap"
-                                   Text="Ничего ещё не запускалось." />
+                        <StackPanel>
+                            <TextBlock Text="Движки" FontWeight="SemiBold" />
+                            <TextBlock x:Name="Step4Status" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                       TextWrapping="Wrap" Text="Ничего ещё не запускалось." />
+                        </StackPanel>
                     </Border>
-                </StackPanel>
 
-                <!-- Шаг 6: результат и куда дальше -->
-                <StackPanel x:Name="Step5" Visibility="Collapsed">
-                    <TextBlock Text="Результат" FontSize="17" FontWeight="SemiBold" />
-
-                    <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                    <Border Style="{StaticResource Card}" Margin="0,10,0,0">
                         <StackPanel>
                             <TextBlock x:Name="ResultTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
 
@@ -357,7 +360,7 @@
                                        Margin="0,8,0,0" />
 
                             <TextBlock x:Name="ResultBody" Style="{StaticResource Caption}"
-                                       Margin="0,10,0,0" TextWrapping="Wrap" />
+                                       Margin="0,6,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
@@ -412,20 +415,18 @@
             <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
         </StackPanel>
 
+        <!--
+            «Запустить» — главная, пока движки не поднялись; поднялись — она
+            уходит, и главной становится «Готово» (ShowTrialButtons).
+        -->
         <StackPanel x:Name="Step4Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
             <Button Style="{StaticResource Ghost}" Content="Назад"
                     Margin="0,0,8,0" Click="OnBack" />
+            <Button x:Name="RecheckButton" Style="{StaticResource Ghost}" Content="Проверить"
+                    Margin="0,0,8,0" Click="OnRecheck" />
             <Button x:Name="Step4Start" Style="{StaticResource Primary}"
                     Content="Запустить" Margin="0,0,8,0" Click="OnStep4Start" />
-            <Button Style="{StaticResource Ghost}" Content="Дальше" Click="OnStep4Next" />
-        </StackPanel>
-
-        <StackPanel x:Name="Step5Buttons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
-            <Button Style="{StaticResource Ghost}" Content="Назад"
-                    Margin="0,0,8,0" Click="OnBack" />
-            <Button Style="{StaticResource Ghost}" Content="Проверить ещё раз"
-                    Margin="0,0,8,0" Click="OnRecheck" />
-            <Button Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" />
+            <Button x:Name="FinishButton" Style="{StaticResource Ghost}" Content="Готово" Click="OnFinish" />
         </StackPanel>
     </Grid>
     </Grid>
