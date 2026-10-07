@@ -226,6 +226,7 @@ public static class ThemeLoader
             Colors = colors,
             Fonts = fonts,
             Background = background,
+            HomeFullWidth = json.TryGetProperty("homeFullWidth", out var wide) && wide.ValueKind == JsonValueKind.True,
         };
 
         // Контраст без картинки сверяется здесь; с картинкой — ещё раз в окне,

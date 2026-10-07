@@ -36,6 +36,17 @@ public sealed record Theme
     /// <summary>Фон окна; <c>null</c> — сплошной цвет <c>backdrop</c>.</summary>
     public ThemeBackground? Background { get; init; }
 
+    /// <summary>
+    /// «Главная» с этой темой — на всю ширину, без колонки под арт.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 08.10 про «Рыбку»: «по умолчанию растягивать главную на всё
+    /// окно». Не всякий фон годится в узкую колонку справа: у ролика 132×74
+    /// в ней остаётся размытое пятно. Выключатель «Главная на всю ширину»
+    /// в «Оформлении» растягивает её при любой теме; тема — только при себе.
+    /// </remarks>
+    public bool HomeFullWidth { get; init; }
+
     public ThemeColor this[string slot] => Colors[slot];
 }
 

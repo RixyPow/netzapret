@@ -181,6 +181,11 @@ public sealed class ThemeLoaderTests : IDisposable
 
         Assert.True(video.Ok, string.Join("; ", video.Problems));
         Assert.True(video.Theme!.Background!.IsVideo);
+        Assert.False(video.Theme.HomeFullWidth);
+
+        // Тема может попросить «Главную» на всю ширину (08.10, «Рыбка»).
+        var wide = Write("wide", """{ "base": "dark", "homeFullWidth": true }""");
+        Assert.True(wide.Theme!.HomeFullWidth);
         Assert.EndsWith("fish.mp4", video.Theme.Background.Image);
 
         var gif = Write("gif", """

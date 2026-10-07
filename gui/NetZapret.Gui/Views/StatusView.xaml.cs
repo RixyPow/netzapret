@@ -1536,7 +1536,9 @@ public partial class StatusView : UserControl
     /// </remarks>
     private void ShowWidth(AppSettings settings)
     {
-        if (settings.HomeFullWidth)
+        // Тема тоже может попросить всю ширину — «Рыбка» (08.10): её видео
+        // в узкой колонке справа — размытое пятно (Theme.HomeFullWidth).
+        if (settings.HomeFullWidth || Themes.WideHome)
         {
             ContentColumn.MaxWidth = double.PositiveInfinity;
             ArtColumn.Width = new GridLength(0);
