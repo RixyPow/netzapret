@@ -127,6 +127,23 @@ public sealed class ServerMemoryTests : IDisposable
         Assert.NotNull(ServerHealthCache.Load(HealthPath).Find("🇯🇵 Япония"));
     }
 
+    /// <summary>«Очистить память замеров» у подписки — только её серверы.</summary>
+    [Fact]
+    public void OneSubscriptionIsForgottenOthersStay()
+    {
+        Check("🇩🇪 Германия · Trust", true, Monday);
+        Check("🇳🇱 Нидерланды · Trust", false, Monday);
+        Check("🇫🇮 Финляндия — TLS XHTTP", true, Monday);
+
+        int forgotten = ServerHealthCache.Forget(["🇩🇪 Германия · Trust", "🇳🇱 Нидерланды · Trust", "🇮🇹 Италия · Trust"], HealthPath);
+
+        Assert.Equal(2, forgotten);
+
+        var memory = ServerHealthCache.Load(HealthPath);
+        Assert.Equal(["🇫🇮 Финляндия — TLS XHTTP"], memory.Entries.Keys);
+        Assert.Equal(0, ServerHealthCache.Forget(["🇮🇹 Италия · Trust"], HealthPath));
+    }
+
     [Fact]
     public void ButtonClearsEverything()
     {

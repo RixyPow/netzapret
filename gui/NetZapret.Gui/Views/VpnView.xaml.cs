@@ -1592,6 +1592,7 @@ public partial class VpnView : UserControl
             var keysMenu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
             keysMenu.Items.Add(Item("\uE72C", "Обновить", async () => await RefreshOneAsync(name)));
             keysMenu.Items.Add(Item("\uEC4A", "Тест пинга", async () => await MeasureAsync([row]), row.CanCheck));
+            keysMenu.Items.Add(Item("", "Очистить память замеров", () => ForgetMeasures(row)));
             keysMenu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
             keysMenu.Items.Add(Item("\uE74D", "Удалить все ключи…", ConfirmRemoveKeys));
             keysMenu.IsOpen = true;
@@ -1602,6 +1603,7 @@ public partial class VpnView : UserControl
 
         menu.Items.Add(Item("", "Обновить", async () => await RefreshOneAsync(name)));
         menu.Items.Add(Item("", "Тест пинга", async () => await MeasureAsync([row]), row.CanCheck));
+        menu.Items.Add(Item("", "Очистить память замеров", () => ForgetMeasures(row)));
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(Item("", first ? "Уже первая" : "Закрепить наверху", () => MoveToTop(name), !first));
         menu.Items.Add(Item("", "Копировать ссылку", () => CopyUrl(row)));
@@ -1610,6 +1612,40 @@ public partial class VpnView : UserControl
         menu.Items.Add(Item("", "Удалить…", () => ConfirmRemove(name)));
 
         menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Забывает замеры серверов одной подписки — задержки, «через раз», «не отвечает».
+    /// </summary>
+    /// <remarks>
+    /// Владелец 07.10: кнопка в «Настройках туннеля» стирает память всех
+    /// подписок, а нужна и для одной. Теги — и пула, и исходные: замеры
+    /// подписки в работе лежат под первыми, выключенной — под вторыми.
+    /// </remarks>
+    private void ForgetMeasures(SubRow row)
+    {
+        if (_sweeping)
+        {
+            Status.Text = "Идёт замер — дождитесь его или остановите.";
+            return;
+        }
+
+        try
+        {
+            int forgotten = ServerHealthCache.Forget(row.Pooled.Concat(row.Raw).Select(s => s.Tag));
+
+            _health.Reload();
+            Reshow();
+
+            Status.Text = forgotten > 0
+                ? $"Память замеров «{row.Entry.Name}» очищена: серверов {forgotten}. Задержки появятся со следующим замером, "
+                  + "нестабильные вернутся в автоподбор при следующем запуске движков."
+                : $"У «{row.Entry.Name}» в памяти замеров ничего нет.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось очистить: " + ex.GetBaseException().Message;
+        }
     }
 
     private static MenuItem Item(string glyph, string text, Action act, bool enabled = true)

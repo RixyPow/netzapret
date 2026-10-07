@@ -342,6 +342,35 @@ public sealed class ServerHealthCache
         return forgotten;
     }
 
+    /// <summary>
+    /// Забывает названные серверы целиком — «Очистить память замеров» у одной подписки.
+    /// </summary>
+    /// <returns>Сколько серверов было в памяти и забыто.</returns>
+    /// <remarks>
+    /// Владелец 07.10: «ты не добавил кнопку очистить память для КОНКРЕТНОЙ
+    /// подписки. Кнопка в настройках очищает всю память». Двойник — тот же узел
+    /// у другого продавца под тем же тегом — забывается вместе: замер у них один.
+    /// </remarks>
+    public static int Forget(IEnumerable<string> tags, string? path = null)
+    {
+        var target = path ?? DefaultPath;
+        var forget = new HashSet<string>(tags, StringComparer.Ordinal);
+
+        using var gate = Gate();
+
+        var entries = Read(target);
+        int removed = entries.Keys.Count(forget.Contains);
+
+        if (removed == 0)
+            return 0;
+
+        foreach (var tag in forget)
+            entries.Remove(tag);
+
+        Write(target, entries);
+        return removed;
+    }
+
     /// <summary>Самая давняя проверка, что ещё в памяти; памяти нет — <c>null</c>.</summary>
     public DateTimeOffset? OldestCheck() =>
         _entries.Values.SelectMany(Times).Cast<DateTimeOffset?>().Min();
