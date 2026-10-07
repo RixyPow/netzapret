@@ -3,10 +3,10 @@
 [![Скачиваний](https://img.shields.io/github/downloads/RixyPow/netzapret/total?label=%D1%81%D0%BA%D0%B0%D1%87%D0%B8%D0%B2%D0%B0%D0%BD%D0%B8%D0%B9)](https://github.com/RixyPow/netzapret/releases)
 [![Скачиваний последней версии](https://img.shields.io/github/downloads/RixyPow/netzapret/latest/total?label=%D0%BF%D0%BE%D1%81%D0%BB%D0%B5%D0%B4%D0%BD%D0%B5%D0%B9%20%D0%B2%D0%B5%D1%80%D1%81%D0%B8%D0%B8)](https://github.com/RixyPow/netzapret/releases/latest)
 [![Последний выпуск](https://img.shields.io/github/v/release/RixyPow/netzapret?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA)](https://github.com/RixyPow/netzapret/releases/latest)
-[![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)
+[![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)<br>
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
-[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.11.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec?nocache=1)
 [![Поддержать](https://img.shields.io/badge/%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-DonationAlerts-F57507)](https://www.donationalerts.com/r/netzapret)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.11.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec?nocache=1)
 
 **Для тех, кому мало одного Zapret.** Десинк чинит то, что тормозит провайдер,
 VPN берёт то, что закрыто по стране, — а NetZapret решает, что куда, для каждого
