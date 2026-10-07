@@ -9,7 +9,11 @@
         Desktop без VPN, через WebSocket и домены за Cloudflare.
     -->
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <StackPanel MaxWidth="980" HorizontalAlignment="Left">
+        <!--
+            На всю ширину, как «Диагностика»: прежде MaxWidth 980, и на широком
+            окне справа оставалась пустая треть (снимок владельца 07.10).
+        -->
+        <StackPanel>
 
             <TextBlock Text="TG Proxy" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
