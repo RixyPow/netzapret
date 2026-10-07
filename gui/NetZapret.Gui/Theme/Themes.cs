@@ -223,13 +223,14 @@ public static class Themes
             }
             else
             {
-                // Кисти видео не замораживаются: кадр в них меняется.
-                // Проигрыватель стартует, только когда тема легла (BackdropVideo.Take).
-                var video = BackdropVideo.Create(background.Image);
-
-                dictionary[BackdropVideo.Key] = video;
-                dictionary["BackdropImage"] = Stretch(new DrawingBrush(video), background.Fit, video.Rect.Size);
-                dictionary["SideArt"] = new DrawingBrush(video) { Stretch = System.Windows.Media.Stretch.UniformToFill };
+                // Кисть с видео в словарь не кладётся: WPF замораживает его
+                // содержимое, а проигрыватель не замораживается (сборка 1,
+                // 07.10 — падение). Здесь фон прозрачный, а видео лежит
+                // описанием; слою фона и колонке арта его ставит BackdropVideo,
+                // когда тема легла (Take).
+                dictionary[BackdropVideo.Key] = BackdropVideo.Create(background.Image, background.Fit);
+                dictionary["BackdropImage"] = Frozen(new SolidColorBrush(Colors.Transparent));
+                dictionary["SideArt"] = Frozen(new SolidColorBrush(Colors.Transparent));
             }
 
             dictionary["BackdropDim"] = dim;
@@ -443,7 +444,7 @@ public static class Themes
         return image;
     }
 
-    private static TileBrush Stretch(TileBrush brush, BackgroundFit fit, Size size)
+    internal static TileBrush Stretch(TileBrush brush, BackgroundFit fit, Size size)
     {
         switch (fit)
         {

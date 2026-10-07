@@ -29,7 +29,7 @@
             с подложкой окна. Не ловят мышь: под ними ничего нет, а над ними
             всё окно.
         -->
-        <Rectangle Grid.ColumnSpan="2" IsHitTestVisible="False" Fill="{DynamicResource BackdropImage}" />
+        <Rectangle x:Name="BackdropLayer" Grid.ColumnSpan="2" IsHitTestVisible="False" Fill="{DynamicResource BackdropImage}" />
         <Rectangle Grid.ColumnSpan="2" IsHitTestVisible="False" Fill="{DynamicResource Backdrop}"
                    Opacity="{DynamicResource BackdropDim}" />
 

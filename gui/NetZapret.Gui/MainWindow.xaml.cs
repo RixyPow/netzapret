@@ -23,6 +23,10 @@ public partial class MainWindow : Window
         // на ней лежит сам фон, и координаты у них общие.
         Glass.Root = Root;
 
+        // Живой фон темы ставится слою кистью напрямую, мимо словаря ресурсов
+        // (BackdropVideo): кисть с проигрывателем словарь заморозил бы.
+        BackdropVideo.Attach(BackdropLayer);
+
         VersionLabel.Text = "версия " + Version();
         ShowOnboardingIfNeeded();
         Loaded += (_, _) => ShowGreetingIfDue();

@@ -282,11 +282,18 @@ public sealed class ThemesTests
                 {
                     Assert.Empty(problems);
                     Assert.Null(built["GlassImage"]);
-                    Assert.IsType<VideoDrawing>(built[BackdropVideo.Key]);
-                    Assert.IsType<DrawingBrush>(built["BackdropImage"]);
-                    Assert.IsType<DrawingBrush>(built["SideArt"]);
+                    Assert.Equal(BackgroundFit.Cover, Assert.IsType<VideoBackdrop>(built[BackdropVideo.Key]).Fit);
                     Assert.True(((SolidColorBrush)built["RailFill"]).Color.A >= 217, "меню без плотной подложки");
                     Assert.Equal(0.7, built["BackdropDim"]);
+
+                    // Кисть с проигрывателем в словаре — падение: WPF замораживает
+                    // его содержимое, а проигрыватель не замораживается (сборка 1,
+                    // 07.10: «MediaPlayer… IsFrozen должно иметь значение false»).
+                    foreach (var key in built.Keys)
+                    {
+                        if (built[key] is Freezable freezable)
+                            Assert.True(freezable.CanFreeze, $"«{key}» в словаре темы не замораживается");
+                    }
                 }
                 finally
                 {

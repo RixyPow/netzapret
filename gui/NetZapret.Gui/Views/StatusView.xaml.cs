@@ -124,14 +124,14 @@ public partial class StatusView : UserControl
     {
         double width = ArtLayer.ActualWidth, height = ArtLayer.ActualHeight;
 
-        // Арт — картинка или живой фон: у видео кисть-рисунок (BackdropVideo),
-        // и пропорции берутся у кадра.
-        (Size Size, Func<TileBrush> Make)? art = TryFindResource("SideArt") switch
-        {
-            ImageBrush { ImageSource: { } image } => (new Size(image.Width, image.Height), () => new ImageBrush(image)),
-            DrawingBrush { Drawing: { } drawing } => (drawing.Bounds.Size, () => new DrawingBrush(drawing)),
-            _ => null,
-        };
+        // Арт — картинка темы или её живой фон: видео в словаре ресурсов
+        // не лежит (BackdropVideo), его рисунок берётся оттуда, а пропорции —
+        // у кадра.
+        (Size Size, Func<TileBrush> Make)? art = TryFindResource("SideArt") is ImageBrush { ImageSource: { } image }
+            ? (new Size(image.Width, image.Height), () => new ImageBrush(image))
+            : BackdropVideo.Drawing is { } drawing
+                ? (drawing.Bounds.Size, () => new DrawingBrush(drawing))
+                : null;
 
         if (art is not { } content || width <= 0 || height <= 0 || content.Size.Height <= 0 || content.Size.Width <= 0)
         {
