@@ -404,6 +404,58 @@
                         <ToggleButton Grid.Column="2" x:Name="MeasureOnStart" Style="{StaticResource Switch}"
                                       Click="OnMeasureOnStart" VerticalAlignment="Center" />
                     </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
+                        Владелец 07.10: «добавь возможность очистить память работы
+                        серверов (то что показывает через раз и т.д.), а так же
+                        настраиваемое автоочищение … с умолчанием раз в неделю»
+                        (ServerMemory, ServerMemoryClock).
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Память замеров" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Задержки серверов и исходы их последних десяти проверок. По ним сервер становится «нестабильным» (жёлтым) и уходит из автоподбора, а не ответивший трижды подряд — «мёртвым». Починившийся сервер сам оттуда почти не выбирается: мимо автоподбора его проверяют редко.&#x0a;&#x0a;«Очистить» стирает всё: в списке вкладки VPN серверы будут без задержек до следующего замера, а в автоподбор вернутся при следующем запуске движков." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="MemoryLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Очистить"
+                                Click="OnClearMemory" VerticalAlignment="Center" MinWidth="110" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Очищать память сама" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Через сколько дней после прошлой очистки память замеров стирается сама. Срок проверяется при запуске программы и раз в час, пока она работает." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="MemoryChoice" Width="180" SelectionChanged="OnCheckSetting">
+                            <ComboBoxItem Content="раз в день" Tag="1" />
+                            <ComboBoxItem Content="раз в неделю" Tag="7" />
+                            <ComboBoxItem Content="раз в месяц" Tag="30" />
+                            <ComboBoxItem Content="никогда" Tag="0" />
+                        </ComboBox>
+                    </Grid>
                 </StackPanel>
             </Border>
 

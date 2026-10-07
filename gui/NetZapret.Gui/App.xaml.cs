@@ -225,6 +225,9 @@ public partial class App : Application
         // туннеля» (владелец 07.10). И при запуске в трей, и с окном.
         StartupSweep.Start();
 
+        // Память замеров серверов — стирается по сроку (владелец 07.10, неделя).
+        ServerMemoryClock.Start();
+
         if (e.Args.Contains(TrayIcon.Switch))
         {
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача

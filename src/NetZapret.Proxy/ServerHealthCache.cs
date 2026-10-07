@@ -298,6 +298,22 @@ public sealed class ServerHealthCache
             _entries.Remove(tag);
     }
 
+    /// <summary>Стирает память замеров целиком — кнопкой или по сроку (<see cref="ServerMemory"/>).</summary>
+    /// <remarks>
+    /// Удаляется сам файл под общей блокировкой. Копии в памяти окна и надзора
+    /// его не воскресят: <see cref="Save"/> повторяет поверх файла только свои
+    /// новые записи, а не всё, что копия когда-то прочла.
+    /// </remarks>
+    public static void Clear(string? path = null)
+    {
+        var target = path ?? DefaultPath;
+
+        using var gate = Gate();
+
+        if (File.Exists(target))
+            File.Delete(target);
+    }
+
     /// <summary>
     /// Сохраняет свои записи поверх того, что в файле сейчас.
     /// </summary>

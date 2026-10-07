@@ -1,6 +1,7 @@
 using System.Windows;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
+using NetZapret.Proxy;
 
 namespace NetZapret.Gui.Views;
 
@@ -142,6 +143,14 @@ public partial class TunnelSettingsWindow : Window
             Choose(ExitCheckChoice, settings.ExitCheckSeconds);
             Choose(FullCheckChoice, settings.FullCheckMinutes);
             Choose(PerEntryChoice, settings.AutoPickPerEntry);
+            Choose(MemoryChoice, settings.ServerMemoryDays);
+
+            MemoryLine.Text = settings.ServerMemoryClearedAt is { } cleared
+                ? $"Очищена {cleared.ToLocalTime():dd.MM в HH:mm}"
+                  + (settings.ServerMemoryDays > 0
+                      ? $", следующая — {cleared.AddDays(settings.ServerMemoryDays).ToLocalTime():dd.MM}."
+                      : ", сама не очищается.")
+                : "Ещё не очищалась.";
 
             FragmentChoice.SelectedItem = FragmentChoice.Items.OfType<System.Windows.Controls.ComboBoxItem>()
                 .FirstOrDefault(i => (string)i.Tag == settings.TlsFragment.ToString()) ?? FragmentChoice.Items[0];
@@ -180,7 +189,26 @@ public partial class TunnelSettingsWindow : Window
             ExitCheckSeconds = Value(ExitCheckChoice) is >= 0 and var sec ? sec : s.ExitCheckSeconds,
             FullCheckMinutes = Value(FullCheckChoice) is > 0 and var min ? min : s.FullCheckMinutes,
             AutoPickPerEntry = Value(PerEntryChoice) is >= 0 and var n ? n : s.AutoPickPerEntry,
+            ServerMemoryDays = Value(MemoryChoice) is >= 0 and var days ? days : s.ServerMemoryDays,
         }, "Проверка серверов изменена.");
+    }
+
+    /// <summary>«Очистить» память замеров — и отсчёт срока автоочистки заново.</summary>
+    private void OnClearMemory(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ServerMemory.ClearNow(DateTimeOffset.Now);
+            Show(AppSettings.Load(AppSettings.DefaultPath));
+
+            Changed = true;
+            Status.Text = "Память замеров очищена: задержки появятся со следующим замером, "
+                + "нестабильные вернутся в автоподбор при следующем запуске движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось очистить: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>

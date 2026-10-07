@@ -422,6 +422,19 @@ public sealed record AppSettings
     /// <summary>Адрес проверки серверов; <c>null</c> — Cloudflare (<see cref="Ping"/>).</summary>
     public string? PingUrl { get; init; }
 
+    /// <summary>
+    /// Через сколько дней память замеров серверов стирается сама; 0 — никогда.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 07.10, по умолчанию неделя. Память — задержки и исходы последних
+    /// проверок: по ней сервер становится «мигающим» и уходит из автоподбора
+    /// и, починившись, сам оттуда почти не выбирается. Очистка — NetZapret.Proxy.ServerMemory.
+    /// </remarks>
+    public int ServerMemoryDays { get; init; } = 7;
+
+    /// <summary>Когда память замеров стёрта последний раз; <c>null</c> — отсчёт не начат.</summary>
+    public DateTimeOffset? ServerMemoryClearedAt { get; init; }
+
     /// <summary>Фрагментация рукопожатия TLS с сервером (<see cref="Core.TlsFragment"/>).</summary>
     public TlsFragment TlsFragment { get; init; }
 
