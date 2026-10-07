@@ -1,7 +1,8 @@
 # Готовые решения с пином: адрес прописывается в hosts как есть.
 #
 # Источник — раздел «Напрямую» каталога hosts Zapret GUI (loop-uh, MIT,
-# © censorliber), версия 2026.10.01.1; голос Discord — решение Flowseal.
+# © censorliber), версия 2026.10.01.1; голос Discord — решение Flowseal;
+# картинки Roblox — своё, по замеру 07.10.
 # Файл заменяется при обновлении программы: свои пины — в окне пина
 # или в catalog.yaml.
 #
@@ -537,6 +538,22 @@ solutions:
       - addresses: [216.24.57.8]
         names:
           - render.com
+
+  # Своё, не из каталога Zapret GUI (владелец 07.10: «добавь в готовые решения
+  # Roblox Картинки пин»). tr.rbxcdn.com снова оборван в DNS: CNAME ведёт
+  # на trns1.rbxcdn.com, а у того записи A нет (DoH к 1.1.1.1, 07.10), и превью
+  # предметов не грузятся вовсе. Адрес — раздача самого Roblox за CloudFront
+  # (Server: public-gateway, узел HEL51), снятый у пользователя
+  # (config/catalog.yaml). Свой, а не посредника, но десинк ему не нужен:
+  # замер 07.10 щитом — 3 из 3, TLS 60 мс, сертификат на имя действителен.
+  - id: roblox-images
+    name: "Roblox — картинки"
+    note: "Имя оборвано в DNS — пин даёт ему адрес раздачи Roblox."
+    desync: false
+    pins:
+      - addresses: [18.165.140.59]
+        names:
+          - tr.rbxcdn.com
 
   - id: supercell
     name: "Supercell"

@@ -233,11 +233,12 @@ public sealed class PinSolutionsTests : IDisposable
 
             var all = PinSolutions.Load(path);
 
-            Assert.Equal(12, all.Count);
+            Assert.Equal(13, all.Count);
             Assert.Equal(["instagram", "x", "youtube", "discord", "discord-voice"], all.Take(5).Select(s => s.Id));
 
-            // Посредник в решениях один — Supercell; остальным десинк нужен.
-            Assert.Equal(["supercell"], all.Where(s => !s.Desync).Select(s => s.Id));
+            // Мимо десинка — Supercell (посредники) и картинки Roblox (07.10:
+            // адрес свой, но щитом открывается 3 из 3); остальным десинк нужен.
+            Assert.Equal(["roblox-images", "supercell"], all.Where(s => !s.Desync).Select(s => s.Id));
             Assert.Equal(["whatsapp", "github-content"], all.Where(s => s.NeedsIpV6).Select(s => s.Id));
             Assert.Equal(348, all.Single(s => s.Id == "discord-voice").Names.Count);
             return;
