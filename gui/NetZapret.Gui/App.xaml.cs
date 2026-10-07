@@ -221,6 +221,10 @@ public partial class App : Application
         // Найдено 24.09, когда меню трея стало брать цвета темы.
         Themes.Apply(AppSettings.Load(AppSettings.DefaultPath).Theme);
 
+        // «Замерить все» само через минуту — если включено в «Настройках
+        // туннеля» (владелец 07.10). И при запуске в трей, и с окном.
+        StartupSweep.Start();
+
         if (e.Args.Contains(TrayIcon.Switch))
         {
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
@@ -391,6 +395,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Замер при запуске мог ещё идти — его пробник не должен пережить окно.
+        StartupSweep.Stop();
+
         _tray?.Dispose();
         SingleInstance.Release();
 

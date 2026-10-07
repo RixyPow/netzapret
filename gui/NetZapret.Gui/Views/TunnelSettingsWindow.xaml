@@ -294,6 +294,39 @@
                             <ComboBoxItem Content="все" Tag="0" />
                         </ComboBox>
                     </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
+                        Владелец 07.10: «добавь возможность включить это в настройках
+                        впн» — «Замерить все» само при запуске (MeasureOnStart,
+                        StartupSweep). Выключено по умолчанию.
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Замерять все серверы при запуске" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="То же, что «Замерить все» на вкладке VPN, но само: через минуту после запуска программы, когда движки поднялись. Меряются серверы подписок в работе и отдельные ключи, при WARP — WARP. Выключенные из работы подписки — только кнопкой.&#x0a;&#x0a;На один вход — строго по одному: у Trust все страны на одном адресе, и пачка проверок разом закрывала его на минуту. Результат пишется в журнал и виден в списке серверов." />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Список серверов на вкладке VPN — со свежими задержками, без нажатия кнопки." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="MeasureOnStartWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="MeasureOnStart" Style="{StaticResource Switch}"
+                                      Click="OnMeasureOnStart" VerticalAlignment="Center" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

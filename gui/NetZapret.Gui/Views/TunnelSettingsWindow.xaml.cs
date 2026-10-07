@@ -118,6 +118,9 @@ public partial class TunnelSettingsWindow : Window
         Word(VerifyWord, settings.VerifyTraffic);
         Verify.IsChecked = settings.VerifyTraffic;
 
+        Word(MeasureOnStartWord, settings.MeasureOnStart);
+        MeasureOnStart.IsChecked = settings.MeasureOnStart;
+
         ShowBypass(settings.BypassWhenTunnelDead);
         ShowChecks(settings);
     }
@@ -237,6 +240,18 @@ public partial class TunnelSettingsWindow : Window
             on
                 ? "Проверка прохода включена: молчащий туннель будет виден."
                 : "Проверка прохода выключена: туннель судится по открытому порту.");
+    }
+
+    private void OnMeasureOnStart(object sender, RoutedEventArgs e)
+    {
+        bool on = MeasureOnStart.IsChecked == true;
+
+        Word(MeasureOnStartWord, on);
+
+        Save(s => s with { MeasureOnStart = on },
+            on
+                ? "Серверы будут замеряться сами через минуту после запуска программы."
+                : "Серверы замеряются только кнопкой «Замерить все».");
     }
 
     private void OnBypass(object sender, RoutedEventArgs e)

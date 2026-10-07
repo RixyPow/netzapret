@@ -1935,78 +1935,17 @@ public partial class VpnView : UserControl
 
         try
         {
-            // Движки подняты — всё, что лежит в конфиге, меряет сам движок:
-            // без процесса на сервер, как у пробника (владелец 28.09: «ускорь
-            // проверку ключей»). Но не залпом — на один вход строго по одному,
-            // разные входы параллельно, не больше восьми всего: залп в 26 проверок на один вход Trust с одним
-            // ключом, 28.09, владелец увидел как «положил все сервера в trust».
-            // Пробнику остаётся то, чего в движке нет.
-            var rest = servers;
-            var token = _work.Token;
-
-            if (EnginesRunning)
-            {
-                using var api = new ClashApi();
-
-                if (await api.MembersAsync(SelectorGroup, token) is { } members)
+            // Замер — в библиотеке (ServerSweep): его же зовёт запуск программы,
+            // когда в «Настройках туннеля» включён «Замер всех серверов при запуске».
+            // Движок меряет свои выходы сам, на вход по одному; пробник — волнами,
+            // тоже не больше одного с входа.
+            int alive = await ServerSweep.RunAsync(
+                servers,
+                singBox,
+                EnginesRunning,
+                _health,
+                tag =>
                 {
-                    var inEngine = members.ToHashSet(StringComparer.Ordinal);
-                    var mine = servers.Where(s => inEngine.Contains(s.Tag)).ToList();
-
-                    rest = servers.Where(s => !inEngine.Contains(s.Tag)).ToList();
-
-                    await api.MeasureGentlyAsync(
-                        mine.Select(s => (s.Tag, $"{s.Host}:{s.Port}")).ToList(),
-                        "http://cp.cloudflare.com/generate_204",
-                        TimeSpan.FromSeconds(5),
-                        (tag, delay) =>
-                        {
-                            // Прерванный замер — не «не отвечает».
-                            if (token.IsCancellationRequested)
-                                return;
-
-                            _health.Set(new ServerHealth
-                            {
-                                Tag = tag,
-                                Success = delay is not null,
-                                LatencyMs = delay?.TotalMilliseconds,
-                                CheckedAt = DateTimeOffset.Now,
-                            });
-
-                            Dispatcher.Invoke(() =>
-                            {
-                                done++;
-                                Progress.Value = done;
-                                _measuring.Remove(tag);
-                                MeasureButton.Content = $"{done} из {servers.Count}…";
-                                Status.Text = $"Измерено {done} из {servers.Count}…";
-                                Reshow();
-                            });
-                        },
-                        token);
-                }
-            }
-
-            await new ProxyProbe(singBox).RunManyAsync(
-                rest,
-                new ProbeOptions
-                {
-                    // Внешний адрес здесь не показывают, а его поиск стоит
-                    // секунд на каждом сервере.
-                    LookupExternalIp = false,
-                    LogLevel = "warn",
-
-                },
-                result =>
-                {
-                    _health.Set(new ServerHealth
-                    {
-                        Tag = result.ServerTag,
-                        Success = result.Success,
-                        LatencyMs = result.Latency?.TotalMilliseconds,
-                        CheckedAt = DateTimeOffset.Now,
-                    });
-
                     // Обновляем на каждом ответе: проверка идёт полминуты,
                     // и таблица, оживающая на глазах, куда честнее полосы
                     // загрузки, которая ничего не измеряет.
@@ -2014,7 +1953,7 @@ public partial class VpnView : UserControl
                     {
                         done++;
                         Progress.Value = done;
-                        _measuring.Remove(result.ServerTag);
+                        _measuring.Remove(tag);
 
                         // Счёт и на кнопке тоже. Полоса и строка состояния
                         // стоят вверху раздела, а смотрят во время замера
@@ -2025,11 +1964,9 @@ public partial class VpnView : UserControl
                         Reshow();
                     });
                 },
-                _work.Token);
+                _work.Token,
+                SelectorGroup);
 
-            _health.Save();
-
-            int alive = servers.Count(s => _health.Find(s.Tag) is { Success: true });
             Status.Text = $"Отвечают {alive} из {servers.Count}. Замер сохранён — меню увидит те же цифры.";
         }
         catch (OperationCanceledException)
@@ -2063,45 +2000,14 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>
-    /// Замеряет выходы руками работающего движка.
+    /// Замеряет выходы руками работающего движка — тех, кого не берёт пробник (WARP).
     /// </summary>
-    /// <remarks>
-    /// Для тех, кого не берёт пробник: у MASQUE учётная запись лежит в кэше
-    /// движка, а файл занят им же, и отдельный экземпляр обязан
-    /// регистрироваться заново — дозвониться ему для этого не через что.
-    /// Движок же меряет свой выход сам, и меряет именно тот, через который
-    /// пойдёт трафик.
-    /// </remarks>
     private async Task MeasureThroughEngineAsync(IEnumerable<ProxyServer> servers)
     {
-        var list = servers.ToList();
-
-        if (list.Count == 0 || !EnginesRunning)
+        if (!EnginesRunning)
             return;
 
-        using var api = new ClashApi();
-
-        if (!await api.AliveAsync(CancellationToken.None))
-            return;
-
-        foreach (var server in list)
-        {
-            var delay = await api.MeasureAsync(
-                server.Tag,
-                "http://cp.cloudflare.com/generate_204",
-                TimeSpan.FromSeconds(15),
-                CancellationToken.None);
-
-            _health.Set(new ServerHealth
-            {
-                Tag = server.Tag,
-                Success = delay is not null,
-                LatencyMs = delay?.TotalMilliseconds,
-                CheckedAt = DateTimeOffset.Now,
-            });
-        }
-
-        _health.Save();
+        await ServerSweep.ThroughEngineAsync(servers, _health, CancellationToken.None);
         Reshow();
     }
 
