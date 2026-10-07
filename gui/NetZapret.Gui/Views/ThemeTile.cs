@@ -66,6 +66,10 @@ public sealed record ThemeTile
                     // картинкой не раскодируется, и плитка выходила пустой
                     // (владелец 07.10: «нету рыбки»).
                     bitmap = VideoPoster.Load(background.Image, size: 240);
+
+                    // Без чёрных полос по краям — как его покажет окно.
+                    if (bitmap is not null)
+                        bitmap = VideoPoster.Crop(bitmap, VideoPoster.Content(bitmap));
                 }
                 else
                 {

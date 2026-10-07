@@ -226,6 +226,47 @@ public sealed class ThemeLoaderTests : IDisposable
         Assert.Null(VideoFile.FrameSize(new MemoryStream(new byte[40])));
     }
 
+    /// <summary>
+    /// Чёрные полосы по бокам кадра находятся и обрезаются, а тёмное
+    /// изображение целиком полосой не считается (08.10, fish.mp4).
+    /// </summary>
+    [Fact]
+    public void BlackBarsAreFoundButADarkFrameIsKept()
+    {
+        static byte[] Frame(int width, int height, Func<int, int, byte> value)
+        {
+            var pixels = new byte[width * height * 4];
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = (y * width + x) * 4;
+                    pixels[i] = pixels[i + 1] = pixels[i + 2] = value(x, y);
+                    pixels[i + 3] = 255;
+                }
+            }
+
+            return pixels;
+        }
+
+        // 100×50: полосы по 12 точек слева и справа, белое поле с серой рыбкой.
+        var bars = Frame(100, 50, (x, y) => x < 12 || x >= 88 ? (byte)0 : x is > 40 and < 60 && y is > 20 and < 30 ? (byte)90 : (byte)250);
+        var (left, top, width, height) = Letterbox.Content(bars, 100, 50, 400);
+
+        Assert.Equal(13, left);
+        Assert.Equal(0, top);
+        Assert.Equal(74, width);
+        Assert.Equal(50, height);
+
+        // Ночной кадр — тёмный целиком, но не полоса: остаётся как есть.
+        var night = Frame(100, 50, (x, y) => (byte)((x + y) % 10 == 0 ? 120 : 10));
+        Assert.Equal((0, 0, 100, 50), Letterbox.Content(night, 100, 50, 400));
+
+        // Совсем чёрный — тоже не режется в ноль.
+        Assert.Equal((0, 0, 100, 50), Letterbox.Content(Frame(100, 50, (_, _) => 0), 100, 50, 400));
+    }
+
     /// <summary>Нечитаемая тема не проходит: пара названа с числом.</summary>
     [Fact]
     public void AnUnreadableThemeNamesThePair()

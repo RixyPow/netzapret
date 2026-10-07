@@ -20,6 +20,19 @@ public sealed class VideoBackdrop
     public required VideoDrawing Drawing { get; init; }
 
     public required BackgroundFit Fit { get; init; }
+
+    /// <summary>Часть кадра без чёрных полос, в долях кадра (<see cref="Letterbox"/>).</summary>
+    public Rect Content { get; init; } = new(0, 0, 1, 1);
+
+    /// <summary>Размер того, что показывается, — кадр без полос.</summary>
+    public Size Size => new(Drawing.Rect.Width * Content.Width, Drawing.Rect.Height * Content.Height);
+
+    /// <summary>Новая кисть видео — только с частью кадра без полос.</summary>
+    public DrawingBrush Brush() => new(Drawing)
+    {
+        Viewbox = Content,
+        ViewboxUnits = BrushMappingMode.RelativeToBoundingBox,
+    };
 }
 
 /// <summary>
@@ -51,11 +64,12 @@ public static class BackdropVideo
     private static VideoBackdrop? _current;
     private static Shape? _layer;
 
-    /// <summary>Рисунок видео текущей темы; <c>null</c> — фон не видео.</summary>
-    public static Drawing? Drawing => _current?.Drawing;
+    /// <summary>Видео текущей темы — для колонки арта; <c>null</c> — фон не видео.</summary>
+    public static VideoBackdrop? Current => _current;
 
     /// <summary>Видео для словаря темы; проигрыватель открыт, но не играет.</summary>
-    internal static VideoBackdrop Create(string path, BackgroundFit fit)
+    /// <param name="content">Часть кадра без чёрных полос, в долях кадра.</param>
+    internal static VideoBackdrop Create(string path, BackgroundFit fit, Rect content)
     {
         var player = new MediaPlayer { IsMuted = true, Volume = 0 };
 
@@ -85,7 +99,7 @@ public static class BackdropVideo
 
         player.Open(new Uri(path));
 
-        return new VideoBackdrop { Drawing = drawing, Fit = fit };
+        return new VideoBackdrop { Drawing = drawing, Fit = fit, Content = content };
     }
 
     /// <summary>Слой фона окна — ему видео ставится кистью напрямую.</summary>
@@ -141,7 +155,7 @@ public static class BackdropVideo
             return;
 
         if (_current is { } video)
-            _layer.Fill = Themes.Stretch(new DrawingBrush(video.Drawing), video.Fit, video.Drawing.Rect.Size);
+            _layer.Fill = Themes.Stretch(video.Brush(), video.Fit, video.Size);
         else
             _layer.SetResourceReference(Shape.FillProperty, "BackdropImage");
     }

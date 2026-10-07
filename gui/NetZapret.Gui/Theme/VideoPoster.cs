@@ -60,6 +60,41 @@ internal static class VideoPoster
         }
     }
 
+    /// <summary>
+    /// Часть кадра без чёрных полос (<see cref="NetZapret.Core.Themes.Letterbox"/>),
+    /// в долях кадра — для <c>Viewbox</c> кисти.
+    /// </summary>
+    public static Rect Content(BitmapSource frame)
+    {
+        var converted = new FormatConvertedBitmap(frame, System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        int width = converted.PixelWidth, height = converted.PixelHeight, stride = width * 4;
+        var pixels = new byte[stride * height];
+        converted.CopyPixels(pixels, stride, 0);
+
+        var (x, y, w, h) = NetZapret.Core.Themes.Letterbox.Content(pixels, width, height, stride);
+
+        return width <= 0 || height <= 0
+            ? new Rect(0, 0, 1, 1)
+            : new Rect((double)x / width, (double)y / height, (double)w / width, (double)h / height);
+    }
+
+    /// <summary>Та часть кадра, что без полос, — отдельной картинкой.</summary>
+    public static BitmapSource Crop(BitmapSource frame, Rect content)
+    {
+        var rect = new Int32Rect(
+            (int)Math.Round(content.X * frame.PixelWidth),
+            (int)Math.Round(content.Y * frame.PixelHeight),
+            Math.Max(1, (int)Math.Round(content.Width * frame.PixelWidth)),
+            Math.Max(1, (int)Math.Round(content.Height * frame.PixelHeight)));
+
+        rect.Width = Math.Min(rect.Width, frame.PixelWidth - rect.X);
+        rect.Height = Math.Min(rect.Height, frame.PixelHeight - rect.Y);
+
+        var cropped = new CroppedBitmap(frame, rect);
+        cropped.Freeze();
+        return cropped;
+    }
+
     private const int ThumbnailOnly = 0x08;
 
     [StructLayout(LayoutKind.Sequential)]

@@ -129,8 +129,8 @@ public partial class StatusView : UserControl
         // у кадра.
         (Size Size, Func<TileBrush> Make)? art = TryFindResource("SideArt") is ImageBrush { ImageSource: { } image }
             ? (new Size(image.Width, image.Height), () => new ImageBrush(image))
-            : BackdropVideo.Drawing is { } drawing
-                ? (drawing.Bounds.Size, () => new DrawingBrush(drawing))
+            : BackdropVideo.Current is { } video
+                ? (video.Size, () => video.Brush())
                 : null;
 
         if (art is not { } content || width <= 0 || height <= 0 || content.Size.Height <= 0 || content.Size.Width <= 0)

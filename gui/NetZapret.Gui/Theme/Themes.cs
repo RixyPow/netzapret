@@ -196,9 +196,25 @@ public static class Themes
             // Меряется по уменьшенной копии — нужны края яркости, а не детали.
             // У видео — по кадру, который показывает проводник (VideoPoster);
             // кадра нет — мерить не по чему, и проверка по картинке пропускается.
-            BitmapSource? sample = background.IsVideo
-                ? VideoPoster.Load(background.Image, size: 96)
-                : Load(background.Image, decodeWidth: 96);
+            // У видео заодно ищутся чёрные полосы по краям кадра: фон и арт
+            // показывают его без них (Letterbox), и яркость мерится без них же.
+            var content = new Rect(0, 0, 1, 1);
+            BitmapSource? sample;
+
+            if (background.IsVideo)
+            {
+                sample = VideoPoster.Load(background.Image, size: 240);
+
+                if (sample is not null)
+                {
+                    content = VideoPoster.Content(sample);
+                    sample = VideoPoster.Crop(sample, content);
+                }
+            }
+            else
+            {
+                sample = Load(background.Image, decodeWidth: 96);
+            }
 
             (double Darkest, double Lightest)? range = sample is null
                 ? null
@@ -228,7 +244,7 @@ public static class Themes
                 // 07.10 — падение). Здесь фон прозрачный, а видео лежит
                 // описанием; слою фона и колонке арта его ставит BackdropVideo,
                 // когда тема легла (Take).
-                dictionary[BackdropVideo.Key] = BackdropVideo.Create(background.Image, background.Fit);
+                dictionary[BackdropVideo.Key] = BackdropVideo.Create(background.Image, background.Fit, content);
                 dictionary["BackdropImage"] = Frozen(new SolidColorBrush(Colors.Transparent));
                 dictionary["SideArt"] = Frozen(new SolidColorBrush(Colors.Transparent));
             }
