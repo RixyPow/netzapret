@@ -65,15 +65,44 @@ public partial class SpeedView : UserControl
     private readonly Path _value = new();
     private readonly RotateTransform _needle = new(SpeedGauge.StartAngle, Centre.X, Centre.Y);
 
-    private CancellationTokenSource? _run;
+    /// <summary>
+    /// Идущий замер — общий для всех заходов в раздел.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 08.10: «чтоб замер скорости не останавливался при переходе
+    /// на другие вкладки, по аналогии с блокчеком». Раздел пересоздаётся
+    /// при каждом заходе, и прежде уход отменял замер (Unloaded). Теперь
+    /// замер живёт сам по себе, как проверка блокировок: показания копятся
+    /// здесь, рисуются на разделе, пока он открыт (<see cref="_open"/>),
+    /// а вернувшийся раздел подхватывает идущий замер или его итог.
+    /// </remarks>
+    private static CancellationTokenSource? _run;
+
+    /// <summary>Каким путём идёт замер — к нему раздел и вернётся.</summary>
+    private static bool _runTunnel;
+
+    /// <summary>Открытый сейчас раздел; <c>null</c> — человек на другой вкладке.</summary>
+    private static SpeedView? _open;
+
+    /// <summary>Чем кончился замер, пока раздел был закрыт, — сказать при возврате.</summary>
+    private static string? _note;
+
+    /// <summary>Показания идущего замера — для кривых.</summary>
+    private static List<double> _down = [];
+    private static List<double> _up = [];
+    private static List<double> _ping = [];
+
+    /// <summary>Что сейчас на крупных цифрах и стрелке идущего замера.</summary>
+    private static string _phase = string.Empty;
+    private static string _pingNow = "—";
+    private static string _downNow = "—";
+    private static string _upNow = "—";
+    private static double _needleNow;
+    private static string _strokeNow = "Accent";
+
     private bool _tunnel;
     private bool _tunnelUp;
     private string? _exit;
-
-    /// <summary>Показания идущего замера — для кривых.</summary>
-    private List<double> _down = [];
-    private List<double> _up = [];
-    private List<double> _ping = [];
 
     /// <summary>Куда стрелка идёт и где она сейчас, Мбит/с.</summary>
     private double _target;
@@ -110,22 +139,44 @@ public partial class SpeedView : UserControl
 
         Loaded += async (_, _) =>
         {
+            _open = this;
+
             await LookAtTunnelAsync();
 
             if (!IsLoaded)
                 return;
 
-            // Туннель — первым выбором, если есть: за ним сюда и приходят.
-            Choose(_tunnelUp);
+            if (_run is not null)
+            {
+                // Замер идёт с прошлого захода — его путь, его цифры и кривые.
+                Choose(_runTunnel);
+                ShowRunning(true);
+                ShowLive();
+            }
+            else
+            {
+                // Туннель — первым выбором, если есть: за ним сюда и приходят.
+                Choose(_tunnelUp);
+
+                if (_note is not null)
+                {
+                    Status.Text = _note;
+                    _note = null;
+                }
+            }
+
             ShowHistory();
             _watch.Start();
         };
 
+        // Уход с вкладки замер не останавливает — только отвязывает раздел.
         Unloaded += (_, _) =>
         {
             _watch.Stop();
             StopFrames();
-            _run?.Cancel();
+
+            if (_open == this)
+                _open = null;
         };
     }
 
@@ -280,15 +331,24 @@ public partial class SpeedView : UserControl
 
         bool tunnel = _tunnel;
 
+        // Выход — на момент начала: раздел, который закончит замер, может
+        // быть уже другим (человек уходил и вернулся).
+        string? exit = _exit;
+
         using var run = new CancellationTokenSource();
         _run = run;
-
-        ShowRunning(true);
-        ShowShot(null);
+        _runTunnel = tunnel;
+        _note = null;
 
         _down = [];
         _up = [];
         _ping = [];
+        _phase = string.Empty;
+        _pingNow = _downNow = _upNow = "—";
+        _needleNow = 0;
+
+        ShowRunning(true);
+        ShowShot(null);
 
         var options = new SpeedTestOptions
         {
@@ -297,15 +357,16 @@ public partial class SpeedView : UserControl
                 : null,
         };
 
-        // Progress создан в потоке окна и туда же возвращает показания.
-        var progress = new Progress<SpeedReading>(Show);
+        // Progress создан в потоке окна и туда же возвращает показания —
+        // в общее состояние, а на раздел, только если он открыт.
+        var progress = new Progress<SpeedReading>(Record);
 
         string? note = null;
 
         try
         {
             var result = await Task.Run(() => new SpeedTest(options).RunAsync(progress, run.Token));
-            var entry = SpeedEntry.From(result, tunnel, ExitName(_exit), DateTimeOffset.Now);
+            var entry = SpeedEntry.From(result, tunnel, ExitName(exit), DateTimeOffset.Now);
             var shot = new Shot(entry, result.Address, _down, _up, _ping);
 
             if (tunnel)
@@ -339,18 +400,47 @@ public partial class SpeedView : UserControl
         finally
         {
             _run = null;
-            Move(0);
+            _needleNow = 0;
 
-            ShowRunning(false);
-
-            // Тот же путь: справка подхватит свежий узел, адрес и расход,
-            // блоки — итог с кривыми (либо прошлый замер, если этот оборван).
-            Choose(tunnel);
-            ShowHistory();
-
-            if (note is not null)
-                Status.Text = note;
+            // Раздел закрыт — итог покажет следующий заход: история уже
+            // записана, а слово о неудаче ждёт в _note.
+            if (_open is { } view)
+                view.Finish(tunnel, note);
+            else
+                _note = note;
         }
+    }
+
+    /// <summary>Замер кончился при открытом разделе: стрелка на ноль, итог и история.</summary>
+    private void Finish(bool tunnel, string? note)
+    {
+        Move(0);
+
+        ShowRunning(false);
+
+        // Тот же путь: справка подхватит свежий узел, адрес и расход,
+        // блоки — итог с кривыми (либо прошлый замер, если этот оборван).
+        Choose(tunnel);
+        ShowHistory();
+
+        if (note is not null)
+            Status.Text = note;
+    }
+
+    /// <summary>Вернулись к идущему замеру: этап, цифры, кривые и стрелка — как они есть.</summary>
+    private void ShowLive()
+    {
+        PhaseText.Text = _phase;
+        PingText.Text = _pingNow;
+        DownText.Text = _downNow;
+        UpText.Text = _upNow;
+
+        PingLine.Show(_ping);
+        DownLine.Show(_down);
+        UpLine.Show(_up);
+
+        _value.SetResourceReference(Shape.StrokeProperty, _strokeNow);
+        Move(_needleNow);
     }
 
     private void ShowRunning(bool running)
@@ -368,8 +458,10 @@ public partial class SpeedView : UserControl
         PhaseText.Text = string.Empty;
     }
 
-    /// <summary>Показание на ходу: стрелка, кривая, подпись этапа; итог этапа — в крупные цифры.</summary>
-    private void Show(SpeedReading reading)
+    /// <summary>
+    /// Показание на ходу — в общее состояние замера; открыт раздел — и на него.
+    /// </summary>
+    private static void Record(SpeedReading reading)
     {
         if (_run is null)
             return;
@@ -377,53 +469,52 @@ public partial class SpeedView : UserControl
         switch (reading.Phase)
         {
             case SpeedPhase.Connect:
-                PhaseText.Text = "устанавливается связь…";
+                _phase = "устанавливается связь…";
                 break;
 
             case SpeedPhase.Ping when reading.Done:
-                PingText.Text = reading.PingMs is { } median ? $"{median:0}" : "—";
+                _pingNow = reading.PingMs is { } median ? $"{median:0}" : "—";
                 break;
 
             case SpeedPhase.Ping:
-                PhaseText.Text = "задержка";
+                _phase = "задержка";
 
                 if (reading.PingMs is { } ms)
                 {
-                    PingText.Text = $"{ms:0}";
+                    _pingNow = $"{ms:0}";
                     _ping.Add(ms);
-                    PingLine.Show(_ping);
                 }
 
                 break;
 
             case SpeedPhase.Download when reading.Done:
-                DownText.Text = SpeedVerdict.Number(reading.Mbps);
-                Move(0);
+                _downNow = SpeedVerdict.Number(reading.Mbps);
+                _needleNow = 0;
                 break;
 
             case SpeedPhase.Upload when reading.Done:
-                UpText.Text = SpeedVerdict.Number(reading.Mbps);
-                Move(0);
+                _upNow = SpeedVerdict.Number(reading.Mbps);
+                _needleNow = 0;
                 break;
 
             case SpeedPhase.Download:
-                PhaseText.Text = "скачивание";
-                DownText.Text = SpeedVerdict.Number(reading.Mbps);
-                Move(reading.Mbps);
-                _value.SetResourceReference(Shape.StrokeProperty, "Accent");
+                _phase = "скачивание";
+                _downNow = SpeedVerdict.Number(reading.Mbps);
+                _needleNow = reading.Mbps;
+                _strokeNow = "Accent";
                 _down.Add(reading.Mbps);
-                DownLine.Show(_down);
                 break;
 
             case SpeedPhase.Upload:
-                PhaseText.Text = "отдача";
-                UpText.Text = SpeedVerdict.Number(reading.Mbps);
-                Move(reading.Mbps);
-                _value.SetResourceReference(Shape.StrokeProperty, "Warn");
+                _phase = "отдача";
+                _upNow = SpeedVerdict.Number(reading.Mbps);
+                _needleNow = reading.Mbps;
+                _strokeNow = "Warn";
                 _up.Add(reading.Mbps);
-                UpLine.Show(_up);
                 break;
         }
+
+        _open?.ShowLive();
     }
 
     /// <summary>Блоки с цифрами и кривыми — по замеру; <c>null</c> — пусто.</summary>
