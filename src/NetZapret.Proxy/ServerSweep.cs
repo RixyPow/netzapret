@@ -18,13 +18,24 @@ namespace NetZapret.Proxy;
 /// Продавцов не бить залпом (CLAUDE.md, «Туннель и серверы»): у Trust все
 /// страны — один вход с одним ключом, и пачка из 16–26 проверок разом
 /// закрывала его на минуту. Работающий движок меряет свои выходы сам —
-/// на вход по одному, всего не больше восьми (<see cref="ClashApi.MeasureGentlyAsync"/>).
-/// Пробнику, которому раньше отдавалось до восьми серверов разом без оглядки
-/// на вход, теперь серверы идут волнами — в волне не больше одного с входа.
+/// на вход не больше <see cref="PerEntry"/> разом, всего не больше восьми
+/// (<see cref="ClashApi.MeasureGentlyAsync"/>). Пробнику, которому раньше
+/// отдавалось до восьми серверов разом без оглядки на вход, серверы идут
+/// волнами — в волне не больше <see cref="PerEntry"/> с входа.
 /// </para>
 /// </remarks>
 public static class ServerSweep
 {
+    /// <summary>Проверок одного входа разом.</summary>
+    /// <remarks>
+    /// Было по одному; владелец 07.10: «на двух он стабильно работал, просто
+    /// не надо перебарщивать» — Trust держит две проверки разом. Вход ронял
+    /// не «Замерить все» по двое, а пачка общего замера движка по всем
+    /// двадцати серверам Trust раз в минуту вместе с «лучшим из двух»
+    /// (12:57, см. Ping).
+    /// </remarks>
+    public const int PerEntry = 2;
+
     /// <summary>
     /// Меряет серверы и пишет замеры в <paramref name="health"/>; сохраняет в конце.
     /// </summary>
@@ -94,7 +105,8 @@ public static class ServerSweep
                     url,
                     TimeSpan.FromSeconds(5),
                     (tag, delay) => Record(tag, delay is not null, delay?.TotalMilliseconds),
-                    cancellationToken);
+                    cancellationToken,
+                    perEntry: PerEntry);
             }
         }
 
@@ -173,24 +185,26 @@ public static class ServerSweep
     }
 
     /// <summary>
-    /// Серверы волнами: в каждой не больше одного с одного входа.
+    /// Серверы волнами: в каждой не больше <paramref name="perEntry"/> с одного входа.
     /// </summary>
     /// <remarks>
     /// Вход — адрес и порт: у Trust все страны на одном, у других продавцов
     /// у каждой страны свой. Первая волна — первые серверы всех входов, вторая —
-    /// вторые, и так далее; порядок внутри входа — как в подписке.
+    /// следующие, и так далее; порядок внутри входа — как в подписке.
     /// </remarks>
-    public static IReadOnlyList<IReadOnlyList<ProxyServer>> Waves(IReadOnlyList<ProxyServer> servers)
+    public static IReadOnlyList<IReadOnlyList<ProxyServer>> Waves(IReadOnlyList<ProxyServer> servers, int perEntry = PerEntry)
     {
+        perEntry = Math.Max(1, perEntry);
+
         var byEntry = servers
             .GroupBy(Entry, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.ToList())
             .ToList();
 
-        int depth = byEntry.Count == 0 ? 0 : byEntry.Max(g => g.Count);
+        int depth = byEntry.Count == 0 ? 0 : (byEntry.Max(g => g.Count) + perEntry - 1) / perEntry;
 
         return Enumerable.Range(0, depth)
-            .Select(i => (IReadOnlyList<ProxyServer>)byEntry.Where(g => g.Count > i).Select(g => g[i]).ToList())
+            .Select(i => (IReadOnlyList<ProxyServer>)byEntry.SelectMany(g => g.Skip(i * perEntry).Take(perEntry)).ToList())
             .ToList();
     }
 

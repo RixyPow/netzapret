@@ -20,12 +20,35 @@ public sealed class ServerSweepTests
     };
 
     /// <summary>
-    /// Пробник получает серверы волнами, и в волне с одного входа — один:
-    /// у Trust все страны на одном адресе, и пачка проверок разом закрывала
-    /// его на минуту (28.09). Прежде пробнику отдавалось до восьми разом.
+    /// Пробник получает серверы волнами, и в волне с одного входа — не больше
+    /// двух: у Trust все страны на одном адресе, и пачка проверок разом
+    /// закрывала его на минуту (28.09), а две разом он держит (владелец 07.10).
+    /// Прежде пробнику отдавалось до восьми разом.
     /// </summary>
     [Fact]
-    public void OneServerPerEntryInEachWave()
+    public void TwoServersPerEntryInEachWave()
+    {
+        var servers = new[]
+        {
+            Server("trust-de", "131.123.25.7"),
+            Server("trust-nl", "131.123.25.7"),
+            Server("trust-fi", "131.123.25.7"),
+            Server("trust-ee", "131.123.25.7"),
+            Server("trust-it", "131.123.25.7"),
+            Server("sw-ee", "ee.example.com"),
+        };
+
+        var waves = ServerSweep.Waves(servers);
+
+        Assert.Equal(2, ServerSweep.PerEntry);
+        Assert.Equal(3, waves.Count);
+        Assert.Equal(["trust-de", "trust-nl", "sw-ee"], waves[0].Select(s => s.Tag));
+        Assert.Equal(["trust-fi", "trust-ee"], waves[1].Select(s => s.Tag));
+        Assert.Equal(["trust-it"], waves[2].Select(s => s.Tag));
+    }
+
+    [Fact]
+    public void OneServerPerEntryWhenAsked()
     {
         var servers = new[]
         {
@@ -38,7 +61,7 @@ public sealed class ServerSweepTests
             Server("other-port", "131.123.25.7", 8443),
         };
 
-        var waves = ServerSweep.Waves(servers);
+        var waves = ServerSweep.Waves(servers, perEntry: 1);
 
         Assert.Equal(3, waves.Count);
 
