@@ -44,6 +44,13 @@ public static class Ping
         Uri.TryCreate(text?.Trim(), UriKind.Absolute, out var uri)
         && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
         && !string.IsNullOrEmpty(uri.Host);
+
+    /// <summary>
+    /// Сколько замер ждёт ответа сервера (<see cref="AppSettings.PingTimeoutSeconds"/>):
+    /// не меньше секунды и не больше полуминуты, что бы ни стояло в файле.
+    /// </summary>
+    public static TimeSpan TimeoutOf(AppSettings settings) =>
+        TimeSpan.FromSeconds(Math.Clamp(settings.PingTimeoutSeconds, 1, 30));
 }
 
 /// <summary>

@@ -24,6 +24,16 @@ public sealed class PingAndFragmentTests
         Assert.Equal(Ping.Cloudflare, Ping.UrlOf(new AppSettings { PingUrl = "ftp://example.com/" }));
     }
 
+    /// <summary>Потолок замера — 5 с, как было; что бы ни стояло в файле, от 1 до 30.</summary>
+    [Fact]
+    public void PingTimeoutIsFiveSecondsAndBounded()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(5), Ping.TimeoutOf(new AppSettings()));
+        Assert.Equal(TimeSpan.FromSeconds(2), Ping.TimeoutOf(new AppSettings { PingTimeoutSeconds = 2 }));
+        Assert.Equal(TimeSpan.FromSeconds(1), Ping.TimeoutOf(new AppSettings { PingTimeoutSeconds = 0 }));
+        Assert.Equal(TimeSpan.FromSeconds(30), Ping.TimeoutOf(new AppSettings { PingTimeoutSeconds = 600 }));
+    }
+
     /// <summary>
     /// «Лучший из двух» убран 07.10, в тот же день, что появился, — а поле
     /// уже записано в файлы настроек. Оно обязано читаться молча: не прочитайся

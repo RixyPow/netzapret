@@ -63,6 +63,10 @@ public static class ServerSweep
 
         var url = Ping.UrlOf(settings);
 
+        // Сколько ждать ответа сервера, прежде чем счесть его неработающим
+        // (владелец 07.10: «какой потолок проверки… давай в настройки»).
+        var timeout = Ping.TimeoutOf(settings);
+
         var sync = new object();
 
         void Record(string tag, bool success, double? latencyMs)
@@ -103,7 +107,7 @@ public static class ServerSweep
                 await api.MeasureGentlyAsync(
                     servers.Where(s => inEngine.Contains(s.Tag)).Select(s => (s.Tag, Entry(s))).ToList(),
                     url,
-                    TimeSpan.FromSeconds(5),
+                    timeout,
                     (tag, delay) => Record(tag, delay is not null, delay?.TotalMilliseconds),
                     cancellationToken,
                     perEntry: PerEntry);
@@ -117,12 +121,16 @@ public static class ServerSweep
         // адреса не должен выглядеть отказом сервера.
         var defaults = new ProbeOptions();
 
+        // Потолок ожидания сервера — тот же, что у движка; пробнику сверху —
+        // время поднять свой sing-box, сервер тут ни при чём.
         var options = defaults with
         {
             LookupExternalIp = false,
             LogLevel = "warn",
             ConnectivityUrls = [url, .. defaults.ConnectivityUrls.Where(u => !string.Equals(u, url, StringComparison.OrdinalIgnoreCase))],
             Fragment = settings.TlsFragment,
+            RequestTimeout = timeout,
+            TotalTimeout = defaults.StartupTimeout + timeout,
         };
 
         foreach (var wave in Waves(rest))

@@ -375,6 +375,33 @@
                     <Border Style="{StaticResource RowLine}" />
 
                     <!--
+                        Владелец 07.10: «какой потолок проверки неработающего сервера?
+                        давай в настройки добавим возможность выбирать» (PingTimeoutSeconds).
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Ждать ответа сервера" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Потолок замера: не ответил за это время — «не отвечает». Касается «Замерить все», теста пинга и замера при запуске. Чем меньше, тем быстрее идёт замер со множеством неработающих серверов, но далёкий медленный сервер может попасть в неработающие. При остановленных движках к потолку прибавляется до 4 с — на запуск проверочного sing-box.&#x0a;&#x0a;Сторожа подключённого сервера не касается: он ждёт 3 с, и от этого зависит, как быстро туннель уйдёт с мёртвого сервера. Автоподбор движка ждёт по своему сроку." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="PingTimeoutChoice" Width="180" SelectionChanged="OnCheckSetting">
+                            <ComboBoxItem Content="2 с" Tag="2" />
+                            <ComboBoxItem Content="3 с" Tag="3" />
+                            <ComboBoxItem Content="5 с" Tag="5" />
+                            <ComboBoxItem Content="10 с" Tag="10" />
+                        </ComboBox>
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
                         Владелец 07.10: «добавь возможность включить это в настройках
                         впн» — «Замерить все» само при запуске (MeasureOnStart,
                         StartupSweep). Выключено по умолчанию.

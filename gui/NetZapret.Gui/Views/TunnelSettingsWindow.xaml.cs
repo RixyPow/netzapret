@@ -144,6 +144,7 @@ public partial class TunnelSettingsWindow : Window
             Choose(FullCheckChoice, settings.FullCheckMinutes);
             Choose(PerEntryChoice, settings.AutoPickPerEntry);
             Choose(MemoryChoice, settings.ServerMemoryDays);
+            Choose(PingTimeoutChoice, settings.PingTimeoutSeconds);
 
             ShowMemory();
 
@@ -185,6 +186,7 @@ public partial class TunnelSettingsWindow : Window
             FullCheckMinutes = Value(FullCheckChoice) is > 0 and var min ? min : s.FullCheckMinutes,
             AutoPickPerEntry = Value(PerEntryChoice) is >= 0 and var n ? n : s.AutoPickPerEntry,
             ServerMemoryDays = Value(MemoryChoice) is >= 0 and var days ? days : s.ServerMemoryDays,
+            PingTimeoutSeconds = Value(PingTimeoutChoice) is > 0 and var wait ? wait : s.PingTimeoutSeconds,
         }, "Проверка серверов изменена.");
     }
 
