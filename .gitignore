@@ -106,4 +106,5 @@ themes/*
 !themes/cream/
 !themes/sloyka1/
 !themes/blissfield/
+!themes/fish/
 config/*.tmp
