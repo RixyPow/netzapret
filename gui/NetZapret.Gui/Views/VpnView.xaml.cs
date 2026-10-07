@@ -1965,6 +1965,7 @@ public partial class VpnView : UserControl
                     });
                 },
                 _work.Token,
+                settings,
                 SelectorGroup);
 
             Status.Text = $"Отвечают {alive} из {servers.Count}. Замер сохранён — меню увидит те же цифры.";
@@ -2007,7 +2008,7 @@ public partial class VpnView : UserControl
         if (!EnginesRunning)
             return;
 
-        await ServerSweep.ThroughEngineAsync(servers, _health, CancellationToken.None);
+        await ServerSweep.ThroughEngineAsync(servers, _health, CancellationToken.None, AppSettings.Load(AppSettings.DefaultPath));
         Reshow();
     }
 

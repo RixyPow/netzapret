@@ -142,6 +142,22 @@ public partial class TunnelSettingsWindow : Window
             Choose(ExitCheckChoice, settings.ExitCheckSeconds);
             Choose(FullCheckChoice, settings.FullCheckMinutes);
             Choose(PerEntryChoice, settings.AutoPickPerEntry);
+
+            FragmentChoice.SelectedItem = FragmentChoice.Items.OfType<System.Windows.Controls.ComboBoxItem>()
+                .FirstOrDefault(i => (string)i.Tag == settings.TlsFragment.ToString()) ?? FragmentChoice.Items[0];
+
+            // Адрес проверки: два известных — пунктами, прочее — «свой адрес»
+            // с полем; пустой или негодный в файле — Cloudflare, как и считает Ping.
+            var url = Ping.UrlOf(settings);
+            string tag = url == Ping.Cloudflare ? "cloudflare" : url == Ping.Google ? "google" : "own";
+
+            PingChoice.SelectedItem = PingChoice.Items.OfType<System.Windows.Controls.ComboBoxItem>()
+                .First(i => (string)i.Tag == tag);
+            PingOwnRow.Visibility = tag == "own" ? Visibility.Visible : Visibility.Collapsed;
+            PingOwn.Text = tag == "own" ? url : string.Empty;
+
+            Word(BestOfTwoWord, settings.PingBestOfTwo);
+            BestOfTwo.IsChecked = settings.PingBestOfTwo;
         }
         finally
         {
@@ -240,6 +256,74 @@ public partial class TunnelSettingsWindow : Window
             on
                 ? "Проверка прохода включена: молчащий туннель будет виден."
                 : "Проверка прохода выключена: туннель судится по открытому порту.");
+    }
+
+    private void OnFragment(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_showingChecks || !IsLoaded
+            || FragmentChoice.SelectedItem is not System.Windows.Controls.ComboBoxItem { Tag: string tag }
+            || !Enum.TryParse<TlsFragment>(tag, out var mode))
+        {
+            return;
+        }
+
+        Save(s => s with { TlsFragment = mode },
+            mode switch
+            {
+                TlsFragment.Records => "Приветствие TLS серверу пойдёт несколькими записями.",
+                TlsFragment.Packets => "Приветствие TLS серверу пойдёт несколькими пакетами — подключение станет медленнее.",
+                _ => "Фрагментация выключена: рукопожатие с сервером как есть.",
+            });
+    }
+
+    private void OnPingChoice(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_showingChecks || !IsLoaded || PingChoice.SelectedItem is not System.Windows.Controls.ComboBoxItem { Tag: string tag })
+            return;
+
+        // «Свой адрес» — сперва поле: пишется по «Сохранить», когда адрес введён.
+        if (tag == "own")
+        {
+            PingOwnRow.Visibility = Visibility.Visible;
+            PingOwn.Focus();
+            Status.Text = "Введите адрес и нажмите «Сохранить».";
+            return;
+        }
+
+        var url = tag == "google" ? Ping.Google : Ping.Cloudflare;
+
+        Save(s => s with { PingUrl = url == Ping.Cloudflare ? null : url }, $"Адрес проверки — {url}.");
+    }
+
+    private void OnPingOwn(object sender, RoutedEventArgs e)
+    {
+        var url = PingOwn.Text.Trim();
+
+        if (!Ping.IsUrl(url))
+        {
+            Status.Text = "Нужен полный адрес на http или https, например http://cp.cloudflare.com/generate_204.";
+            return;
+        }
+
+        Save(s => s with { PingUrl = url }, $"Адрес проверки — {url}.");
+    }
+
+    private void OnPingOwnKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            OnPingOwn(sender, e);
+    }
+
+    private void OnBestOfTwo(object sender, RoutedEventArgs e)
+    {
+        bool on = BestOfTwo.IsChecked == true;
+
+        Word(BestOfTwoWord, on);
+
+        Save(s => s with { PingBestOfTwo = on },
+            on
+                ? "Замер — лучший из двух запросов."
+                : "Замер — один запрос.");
     }
 
     private void OnMeasureOnStart(object sender, RoutedEventArgs e)

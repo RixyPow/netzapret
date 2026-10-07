@@ -109,7 +109,7 @@ internal static class StartupSweep
                     return;
                 }
 
-                await ServerSweep.ThroughEngineAsync(Warp.Exits(), health, cancellationToken);
+                await ServerSweep.ThroughEngineAsync(Warp.Exits(), health, cancellationToken, settings);
                 Journal.Write("замер", "при запуске: WARP " + (health.Find(Warp.Exits()[0].Tag) is { Success: true } ? "отвечает" : "не отвечает"));
                 return;
             }
@@ -130,7 +130,7 @@ internal static class StartupSweep
                 return;
             }
 
-            int alive = await ServerSweep.RunAsync(servers, singBox, engine, health, null, cancellationToken);
+            int alive = await ServerSweep.RunAsync(servers, singBox, engine, health, null, cancellationToken, settings);
 
             Journal.Write("замер", $"при запуске: отвечают {alive} из {servers.Count}"
                 + (engine ? " (через движок)" : " (пробником, движок не поднят)"));

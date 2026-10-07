@@ -475,7 +475,8 @@ internal static class SupervisorHost
             preferredExit: Warp.PreferredExit(settings),
             exitCheckSeconds: settings.ExitCheckSeconds,
             replacePinned: settings.ReplaceSilentServer,
-            dnsViaAuto: options.DnsViaAuto)
+            dnsViaAuto: options.DnsViaAuto,
+            watchUrl: Ping.UrlOf(settings))
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         });

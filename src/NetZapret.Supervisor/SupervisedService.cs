@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using NetZapret.Core;
 using NetZapret.Proxy;
 
 namespace NetZapret.Supervisor;
@@ -380,8 +381,10 @@ public sealed class SingBoxService : SupervisedService
         int exitCheckSeconds = 30,
         bool replacePinned = false,
         bool dnsOnly = false,
-        bool dnsViaAuto = false)
+        bool dnsViaAuto = false,
+        string? watchUrl = null)
     {
+        _watchUrl = string.IsNullOrWhiteSpace(watchUrl) ? Ping.Cloudflare : watchUrl;
         _dnsOnly = dnsOnly;
         _dnsViaAuto = dnsViaAuto;
         _exitCheckSeconds = exitCheckSeconds;
@@ -893,7 +896,7 @@ public sealed class SingBoxService : SupervisedService
         // (до 01.10 выбор человека так терялся до перезапуска).
         if (_pinnedPlaced)
         {
-            var pinned = await api.MeasureAsync(_preferredExit!, WatchUrl, CheckTimeout, cancellationToken);
+            var pinned = await api.MeasureAsync(_preferredExit!, _watchUrl, CheckTimeout, cancellationToken);
             Record(_preferredExit!, pinned);
 
             if (pinned is not null)
@@ -910,7 +913,7 @@ public sealed class SingBoxService : SupervisedService
         }
 
         // В обходе селектор стоит на direct — меряем автоподбор, а не его.
-        if (await api.MeasureAsync(LatencyGroup, WatchUrl, CheckTimeout, cancellationToken) is not null)
+        if (await api.MeasureAsync(LatencyGroup, _watchUrl, CheckTimeout, cancellationToken) is not null)
         {
             _returnTo = null;
             return true;
@@ -936,7 +939,8 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Идёт подбор замены — второй не начинаем.</summary>
     private int _picking;
 
-    private const string WatchUrl = "http://cp.cloudflare.com/generate_204";
+    /// <summary>Адрес проверки выхода — тот, что выбран в «Настройках туннеля» (<see cref="Ping"/>).</summary>
+    private readonly string _watchUrl;
 
     /// <summary>
     /// Проверяет серверы автоподбора строго по одному и ставит первый ответивший.
@@ -979,7 +983,7 @@ public sealed class SingBoxService : SupervisedService
 
         foreach (var tag in ordered)
         {
-            var delay = await api.MeasureAsync(tag, WatchUrl, CheckTimeout, cancellationToken);
+            var delay = await api.MeasureAsync(tag, _watchUrl, CheckTimeout, cancellationToken);
             Record(tag, delay);
 
             if (delay is not null)
@@ -1091,7 +1095,7 @@ public sealed class SingBoxService : SupervisedService
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
         var exit = await CurrentExitAsync(api, cancellationToken);
-        var delay = await api.MeasureAsync(exit ?? SelectorGroup, WatchUrl, CheckTimeout, cancellationToken);
+        var delay = await api.MeasureAsync(exit ?? SelectorGroup, _watchUrl, CheckTimeout, cancellationToken);
 
         if (exit is not null)
             Record(exit, delay);
@@ -1106,7 +1110,7 @@ public sealed class SingBoxService : SupervisedService
         // ответа закреплённого с разницей в 5 с — это один ответ.
         if (planned && replaced)
         {
-            var pinned = await api.MeasureAsync(_preferredExit!, WatchUrl, CheckTimeout, cancellationToken);
+            var pinned = await api.MeasureAsync(_preferredExit!, _watchUrl, CheckTimeout, cancellationToken);
             Record(_preferredExit!, pinned);
 
             if (_watch.OnPinned(pinned is not null) == ExitAction.Restore

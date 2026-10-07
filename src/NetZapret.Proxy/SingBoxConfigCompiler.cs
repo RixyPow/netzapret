@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Subscriptions;
 
@@ -190,6 +191,9 @@ public sealed class SingBoxOptions
     /// проверяется не доступность сайта, а работоспособность сервера.
     /// </summary>
     public string LatencyTestUrl { get; init; } = "https://www.gstatic.com/generate_204";
+
+    /// <summary>Фрагментация рукопожатия TLS с серверами (<see cref="SingBoxConfigCompiler.Fragment"/>).</summary>
+    public TlsFragment TlsFragment { get; init; }
 
     /// <summary>
     /// Как часто перезамерять задержку.
@@ -546,7 +550,8 @@ public sealed class SingBoxConfigCompiler
         string? logPath,
         string logLevel = "debug",
         string? resolvedAddress = null,
-        EngineKeys? keys = null)
+        EngineKeys? keys = null,
+        TlsFragment fragment = TlsFragment.Off)
     {
         var log = new JsonObject { ["level"] = logLevel, ["timestamp"] = true };
 
@@ -577,7 +582,7 @@ public sealed class SingBoxConfigCompiler
                 ? new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } }
                 : new JsonArray
                 {
-                    PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress),
+                    Fragment(PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress), fragment),
                     new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
                 },
             ["route"] = new JsonObject
@@ -1091,7 +1096,7 @@ public sealed class SingBoxConfigCompiler
         // Endpoint'ы описаны отдельным разделом, но в группы входят наравне
         // с исходящими: для urltest и селектора это такой же тег.
         foreach (var server in servers.Where(s => !s.IsEndpoint))
-            outbounds.Add(BuildOutbound(server, tags[server]));
+            outbounds.Add(Fragment(BuildOutbound(server, tags[server]), options.TlsFragment));
 
         if (servers.Count == 0)
             return outbounds;
@@ -1481,6 +1486,41 @@ public sealed class SingBoxConfigCompiler
         var transport = BuildTransport(server);
         if (transport is not null)
             outbound["transport"] = transport;
+
+        return outbound;
+    }
+
+    /// <summary>
+    /// Фрагментация рукопожатия TLS с сервером — если включена в настройках.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 07.10. Только у протоколов поверх TCP с TLS: VLESS, VMess,
+    /// Trojan, AnyTLS. У QUIC (Hysteria, Hysteria2, TUIC) рукопожатие идёт
+    /// в пакетах UDP, и резать там нечего; WireGuard и Shadowsocks без TLS.
+    /// </para>
+    /// <para>
+    /// «Записями» — <c>record_fragment</c>: приветствие несколькими записями TLS,
+    /// дёшево. «Пакетами» — <c>fragment</c>: несколькими пакетами TCP с паузой
+    /// между ними, сильнее и медленнее; на Windows паузу движок подбирает сам
+    /// с правами администратора, которые у программы есть. Конфиг с обоими
+    /// принимает sing-box check (1.14.1-extended-2.7.2); на живом сервере,
+    /// который режут, — не проверено, с REALITY — тоже.
+    /// </para>
+    /// </remarks>
+    internal static JsonObject Fragment(JsonObject outbound, TlsFragment mode)
+    {
+        if (mode == TlsFragment.Off
+            || outbound["type"]?.GetValue<string>() is not ("vless" or "vmess" or "trojan" or "anytls")
+            || outbound["tls"] is not JsonObject tls)
+        {
+            return outbound;
+        }
+
+        if (mode == TlsFragment.Records)
+            tls["record_fragment"] = true;
+        else
+            tls["fragment"] = true;
 
         return outbound;
     }

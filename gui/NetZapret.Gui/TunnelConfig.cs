@@ -235,6 +235,12 @@ internal static class TunnelConfig
 
                 // Проверка серверов — как настроил человек (AppSettings).
                 LatencyTestInterval = $"{Math.Max(1, settings.FullCheckMinutes)}m",
+
+                // Адрес проверки — один на всех (Ping, 07.10): прежде автоподбор
+                // движка ходил на https://www.gstatic.com, а сторож и замер вкладки —
+                // на http://cp.cloudflare.com.
+                LatencyTestUrl = Ping.UrlOf(settings),
+                TlsFragment = settings.TlsFragment,
                 AutoPickPerEntry = Math.Max(0, settings.AutoPickPerEntry),
                 KnownLatency = ServerHealthCache.Load().Latencies(),
             });

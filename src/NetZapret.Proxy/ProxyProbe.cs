@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using NetZapret.Subscriptions;
+using NetZapret.Core;
 
 namespace NetZapret.Proxy;
 
@@ -107,6 +108,12 @@ public sealed record ProbeOptions
     /// впустую перебираются все три подряд.
     /// </remarks>
     public bool LookupExternalIp { get; init; } = true;
+
+    /// <summary>Запросов на замер; в счёт идёт быстрейший (<see cref="Ping.AttemptsOf"/>).</summary>
+    public int Attempts { get; init; } = 1;
+
+    /// <summary>Фрагментация рукопожатия с сервером — та же, что в конфиге туннеля.</summary>
+    public TlsFragment Fragment { get; init; }
 
     /// <summary>
     /// Службы, возвращающие внешний адрес открытым текстом.
@@ -286,7 +293,7 @@ public sealed class ProxyProbe
         }
 
         var keys = EngineKeys.Generate();
-        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address, keys);
+        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address, keys, options.Fragment);
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
         var stopwatch = Stopwatch.StartNew();
@@ -325,7 +332,20 @@ public sealed class ProxyProbe
 
             using var http = new HttpClient(handler) { Timeout = options.RequestTimeout };
 
-            var (latency, error) = await MeasureAsync(http, options.ConnectivityUrls, cancellationToken);
+            var (latency, error, answered) = await MeasureAsync(http, options.ConnectivityUrls, cancellationToken);
+
+            // «Лучший из двух» (AppSettings.PingBestOfTwo): ещё запрос к тому же
+            // адресу, но новым соединением — как меряет движок, — а не через
+            // уже открытое: иначе второй замер мерил бы одну дорогу туда-обратно
+            // по готовому туннелю, и цифры пробника с движком разошлись бы.
+            for (int extra = 1; extra < options.Attempts && latency is not null && answered is not null; extra++)
+            {
+                using var again = new HttpClientHandler { Proxy = keys.Proxy(options.ListenPort), UseProxy = true };
+                using var fresh = new HttpClient(again) { Timeout = options.RequestTimeout };
+
+                var (next, _, _) = await MeasureAsync(fresh, [answered], cancellationToken);
+                latency = Ping.Best([latency, next]);
+            }
 
             if (latency is null)
             {
@@ -425,7 +445,8 @@ public sealed class ProxyProbe
     /// <summary>
     /// Замеряет отклик через прокси; <c>null</c> — трафик не пошёл.
     /// </summary>
-    private static async Task<(TimeSpan? Latency, string? Error)> MeasureAsync(
+    /// <returns>Задержка, причины неудачи и адрес, который ответил.</returns>
+    private static async Task<(TimeSpan? Latency, string? Error, string? Url)> MeasureAsync(
         HttpClient http,
         IReadOnlyList<string> urls,
         CancellationToken cancellationToken)
@@ -446,7 +467,7 @@ public sealed class ProxyProbe
                 stopwatch.Stop();
 
                 if (response.IsSuccessStatusCode)
-                    return (stopwatch.Elapsed, null);
+                    return (stopwatch.Elapsed, null, url);
 
                 reasons.Add($"{Short(url)}: {(int)response.StatusCode}");
             }
@@ -459,7 +480,7 @@ public sealed class ProxyProbe
             }
         }
 
-        return (null, reasons.Count > 0 ? string.Join("; ", reasons) : null);
+        return (null, reasons.Count > 0 ? string.Join("; ", reasons) : null, null);
     }
 
     private static async Task<(string? Ip, IReadOnlyList<string> Reasons)> TryServicesAsync(

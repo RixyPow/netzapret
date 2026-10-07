@@ -1,3 +1,4 @@
+using NetZapret.Core;
 using NetZapret.Subscriptions;
 
 namespace NetZapret.Proxy;
@@ -24,9 +25,6 @@ namespace NetZapret.Proxy;
 /// </remarks>
 public static class ServerSweep
 {
-    /// <summary>Адрес проверки — тот же, что у автоподбора движка.</summary>
-    public const string ProbeUrl = "http://cp.cloudflare.com/generate_204";
-
     /// <summary>
     /// Меряет серверы и пишет замеры в <paramref name="health"/>; сохраняет в конце.
     /// </summary>
@@ -34,6 +32,10 @@ public static class ServerSweep
     /// <param name="singBox">Путь к sing-box для пробника.</param>
     /// <param name="engineRunning">Работает ли движок туннеля — тогда свои выходы меряет он.</param>
     /// <param name="onMeasured">Тег замеренного — по мере готовности, из любого потока.</param>
+    /// <param name="settings">
+    /// Адрес проверки, «лучший из двух» и фрагментация (<see cref="Ping"/>);
+    /// <c>null</c> — значения по умолчанию.
+    /// </param>
     /// <returns>Сколько серверов ответило.</returns>
     /// <exception cref="OperationCanceledException">Замер прерван; замеренное не сохраняется.</exception>
     public static async Task<int> RunAsync(
@@ -43,8 +45,14 @@ public static class ServerSweep
         ServerHealthCache health,
         Action<string>? onMeasured,
         CancellationToken cancellationToken,
+        AppSettings? settings = null,
         string selectorGroup = "auto")
     {
+        settings ??= new AppSettings();
+
+        var url = Ping.UrlOf(settings);
+        int attempts = Ping.AttemptsOf(settings);
+
         var sync = new object();
 
         void Record(string tag, bool success, double? latencyMs)
@@ -84,17 +92,29 @@ public static class ServerSweep
 
                 await api.MeasureGentlyAsync(
                     servers.Where(s => inEngine.Contains(s.Tag)).Select(s => (s.Tag, Entry(s))).ToList(),
-                    ProbeUrl,
+                    url,
                     TimeSpan.FromSeconds(5),
                     (tag, delay) => Record(tag, delay is not null, delay?.TotalMilliseconds),
-                    cancellationToken);
+                    cancellationToken,
+                    attempts: attempts);
             }
         }
 
         var probe = new ProxyProbe(singBox);
 
         // Внешний адрес здесь не нужен, а его поиск стоит секунд на каждом сервере.
-        var options = new ProbeOptions { LookupExternalIp = false, LogLevel = "warn" };
+        // Выбранный адрес проверки — первым, прочие — запасом: отказ одного
+        // адреса не должен выглядеть отказом сервера.
+        var defaults = new ProbeOptions();
+
+        var options = defaults with
+        {
+            LookupExternalIp = false,
+            LogLevel = "warn",
+            ConnectivityUrls = [url, .. defaults.ConnectivityUrls.Where(u => !string.Equals(u, url, StringComparison.OrdinalIgnoreCase))],
+            Attempts = attempts,
+            Fragment = settings.TlsFragment,
+        };
 
         foreach (var wave in Waves(rest))
         {
@@ -124,12 +144,15 @@ public static class ServerSweep
     public static async Task ThroughEngineAsync(
         IEnumerable<ProxyServer> servers,
         ServerHealthCache health,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        AppSettings? settings = null)
     {
         var list = servers.ToList();
 
         if (list.Count == 0)
             return;
+
+        settings ??= new AppSettings();
 
         using var api = new ClashApi();
 
@@ -138,7 +161,10 @@ public static class ServerSweep
 
         foreach (var server in list)
         {
-            var delay = await api.MeasureAsync(server.Tag, ProbeUrl, TimeSpan.FromSeconds(15), cancellationToken);
+            TimeSpan? delay = null;
+
+            for (int attempt = 0; attempt < Ping.AttemptsOf(settings); attempt++)
+                delay = Ping.Best([delay, await api.MeasureAsync(server.Tag, Ping.UrlOf(settings), TimeSpan.FromSeconds(15), cancellationToken)]);
 
             health.Set(new ServerHealth
             {

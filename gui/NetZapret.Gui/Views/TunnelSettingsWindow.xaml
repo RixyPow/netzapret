@@ -1,6 +1,7 @@
 <Window x:Class="NetZapret.Gui.Views.TunnelSettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
         Title="Настройки туннеля"
         Width="620" SizeToContent="Height" MaxHeight="820"
         WindowStartupLocation="CenterOwner"
@@ -190,6 +191,41 @@
                 страны на одном входе и закрывает его от частых проверок.
                 Значение строки — в Tag: секунды, минуты или штуки.
             -->
+            <!--
+                Владелец 07.10: «я бы сделал её выключателем в «Настройках
+                туннеля», выключенным по умолчанию» — «делай». Не выключатель,
+                а выбор из трёх: у движка два способа резать приветствие,
+                и дешёвый стоит пробовать первым (TlsFragment).
+            -->
+            <TextBlock Text="СОЕДИНЕНИЕ С СЕРВЕРОМ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
+
+            <Border Style="{StaticResource SettingsGroup}">
+                <Grid Margin="16,13">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Фрагментация рукопожатия" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Режет приветствие TLS, с которого начинается соединение с VPN-сервером, чтобы фильтр оператора не узнал сервер по имени в нём. Нужна, когда оператор закрывает соединение именно с сервером — серверы перестали подключаться, а подписка и ключи те же.&#x0a;&#x0a;«Записями TLS» — дешевле, пробовать первым. «Пакетами TCP» — сильнее, но каждое новое соединение с сервером медленнее.&#x0a;&#x0a;Действует на VLESS, VMess, Trojan и AnyTLS с TLS; у Hysteria, TUIC и WireGuard резать нечего. С REALITY не проверялась. Включайте, если серверы режут: на работающих она только замедляет подключение. Применяется при следующем запуске движков." />
+                        </StackPanel>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="Когда оператор режет соединение с самим сервером." />
+                    </StackPanel>
+
+                    <ComboBox Grid.Column="1" x:Name="FragmentChoice" Width="180" SelectionChanged="OnFragment">
+                        <ComboBoxItem Content="выключена" Tag="Off" />
+                        <ComboBoxItem Content="записями TLS" Tag="Records" />
+                        <ComboBoxItem Content="пакетами TCP" Tag="Packets" />
+                    </ComboBox>
+                </Grid>
+            </Border>
+
             <TextBlock Text="ПРОВЕРКА СЕРВЕРОВ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
             <Border Style="{StaticResource SettingsGroup}">
@@ -293,6 +329,74 @@
                             <ComboBoxItem Content="три" Tag="3" />
                             <ComboBoxItem Content="все" Tag="0" />
                         </ComboBox>
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
+                        Настройки пинга — по образцу Happ (владелец 07.10, «делай»):
+                        адрес проверки и «лучший из двух». Адрес один на всех —
+                        автоподбор движка, сторож, «Замерить все» и пробник (Ping).
+                    -->
+                    <StackPanel Margin="16,13">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Text="Адрес проверки" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Куда уходит запрос через сервер при каждом замере — автоподбора, сторожа, «Замерить все». Нужен адрес, отдающий пустой ответ быстро: сервер меряется, а не сайт.&#x0a;&#x0a;Cloudflare — узел рядом с выходом сервера. Google — адрес, которым меряет Happ. Свой — если оба через ваши серверы не отвечают.&#x0a;&#x0a;Автоподбор и сторож возьмут его при следующем запуске движков, «Замерить все» — сразу." />
+                            </StackPanel>
+
+                            <ComboBox Grid.Column="1" x:Name="PingChoice" Width="180" SelectionChanged="OnPingChoice">
+                                <ComboBoxItem Content="Cloudflare" Tag="cloudflare" />
+                                <ComboBoxItem Content="Google" Tag="google" />
+                                <ComboBoxItem Content="свой адрес" Tag="own" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid x:Name="PingOwnRow" Margin="0,10,0,0" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="PingOwn" gui:Hint.Text="http://адрес/generate_204" KeyDown="OnPingOwnKey" />
+                            <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Сохранить"
+                                    Click="OnPingOwn" Margin="8,0,0,0" />
+                        </Grid>
+                    </StackPanel>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Лучший из двух" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Каждый замер — два запроса по очереди, в счёт идёт быстрейший. Как режим double в Happ: второй запрос не платит за разрешение имён, и цифры ближе к тому, что чувствуется в браузере, и к цифрам Happ.&#x0a;&#x0a;Цена — вдвое больше проверок к продавцам. Автоподбор движка так не умеет: он меряет одним запросом, как и прежде." />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="«Замерить все», тест пинга и замер при запуске." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="BestOfTwoWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="BestOfTwo" Style="{StaticResource Switch}"
+                                      Click="OnBestOfTwo" VerticalAlignment="Center" />
                     </Grid>
 
                     <Border Style="{StaticResource RowLine}" />
