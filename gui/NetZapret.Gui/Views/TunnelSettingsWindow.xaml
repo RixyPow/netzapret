@@ -335,8 +335,9 @@
 
                     <!--
                         Настройки пинга — по образцу Happ (владелец 07.10, «делай»):
-                        адрес проверки и «лучший из двух». Адрес один на всех —
-                        автоподбор движка, сторож, «Замерить все» и пробник (Ping).
+                        адрес проверки, один на всех — автоподбор движка, сторож,
+                        «Замерить все» и пробник (Ping). «Лучший из двух» был здесь
+                        и убран в тот же день — почему, в Ping.
                     -->
                     <StackPanel Margin="16,13">
                         <Grid>
@@ -370,34 +371,6 @@
                                     Click="OnPingOwn" Margin="8,0,0,0" />
                         </Grid>
                     </StackPanel>
-
-                    <Border Style="{StaticResource RowLine}" />
-
-                    <Grid Margin="16,13">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Лучший из двух" VerticalAlignment="Center" />
-
-                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Каждый замер — два запроса по очереди, в счёт идёт быстрейший. Как режим double в Happ: второй запрос не платит за разрешение имён, и цифры ближе к тому, что чувствуется в браузере, и к цифрам Happ.&#x0a;&#x0a;Цена — вдвое больше проверок к продавцам. Автоподбор движка так не умеет: он меряет одним запросом, как и прежде." />
-                            </StackPanel>
-
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="«Замерить все», тест пинга и замер при запуске." />
-                        </StackPanel>
-
-                        <TextBlock Grid.Column="1" x:Name="BestOfTwoWord" Style="{StaticResource Caption}"
-                                   VerticalAlignment="Center" Margin="0,0,10,0" />
-
-                        <ToggleButton Grid.Column="2" x:Name="BestOfTwo" Style="{StaticResource Switch}"
-                                      Click="OnBestOfTwo" VerticalAlignment="Center" />
-                    </Grid>
 
                     <Border Style="{StaticResource RowLine}" />
 

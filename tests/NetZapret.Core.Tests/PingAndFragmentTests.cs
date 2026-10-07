@@ -24,17 +24,31 @@ public sealed class PingAndFragmentTests
         Assert.Equal(Ping.Cloudflare, Ping.UrlOf(new AppSettings { PingUrl = "ftp://example.com/" }));
     }
 
+    /// <summary>
+    /// «Лучший из двух» убран 07.10, в тот же день, что появился, — а поле
+    /// уже записано в файлы настроек. Оно обязано читаться молча: не прочитайся
+    /// файл, программа взяла бы настройки по умолчанию целиком — вплоть
+    /// до мастера первого запуска.
+    /// </summary>
     [Fact]
-    public void BestOfTwoTakesTheFastestAnswer()
+    public void SettingsWithTheRemovedBestOfTwoStillRead()
     {
-        Assert.Equal(1, Ping.AttemptsOf(new AppSettings()));
-        Assert.Equal(2, Ping.AttemptsOf(new AppSettings { PingBestOfTwo = true }));
+        var path = Path.Combine(Path.GetTempPath(), $"nz-settings-{Guid.NewGuid():N}.json");
 
-        Assert.Equal(TimeSpan.FromMilliseconds(80), Ping.Best([TimeSpan.FromMilliseconds(120), TimeSpan.FromMilliseconds(80)]));
+        try
+        {
+            File.WriteAllText(path, """{ "OnboardingDone": true, "PingBestOfTwo": true, "PingUrl": "http://www.gstatic.com/generate_204" }""");
 
-        // Один не ответил — в счёт идёт ответивший; не ответил никто — сервер молчит.
-        Assert.Equal(TimeSpan.FromMilliseconds(120), Ping.Best([null, TimeSpan.FromMilliseconds(120)]));
-        Assert.Null(Ping.Best([null, null]));
+            var settings = AppSettings.TryLoad(path, out var result);
+
+            Assert.Equal(AppSettings.ReadResult.Read, result);
+            Assert.True(settings.OnboardingDone);
+            Assert.Equal(Ping.Google, Ping.UrlOf(settings));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static readonly ProxyServer[] Servers =

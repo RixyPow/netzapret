@@ -1,7 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
-using NetZapret.Core;
 
 namespace NetZapret.Proxy;
 
@@ -168,8 +167,7 @@ public sealed class ClashApi : IDisposable
         Action<string, TimeSpan?> onResult,
         CancellationToken cancellationToken,
         int perEntry = 1,
-        int total = 8,
-        int attempts = 1)
+        int total = 8)
     {
         using var all = new SemaphoreSlim(total);
 
@@ -191,14 +189,7 @@ public sealed class ClashApi : IDisposable
 
                     try
                     {
-                        // «Лучший из двух» (AppSettings.PingBestOfTwo): запросы
-                        // по очереди, каждый — новым соединением движка.
-                        TimeSpan? best = null;
-
-                        for (int attempt = 0; attempt < Math.Max(1, attempts); attempt++)
-                            best = Ping.Best([best, await MeasureAsync(server.Tag, url, timeout, cancellationToken)]);
-
-                        onResult(server.Tag, best);
+                        onResult(server.Tag, await MeasureAsync(server.Tag, url, timeout, cancellationToken));
                     }
                     finally
                     {

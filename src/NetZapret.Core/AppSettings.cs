@@ -422,16 +422,6 @@ public sealed record AppSettings
     /// <summary>Адрес проверки серверов; <c>null</c> — Cloudflare (<see cref="Ping"/>).</summary>
     public string? PingUrl { get; init; }
 
-    /// <summary>
-    /// «Лучший из двух»: каждый замер — два запроса, в счёт идёт быстрейший (<see cref="Ping"/>).
-    /// </summary>
-    /// <remarks>
-    /// Как double у Happ: второй запрос не платит за разрешение имён, и цифры
-    /// ближе к тому, что чувствуется в браузере. Вдвое больше запросов к продавцам —
-    /// поэтому выключено по умолчанию.
-    /// </remarks>
-    public bool PingBestOfTwo { get; init; }
-
     /// <summary>Фрагментация рукопожатия TLS с сервером (<see cref="Core.TlsFragment"/>).</summary>
     public TlsFragment TlsFragment { get; init; }
 

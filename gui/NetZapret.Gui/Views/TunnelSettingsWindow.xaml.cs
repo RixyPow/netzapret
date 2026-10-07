@@ -155,9 +155,6 @@ public partial class TunnelSettingsWindow : Window
                 .First(i => (string)i.Tag == tag);
             PingOwnRow.Visibility = tag == "own" ? Visibility.Visible : Visibility.Collapsed;
             PingOwn.Text = tag == "own" ? url : string.Empty;
-
-            Word(BestOfTwoWord, settings.PingBestOfTwo);
-            BestOfTwo.IsChecked = settings.PingBestOfTwo;
         }
         finally
         {
@@ -312,18 +309,6 @@ public partial class TunnelSettingsWindow : Window
     {
         if (e.Key == System.Windows.Input.Key.Enter)
             OnPingOwn(sender, e);
-    }
-
-    private void OnBestOfTwo(object sender, RoutedEventArgs e)
-    {
-        bool on = BestOfTwo.IsChecked == true;
-
-        Word(BestOfTwoWord, on);
-
-        Save(s => s with { PingBestOfTwo = on },
-            on
-                ? "Замер — лучший из двух запросов."
-                : "Замер — один запрос.");
     }
 
     private void OnMeasureOnStart(object sender, RoutedEventArgs e)

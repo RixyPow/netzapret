@@ -33,7 +33,7 @@ public static class ServerSweep
     /// <param name="engineRunning">Работает ли движок туннеля — тогда свои выходы меряет он.</param>
     /// <param name="onMeasured">Тег замеренного — по мере готовности, из любого потока.</param>
     /// <param name="settings">
-    /// Адрес проверки, «лучший из двух» и фрагментация (<see cref="Ping"/>);
+    /// Адрес проверки (<see cref="Ping"/>) и фрагментация;
     /// <c>null</c> — значения по умолчанию.
     /// </param>
     /// <returns>Сколько серверов ответило.</returns>
@@ -51,7 +51,6 @@ public static class ServerSweep
         settings ??= new AppSettings();
 
         var url = Ping.UrlOf(settings);
-        int attempts = Ping.AttemptsOf(settings);
 
         var sync = new object();
 
@@ -95,8 +94,7 @@ public static class ServerSweep
                     url,
                     TimeSpan.FromSeconds(5),
                     (tag, delay) => Record(tag, delay is not null, delay?.TotalMilliseconds),
-                    cancellationToken,
-                    attempts: attempts);
+                    cancellationToken);
             }
         }
 
@@ -112,7 +110,6 @@ public static class ServerSweep
             LookupExternalIp = false,
             LogLevel = "warn",
             ConnectivityUrls = [url, .. defaults.ConnectivityUrls.Where(u => !string.Equals(u, url, StringComparison.OrdinalIgnoreCase))],
-            Attempts = attempts,
             Fragment = settings.TlsFragment,
         };
 
@@ -161,10 +158,7 @@ public static class ServerSweep
 
         foreach (var server in list)
         {
-            TimeSpan? delay = null;
-
-            for (int attempt = 0; attempt < Ping.AttemptsOf(settings); attempt++)
-                delay = Ping.Best([delay, await api.MeasureAsync(server.Tag, Ping.UrlOf(settings), TimeSpan.FromSeconds(15), cancellationToken)]);
+            var delay = await api.MeasureAsync(server.Tag, Ping.UrlOf(settings), TimeSpan.FromSeconds(15), cancellationToken);
 
             health.Set(new ServerHealth
             {
