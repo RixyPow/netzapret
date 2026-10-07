@@ -72,6 +72,33 @@ public sealed class ThemeWriterTests : IDisposable
         Assert.Equal(BackgroundFit.Contain, theme.Background!.Fit);
         Assert.Equal(0.65, theme.Background.Dim);
         Assert.EndsWith("background.jpg", theme.Background.Image);
+        Assert.False(theme.HomeFullWidth);
+    }
+
+    /// <summary>
+    /// Копия темы с живым фоном и «Главной» на всю ширину (как «Рыбка», 08.10)
+    /// сохраняет и видео, и ширину.
+    /// </summary>
+    [Fact]
+    public void ACopyKeepsTheVideoAndTheWideHome()
+    {
+        var video = Path.Combine(_root, "fish.mp4");
+        File.WriteAllBytes(video, new byte[32]);
+
+        var id = ThemeWriter.Save(new ThemeDraft
+        {
+            Name = "Рыбка — моя",
+            Colors = Dark(),
+            BackgroundSource = video,
+            Dim = 0.7,
+            HomeFullWidth = true,
+        }, root: _root);
+
+        var theme = ThemeLoader.Load(id, _root).Theme!;
+
+        Assert.True(theme.HomeFullWidth);
+        Assert.True(theme.Background!.IsVideo);
+        Assert.EndsWith("background.mp4", theme.Background.Image);
     }
 
     /// <summary>Встроенная тема не перезаписывается: правка уходит новой.</summary>

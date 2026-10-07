@@ -161,6 +161,7 @@ public partial class ThemeEditorWindow : Window
                 Dim = Dims[Math.Max(0, DimChoice.SelectedIndex)],
                 Blur = Blurs[Math.Max(0, BlurChoice.SelectedIndex)],
             },
+        HomeFullWidth = _from.HomeFullWidth,
     };
 
     /// <summary>
@@ -343,6 +344,7 @@ public partial class ThemeEditorWindow : Window
             Fit = (BackgroundFit)Math.Max(0, FitChoice.SelectedIndex),
             Dim = Dims[Math.Max(0, DimChoice.SelectedIndex)],
             Blur = Blurs[Math.Max(0, BlurChoice.SelectedIndex)],
+            HomeFullWidth = _from.HomeFullWidth,
         };
 
         try

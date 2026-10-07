@@ -30,6 +30,15 @@ public sealed record ThemeDraft
     public double Dim { get; init; } = 0.5;
 
     public double Blur { get; init; } = 24;
+
+    /// <summary>
+    /// «Главная» на всю ширину с этой темой (<see cref="Theme.HomeFullWidth"/>).
+    /// </summary>
+    /// <remarks>
+    /// Редактору его не выбрать, но копия темы его сохраняет: правка
+    /// «Рыбки» (выпускаемой с 08.10) иначе вернула бы колонку под арт.
+    /// </remarks>
+    public bool HomeFullWidth { get; init; }
 }
 
 /// <summary>
@@ -73,6 +82,9 @@ public static class ThemeWriter
 
         if (!string.IsNullOrWhiteSpace(draft.Author))
             json["author"] = draft.Author.Trim();
+
+        if (draft.HomeFullWidth)
+            json["homeFullWidth"] = true;
 
         var colors = new JsonObject();
 
