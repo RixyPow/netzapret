@@ -101,6 +101,9 @@ public partial class AppearanceView : UserControl
 
             next.Save(AppSettings.DefaultPath);
             Motion.Refresh();
+
+            // Живой фон темы — тоже движение: с выключенными анимациями стоит.
+            BackdropVideo.Update();
             ShowAnimations(next);
         }
         catch (Exception ex)

@@ -165,6 +165,65 @@ public sealed class ThemeLoaderTests : IDisposable
         Assert.Equal(0.7, background.Dim);
         Assert.Equal(30, background.Blur);
         Assert.EndsWith("wall.jpg", background.Image);
+        Assert.False(background.IsVideo);
+    }
+
+    /// <summary>
+    /// Фоном может быть видео mp4 (07.10, «именно как фон эта гифка должна
+    /// быть»), а GIF — нет: фоном он съел бы сотни мегабайт памяти.
+    /// </summary>
+    [Fact]
+    public void AVideoBackgroundIsTakenAndAGifIsNot()
+    {
+        var video = Write("video", """
+            { "base": "dark", "background": { "image": "fish.mp4", "dim": 0.7 } }
+            """, ("fish.mp4", 16));
+
+        Assert.True(video.Ok, string.Join("; ", video.Problems));
+        Assert.True(video.Theme!.Background!.IsVideo);
+        Assert.EndsWith("fish.mp4", video.Theme.Background.Image);
+
+        var gif = Write("gif", """
+            { "base": "dark", "background": { "image": "fish.gif" } }
+            """, ("fish.gif", 16));
+
+        Assert.False(gif.Ok);
+        Assert.Contains(gif.Problems, p => p.Contains("fish.gif"));
+    }
+
+    /// <summary>
+    /// Размер кадра читается из заголовка mp4: у звуковой дорожки он нулевой,
+    /// у видео — настоящий; коробка mdat перед moov не мешает.
+    /// </summary>
+    [Fact]
+    public void TheFrameSizeIsReadFromTheMp4Header()
+    {
+        static byte[] Box(string type, params byte[][] content)
+        {
+            var body = content.SelectMany(c => c).ToArray();
+            var size = 8 + body.Length;
+            return [(byte)(size >> 24), (byte)(size >> 16), (byte)(size >> 8), (byte)size,
+                .. System.Text.Encoding.ASCII.GetBytes(type), .. body];
+        }
+
+        static byte[] Tkhd(int width, int height)
+        {
+            // Версия 0: ширина и высота — с 76-го байта тела, в формате 16.16.
+            var body = new byte[84];
+            body[76] = (byte)(width >> 8);
+            body[77] = (byte)width;
+            body[80] = (byte)(height >> 8);
+            body[81] = (byte)height;
+            return Box("tkhd", body);
+        }
+
+        var file = Box("ftyp", new byte[8])
+            .Concat(Box("mdat", new byte[100]))
+            .Concat(Box("moov", Box("mvhd", new byte[100]), Box("trak", Tkhd(0, 0)), Box("trak", Tkhd(132, 74))))
+            .ToArray();
+
+        Assert.Equal((132, 74), VideoFile.FrameSize(new MemoryStream(file)));
+        Assert.Null(VideoFile.FrameSize(new MemoryStream(new byte[40])));
     }
 
     /// <summary>Нечитаемая тема не проходит: пара названа с числом.</summary>

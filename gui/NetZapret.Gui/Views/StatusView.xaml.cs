@@ -124,15 +124,23 @@ public partial class StatusView : UserControl
     {
         double width = ArtLayer.ActualWidth, height = ArtLayer.ActualHeight;
 
-        if (TryFindResource("SideArt") is not ImageBrush { ImageSource: { } image }
-            || width <= 0 || height <= 0 || image.Height <= 0)
+        // Арт — картинка или живой фон: у видео кисть-рисунок (BackdropVideo),
+        // и пропорции берутся у кадра.
+        (Size Size, Func<TileBrush> Make)? art = TryFindResource("SideArt") switch
+        {
+            ImageBrush { ImageSource: { } image } => (new Size(image.Width, image.Height), () => new ImageBrush(image)),
+            DrawingBrush { Drawing: { } drawing } => (drawing.Bounds.Size, () => new DrawingBrush(drawing)),
+            _ => null,
+        };
+
+        if (art is not { } content || width <= 0 || height <= 0 || content.Size.Height <= 0 || content.Size.Width <= 0)
         {
             Art.Fill = null;
             ArtShade.Fill = null;
             return;
         }
 
-        double aspect = image.Width / image.Height;
+        double aspect = content.Size.Width / content.Size.Height;
         double w = height * aspect, h = height;
 
         // Уже страницы — растягиваем до её ширины: пустая полоса справа хуже обрезки.
@@ -148,13 +156,12 @@ public partial class StatusView : UserControl
 
         double left = centre - w / 2;
 
-        Art.Fill = new ImageBrush(image)
-        {
-            Stretch = Stretch.Fill,
-            TileMode = TileMode.None,
-            ViewportUnits = BrushMappingMode.Absolute,
-            Viewport = new Rect(left, (height - h) / 2, w, h),
-        };
+        var fill = content.Make();
+        fill.Stretch = Stretch.Fill;
+        fill.TileMode = TileMode.None;
+        fill.ViewportUnits = BrushMappingMode.Absolute;
+        fill.Viewport = new Rect(left, (height - h) / 2, w, h);
+        Art.Fill = fill;
 
         // Левый край картинки — в подложку, без черты. Растворение кончается
         // до колонки с артом (не позже 80 % пути от края картинки до неё),

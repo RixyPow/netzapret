@@ -254,16 +254,21 @@ public partial class ThemeEditorWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Картинка фона",
-            Filter = "Картинки (PNG, JPG)|*.png;*.jpg;*.jpeg",
+            Title = "Картинка или видео фона",
+
+            // Видео — живой фон по кругу (07.10); стекла под карточками у него нет.
+            Filter = "Картинки и видео (PNG, JPG, MP4)|*.png;*.jpg;*.jpeg;*.mp4|Картинки (PNG, JPG)|*.png;*.jpg;*.jpeg|Видео (MP4)|*.mp4",
         };
 
         if (dialog.ShowDialog(this) != true)
             return;
 
-        if (new FileInfo(dialog.FileName).Length > ThemeLoader.MaxImageBytes)
+        bool video = Path.GetExtension(dialog.FileName).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
+        long limit = video ? ThemeLoader.MaxVideoBytes : ThemeLoader.MaxImageBytes;
+
+        if (new FileInfo(dialog.FileName).Length > limit)
         {
-            Say($"Картинка больше {ThemeLoader.MaxImageBytes / 1024 / 1024} МБ — возьмите поменьше.");
+            Say($"{(video ? "Видео" : "Картинка")} больше {limit / 1024 / 1024} МБ — возьмите поменьше.");
             return;
         }
 

@@ -245,6 +245,62 @@ public sealed class ThemesTests
     }
 
     /// <summary>
+    /// Живой фон (07.10): видео ложится кистью-рисунком, стекла под ним нет,
+    /// меню на плотной подложке, карточки — полупрозрачные поверх видео.
+    /// </summary>
+    /// <remarks>
+    /// Файл — не настоящее видео: проигрыватель откроет его позже и молча
+    /// не сыграет, а сборке темы это неважно. Кадра у такого файла проводник
+    /// не даст, и проверка по картинке пропускается, а не роняет тему.
+    /// </remarks>
+    [Fact]
+    public void AVideoBackgroundIsABrushWithoutGlass()
+    {
+        if (Themes() is not { } repo)
+            return;
+
+        var root = Path.Combine(Path.GetTempPath(), $"netzapret-video-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "dark"));
+            File.Copy(Path.Combine(repo, "dark", "theme.json"), Path.Combine(root, "dark", "theme.json"));
+            Directory.CreateDirectory(Path.Combine(root, "video"));
+            File.WriteAllBytes(Path.Combine(root, "video", "fish.mp4"), new byte[64]);
+            File.WriteAllText(Path.Combine(root, "video", "theme.json"), """
+                { "base": "dark", "colors": { "surface": "#B3161B22" },
+                  "background": { "image": "fish.mp4", "dim": 0.7, "blur": 12 } }
+                """);
+
+            Sta.Run(() =>
+            {
+                var theme = ThemeLoader.Load("video", root).Theme!;
+                var problems = new List<string>();
+                var built = NetZapret.Gui.Themes.Build(theme, problems, new Appearance(true, true, 0));
+
+                try
+                {
+                    Assert.Empty(problems);
+                    Assert.Null(built["GlassImage"]);
+                    Assert.IsType<VideoDrawing>(built[BackdropVideo.Key]);
+                    Assert.IsType<DrawingBrush>(built["BackdropImage"]);
+                    Assert.IsType<DrawingBrush>(built["SideArt"]);
+                    Assert.True(((SolidColorBrush)built["RailFill"]).Color.A >= 217, "меню без плотной подложки");
+                    Assert.Equal(0.7, built["BackdropDim"]);
+                }
+                finally
+                {
+                    BackdropVideo.Discard(built);
+                }
+            });
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Край яркости картинки считается под затемнением: чёрная картинка
     /// с белым пятном в два процента не должна объявляться белой.
     /// </summary>

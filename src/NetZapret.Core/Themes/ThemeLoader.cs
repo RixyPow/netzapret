@@ -47,7 +47,21 @@ public static class ThemeLoader
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;
 
+    /// <summary>
+    /// Видео фона больше картинки: двенадцать секунд по кругу в приличном
+    /// качестве весят десятки мегабайт, а картинке и двадцати много.
+    /// </summary>
+    public const long MaxVideoBytes = 64 * 1024 * 1024;
+
     private static readonly string[] ImageTypes = [".png", ".jpg", ".jpeg"];
+
+    /// <summary>
+    /// Живой фон — только mp4 (07.10, владелец: «именно как фон эта гифка
+    /// должна быть»). Его WPF играет сам, через Windows Media Foundation.
+    /// GIF фоном не годится: кадр 1920×1080 — 8 МБ памяти, сотня кадров —
+    /// почти гигабайт, а сжимать на лету WPF его не умеет.
+    /// </summary>
+    private static readonly string[] VideoTypes = [".mp4"];
     private static readonly string[] FontTypes = [".ttf", ".otf"];
 
     /// <summary>Папка тем у установки.</summary>
@@ -177,7 +191,10 @@ public static class ThemeLoader
 
         if (json.TryGetProperty("background", out var bg) && bg.ValueKind == JsonValueKind.Object)
         {
-            var image = Inside(folder, Text(bg, "image"), ImageTypes, MaxImageBytes, "картинка фона", problems);
+            var name = Text(bg, "image");
+            var image = name is not null && VideoTypes.Contains(Path.GetExtension(name).ToLowerInvariant())
+                ? Inside(folder, name, VideoTypes, MaxVideoBytes, "видео фона", problems)
+                : Inside(folder, name, ImageTypes, MaxImageBytes, "картинка фона", problems);
 
             var fit = BackgroundFit.Cover;
 

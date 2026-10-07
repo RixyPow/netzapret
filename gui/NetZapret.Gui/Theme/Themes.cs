@@ -69,9 +69,12 @@ public static class Themes
                 {
                     Swap(dictionary);
                     Glass.Set(dictionary["GlassImage"] as ImageSource, System.Windows.Media.Stretch.UniformToFill);
+                    BackdropVideo.Take(dictionary);
                     Current = wanted;
                     return new ThemeApplied(wanted, true, []);
                 }
+
+                BackdropVideo.Discard(dictionary);
             }
             catch (Exception ex)
             {
@@ -95,6 +98,7 @@ public static class Themes
 
         Swap(builtIn);
         Glass.Set(null, System.Windows.Media.Stretch.UniformToFill);
+        BackdropVideo.Take(builtIn);
         Current = fallback == LightPath ? "light" : DefaultId;
 
         return new ThemeApplied(wanted, false, problems);
@@ -125,6 +129,11 @@ public static class Themes
             {
                 Swap(dictionary);
                 Glass.Set(dictionary["GlassImage"] as ImageSource, System.Windows.Media.Stretch.UniformToFill);
+                BackdropVideo.Take(dictionary);
+            }
+            else
+            {
+                BackdropVideo.Discard(dictionary);
             }
         }
         catch (Exception ex)
@@ -178,24 +187,52 @@ public static class Themes
             // затемнение — то, чем тема проходит проверку читаемости.
             double dim = Math.Min(0.95, background.Dim + Appearance.DimStep * look.DimSteps);
 
-            var image = Load(background.Image, decodeWidth: 2560);
+            // Живой фон (07.10) картинки не имеет: он играет кистью, и стекла
+            // под ним нет — карточки полупрозрачные прямо поверх (владелец:
+            // «стекло не надо, пусть только прозрачность будет»).
+            BitmapSource? image = background.IsVideo ? null : Load(background.Image, decodeWidth: 2560);
 
             // Контраст на картинке: заголовки и меню стоят прямо на ней.
             // Меряется по уменьшенной копии — нужны края яркости, а не детали.
-            var range = LuminanceRange(Load(background.Image, decodeWidth: 96), theme[ThemeSlots.Backdrop], dim);
+            // У видео — по кадру, который показывает проводник (VideoPoster);
+            // кадра нет — мерить не по чему, и проверка по картинке пропускается.
+            BitmapSource? sample = background.IsVideo
+                ? VideoPoster.Load(background.Image, size: 96)
+                : Load(background.Image, decodeWidth: 96);
 
-            foreach (var failure in ThemeContrast.Check(theme, range))
-                problems.Add("не читается: " + failure);
+            (double Darkest, double Lightest)? range = sample is null
+                ? null
+                : LuminanceRange(sample, theme[ThemeSlots.Backdrop], dim);
 
-            dictionary["BackdropImage"] = Frozen(Stretch(new ImageBrush(image), background.Fit, image));
+            if (range is { } measured)
+            {
+                foreach (var failure in ThemeContrast.Check(theme, measured))
+                    problems.Add("не читается: " + failure);
+            }
+
+            if (image is not null)
+            {
+                dictionary["BackdropImage"] = Frozen(Stretch(new ImageBrush(image), background.Fit, new Size(image.Width, image.Height)));
+
+                // Та же картинка для колонки справа на «Главной» (макет владельца
+                // 30.09: «арт сбоку»). Во всё окно персонаж, стоящий по центру
+                // картинки, оказывался под карточками; в своей колонке он стоит
+                // по центру её. Заполнением, а не вписыванием: колонка узкая
+                // и высокая, и вписанная картинка вышла бы полоской посередине.
+                dictionary["SideArt"] = Frozen(new ImageBrush(image) { Stretch = System.Windows.Media.Stretch.UniformToFill });
+            }
+            else
+            {
+                // Кисти видео не замораживаются: кадр в них меняется.
+                // Проигрыватель стартует, только когда тема легла (BackdropVideo.Take).
+                var video = BackdropVideo.Create(background.Image);
+
+                dictionary[BackdropVideo.Key] = video;
+                dictionary["BackdropImage"] = Stretch(new DrawingBrush(video), background.Fit, video.Rect.Size);
+                dictionary["SideArt"] = new DrawingBrush(video) { Stretch = System.Windows.Media.Stretch.UniformToFill };
+            }
+
             dictionary["BackdropDim"] = dim;
-
-            // Та же картинка для колонки справа на «Главной» (макет владельца
-            // 30.09: «арт сбоку»). Во всё окно персонаж, стоящий по центру
-            // картинки, оказывался под карточками; в своей колонке он стоит
-            // по центру её. Заполнением, а не вписыванием: колонка узкая
-            // и высокая, и вписанная картинка вышла бы полоской посередине.
-            dictionary["SideArt"] = Frozen(new ImageBrush(image) { Stretch = System.Windows.Media.Stretch.UniformToFill });
 
             // Разделы прозрачные: под ними тот же фон, что под всем окном
             // (владелец, 23.09: «давай попробуем и под боковым меню»).
@@ -203,7 +240,7 @@ public static class Themes
 
             var surface = theme[ThemeSlots.Surface];
 
-            if (look.Blur && background.Blur > 0)
+            if (image is not null && look.Blur && background.Blur > 0)
             {
                 var (glass, alpha, reads) = RenderGlass(image, theme, dim, background.Blur);
 
@@ -232,8 +269,8 @@ public static class Themes
 
                 // Полупрозрачные карточки стоят прямо на картинке: текст
                 // на них сверяется с её краями под затемнением.
-                if (!surface.Opaque)
-                    CheckOver(theme, surface, range, "карточка над картинкой", problems);
+                if (!surface.Opaque && range is { } under)
+                    CheckOver(theme, surface, under, "карточка над картинкой", problems);
             }
         }
         else
@@ -406,7 +443,7 @@ public static class Themes
         return image;
     }
 
-    private static TileBrush Stretch(ImageBrush brush, BackgroundFit fit, BitmapSource image)
+    private static TileBrush Stretch(TileBrush brush, BackgroundFit fit, Size size)
     {
         switch (fit)
         {
@@ -418,7 +455,7 @@ public static class Themes
                 brush.Stretch = System.Windows.Media.Stretch.None;
                 brush.TileMode = TileMode.Tile;
                 brush.ViewportUnits = BrushMappingMode.Absolute;
-                brush.Viewport = new Rect(0, 0, image.Width, image.Height);
+                brush.Viewport = new Rect(0, 0, size.Width, size.Height);
                 break;
 
             default:

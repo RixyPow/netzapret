@@ -81,8 +81,19 @@ public enum BackgroundFit
 /// </remarks>
 public sealed record ThemeBackground
 {
-    /// <summary>Картинка, полный путь внутри папки темы.</summary>
+    /// <summary>Картинка или видео (mp4), полный путь внутри папки темы.</summary>
     public required string Image { get; init; }
+
+    /// <summary>
+    /// Фон — видео: играет по кругу, стекла под карточками нет.
+    /// </summary>
+    /// <remarks>
+    /// Стекло считается из фона один раз при применении темы; у живого
+    /// фона оно отставало бы от картинки. Владелец 07.10: «стекло не надо,
+    /// пусть только прозрачность будет» — карточки полупрозрачные прямо
+    /// поверх видео.
+    /// </remarks>
+    public bool IsVideo => Path.GetExtension(Image).Equals(".mp4", StringComparison.OrdinalIgnoreCase);
 
     public BackgroundFit Fit { get; init; } = BackgroundFit.Cover;
 

@@ -44,6 +44,11 @@ public partial class MainWindow : Window
         // Запуск в трей: окно появится позже — тогда и предложим.
         IsVisibleChanged += (_, _) => OfferUpdateOnce();
 
+        // Живой фон темы играет, только пока окно видно: в трее и свёрнутым
+        // он перерисовывал бы окно впустую.
+        IsVisibleChanged += (_, _) => BackdropVideo.Update();
+        StateChanged += (_, _) => BackdropVideo.Update();
+
         _ = CheckForUpdateAsync();
         _ = WarmRoutesAsync();
     }
