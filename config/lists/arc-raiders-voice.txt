@@ -1,0 +1,19 @@
+# ARC Raiders: голосовой чат.
+#
+# Голос игры идёт через Epic Online Services: сигнализация
+# signaling-service-prod.<регион>.live.rtcp.on.epicgames.com и TURN
+# turn*.rtcp.on.epicgames.com. Имена — из списка a1k3r
+# (github.com/a1k3r/zapret-discord-youtube-main-fixtoarcandapex); порты
+# сходятся с поддержкой Embark: TCP и UDP 5222 и 443. Сама игра Embark
+# (es-pio.net) сюда не входит — она работает и так.
+#
+# Лежит внутри epicgames-fortnite.txt (зона epicgames.com), поэтому правило
+# части пишется раньше правила Epic. Выключена, пока человек не выберет путь
+# (владелец 07.10): с января 2026 голос ARC Raiders из России, по сообщениям,
+# работает только через VPN, а мы этого не проверяли — игры нет ни у кого.
+# Замер 07.10 из сети владельца, напрямую: TLS к сигнализации и TURN проходит
+# за 0,08 с, STUN к TURN на UDP 3478 и 443 отвечает.
+#
+# Если звук пойдёт на голые адреса, как у Discord, этих имён не хватит —
+# нужен отчёт, снятый в игре во время разговора.
+rtcp.on.epicgames.com

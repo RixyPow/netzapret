@@ -52,6 +52,41 @@ public sealed class ServicePartOrderTests
     }
 
     /// <summary>
+    /// Голос ARC Raiders (07.10) — выключен до выбора, а выбранный встаёт раньше Epic.
+    /// </summary>
+    /// <remarks>
+    /// Его зона rtcp.on.epicgames.com лежит внутри epicgames.com, а Epic у всех
+    /// идёт «напрямую»: записанное после правило голоса не сработало бы никогда.
+    /// </remarks>
+    [Fact]
+    public void Arc_raiders_voice_is_off_and_goes_before_epic()
+    {
+        var part = Assert.Single(ServiceCatalog.All.SelectMany(s => s.Parts),
+            p => p.List == "config/lists/arc-raiders-voice.txt");
+
+        Assert.True(part.DefaultOff);
+        Assert.Equal("config/lists/epicgames-fortnite.txt", part.Within);
+        Assert.EndsWith(".rtcp.on.epicgames.com", part.Probe);
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-rules-{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            var file = UserRulesFile.Load(path);
+            file.Set(MatchKind.HostList, "config/lists/epicgames-fortnite.txt", RoutingMode.Direct);
+            file.Set(MatchKind.HostList, part.List, RoutingMode.Proxy, before: part.Within);
+
+            Assert.Equal(
+                ["config/lists/arc-raiders-voice.txt", "config/lists/epicgames-fortnite.txt"],
+                file.Entries.Select(e => e.Value));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// Капча, выбранная отдельно, встаёт раньше списка, где её имя лежало прежде.
     /// </summary>
     [Fact]

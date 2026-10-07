@@ -682,6 +682,20 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "Epic Games и Fortnite", List = "config/lists/epicgames-fortnite.txt" },
+
+                // Голос ARC Raiders — Epic Online Services, внутри зоны Epic.
+                // Выключена до выбора (владелец 07.10): из России, по сообщениям,
+                // голос идёт только через VPN, а игры для проверки нет. Зона сама
+                // адреса не имеет — рецепты пробуются на сигнальном сервере.
+                new ServicePart
+                {
+                    Name = "ARC Raiders — голос",
+                    List = "config/lists/arc-raiders-voice.txt",
+                    Within = "config/lists/epicgames-fortnite.txt",
+                    Probe = "signaling-service-prod.euc1.live.rtcp.on.epicgames.com",
+                    Note = "голосовой чат через Epic Online Services; из России, по сообщениям, работает только через VPN",
+                    DefaultOff = true,
+                },
                 new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
                 new ServicePart { Name = "itch.io", List = "config/lists/itch.txt" },
                 new ServicePart
