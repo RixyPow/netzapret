@@ -1,14 +1,16 @@
 using System.Windows.Threading;
+using NetZapret.Core;
 using NetZapret.Proxy;
 
 namespace NetZapret.Gui;
 
 /// <summary>
-/// Автоочистка памяти замеров серверов по сроку из «Настроек туннеля» (<see cref="ServerMemory"/>).
+/// Забывает старые проверки серверов по сроку из «Настроек туннеля» (<see cref="ServerMemory"/>).
 /// </summary>
 /// <remarks>
-/// Срок проверяется при запуске программы и раз в час: в трее она живёт
-/// неделями, и проверки только при запуске срок проспали бы.
+/// При запуске программы и раз в час: в трее она живёт неделями, и проверки
+/// только при запуске срок проспали бы. Забывание по возрасту ничего не помнит
+/// о прошлом прогоне — повторять его можно сколько угодно.
 /// </remarks>
 internal static class ServerMemoryClock
 {
@@ -30,12 +32,17 @@ internal static class ServerMemoryClock
     {
         try
         {
-            if (ServerMemory.ClearIfDue(DateTimeOffset.Now))
-                Journal.Write("замер", "память замеров серверов очищена по сроку");
+            int forgotten = ServerMemory.ForgetOld(DateTimeOffset.Now);
+
+            if (forgotten > 0)
+            {
+                int days = AppSettings.Load(AppSettings.DefaultPath).ServerMemoryDays;
+                Journal.Write("замер", $"забыто проверок серверов старше {days} дн.: {forgotten}");
+            }
         }
         catch (Exception ex)
         {
-            Journal.Write("замер", "очистка памяти замеров не удалась: " + ex.GetType().Name);
+            Journal.Write("замер", "старые проверки серверов не забылись: " + ex.GetType().Name);
         }
     });
 }

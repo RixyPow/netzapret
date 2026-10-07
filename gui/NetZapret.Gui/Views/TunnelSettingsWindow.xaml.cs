@@ -145,12 +145,7 @@ public partial class TunnelSettingsWindow : Window
             Choose(PerEntryChoice, settings.AutoPickPerEntry);
             Choose(MemoryChoice, settings.ServerMemoryDays);
 
-            MemoryLine.Text = settings.ServerMemoryClearedAt is { } cleared
-                ? $"Очищена {cleared.ToLocalTime():dd.MM в HH:mm}"
-                  + (settings.ServerMemoryDays > 0
-                      ? $", следующая — {cleared.AddDays(settings.ServerMemoryDays).ToLocalTime():dd.MM}."
-                      : ", сама не очищается.")
-                : "Ещё не очищалась.";
+            ShowMemory();
 
             FragmentChoice.SelectedItem = FragmentChoice.Items.OfType<System.Windows.Controls.ComboBoxItem>()
                 .FirstOrDefault(i => (string)i.Tag == settings.TlsFragment.ToString()) ?? FragmentChoice.Items[0];
@@ -193,13 +188,23 @@ public partial class TunnelSettingsWindow : Window
         }, "Проверка серверов изменена.");
     }
 
-    /// <summary>«Очистить» память замеров — и отсчёт срока автоочистки заново.</summary>
+    /// <summary>Что сейчас в памяти замеров: сколько серверов и самая давняя проверка.</summary>
+    private void ShowMemory()
+    {
+        var memory = ServerHealthCache.Load();
+
+        MemoryLine.Text = memory.OldestCheck() is { } oldest
+            ? $"Серверов в памяти: {memory.Count}, самая давняя проверка — {oldest.ToLocalTime():dd.MM в HH:mm}."
+            : "Пусто: серверы ещё не проверялись.";
+    }
+
+    /// <summary>«Очистить» — вся память замеров разом.</summary>
     private void OnClearMemory(object sender, RoutedEventArgs e)
     {
         try
         {
-            ServerMemory.ClearNow(DateTimeOffset.Now);
-            Show(AppSettings.Load(AppSettings.DefaultPath));
+            ServerMemory.ClearAll();
+            ShowMemory();
 
             Changed = true;
             Status.Text = "Память замеров очищена: задержки появятся со следующим замером, "

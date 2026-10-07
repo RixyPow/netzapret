@@ -57,6 +57,16 @@ public sealed record ServerHealth
     /// </remarks>
     public IReadOnlyList<bool> Recent { get; init; } = Array.Empty<bool>();
 
+    /// <summary>Когда была каждая из <see cref="Recent"/>, в том же порядке.</summary>
+    /// <remarks>
+    /// С 07.10 — чтобы забывать старые замеры по одному, а не всю память разом
+    /// (владелец: «можно сделать так чтобы подчищало именно старые замеры а не
+    /// всю память?»). В записях до того времени нет; им достаётся время
+    /// последней проверки (<see cref="ServerHealthCache.Times"/>) — раньше
+    /// неё они были наверняка, так что уйдут не позже срока.
+    /// </remarks>
+    public IReadOnlyList<DateTimeOffset> RecentAt { get; init; } = Array.Empty<DateTimeOffset>();
+
     /// <summary>
     /// Отвечает через раз: из последних проверок (не меньше пяти) удачных меньше 80 %.
     /// </summary>
@@ -248,12 +258,93 @@ public sealed class ServerHealthCache
             .TakeLast(RecentSize)
             .ToList();
 
+        var recentAt = (previous is null ? Array.Empty<DateTimeOffset>() : Times(previous))
+            .Append(health.CheckedAt)
+            .TakeLast(RecentSize)
+            .ToList();
+
         entries[health.Tag] = health with
         {
             Failures = health.Success ? 0 : before + 1,
             Recent = recent,
+            RecentAt = recentAt,
         };
     }
+
+    /// <summary>
+    /// Время каждой проверки из <see cref="ServerHealth.Recent"/>; у записей
+    /// без времени (до 07.10) недостающее — время последней проверки.
+    /// </summary>
+    internal static IReadOnlyList<DateTimeOffset> Times(ServerHealth health)
+    {
+        int missing = health.Recent.Count - health.RecentAt.Count;
+
+        return missing > 0
+            ? Enumerable.Repeat(health.CheckedAt, missing).Concat(health.RecentAt).ToList()
+            : health.RecentAt.TakeLast(health.Recent.Count).ToList();
+    }
+
+    /// <summary>
+    /// Забывает проверки старше <paramref name="cutoff"/>; у кого не осталось ни одной — забывает сервер.
+    /// </summary>
+    /// <returns>Сколько проверок забыто.</returns>
+    /// <remarks>
+    /// Счёт неудач подряд пересчитывается по оставшимся: давний промах больше
+    /// не держит сервер «мёртвым», а давние промахи вперемешку — «нестабильным».
+    /// Файл правится под общей блокировкой; копии в памяти окна и надзора
+    /// забытого не воскресят — их <see cref="Save"/> повторяет только свои
+    /// новые записи.
+    /// </remarks>
+    public static int Prune(DateTimeOffset cutoff, string? path = null)
+    {
+        var target = path ?? DefaultPath;
+
+        using var gate = Gate();
+
+        var entries = Read(target);
+        int forgotten = 0;
+        bool changed = false;
+
+        foreach (var (tag, health) in entries.ToList())
+        {
+            var times = Times(health);
+            var keep = Enumerable.Range(0, health.Recent.Count).Where(i => times[i] >= cutoff).ToList();
+
+            // Ни одной свежей проверки — и задержка, и время последней такие же
+            // старые: сервер забывается целиком.
+            if (keep.Count == 0 || health.CheckedAt < cutoff)
+            {
+                forgotten += health.Recent.Count;
+                entries.Remove(tag);
+                changed = true;
+                continue;
+            }
+
+            if (keep.Count == health.Recent.Count)
+                continue;
+
+            forgotten += health.Recent.Count - keep.Count;
+            changed = true;
+
+            var recent = keep.Select(i => health.Recent[i]).ToList();
+
+            entries[tag] = health with
+            {
+                Recent = recent,
+                RecentAt = keep.Select(i => times[i]).ToList(),
+                Failures = recent.AsEnumerable().Reverse().TakeWhile(ok => !ok).Count(),
+            };
+        }
+
+        if (changed)
+            Write(target, entries);
+
+        return forgotten;
+    }
+
+    /// <summary>Самая давняя проверка, что ещё в памяти; памяти нет — <c>null</c>.</summary>
+    public DateTimeOffset? OldestCheck() =>
+        _entries.Values.SelectMany(Times).Cast<DateTimeOffset?>().Min();
 
     /// <summary>Сколько последних исходов помнить.</summary>
     public const int RecentSize = 10;
@@ -332,22 +423,7 @@ public sealed class ServerHealthCache
 
             var merged = Read(target);
             Replay(merged);
-
-            var directory = Path.GetDirectoryName(Path.GetFullPath(target));
-
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-
-            // Через временный файл: читающий без блокировки (или не дождавшийся
-            // её) увидит прежний файл или новый, но не обрезанный.
-            var temporary = target + ".tmp";
-
-            File.WriteAllText(
-                temporary,
-                JsonSerializer.Serialize(merged.Values.ToList(), Options),
-                new UTF8Encoding(false));
-
-            File.Move(temporary, target, overwrite: true);
+            Write(target, merged);
 
             Replace(merged);
             _pending.Clear();
@@ -358,5 +434,26 @@ public sealed class ServerHealthCache
             // Не сохранилось — переживём: в следующий раз проверим заново.
             // Свои записи копия помнит и повторит при следующем сохранении.
         }
+    }
+
+    /// <summary>
+    /// Пишет записи через временный файл: читающий без блокировки (или не
+    /// дождавшийся её) увидит прежний файл или новый, но не обрезанный.
+    /// </summary>
+    private static void Write(string target, Dictionary<string, ServerHealth> entries)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(target));
+
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        var temporary = target + ".tmp";
+
+        File.WriteAllText(
+            temporary,
+            JsonSerializer.Serialize(entries.Values.ToList(), Options),
+            new UTF8Encoding(false));
+
+        File.Move(temporary, target, overwrite: true);
     }
 }

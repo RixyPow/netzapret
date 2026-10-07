@@ -5,7 +5,8 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Очистка памяти замеров серверов — кнопкой и по сроку (владелец 07.10).
+/// Память замеров серверов: старые проверки забываются по одной, кнопка
+/// стирает всё (владелец 07.10).
 /// </summary>
 public sealed class ServerMemoryTests : IDisposable
 {
@@ -24,89 +25,128 @@ public sealed class ServerMemoryTests : IDisposable
 
     private static readonly DateTimeOffset Monday = new(2026, 10, 5, 12, 0, 0, TimeSpan.FromHours(3));
 
-    /// <summary>Пишет в память «мигающий» сервер: пять проверок, удачных две.</summary>
-    private void Remember()
+    private void Check(string tag, bool ok, DateTimeOffset at)
     {
         var health = ServerHealthCache.Load(HealthPath);
-
-        foreach (var ok in new[] { true, false, true, false, false })
-            health.Set(new ServerHealth { Tag = "🇪🇺 ОБС", Success = ok, CheckedAt = Monday });
-
+        health.Set(new ServerHealth { Tag = tag, Success = ok, CheckedAt = at });
         health.Save(HealthPath);
-        Assert.Equal(["🇪🇺 ОБС"], ServerHealthCache.Load(HealthPath).Flaky());
     }
 
     [Fact]
     public void WeekIsTheDefault() => Assert.Equal(ServerMemory.DefaultDays, new AppSettings().ServerMemoryDays);
 
     /// <summary>
-    /// Отсчёта не было — он начинается, а память цела: иначе первая же сборка
-    /// с этой правкой стёрла бы её у всех разом, без всякого срока.
+    /// Владелец 07.10: «подчищало именно старые замеры, а не всю память».
+    /// Сервер мигал неделю назад и с тех пор отвечает — давние промахи
+    /// забываются, свежие удачи остаются, и «нестабильным» он быть перестаёт.
     /// </summary>
     [Fact]
-    public void FirstLookOnlyStartsTheClock()
+    public void OldMissesAreForgottenFreshChecksStay()
     {
-        new AppSettings { OnboardingDone = true }.Save(SettingsPath);
-        Remember();
+        new AppSettings().Save(SettingsPath);
 
-        Assert.False(ServerMemory.ClearIfDue(Monday, SettingsPath, HealthPath));
+        foreach (var (ok, day) in new[] { (false, 0), (true, 0), (false, 1), (false, 1), (true, 8), (true, 9) })
+            Check("🇪🇺 ОБС", ok, Monday.AddDays(day));
 
-        Assert.Equal(Monday, AppSettings.Load(SettingsPath).ServerMemoryClearedAt);
-        Assert.NotEmpty(ServerHealthCache.Load(HealthPath).Entries);
+        Assert.Equal(["🇪🇺 ОБС"], ServerHealthCache.Load(HealthPath).Flaky());
+
+        // На десятый день: неделя назад — третий день; всё до него забыто.
+        int forgotten = ServerMemory.ForgetOld(Monday.AddDays(10), SettingsPath, HealthPath);
+
+        Assert.Equal(4, forgotten);
+
+        var memory = ServerHealthCache.Load(HealthPath);
+        var server = memory.Find("🇪🇺 ОБС")!;
+
+        Assert.Equal([true, true], server.Recent);
+        Assert.Equal([Monday.AddDays(8), Monday.AddDays(9)], server.RecentAt);
+        Assert.Equal(0, server.Failures);
+        Assert.Empty(memory.Flaky());
     }
 
+    /// <summary>Не осталось ни одной свежей проверки — сервер забывается целиком, а задержка с ним.</summary>
     [Fact]
-    public void MemoryIsClearedWhenTheTermIsUp()
+    public void ServerWithOnlyOldChecksIsForgotten()
     {
-        new AppSettings { OnboardingDone = true, ServerMemoryClearedAt = Monday }.Save(SettingsPath);
-        Remember();
+        new AppSettings().Save(SettingsPath);
+        Check("🇯🇵 Япония", true, Monday);
+        Check("🇳🇱 Нидерланды", true, Monday.AddDays(9));
 
-        // Шесть дней — рано.
-        Assert.False(ServerMemory.ClearIfDue(Monday.AddDays(6), SettingsPath, HealthPath));
-        Assert.NotEmpty(ServerHealthCache.Load(HealthPath).Entries);
+        ServerMemory.ForgetOld(Monday.AddDays(10), SettingsPath, HealthPath);
 
-        // Неделя — пора: «мигающий» сервер забыт, отсчёт пошёл заново.
-        Assert.True(ServerMemory.ClearIfDue(Monday.AddDays(7), SettingsPath, HealthPath));
+        var memory = ServerHealthCache.Load(HealthPath);
+        Assert.Null(memory.Find("🇯🇵 Япония"));
+        Assert.NotNull(memory.Find("🇳🇱 Нидерланды"));
+    }
+
+    /// <summary>
+    /// Давний промах не держит «мёртвым»: счёт неудач подряд — по оставшимся.
+    /// </summary>
+    [Fact]
+    public void FailureStreakIsRecountedFromWhatRemains()
+    {
+        new AppSettings().Save(SettingsPath);
+
+        foreach (var (ok, day) in new[] { (true, 0), (false, 1), (false, 1), (false, 9) })
+            Check("🇪🇸 Испания", ok, Monday.AddDays(day));
+
+        Assert.Equal(["🇪🇸 Испания"], ServerHealthCache.Load(HealthPath).Dead(3));
+
+        ServerMemory.ForgetOld(Monday.AddDays(10), SettingsPath, HealthPath);
+
+        var server = ServerHealthCache.Load(HealthPath).Find("🇪🇸 Испания")!;
+        Assert.Equal(1, server.Failures);
+        Assert.Empty(ServerHealthCache.Load(HealthPath).Dead(3));
+    }
+
+    /// <summary>
+    /// Записи до 07.10 времени у каждой проверки не знают — им достаётся время
+    /// последней проверки: раньше неё они были наверняка и уйдут не позже срока.
+    /// </summary>
+    [Fact]
+    public void ChecksWithoutTimeTakeTheLastCheckTime()
+    {
+        new AppSettings().Save(SettingsPath);
+        File.WriteAllText(HealthPath, $$"""
+            [ { "Tag": "🇧🇪 Бельгия", "Success": true, "LatencyMs": 164, "CheckedAt": "{{Monday:O}}",
+                "Failures": 0, "Recent": [false, true, true, false, true] } ]
+            """);
+
+        Assert.Equal(0, ServerMemory.ForgetOld(Monday.AddDays(6), SettingsPath, HealthPath));
+        Assert.Equal(5, ServerMemory.ForgetOld(Monday.AddDays(8), SettingsPath, HealthPath));
         Assert.Empty(ServerHealthCache.Load(HealthPath).Entries);
-        Assert.Empty(ServerHealthCache.Load(HealthPath).Flaky());
-
-        var settings = AppSettings.Load(SettingsPath);
-        Assert.Equal(Monday.AddDays(7), settings.ServerMemoryClearedAt);
-        Assert.True(settings.OnboardingDone);
     }
 
     [Fact]
     public void NeverMeansNever()
     {
-        new AppSettings { ServerMemoryDays = 0, ServerMemoryClearedAt = Monday }.Save(SettingsPath);
-        Remember();
+        new AppSettings { ServerMemoryDays = 0 }.Save(SettingsPath);
+        Check("🇯🇵 Япония", false, Monday);
 
-        Assert.False(ServerMemory.ClearIfDue(Monday.AddDays(365), SettingsPath, HealthPath));
-        Assert.NotEmpty(ServerHealthCache.Load(HealthPath).Entries);
+        Assert.Equal(0, ServerMemory.ForgetOld(Monday.AddDays(365), SettingsPath, HealthPath));
+        Assert.NotNull(ServerHealthCache.Load(HealthPath).Find("🇯🇵 Япония"));
     }
 
     [Fact]
-    public void ButtonClearsAndRestartsTheClock()
+    public void ButtonClearsEverything()
     {
-        new AppSettings { OnboardingDone = true, ServerMemoryClearedAt = Monday }.Save(SettingsPath);
-        Remember();
+        Check("🇯🇵 Япония", true, Monday);
+        Check("🇳🇱 Нидерланды", true, Monday.AddDays(9));
 
-        ServerMemory.ClearNow(Monday.AddDays(2), SettingsPath, HealthPath);
+        ServerMemory.ClearAll(HealthPath);
 
         Assert.Empty(ServerHealthCache.Load(HealthPath).Entries);
-        Assert.Equal(Monday.AddDays(2), AppSettings.Load(SettingsPath).ServerMemoryClearedAt);
     }
 
-    /// <summary>
-    /// Нечитаемый файл настроек не перезаписывается: в руках были бы
-    /// значения по умолчанию, и запись поверх стёрла бы настройки целиком.
-    /// </summary>
+    /// <summary>Настройки только читаются: нечитаемый файл остаётся как был.</summary>
     [Fact]
-    public void UnreadableSettingsAreLeftAlone()
+    public void SettingsAreNeverWritten()
     {
         File.WriteAllText(SettingsPath, "{ это не json");
+        Check("🇯🇵 Япония", true, Monday);
 
-        Assert.False(ServerMemory.ClearIfDue(Monday, SettingsPath, HealthPath));
+        Assert.Equal(0, ServerMemory.ForgetOld(Monday.AddDays(30), SettingsPath, HealthPath));
         Assert.Equal("{ это не json", File.ReadAllText(SettingsPath));
+        Assert.NotNull(ServerHealthCache.Load(HealthPath).Find("🇯🇵 Япония"));
     }
 }

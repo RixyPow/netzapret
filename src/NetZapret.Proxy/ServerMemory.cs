@@ -3,7 +3,7 @@ using NetZapret.Core;
 namespace NetZapret.Proxy;
 
 /// <summary>
-/// Очистка памяти замеров серверов — кнопкой и по сроку.
+/// Память замеров серверов: забывать старые проверки и стирать всё кнопкой.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -11,13 +11,15 @@ namespace NetZapret.Proxy;
 /// показывает через раз и т.д.), а так же настраиваемое автоочищение …
 /// с умолчанием раз в неделю». Память — <see cref="ServerHealthCache"/>:
 /// задержки и исходы последних десяти проверок. По ней сервер становится
-/// «мигающим» и уходит из автоподбора, «мёртвым» — тоже. Сервер, который
-/// однажды мигал, а потом починился, сам из этого не выберется, пока не наберёт
-/// удачных проверок, — а проверяют его редко, раз он мимо автоподбора.
+/// «нестабильным» и уходит из автоподбора, «мёртвым» — тоже, а починившись,
+/// сам оттуда почти не выбирается: мимо автоподбора его проверяют редко.
 /// </para>
 /// <para>
-/// Настройки пишутся, только если файл прочитался: не прочитался — значит,
-/// в руках значения по умолчанию, и запись поверх стёрла бы настройки целиком.
+/// Сперва автоочистка стирала память целиком раз в срок; в тот же день
+/// владелец: «можно сделать так чтобы подчищало именно старые замеры а не всю
+/// память?». Теперь по сроку забываются только проверки старше него — у сервера
+/// остаются свежие, и давние промахи перестают держать его «нестабильным».
+/// Целиком память стирает только кнопка.
 /// </para>
 /// </remarks>
 public static class ServerMemory
@@ -25,50 +27,21 @@ public static class ServerMemory
     /// <summary>Срок по умолчанию — неделя.</summary>
     public const int DefaultDays = 7;
 
-    /// <summary>Пора ли чистить: срок задан, отсчёт начат и прошёл.</summary>
-    public static bool IsDue(AppSettings settings, DateTimeOffset now) =>
-        settings.ServerMemoryDays > 0
-        && settings.ServerMemoryClearedAt is { } at
-        && now - at >= TimeSpan.FromDays(settings.ServerMemoryDays);
-
     /// <summary>
-    /// Чистит память, если подошёл срок; <c>true</c> — почистила.
+    /// Забывает проверки старше срока из настроек; срок 0 — ничего.
     /// </summary>
-    /// <remarks>
-    /// Отсчёта ещё не было (настройка новая) — он начинается сейчас, а память
-    /// не трогается: иначе первая же сборка с этой правкой стёрла бы её у всех
-    /// разом, без всякого срока.
-    /// </remarks>
-    public static bool ClearIfDue(DateTimeOffset now, string? settingsPath = null, string? healthPath = null)
+    /// <returns>Сколько проверок забыто.</returns>
+    public static int ForgetOld(DateTimeOffset now, string? settingsPath = null, string? healthPath = null)
     {
-        var path = settingsPath ?? AppSettings.DefaultPath;
-        var settings = AppSettings.TryLoad(path, out var read);
+        var settings = AppSettings.TryLoad(settingsPath ?? AppSettings.DefaultPath, out var read);
 
-        if (read != AppSettings.ReadResult.Read || settings.ServerMemoryDays <= 0)
-            return false;
+        // Не прочитались настройки — срока не знаем, и забывать не по чему.
+        if (read == AppSettings.ReadResult.Unreadable || settings.ServerMemoryDays <= 0)
+            return 0;
 
-        if (settings.ServerMemoryClearedAt is null)
-        {
-            (settings with { ServerMemoryClearedAt = now }).Save(path);
-            return false;
-        }
-
-        if (!IsDue(settings, now))
-            return false;
-
-        ClearNow(now, path, healthPath);
-        return true;
+        return ServerHealthCache.Prune(now - TimeSpan.FromDays(settings.ServerMemoryDays), healthPath);
     }
 
-    /// <summary>Чистит память сейчас и начинает отсчёт срока заново.</summary>
-    public static void ClearNow(DateTimeOffset now, string? settingsPath = null, string? healthPath = null)
-    {
-        ServerHealthCache.Clear(healthPath);
-
-        var path = settingsPath ?? AppSettings.DefaultPath;
-        var settings = AppSettings.TryLoad(path, out var read);
-
-        if (read == AppSettings.ReadResult.Read)
-            (settings with { ServerMemoryClearedAt = now }).Save(path);
-    }
+    /// <summary>Стирает всю память замеров — кнопка «Очистить».</summary>
+    public static void ClearAll(string? healthPath = null) => ServerHealthCache.Clear(healthPath);
 }
