@@ -559,13 +559,16 @@
   (`WinwsCommandLine.PrepareWritable`, иначе «bad file 'user/winws2'», код 1)
   и разбор двух ключей на одной строке (`PresetReader.Arguments`, иначе
   «circular: strategy number '25 --lua-desync=…' is invalid»). Замер 08.10
-  у владельца, сборка 3, проверка блокировок кодом окна: «white sni» — 142
-  из 156 оба прохода (V11 Lite накануне, со старыми модулями lua, — 151;
-  хуже на huggingface, mistral, nintendo, proton, slack, valheim, vimeo, bsky);
-  соединение на 443 — 7,2 мс процессора, закачка 360 Мбит/с — 82–83 % ядра.
-  «shadow probes» — 4,7–5,3 мс и 54–79 %, проверка блокировок на нём шла
-  ещё со склеенными строками и не в счёт. V11 Lite с новыми модулями lua
-  не перемерен. Zapret GUI с 08.10 сам везёт наш родной winws2 (`bc0d8c36…`).
+  у владельца, сборка 3, в один день, одни модули lua, проверка блокировок
+  кодом окна (программа в скрэтчпаде, два прохода): V11 Lite — 148 и 149
+  из 156, «white sni» — 142 и 142. «white sni» хуже на bsky.app, huggingface,
+  mistral, nintendo, proton, slack, valheim, vimeo, лучше на gemini.google.com
+  (у V11 Lite с новыми модулями — «DPI по TLS», накануне со старыми был
+  доступен). Нагрузка winws2: соединение на 443 — V11 Lite 8,9 мс, «white
+  sni» 7,2; закачка ~360 Мбит/с — V11 Lite 2 % ядра, «white sni» 82–83 %;
+  отдача — 63–65 % и 61–70 %. «shadow probes» — 4,7–5,3 мс и 54–79 % на
+  закачке; его проверка блокировок шла ещё со склеенными строками и не
+  в счёт. Zapret GUI с 08.10 сам везёт наш родной winws2 (`bc0d8c36…`).
 - **Zapret GUI — автор loop-uh** (владелец, 30.09): `wiki.zapret.moe`,
   исходники — `git.zapret.moe/zapretdiscordyoutube/zapretgui`, MIT. В файле
   лицензии правообладателем назван **censorliber** — строка копирайта везде
