@@ -6,7 +6,7 @@
 [![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)<br>
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
 [![Поддержать](https://img.shields.io/badge/%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-DonationAlerts-F57507)](https://www.donationalerts.com/r/netzapret)
-[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.11.0-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec?nocache=1)
+[![VirusTotal](https://img.shields.io/badge/VirusTotal-0.14.4-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/2b883f12a96e492cd69ad92352541131cc2519bd0d3be00bb1011c831df1c0d3?nocache=1)
 
 **Для тех, кому мало одного Zapret.** Десинк чинит то, что тормозит провайдер,
 VPN берёт то, что закрыто по стране, — а NetZapret решает, что куда, для каждого
@@ -682,20 +682,20 @@ DoH — 65–73 мс. Вкладка «DNS» говорит это рядом с
 
 ## Антивирусы
 
-Значок в шапке ведёт на отчёт VirusTotal по архиву 0.11.0
-(SHA-256 `edfd85c93c52a2bcc1a40f604084468dbd7ade0a2520b057f7754ba2ec4d32ec`).
+Значок в шапке ведёт на отчёт VirusTotal по архиву 0.14.4
+(SHA-256 `2b883f12a96e492cd69ad92352541131cc2519bd0d3be00bb1011c831df1c0d3`).
 Хэш архива каждой версии стоит в примечаниях к выпуску: сверьте со скачанным
 файлом.
 
-Срабатывают на средства обхода, а не на вредоносный код. Архив 0.9.0, например,
-давал 2 срабатывания из 63:
+Срабатывают на средства обхода, а не на вредоносный код. Архив 0.14.4 даёт
+2 срабатывания из 64:
 
 - **Elastic** — `Windows.Rootkit.WinDivert`: это **WinDivert**, драйвер
   перехвата пакетов. Без него обход DPI невозможен, и та же картина у Zapret
   и GoodbyeDPI.
-- **Kaspersky** — `Not-a-virus:UDS:NetTool…`: сам Kaspersky пишет «не вирус»
-  и относит находку к сетевым инструментам — так он помечает программы,
-  которые строят туннели.
+- **Kaspersky** — `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: сам Kaspersky
+  пишет «не вирус» и относит находку к сетевым инструментам — так он помечает
+  программы, которые строят туннели.
 
 Чтобы Defender не трогал движки, папку программы можно добавить в его
 исключения — кнопкой в «Ещё». Сам Defender программа не выключает и не трогает
