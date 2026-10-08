@@ -176,7 +176,7 @@ if not defined ZAPRET (
 
 echo Bundling Zapret from %ZAPRET%
 
-rem Three files from exe\ are left out.
+rem Five files from exe\ are left out.
 rem
 rem   winws.exe    the previous engine. Our presets drive it through
 rem                --lua-desync, which that binary has no notion of, so it
@@ -186,9 +186,12 @@ rem                to it: WinDivert.dll names Monkey64.sys and only that.
 rem   stop.bat     belongs to the Zapret GUI. Running it kills the engines
 rem                behind the supervisor's back, which then restarts them -
 rem                a fight nobody wins.
+rem   dnscrypt-proxy.exe and its licence - the Zapret GUI's own DNS client,
+rem                in its exe\ since its 08.10 update. Nothing of ours runs it;
+rem                0.14.4 shipped it by accident, 12 MB of dead weight.
 for %%D in (exe lists lua bin windivert.filter) do (
     if exist "%ZAPRET%\%%D" (
-        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF winws.exe aaaaaaaaa1 stop.bat >nul
+        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL /XF winws.exe aaaaaaaaa1 stop.bat dnscrypt-proxy.exe dnscrypt-proxy.LICENSE.txt >nul
         if errorlevel 8 exit /b 1
     )
 )
