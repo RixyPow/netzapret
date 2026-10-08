@@ -254,4 +254,34 @@ public sealed class PresetReaderTests : IDisposable
     {
         Assert.Empty(new PresetReader().List(Path.Combine(_root, "nope")));
     }
+
+    /// <summary>
+    /// Два ключа на одной строке — два ключа, а название с пробелами — одно
+    /// (пресеты Zapret GUI «white sni» и «shadow probes», 08.10).
+    /// </summary>
+    [Fact]
+    public void TwoKeysOnOneLineAreTwoArguments()
+    {
+        var path = WritePreset("circular", """
+            --wf-tcp-out=443
+            --new
+            --name=Все сайты (айпи)
+            --lua-desync=circular:fails=2
+            --lua-desync=fake:blob=fake_tls:repeats=6:strategy=25 --lua-desync=multidisorder:pos=1,midsld:strategy=25
+            --new --name=Вторая
+            --lua-desync=pass
+            """);
+
+        var preset = new PresetReader().Load(path);
+
+        Assert.Equal(2, preset.Sections.Count);
+
+        var first = preset.Sections[0];
+        Assert.Equal("Все сайты (айпи)", first.Name);
+        Assert.Equal(
+            ["circular:fails=2", "fake:blob=fake_tls:repeats=6:strategy=25", "multidisorder:pos=1,midsld:strategy=25"],
+            first.DesyncRecipes);
+
+        Assert.Equal("Вторая", preset.Sections[1].Name);
+    }
 }

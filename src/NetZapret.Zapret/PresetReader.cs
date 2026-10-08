@@ -82,24 +82,27 @@ public sealed class PresetReader
                 continue;
             }
 
-            if (line.Equals(SectionSeparator, StringComparison.OrdinalIgnoreCase))
+            foreach (var argument in Arguments(line))
             {
-                if (!seenSeparator)
+                if (argument.Equals(SectionSeparator, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Всё до первого --new — глобальные ключи.
-                    globals.AddRange(current);
-                    seenSeparator = true;
-                }
-                else if (current.Count > 0)
-                {
-                    sections.Add(BuildSection(current));
+                    if (!seenSeparator)
+                    {
+                        // Всё до первого --new — глобальные ключи.
+                        globals.AddRange(current);
+                        seenSeparator = true;
+                    }
+                    else if (current.Count > 0)
+                    {
+                        sections.Add(BuildSection(current));
+                    }
+
+                    current = new List<string>();
+                    continue;
                 }
 
-                current = new List<string>();
-                continue;
+                current.Add(argument);
             }
-
-            current.Add(line);
         }
 
         // Хвост после последнего --new.
@@ -160,6 +163,24 @@ public sealed class PresetReader
                 break;
         }
     }
+
+    /// <summary>
+    /// Ключи одной строки пресета: обычно один, но бывает и несколько.
+    /// </summary>
+    /// <remarks>
+    /// В пресетах Zapret GUI «white sni (circular)» и «shadow probes (circular)»
+    /// (08.10) пара рецептов одной стратегии стоит на одной строке:
+    /// <c>--lua-desync=fake:…:strategy=25 --lua-desync=multidisorder:…:strategy=25</c>.
+    /// Строка целиком уходила в winws2 одним ключом, и номер стратегии доезжал
+    /// как «25 --lua-desync=multidisorder…» — «circular: strategy number … is
+    /// invalid», рецепт не работал. Делится там, где после пробела начинается
+    /// новый ключ: «--» и буква. Названия секций с пробелами («Все сайты
+    /// (айпи)») так не режутся — в них нет « --».
+    /// </remarks>
+    internal static IEnumerable<string> Arguments(string line) =>
+        System.Text.RegularExpressions.Regex.Split(line, @"\s+(?=--[A-Za-z])")
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0);
 
     private static ZapretSection BuildSection(IReadOnlyList<string> arguments)
     {
