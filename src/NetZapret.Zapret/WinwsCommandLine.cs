@@ -499,6 +499,48 @@ public static class WinwsCommandLine
     public static string Forward(string path) => path.Replace('\\', '/');
 
     /// <summary>
+    /// Создаёт папку над <c>--writable</c> пресета, считая от корня Zapret.
+    /// </summary>
+    /// <remarks>
+    /// <c>--writable=user/winws2</c> — папка, куда lua пишет своё состояние
+    /// (пресет Zapret GUI «white sni (circular)» держит там, какой рецепт
+    /// у какого сайта сработал). Саму папку winws2 создаёт, а путь до неё
+    /// разбирает <c>realpath_any</c>: когда её ещё нет, родитель обязан быть.
+    /// В установке Zapret GUI <c>user</c> есть — там его настройки, — а в нашей
+    /// поставке нет, и winws2 падал на старте: «bad file 'user/winws2'», код 1
+    /// (08.10, сборка 1 версии 0.14.4).
+    /// </remarks>
+    /// <param name="arguments">Готовая строка запуска.</param>
+    /// <param name="zapretRoot">Рабочий каталог winws2 — от него считается путь.</param>
+    public static void PrepareWritable(IEnumerable<string> arguments, string zapretRoot)
+    {
+        const string key = "--writable=";
+
+        foreach (var argument in arguments)
+        {
+            if (!argument.StartsWith(key, StringComparison.Ordinal))
+                continue;
+
+            var dir = argument[key.Length..].Trim().Trim('"');
+
+            if (dir.Length == 0)
+                continue;
+
+            try
+            {
+                var parent = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(zapretRoot, dir)));
+
+                if (!string.IsNullOrEmpty(parent))
+                    Directory.CreateDirectory(parent);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                // Не вышло — winws2 скажет сам («bad file»), и это будет видно в журнале.
+            }
+        }
+    }
+
+    /// <summary>
     /// Имя рецепта в имя файла — строго латиницей и цифрами.
     /// </summary>
     /// <remarks>

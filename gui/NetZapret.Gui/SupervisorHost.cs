@@ -604,6 +604,10 @@ internal static class SupervisorHost
 
         Console.WriteLine($"Пресет: {preset.Name} ({arguments.Count} аргументов)");
 
+        // Пресет с --writable (Zapret GUI «white sni») требует родительскую
+        // папку — у нас её нет, и без неё winws2 не поднимается (08.10).
+        WinwsCommandLine.PrepareWritable(arguments, paths.Root);
+
         services.Add(new WinwsService(paths.ExecutablePath, arguments, paths.Root)
         {
             OutputLogPath = Path.Combine("runtime", "winws2.log"),
