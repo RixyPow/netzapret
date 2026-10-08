@@ -72,7 +72,7 @@ public static class CustomDns
         var title = name?.Trim() ?? string.Empty;
 
         if (!IPAddress.TryParse(address?.Trim(), out var ip))
-            return (null, "Адрес нужен цифрами, например 111.88.96.50: имя резолвера туннелю не подходит — его самого нечем разрешить.");
+            return (null, "Адрес нужен цифрами, например 111.88.96.54: имя резолвера туннелю не подходит — его самого нечем разрешить.");
 
         var udp = new List<string> { ip.ToString() };
 
