@@ -548,6 +548,24 @@
   десинк открыл те же сайты, что v1.0.3 (14 имён, адреса 8.x закреплены).
   Зачем — в «Разборе неисправностей»: v1.0.3 при каждом поиске профиля
   проверял файлы списков у всех профилей до порта, v1.0.5.1 — после.
+- **«white sni (circular)» и «shadow probes (circular)»** — встроенные пресеты
+  Zapret GUI 2.45 и 2.43, в поставке с 08.10 по слову владельца («добавляй»).
+  Одна секция на весь иностранный TCP и одна на UDP, рецепт подбирается сам
+  (`circular` — 40 стратегий по очереди с памятью в `user\winws2`;
+  `shadow_probe` — пробы пачками); перехват и входящих пакетов. Нужны три вещи,
+  которых до 08.10 не было: модули lua Zapret GUI от 07.10 (`custom_funcs.lua`
+  с `shadow_probe`, `white_seqovl`, `white_*_detector`, `white_hostkey`) —
+  `build.cmd` берёт их из установки, родитель папки `--writable`
+  (`WinwsCommandLine.PrepareWritable`, иначе «bad file 'user/winws2'», код 1)
+  и разбор двух ключей на одной строке (`PresetReader.Arguments`, иначе
+  «circular: strategy number '25 --lua-desync=…' is invalid»). Замер 08.10
+  у владельца, сборка 3, проверка блокировок кодом окна: «white sni» — 142
+  из 156 оба прохода (V11 Lite накануне, со старыми модулями lua, — 151;
+  хуже на huggingface, mistral, nintendo, proton, slack, valheim, vimeo, bsky);
+  соединение на 443 — 7,2 мс процессора, закачка 360 Мбит/с — 82–83 % ядра.
+  «shadow probes» — 4,7–5,3 мс и 54–79 %, проверка блокировок на нём шла
+  ещё со склеенными строками и не в счёт. V11 Lite с новыми модулями lua
+  не перемерен. Zapret GUI с 08.10 сам везёт наш родной winws2 (`bc0d8c36…`).
 - **Zapret GUI — автор loop-uh** (владелец, 30.09): `wiki.zapret.moe`,
   исходники — `git.zapret.moe/zapretdiscordyoutube/zapretgui`, MIT. В файле
   лицензии правообладателем назван **censorliber** — строка копирайта везде
