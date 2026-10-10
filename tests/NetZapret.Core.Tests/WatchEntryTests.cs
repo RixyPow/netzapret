@@ -187,6 +187,32 @@ public sealed class WatchEntryTests
         Assert.Equal(["9.9.9.9", "142.250.74.14", "142.250.74.46", "2a00:1450:4010:c05::64"], WatchEntry.AddressesOf(entries));
     }
 
+    /// <summary>Правило коротко — для таблицы и отбора по правилу.</summary>
+    [Theory]
+    [InlineData("#47 domain www.google.com в списке config/lists/google.txt", "#47 google")]
+    [InlineData("#15 domain api.modrinth.com ~ *.modrinth.com", "#15 *.modrinth.com")]
+    [InlineData("#145 ip 8.8.8.8 в списке config/lists/ipset-ru.txt", "#145 ipset-ru")]
+    [InlineData("#9 ip 10.1.2.3 in 10.0.0.0/8", "#9 10.0.0.0/8")]
+    [InlineData("#3 process name ~ Discord.exe", "#3 Discord.exe")]
+    [InlineData("default", "по умолчанию")]
+    [InlineData("локальная сеть (жёсткое исключение)", "локальная сеть (жёсткое исключение)")]
+    public void TheRuleIsShortened(string rule, string shown)
+    {
+        Assert.Equal(shown, WatchEntry.ShortRule(rule));
+    }
+
+    /// <summary>Точно — подставной адрес, движок, локальное; остальное — ответ правил.</summary>
+    [Fact]
+    public void CertaintyIsWhatTheWatchKnowsItself()
+    {
+        var rule = new RuleDecision { Mode = RoutingMode.Proxy, Reason = "openai" };
+
+        Assert.True(WatchEntry.From(Connection("codex.exe", "chatgpt.com", "198.18.0.24", 443), rule, Engine).Certain);
+        Assert.True(WatchEntry.From(Connection("sing-box.exe", null, "138.124.32.99", 443), rule, Engine).Certain);
+        Assert.True(WatchEntry.From(Connection("svchost.exe", null, "192.168.1.1", 53), rule, Engine).Certain);
+        Assert.False(WatchEntry.From(Connection("chrome.exe", "chatgpt.com", "104.18.32.47", 443), rule, Engine).Certain);
+    }
+
     [Fact]
     public void WithoutAJournalTheSummarySaysSo()
     {

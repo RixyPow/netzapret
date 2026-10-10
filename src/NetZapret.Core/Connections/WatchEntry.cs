@@ -89,6 +89,65 @@ public sealed record WatchEntry(
     /// <summary>Правило записи с подставным адресом движка.</summary>
     public const string FakeRule = "подставной адрес движка — имя идёт через VPN";
 
+    /// <summary>
+    /// Известно ли «куда» точно, а не по ответу правил.
+    /// </summary>
+    /// <remarks>
+    /// Точно — подставной адрес движка (его выдают только именам через VPN),
+    /// соединение самого движка и домашняя сеть. Остальное — что сказали бы
+    /// правила: sing-box и winws2 наблюдение не спрашивает. Окно рисует это
+    /// залитым и полым кружком (макет владельца 10.10).
+    /// </remarks>
+    public bool Certain => Mode is WatchRoute.Local or WatchRoute.Engine || Rule == FakeRule;
+
+    /// <summary>
+    /// Правило коротко — для таблицы и отбора: «#47 google», а не
+    /// «#47 domain www.google.com в списке config/lists/google.txt».
+    /// </summary>
+    /// <remarks>
+    /// Выводится из текста правила, а не хранится отдельно: так оно
+    /// одинаково у живой записи и у прочитанной из журнала.
+    /// </remarks>
+    public string RuleName => ShortRule(Rule);
+
+    internal static string ShortRule(string rule)
+    {
+        if (rule == "default")
+            return "по умолчанию";
+
+        int space = rule.IndexOf(' ');
+
+        if (!rule.StartsWith('#') || space < 0)
+            return rule;
+
+        var number = rule[..space];
+        var reason = rule[(space + 1)..];
+
+        string Tail(string marker) => reason[(reason.IndexOf(marker, StringComparison.Ordinal) + marker.Length)..].Trim();
+
+        var name = reason switch
+        {
+            _ when reason.Contains(" в списке ", StringComparison.Ordinal) =>
+                System.IO.Path.GetFileNameWithoutExtension(Tail(" в списке ").Replace('\\', '/')),
+            _ when reason.Contains(" ~ ", StringComparison.Ordinal) => Tail(" ~ "),
+            _ when reason.StartsWith("ip ", StringComparison.Ordinal) && reason.Contains(" in ", StringComparison.Ordinal) => Tail(" in "),
+            _ => reason,
+        };
+
+        return $"{number} {name}";
+    }
+
+    /// <summary>
+    /// Сайт имени — два последних уровня: «Сайты» в «Наблюдении» сводят
+    /// сотню поддоменов Microsoft в одну строку.
+    /// </summary>
+    /// <remarks>
+    /// Грубо, как <c>PinPicker.SameSite</c>: у co.uk ошибётся. Для сводки
+    /// «кто шумит» цена ошибки — одна лишняя строка.
+    /// </remarks>
+    public static string SiteOf(string host) =>
+        string.Join('.', host.ToLowerInvariant().TrimEnd('.').Split('.').TakeLast(2));
+
     /// <summary>Имя без порта; <c>null</c> — имя не узнано.</summary>
     public string? Host => Endpoint == Address ? null : Endpoint[..Endpoint.LastIndexOf(':')];
 

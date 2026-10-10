@@ -1,41 +1,59 @@
 <UserControl x:Class="NetZapret.Gui.Views.WatchView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
+             xmlns:views="clr-namespace:NetZapret.Gui.Views"
              Background="{DynamicResource Chrome}">
+    <UserControl.Resources>
+        <!-- Строка «кто шумит»: имя, полоска длины по числу, число; щелчок — отбор. -->
+        <DataTemplate x:Key="WatchTopLine">
+            <Grid Margin="0,3" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="OnTopClick"
+                  ToolTip="{Binding Hint}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="44" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                <Border Grid.Column="1" Height="5" CornerRadius="2.5" Background="{DynamicResource Raised}" VerticalAlignment="Center"
+                        Width="{Binding Track}">
+                    <Border Height="5" CornerRadius="2.5" Background="{DynamicResource Accent}"
+                            HorizontalAlignment="Left" Width="{Binding Bar}" />
+                </Border>
+                <TextBlock Grid.Column="2" Text="{Binding Count}" HorizontalAlignment="Right" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
 
-    <Grid Margin="32,28,32,28">
+    <!--
+        По макету владельца 10.10: поиск, отборы «Программа», «Куда», «Правило»,
+        счётчики, таблица с кружком «точно / по правилам» и меню у строки,
+        справа кольцо долей и «кто шумит». На узком окне правая колонка уходит
+        под таблицу (OnBodySize): у владельца ~830 точек содержимого.
+    -->
+    <Grid Margin="32,28,32,24">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--
-            Кнопки — строкой под пояснением, а не справа от заголовка: со
-            списком программ они заняли ~800 точек, и на окне владельца
-            (10.10, масштаб 125 %) заголовок обрезался до «Наблюден»,
-            а пояснение встало столбиком в два слова шириной.
-        -->
         <StackPanel Grid.Row="0">
             <TextBlock Text="Наблюдение" Style="{StaticResource Title}" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Соединения по мере их появления и правило, которое к каждому применилось бы. Ничего не перенаправляет и ни на что не влияет — только смотрит." />
+                       Text="Соединения по мере появления и правило, которое к каждому применилось бы. Ничего не меняет — только смотрит." />
 
-            <!--
-                «Начать» первым: строка слева, и главное действие — в начале.
-                WrapPanel: с кнопками копирования ряд шире окна владельца
-                (~830 точек содержимого), и лишнее уходит на вторую строку,
-                а не за край.
-            -->
+            <!-- WrapPanel: на узком окне лишнее уходит на вторую строку, а не за край. -->
             <WrapPanel Margin="0,16,0,-8">
                 <Button x:Name="PowerButton" Style="{StaticResource Primary}"
                         Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,8" />
-                <Button x:Name="ProcessButton" Style="{StaticResource Ghost}" MinWidth="180"
-                        Content="Все программы" Click="OnProcessMenu" Margin="0,0,8,8"
+                <Button x:Name="ProcessButton" Style="{StaticResource Ghost}" MinWidth="150"
+                        Content="Программа: все" Click="OnProcessMenu" Margin="0,0,8,8"
                         ToolTip="Показывать соединения одной программы" />
-                <Button x:Name="FilterButton" Style="{StaticResource Ghost}"
-                        Content="Только туннель и десинк" Click="OnFilter" Margin="0,0,8,8" />
+                <Button x:Name="RouteButton" Style="{StaticResource Ghost}" MinWidth="110"
+                        Content="Куда: все" Click="OnRouteMenu" Margin="0,0,8,8" />
+                <Button x:Name="RuleButton" Style="{StaticResource Ghost}" MinWidth="120"
+                        Content="Правило: все" Click="OnRuleMenu" Margin="0,0,8,8" />
                 <Button x:Name="ClearButton" Style="{StaticResource Ghost}"
                         Content="Очистить" Click="OnClear" Margin="0,0,8,8" />
                 <Button x:Name="CopyHostsButton" Style="{StaticResource Ghost}"
@@ -44,68 +62,242 @@
                 <Button x:Name="CopyAddressesButton" Style="{StaticResource Ghost}"
                         Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8"
                         ToolTip="Все адреса по нынешнему отбору — по строке, без повторов. Без локальных, соединений движка и его подставных адресов." />
+                <Button x:Name="JournalButton" Style="{StaticResource Ghost}"
+                        Content="Открыть журнал" Click="OnJournal" Margin="0,0,8,8"
+                        ToolTip="runtime\watch.log — каждое соединение всех сеансов, и прямое тоже" />
             </WrapPanel>
         </StackPanel>
 
-        <TextBlock Grid.Row="1" x:Name="Status" Style="{StaticResource Caption}"
-                   Margin="4,18,0,0" TextWrapping="Wrap" />
+        <StackPanel Grid.Row="1">
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}"
+                       Margin="2,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
-        <!--
-            Заголовок таблицы отдельной строкой, а не первым элементом списка:
-            список переписывается целиком при каждом обновлении, и заголовок
-            уезжал бы вместе с ним.
-        -->
-        <Grid Grid.Row="2" Margin="16,16,16,6">
+            <!-- Ответ пунктов «Почему так» и «Проверить это имя» из меню строки. -->
+            <Border x:Name="Details" Style="{StaticResource Card}" Margin="0,12,0,0" Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="DetailsTitle" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DetailsText" Style="{StaticResource Mono}" FontSize="12"
+                                   Margin="0,8,0,0" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Закрыть"
+                            VerticalAlignment="Top" Margin="12,0,0,0" Click="OnDetailsClose" />
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <Grid Grid.Row="2" x:Name="Body" Margin="0,16,0,0" SizeChanged="OnBodySize">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="86" />
-                <ColumnDefinition Width="72" />
-                <ColumnDefinition Width="170" />
-                <ColumnDefinition Width="3*" />
-                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SideColumn" Width="300" />
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition x:Name="SideRow" Height="0" />
+            </Grid.RowDefinitions>
 
-            <TextBlock Grid.Column="0" Text="ВРЕМЯ" Style="{StaticResource Caption}" />
-            <TextBlock Grid.Column="1" Text="КУДА" Style="{StaticResource Caption}" />
-            <TextBlock Grid.Column="2" Text="ПРОЦЕСС" Style="{StaticResource Caption}" />
-            <TextBlock Grid.Column="3" Text="НАЗНАЧЕНИЕ" Style="{StaticResource Caption}" />
-            <TextBlock Grid.Column="4" Text="ПРАВИЛО" Style="{StaticResource Caption}" />
-        </Grid>
+            <Grid Grid.Column="0" Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,10">
-                <ItemsControl x:Name="Rows">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="0,0,0,5">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="86" />
-                                    <ColumnDefinition Width="72" />
-                                    <ColumnDefinition Width="170" />
-                                    <ColumnDefinition Width="3*" />
-                                    <ColumnDefinition Width="2*" />
-                                </Grid.ColumnDefinitions>
+                <TextBox Grid.Row="0" x:Name="Search" TextChanged="OnSearch"
+                         gui:Hint.Text="Поиск по имени, адресу, программе, правилу" />
 
-                                <TextBlock Grid.Column="0" Text="{Binding Time}" Style="{StaticResource Mono}"
-                                           Foreground="{DynamicResource Muted}" />
+                <!-- Счётчики: имён и адресов рядом — разрыв выдаёт браузер со своим DoH. -->
+                <UniformGrid Grid.Row="1" Rows="1" Margin="0,12,0,0">
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock x:Name="TotalText" Text="0" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="соединений" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock x:Name="MatchedText" Text="0" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="под правило" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock x:Name="NamesText" Text="0" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="имён узнано" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <StackPanel>
+                            <TextBlock x:Name="AddressesText" Text="0" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock Text="адресов" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10">
+                        <StackPanel>
+                            <TextBlock x:Name="ClockText" Text="—" FontSize="20" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ClockCaption" Text="выключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+                </UniformGrid>
 
-                                <TextBlock Grid.Column="1" Text="{Binding Mode}" Style="{StaticResource Mono}"
-                                           Foreground="{Binding Colour}" />
+                <!--
+                    Заголовок таблицы отдельной строкой, а не первым элементом
+                    списка: список переписывается целиком, и заголовок уезжал бы.
+                -->
+                <Grid Grid.Row="2" Margin="16,14,16,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="90" />
+                        <ColumnDefinition Width="98" />
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="3*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="36" />
+                    </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Column="2" Text="{Binding Process}"
-                                           TextTrimming="CharacterEllipsis" Margin="0,0,10,0"
-                                           Cursor="Hand" ToolTip="Только эта программа"
-                                           MouseLeftButtonUp="OnProcessClick" />
+                    <TextBlock Grid.Column="0" Text="ВРЕМЯ" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="1" Text="КУДА" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="2" Text="ПРОГРАММА" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="3" Text="НАЗНАЧЕНИЕ" Style="{StaticResource Caption}" />
+                    <TextBlock Grid.Column="4" Text="ПРАВИЛО" Style="{StaticResource Caption}" />
+                </Grid>
 
-                                <TextBlock Grid.Column="3" Text="{Binding Endpoint}"
-                                           TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
+                        <ItemsControl x:Name="Rows">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3,0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="90" />
+                                            <ColumnDefinition Width="98" />
+                                            <ColumnDefinition Width="150" />
+                                            <ColumnDefinition Width="3*" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="36" />
+                                        </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Column="4" Text="{Binding Rule}" Style="{StaticResource Caption}"
-                                           TextTrimming="CharacterEllipsis" />
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                                        <TextBlock Grid.Column="0" Text="{Binding Time}" Style="{StaticResource Mono}"
+                                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+
+                                        <!-- Залитый кружок — известно точно, полый — ответ правил. -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"
+                                                    ToolTip="{Binding CertaintyHint}">
+                                            <Ellipse Width="9" Height="9" Stroke="{Binding Colour}" StrokeThickness="1.6"
+                                                     Fill="{Binding Dot}" Margin="0,0,7,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Mode}" Foreground="{Binding Colour}" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Process}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" Margin="0,0,10,0"
+                                                   Cursor="Hand" ToolTip="Только эта программа"
+                                                   MouseLeftButtonUp="OnProcessClick" />
+
+                                        <StackPanel Grid.Column="3" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Endpoint}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding AddressLine}" Visibility="{Binding AddressShown}"
+                                                       Style="{StaticResource Mono}" FontSize="11"
+                                                       Foreground="{DynamicResource Muted}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="4" Text="{Binding RuleName}" ToolTip="{Binding Rule}"
+                                                   Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <Button Grid.Column="5" Style="{StaticResource Ghost}" Content="⋮"
+                                                Padding="0,2" MinWidth="28" HorizontalAlignment="Right"
+                                                VerticalAlignment="Center" Click="OnRowMenu"
+                                                ToolTip="Что сделать с этим соединением" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
+
+                <TextBlock Grid.Row="4" Style="{StaticResource Caption}" Margin="4,8,0,0" TextWrapping="Wrap"
+                           Text="● — известно точно: подставной адрес движка, сам движок, домашняя сеть · ○ — так сказали бы правила, движок не спрашивали" />
+            </Grid>
+
+            <!-- Правая колонка; на узком окне — строкой под таблицей (OnBodySize). -->
+            <ScrollViewer x:Name="SideHost" Grid.Column="1" Grid.Row="0" Margin="16,0,0,0" Style="{StaticResource PageScroll}">
+            <Grid x:Name="Side">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="SideR0" Height="Auto" />
+                    <RowDefinition x:Name="SideR1" Height="Auto" />
+                    <RowDefinition x:Name="SideR2" Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="SideC0" Width="*" />
+                    <ColumnDefinition x:Name="SideC1" Width="0" />
+                    <ColumnDefinition x:Name="SideC2" Width="0" />
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="RingCard" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <!-- На узком окне кольцо встаёт слева от легенды, а не над ней (OnBodySize). -->
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="RingLegendColumn" Width="0" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="Куда уходит" FontWeight="SemiBold" Margin="0,0,0,10" Grid.ColumnSpan="2" />
+                        <Grid x:Name="RingBox" Grid.Row="1" Width="150" Height="150" HorizontalAlignment="Center">
+                            <views:WatchRing x:Name="Ring" />
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock x:Name="RingTotal" Text="0" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                <TextBlock x:Name="RingCaption" Text="соединений" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                        <ItemsControl x:Name="RingLegend" Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Center">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,2" Cursor="Hand" Background="Transparent"
+                                          MouseLeftButtonUp="OnLegendClick" ToolTip="Показать только это">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="34" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Width="9" Height="9" Fill="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Word}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Count}" FontWeight="SemiBold" Margin="8,0,0,0" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Share}" Style="{StaticResource Caption}"
+                                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="ProgramsCard" Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
+                    <StackPanel>
+                        <TextBlock Text="Шумят больше всех" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <ItemsControl x:Name="TopPrograms" ItemTemplate="{StaticResource WatchTopLine}" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="SitesCard" Grid.Row="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="Сайты" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <ItemsControl x:Name="TopSites" ItemTemplate="{StaticResource WatchTopLine}" />
+                    </StackPanel>
+                </Border>
+            </Grid>
             </ScrollViewer>
-        </Border>
+        </Grid>
     </Grid>
+
 </UserControl>

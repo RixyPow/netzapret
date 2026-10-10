@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -6,19 +7,31 @@ using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
+using NetZapret.Proxy;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Одно замеченное соединение и решение по нему.</summary>
+/// <summary>Одно замеченное соединение — строка таблицы.</summary>
 public sealed record WatchRow(
     string Time,
     string Mode,
     Brush Colour,
+    Brush Dot,
+    string CertaintyHint,
     string Process,
     string Endpoint,
+    string AddressLine,
+    Visibility AddressShown,
+    string RuleName,
     string Rule,
     WatchEntry Entry);
+
+/// <summary>Строка легенды кольца.</summary>
+public sealed record WatchLegendLine(WatchRoute Route, Brush Brush, string Word, int Count, string Share);
+
+/// <summary>Строка «Шумят больше всех» или «Сайты».</summary>
+public sealed record WatchTopLine(string Name, int Count, double Bar, double Track, string Hint, bool IsSite);
 
 /// <summary>
 /// Показывает соединения по мере появления и правило, применённое к каждому.
@@ -28,30 +41,31 @@ public sealed record WatchRow(
 /// Отвечает на вопрос, на который не отвечает ничто другое: «почему это пошло
 /// не туда». Маршруты показывают, как правила <i>записаны</i>, проверка
 /// блокировок — что закрыто снаружи, а здесь видно, какое правило досталось
-/// настоящему соединению настоящей программы. Расхождение между первым
-/// и третьим и есть та ошибка, которую иначе ищут наугад.
+/// настоящему соединению настоящей программы.
 /// </para>
 /// <para>
 /// Не перенаправляет ничего и ни на что не влияет: события только читаются.
-/// Выключать движки ради него не нужно, и на их работу он не действует.
 /// </para>
 /// <para>
 /// Источник — события ядра (ETW), сеанс — <see cref="ConnectionWatch"/>, общий
 /// с <c>nz watch</c>; каждое соединение пишется в <c>runtime\watch.log</c>,
-/// и журнал со сводкой по программам едет в отчёт. WFP источником не взят:
-/// на этой системе он не отдаёт событий о <i>разрешённых</i> соединениях,
-/// то есть показывал бы пустую таблицу.
+/// и журнал со сводкой по программам едет в отчёт.
+/// </para>
+/// <para>
+/// Вид — по макету владельца 10.10: поиск, отборы «Программа», «Куда»,
+/// «Правило», счётчики, кружок «точно / по правилам», меню у строки
+/// («Проверить», «Почему так», «Добавить маршрут»), справа кольцо долей
+/// и «кто шумит».
 /// </para>
 /// </remarks>
 public partial class WatchView : UserControl
 {
     /// <summary>
-    /// Сколько строк держать.
+    /// Сколько строк рисовать.
     /// </summary>
     /// <remarks>
-    /// Ограничение обязательно, а не на всякий случай: браузер с десятком
-    /// вкладок даёт сотни соединений в минуту, и список без предела съел бы
-    /// память за полчаса наблюдения.
+    /// Список не виртуализирован, и тысячи строк окно не потянет: браузер
+    /// с десятком вкладок даёт сотни соединений в минуту.
     /// </remarks>
     private const int Limit = 400;
 
@@ -59,29 +73,40 @@ public partial class WatchView : UserControl
     /// Как часто переносить накопленное в таблицу.
     /// </summary>
     /// <remarks>
-    /// Пачками, а не по событию. События приходят очередями по десятку
-    /// за миг, и вставка каждого поодиночке заставляет WPF пересчитывать
-    /// разметку столько же раз — окно начинает заикаться ровно тогда, когда
-    /// на него смотрят.
+    /// Пачками, а не по событию: вставка каждого поодиночке заставляет WPF
+    /// пересчитывать разметку столько же раз — окно начинает заикаться ровно
+    /// тогда, когда на него смотрят.
     /// </remarks>
     private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>Правая колонка и кольцо — раз в столько перерисовок таблицы.</summary>
+    private const int SideEvery = 4;
+
     /// <summary>
-    /// Сколько строк помнить для отбора по программе.
+    /// Сколько строк помнить для отбора.
     /// </summary>
     /// <remarks>
-    /// Больше, чем показывается: браузер вытесняет из четырёхсот последних
-    /// строк всё остальное за минуту, и отбор по редкой программе иначе
-    /// находил бы пустоту. Рисуются всё равно не больше <see cref="Limit"/> —
-    /// список не виртуализирован, и тысячи строк окно не потянет.
+    /// Больше, чем рисуется: браузер вытесняет из четырёхсот последних строк
+    /// всё остальное за минуту, и отбор по редкой программе иначе находил
+    /// бы пустоту.
     /// </remarks>
     private const int StoreLimit = 5000;
 
-    /// <summary>Надпись кнопки без отбора.</summary>
-    private const string AllProcesses = "Все программы";
+    /// <summary>Сколько строк в меню программ и правил, в «кто шумит».</summary>
+    private const int MenuItems = 15;
+    private const int TopItems = 5;
 
-    /// <summary>Сколько замеченных программ показывать в меню.</summary>
-    private const int MenuPrograms = 15;
+    /// <summary>Правая колонка уходит под таблицу, когда раздел уже этого.</summary>
+    private const double NarrowBelow = 1100;
+
+    private static readonly WatchRoute[] Routes =
+        [WatchRoute.Proxy, WatchRoute.Desync, WatchRoute.Direct, WatchRoute.Local, WatchRoute.Engine];
+
+    /// <summary>
+    /// Цвет движка: своего в палитре нет, а серый уже у «напрямую»
+    /// и «локально». Голубовато-серый, как на макете.
+    /// </summary>
+    private static readonly Brush EngineBrush = Frozen(Color.FromRgb(0x7D, 0x8F, 0xB0));
 
     // Сеанс и накопленное — статические, как у «Замера скорости»: раздел
     // создаётся заново при каждом заходе, и прежде уход с вкладки (Unloaded)
@@ -93,25 +118,32 @@ public partial class WatchView : UserControl
 
     /// <summary>Запомненные строки, старые первыми.</summary>
     private static readonly List<WatchRow> _store = [];
-    private static readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Пришедшее с последней перерисовки — пока раздел открыт.</summary>
     private static readonly List<WatchRow> _pending = [];
 
-    /// <summary>Какую программу показывать; <c>null</c> — все.</summary>
+    // Счёт с последнего «Очистить» — для кольца, счётчиков и «кто шумит».
+    private static readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, int> _perSite = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, int> _perRule = new(StringComparer.Ordinal);
+    private static readonly Dictionary<WatchRoute, int> _perRoute = [];
+    private static readonly HashSet<string> _names = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly HashSet<string> _addresses = new(StringComparer.OrdinalIgnoreCase);
+
+    // Отбор показа; в журнал соединение уходит всякое.
     private static string? _process;
+    private static WatchRoute? _route;
+    private static string? _rule;
+    private static string _search = string.Empty;
 
     private static CancellationTokenSource? _work;
     private static ConnectionWatch? _watch;
     private static Dictionary<WatchRoute, Brush> _brushes = [];
-
-    /// <summary>Показывать только то, что уходит в туннель или под десинк.</summary>
-    private static bool _interestingOnly;
+    private static DateTimeOffset _startedAt;
 
     /// <summary>Счёт сеанса на миг «Очистить»: таблица считает с нуля, журнал — нет.</summary>
     private static long _totalBase;
     private static long _matchedBase;
-    private static long _hidden;
 
     /// <summary>Открытый раздел; <c>null</c> — наблюдение идёт без него.</summary>
     private static WatchView? _open;
@@ -123,6 +155,10 @@ public partial class WatchView : UserControl
 
     private readonly ObservableCollection<WatchRow> _rows = [];
     private readonly DispatcherTimer _flush = new() { Interval = FlushInterval };
+    private int _ticks;
+
+    /// <summary>Проверка имени из меню строки — одна за раз.</summary>
+    private CancellationTokenSource? _probe;
 
     public WatchView()
     {
@@ -136,12 +172,17 @@ public partial class WatchView : UserControl
             lock (Gate)
                 _open = this;
 
-            ShowProcess(_process);
-            ShowFilter();
-            PowerButton.Content = _watch is null ? "Начать" : "Остановить";
+            if (_brushes.Count == 0)
+                _brushes = Palette();
 
-            if (_watch is null)
-                Status.Text = _note ?? "Наблюдение выключено. Оно ничего не меняет — только читает события ядра.";
+            Search.Text = _search;
+            ShowFilters();
+            Refill();
+            ShowSide();
+            ShowCounters();
+
+            PowerButton.Content = _watch is null ? "Начать" : "Остановить";
+            Say(_watch is null ? _note : null);
 
             _flush.Start();
         };
@@ -150,6 +191,7 @@ public partial class WatchView : UserControl
         Unloaded += (_, _) =>
         {
             _flush.Stop();
+            _probe?.Cancel();
 
             lock (Gate)
             {
@@ -161,12 +203,38 @@ public partial class WatchView : UserControl
         };
     }
 
+    private Dictionary<WatchRoute, Brush> Palette() => new()
+    {
+        [WatchRoute.Proxy] = (Brush)FindResource("Accent"),
+        [WatchRoute.Desync] = (Brush)FindResource("Warn"),
+        [WatchRoute.Direct] = (Brush)FindResource("Muted"),
+        [WatchRoute.Local] = Brush("Faint", Brushes.DimGray),
+        [WatchRoute.Engine] = EngineBrush,
+    };
+
+    /// <summary>Кисть темы; у темы без неё — запасная, а не падение раздела.</summary>
+    private Brush Brush(string key, Brush fallback) => TryFindResource(key) as Brush ?? fallback;
+
+    private static Brush Frozen(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
+    }
+
+    private void Say(string? text)
+    {
+        Status.Text = text ?? string.Empty;
+        Status.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void OnPower(object sender, RoutedEventArgs e)
     {
         if (_watch is not null)
         {
             StopSession();
             PowerButton.Content = "Начать";
+            ShowCounters();
             return;
         }
 
@@ -175,19 +243,13 @@ public partial class WatchView : UserControl
             // Тот же сеанс, что у nz watch (ConnectionWatch): те же правила,
             // что у сборки конфига, и тот же журнал runtime\watch.log.
             _watch = ConnectionWatch.Start(AppSettings.Load(AppSettings.DefaultPath), ConnectionWatch.DefaultJournal);
+            _startedAt = DateTimeOffset.Now;
             _totalBase = 0;
             _matchedBase = 0;
             _note = null;
 
             // Кисти — здесь, в потоке окна: строки собираются в фоне.
-            _brushes = new Dictionary<WatchRoute, Brush>
-            {
-                [WatchRoute.Proxy] = (Brush)FindResource("Accent"),
-                [WatchRoute.Desync] = (Brush)FindResource("Warn"),
-                [WatchRoute.Direct] = (Brush)FindResource("Muted"),
-                [WatchRoute.Local] = (Brush)FindResource("Muted"),
-                [WatchRoute.Engine] = (Brush)FindResource("Muted"),
-            };
+            _brushes = Palette();
 
             // Сессия ETW переживает процесс: выход из программы обязан её
             // остановить, раз раздел этого больше не делает.
@@ -201,7 +263,7 @@ public partial class WatchView : UserControl
             _ = ReadAsync(_watch, _work.Token);
 
             PowerButton.Content = "Остановить";
-            Status.Text = $"Смотрю. Правил: {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
+            Say($"Смотрю: правил {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.");
         }
         catch (Exception ex)
         {
@@ -209,7 +271,7 @@ public partial class WatchView : UserControl
 
             _note = "Не удалось начать: " + ex.GetBaseException().Message
                 + ". Сессия ETW требует прав администратора — окно их запрашивает при запуске.";
-            Status.Text = _note;
+            Say(_note);
         }
     }
 
@@ -219,7 +281,6 @@ public partial class WatchView : UserControl
     /// <remarks>
     /// В фоне, а не при показе: решение правил разворачивает списки доменов,
     /// и в потоке разметки это подвешивало бы окно на каждой строке.
-    /// В журнал соединение уходит всякое — отбор здесь касается только показа.
     /// </remarks>
     private static async Task ReadAsync(ConnectionWatch watch, CancellationToken cancellationToken)
     {
@@ -227,25 +288,12 @@ public partial class WatchView : UserControl
         {
             await foreach (var entry in watch.ReadAsync(cancellationToken))
             {
-                if (_interestingOnly && !entry.Routed)
-                {
-                    Interlocked.Increment(ref _hidden);
-                    continue;
-                }
-
-                var row = new WatchRow(
-                    entry.Time.ToLocalTime().ToString("HH:mm:ss.fff"),
-                    entry.ModeWord,
-                    _brushes[entry.Mode],
-                    entry.Process,
-                    entry.Endpoint,
-                    entry.RuleShown,
-                    entry);
+                var row = Row(entry);
 
                 lock (Gate)
                 {
                     _store.Add(row);
-                    _perProcess[row.Process] = _perProcess.GetValueOrDefault(row.Process) + 1;
+                    Count(entry);
 
                     // Срезается пачкой, а не по строке: сдвиг пятитысячного
                     // списка на каждое соединение — лишняя работа.
@@ -259,7 +307,6 @@ public partial class WatchView : UserControl
 
             // Поток кончился без нашей остановки — сессию погасили снаружи:
             // имя сессии одно на машину, и nz watch --force её забирает.
-            // Прежде раздел этого не замечал и стоял на «Остановить» с замершим счётом.
             if (!cancellationToken.IsCancellationRequested)
                 Interrupted("сессию забрал nz watch --force или остановила система");
         }
@@ -273,6 +320,49 @@ public partial class WatchView : UserControl
         }
     }
 
+    private static WatchRow Row(WatchEntry entry)
+    {
+        var colour = _brushes.TryGetValue(entry.Mode, out var brush) ? brush : Brushes.Gray;
+        bool named = entry.Host is not null;
+
+        return new WatchRow(
+            entry.Time.ToLocalTime().ToString("HH:mm:ss.fff"),
+            entry.ModeWord,
+            colour,
+            entry.Certain ? colour : Brushes.Transparent,
+            entry.Certain
+                ? "Известно точно: подставной адрес движка, сам движок или домашняя сеть"
+                : "Так сказали бы правила — движок не спрашивали",
+            entry.Process,
+            entry.Endpoint,
+            named ? entry.Address : string.Empty,
+            named ? Visibility.Visible : Visibility.Collapsed,
+            entry.RuleName,
+            entry.RuleShown,
+            entry);
+    }
+
+    /// <summary>Учёт одной строки — под замком <see cref="Gate"/>.</summary>
+    private static void Count(WatchEntry entry)
+    {
+        _perProcess[entry.Process] = _perProcess.GetValueOrDefault(entry.Process) + 1;
+        _perRoute[entry.Mode] = _perRoute.GetValueOrDefault(entry.Mode) + 1;
+        _perRule[entry.RuleName] = _perRule.GetValueOrDefault(entry.RuleName) + 1;
+
+        if (entry.Mode is not (WatchRoute.Local or WatchRoute.Engine))
+        {
+            _addresses.Add(entry.Ip);
+
+            if (entry.Host is { } host)
+            {
+                _names.Add(host);
+
+                var site = WatchEntry.SiteOf(host);
+                _perSite[site] = _perSite.GetValueOrDefault(site) + 1;
+            }
+        }
+    }
+
     private static void Interrupted(string why) =>
         Application.Current?.Dispatcher.Invoke(() =>
         {
@@ -282,7 +372,8 @@ public partial class WatchView : UserControl
             if (_open is { } view)
             {
                 view.PowerButton.Content = "Начать";
-                view.Status.Text = _note;
+                view.Say(_note);
+                view.ShowCounters();
             }
         });
 
@@ -297,8 +388,7 @@ public partial class WatchView : UserControl
             _pending.Clear();
         }
 
-        // Новое сверху: живой список смотрят ради последнего события,
-        // а не ради первого, и прокручивать за ним вниз пришлось бы вручную.
+        // Новое сверху: живой список смотрят ради последнего события.
         foreach (var row in batch)
         {
             if (Shows(row))
@@ -308,27 +398,36 @@ public partial class WatchView : UserControl
         while (_rows.Count > Limit)
             _rows.RemoveAt(_rows.Count - 1);
 
-        ShowStats();
+        ShowCounters();
+
+        if (++_ticks % SideEvery == 0)
+            ShowSide();
     }
 
-    private static bool Shows(WatchRow row) =>
-        _process is null || string.Equals(row.Process, _process, StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>Показать одну программу или все — заново из запомненного.</summary>
-    /// <remarks>
-    /// Сравнение по имени файла без регистра: ETW даёт путь, раздел
-    /// показывает имя в нижнем регистре (<c>ExecutableName</c>), а окно
-    /// выбора и файл — как записано на диске.
-    /// </remarks>
-    private void ShowProcess(string? name)
+    /// <summary>Проходит ли строка нынешний отбор.</summary>
+    private static bool Shows(WatchRow row)
     {
-        _process = name;
-        ProcessButton.Content = name ?? AllProcesses;
-        if (name is null)
-            ProcessButton.ClearValue(ForegroundProperty);
-        else
-            ProcessButton.Foreground = (Brush)FindResource("Accent");
+        var e = row.Entry;
 
+        if (_process is not null && !string.Equals(e.Process, _process, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (_route is { } route && e.Mode != route)
+            return false;
+
+        if (_rule is not null && e.RuleName != _rule)
+            return false;
+
+        return _search.Length == 0
+            || e.Process.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || e.Endpoint.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || e.Address.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || e.RuleShown.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Таблица заново из запомненного — после смены отбора.</summary>
+    private void Refill()
+    {
         List<WatchRow> shown;
 
         lock (Gate)
@@ -341,8 +440,181 @@ public partial class WatchView : UserControl
 
         foreach (var row in shown)
             _rows.Add(row);
+    }
 
-        ShowStats();
+    private void ShowFilters()
+    {
+        Mark(ProcessButton, _process is null ? "Программа: все" : $"Программа: {_process}", _process is not null);
+        Mark(RouteButton, _route is { } r ? $"Куда: {WatchEntry.Word(r)}" : "Куда: все", _route is not null);
+        Mark(RuleButton, _rule is null ? "Правило: все" : $"Правило: {_rule}", _rule is not null);
+    }
+
+    private void Mark(Button button, string text, bool on)
+    {
+        button.Content = text;
+
+        if (on)
+            button.Foreground = (Brush)FindResource("Accent");
+        else
+            button.ClearValue(ForegroundProperty);
+    }
+
+    private void Filter(Action change)
+    {
+        change();
+        ShowFilters();
+        Refill();
+    }
+
+    private void OnSearch(object sender, TextChangedEventArgs e)
+    {
+        var text = Search.Text.Trim();
+
+        if (text == _search)
+            return;
+
+        _search = text;
+        Refill();
+    }
+
+    private void ShowCounters()
+    {
+        if (_watch is { } watch)
+        {
+            TotalText.Text = (watch.Total - _totalBase).ToString("N0");
+            MatchedText.Text = (watch.Matched - _matchedBase).ToString("N0");
+
+            var running = DateTimeOffset.Now - _startedAt;
+            ClockText.Text = $"{(int)running.TotalHours:00}:{running.Minutes:00}:{running.Seconds:00}";
+            ClockCaption.Text = watch.Dropped > 0 ? $"идёт · потеряно {watch.Dropped}" : "идёт";
+        }
+        else
+        {
+            ClockText.Text = "—";
+            ClockCaption.Text = "выключено";
+        }
+
+        lock (Gate)
+        {
+            NamesText.Text = _names.Count.ToString("N0");
+            AddressesText.Text = _addresses.Count.ToString("N0");
+        }
+    }
+
+    /// <summary>Кольцо, легенда и «кто шумит».</summary>
+    private void ShowSide()
+    {
+        // Размер приходит раньше Loaded, и кистей тогда ещё нет.
+        if (_brushes.Count == 0)
+            _brushes = Palette();
+
+        Dictionary<WatchRoute, int> routes;
+        List<KeyValuePair<string, int>> programs, sites;
+
+        lock (Gate)
+        {
+            routes = new(_perRoute);
+            programs = [.. _perProcess.OrderByDescending(p => p.Value).Take(TopItems)];
+            sites = [.. _perSite.OrderByDescending(p => p.Value).Take(TopItems)];
+        }
+
+        int total = routes.Values.Sum();
+
+        Ring.Show([.. Routes.Select(r => ((double)routes.GetValueOrDefault(r), _brushes[r]))], Brush("Raised", Brushes.DimGray));
+        RingTotal.Text = total.ToString("N0");
+
+        RingLegend.ItemsSource = Routes
+            .Select(r => new WatchLegendLine(
+                r,
+                _brushes[r],
+                WatchEntry.Word(r),
+                routes.GetValueOrDefault(r),
+                total == 0 ? "—" : $"{100.0 * routes.GetValueOrDefault(r) / total:0}%"))
+            .ToList();
+
+        TopPrograms.ItemsSource = Top(programs, isSite: false);
+        TopSites.ItemsSource = Top(sites, isSite: true);
+    }
+
+    /// <summary>Длина дорожки «кто шумит»: на узком окне вдвое короче — место имени.</summary>
+    private double _track = 70;
+
+    private List<WatchTopLine> Top(List<KeyValuePair<string, int>> items, bool isSite)
+    {
+        int max = items.Count == 0 ? 1 : Math.Max(1, items.Max(i => i.Value));
+
+        return [.. items.Select(i => new WatchTopLine(
+            i.Key,
+            i.Value,
+            _track * i.Value / max,
+            _track,
+            $"Показать только {i.Key}",
+            isSite))];
+    }
+
+    private void OnTopClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: WatchTopLine line })
+            return;
+
+        if (line.IsSite)
+            Search.Text = line.Name;
+        else
+            Filter(() => _process = line.Name);
+    }
+
+    private void OnLegendClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WatchLegendLine line })
+            Filter(() => _route = _route == line.Route ? null : line.Route);
+    }
+
+    /// <summary>На узком окне правая колонка встаёт строкой под таблицу.</summary>
+    /// <remarks>
+    /// У владельца ~830 точек содержимого: колонка в 300 оставила бы таблице
+    /// пятьсот, и назначения обрезались бы на третьей букве.
+    /// </remarks>
+    private void OnBodySize(object sender, SizeChangedEventArgs e)
+    {
+        bool narrow = Body.ActualWidth < NarrowBelow;
+
+        SideColumn.Width = new GridLength(narrow ? 0 : 300);
+        SideRow.Height = narrow ? GridLength.Auto : new GridLength(0);
+
+        Grid.SetColumn(SideHost, narrow ? 0 : 1);
+        Grid.SetRow(SideHost, narrow ? 1 : 0);
+        SideHost.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(16, 0, 0, 0);
+
+        if (_track != (narrow ? 36 : 70))
+        {
+            _track = narrow ? 36 : 70;
+            ShowSide();
+        }
+
+        // Карточка кольца шире двух других: в ней кольцо и легенда рядом.
+        SideC0.Width = new GridLength(narrow ? 1.6 : 1, GridUnitType.Star);
+        SideC1.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        SideC2.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        // Кольцо слева от легенды и меньше: строка под таблицей должна быть
+        // низкой, иначе таблице на окне владельца оставалось четыре строки.
+        RingLegendColumn.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        RingBox.Width = RingBox.Height = narrow ? 88 : 150;
+        RingCaption.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetRow(RingLegend, narrow ? 1 : 2);
+        Grid.SetColumn(RingLegend, narrow ? 1 : 0);
+        RingLegend.Margin = narrow ? new Thickness(12, 0, 0, 0) : new Thickness(0, 12, 0, 0);
+
+        Place(RingCard, narrow ? 0 : 0, narrow ? 0 : 0, narrow ? new Thickness(0, 0, 8, 0) : new Thickness(0, 0, 0, 12));
+        Place(ProgramsCard, narrow ? 0 : 1, narrow ? 1 : 0, narrow ? new Thickness(4, 0, 4, 0) : new Thickness(0, 0, 0, 12));
+        Place(SitesCard, narrow ? 0 : 2, narrow ? 2 : 0, narrow ? new Thickness(8, 0, 0, 0) : new Thickness(0));
+    }
+
+    private static void Place(FrameworkElement card, int row, int column, Thickness margin)
+    {
+        Grid.SetRow(card, row);
+        Grid.SetColumn(card, column);
+        card.Margin = margin;
     }
 
     /// <summary>
@@ -352,18 +624,13 @@ public partial class WatchView : UserControl
     /// Не только из замеченных (владелец 10.10: «почему ты выбираешь только
     /// из существующих»): программу выбирают, чтобы увидеть, куда она пойдёт,
     /// часто до того, как её запустили. Отбор по ней ждёт её первых соединений.
-    /// Замеченные — ниже, по числу соединений: это те, что шумят сейчас.
     /// </remarks>
     private void OnProcessMenu(object sender, RoutedEventArgs e)
     {
-        var menu = new ContextMenu
-        {
-            PlacementTarget = ProcessButton,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
-        };
+        var menu = Menu(ProcessButton);
 
         if (_process is not null)
-            menu.Items.Add(MenuEntry("", AllProcesses, () => ShowProcess(null)));
+            menu.Items.Add(MenuEntry("", "Все программы", () => Filter(() => _process = null)));
 
         menu.Items.Add(MenuEntry("", "Из запущенных…", PickRunning));
         menu.Items.Add(MenuEntry("", "Выбрать файл…", PickFile));
@@ -371,24 +638,61 @@ public partial class WatchView : UserControl
         List<KeyValuePair<string, int>> seen;
 
         lock (Gate)
-        {
-            seen = _perProcess
-                .Where(p => p.Value > 0)
-                .OrderByDescending(p => p.Value)
-                .Take(MenuPrograms)
-                .ToList();
-        }
+            seen = [.. _perProcess.Where(p => p.Value > 0).OrderByDescending(p => p.Value).Take(MenuItems)];
 
         if (seen.Count > 0)
         {
             menu.Items.Add(new Separator());
 
             foreach (var (name, count) in seen)
-                menu.Items.Add(MenuEntry(string.Empty, $"{name} — {count}", () => ShowProcess(name)));
+                menu.Items.Add(MenuEntry(string.Empty, $"{name} — {count}", () => Filter(() => _process = name)));
         }
 
         menu.IsOpen = true;
     }
+
+    private void OnRouteMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = Menu(RouteButton);
+
+        menu.Items.Add(MenuEntry(string.Empty, "Все", () => Filter(() => _route = null)));
+
+        Dictionary<WatchRoute, int> counts;
+
+        lock (Gate)
+            counts = new(_perRoute);
+
+        foreach (var route in Routes)
+            menu.Items.Add(MenuEntry(string.Empty, $"{WatchEntry.Word(route)} — {counts.GetValueOrDefault(route)}", () => Filter(() => _route = route)));
+
+        menu.IsOpen = true;
+    }
+
+    private void OnRuleMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = Menu(RuleButton);
+
+        menu.Items.Add(MenuEntry(string.Empty, "Все", () => Filter(() => _rule = null)));
+
+        List<KeyValuePair<string, int>> seen;
+
+        lock (Gate)
+            seen = [.. _perRule.OrderByDescending(p => p.Value).Take(MenuItems)];
+
+        if (seen.Count > 0)
+            menu.Items.Add(new Separator());
+
+        foreach (var (name, count) in seen)
+            menu.Items.Add(MenuEntry(string.Empty, $"{name} — {count}", () => Filter(() => _rule = name)));
+
+        menu.IsOpen = true;
+    }
+
+    private static ContextMenu Menu(UIElement target) => new()
+    {
+        PlacementTarget = target,
+        Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+    };
 
     private static MenuItem MenuEntry(string glyph, string text, Action act)
     {
@@ -406,7 +710,7 @@ public partial class WatchView : UserControl
         var window = new ProgramPickerWindow { Owner = Window.GetWindow(this) };
 
         if (window.ShowDialog() == true && window.Chosen is { } chosen)
-            ShowProcess(chosen.Name);
+            Filter(() => _process = chosen.Name);
     }
 
     private void PickFile()
@@ -418,58 +722,192 @@ public partial class WatchView : UserControl
         };
 
         if (dialog.ShowDialog(Window.GetWindow(this)) == true)
-            ShowProcess(System.IO.Path.GetFileName(dialog.FileName));
+            Filter(() => _process = System.IO.Path.GetFileName(dialog.FileName));
     }
 
     private void OnProcessClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: WatchRow row })
-            ShowProcess(row.Process);
+            Filter(() => _process = row.Process);
     }
 
-    private void ShowStats()
+    /// <summary>
+    /// Меню строки: от соединения к разбору в один щелчок (макет владельца 10.10).
+    /// </summary>
+    private void OnRowMenu(object sender, RoutedEventArgs e)
     {
-        if (_watch is null)
+        if (sender is not FrameworkElement { DataContext: WatchRow row } button)
             return;
 
-        var parts = new List<string>
+        var entry = row.Entry;
+        var target = entry.Host ?? entry.Ip;
+        bool outside = entry.Mode is not (WatchRoute.Local or WatchRoute.Engine);
+        var menu = Menu(button);
+
+        if (outside)
         {
-            $"соединений: {_watch.Total - _totalBase}",
-            $"под правило попало: {_watch.Matched - _matchedBase}",
-            $"имён узнано: {_watch.NamesKnown}",
-        };
-
-        if (_watch.Dropped > 0)
-            parts.Add($"потеряно при переполнении: {_watch.Dropped}");
-
-        if (_interestingOnly && _hidden > 0)
-            parts.Add($"скрыто прямых: {_hidden}");
-
-        if (_process is not null)
-        {
-            lock (Gate)
-                parts.Add($"{_process}: {_perProcess.GetValueOrDefault(_process)}");
+            menu.Items.Add(MenuEntry("", entry.Host is null ? "Проверить этот адрес" : "Проверить это имя",
+                () => _ = CheckAsync(entry)));
         }
 
-        Status.Text = string.Join(" · ", parts);
+        menu.Items.Add(MenuEntry("", "Почему так", () => _ = WhyAsync(target)));
+
+        if (outside && entry.Rule != WatchEntry.FakeRule)
+        {
+            var (kind, value, shown) = entry.Host is { } host
+                ? (MatchKind.Domain, "*." + WatchEntry.SiteOf(host), WatchEntry.SiteOf(host))
+                : (MatchKind.Ip, entry.Ip, entry.Ip);
+
+            var add = new MenuItem { Header = $"Добавить маршрут для {shown}" };
+            add.Items.Add(MenuEntry(string.Empty, "через VPN", () => AddRoute(kind, value, shown, RoutingMode.Proxy)));
+            add.Items.Add(MenuEntry(string.Empty, "десинк", () => AddRoute(kind, value, shown, RoutingMode.Desync)));
+            add.Items.Add(MenuEntry(string.Empty, "напрямую", () => AddRoute(kind, value, shown, RoutingMode.Direct)));
+            menu.Items.Add(add);
+        }
+
+        menu.Items.Add(new Separator());
+
+        if (entry.Host is { } name)
+            menu.Items.Add(MenuEntry("", "Скопировать имя", () => CopyText(name)));
+
+        menu.Items.Add(MenuEntry("", "Скопировать адрес", () => CopyText(entry.Ip)));
+        menu.Items.Add(MenuEntry("", $"Показать только {entry.Process}", () => Filter(() => _process = entry.Process)));
+
+        menu.IsOpen = true;
     }
 
-    /// <summary>Останавливает сеанс — кнопкой или с выходом из программы.</summary>
-    private static void StopSession()
+    private static void CopyText(string text)
     {
-        _work?.Cancel();
-        _work = null;
-
-        if (_watch is not null)
+        try
         {
-            // Синхронно и до конца: сессия ETW переживает процесс, и брошенная
-            // она останется в системе именем NetZapret до перезагрузки.
-            _watch.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _watch = null;
+            Clipboard.SetText(text);
+        }
+        catch (Exception)
+        {
+            // Буфер обмена держит другая программа — бывает, и не наша беда.
+        }
+    }
+
+    private void ShowDetails(string title, string text)
+    {
+        DetailsTitle.Text = title;
+        DetailsText.Text = text;
+        Details.Visibility = Visibility.Visible;
+    }
+
+    private void OnDetailsClose(object sender, RoutedEventArgs e)
+    {
+        _probe?.Cancel();
+        Details.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>«Почему так» — то же объяснение, что nz where (RouteWhy).</summary>
+    private async Task WhyAsync(string target)
+    {
+        ShowDetails($"Почему так: {target}", "Смотрю правила, hosts и DNS…");
+
+        try
+        {
+            var lines = await Task.Run(() => RouteWhy.Explain(target));
+            ShowDetails($"Почему так: {target}", string.Join(Environment.NewLine, lines));
+        }
+        catch (Exception ex)
+        {
+            ShowDetails($"Почему так: {target}", "Не вышло: " + ex.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>
+    /// «Проверить это имя» — тот же разбор, что строка проверки блокировок.
+    /// </summary>
+    /// <remarks>
+    /// Через туннель — если соединение и ушло в туннель: вердикты про DPI
+    /// к такому имени неприменимы (<c>throughTunnel</c>).
+    /// </remarks>
+    private async Task CheckAsync(WatchEntry entry)
+    {
+        var target = entry.Host ?? entry.Ip;
+        var title = $"Проверка: {target}";
+
+        _probe?.Cancel();
+        _probe = new CancellationTokenSource();
+        var token = _probe.Token;
+
+        ShowDetails(title, "Проверяю — до полуминуты, если имя молчит…");
+
+        try
+        {
+            var report = await BlockCheck.CheckAsync(target, null, token, throughTunnel: entry.Mode == WatchRoute.Proxy);
+
+            var text = report.Describe()
+                + (report.Why is { } why ? Environment.NewLine + why : string.Empty)
+                + Environment.NewLine
+                + $"TCP: {report.Tcp.Describe()} · TLS: {report.Tls.Describe()} · данные: {report.DescribeData()}";
+
+            if (!token.IsCancellationRequested)
+                ShowDetails(title, text);
+        }
+        catch (OperationCanceledException)
+        {
+            // Закрыли карточку или ушли с вкладки.
+        }
+        catch (Exception ex)
+        {
+            ShowDetails(title, "Не вышло: " + ex.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>
+    /// «Добавить маршрут» — своё правило, как «Свой сайт» в «Маршрутах».
+    /// </summary>
+    /// <remarks>
+    /// Для имени — весь сайт (<c>*.сайт</c>): соединение одного поддомена
+    /// почти никогда не всё, что сайту нужно. Просьба Евгения в Telegram 10.10:
+    /// «добавить маршрут прямо по наблюдаемым назначениям». Применится
+    /// при следующем запуске движков — окно предложит перезапуск.
+    /// </remarks>
+    private void AddRoute(MatchKind kind, string value, string shown, RoutingMode mode)
+    {
+        try
+        {
+            var file = UserRulesFile.Load();
+            file.Set(kind, value, mode, recipe: null);
+            file.Save();
+
+            var word = mode switch
+            {
+                RoutingMode.Proxy => "через VPN",
+                RoutingMode.Desync => "десинк",
+                _ => "напрямую",
+            };
+
+            Say($"Записано: {shown} → {word}. Применится при следующем запуске движков; править — в «Маршрутах».");
+            this.Offer($"Добавлен маршрут: {shown}");
+        }
+        catch (Exception ex)
+        {
+            Say("Не удалось записать: " + ex.GetBaseException().Message);
+        }
+    }
+
+    private void OnJournal(object sender, RoutedEventArgs e)
+    {
+        var path = System.IO.Path.GetFullPath(ConnectionWatch.DefaultJournal);
+
+        if (!System.IO.File.Exists(path))
+        {
+            Answer(JournalButton, "Открыть журнал", "Журнала ещё нет");
+            return;
         }
 
-        lock (Gate)
-            _pending.Clear();
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            Answer(JournalButton, "Открыть журнал", "Не открылся");
+        }
     }
 
     private void OnCopyHosts(object sender, RoutedEventArgs e) =>
@@ -502,7 +940,6 @@ public partial class WatchView : UserControl
         }
         catch (Exception)
         {
-            // Буфер обмена держит другая программа — бывает, и не наша беда.
             Answer(button, caption, "Буфер занят — ещё раз");
         }
     }
@@ -521,38 +958,49 @@ public partial class WatchView : UserControl
         back.Start();
     }
 
-    private void OnFilter(object sender, RoutedEventArgs e)
+    /// <summary>Останавливает сеанс — кнопкой или с выходом из программы.</summary>
+    private static void StopSession()
     {
-        _interestingOnly = !_interestingOnly;
-        _hidden = 0;
+        _work?.Cancel();
+        _work = null;
 
-        ShowFilter();
+        if (_watch is not null)
+        {
+            // Синхронно и до конца: сессия ETW переживает процесс, и брошенная
+            // она останется в системе именем NetZapret до перезагрузки.
+            _watch.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _watch = null;
+        }
+
+        lock (Gate)
+            _pending.Clear();
     }
 
-    private void ShowFilter()
-    {
-        FilterButton.Content = _interestingOnly ? "Показывать всё" : "Только туннель и десинк";
-        if (_interestingOnly)
-            FilterButton.Foreground = (Brush)FindResource("Accent");
-        else
-            FilterButton.ClearValue(ForegroundProperty);
-    }
-
+    /// <summary>
+    /// Очистить таблицу и счёт. Отбор остаётся: очистка — чтобы смотреть
+    /// выбранное с чистого листа, а не чтобы сбросить выбор.
+    /// </summary>
     private void OnClear(object sender, RoutedEventArgs e)
     {
         _rows.Clear();
 
-        // Выбранная программа остаётся в отборе: очистка — чтобы смотреть
-        // её соединения с чистого листа, а не чтобы сбросить выбор.
         lock (Gate)
         {
             _store.Clear();
-            _perProcess.Clear();
             _pending.Clear();
+            _perProcess.Clear();
+            _perSite.Clear();
+            _perRule.Clear();
+            _perRoute.Clear();
+            _names.Clear();
+            _addresses.Clear();
         }
 
         _totalBase = _watch?.Total ?? 0;
         _matchedBase = _watch?.Matched ?? 0;
-        _hidden = 0;
+        _startedAt = DateTimeOffset.Now;
+
+        ShowCounters();
+        ShowSide();
     }
 }
