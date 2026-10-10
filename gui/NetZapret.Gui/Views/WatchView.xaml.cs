@@ -133,6 +133,16 @@ public partial class WatchView : UserControl
     // Отбор показа; в журнал соединение уходит всякое.
     private static string? _process;
     private static WatchRoute? _route;
+
+    /// <summary>
+    /// Без отбора по виду — только «наружу»: туннель, десинк, напрямую.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию: на снимках владельца 10.10 локальное и движок — 70 %
+    /// строк (мультикаст, DNS к 172.19.0.2, sing-box к серверу), а разбирают
+    /// почти всегда то, что уходит наружу. «Всё» — в меню «Куда».
+    /// </remarks>
+    private static bool _outsideOnly = true;
     private static string? _rule;
     private static string _search = string.Empty;
 
@@ -412,7 +422,7 @@ public partial class WatchView : UserControl
         if (_process is not null && !string.Equals(e.Process, _process, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (_route is { } route && e.Mode != route)
+        if (_route is { } route ? e.Mode != route : _outsideOnly && e.Mode is (WatchRoute.Local or WatchRoute.Engine))
             return false;
 
         if (_rule is not null && e.RuleName != _rule)
@@ -445,7 +455,7 @@ public partial class WatchView : UserControl
     private void ShowFilters()
     {
         Mark(ProcessButton, _process is null ? "Программа: все" : $"Программа: {_process}", _process is not null);
-        Mark(RouteButton, _route is { } r ? $"Куда: {WatchEntry.Word(r)}" : "Куда: все", _route is not null);
+        Mark(RouteButton, _route is { } r ? $"Куда: {WatchEntry.Word(r)}" : _outsideOnly ? "Куда: наружу" : "Куда: всё", _route is not null || !_outsideOnly);
         Mark(RuleButton, _rule is null ? "Правило: все" : $"Правило: {_rule}", _rule is not null);
     }
 
@@ -576,7 +586,16 @@ public partial class WatchView : UserControl
     /// </remarks>
     private void OnBodySize(object sender, SizeChangedEventArgs e)
     {
-        bool narrow = Body.ActualWidth < NarrowBelow;
+        bool narrow = BodyScroll.ActualWidth < NarrowBelow;
+
+        // Широкое окно — Body ровно по высоте, таблица забирает остаток.
+        // Узкое — таблица высокая, сводка ниже и докручивается: прежде
+        // таблице на окне владельца оставалось три строки (10.10, сборка 9).
+        Body.Height = narrow ? double.NaN : BodyScroll.ActualHeight;
+        Body.Margin = narrow ? new Thickness(0, 0, 14, 0) : new Thickness(0);
+        MainRow.Height = narrow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        TableRow.Height = narrow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        TableCard.Height = narrow ? Math.Max(360, BodyScroll.ActualHeight - 150) : double.NaN;
 
         SideColumn.Width = new GridLength(narrow ? 0 : 300);
         SideRow.Height = narrow ? GridLength.Auto : new GridLength(0);
@@ -655,12 +674,19 @@ public partial class WatchView : UserControl
     {
         var menu = Menu(RouteButton);
 
-        menu.Items.Add(MenuEntry(string.Empty, "Все", () => Filter(() => _route = null)));
-
         Dictionary<WatchRoute, int> counts;
 
         lock (Gate)
             counts = new(_perRoute);
+
+        int outside = counts.GetValueOrDefault(WatchRoute.Proxy) + counts.GetValueOrDefault(WatchRoute.Desync)
+            + counts.GetValueOrDefault(WatchRoute.Direct);
+
+        menu.Items.Add(MenuEntry(string.Empty, $"Наружу: туннель, десинк, напрямую — {outside}",
+            () => Filter(() => (_route, _outsideOnly) = (null, true))));
+        menu.Items.Add(MenuEntry(string.Empty, $"Всё, и локальное с движком — {counts.Values.Sum()}",
+            () => Filter(() => (_route, _outsideOnly) = (null, false))));
+        menu.Items.Add(new Separator());
 
         foreach (var route in Routes)
             menu.Items.Add(MenuEntry(string.Empty, $"{WatchEntry.Word(route)} — {counts.GetValueOrDefault(route)}", () => Filter(() => _route = route)));

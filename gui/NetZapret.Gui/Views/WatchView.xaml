@@ -90,13 +90,19 @@
             </Border>
         </StackPanel>
 
-        <Grid Grid.Row="2" x:Name="Body" Margin="0,16,0,0" SizeChanged="OnBodySize">
+        <!--
+            Прокрутка — для узкого окна: там сводка встаёт под таблицу, и без
+            прокрутки таблице оставалось три строки (снимок владельца 10.10,
+            сборка 9). На широком Body ровно по высоте и не прокручивается.
+        -->
+        <ScrollViewer Grid.Row="2" x:Name="BodyScroll" Margin="0,16,0,0" Style="{StaticResource PageScroll}" SizeChanged="OnBodySize">
+        <Grid x:Name="Body">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition x:Name="SideColumn" Width="300" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
+                <RowDefinition x:Name="MainRow" Height="*" />
                 <RowDefinition x:Name="SideRow" Height="0" />
             </Grid.RowDefinitions>
 
@@ -105,7 +111,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition x:Name="TableRow" Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
@@ -167,7 +173,7 @@
                     <TextBlock Grid.Column="4" Text="ПРАВИЛО" Style="{StaticResource Caption}" />
                 </Grid>
 
-                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+                <Border x:Name="TableCard" Grid.Row="3" Style="{StaticResource Card}" Padding="0">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
                         <ItemsControl x:Name="Rows">
                             <ItemsControl.ItemTemplate>
@@ -298,6 +304,7 @@
             </Grid>
             </ScrollViewer>
         </Grid>
+        </ScrollViewer>
     </Grid>
 
 </UserControl>

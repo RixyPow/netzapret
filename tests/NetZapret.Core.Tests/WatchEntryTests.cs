@@ -213,6 +213,20 @@ public sealed class WatchEntryTests
         Assert.False(WatchEntry.From(Connection("chrome.exe", "chatgpt.com", "104.18.32.47", 443), rule, Engine).Certain);
     }
 
+    /// <summary>Сайт — два уровня, у зон вида co.uk — три (10.10: «co.uk» в «Сайтах»).</summary>
+    [Theory]
+    [InlineData("rr4---sn-nx8xon3t-83vl.googlevideo.com", "googlevideo.com")]
+    [InlineData("kws2.pclead.co.uk", "pclead.co.uk")]
+    [InlineData("www.bbc.co.uk", "bbc.co.uk")]
+    [InlineData("shop.example.com.br", "example.com.br")]
+    [InlineData("api.anthropic.com", "anthropic.com")]
+    [InlineData("t.co", "t.co")]
+    [InlineData("discord.media", "discord.media")]
+    public void TheSiteIsTheRegistrablePart(string host, string site)
+    {
+        Assert.Equal(site, WatchEntry.SiteOf(host));
+    }
+
     [Fact]
     public void WithoutAJournalTheSummarySaysSo()
     {

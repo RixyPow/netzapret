@@ -142,11 +142,24 @@ public sealed record WatchEntry(
     /// сотню поддоменов Microsoft в одну строку.
     /// </summary>
     /// <remarks>
-    /// Грубо, как <c>PinPicker.SameSite</c>: у co.uk ошибётся. Для сводки
-    /// «кто шумит» цена ошибки — одна лишняя строка.
+    /// Зоны вида co.uk и com.br — тремя уровнями: 10.10 у владельца в «Сайтах»
+    /// первым стоял «co.uk» — это kws2.pclead.co.uk и kws2.offshor.co.uk прокси
+    /// Telegram. Без списка публичных суффиксов: второй уровень из короткого
+    /// набора при двухбуквенной стране — достаточно для сводки «кто шумит».
     /// </remarks>
-    public static string SiteOf(string host) =>
-        string.Join('.', host.ToLowerInvariant().TrimEnd('.').Split('.').TakeLast(2));
+    public static string SiteOf(string host)
+    {
+        var labels = host.ToLowerInvariant().TrimEnd('.').Split('.');
+
+        bool countrySecondLevel = labels.Length >= 3
+            && labels[^1].Length == 2
+            && SecondLevels.Contains(labels[^2]);
+
+        return string.Join('.', labels.TakeLast(countrySecondLevel ? 3 : 2));
+    }
+
+    private static readonly HashSet<string> SecondLevels =
+        ["co", "com", "net", "org", "gov", "edu", "ac", "or", "ne", "go", "msk", "spb"];
 
     /// <summary>Имя без порта; <c>null</c> — имя не узнано.</summary>
     public string? Host => Endpoint == Address ? null : Endpoint[..Endpoint.LastIndexOf(':')];
