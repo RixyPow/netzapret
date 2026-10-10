@@ -164,3 +164,66 @@ services:
       - 169.150.247.33
       - 138.199.36.8
       - 143.244.56.56
+
+  # Claude и ChatGPT через посредников GeoHide и AstraCat. В каталоге Zapret
+  # GUI для Claude их записей нет (снимок 10.10: GeoHide — ни одной), а XBOX
+  # с 10.10 отдаёт на ИИ 0.0.0.0. Замер 10.10, по одному запросу мимо туннеля:
+  # claude.ai и chatgpt.com на всех адресах ниже — проверка Cloudflare на
+  # робота с узла FRA, браузер её проходит; GeoHide 193.233.112.x — 0,18–0,30 с,
+  # AstraCat — 0,23 с. Адреса — те, что посредники отдают этим именам сейчас;
+  # стареют, и тогда автоподбор спросит их заново (IntermediaryDns).
+  - name: Claude — GeoHide
+    names:
+      - claude.ai
+      - claude.com
+      - anthropic.com
+      - claudeusercontent.com
+    addresses:
+      - 193.233.112.88
+      - 193.233.112.67
+      - 193.233.112.68
+
+  - name: Claude — AstraCat
+    names:
+      - claude.ai
+      - claude.com
+      - anthropic.com
+      - claudeusercontent.com
+    addresses:
+      - 217.60.179.6
+
+  - name: ChatGPT — GeoHide
+    names:
+      - chatgpt.com
+      - openai.com
+      - oaistatic.com
+      - oaiusercontent.com
+    addresses:
+      - 193.233.112.88
+      - 193.233.112.67
+      - 193.233.112.68
+
+  - name: ChatGPT — AstraCat
+    names:
+      - chatgpt.com
+      - openai.com
+      - oaistatic.com
+      - oaiusercontent.com
+    addresses:
+      - 217.60.179.6
+
+# Посредники — адреса, которые автоподбор пробует для любого имени: они
+# смотрят на имя в приветствии TLS и сами идут к сайту. Снимок каталога
+# Zapret приносит свои; эти — сверх него, потому что их там нет или мало
+# (10.10: GeoHide ни одного, AstraCat один). Быстрые первыми: подбор при
+# равном исходе берёт быстрейшего. 159.194.200.33 GeoHide тоже отдаёт,
+# но отвечает за 1,4–1,8 с — не взят.
+intermediaries:
+  - address: 193.233.112.88
+    source: GeoHide
+  - address: 193.233.112.67
+    source: GeoHide
+  - address: 193.233.112.68
+    source: GeoHide
+  - address: 217.60.179.6
+    source: AstraCat
