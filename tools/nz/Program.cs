@@ -131,56 +131,15 @@ int Where(string target)
         return 2;
     }
 
-    var settings = AppSettings.Load(AppSettings.DefaultPath);
-    var (engine, _) = NetZapret.Zapret.RuleSetExpander.LoadFor(settings);
-    var connection = NetZapret.Core.Connections.ConnectionEvent.Describe(target);
-    var decision = engine.Evaluate(connection);
-    var engines = settings.Engines;
-    bool tunnelUp = settings.NeedsProxy;
-
+    // Объяснение — в библиотеке (RouteWhy): тот же текст даёт «Почему так»
+    // в меню строки «Наблюдения».
     Console.WriteLine($"{target}");
     Console.WriteLine();
-    Console.WriteLine($"  в правилах:       {Word(decision.Mode)}"
-        + (decision.Rule is null ? "  (по умолчанию)" : $"  ({decision.Rule})"));
-    Console.WriteLine($"  при выключателях: {Word(engines.Effective(decision.Mode, tunnelUp))}"
-        + $"  ({engines.Describe()})");
 
-    if (connection.Hostname is { } host && settings.NeedsDesync)
-    {
-        var exclusions = NetZapret.Proxy.HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelUp);
-        var bypass = NetZapret.Proxy.HostsFile.BypassFor(
-            exclusions,
-            host,
-            NetZapret.Proxy.HostsFile.CollectShieldHoles(engine.RuleSet, exclusions));
-
-        if (bypass != NetZapret.Proxy.DesyncBypass.None)
-            Console.WriteLine($"  десинк:            {NetZapret.Proxy.HostsFile.DescribeBypass(bypass)}");
-    }
-
-    // Через что разрешается имя — сейчас, по hosts и конфигу работающего
-    // движка (DnsPath). 30.09 имена мимо VPN разрешались через туннель,
-    // и при заминке сервера пропадали у всей машины.
-    if (connection.Hostname is { } name)
-    {
-        var steps = NetZapret.Proxy.DnsPath.Explain(
-            name,
-            NetZapret.Proxy.HostsFile.Read(),
-            ReadEngineConfig(),
-            EngineAnswersDns(),
-            NetZapret.Proxy.SystemResolvers.Discover());
-
-        for (int i = 0; i < steps.Count; i++)
-            Console.WriteLine((i == 0 ? "  DNS:              " : "                    ") + steps[i]);
-    }
+    foreach (var line in RouteWhy.Explain(target))
+        Console.WriteLine("  " + line);
 
     return 0;
-
-    static string Word(RoutingMode mode) => mode switch
-    {
-        RoutingMode.Proxy => "VPN",
-        RoutingMode.Desync => "десинк",
-        _ => "напрямую",
-    };
 }
 
 // «Сайт не открывается»: пути по очереди, сработавший — в правила.
