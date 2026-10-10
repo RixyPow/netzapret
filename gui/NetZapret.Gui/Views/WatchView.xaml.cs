@@ -78,12 +78,14 @@ public partial class WatchView : UserControl
     /// </remarks>
     private const int StoreLimit = 5000;
 
-    /// <summary>Пункт списка программ «без отбора».</summary>
+    /// <summary>Надпись кнопки без отбора.</summary>
     private const string AllProcesses = "Все программы";
+
+    /// <summary>Сколько замеченных программ показывать в меню.</summary>
+    private const int MenuPrograms = 15;
 
     private readonly ObservableCollection<WatchRow> _rows = [];
     private readonly List<WatchRow> _store = [];
-    private readonly ObservableCollection<string> _processes = [AllProcesses];
     private readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<WatchRow> _pending = [];
 
@@ -106,8 +108,6 @@ public partial class WatchView : UserControl
         InitializeComponent();
 
         Rows.ItemsSource = _rows;
-        ProcessBox.ItemsSource = _processes;
-        ProcessBox.SelectedIndex = 0;
         _flush.Tick += (_, _) => Flush();
 
         Status.Text = "Наблюдение выключено. Оно ничего не меняет — только читает события ядра.";
@@ -265,15 +265,7 @@ public partial class WatchView : UserControl
         {
             _store.Insert(0, row);
 
-            if (_perProcess.TryGetValue(row.Process, out int seen))
-            {
-                _perProcess[row.Process] = seen + 1;
-            }
-            else
-            {
-                _perProcess[row.Process] = 1;
-                AddProcess(row.Process);
-            }
+            _perProcess[row.Process] = _perProcess.GetValueOrDefault(row.Process) + 1;
 
             if (Shows(row))
                 _rows.Insert(0, row);
@@ -291,25 +283,21 @@ public partial class WatchView : UserControl
     private bool Shows(WatchRow row) =>
         _process is null || string.Equals(row.Process, _process, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Новая программа — в список по алфавиту, после «все».</summary>
-    /// <remarks>
-    /// По алфавиту, а не по числу соединений: порядок по числу менялся бы
-    /// под рукой, пока человек ищет в раскрытом списке.
-    /// </remarks>
-    private void AddProcess(string name)
-    {
-        int at = 1;
-
-        while (at < _processes.Count && string.Compare(_processes[at], name, StringComparison.OrdinalIgnoreCase) < 0)
-            at++;
-
-        _processes.Insert(at, name);
-    }
-
     /// <summary>Показать одну программу или все — заново из запомненного.</summary>
+    /// <remarks>
+    /// Сравнение по имени файла без регистра: ETW даёт путь, раздел
+    /// показывает имя в нижнем регистре (<c>ExecutableName</c>), а окно
+    /// выбора и файл — как записано на диске.
+    /// </remarks>
     private void ShowProcess(string? name)
     {
         _process = name;
+        ProcessButton.Content = name ?? AllProcesses;
+        if (name is null)
+            ProcessButton.ClearValue(ForegroundProperty);
+        else
+            ProcessButton.Foreground = (Brush)FindResource("Accent");
+
         _rows.Clear();
 
         foreach (var row in _store.Where(Shows).Take(Limit))
@@ -318,19 +306,81 @@ public partial class WatchView : UserControl
         ShowStats();
     }
 
-    private void OnProcessChosen(object sender, SelectionChangedEventArgs e)
+    /// <summary>
+    /// Меню выбора программы — как «Добавить программу» в «Маршрутах».
+    /// </summary>
+    /// <remarks>
+    /// Не только из замеченных (владелец 10.10: «почему ты выбираешь только
+    /// из существующих»): программу выбирают, чтобы увидеть, куда она пойдёт,
+    /// часто до того, как её запустили. Отбор по ней ждёт её первых соединений.
+    /// Замеченные — ниже, по числу соединений: это те, что шумят сейчас.
+    /// </remarks>
+    private void OnProcessMenu(object sender, RoutedEventArgs e)
     {
-        var name = ProcessBox.SelectedItem as string;
-        name = name is null or AllProcesses ? null : name;
+        var menu = new ContextMenu
+        {
+            PlacementTarget = ProcessButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
 
-        if (!string.Equals(name, _process, StringComparison.OrdinalIgnoreCase))
-            ShowProcess(name);
+        if (_process is not null)
+            menu.Items.Add(MenuEntry("", AllProcesses, () => ShowProcess(null)));
+
+        menu.Items.Add(MenuEntry("", "Из запущенных…", PickRunning));
+        menu.Items.Add(MenuEntry("", "Выбрать файл…", PickFile));
+
+        var seen = _perProcess
+            .Where(p => p.Value > 0)
+            .OrderByDescending(p => p.Value)
+            .Take(MenuPrograms)
+            .ToList();
+
+        if (seen.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+
+            foreach (var (name, count) in seen)
+                menu.Items.Add(MenuEntry(string.Empty, $"{name} — {count}", () => ShowProcess(name)));
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private static MenuItem MenuEntry(string glyph, string text, Action act)
+    {
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        var item = new MenuItem { Header = text, Icon = icon };
+        item.Click += (_, _) => act();
+
+        return item;
+    }
+
+    private void PickRunning()
+    {
+        var window = new ProgramPickerWindow { Owner = Window.GetWindow(this) };
+
+        if (window.ShowDialog() == true && window.Chosen is { } chosen)
+            ShowProcess(chosen.Name);
+    }
+
+    private void PickFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Программа",
+            Filter = "Программы|*.exe",
+        };
+
+        if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+            ShowProcess(System.IO.Path.GetFileName(dialog.FileName));
     }
 
     private void OnProcessClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: WatchRow row })
-            ProcessBox.SelectedItem = row.Process;
+            ShowProcess(row.Process);
     }
 
     private void ShowStats()
@@ -394,15 +444,9 @@ public partial class WatchView : UserControl
     {
         _rows.Clear();
         _store.Clear();
+        // Выбранная программа остаётся в отборе: очистка — чтобы смотреть
+        // её соединения с чистого листа, а не чтобы сбросить выбор.
         _perProcess.Clear();
-
-        // Выбранная программа остаётся в списке и в отборе: очистка — чтобы
-        // смотреть её соединения с чистого листа, а не чтобы сбросить выбор.
-        foreach (var name in _processes.Skip(1).Where(n => !string.Equals(n, _process, StringComparison.OrdinalIgnoreCase)).ToList())
-            _processes.Remove(name);
-
-        if (_process is not null)
-            _perProcess[_process] = 0;
 
         lock (_pending)
             _pending.Clear();

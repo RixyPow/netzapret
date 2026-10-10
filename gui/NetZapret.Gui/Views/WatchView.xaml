@@ -11,30 +11,30 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <!--
+            Кнопки — строкой под пояснением, а не справа от заголовка: со
+            списком программ они заняли ~800 точек, и на окне владельца
+            (10.10, масштаб 125 %) заголовок обрезался до «Наблюден»,
+            а пояснение встало столбиком в два слова шириной.
+        -->
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Наблюдение" Style="{StaticResource Title}" />
+            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                       Text="Соединения по мере их появления и правило, которое к каждому применилось бы. Ничего не перенаправляет и ни на что не влияет — только смотрит." />
 
-            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                <TextBlock Text="Наблюдение" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Соединения по мере их появления и правило, которое к каждому применилось бы. Ничего не перенаправляет и ни на что не влияет — только смотрит." />
-            </StackPanel>
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                <ComboBox x:Name="ProcessBox" MinWidth="210" Margin="0,0,8,0"
-                          SelectionChanged="OnProcessChosen"
-                          ToolTip="Показывать соединения одной программы" />
+            <!-- «Начать» первым: строка теперь слева, и главное действие — в начале. -->
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                <Button x:Name="PowerButton" Style="{StaticResource Primary}"
+                        Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,0" />
+                <Button x:Name="ProcessButton" Style="{StaticResource Ghost}" MinWidth="180"
+                        Content="Все программы" Click="OnProcessMenu" Margin="0,0,8,0"
+                        ToolTip="Показывать соединения одной программы" />
                 <Button x:Name="FilterButton" Style="{StaticResource Ghost}"
                         Content="Только туннель и десинк" Click="OnFilter" Margin="0,0,8,0" />
                 <Button x:Name="ClearButton" Style="{StaticResource Ghost}"
-                        Content="Очистить" Click="OnClear" Margin="0,0,8,0" />
-                <Button x:Name="PowerButton" Style="{StaticResource Primary}"
-                        Content="Начать" Click="OnPower" MinWidth="110" />
+                        Content="Очистить" Click="OnClear" />
             </StackPanel>
-        </Grid>
+        </StackPanel>
 
         <TextBlock Grid.Row="1" x:Name="Status" Style="{StaticResource Caption}"
                    Margin="4,18,0,0" TextWrapping="Wrap" />
@@ -49,7 +49,7 @@
                 <ColumnDefinition Width="86" />
                 <ColumnDefinition Width="72" />
                 <ColumnDefinition Width="170" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="3*" />
                 <ColumnDefinition Width="2*" />
             </Grid.ColumnDefinitions>
 
@@ -70,7 +70,7 @@
                                     <ColumnDefinition Width="86" />
                                     <ColumnDefinition Width="72" />
                                     <ColumnDefinition Width="170" />
-                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="3*" />
                                     <ColumnDefinition Width="2*" />
                                 </Grid.ColumnDefinitions>
 
