@@ -250,9 +250,33 @@
                     <TextBlock Grid.Column="4" Text="ПРАВИЛО" Style="{StaticResource Caption}" />
                 </Grid>
 
+                <!--
+                    Таблица виртуальная: рисуются только видимые строки. До 10.10
+                    все 400 строк собирались целиком, и после двух часов наблюдения
+                    заход в раздел и смена отбора занимали поток окна на 2–3,5 с
+                    (сторож подвисаний у владельца: 1,1–2,0 с, «окно считало»).
+                    Прокрутка внутри шаблона списка, а не снаружи: иначе
+                    VirtualizingStackPanel получает бесконечную высоту и строит всё.
+                -->
                 <Border x:Name="TableCard" Grid.Row="3" Style="{StaticResource Card}" Padding="0">
-                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8">
-                        <ItemsControl x:Name="Rows">
+                        <ItemsControl x:Name="Rows"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,8"
+                                                  CanContentScroll="True" Focusable="False">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,3,0,3">
@@ -300,7 +324,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </ScrollViewer>
                 </Border>
 
                 <TextBlock Grid.Row="4" Style="{StaticResource Caption}" Margin="4,8,0,0" TextWrapping="Wrap"
