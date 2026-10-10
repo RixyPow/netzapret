@@ -67,8 +67,28 @@ public partial class WatchView : UserControl
     /// </remarks>
     private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>
+    /// Сколько строк помнить для отбора по программе.
+    /// </summary>
+    /// <remarks>
+    /// Больше, чем показывается: браузер вытесняет из четырёхсот последних
+    /// строк всё остальное за минуту, и отбор по редкой программе иначе
+    /// находил бы пустоту. Рисуются всё равно не больше <see cref="Limit"/> —
+    /// список не виртуализирован, и тысячи строк окно не потянет.
+    /// </remarks>
+    private const int StoreLimit = 5000;
+
+    /// <summary>Пункт списка программ «без отбора».</summary>
+    private const string AllProcesses = "Все программы";
+
     private readonly ObservableCollection<WatchRow> _rows = [];
+    private readonly List<WatchRow> _store = [];
+    private readonly ObservableCollection<string> _processes = [AllProcesses];
+    private readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<WatchRow> _pending = [];
+
+    /// <summary>Какую программу показывать; <c>null</c> — все.</summary>
+    private string? _process;
     private readonly DispatcherTimer _flush = new() { Interval = FlushInterval };
 
     private CancellationTokenSource? _work;
@@ -86,6 +106,8 @@ public partial class WatchView : UserControl
         InitializeComponent();
 
         Rows.ItemsSource = _rows;
+        ProcessBox.ItemsSource = _processes;
+        ProcessBox.SelectedIndex = 0;
         _flush.Tick += (_, _) => Flush();
 
         Status.Text = "Наблюдение выключено. Оно ничего не меняет — только читает события ядра.";
@@ -240,12 +262,75 @@ public partial class WatchView : UserControl
         // Новое сверху: живой список смотрят ради последнего события,
         // а не ради первого, и прокручивать за ним вниз пришлось бы вручную.
         foreach (var row in batch)
-            _rows.Insert(0, row);
+        {
+            _store.Insert(0, row);
+
+            if (_perProcess.TryGetValue(row.Process, out int seen))
+            {
+                _perProcess[row.Process] = seen + 1;
+            }
+            else
+            {
+                _perProcess[row.Process] = 1;
+                AddProcess(row.Process);
+            }
+
+            if (Shows(row))
+                _rows.Insert(0, row);
+        }
+
+        if (_store.Count > StoreLimit)
+            _store.RemoveRange(StoreLimit, _store.Count - StoreLimit);
 
         while (_rows.Count > Limit)
             _rows.RemoveAt(_rows.Count - 1);
 
         ShowStats();
+    }
+
+    private bool Shows(WatchRow row) =>
+        _process is null || string.Equals(row.Process, _process, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Новая программа — в список по алфавиту, после «все».</summary>
+    /// <remarks>
+    /// По алфавиту, а не по числу соединений: порядок по числу менялся бы
+    /// под рукой, пока человек ищет в раскрытом списке.
+    /// </remarks>
+    private void AddProcess(string name)
+    {
+        int at = 1;
+
+        while (at < _processes.Count && string.Compare(_processes[at], name, StringComparison.OrdinalIgnoreCase) < 0)
+            at++;
+
+        _processes.Insert(at, name);
+    }
+
+    /// <summary>Показать одну программу или все — заново из запомненного.</summary>
+    private void ShowProcess(string? name)
+    {
+        _process = name;
+        _rows.Clear();
+
+        foreach (var row in _store.Where(Shows).Take(Limit))
+            _rows.Add(row);
+
+        ShowStats();
+    }
+
+    private void OnProcessChosen(object sender, SelectionChangedEventArgs e)
+    {
+        var name = ProcessBox.SelectedItem as string;
+        name = name is null or AllProcesses ? null : name;
+
+        if (!string.Equals(name, _process, StringComparison.OrdinalIgnoreCase))
+            ShowProcess(name);
+    }
+
+    private void OnProcessClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WatchRow row })
+            ProcessBox.SelectedItem = row.Process;
     }
 
     private void ShowStats()
@@ -268,6 +353,9 @@ public partial class WatchView : UserControl
 
         if (_interestingOnly && _hidden > 0)
             parts.Add($"скрыто прямых: {_hidden}");
+
+        if (_process is not null)
+            parts.Add($"{_process}: {_perProcess.GetValueOrDefault(_process)}");
 
         Status.Text = string.Join(" · ", parts);
     }
@@ -305,6 +393,16 @@ public partial class WatchView : UserControl
     private void OnClear(object sender, RoutedEventArgs e)
     {
         _rows.Clear();
+        _store.Clear();
+        _perProcess.Clear();
+
+        // Выбранная программа остаётся в списке и в отборе: очистка — чтобы
+        // смотреть её соединения с чистого листа, а не чтобы сбросить выбор.
+        foreach (var name in _processes.Skip(1).Where(n => !string.Equals(n, _process, StringComparison.OrdinalIgnoreCase)).ToList())
+            _processes.Remove(name);
+
+        if (_process is not null)
+            _perProcess[_process] = 0;
 
         lock (_pending)
             _pending.Clear();

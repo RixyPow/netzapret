@@ -24,6 +24,9 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ComboBox x:Name="ProcessBox" MinWidth="210" Margin="0,0,8,0"
+                          SelectionChanged="OnProcessChosen"
+                          ToolTip="Показывать соединения одной программы" />
                 <Button x:Name="FilterButton" Style="{StaticResource Ghost}"
                         Content="Только туннель и десинк" Click="OnFilter" Margin="0,0,8,0" />
                 <Button x:Name="ClearButton" Style="{StaticResource Ghost}"
@@ -78,7 +81,9 @@
                                            Foreground="{Binding Colour}" />
 
                                 <TextBlock Grid.Column="2" Text="{Binding Process}"
-                                           TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+                                           TextTrimming="CharacterEllipsis" Margin="0,0,10,0"
+                                           Cursor="Hand" ToolTip="Только эта программа"
+                                           MouseLeftButtonUp="OnProcessClick" />
 
                                 <TextBlock Grid.Column="3" Text="{Binding Endpoint}"
                                            TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
