@@ -82,26 +82,46 @@ public partial class WatchView : UserControl
     /// <summary>Сколько замеченных программ показывать в меню.</summary>
     private const int MenuPrograms = 15;
 
-    private readonly ObservableCollection<WatchRow> _rows = [];
-    private readonly List<WatchRow> _store = [];
-    private readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<WatchRow> _pending = [];
+    // Сеанс и накопленное — статические, как у «Замера скорости»: раздел
+    // создаётся заново при каждом заходе, и прежде уход с вкладки (Unloaded)
+    // останавливал наблюдение. Владелец 10.10: «не останавливай наблюдение
+    // при переключении вкладок». Останавливают кнопка и выход из программы.
+
+    /// <summary>Замок над запомненным: его пишет фоновое чтение, читает раздел.</summary>
+    private static readonly object Gate = new();
+
+    /// <summary>Запомненные строки, старые первыми.</summary>
+    private static readonly List<WatchRow> _store = [];
+    private static readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Пришедшее с последней перерисовки — пока раздел открыт.</summary>
+    private static readonly List<WatchRow> _pending = [];
 
     /// <summary>Какую программу показывать; <c>null</c> — все.</summary>
-    private string? _process;
-    private readonly DispatcherTimer _flush = new() { Interval = FlushInterval };
+    private static string? _process;
 
-    private CancellationTokenSource? _work;
-    private ConnectionWatch? _watch;
-    private Dictionary<WatchRoute, Brush> _brushes = [];
+    private static CancellationTokenSource? _work;
+    private static ConnectionWatch? _watch;
+    private static Dictionary<WatchRoute, Brush> _brushes = [];
 
     /// <summary>Показывать только то, что уходит в туннель или под десинк.</summary>
-    private bool _interestingOnly;
+    private static bool _interestingOnly;
 
     /// <summary>Счёт сеанса на миг «Очистить»: таблица считает с нуля, журнал — нет.</summary>
-    private long _totalBase;
-    private long _matchedBase;
-    private long _hidden;
+    private static long _totalBase;
+    private static long _matchedBase;
+    private static long _hidden;
+
+    /// <summary>Открытый раздел; <c>null</c> — наблюдение идёт без него.</summary>
+    private static WatchView? _open;
+
+    /// <summary>Последнее, что сказать без сеанса: почему не началось или прервалось.</summary>
+    private static string? _note;
+
+    private static bool _exitHooked;
+
+    private readonly ObservableCollection<WatchRow> _rows = [];
+    private readonly DispatcherTimer _flush = new() { Interval = FlushInterval };
 
     public WatchView()
     {
@@ -110,18 +130,42 @@ public partial class WatchView : UserControl
         Rows.ItemsSource = _rows;
         _flush.Tick += (_, _) => Flush();
 
-        Status.Text = "Наблюдение выключено. Оно ничего не меняет — только читает события ядра.";
+        Loaded += (_, _) =>
+        {
+            lock (Gate)
+                _open = this;
 
-        // Сессия ETW принадлежит системе, а не окну: не остановленная, она
-        // переживёт уход с вкладки и останется висеть до перезагрузки.
-        Unloaded += (_, _) => Stop();
+            ShowProcess(_process);
+            ShowFilter();
+            PowerButton.Content = _watch is null ? "Начать" : "Остановить";
+
+            if (_watch is null)
+                Status.Text = _note ?? "Наблюдение выключено. Оно ничего не меняет — только читает события ядра.";
+
+            _flush.Start();
+        };
+
+        // Уход с вкладки сеанс не трогает: раздел только перестаёт рисовать.
+        Unloaded += (_, _) =>
+        {
+            _flush.Stop();
+
+            lock (Gate)
+            {
+                if (_open == this)
+                    _open = null;
+
+                _pending.Clear();
+            }
+        };
     }
 
     private void OnPower(object sender, RoutedEventArgs e)
     {
         if (_watch is not null)
         {
-            Stop();
+            StopSession();
+            PowerButton.Content = "Начать";
             return;
         }
 
@@ -132,6 +176,7 @@ public partial class WatchView : UserControl
             _watch = ConnectionWatch.Start(AppSettings.Load(AppSettings.DefaultPath), ConnectionWatch.DefaultJournal);
             _totalBase = 0;
             _matchedBase = 0;
+            _note = null;
 
             // Кисти — здесь, в потоке окна: строки собираются в фоне.
             _brushes = new Dictionary<WatchRoute, Brush>
@@ -143,32 +188,39 @@ public partial class WatchView : UserControl
                 [WatchRoute.Engine] = (Brush)FindResource("Muted"),
             };
 
+            // Сессия ETW переживает процесс: выход из программы обязан её
+            // остановить, раз раздел этого больше не делает.
+            if (!_exitHooked && Application.Current is { } app)
+            {
+                app.Exit += (_, _) => StopSession();
+                _exitHooked = true;
+            }
+
             _work = new CancellationTokenSource();
             _ = ReadAsync(_watch, _work.Token);
-
-            _flush.Start();
 
             PowerButton.Content = "Остановить";
             Status.Text = $"Смотрю. Правил: {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
         }
         catch (Exception ex)
         {
-            Stop();
+            StopSession();
 
-            Status.Text = "Не удалось начать: " + ex.GetBaseException().Message
+            _note = "Не удалось начать: " + ex.GetBaseException().Message
                 + ". Сессия ETW требует прав администратора — окно их запрашивает при запуске.";
+            Status.Text = _note;
         }
     }
 
     /// <summary>
-    /// Читает соединения и складывает готовые строки в очередь.
+    /// Читает соединения и запоминает готовые строки — и без открытого раздела.
     /// </summary>
     /// <remarks>
     /// В фоне, а не при показе: решение правил разворачивает списки доменов,
     /// и в потоке разметки это подвешивало бы окно на каждой строке.
     /// В журнал соединение уходит всякое — отбор здесь касается только показа.
     /// </remarks>
-    private async Task ReadAsync(ConnectionWatch watch, CancellationToken cancellationToken)
+    private static async Task ReadAsync(ConnectionWatch watch, CancellationToken cancellationToken)
     {
         try
         {
@@ -188,8 +240,19 @@ public partial class WatchView : UserControl
                     entry.Endpoint,
                     entry.RuleShown);
 
-                lock (_pending)
-                    _pending.Add(row);
+                lock (Gate)
+                {
+                    _store.Add(row);
+                    _perProcess[row.Process] = _perProcess.GetValueOrDefault(row.Process) + 1;
+
+                    // Срезается пачкой, а не по строке: сдвиг пятитысячного
+                    // списка на каждое соединение — лишняя работа.
+                    if (_store.Count > StoreLimit + StoreLimit / 10)
+                        _store.RemoveRange(0, _store.Count - StoreLimit);
+
+                    if (_open is not null)
+                        _pending.Add(row);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -198,10 +261,16 @@ public partial class WatchView : UserControl
         }
         catch (Exception ex)
         {
-            Dispatcher.Invoke(() =>
+            Application.Current?.Dispatcher.Invoke(() =>
             {
-                Stop();
-                Status.Text = "Наблюдение прервалось: " + ex.GetBaseException().Message;
+                StopSession();
+                _note = "Наблюдение прервалось: " + ex.GetBaseException().Message;
+
+                if (_open is { } view)
+                {
+                    view.PowerButton.Content = "Начать";
+                    view.Status.Text = _note;
+                }
             });
         }
     }
@@ -211,14 +280,8 @@ public partial class WatchView : UserControl
     {
         List<WatchRow> batch;
 
-        lock (_pending)
+        lock (Gate)
         {
-            if (_pending.Count == 0)
-            {
-                ShowStats();
-                return;
-            }
-
             batch = [.. _pending];
             _pending.Clear();
         }
@@ -227,16 +290,9 @@ public partial class WatchView : UserControl
         // а не ради первого, и прокручивать за ним вниз пришлось бы вручную.
         foreach (var row in batch)
         {
-            _store.Insert(0, row);
-
-            _perProcess[row.Process] = _perProcess.GetValueOrDefault(row.Process) + 1;
-
             if (Shows(row))
                 _rows.Insert(0, row);
         }
-
-        if (_store.Count > StoreLimit)
-            _store.RemoveRange(StoreLimit, _store.Count - StoreLimit);
 
         while (_rows.Count > Limit)
             _rows.RemoveAt(_rows.Count - 1);
@@ -244,7 +300,7 @@ public partial class WatchView : UserControl
         ShowStats();
     }
 
-    private bool Shows(WatchRow row) =>
+    private static bool Shows(WatchRow row) =>
         _process is null || string.Equals(row.Process, _process, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Показать одну программу или все — заново из запомненного.</summary>
@@ -262,9 +318,17 @@ public partial class WatchView : UserControl
         else
             ProcessButton.Foreground = (Brush)FindResource("Accent");
 
+        List<WatchRow> shown;
+
+        lock (Gate)
+        {
+            shown = [.. Enumerable.Range(0, _store.Count).Select(i => _store[_store.Count - 1 - i]).Where(Shows).Take(Limit)];
+            _pending.Clear();
+        }
+
         _rows.Clear();
 
-        foreach (var row in _store.Where(Shows).Take(Limit))
+        foreach (var row in shown)
             _rows.Add(row);
 
         ShowStats();
@@ -293,11 +357,16 @@ public partial class WatchView : UserControl
         menu.Items.Add(MenuEntry("", "Из запущенных…", PickRunning));
         menu.Items.Add(MenuEntry("", "Выбрать файл…", PickFile));
 
-        var seen = _perProcess
-            .Where(p => p.Value > 0)
-            .OrderByDescending(p => p.Value)
-            .Take(MenuPrograms)
-            .ToList();
+        List<KeyValuePair<string, int>> seen;
+
+        lock (Gate)
+        {
+            seen = _perProcess
+                .Where(p => p.Value > 0)
+                .OrderByDescending(p => p.Value)
+                .Take(MenuPrograms)
+                .ToList();
+        }
 
         if (seen.Count > 0)
         {
@@ -366,14 +435,17 @@ public partial class WatchView : UserControl
             parts.Add($"скрыто прямых: {_hidden}");
 
         if (_process is not null)
-            parts.Add($"{_process}: {_perProcess.GetValueOrDefault(_process)}");
+        {
+            lock (Gate)
+                parts.Add($"{_process}: {_perProcess.GetValueOrDefault(_process)}");
+        }
 
         Status.Text = string.Join(" · ", parts);
     }
 
-    private void Stop()
+    /// <summary>Останавливает сеанс — кнопкой или с выходом из программы.</summary>
+    private static void StopSession()
     {
-        _flush.Stop();
         _work?.Cancel();
         _work = null;
 
@@ -385,10 +457,8 @@ public partial class WatchView : UserControl
             _watch = null;
         }
 
-        lock (_pending)
+        lock (Gate)
             _pending.Clear();
-
-        PowerButton.Content = "Начать";
     }
 
     private void OnFilter(object sender, RoutedEventArgs e)
@@ -396,21 +466,30 @@ public partial class WatchView : UserControl
         _interestingOnly = !_interestingOnly;
         _hidden = 0;
 
-        FilterButton.Content = _interestingOnly ? "Показывать всё" : "Только туннель и десинк";
+        ShowFilter();
+    }
 
-        FilterButton.Foreground = (Brush)FindResource(_interestingOnly ? "Accent" : "Muted");
+    private void ShowFilter()
+    {
+        FilterButton.Content = _interestingOnly ? "Показывать всё" : "Только туннель и десинк";
+        if (_interestingOnly)
+            FilterButton.Foreground = (Brush)FindResource("Accent");
+        else
+            FilterButton.ClearValue(ForegroundProperty);
     }
 
     private void OnClear(object sender, RoutedEventArgs e)
     {
         _rows.Clear();
-        _store.Clear();
+
         // Выбранная программа остаётся в отборе: очистка — чтобы смотреть
         // её соединения с чистого листа, а не чтобы сбросить выбор.
-        _perProcess.Clear();
-
-        lock (_pending)
+        lock (Gate)
+        {
+            _store.Clear();
+            _perProcess.Clear();
             _pending.Clear();
+        }
 
         _totalBase = _watch?.Total ?? 0;
         _matchedBase = _watch?.Matched ?? 0;
