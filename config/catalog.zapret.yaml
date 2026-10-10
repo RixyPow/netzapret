@@ -4,9 +4,9 @@
 # перепишет. Свои записи — в catalog.yaml: он при обновлении сохраняется,
 # а этот файл заменяется новым.
 #
-# Снят 08.10.2026 12:43 с машины, где стоит Zapret: записей 6896,
-# адресов 1133, принимали соединение 1003;
-# имён 1199, рабочий адрес нашёлся у 475.
+# Снят 10.10.2026 13:48 с машины, где стоит Zapret: записей 6896,
+# адресов 1133, принимали соединение 996;
+# имён 1199, рабочий адрес нашёлся у 329.
 #
 # Рабочая — значит сертификат этого сайта и ответ не отказ, как у автоподбора
 # пина. Адреса стареют: узел за посредником живёт сколько живёт, поэтому
@@ -17,28 +17,14 @@
 # и то, чего в каталоге нет.
 
 intermediaries:
-  - address: 103.137.248.145
-    source: "Comss DNS"
-  - address: 89.150.59.128
-    source: "Comss DNS"
   - address: 23.12.157.162
     source: "Comss DNS"
   - address: 23.197.161.156
     source: "Comss DNS"
-  - address: 87.228.47.199
-    source: "XBOX DNS"
-  - address: 188.68.214.131
-    source: "XBOX DNS"
-  - address: 188.68.214.144
-    source: "XBOX DNS"
   - address: 184.24.145.154
     source: "Malw DNS"
   - address: 217.60.179.6
     source: "AstraCat"
-  - address: 188.68.214.132
-    source: "XBOX DNS"
-  - address: 188.68.214.145
-    source: "XBOX DNS"
   - address: 160.79.104.10
     source: "Comss DNS"
   - address: 2.22.145.84
@@ -52,6 +38,8 @@ intermediaries:
   - address: 95.100.177.169
     source: "XBOX DNS"
   - address: 8.47.69.0
+    source: "Comss DNS"
+  - address: 8.6.112.0
     source: "Comss DNS"
   - address: 95.100.107.142
     source: "XBOX DNS"
@@ -76,16 +64,11 @@ services:
       - amd.com
     addresses:
       - 23.12.156.165
-  - name: "AMD — Comss DNS"
+  - name: "AMD — Malw DNS"
     names:
       - www.amd.com
     addresses:
-      - 2.23.88.118
-  - name: "Autodesk — Comss DNS"
-    names:
-      - accounts.autodesk.com
-    addresses:
-      - 103.137.248.145
+      - 23.12.156.165
   - name: "Badoo — Comss DNS"
     names:
       - badoo.app
@@ -95,34 +78,53 @@ services:
     names:
       - eu1.ecdn2.badoocdn.com
     addresses:
-      - 151.101.65.91
-  - name: "Broadcom — Comss DNS"
-    names:
-      - access.broadcom.com
-      - knowledge.broadcom.com
-      - support.broadcom.com
-    addresses:
-      - 103.137.248.145
-  - name: "Broadcom — Comss DNS"
-    names:
-      - profile.broadcom.com
-    addresses:
-      - 89.150.59.128
+      - 151.101.1.91
   - name: "Canva — Comss DNS"
     names:
       - canva.com
     addresses:
-      - 3.164.68.92
+      - 65.9.62.50
+  - name: "ChatGPT & Sora (OpenAI) — AstraCat"
+    names:
+      - api.openai.com
+      - auth.openai.com
+      - auth0.openai.com
+      - beta.api.openai.com
+      - blog.openai.com
+      - cdn.platform.openai.com
+      - chat.openai.com
+      - chatgpt.com
+      - community.openai.com
+      - deploymentsafety.openai.com
+      - developers.openai.com
+      - files.oaiusercontent.com
+      - help.openai.com
+      - jukebox.openai.com
+      - openai.com
+      - operator.chatgpt.com
+      - platform.api.openai.com
+      - platform.openai.com
+      - realtime.chatgpt.com
+      - sdmntpritalynorth.oaiusercontent.com
+      - sdmntprnortheu.oaiusercontent.com
+      - sdmntprpolandcentral.oaiusercontent.com
+      - sdmntprukwest.oaiusercontent.com
+      - sentinel.openai.com
+      - sora.chatgpt.com
+      - spinningup.openai.com
+      - tcr9i.chat.openai.com
+      - videos.openai.com
+      - webrtc.chatgpt.com
+      - ws.chatgpt.com
+      - www.chatgpt.com
+      - www.openai.com
+    addresses:
+      - 217.60.179.6
   - name: "ChatGPT & Sora (OpenAI) — AstraCat"
     names:
       - d.docs.live.net
     addresses:
       - 150.171.22.11
-  - name: "ChatGPT & Sora (OpenAI) — AstraCat"
-    names:
-      - ws.chatgpt.com
-    addresses:
-      - 217.60.179.6
   - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
     names:
       - cdn.auth0.com
@@ -135,71 +137,14 @@ services:
       - 8.47.69.0
   - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
     names:
-      - arena.openai.com
-      - auth0.openai.com
-      - contest.openai.com
-      - debate-game.openai.com
-      - discuss.openai.com
-      - files.oaiusercontent.com
-      - gym.openai.com
-      - microscope.openai.com
-      - universe.openai.com
-    addresses:
-      - 103.137.248.145
-  - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
-    names:
       - mobile.events.data.microsoft.com
     addresses:
       - 51.132.193.107
-  - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
-    names:
-      - labs.openai.com
-    addresses:
-      - 89.150.59.128
-  - name: "ChatGPT & Sora (OpenAI) — XBOX DNS"
-    names:
-      - jukebox.openai.com
-      - platform.api.openai.com
-    addresses:
-      - 188.68.214.145
-  - name: "ChatGPT & Sora (OpenAI) — XBOX DNS"
-    names:
-      - api.openai.com
-      - auth.openai.com
-      - beta.api.openai.com
-      - beta.openai.com
-      - blog.openai.com
-      - cdn.platform.openai.com
-      - chat.openai.com
-      - chatgpt.com
-      - community.openai.com
-      - deploymentsafety.openai.com
-      - developers.openai.com
-      - help.openai.com
-      - openai.com
-      - operator.chatgpt.com
-      - platform.openai.com
-      - realtime.chatgpt.com
-      - sdmntpritalynorth.oaiusercontent.com
-      - sdmntprnortheu.oaiusercontent.com
-      - sdmntprpolandcentral.oaiusercontent.com
-      - sdmntprukwest.oaiusercontent.com
-      - sentinel.openai.com
-      - sora.chatgpt.com
-      - sora.com
-      - spinningup.openai.com
-      - tcr9i.chat.openai.com
-      - videos.openai.com
-      - webrtc.chatgpt.com
-      - www.chatgpt.com
-      - www.openai.com
-    addresses:
-      - 188.68.214.132
   - name: "ChatGPT & Sora (OpenAI) — XBOX DNS"
     names:
       - cdn.oaistatic.com
     addresses:
-      - 8.47.69.0
+      - 8.6.112.0
   - name: "ChatGPT & Sora (OpenAI) — XBOX DNS"
     names:
       - cdn.openai.com
@@ -209,15 +154,7 @@ services:
     names:
       - assets-configurator.chess.com
     addresses:
-      - 104.18.139.67
-  - name: "Claude — Comss DNS"
-    names:
-      - api.claude.ai
-      - api.console.anthropic.com
-      - auth.anthropic.com
-      - statsig.anthropic.com
-    addresses:
-      - 103.137.248.145
+      - 104.18.141.67
   - name: "Claude — Comss DNS"
     names:
       - a.claude.com
@@ -233,6 +170,7 @@ services:
       - econ-index.mcp.claude.com
       - hcls.mcp.claude.com
       - plaid.mcp.claude.com
+      - platform.claude.com
       - privacy.claude.com
       - pubmed.mcp.claude.com
       - releases.claude.com
@@ -243,97 +181,42 @@ services:
       - 160.79.104.10
   - name: "Claude — Malw DNS"
     names:
-      - a.claude.ai
       - alignment.anthropic.com
       - anthropic.com
       - assets.anthropic.com
       - brand.anthropic.com
       - claude.anthropic.com
-      - console.claude.ai
       - docs.anthropic.com
       - earlyaccess.anthropic.com
       - institute.anthropic.com
       - legal.anthropic.com
       - mcp-proxy.anthropic.com
       - status.anthropic.com
-      - status.claude.ai
       - support.anthropic.com
       - tai.anthropic.com
       - www.anthropic.com
     addresses:
       - 160.79.104.10
-  - name: "Claude — XBOX DNS"
+  - name: "Claude — Malw DNS"
     names:
       - a-cdn.anthropic.com
-      - api.anthropic.com
-      - claude.ai
-      - console.anthropic.com
-      - frame.claudeusercontent.com
-      - platform.claude.com
-      - s-cdn.anthropic.com
-      - www.claude.ai
     addresses:
-      - 188.68.214.131
-  - name: "DeepL — Comss DNS"
-    names:
-      - static.deepl.com
-      - support.deepl.com
-      - write-free.www.deepl.com
-    addresses:
-      - 103.137.248.145
-  - name: "DeepL — XBOX DNS"
-    names:
-      - api-free.deepl.com
-      - api.deepl.com
-      - auth.deepl.com
-      - backend.deepl.com
-      - checkout.www.deepl.com
-      - clearance.deepl.com
-      - community-auth.deepl.com
-      - deepl.com
-      - developers.deepl.com
-      - dict-audio.deepl.com
-      - errortracking.deepl.com
-      - experimentation-grpc.deepl.com
-      - experimentation.deepl.com
-      - gtm.deepl.com
-      - home.deepl.com
-      - hs.deepl.com
-      - internal.deepl.com
-      - ita-free.app.deepl.com
-      - ita-free.www.deepl.com
-      - jobs.deepl.com
-      - login-wall.deepl.com
-      - oneshot-free.www.deepl.com
-      - ott.deepl.com
-      - s.deepl.com
-      - shield.deepl.com
-      - sl.deepl.com
-      - w.deepl.com
-      - www.deepl.com
-    addresses:
-      - 87.228.47.199
+      - 34.36.57.103
   - name: "Deezer — Comss DNS"
     names:
       - account.deezer.com
       - activation.deezer.com
-      - ansync.deezer.com
       - api-websub.deezer.com
-      - auth.deezer.com
       - backstage.deezer.com
-      - dalida.deezer.com
-      - games.deezer.com
-      - hhe.deezer.com
+      - gcast.deezer.com
+      - mydeezerstory.deezer.com
       - oauth.deezer.com
-      - pay.deezer.com
-      - payment.deezer.com
+      - partners.deezer.com
       - pipe.deezer.com
-      - platform.deezer.com
       - queue.deezer.com
-      - shaker.deezer.com
       - www.deezer.com
     addresses:
-      - 2.22.145.96
+      - 2.22.145.84
   - name: "Deezer — Comss DNS"
     names:
       - affiliate.deezer.com
@@ -344,15 +227,17 @@ services:
       - 185.159.107.201
   - name: "Deezer — Comss DNS"
     names:
-      - api.deezer.com
-      - bo-playlist.deezer.com
+      - ansync.deezer.com
+      - dalida.deezer.com
       - dataconnect.deezer.com
-      - mydeezerstory.deezer.com
-      - partners.deezer.com
+      - games.deezer.com
+      - papi.deezer.com
+      - pay.deezer.com
+      - platform.deezer.com
       - tv2.deezer.com
       - widget.deezer.com
     addresses:
-      - 2.22.145.84
+      - 2.22.145.96
   - name: "Deezer — Comss DNS"
     names:
       - deezer.com
@@ -373,7 +258,7 @@ services:
       - creatorsupport.deezer.com
       - support.deezer.com
     addresses:
-      - 216.198.54.11
+      - 216.198.53.11
   - name: "Deezer — Comss DNS"
     names:
       - homepod.deezer.com
@@ -398,7 +283,7 @@ services:
     names:
       - research.deezer.com
     addresses:
-      - 185.199.111.153
+      - 185.199.110.153
   - name: "Deezer — Comss DNS"
     names:
       - wellbeing.deezer.com
@@ -416,14 +301,21 @@ services:
       - 35.227.205.143
   - name: "Deezer — XBOX DNS"
     names:
-      - gcast.deezer.com
+      - auth.deezer.com
+      - hhe.deezer.com
+      - shaker.deezer.com
     addresses:
-      - 95.100.107.152
+      - 95.100.107.138
   - name: "Deezer — XBOX DNS"
     names:
-      - papi.deezer.com
+      - api.deezer.com
     addresses:
-      - 95.100.107.142
+      - 95.100.107.180
+  - name: "Deezer — XBOX DNS"
+    names:
+      - bo-playlist.deezer.com
+    addresses:
+      - 95.100.107.152
   - name: "Deezer — XBOX DNS"
     names:
       - m.deezer.com
@@ -431,19 +323,24 @@ services:
       - 95.100.107.91
   - name: "Deezer — XBOX DNS"
     names:
+      - payment.deezer.com
+    addresses:
+      - 95.100.107.172
+  - name: "Deezer — XBOX DNS"
+    names:
       - weight-images.deezer.com
     addresses:
-      - 188.43.75.104
+      - 23.73.4.198
   - name: "Deezer — XBOX DNS"
     names:
       - webviews.deezer.com
     addresses:
-      - 95.100.107.177
+      - 95.100.107.178
   - name: "Dell — Comss DNS"
     names:
       - alienwarearena.com
     addresses:
-      - 151.101.2.133
+      - 151.101.194.133
   - name: "Discord — каталог Zapret"
     names:
       - discord.com
@@ -452,16 +349,6 @@ services:
       - updates.discord.com
     addresses:
       - 23.227.38.74
-  - name: "ElevenLabs — Comss DNS"
-    names:
-      - api.elevenlabs.io
-    addresses:
-      - 34.8.184.191
-  - name: "ElevenLabs — Comss DNS"
-    names:
-      - api.us.elevenlabs.io
-    addresses:
-      - 34.36.213.91
   - name: "ElevenLabs — Comss DNS"
     names:
       - payload.elevenlabs.io
@@ -475,56 +362,53 @@ services:
       - 34.117.39.235
   - name: "ElevenLabs — Comss DNS"
     names:
+      - api.us.elevenlabs.io
+    addresses:
+      - 34.36.213.91
+  - name: "ElevenLabs — Comss DNS"
+    names:
       - help.elevenlabs.io
     addresses:
       - 216.198.53.6
-  - name: "ElevenLabs — XBOX DNS"
+  - name: "ElevenLabs — Comss DNS"
     names:
-      - elevenlabs.io
+      - api.elevenlabs.io
     addresses:
-      - 87.228.47.198
+      - 34.8.184.191
   - name: "Elgato — Comss DNS"
     names:
       - www.elgato.com
     addresses:
-      - 8.47.69.0
+      - 8.6.112.0
+  - name: "Fitbit — Comss DNS"
+    names:
+      - api.fitbit.com
+      - fitbit-pa.googleapis.com
+      - fitbitvestibuleshim-pa.googleapis.com
+    addresses:
+      - 172.217.114.4
   - name: "Fitbit — Comss DNS"
     names:
       - fitbit.google.com
     addresses:
-      - 173.194.220.113
-  - name: "Fitbit — Comss DNS"
-    names:
-      - fitbit-pa.googleapis.com
-    addresses:
-      - 172.217.115.4
-  - name: "Fitbit — Comss DNS"
-    names:
-      - api.fitbit.com
-    addresses:
-      - 172.217.117.4
-  - name: "Fitbit — Comss DNS"
-    names:
-      - fitbitvestibuleshim-pa.googleapis.com
-    addresses:
-      - 172.217.114.4
+      - 209.85.233.102
   - name: "FMHY — Comss DNS"
     names:
-      - api.fmhy.net
       - fmhy.net
       - old.fmhy.net
       - paste.fmhy.net
-      - pastes.fmhy.net
-      - redlib.fmhy.net
       - searx.fmhy.net
       - stats.fmhy.net
-      - status.fmhy.net
+      - ui.fmhy.net
       - www.fmhy.net
     addresses:
       - 172.67.209.224
   - name: "FMHY — Comss DNS"
     names:
-      - ui.fmhy.net
+      - api.fmhy.net
+      - pastes.fmhy.net
+      - redlib.fmhy.net
+      - status.fmhy.net
     addresses:
       - 104.21.93.123
   - name: "FMHY — XBOX DNS"
@@ -536,17 +420,18 @@ services:
     names:
       - www.framer.com
     addresses:
-      - 31.43.160.19
+      - 31.43.161.19
   - name: "Gemini AI — Comss DNS"
     names:
       - assistant-s3-pa.googleapis.com
+      - geller-pa.googleapis.com
     addresses:
-      - 172.217.116.4
+      - 172.217.117.4
   - name: "Gemini AI — Comss DNS"
     names:
       - daily-cloudcode-pa.googleapis.com
     addresses:
-      - 172.217.112.4
+      - 172.217.116.4
   - name: "Gemini AI — Comss DNS"
     names:
       - deepmind.google
@@ -554,19 +439,14 @@ services:
       - 216.239.32.21
   - name: "Gemini AI — Comss DNS"
     names:
-      - deepmind.com
-    addresses:
-      - 216.239.38.21
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - geller-pa.googleapis.com
-    addresses:
-      - 172.217.117.4
-  - name: "Gemini AI — Comss DNS"
-    names:
       - generativeai.google
     addresses:
       - 216.239.32.29
+  - name: "Gemini AI — Comss DNS"
+    names:
+      - deepmind.com
+    addresses:
+      - 216.239.34.21
   - name: "Gemini AI — Comss DNS"
     names:
       - jules.google
@@ -574,55 +454,10 @@ services:
       - 216.239.32.27
   - name: "Gemini AI — Malw DNS"
     names:
-      - ai.google.dev
-    addresses:
-      - 173.194.222.101
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - appcatalyst.pa.googleapis.com
-    addresses:
-      - 64.233.162.95
-  - name: "Gemini AI — Malw DNS"
-    names:
       - labs.google.com
-    addresses:
-      - 209.85.233.102
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - bard.google.com
-    addresses:
-      - 142.251.156.2
-  - name: "Gemini AI — Malw DNS"
-    names:
       - lookerstudio.google.com
     addresses:
-      - 209.85.233.113
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - gemini.google
-    addresses:
-      - 216.239.32.61
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - makersuite.google.com
-    addresses:
-      - 142.251.1.101
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - developerprofiles-pa.googleapis.com
-      - notebooklm-pa.googleapis.com
-    addresses:
-      - 172.217.115.4
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - opal.google.com
-    addresses:
-      - 64.233.164.113
-  - name: "Gemini AI — Malw DNS"
-    names:
-      - notebooklm.google
-    addresses:
-      - 216.239.32.27
+      - 209.85.233.100
   - name: "Gemini AI — Malw DNS"
     names:
       - people-pa.clients6.google.com
@@ -630,9 +465,39 @@ services:
       - 64.233.161.95
   - name: "Gemini AI — Malw DNS"
     names:
-      - suggestqueries.google.com
+      - opal.google.com
     addresses:
-      - 142.250.150.101
+      - 64.233.164.102
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - appcatalyst.pa.googleapis.com
+    addresses:
+      - 64.233.162.95
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - bard.google.com
+    addresses:
+      - 142.251.156.2
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - developerprofiles-pa.googleapis.com
+    addresses:
+      - 172.217.113.4
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - ai.google.dev
+    addresses:
+      - 173.194.222.113
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - gemini.google
+    addresses:
+      - 216.239.32.61
+  - name: "Gemini AI — Malw DNS"
+    names:
+      - notebooklm.google
+    addresses:
+      - 216.239.32.27
   - name: "Gemini AI — Malw DNS"
     names:
       - opal.google
@@ -640,49 +505,14 @@ services:
       - 34.8.221.189
   - name: "Gemini AI — Malw DNS"
     names:
-      - waa-pa.clients6.google.com
-    addresses:
-      - 64.233.165.95
-  - name: "Gemini AI — Malw DNS"
-    names:
       - opal.withgoogle.com
     addresses:
       - 34.49.76.124
   - name: "Gemini AI — Malw DNS"
     names:
-      - signaler-pa.clients6.google.com
+      - notebooklm-pa.googleapis.com
     addresses:
-      - 172.253.152.95
-  - name: "Gemini AI — XBOX DNS"
-    names:
-      - aisandbox-pa.googleapis.com
-      - alkalimakersuite-pa.clients6.google.com
-      - gemini.google.com
-      - generativelanguage.googleapis.com
-      - jules.google.com
-      - labs.google
-      - notebooklm.google.com
-      - proactivebackend-pa.googleapis.com
-      - robinfrontend-pa.googleapis.com
-      - stitch.withgoogle.com
-      - webchannel-alkalimakersuite-pa.clients6.google.com
-    addresses:
-      - 188.68.214.130
-  - name: "Gemini AI — XBOX DNS"
-    names:
-      - aitestkitchen.withgoogle.com
-    addresses:
-      - 108.177.14.141
-  - name: "Gemini AI — XBOX DNS"
-    names:
-      - alkalicore-pa.clients6.google.com
-    addresses:
-      - 108.177.14.95
-  - name: "Gemini AI — XBOX DNS"
-    names:
-      - apis.google.com
-    addresses:
-      - 142.250.150.100
+      - 172.217.118.4
   - name: "Gemini AI — XBOX DNS"
     names:
       - o.pki.goog
@@ -690,95 +520,80 @@ services:
       - 64.233.164.94
   - name: "Gemini AI — XBOX DNS"
     names:
-      - aistudio.google.com
+      - suggestqueries.google.com
     addresses:
-      - 188.68.214.143
-  - name: "GitHub — каталог Zapret"
+      - 64.233.164.102
+  - name: "Gemini AI — XBOX DNS"
     names:
-      - github.githubassets.com
+      - makersuite.google.com
     addresses:
-      - 185.199.110.154
+      - 209.85.233.100
+  - name: "Gemini AI — XBOX DNS"
+    names:
+      - apis.google.com
+    addresses:
+      - 142.250.150.138
+  - name: "Gemini AI — XBOX DNS"
+    names:
+      - signaler-pa.clients6.google.com
+    addresses:
+      - 64.233.162.95
+  - name: "Gemini AI — XBOX DNS"
+    names:
+      - waa-pa.clients6.google.com
+    addresses:
+      - 173.194.73.95
+  - name: "Gemini AI — XBOX DNS"
+    names:
+      - alkalicore-pa.clients6.google.com
+    addresses:
+      - 142.250.150.95
+  - name: "Gemini AI — XBOX DNS"
+    names:
+      - aitestkitchen.withgoogle.com
+    addresses:
+      - 108.177.14.141
   - name: "GitHub — каталог Zapret"
     names:
       - github.com
     addresses:
       - 140.82.114.3
+  - name: "GitHub — каталог Zapret"
+    names:
+      - github.githubassets.com
+    addresses:
+      - 185.199.110.154
   - name: "GitHub Copilot — XBOX DNS (old)"
     names:
       - api.individual.githubcopilot.com
     addresses:
       - 140.82.113.22
-  - name: "GitHub загрузки/картинки — каталог Zapret"
-    names:
-      - avatars.githubusercontent.com
-      - avatars0.githubusercontent.com
-      - avatars1.githubusercontent.com
-      - avatars2.githubusercontent.com
-      - avatars3.githubusercontent.com
-      - avatars4.githubusercontent.com
-      - avatars5.githubusercontent.com
-      - avatars6.githubusercontent.com
-      - avatars7.githubusercontent.com
-      - camo.githubusercontent.com
-      - gist.githubusercontent.com
-      - media.githubusercontent.com
-      - objects.githubusercontent.com
-      - private-user-images.githubusercontent.com
-      - raw.githubusercontent.com
-      - release-assets.githubusercontent.com
-    addresses:
-      - 146.75.22.132
   - name: "Grok — Comss DNS"
     names:
-      - api.x.ai
-      - assets.grok.com
-      - docs.x.ai
-      - eu-west-1.api.x.ai
-      - grok.com
-      - jf.x.ai
-      - trust.x.ai
-      - us-east-4-raw.api.x.ai
-      - us-west-1.api.x.ai
-      - www.x.ai
+      - www.grok.com
     addresses:
-      - 103.137.248.145
+      - 8.6.112.0
   - name: "Grok — Comss DNS"
     names:
       - livekit.grok.com
     addresses:
       - 35.227.192.44
-  - name: "Grok — Comss DNS"
-    names:
-      - www.grok.com
-    addresses:
-      - 8.47.69.0
-  - name: "Grok — Comss DNS"
-    names:
-      - grok.x.ai
-      - us-east-1.api.x.ai
-    addresses:
-      - 89.150.59.128
   - name: "Guidedhacking — Comss DNS"
     names:
       - guidedhacking.com
       - www.guidedhacking.com
     addresses:
-      - 8.47.69.0
+      - 8.6.112.0
   - name: "Guilded — Comss DNS"
     names:
       - guilded.gg
     addresses:
-      - 52.85.154.105
-  - name: "Guilded — Comss DNS"
-    names:
-      - www.guilded.gg
-    addresses:
-      - 103.137.248.145
-  - name: "Imgur — Comss DNS"
+      - 52.85.154.98
+  - name: "Imgur — XBOX DNS"
     names:
       - api.imgur.com
     addresses:
-      - 146.75.116.193
+      - 199.232.196.193
   - name: "Intel — Comss DNS"
     names:
       - intel.com
@@ -788,21 +603,17 @@ services:
     names:
       - geolocation.onetrust.com
     addresses:
-      - 8.47.69.0
-  - name: "JetBrains — Comss DNS"
-    names:
-      - code-with-me.jetbrains.com
-      - codewithme-lobby-production.api.jetbrains.com
-      - codewithme-lobby-staging.api.jetbrains.com
-      - data.services.jetbrains.com
-      - datalore.jetbrains.com
-    addresses:
-      - 103.137.248.145
+      - 8.6.112.0
   - name: "JetBrains — Comss DNS"
     names:
       - myjetbrains.com
     addresses:
-      - 108.157.214.66
+      - 13.33.235.17
+  - name: "JetBrains — Malw DNS"
+    names:
+      - blog.jetbrains.com
+    addresses:
+      - 18.165.122.57
   - name: "JetBrains — Malw DNS"
     names:
       - academy.jetbrains.com
@@ -830,8 +641,7 @@ services:
   - name: "JetBrains — Malw DNS"
     names:
       - adobe.fls.jetbrains.com
-      - amazon.fls.jetbrains.com
-      - cai.jetbrains.com
+      - dunnhumby.fls.jetbrains.com
       - skyscanner.fls.jetbrains.com
       - spotify.fls.jetbrains.com
       - sv.fls.jetbrains.com
@@ -844,32 +654,28 @@ services:
       - 18.165.122.93
   - name: "JetBrains — Malw DNS"
     names:
-      - blog.jetbrains.com
-    addresses:
-      - 18.165.122.67
-  - name: "JetBrains — Malw DNS"
-    names:
-      - code2art.jetbrains.com
-    addresses:
-      - 18.165.122.84
-  - name: "JetBrains — Malw DNS"
-    names:
-      - datalore-forum.jetbrains.com
-    addresses:
-      - 52.16.11.100
-  - name: "JetBrains — Malw DNS"
-    names:
-      - dunnhumby.fls.jetbrains.com
-      - jb-team.fls.jetbrains.com
+      - amazon.fls.jetbrains.com
+      - cai.jetbrains.com
       - renew-your-ssl-certificate.jetbrains.com
       - zillow.fls.jetbrains.com
     addresses:
       - 34.253.238.102
   - name: "JetBrains — Malw DNS"
     names:
-      - ea.jetbrains.com
+      - cloudconfig.jetbrains.com
     addresses:
-      - 34.240.120.87
+      - 13.33.235.40
+  - name: "JetBrains — Malw DNS"
+    names:
+      - download-cdn.jetbrains.com
+    addresses:
+      - 18.165.122.62
+  - name: "JetBrains — Malw DNS"
+    names:
+      - ea.jetbrains.com
+      - oauth.account.jetbrains.com
+    addresses:
+      - 99.80.51.179
   - name: "JetBrains — Malw DNS"
     names:
       - geo2.datalore.jetbrains.com
@@ -884,19 +690,29 @@ services:
       - 3.164.206.93
   - name: "JetBrains — Malw DNS"
     names:
-      - hub.jetbrains.com
+      - jetbrains.com
     addresses:
-      - 108.128.228.195
+      - 13.33.235.56
   - name: "JetBrains — Malw DNS"
     names:
-      - jetarchive.jetbrains.com
+      - datalore-forum.jetbrains.com
     addresses:
-      - 3.174.113.68
+      - 52.16.11.100
   - name: "JetBrains — Malw DNS"
     names:
-      - download-cdn.jetbrains.com
+      - jb-team.fls.jetbrains.com
     addresses:
-      - 18.165.122.62
+      - 52.213.162.214
+  - name: "JetBrains — Malw DNS"
+    names:
+      - marketplace.jetbrains.com
+    addresses:
+      - 13.33.235.2
+  - name: "JetBrains — Malw DNS"
+    names:
+      - lp.jetbrains.com
+    addresses:
+      - 13.33.235.22
   - name: "JetBrains — Malw DNS"
     names:
       - jetpeople.jetbrains.com
@@ -904,37 +720,22 @@ services:
       - 54.247.121.209
   - name: "JetBrains — Malw DNS"
     names:
-      - lp.jetbrains.com
-    addresses:
-      - 13.33.235.68
-  - name: "JetBrains — Malw DNS"
-    names:
-      - marketplace.jetbrains.com
-    addresses:
-      - 13.33.235.64
-  - name: "JetBrains — Malw DNS"
-    names:
-      - jetbrains.com
-    addresses:
-      - 13.33.235.56
-  - name: "JetBrains — Malw DNS"
-    names:
-      - oauth.account.jetbrains.com
-    addresses:
-      - 99.80.51.179
-  - name: "JetBrains — Malw DNS"
-    names:
       - sales.jetbrains.com
+      - support.jetbrains.com
     addresses:
       - 216.198.54.11
   - name: "JetBrains — Malw DNS"
     names:
-      - slack-bdt.mau.jetbrains.com
+      - hub.jetbrains.com
     addresses:
-      - 3.164.68.31
+      - 108.128.228.195
   - name: "JetBrains — Malw DNS"
     names:
-      - support.jetbrains.com
+      - www.jetbrains.com
+    addresses:
+      - 108.156.22.18
+  - name: "JetBrains — Malw DNS"
+    names:
       - teamcity-support.jetbrains.com
     addresses:
       - 216.198.53.11
@@ -945,37 +746,29 @@ services:
       - 52.211.63.228
   - name: "JetBrains — Malw DNS"
     names:
-      - www.jetbrains.com
-    addresses:
-      - 108.156.22.30
-  - name: "JetBrains — Malw DNS"
-    names:
       - youtrack.jetbrains.com
     addresses:
       - 63.33.88.220
   - name: "JetBrains — XBOX DNS"
     names:
-      - account.jetbrains.com
-      - api.jetbrains.ai
-      - cloudconfig.jetbrains.com
-      - plugins.jetbrains.com
+      - code2art.jetbrains.com
     addresses:
-      - 87.228.47.199
+      - 65.9.46.80
   - name: "JetBrains — XBOX DNS"
     names:
       - resharper-plugins.jetbrains.com
     addresses:
-      - 65.9.46.106
+      - 65.9.46.6
   - name: "JetBrains — XBOX DNS"
     names:
-      - teamcity.jetbrains.com
+      - slack-bdt.mau.jetbrains.com
     addresses:
-      - 108.157.229.63
+      - 3.173.161.117
   - name: "JetBrains — XBOX DNS"
     names:
       - uploads.jetbrains.com
     addresses:
-      - 13.226.244.15
+      - 18.239.83.125
   - name: "JetBrains — XBOX DNS"
     names:
       - uploads.services.jetbrains.com
@@ -983,55 +776,48 @@ services:
       - 143.204.238.49
   - name: "JetBrains — XBOX DNS"
     names:
+      - jetarchive.jetbrains.com
+    addresses:
+      - 65.9.46.37
+  - name: "JetBrains — XBOX DNS"
+    names:
       - oauth.fls.jetbrains.com
     addresses:
       - 52.50.221.0
+  - name: "JetBrains — XBOX DNS"
+    names:
+      - teamcity.jetbrains.com
+    addresses:
+      - 108.157.229.11
   - name: "Linear.app — Comss DNS"
     names:
-      - client-api.linear.app
       - constellation.linear.app
       - linear.app
-      - s.linear.app
       - uploads.linear.app
     addresses:
       - 8.47.69.0
+  - name: "Linear.app — Comss DNS"
+    names:
+      - client-api.linear.app
+      - s.linear.app
+    addresses:
+      - 8.6.112.0
   - name: "Make — Comss DNS"
     names:
       - make.com
       - www.make.com
     addresses:
-      - 172.64.150.145
+      - 104.18.37.111
   - name: "Manus — Comss DNS"
     names:
       - files.manuscdn.com
     addresses:
-      - 13.33.235.78
-  - name: "Manus — XBOX DNS"
-    names:
-      - api.manus.im
-      - manus.im
-    addresses:
-      - 87.228.47.198
+      - 13.33.235.95
   - name: "Microsoft (Copilot, Designer, Xbox) — Comss DNS"
     names:
       - copilot.microsoft.com
     addresses:
       - 132.243.112.38
-  - name: "Microsoft (Copilot, Designer, Xbox) — Comss DNS"
-    names:
-      - rewards.bing.com
-    addresses:
-      - 150.171.28.10
-  - name: "Microsoft (Copilot, Designer, Xbox) — Comss DNS"
-    names:
-      - xgpuweb.gssv-play-prod.xboxlive.com
-    addresses:
-      - 51.12.31.0
-  - name: "Microsoft (Copilot, Designer, Xbox) — Malw DNS"
-    names:
-      - ecs.office.com
-    addresses:
-      - 52.123.129.14
   - name: "Microsoft (Copilot, Designer, Xbox) — Malw DNS"
     names:
       - designerapp.officeapps.live.com
@@ -1042,6 +828,11 @@ services:
       - xboxdesignlab.xbox.com
     addresses:
       - 151.101.1.124
+  - name: "Microsoft (Copilot, Designer, Xbox) — Malw DNS"
+    names:
+      - ecs.office.com
+    addresses:
+      - 52.123.128.14
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
     names:
       - designer.microsoft.com
@@ -1049,14 +840,10 @@ services:
       - 23.210.168.176
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
     names:
-      - edgeservices.bing.com
+      - xgpuweb.gssv-play-prod.xboxlive.com
+      - xsts.auth.xboxlive.com
     addresses:
-      - 184.51.252.58
-  - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
-    names:
-      - sydney.bing.com
-    addresses:
-      - 150.171.28.10
+      - 87.228.47.196
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
     names:
       - xgpuwebf2p.gssv-play-prod.xboxlive.com
@@ -1064,9 +851,14 @@ services:
       - 20.50.2.84
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
     names:
-      - xsts.auth.xboxlive.com
+      - sydney.bing.com
     addresses:
-      - 87.228.47.196
+      - 150.171.27.10
+  - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
+    names:
+      - edgeservices.bing.com
+    addresses:
+      - 184.51.252.57
   - name: "Naukri — Comss DNS"
     names:
       - assessments.nc.naukri.com
@@ -1076,12 +868,7 @@ services:
     names:
       - insights.naukri.com
     addresses:
-      - 145.224.205.238
-  - name: "Naukri — Comss DNS"
-    names:
-      - pt.naukri.com
-    addresses:
-      - 23.12.157.162
+      - 145.224.205.235
   - name: "Naukri — Comss DNS"
     names:
       - m9.naukri.com
@@ -1093,61 +880,48 @@ services:
     names:
       - staging.contest.nc.naukri.com
     addresses:
-      - 65.9.46.101
+      - 3.164.206.113
   - name: "Naukri — Comss DNS"
     names:
       - staging.fn-hackathon-ui.nc.naukri.com
     addresses:
       - 13.33.235.107
+  - name: "Naukri — Comss DNS"
+    names:
+      - staging.onlinetest.nc.naukri.com
+    addresses:
+      - 3.164.240.92
   - name: "Naukri — Malw DNS"
     names:
       - naukri.com
     addresses:
-      - 23.216.134.115
-  - name: "Naukri — XBOX DNS"
+      - 2.17.251.25
+  - name: "Naukri — Malw DNS"
     names:
-      - staging.onlinetest.nc.naukri.com
+      - pt.naukri.com
+    addresses:
+      - 184.24.145.154
+  - name: "Naukri — Malw DNS"
+    names:
       - static.staging.assessment.nc.naukri.com
     addresses:
-      - 65.9.130.45
-  - name: "Notion — Comss DNS"
-    names:
-      - calendar.notion.com
-    addresses:
-      - 103.137.248.145
+      - 18.165.140.96
   - name: "Notion — Malw DNS"
     names:
       - notion.com
       - www.notion.com
     addresses:
       - 208.103.161.16
-  - name: "Notion — XBOX DNS"
-    names:
-      - calendar.notion.so
-      - notion.so
-      - www.notion.so
-    addresses:
-      - 87.228.47.199
-  - name: "Nvidia — Comss DNS"
+  - name: "Nvidia — XBOX DNS"
     names:
       - developer.nvidia.com
     addresses:
-      - 23.47.124.140
-  - name: "OpenRouter — XBOX DNS"
-    names:
-      - openrouter.ai
-    addresses:
-      - 87.228.47.198
+      - 2.19.183.64
   - name: "Oracle — Comss DNS"
     names:
       - oracle.com
     addresses:
       - 138.1.33.162
-  - name: "Posthog — XBOX DNS"
-    names:
-      - eu.posthog.com
-    addresses:
-      - 87.228.47.199
   - name: "Pump.fun — Comss DNS"
     names:
       - images.pump.fun
@@ -1155,14 +929,14 @@ services:
       - 8.47.69.0
   - name: "Qwant — XBOX DNS"
     names:
-      - www.qwant.com
-    addresses:
-      - 51.91.211.91
-  - name: "Qwant — XBOX DNS"
-    names:
       - qwant.com
     addresses:
       - 51.91.151.171
+  - name: "Qwant — XBOX DNS"
+    names:
+      - www.qwant.com
+    addresses:
+      - 51.91.211.91
   - name: "Reve — Malw DNS"
     names:
       - preview.reve.art
@@ -1175,6 +949,7 @@ services:
       - 34.111.111.30
   - name: "Rutor — каталог Zapret"
     names:
+      - d.rutor.info
       - d.rutor.is
     addresses:
       - 172.64.33.155
@@ -1182,19 +957,17 @@ services:
     names:
       - sketchup.com
     addresses:
-      - 65.9.46.52
+      - 13.33.235.71
   - name: "SketchUp — Comss DNS"
     names:
       - sketchup.trimble.com
-      - www.sketchup.com
     addresses:
       - 15.197.167.90
-  - name: "Spotify — Comss DNS"
+  - name: "SketchUp — Comss DNS"
     names:
-      - accounts.spotify.com
-      - www.spotify.com
+      - www.sketchup.com
     addresses:
-      - 199.232.175.42
+      - 3.33.186.135
   - name: "Spotify — Comss DNS"
     names:
       - api-partner.spotify.com
@@ -1203,6 +976,12 @@ services:
       - spclient.wg.spotify.com
     addresses:
       - 35.186.224.24
+  - name: "Spotify — Comss DNS"
+    names:
+      - accounts.spotify.com
+      - www.spotify.com
+    addresses:
+      - 199.232.175.42
   - name: "Spotify — Comss DNS"
     names:
       - gew1-spclient.spotify.com
@@ -1218,116 +997,51 @@ services:
       - open.spotify.com
     addresses:
       - 146.75.119.42
-  - name: "Spotify — XBOX DNS"
-    names:
-      - aet.spotify.com
-    addresses:
-      - 87.228.47.199
-  - name: "Strava — Comss DNS"
-    names:
-      - email.strava.com
-    addresses:
-      - 103.137.248.145
-  - name: "Strava — Comss DNS"
-    names:
-      - www.blog.strava.com
-    addresses:
-      - 89.150.59.128
-  - name: "Strava — XBOX DNS"
-    names:
-      - blog.strava.com
-      - business.strava.com
-      - c.strava.com
-      - cdn-1.strava.com
-      - communityhub.strava.com
-      - content-a.strava.com
-      - email1.strava.com
-      - graphql.strava.com
-      - links.strava.com
-      - metro.strava.com
-      - mi.strava.com
-      - promo.strava.com
-      - shop.strava.com
-      - status.strava.com
-      - store.strava.com
-      - stories.strava.com
-      - strava.com
-      - support.strava.com
-      - tiles.strava.com
-      - www.promo.strava.com
-      - www.strava.com
-    addresses:
-      - 87.228.47.199
   - name: "Tailscale — Comss DNS"
     names:
       - controlplane.tailscale.com
     addresses:
       - 192.200.0.102
-  - name: "TikTok — Comss DNS"
+  - name: "TikTok — XBOX DNS"
     names:
       - tiktok.com
     addresses:
-      - 23.216.134.133
-  - name: "TikTok — Comss DNS"
+      - 2.19.183.6
+  - name: "TikTok — XBOX DNS"
     names:
       - www.tiktok.com
     addresses:
-      - 2.19.204.35
+      - 23.73.4.200
   - name: "Trae.ai — Comss DNS"
     names:
       - api-sg-central.trae.ai
     addresses:
-      - 2.23.167.211
-  - name: "Trae.ai — Comss DNS"
+      - 2.20.255.152
+  - name: "Trae.ai — XBOX DNS"
     names:
       - api16-normal-alisg.mchost.guru
     addresses:
-      - 2.20.255.138
+      - 23.215.2.135
   - name: "Trae.ai — XBOX DNS"
     names:
       - api.trae.ai
     addresses:
-      - 23.215.2.143
+      - 23.215.2.149
   - name: "Trae.ai — XBOX DNS"
     names:
       - trae-api-sg.mchost.guru
     addresses:
-      - 2.16.56.197
+      - 2.16.56.207
   - name: "Tria.ge — Comss DNS"
     names:
       - www.tria.ge
     addresses:
       - 8.47.69.0
-  - name: "Tria.ge — XBOX DNS"
-    names:
-      - tria.ge
-    addresses:
-      - 87.228.47.199
-  - name: "Twitch — XBOX DNS"
-    names:
-      - gql.twitch.tv
-    addresses:
-      - 87.228.47.199
   - name: "Weather Underground — Comss DNS"
     names:
       - wxug.com
     addresses:
       - 18.158.212.228
-  - name: "Weather Underground — Comss DNS"
-    names:
-      - wunderground.com
-    addresses:
-      - 103.137.248.145
-  - name: "Weather.com — Comss DNS"
-    names:
-      - upsx.weather.com
-    addresses:
-      - 103.137.248.145
-  - name: "Weather.com — XBOX DNS"
-    names:
-      - weather.com
-    addresses:
-      - 87.228.47.199
   - name: "Web Archive — Comss DNS"
     names:
       - web.archive.org
@@ -1336,6 +1050,11 @@ services:
   - name: "Windsurf — Comss DNS"
     names:
       - windsurf.com
+    addresses:
+      - 76.76.21.21
+  - name: "Windsurf — XBOX DNS"
+    names:
+      - codeium.com
     addresses:
       - 76.76.21.21
   - name: "Windsurf — XBOX DNS"
@@ -1353,16 +1072,11 @@ services:
       - inference.codeium.com
     addresses:
       - 192.34.20.166
-  - name: "Windsurf — XBOX DNS"
-    names:
-      - codeium.com
-    addresses:
-      - 76.76.21.21
-  - name: "WorkOS — XBOX DNS"
+  - name: "WorkOS — Malw DNS"
     names:
       - api.workos.com
     addresses:
-      - 8.47.69.0
+      - 172.64.146.140
   - name: "x.com / Twitter — каталог Zapret"
     names:
       - api.x.com
