@@ -106,12 +106,24 @@ public static class PinPicker
     /// <param name="pool">Посредники, пробуемые для любого имени, в порядке доверия.</param>
     /// <param name="progress">Сколько имён готово.</param>
     /// <param name="probes">Каждая проверка по мере готовности — для живой таблицы в окне.</param>
+    /// <param name="main">Главное имя сайта; без него — первое из <paramref name="hosts"/>.</param>
     /// <remarks>
+    /// <para>
     /// Имена, на которые сайт переадресует, подбираются тоже. Замер 23.09:
     /// crunchyroll.com прибили к посреднику, он ответил 301 на
     /// www.crunchyroll.com — а тот прибит не был, браузер пошёл туда
     /// по обычному адресу и получил 1009. Список сервиса называл одну зону,
     /// а hosts зон не знает: каждое имя прибивается отдельно.
+    /// </para>
+    /// <para>
+    /// Все кандидаты пробуются только на главном имени, прочие имена — лишь
+    /// на лучших адресах главного (<see cref="SiteContenders"/>). Прежде
+    /// каждое имя пробовалось на всех: у Claude 10.10 это 48 имён по ~46
+    /// кандидатов, ~2200 проверок, из них молчащие — по 6 с каждая, и
+    /// владелец подбора не дождался. Сайт всё равно получает один адрес
+    /// (<see cref="OneAddress"/>), так что адрес, не годный главному имени,
+    /// прочим и не нужен.
+    /// </para>
     /// </remarks>
     public static async Task<IReadOnlyList<PinPick>> PickAsync(
         IReadOnlyList<string> hosts,
@@ -122,57 +134,123 @@ public static class PinPicker
         IProgress<(string Host, PinProbe Probe)>? probes = null,
         string? main = null)
     {
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
-        using var names = new SemaphoreSlim(4);
+        main ??= hosts.FirstOrDefault();
 
-        // Посредник, выручивший одно имя, первым пробуется для следующих:
-        // имена одного сервиса обычно ходят через одного и того же.
-        var proven = new List<PinCandidate>();
+        if (main is null)
+            return [];
+
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         int done = 0;
 
-        var seen = new HashSet<string>(hosts, StringComparer.OrdinalIgnoreCase);
-        var picks = new List<PinPick>();
-        IReadOnlyList<string> round = hosts;
+        // Главное имя — на всех кандидатах, по шестнадцать разом: молчащих
+        // среди посредников каталога много, и ждут они весь срок.
+        var mainProbes = await ProbeAllAsync(
+            main,
+            Distinct((await HonestAsync(main, http, cancellationToken)).Concat(known(main)).Concat(pool)),
+            probes,
+            MainSlots,
+            cancellationToken);
+
+        progress?.Report(Interlocked.Increment(ref done));
+
+        var tried = new Dictionary<string, List<PinProbe>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [main] = [.. mainProbes],
+        };
+
+        // Лучшие источники главного имени: адрес посредника либо настоящие
+        // адреса целиком (SiteKey).
+        var contenders = mainProbes
+            .Where(p => p.Usable)
+            .OrderBy(p => p.Rank)
+            .GroupBy(p => SiteKey(p.Candidate))
+            .Take(SiteContenders)
+            .Select(g => g.First().Candidate)
+            .ToList();
+
+        var order = new List<string> { main };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { main };
+
+        IReadOnlyList<string> round = [.. hosts.Where(seen.Add)];
+
+        // Переадресация главного имени — тоже имя сайта.
+        if (OneAddress([Pick(main, tried[main])], main)[0].Chosen?.Redirect is { } first
+            && SameSite(main, first)
+            && seen.Add(first))
+        {
+            round = [.. round, first];
+        }
+
+        if (contenders.Count == 0)
+        {
+            // Главному имени не годится никто — сайт пином не взять, и
+            // гонять прочие имена незачем.
+            return [Pick(main, tried[main]), .. round.Select(h => new PinPick(h, null, []))];
+        }
+
+        using var slots = new SemaphoreSlim(MainSlots);
 
         // Два круга переадресаций хватает: голое имя → www, изредка ещё
         // региональное. Больше — уже не тот сайт, а чужая цепочка.
         for (int depth = 0; depth < 3 && round.Count > 0; depth++)
         {
-            var work = round.Select(async host =>
+            order.AddRange(round);
+
+            var found = await Task.WhenAll(round.Select(async host =>
             {
-                await names.WaitAsync(cancellationToken);
+                var result = new List<PinProbe>();
 
-                try
+                foreach (var candidates in await Task.WhenAll(contenders.Select(async c =>
+                    c.Source == PinSource.Honest
+                        ? await HonestAsync(host, http, cancellationToken)
+                        : [c])))
                 {
-                    return await PickOneAsync(host, known(host), pool, proven, http, probes, cancellationToken);
-                }
-                finally
-                {
-                    names.Release();
-                    progress?.Report(Interlocked.Increment(ref done));
-                }
-            });
+                    result.AddRange(await Task.WhenAll(candidates.Select(async candidate =>
+                    {
+                        await slots.WaitAsync(cancellationToken);
 
-            var found = await Task.WhenAll(work);
-            picks.AddRange(found);
+                        try
+                        {
+                            var probe = await ProbeAsync(candidate, host, cancellationToken);
+                            probes?.Report((host, probe));
+                            return probe;
+                        }
+                        finally
+                        {
+                            slots.Release();
+                        }
+                    })));
+                }
 
-            round = found
+                progress?.Report(Interlocked.Increment(ref done));
+                return (Host: host, Probes: result);
+            }));
+
+            foreach (var (host, result) in found)
+                tried[host] = result;
+
+            var chosen = OneAddress([.. order.Select(h => Pick(h, tried[h]))], main);
+
+            round = [.. chosen
                 .Where(p => p.Chosen?.Redirect is { } next && SameSite(p.Host, next))
                 .Select(p => p.Chosen!.Redirect!)
-                .Where(seen.Add)
-                .ToList();
+                .Where(seen.Add)];
         }
 
-        main ??= hosts.FirstOrDefault();
-
-        foreach (var (host, probe) in await FillAsync(picks, main, probes, cancellationToken))
-        {
-            int i = picks.FindIndex(p => string.Equals(p.Host, host, StringComparison.OrdinalIgnoreCase));
-            picks[i] = picks[i] with { Rejected = [.. picks[i].Rejected, probe] };
-        }
-
-        return OneAddress(picks, main);
+        return OneAddress([.. order.Select(h => Pick(h, tried[h]))], main);
     }
+
+    /// <summary>Сколько проверок разом.</summary>
+    private const int MainSlots = 16;
+
+    private static PinPick Pick(string host, IReadOnlyList<PinProbe> probes) => new(host, null, probes);
+
+    private static async Task<IReadOnlyList<PinCandidate>> HonestAsync(
+        string host,
+        HttpClient http,
+        CancellationToken cancellationToken) =>
+        [.. (await DohResolver.CandidatesAsync(host, http, cancellationToken))
+            .Select(a => new PinCandidate(a, PinSource.Honest, "честный резолвер"))];
 
     /// <summary>
     /// Чем сайт прибивается целиком: адрес посредника либо, пустой строкой,
@@ -184,61 +262,8 @@ public static class PinPicker
     private static IEnumerable<PinProbe> All(PinPick pick) =>
         pick.Chosen is { } chosen ? pick.Rejected.Prepend(chosen) : pick.Rejected;
 
-    /// <summary>Сколько посредников проверить на всех именах сайта, прежде чем выбирать.</summary>
+    /// <summary>Сколько лучших источников главного имени пробуется на прочих именах.</summary>
     private const int SiteContenders = 3;
-
-    /// <summary>
-    /// Лучших посредников главного имени — на те имена, где их не пробовали.
-    /// </summary>
-    /// <remarks>
-    /// Посредники каталога пробуются на каждом имени и так, а адрес, который
-    /// посредник отдал сейчас одному имени, другим не предлагался: без
-    /// дозамера сайт достался бы тому, кого просто чаще спрашивали.
-    /// </remarks>
-    private static async Task<List<(string Host, PinProbe Probe)>> FillAsync(
-        IReadOnlyList<PinPick> picks,
-        string? main,
-        IProgress<(string Host, PinProbe Probe)>? probes,
-        CancellationToken cancellationToken)
-    {
-        var usable = picks
-            .SelectMany(p => All(p).Where(probe => probe.Usable).Select(probe => (p.Host, Probe: probe)))
-            .ToList();
-
-        var onMain = usable.Where(x => string.Equals(x.Host, main, StringComparison.OrdinalIgnoreCase)).ToList();
-
-        var contenders = (onMain.Count > 0 ? onMain : usable)
-            .Where(x => x.Probe.Candidate.Source != PinSource.Honest)
-            .OrderBy(x => x.Probe.Rank)
-            .Select(x => x.Probe.Candidate)
-            .DistinctBy(c => c.Address)
-            .Take(SiteContenders)
-            .ToList();
-
-        var work = picks
-            .SelectMany(p => contenders
-                .Where(c => All(p).All(probe => probe.Candidate.Address != c.Address))
-                .Select(c => (p.Host, Candidate: c)))
-            .ToList();
-
-        using var slots = new SemaphoreSlim(8);
-
-        return [.. await Task.WhenAll(work.Select(async item =>
-        {
-            await slots.WaitAsync(cancellationToken);
-
-            try
-            {
-                var probe = await ProbeAsync(item.Candidate, item.Host, cancellationToken);
-                probes?.Report((item.Host, probe));
-                return (item.Host, probe);
-            }
-            finally
-            {
-                slots.Release();
-            }
-        }))];
-    }
 
     /// <summary>
     /// Один сайт — один адрес: все имена прибиваются туда же, куда главное.
@@ -307,49 +332,6 @@ public static class PinPicker
         static string Tail(string host) => string.Join('.', host.ToLowerInvariant().Split('.').TakeLast(2));
 
         return Tail(a) == Tail(b);
-    }
-
-    private static async Task<PinPick> PickOneAsync(
-        string host,
-        IReadOnlyList<PinCandidate> known,
-        IReadOnlyList<PinCandidate> pool,
-        List<PinCandidate> proven,
-        HttpClient http,
-        IProgress<(string Host, PinProbe Probe)>? probes,
-        CancellationToken cancellationToken)
-    {
-        var tried = new List<PinProbe>();
-
-        var honest = (await DohResolver.CandidatesAsync(host, http, cancellationToken))
-            .Select(a => new PinCandidate(a, PinSource.Honest, "честный резолвер"));
-
-        // Все кандидаты разом — и посредники тоже, даже когда сайт ответил
-        // по настоящему адресу. Прежде посредники пробовались, только если
-        // настоящий не ответил, и владелец 28.09 не нашёл в таблице
-        // 87.228.47.204 для Claude: claude.ai по настоящему адресу отвечает
-        // 302, до посредников очередь не дошла. А «ответил» у настоящего
-        // адреса ещё не значит «работает»: API того же Claude по нему даёт
-        // отказ по стране. Выбирать — человеку, и видеть он должен всех.
-        PinCandidate[] helpers;
-
-        lock (proven)
-            helpers = [.. proven];
-
-        tried.AddRange(await ProbeAllAsync(
-            host, Distinct(honest.Concat(known).Concat(helpers).Concat(pool)), probes, cancellationToken));
-
-        var chosen = tried.Where(p => p.Usable).OrderBy(p => p.Rank).FirstOrDefault();
-
-        if (chosen?.Candidate.Source is PinSource.Pool or PinSource.Catalog)
-        {
-            lock (proven)
-            {
-                if (proven.All(c => c.Address != chosen.Candidate.Address))
-                    proven.Insert(0, chosen.Candidate);
-            }
-        }
-
-        return new PinPick(host, chosen, tried.Where(p => p != chosen).OrderBy(p => p.Rank).ToList());
     }
 
     /// <summary>
@@ -440,9 +422,10 @@ public static class PinPicker
         string host,
         IReadOnlyList<PinCandidate> candidates,
         IProgress<(string Host, PinProbe Probe)>? probes,
+        int parallel,
         CancellationToken cancellationToken)
     {
-        using var slots = new SemaphoreSlim(8);
+        using var slots = new SemaphoreSlim(parallel);
 
         return await Task.WhenAll(candidates.Select(async candidate =>
         {

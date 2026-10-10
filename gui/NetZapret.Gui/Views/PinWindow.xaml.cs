@@ -692,8 +692,15 @@ public partial class PinWindow : Window
         // Что посредники отдают этим именам сейчас. Снимок каталога стареет:
         // 28.09 он знал у XBOX DNS только мёртвые .195 и .204, а живые .201
         // и .203 владелец нашёл в чужом GUI (IntermediaryDns).
+        //
+        // Только для главного имени: прочие имена пробуются лишь на лучших
+        // адресах главного (PinPicker.PickAsync), и ответы посредников им
+        // ни к чему, а вопрос пяти серверам на каждое из 48 имён Claude —
+        // 240 запросов.
+        var main = zones.FirstOrDefault() ?? names[0];
+
         Status.Text = "Спрашиваю у XBOX DNS, Comss, AstraCat и GeoHide, какие адреса они отдают сейчас…";
-        var live = await IntermediaryDns.AskManyAsync(names, CancellationToken.None);
+        var live = await IntermediaryDns.AskManyAsync([main], CancellationToken.None);
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
         // который едет с программой: без Zapret остался бы только второй.
@@ -704,7 +711,7 @@ public partial class PinWindow : Window
             progress,
             CancellationToken.None,
             probes,
-            _target.Zones.FirstOrDefault()?.TrimStart('*', '.'));
+            main);
 
         // Итог: выбранный подбором — первым и отмеченным, остальные —
         // в порядке, в каком подбор их оценил, последней — «не прибивать».
