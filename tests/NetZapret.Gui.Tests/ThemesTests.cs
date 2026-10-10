@@ -134,6 +134,11 @@ public sealed class ThemesTests
         {
             var child = VisualTreeHelper.GetChild(root, i);
 
+            // Скрытое не в счёт: в шаблоне кнопки с 10.10 стоят значок
+            // и стрелка меню (ButtonGlyph), свёрнутые, пока их не задали.
+            if (child is UIElement { Visibility: not Visibility.Visible })
+                continue;
+
             if (child is T found)
                 return found;
 

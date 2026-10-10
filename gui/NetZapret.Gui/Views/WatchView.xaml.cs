@@ -96,6 +96,12 @@ public partial class WatchView : UserControl
     private const int MenuItems = 15;
     private const int TopItems = 5;
 
+    /// <summary>
+    /// «Сайтов» в правой колонке широкого окна — с запасом: рисуется столько,
+    /// сколько влезло по высоте (FitStack), на высоком окне больше пяти.
+    /// </summary>
+    private const int SiteItemsWide = 15;
+
     /// <summary>Правая колонка уходит под таблицу, когда раздел уже этого.</summary>
     private const double NarrowBelow = 1100;
 
@@ -191,7 +197,7 @@ public partial class WatchView : UserControl
             ShowSide();
             ShowCounters();
 
-            PowerButton.Content = _watch is null ? "Начать" : "Остановить";
+            ShowPower(_watch is not null);
             Say(_watch is null ? _note : null);
 
             _flush.Start();
@@ -238,12 +244,19 @@ public partial class WatchView : UserControl
         Status.Visibility = string.IsNullOrEmpty(text) ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    /// <summary>Подпись и значок кнопки по тому, идёт ли наблюдение.</summary>
+    private void ShowPower(bool running)
+    {
+        PowerButton.Content = running ? "Остановить" : "Начать";
+        ButtonGlyph.SetLead(PowerButton, running ? Glyph.Stop : Glyph.Play);
+    }
+
     private void OnPower(object sender, RoutedEventArgs e)
     {
         if (_watch is not null)
         {
             StopSession();
-            PowerButton.Content = "Начать";
+            ShowPower(false);
             ShowCounters();
             return;
         }
@@ -272,7 +285,7 @@ public partial class WatchView : UserControl
             _work = new CancellationTokenSource();
             _ = ReadAsync(_watch, _work.Token);
 
-            PowerButton.Content = "Остановить";
+            ShowPower(true);
             // Строкой под кнопками это отъедало у таблицы высоту — в подсказку.
             Say(null);
             ClockText.ToolTip = $"Правил {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
@@ -383,7 +396,7 @@ public partial class WatchView : UserControl
 
             if (_open is { } view)
             {
-                view.PowerButton.Content = "Начать";
+                view.ShowPower(false);
                 view.Say(_note);
                 view.ShowCounters();
             }
@@ -527,7 +540,7 @@ public partial class WatchView : UserControl
         {
             routes = new(_perRoute);
             programs = [.. _perProcess.OrderByDescending(p => p.Value).Take(TopItems)];
-            sites = [.. _perSite.OrderByDescending(p => p.Value).Take(TopItems)];
+            sites = [.. _perSite.OrderByDescending(p => p.Value).Take(_narrow ? TopItems : SiteItemsWide)];
         }
 
         int total = routes.Values.Sum();
@@ -594,18 +607,19 @@ public partial class WatchView : UserControl
         // кнопкой «Сводка»: открытая отнимала у таблицы всё, кроме трёх
         // строк (сборка 9), а прокрутка страницы, которой это лечилось
         // в сборке 10, заставляла мотать везде (владелец 10.10).
+        bool changed = _narrow != narrow;
         _narrow = narrow;
         SummaryButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
         ShowSummary();
 
-        SideColumn.Width = new GridLength(narrow ? 0 : 300);
+        SideColumn.Width = new GridLength(narrow ? 0 : 330);
         SideRow.Height = narrow ? GridLength.Auto : new GridLength(0);
 
         Grid.SetColumn(SideHost, narrow ? 0 : 1);
         Grid.SetRow(SideHost, narrow ? 1 : 0);
         SideHost.Margin = narrow ? new Thickness(0, 12, 0, 0) : new Thickness(16, 0, 0, 0);
 
-        if (_track != (narrow ? 36 : 70))
+        if (changed || _track != (narrow ? 36 : 70))
         {
             _track = narrow ? 36 : 70;
             ShowSide();
@@ -616,14 +630,10 @@ public partial class WatchView : UserControl
         SideC1.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
         SideC2.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
 
-        // Кольцо слева от легенды и меньше: строка под таблицей должна быть
-        // низкой, иначе таблице на окне владельца оставалось четыре строки.
-        RingLegendColumn.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
-        RingBox.Width = RingBox.Height = narrow ? 88 : 120;
+        // Кольцо под таблицей меньше: строка сводки должна быть низкой,
+        // иначе таблице на окне владельца оставалось четыре строки.
+        RingBox.Width = RingBox.Height = narrow ? 88 : 116;
         RingCaption.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        Grid.SetRow(RingLegend, narrow ? 1 : 2);
-        Grid.SetColumn(RingLegend, narrow ? 1 : 0);
-        RingLegend.Margin = narrow ? new Thickness(12, 0, 0, 0) : new Thickness(0, 12, 0, 0);
 
         Place(RingCard, narrow ? 0 : 0, narrow ? 0 : 0, narrow ? new Thickness(0, 0, 8, 0) : new Thickness(0, 0, 0, 12));
         Place(ProgramsCard, narrow ? 0 : 1, narrow ? 1 : 0, narrow ? new Thickness(4, 0, 4, 0) : new Thickness(0, 0, 0, 12));
@@ -740,13 +750,36 @@ public partial class WatchView : UserControl
 
     private static MenuItem MenuEntry(string glyph, string text, Action act)
     {
-        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
-        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
-
-        var item = new MenuItem { Header = text, Icon = icon };
+        var item = new MenuItem { Header = text, Icon = MenuGlyph(glyph) };
         item.Click += (_, _) => act();
 
         return item;
+    }
+
+    private static TextBlock MenuGlyph(string glyph)
+    {
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        return icon;
+    }
+
+    /// <summary>
+    /// Знаки IconFont раздела. Проверены снимком 10.10 (Segoe Fluent Icons);
+    /// «Маршрут», «VPN» и «Десинк» — те же, что у пунктов бокового меню.
+    /// </summary>
+    private static class Glyph
+    {
+        public const string Play = "\uE768";
+        public const string Stop = "\uE71A";
+        public const string Search = "\uE721";
+        public const string Info = "\uE946";
+        public const string Route = "\uE816";
+        public const string Vpn = "\uE774";
+        public const string Desync = "\uE9E9";
+        public const string Direct = "\uE72A";
+        public const string Copy = "\uE8C8";
+        public const string Filter = "\uE71C";
     }
 
     private void PickRunning()
@@ -790,11 +823,11 @@ public partial class WatchView : UserControl
 
         if (outside)
         {
-            menu.Items.Add(MenuEntry("", entry.Host is null ? "Проверить этот адрес" : "Проверить это имя",
+            menu.Items.Add(MenuEntry(Glyph.Search, entry.Host is null ? "Проверить этот адрес" : "Проверить это имя",
                 () => _ = CheckAsync(entry)));
         }
 
-        menu.Items.Add(MenuEntry("", "Почему так", () => _ = WhyAsync(target)));
+        menu.Items.Add(MenuEntry(Glyph.Info, "Почему так", () => _ = WhyAsync(target)));
 
         if (outside && entry.Rule != WatchEntry.FakeRule)
         {
@@ -802,20 +835,20 @@ public partial class WatchView : UserControl
                 ? (MatchKind.Domain, "*." + WatchEntry.SiteOf(host), WatchEntry.SiteOf(host))
                 : (MatchKind.Ip, entry.Ip, entry.Ip);
 
-            var add = new MenuItem { Header = $"Добавить маршрут для {shown}" };
-            add.Items.Add(MenuEntry(string.Empty, "через VPN", () => AddRoute(kind, value, shown, RoutingMode.Proxy)));
-            add.Items.Add(MenuEntry(string.Empty, "десинк", () => AddRoute(kind, value, shown, RoutingMode.Desync)));
-            add.Items.Add(MenuEntry(string.Empty, "напрямую", () => AddRoute(kind, value, shown, RoutingMode.Direct)));
+            var add = new MenuItem { Header = $"Добавить маршрут для {shown}", Icon = MenuGlyph(Glyph.Route) };
+            add.Items.Add(MenuEntry(Glyph.Vpn, "через VPN", () => AddRoute(kind, value, shown, RoutingMode.Proxy)));
+            add.Items.Add(MenuEntry(Glyph.Desync, "десинк", () => AddRoute(kind, value, shown, RoutingMode.Desync)));
+            add.Items.Add(MenuEntry(Glyph.Direct, "напрямую", () => AddRoute(kind, value, shown, RoutingMode.Direct)));
             menu.Items.Add(add);
         }
 
         menu.Items.Add(new Separator());
 
         if (entry.Host is { } name)
-            menu.Items.Add(MenuEntry("", "Скопировать имя", () => CopyText(name)));
+            menu.Items.Add(MenuEntry(Glyph.Copy, "Скопировать имя", () => CopyText(name)));
 
-        menu.Items.Add(MenuEntry("", "Скопировать адрес", () => CopyText(entry.Ip)));
-        menu.Items.Add(MenuEntry("", $"Показать только {entry.Process}", () => Filter(() => _process = entry.Process)));
+        menu.Items.Add(MenuEntry(Glyph.Copy, "Скопировать адрес", () => CopyText(entry.Ip)));
+        menu.Items.Add(MenuEntry(Glyph.Filter, $"Показать только {entry.Process}", () => Filter(() => _process = entry.Process)));
 
         menu.IsOpen = true;
     }

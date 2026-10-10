@@ -50,6 +50,42 @@
     </Style>
 
     <!--
+        Стрелка сворачивания — фигурой, а не знаком шрифта.
+
+        Знаками она была, и это оказалось ошибкой, которую видно глазом.
+        Замер 20.09: «▸» U+25B8 и «▾» U+25BE, которыми рисовали маршруты
+        и хосты, в Segoe UI отсутствуют — Windows подменяла их чужим
+        шрифтом. «►» U+25BA и «▼» U+25BC, которыми рисовали подписки,
+        в нём свои. Один и тот же жест выходил на двух вкладках разной
+        гарнитурой: разный размер, разный вес, разная высота над строкой.
+        Владелец назвал это «стрелочки кривые», и был прав.
+
+        Фигура ни от какого шрифта не зависит. Одна на все разделы: две
+        копии разошлись бы при первой же правке — так уже вышло с парами
+        «▸/▾» в маршрутах и «►/▼» в подписках.
+
+        Повёрнута поворотом, а не второй фигурой: угол легко связать
+        с состоянием, а две фигуры пришлось бы держать в согласии руками.
+
+        Стоит раньше кнопки: её шаблон рисует этой же фигурой стрелку меню
+        (ButtonGlyph.Menu), а ключ словаря виден только ниже своего места.
+    -->
+    <Style x:Key="Chevron" TargetType="Path">
+        <Setter Property="Data" Value="M 0,0 L 5,4 L 0,8 Z" />
+        <Setter Property="Fill" Value="{DynamicResource Muted}" />
+        <Setter Property="Width" Value="5" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="Stretch" Value="Fill" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <RotateTransform Angle="0" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         Кнопка. Шаблон переопределён целиком: у стандартной внутри своя
         подложка, которая на тёмном фоне остаётся светлой при наведении.
     -->
@@ -92,7 +128,33 @@
                             пина, и тот показывался строкой
                             «System.Windows.Shapes.Path» (CaptionSelector).
                         -->
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <!--
+                            Значок слева и стрелка меню справа (ButtonGlyph) —
+                            по умолчанию скрыты. Сетка, а не StackPanel: подпись
+                            в средней колонке меряется по ширине кнопки и умеет
+                            переноситься, в StackPanel ширина была бы бесконечной.
+                        -->
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock x:Name="LeadGlyph" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
+                                       FontFamily="{DynamicResource IconFont}" FontSize="14"
+                                       Text="{TemplateBinding local:ButtonGlyph.Lead}"
+                                       Foreground="{TemplateBinding Foreground}" />
+
+                            <Path x:Name="MenuArrow" Grid.Column="2" Style="{StaticResource Chevron}"
+                                  Fill="{TemplateBinding Foreground}" Opacity="0.75" Margin="10,1,0,0"
+                                  Visibility="Collapsed">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="90" />
+                                </Path.RenderTransform>
+                            </Path>
+
+                        <ContentPresenter Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <ContentPresenter.ContentTemplateSelector>
                                 <local:CaptionSelector>
                                     <local:CaptionSelector.Text>
@@ -111,8 +173,15 @@
                                 </local:CaptionSelector>
                             </ContentPresenter.ContentTemplateSelector>
                         </ContentPresenter>
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="local:ButtonGlyph.Lead" Value="">
+                            <Setter TargetName="LeadGlyph" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="local:ButtonGlyph.Menu" Value="True">
+                            <Setter TargetName="MenuArrow" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
                         </Trigger>
@@ -486,39 +555,6 @@
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        Стрелка сворачивания — фигурой, а не знаком шрифта.
-
-        Знаками она была, и это оказалось ошибкой, которую видно глазом.
-        Замер 20.09: «▸» U+25B8 и «▾» U+25BE, которыми рисовали маршруты
-        и хосты, в Segoe UI отсутствуют — Windows подменяла их чужим
-        шрифтом. «►» U+25BA и «▼» U+25BC, которыми рисовали подписки,
-        в нём свои. Один и тот же жест выходил на двух вкладках разной
-        гарнитурой: разный размер, разный вес, разная высота над строкой.
-        Владелец назвал это «стрелочки кривые», и был прав.
-
-        Фигура ни от какого шрифта не зависит. Одна на все разделы: две
-        копии разошлись бы при первой же правке — так уже вышло с парами
-        «▸/▾» в маршрутах и «►/▼» в подписках.
-
-        Повёрнута поворотом, а не второй фигурой: угол легко связать
-        с состоянием, а две фигуры пришлось бы держать в согласии руками.
-    -->
-    <Style x:Key="Chevron" TargetType="Path">
-        <Setter Property="Data" Value="M 0,0 L 5,4 L 0,8 Z" />
-        <Setter Property="Fill" Value="{DynamicResource Muted}" />
-        <Setter Property="Width" Value="5" />
-        <Setter Property="Height" Value="8" />
-        <Setter Property="Stretch" Value="Fill" />
-        <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-        <Setter Property="RenderTransform">
-            <Setter.Value>
-                <RotateTransform Angle="0" />
             </Setter.Value>
         </Setter>
     </Style>

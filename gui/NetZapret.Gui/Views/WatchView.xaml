@@ -23,6 +23,22 @@
                 <TextBlock Grid.Column="2" Text="{Binding Count}" HorizontalAlignment="Right" />
             </Grid>
         </DataTemplate>
+
+        <!-- Значок счётчика — акцентом, как на макете владельца 10.10. -->
+        <Style x:Key="StatGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource IconFont}" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="2,0,12,0" />
+        </Style>
+
+        <!-- Число счётчика: на узком окне плитка в полторы сотни точек. -->
+        <Style x:Key="StatNumber" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
     </UserControl.Resources>
 
     <!--
@@ -39,34 +55,49 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
-            <TextBlock Text="Наблюдение" Style="{StaticResource Title}" />
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Наблюдение" Style="{StaticResource Title}" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="4,2,0,0"
+                                Content="Источник — события ядра Windows (ETW): каждое новое соединение и программа, которая его открыла.&#x0a;&#x0a;«Куда» — что сказали бы правила для этого имени или адреса. Точно известно только про подставные адреса движка, сам движок и домашнюю сеть — это залитый кружок.&#x0a;&#x0a;Всё, и прямое тоже, пишется в runtime\watch.log и едет в отчёт." />
+            </StackPanel>
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Соединения по мере появления и правило, которое к каждому применилось бы. Ничего не меняет — только смотрит." />
 
-            <!-- WrapPanel: на узком окне лишнее уходит на вторую строку, а не за край. -->
+            <!--
+                WrapPanel: на узком окне лишнее уходит на вторую строку, а не за край.
+                Отступ кнопок 14, а не 18: со значками ряд на окне владельца
+                (1536 точек) выходил на две точки шире, и «Открыть журнал»
+                уходила второй строкой — та отнимала у таблицы 46 точек высоты.
+            -->
             <WrapPanel Margin="0,16,0,-8">
-                <Button x:Name="PowerButton" Style="{StaticResource Primary}"
-                        Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,8" />
-                <Button x:Name="ProcessButton" Style="{StaticResource Ghost}" MinWidth="150"
-                        Content="Программа: все" Click="OnProcessMenu" Margin="0,0,8,8"
+                <WrapPanel.Resources>
+                    <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
+                        <Setter Property="Padding" Value="14,9" />
+                    </Style>
+                </WrapPanel.Resources>
+                <Button x:Name="PowerButton" Style="{StaticResource Primary}" Padding="18,9"
+                        Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,8"
+                        gui:ButtonGlyph.Lead="&#xE768;" />
+                <Button x:Name="ProcessButton" MinWidth="150"
+                        Content="Программа: все" Click="OnProcessMenu" Margin="0,0,8,8" gui:ButtonGlyph.Menu="True"
                         ToolTip="Показывать соединения одной программы" />
-                <Button x:Name="RouteButton" Style="{StaticResource Ghost}" MinWidth="110"
-                        Content="Куда: все" Click="OnRouteMenu" Margin="0,0,8,8" />
-                <Button x:Name="RuleButton" Style="{StaticResource Ghost}" MinWidth="120"
-                        Content="Правило: все" Click="OnRuleMenu" Margin="0,0,8,8" />
-                <Button x:Name="ClearButton" Style="{StaticResource Ghost}"
-                        Content="Очистить" Click="OnClear" Margin="0,0,8,8" />
-                <Button x:Name="CopyHostsButton" Style="{StaticResource Ghost}"
-                        Content="Скопировать домены" Click="OnCopyHosts" Margin="0,0,8,8"
+                <Button x:Name="RouteButton" MinWidth="110"
+                        Content="Куда: все" Click="OnRouteMenu" Margin="0,0,8,8" gui:ButtonGlyph.Menu="True" />
+                <Button x:Name="RuleButton" MinWidth="120"
+                        Content="Правило: все" Click="OnRuleMenu" Margin="0,0,8,8" gui:ButtonGlyph.Menu="True" />
+                <Button x:Name="ClearButton"
+                        Content="Очистить" Click="OnClear" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE74D;" />
+                <Button x:Name="CopyHostsButton"
+                        Content="Скопировать домены" Click="OnCopyHosts" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE8C8;"
                         ToolTip="Все узнанные имена по нынешнему отбору — по строке, без повторов. Локальное и соединения движка не берутся." />
-                <Button x:Name="CopyAddressesButton" Style="{StaticResource Ghost}"
-                        Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8"
+                <Button x:Name="CopyAddressesButton"
+                        Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE8C8;"
                         ToolTip="Все адреса по нынешнему отбору — по строке, без повторов. Без локальных, соединений движка и его подставных адресов." />
-                <Button x:Name="SummaryButton" Style="{StaticResource Ghost}" Visibility="Collapsed"
-                        Content="Сводка" Click="OnSummary" Margin="0,0,8,8"
+                <Button x:Name="SummaryButton" Visibility="Collapsed"
+                        Content="Сводка" Click="OnSummary" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xEB05;"
                         ToolTip="Кольцо долей, кто шумит и сайты — на узком окне скрыты, чтобы таблице хватило места" />
-                <Button x:Name="JournalButton" Style="{StaticResource Ghost}"
-                        Content="Открыть журнал" Click="OnJournal" Margin="0,0,8,8"
+                <Button x:Name="JournalButton"
+                        Content="Открыть журнал" Click="OnJournal" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE8FD;"
                         ToolTip="runtime\watch.log — каждое соединение всех сеансов, и прямое тоже" />
             </WrapPanel>
         </StackPanel>
@@ -101,7 +132,7 @@
         <Grid Grid.Row="2" x:Name="Body" Margin="0,16,0,0" SizeChanged="OnBodySize">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="SideColumn" Width="300" />
+                <ColumnDefinition x:Name="SideColumn" Width="330" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="MainRow" Height="*" />
@@ -117,40 +148,84 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <TextBox Grid.Row="0" x:Name="Search" TextChanged="OnSearch"
-                         gui:Hint.Text="Поиск по имени, адресу, программе, правилу" />
+                <!--
+                    Лупа поверх поля. Отступ слева 17: шаблон поля складывает
+                    Padding дважды (см. Hint.cs), и текст с подсказкой встают
+                    на 37,5 — сразу за лупой.
+                -->
+                <Grid Grid.Row="0">
+                    <TextBox x:Name="Search" TextChanged="OnSearch" Padding="17,7,11,7"
+                             gui:Hint.Text="Поиск по имени, адресу, программе, правилу" />
+                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" FontSize="14"
+                               HorizontalAlignment="Left" Margin="14,0,0,0" IsHitTestVisible="False" />
+                </Grid>
 
                 <!-- Счётчики: имён и адресов рядом — разрыв выдаёт браузер со своим DoH. -->
                 <UniformGrid Grid.Row="1" Rows="1" Margin="0,12,0,0">
                     <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
-                        <StackPanel>
-                            <TextBlock x:Name="TotalText" Text="0" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock Text="соединений" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE8AB;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="TotalText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="соединений" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
-                        <StackPanel>
-                            <TextBlock x:Name="MatchedText" Text="0" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock Text="под правило" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE816;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="MatchedText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="под правило" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
-                        <StackPanel>
-                            <TextBlock x:Name="NamesText" Text="0" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock Text="имён узнано" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE8EC;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="NamesText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="имён узнано" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
-                        <StackPanel>
-                            <TextBlock x:Name="AddressesText" Text="0" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock Text="адресов" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE968;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="AddressesText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="адресов" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                     <Border Style="{StaticResource Card}" Padding="14,10">
-                        <StackPanel>
-                            <TextBlock x:Name="ClockText" Text="—" FontSize="20" FontWeight="SemiBold" />
-                            <TextBlock x:Name="ClockCaption" Text="выключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE916;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="ClockText" Text="—" Style="{StaticResource StatNumber}" />
+                                <TextBlock x:Name="ClockCaption" Text="выключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
                 </UniformGrid>
 
@@ -232,13 +307,19 @@
                            Text="● — известно точно: подставной адрес движка, сам движок, домашняя сеть · ○ — так сказали бы правила, движок не спрашивали" />
             </Grid>
 
-            <!-- Правая колонка; на узком окне — строкой под таблицей (OnBodySize). -->
-            <ScrollViewer x:Name="SideHost" Grid.Column="1" Grid.Row="0" Margin="16,0,0,0" Style="{StaticResource PageScroll}">
+            <!--
+                Правая колонка; на узком окне — строкой под таблицей (OnBodySize).
+                Без прокрутки: «Сайты» забирают остаток высоты и показывают
+                столько строк, сколько влезло целиком (FitStack). В сборке 11
+                колонка на развёрнутом окне владельца не влезала на ~30 точек
+                и прокручивалась своей полосой.
+            -->
+            <Border x:Name="SideHost" Grid.Column="1" Grid.Row="0" Margin="16,0,0,0">
             <Grid x:Name="Side">
                 <Grid.RowDefinitions>
                     <RowDefinition x:Name="SideR0" Height="Auto" />
                     <RowDefinition x:Name="SideR1" Height="Auto" />
-                    <RowDefinition x:Name="SideR2" Height="Auto" />
+                    <RowDefinition x:Name="SideR2" Height="*" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="SideC0" Width="*" />
@@ -247,27 +328,34 @@
                 </Grid.ColumnDefinitions>
 
                 <Border x:Name="RingCard" Style="{StaticResource Card}" Margin="0,0,0,12">
-                    <!-- На узком окне кольцо встаёт слева от легенды, а не над ней (OnBodySize). -->
+                    <!--
+                        Легенда справа от кольца, и на широком окне тоже: под
+                        кольцом она отнимала у «Сайтов» ~120 точек высоты —
+                        на окне владельца (сборка 11) им оставалась строка-две.
+                    -->
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition x:Name="RingLegendColumn" Width="0" />
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Text="Куда уходит" FontWeight="SemiBold" Margin="0,0,0,10" Grid.ColumnSpan="2" />
-                        <Grid x:Name="RingBox" Grid.Row="1" Width="120" Height="120" HorizontalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10" Grid.ColumnSpan="2">
+                            <TextBlock Text="Куда уходит" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Доли всех соединений сеанса по пути. Локально — домашняя сеть и мультикаст, движок — соединения самого sing-box: к серверу VPN, к DNS.&#x0a;&#x0a;Щелчок по строке — показать в таблице только её." />
+                        </StackPanel>
+                        <Grid x:Name="RingBox" Grid.Row="1" Width="116" Height="116" VerticalAlignment="Center">
                             <views:WatchRing x:Name="Ring" />
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <TextBlock x:Name="RingTotal" Text="0" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                 <TextBlock x:Name="RingCaption" Text="соединений" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
                             </StackPanel>
                         </Grid>
-                        <ItemsControl x:Name="RingLegend" Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Center">
+                        <ItemsControl x:Name="RingLegend" Grid.Row="1" Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid Margin="0,2" Cursor="Hand" Background="Transparent"
@@ -276,7 +364,7 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="34" />
+                                            <ColumnDefinition Width="32" />
                                         </Grid.ColumnDefinitions>
                                         <Ellipse Width="9" Height="9" Fill="{Binding Brush}" Margin="0,0,8,0" VerticalAlignment="Center" />
                                         <TextBlock Grid.Column="1" Text="{Binding Word}" />
@@ -291,20 +379,48 @@
                 </Border>
 
                 <Border x:Name="ProgramsCard" Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
-                    <StackPanel>
-                        <TextBlock Text="Шумят больше всех" FontWeight="SemiBold" Margin="0,0,0,8" />
-                        <ItemsControl x:Name="TopPrograms" ItemTemplate="{StaticResource WatchTopLine}" />
-                    </StackPanel>
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Шумят больше всех" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Программы с наибольшим числом соединений за сеанс.&#x0a;&#x0a;Щелчок — показать в таблице только эту программу." />
+                        </StackPanel>
+                        <ItemsControl x:Name="TopPrograms" Grid.Row="1" ItemTemplate="{StaticResource WatchTopLine}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <gui:FitStack />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
                 </Border>
 
-                <Border x:Name="SitesCard" Grid.Row="2" Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Text="Сайты" FontWeight="SemiBold" Margin="0,0,0,8" />
-                        <ItemsControl x:Name="TopSites" ItemTemplate="{StaticResource WatchTopLine}" />
-                    </StackPanel>
+                <Border x:Name="SitesCard" Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Сайты" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Сайты по числу соединений: имена сведены к сайту — www.youtube.com и m.youtube.com считаются вместе. Строк столько, сколько влезает по высоте.&#x0a;&#x0a;Щелчок — найти сайт в таблице." />
+                        </StackPanel>
+                        <ItemsControl x:Name="TopSites" Grid.Row="1" ItemTemplate="{StaticResource WatchTopLine}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <gui:FitStack />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
                 </Border>
             </Grid>
-            </ScrollViewer>
+            </Border>
         </Grid>
     </Grid>
 
