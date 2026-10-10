@@ -273,7 +273,9 @@ public partial class WatchView : UserControl
             _ = ReadAsync(_watch, _work.Token);
 
             PowerButton.Content = "Остановить";
-            Say($"Смотрю: правил {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.");
+            // Строкой под кнопками это отъедало у таблицы высоту — в подсказку.
+            Say(null);
+            ClockText.ToolTip = $"Правил {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
         }
         catch (Exception ex)
         {
@@ -586,16 +588,15 @@ public partial class WatchView : UserControl
     /// </remarks>
     private void OnBodySize(object sender, SizeChangedEventArgs e)
     {
-        bool narrow = BodyScroll.ActualWidth < NarrowBelow;
+        bool narrow = Body.ActualWidth < NarrowBelow;
 
-        // Широкое окно — Body ровно по высоте, таблица забирает остаток.
-        // Узкое — таблица высокая, сводка ниже и докручивается: прежде
-        // таблице на окне владельца оставалось три строки (10.10, сборка 9).
-        Body.Height = narrow ? double.NaN : BodyScroll.ActualHeight;
-        Body.Margin = narrow ? new Thickness(0, 0, 14, 0) : new Thickness(0);
-        MainRow.Height = narrow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
-        TableRow.Height = narrow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
-        TableCard.Height = narrow ? Math.Max(360, BodyScroll.ActualHeight - 150) : double.NaN;
+        // Узкое окно — сводка под таблицей, но скрыта, пока не попросят
+        // кнопкой «Сводка»: открытая отнимала у таблицы всё, кроме трёх
+        // строк (сборка 9), а прокрутка страницы, которой это лечилось
+        // в сборке 10, заставляла мотать везде (владелец 10.10).
+        _narrow = narrow;
+        SummaryButton.Visibility = narrow ? Visibility.Visible : Visibility.Collapsed;
+        ShowSummary();
 
         SideColumn.Width = new GridLength(narrow ? 0 : 300);
         SideRow.Height = narrow ? GridLength.Auto : new GridLength(0);
@@ -618,7 +619,7 @@ public partial class WatchView : UserControl
         // Кольцо слева от легенды и меньше: строка под таблицей должна быть
         // низкой, иначе таблице на окне владельца оставалось четыре строки.
         RingLegendColumn.Width = narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
-        RingBox.Width = RingBox.Height = narrow ? 88 : 150;
+        RingBox.Width = RingBox.Height = narrow ? 88 : 120;
         RingCaption.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
         Grid.SetRow(RingLegend, narrow ? 1 : 2);
         Grid.SetColumn(RingLegend, narrow ? 1 : 0);
@@ -627,6 +628,23 @@ public partial class WatchView : UserControl
         Place(RingCard, narrow ? 0 : 0, narrow ? 0 : 0, narrow ? new Thickness(0, 0, 8, 0) : new Thickness(0, 0, 0, 12));
         Place(ProgramsCard, narrow ? 0 : 1, narrow ? 1 : 0, narrow ? new Thickness(4, 0, 4, 0) : new Thickness(0, 0, 0, 12));
         Place(SitesCard, narrow ? 0 : 2, narrow ? 2 : 0, narrow ? new Thickness(8, 0, 0, 0) : new Thickness(0));
+    }
+
+    /// <summary>Открыта ли сводка на узком окне — помнится между заходами.</summary>
+    private static bool _summaryOpen;
+
+    private bool _narrow;
+
+    private void ShowSummary()
+    {
+        SideHost.Visibility = !_narrow || _summaryOpen ? Visibility.Visible : Visibility.Collapsed;
+        Mark(SummaryButton, _summaryOpen ? "Скрыть сводку" : "Сводка", _summaryOpen);
+    }
+
+    private void OnSummary(object sender, RoutedEventArgs e)
+    {
+        _summaryOpen = !_summaryOpen;
+        ShowSummary();
     }
 
     private static void Place(FrameworkElement card, int row, int column, Thickness margin)

@@ -7,7 +7,7 @@
     <UserControl.Resources>
         <!-- Строка «кто шумит»: имя, полоска длины по числу, число; щелчок — отбор. -->
         <DataTemplate x:Key="WatchTopLine">
-            <Grid Margin="0,3" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="OnTopClick"
+            <Grid Margin="0,2" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="OnTopClick"
                   ToolTip="{Binding Hint}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -62,6 +62,9 @@
                 <Button x:Name="CopyAddressesButton" Style="{StaticResource Ghost}"
                         Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8"
                         ToolTip="Все адреса по нынешнему отбору — по строке, без повторов. Без локальных, соединений движка и его подставных адресов." />
+                <Button x:Name="SummaryButton" Style="{StaticResource Ghost}" Visibility="Collapsed"
+                        Content="Сводка" Click="OnSummary" Margin="0,0,8,8"
+                        ToolTip="Кольцо долей, кто шумит и сайты — на узком окне скрыты, чтобы таблице хватило места" />
                 <Button x:Name="JournalButton" Style="{StaticResource Ghost}"
                         Content="Открыть журнал" Click="OnJournal" Margin="0,0,8,8"
                         ToolTip="runtime\watch.log — каждое соединение всех сеансов, и прямое тоже" />
@@ -91,12 +94,11 @@
         </StackPanel>
 
         <!--
-            Прокрутка — для узкого окна: там сводка встаёт под таблицу, и без
-            прокрутки таблице оставалось три строки (снимок владельца 10.10,
-            сборка 9). На широком Body ровно по высоте и не прокручивается.
+            Без прокрутки страницы: 10.10 владелец — «теперь везде нужно мотать
+            страницу». На узком окне сводка скрыта и открывается кнопкой
+            «Сводка» (OnBodySize), иначе таблице оставалось три строки.
         -->
-        <ScrollViewer Grid.Row="2" x:Name="BodyScroll" Margin="0,16,0,0" Style="{StaticResource PageScroll}" SizeChanged="OnBodySize">
-        <Grid x:Name="Body">
+        <Grid Grid.Row="2" x:Name="Body" Margin="0,16,0,0" SizeChanged="OnBodySize">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition x:Name="SideColumn" Width="300" />
@@ -258,7 +260,7 @@
                         </Grid.ColumnDefinitions>
 
                         <TextBlock Text="Куда уходит" FontWeight="SemiBold" Margin="0,0,0,10" Grid.ColumnSpan="2" />
-                        <Grid x:Name="RingBox" Grid.Row="1" Width="150" Height="150" HorizontalAlignment="Center">
+                        <Grid x:Name="RingBox" Grid.Row="1" Width="120" Height="120" HorizontalAlignment="Center">
                             <views:WatchRing x:Name="Ring" />
                             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <TextBlock x:Name="RingTotal" Text="0" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center" />
@@ -304,7 +306,6 @@
             </Grid>
             </ScrollViewer>
         </Grid>
-        </ScrollViewer>
     </Grid>
 
 </UserControl>
