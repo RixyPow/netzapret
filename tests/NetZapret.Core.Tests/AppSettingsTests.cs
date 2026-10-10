@@ -237,6 +237,18 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Equal("8.8.4.4", new AppSettings().DnsServer);
     }
 
+    /// <summary>
+    /// Выбравший Mullvad переходит на Google: Mullvad убран из резолверов
+    /// 10.10, и без него в списке DoH шёл бы на адрес без имени.
+    /// </summary>
+    [Fact]
+    public void RemovedMullvadMovesToGoogle()
+    {
+        File.WriteAllText(_path, "{ \"DnsServer\": \"194.242.2.2\" }");
+        Assert.Equal("8.8.4.4", AppSettings.Load(_path).DnsServer);
+        Assert.Null(NetZapret.Proxy.DnsSurvey.ByAddress("194.242.2.2"));
+    }
+
     [Fact]
     public void ThemeSurvivesAndDefaultsToDark()
     {

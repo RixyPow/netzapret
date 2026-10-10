@@ -220,6 +220,9 @@ public sealed record AppSettings
     /// <summary>Адрес Google, который работает по DoH и там, где 8.8.8.8 закрыт.</summary>
     public const string GoogleDns = "8.8.4.4";
 
+    /// <summary>Адрес Mullvad, убранного из резолверов 10.10: DoH у владельца не отвечал.</summary>
+    internal const string MullvadDns = "194.242.2.2";
+
     /// <summary>
     /// Выбирать апстрим самому — быстрейший по DoH после каждого обзора.
     /// </summary>
@@ -806,10 +809,14 @@ public sealed record AppSettings
             // сертификатом, а записан он почти у всех потому, что стоял
             // по умолчанию, а не потому, что выбран. Без перевода смена
             // умолчания 27.09 досталась бы только новым установкам.
+            //
+            // Mullvad тоже: его убрали из списка 10.10, и выбравший его
+            // остался бы с DoH на адрес без имени для сертификата — туннель
+            // без имён.
             return PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
-                DnsServer = read.DnsServer == "8.8.8.8" ? GoogleDns : read.DnsServer,
+                DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
             })));
         }
         catch (Exception)

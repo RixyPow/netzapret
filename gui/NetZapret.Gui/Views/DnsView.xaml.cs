@@ -179,8 +179,7 @@ public partial class DnsView : UserControl
     /// Имя DoH для этого годится не всегда: у dns.quad9.net и
     /// common.dot.dns.yandex.net значка нет, он на главном сайте. Неизвестным
     /// и своим — по имени DoH без первой части; нет и его — буква.
-    /// Буква и у XBOX DNS (значок только SVG, окно его не рисует) и у Mullvad
-    /// (сайт напрямую не отвечает) — замер 05.10.
+    /// Буква и у XBOX DNS (значок только SVG, окно его не рисует) — замер 05.10.
     /// </remarks>
     private static string? LogoSite(DnsProvider provider)
     {
@@ -195,7 +194,6 @@ public partial class DnsView : UserControl
         // загрузчик не идёт, и логотипа не было (05.10).
         if (name.StartsWith("OpenDNS", StringComparison.OrdinalIgnoreCase)) return "www.opendns.com";
         if (name.StartsWith("CleanBrowsing", StringComparison.OrdinalIgnoreCase)) return "cleanbrowsing.org";
-        if (name.StartsWith("Mullvad", StringComparison.OrdinalIgnoreCase)) return "mullvad.net";
         if (name.StartsWith("NextDNS", StringComparison.OrdinalIgnoreCase)) return "nextdns.io";
         if (name.StartsWith("ControlD", StringComparison.OrdinalIgnoreCase)) return "controld.com";
         if (name.StartsWith("Alibaba", StringComparison.OrdinalIgnoreCase)) return "alidns.com";
