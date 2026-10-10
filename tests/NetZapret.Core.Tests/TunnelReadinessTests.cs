@@ -62,11 +62,17 @@ public sealed class TunnelReadinessTests
     [Fact]
     public async Task ARefusedHealthInboundIsNotAServerProblem()
     {
-        // Свободный порт: заняли и отпустили — на нём никто не слушает.
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
+        // Порт занят, но не слушается: подключение получает тот же отказ,
+        // что у петли без входа проверки. Прежде порт брали и отпускали,
+        // и 10.10 в общем прогоне его успел занять соседний тест —
+        // «туннель не пропустил соединение» вместо отказа; отдельно тест
+        // проходил 3 из 3. Занятый на весь тест порт другой уже не возьмёт.
+        using var held = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        {
+            ExclusiveAddressUse = true,
+        };
+        held.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        int port = ((IPEndPoint)held.LocalEndPoint!).Port;
 
         var result = await new SpeedTest(new SpeedTestOptions
         {
