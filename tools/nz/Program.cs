@@ -387,7 +387,7 @@ async Task<int> Watch(List<string> options)
     {
         await foreach (var entry in watch.ReadAsync(stop.Token))
         {
-            if (routed && entry.Mode == NetZapret.Core.Rules.RoutingMode.Direct)
+            if (routed && !entry.Routed)
                 continue;
 
             if (process is not null && !string.Equals(entry.Process, process, StringComparison.OrdinalIgnoreCase))

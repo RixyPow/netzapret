@@ -93,7 +93,7 @@ public partial class WatchView : UserControl
 
     private CancellationTokenSource? _work;
     private ConnectionWatch? _watch;
-    private Dictionary<RoutingMode, Brush> _brushes = [];
+    private Dictionary<WatchRoute, Brush> _brushes = [];
 
     /// <summary>Показывать только то, что уходит в туннель или под десинк.</summary>
     private bool _interestingOnly;
@@ -134,11 +134,13 @@ public partial class WatchView : UserControl
             _matchedBase = 0;
 
             // Кисти — здесь, в потоке окна: строки собираются в фоне.
-            _brushes = new Dictionary<RoutingMode, Brush>
+            _brushes = new Dictionary<WatchRoute, Brush>
             {
-                [RoutingMode.Proxy] = (Brush)FindResource("Accent"),
-                [RoutingMode.Desync] = (Brush)FindResource("Warn"),
-                [RoutingMode.Direct] = (Brush)FindResource("Muted"),
+                [WatchRoute.Proxy] = (Brush)FindResource("Accent"),
+                [WatchRoute.Desync] = (Brush)FindResource("Warn"),
+                [WatchRoute.Direct] = (Brush)FindResource("Muted"),
+                [WatchRoute.Local] = (Brush)FindResource("Muted"),
+                [WatchRoute.Engine] = (Brush)FindResource("Muted"),
             };
 
             _work = new CancellationTokenSource();
@@ -172,7 +174,7 @@ public partial class WatchView : UserControl
         {
             await foreach (var entry in watch.ReadAsync(cancellationToken))
             {
-                if (_interestingOnly && entry.Mode == RoutingMode.Direct)
+                if (_interestingOnly && !entry.Routed)
                 {
                     Interlocked.Increment(ref _hidden);
                     continue;

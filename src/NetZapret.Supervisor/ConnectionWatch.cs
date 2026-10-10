@@ -50,12 +50,42 @@ public sealed class ConnectionWatch : IAsyncDisposable
     private long _matched;
     private bool _disposed;
 
-    private ConnectionWatch(EtwConnectionSource source, RuleEngine engine, RollingLog? journal, string mode)
+    private readonly WatchContext _context;
+
+    private ConnectionWatch(EtwConnectionSource source, RuleEngine engine, RollingLog? journal, string mode, WatchContext context)
     {
         _source = source;
         _engine = engine;
         _journal = journal;
+        _context = context;
         Mode = mode;
+    }
+
+    /// <summary>
+    /// Подставные адреса и серверы VPN из конфига движка — если движки подняты.
+    /// </summary>
+    /// <remarks>
+    /// Конфиг от прошлого запуска лежит и при остановленных движках, а адрес
+    /// 198.18.x тогда выдаёт чужой VPN-клиент (обсуждение №8) — назвать его
+    /// «туннелем» значило бы соврать.
+    /// </remarks>
+    private static WatchContext Context(AppSettings settings)
+    {
+        try
+        {
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            if (state is null || !state.IsSupervisorAlive() || !File.Exists(settings.ProxyConfigPath))
+                return WatchContext.None;
+
+            return new WatchContext(
+                NetZapret.Proxy.TunnelEndpoints.FakeRanges(settings.ProxyConfigPath),
+                NetZapret.Proxy.TunnelEndpoints.Read(settings.ProxyConfigPath));
+        }
+        catch (Exception)
+        {
+            return WatchContext.None;
+        }
     }
 
     /// <summary>Режим работы словами — на момент начала.</summary>
@@ -105,7 +135,7 @@ public sealed class ConnectionWatch : IAsyncDisposable
         }
 
         var log = journal is null ? null : new RollingLog(journal, JournalBytes, generations: 1);
-        var watch = new ConnectionWatch(source, engine, log, settings.DescribeMode());
+        var watch = new ConnectionWatch(source, engine, log, settings.DescribeMode(), Context(settings));
 
         log?.AppendLine(WatchEntry.Session(DateTimeOffset.Now,
             $"{WatchEntry.Started}: режим «{watch.Mode}», правил {watch.RuleCount}"));
@@ -140,7 +170,7 @@ public sealed class ConnectionWatch : IAsyncDisposable
                 if (decision.Rule is not null)
                     Interlocked.Increment(ref _matched);
 
-                var entry = WatchEntry.From(connection, decision);
+                var entry = WatchEntry.From(connection, decision, _context);
 
                 _journal?.AppendLine(entry.ToLine());
 

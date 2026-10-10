@@ -23,7 +23,7 @@ namespace NetZapret.Core.Connections;
 /// <param name="Address">Адрес с портом всегда — имя на адресе CDN бывает чужим.</param>
 public sealed record WatchEntry(
     DateTimeOffset Time,
-    RoutingMode Mode,
+    WatchRoute Mode,
     string Protocol,
     string Process,
     string Endpoint,
@@ -40,17 +40,37 @@ public sealed record WatchEntry(
     /// <summary>Слова строки начала сеанса — по ним сводка считает сеансы.</summary>
     public const string Started = "наблюдение начато";
 
-    public static WatchEntry From(ConnectionEvent connection, RuleDecision decision)
+    /// <summary>
+    /// Запись по соединению: сперва то, что наблюдение знает само (движок,
+    /// подставной адрес, мультикаст, домашняя сеть), потом ответ правил.
+    /// </summary>
+    public static WatchEntry From(ConnectionEvent connection, RuleDecision decision, WatchContext? context = null)
     {
-        var address = connection.DescribeEndpoint();
+        context ??= WatchContext.None;
 
-        var rule = decision.Rule is null
-            ? decision.Reason ?? "по умолчанию"
-            : $"#{decision.Rule.Ordinal} {decision.Reason}";
+        var address = connection.DescribeEndpoint();
+        var remote = connection.RemoteAddress;
+
+        var (route, rule) = remote switch
+        {
+            _ when WatchContext.IsEngine(connection.ExecutableName) => (WatchRoute.Engine,
+                remote is not null && context.IsServer(remote)
+                    ? "движок: соединение с сервером VPN, мимо перехвата"
+                    : "движок: выход «напрямую» из туннеля или его DNS"),
+            not null when context.IsFake(remote) => (WatchRoute.Proxy,
+                "подставной адрес движка — имя идёт через VPN"),
+            not null when WatchContext.IsMulticast(remote) => (WatchRoute.Local,
+                "мультикаст — поиск устройств в домашней сети"),
+            not null when connection.IsLoopback || LocalNetworks.IsLocal(remote) => (WatchRoute.Local,
+                decision.Reason ?? "локальная сеть"),
+            _ => (Route(decision.Mode), decision.Rule is null
+                ? decision.Reason ?? "по умолчанию"
+                : $"#{decision.Rule.Ordinal} {decision.Reason}"),
+        };
 
         return new WatchEntry(
             connection.Timestamp,
-            decision.Mode,
+            route,
             connection.Protocol == ProtocolKind.Udp ? "udp" : "tcp",
             connection.ExecutableName ?? UnknownProcess,
             connection.Hostname is { } host ? $"{host}:{connection.RemotePort}" : address,
@@ -59,13 +79,25 @@ public sealed record WatchEntry(
             connection.Verdict == ObservedVerdict.Dropped);
     }
 
+    private static WatchRoute Route(RoutingMode mode) => mode switch
+    {
+        RoutingMode.Proxy => WatchRoute.Proxy,
+        RoutingMode.Desync => WatchRoute.Desync,
+        _ => WatchRoute.Direct,
+    };
+
     /// <summary>«Куда» словом — как в таблице окна.</summary>
     public string ModeWord => Word(Mode);
 
-    public static string Word(RoutingMode mode) => mode switch
+    /// <summary>Пошло ли через туннель или под десинк — то, что ищут отбором «только туннель и десинк».</summary>
+    public bool Routed => Mode is WatchRoute.Proxy or WatchRoute.Desync;
+
+    public static string Word(WatchRoute mode) => mode switch
     {
-        RoutingMode.Proxy => "туннель",
-        RoutingMode.Desync => "десинк",
+        WatchRoute.Proxy => "туннель",
+        WatchRoute.Desync => "десинк",
+        WatchRoute.Local => "локально",
+        WatchRoute.Engine => "движок",
         _ => "напрямую",
     };
 
@@ -104,9 +136,11 @@ public sealed record WatchEntry(
 
         var mode = parts[1] switch
         {
-            "туннель" => RoutingMode.Proxy,
-            "десинк" => RoutingMode.Desync,
-            _ => RoutingMode.Direct,
+            "туннель" => WatchRoute.Proxy,
+            "десинк" => WatchRoute.Desync,
+            "локально" => WatchRoute.Local,
+            "движок" => WatchRoute.Engine,
+            _ => WatchRoute.Direct,
         };
 
         const string dropped = "система отбросила · ";
@@ -171,9 +205,10 @@ public sealed record WatchEntry(
         var last = entries.Max(e => e.Time).ToLocalTime();
 
         text.AppendLine($"Наблюдение: сеансов {sessions}, {first:dd.MM HH:mm:ss} — {last:dd.MM HH:mm:ss}, соединений {entries.Count}.");
-        text.AppendLine("«Куда» — что сказали бы правила, а не что сделал движок; имя на адресе CDN бывает чужим.");
+        text.AppendLine("«Куда» — что сказали бы правила, а не что сделал движок; точно известны только «туннель»");
+        text.AppendLine("по подставному адресу движка, «локально» и «движок». Имя на адресе CDN бывает чужим.");
         text.AppendLine();
-        text.AppendLine($"{"программа",-32} {"всего",7} {"туннель",8} {"десинк",8} {"напрямую",9} {"udp",6}");
+        text.AppendLine($"{"программа",-32} {"всего",7} {"туннель",8} {"десинк",8} {"напрямую",9} {"локально",9} {"движок",7} {"udp",6}");
 
         var programs = entries
             .GroupBy(e => e.Process, StringComparer.OrdinalIgnoreCase)
@@ -183,8 +218,9 @@ public sealed record WatchEntry(
         foreach (var g in programs)
         {
             text.AppendLine(
-                $"{Cut(g.Key, 32),-32} {g.Count(),7} {g.Count(e => e.Mode == RoutingMode.Proxy),8} "
-                + $"{g.Count(e => e.Mode == RoutingMode.Desync),8} {g.Count(e => e.Mode == RoutingMode.Direct),9} "
+                $"{Cut(g.Key, 32),-32} {g.Count(),7} {g.Count(e => e.Mode == WatchRoute.Proxy),8} "
+                + $"{g.Count(e => e.Mode == WatchRoute.Desync),8} {g.Count(e => e.Mode == WatchRoute.Direct),9} "
+                + $"{g.Count(e => e.Mode == WatchRoute.Local),9} {g.Count(e => e.Mode == WatchRoute.Engine),7} "
                 + $"{g.Count(e => e.Protocol == "udp"),6}");
         }
 

@@ -88,6 +88,79 @@ public sealed class WatchEntryTests
         Assert.Contains("149.154.167.220:443", text);
     }
 
+    private static readonly WatchContext Engine = new(["198.18.0.0/15", "fc00::/18"], [IPAddress.Parse("138.124.32.99")]);
+
+    /// <summary>
+    /// Подставной адрес движка — туннель как факт, и IPv6 тоже, хоть правила
+    /// и зовут fc00::/7 домашней сетью. Замер 10.10: api.anthropic.com на
+    /// <c>[fc00::b]</c> писался «напрямую, локальная сеть» 13 раз.
+    /// </summary>
+    [Theory]
+    [InlineData("198.18.0.11")]
+    [InlineData("fc00::b")]
+    public void AFakeAddressIsTheTunnel(string address)
+    {
+        var entry = WatchEntry.From(
+            Connection("claude.exe", "api.anthropic.com", address, 443),
+            new RuleDecision { Mode = RoutingMode.Direct, Reason = "локальная сеть (жёсткое исключение)" },
+            Engine);
+
+        Assert.Equal(WatchRoute.Proxy, entry.Mode);
+        Assert.Contains("подставной адрес", entry.Rule);
+        Assert.True(entry.Routed);
+    }
+
+    /// <summary>Без поднятого движка подставного диапазона нет — 198.18.x тогда чужой.</summary>
+    [Fact]
+    public void WithoutTheEngineAFakeRangeIsNotTrusted()
+    {
+        var entry = WatchEntry.From(
+            Connection("claude.exe", null, "fc00::b", 443),
+            new RuleDecision { Mode = RoutingMode.Direct, Reason = "локальная сеть (жёсткое исключение)" });
+
+        Assert.Equal(WatchRoute.Local, entry.Mode);
+    }
+
+    /// <summary>Мультикаст — поиск устройств, а не десинк (Spotify, Steam, ChatGPT 10.10).</summary>
+    [Theory]
+    [InlineData("239.255.255.250", (ushort)1900)]
+    [InlineData("224.0.0.251", (ushort)5353)]
+    [InlineData("ff02::fb", (ushort)5353)]
+    [InlineData("255.255.255.255", (ushort)67)]
+    public void MulticastIsLocal(string address, ushort port)
+    {
+        var entry = WatchEntry.From(
+            Connection("spotify.exe", null, address, port, ProtocolKind.Udp),
+            new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" },
+            Engine);
+
+        Assert.Equal(WatchRoute.Local, entry.Mode);
+        Assert.Equal("локально", entry.ModeWord);
+        Assert.False(entry.Routed);
+    }
+
+    /// <summary>Соединения sing-box — движок: к серверу VPN или выход из туннеля, не десинк.</summary>
+    [Fact]
+    public void TheEnginesOwnConnectionsAreTheEngine()
+    {
+        var server = WatchEntry.From(
+            Connection("sing-box.exe", null, "138.124.32.99", 443),
+            new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" },
+            Engine);
+
+        var other = WatchEntry.From(
+            Connection("sing-box.exe", null, "72.56.93.144", 443),
+            new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" },
+            Engine);
+
+        Assert.Equal(WatchRoute.Engine, server.Mode);
+        Assert.Contains("сервером VPN", server.Rule);
+        Assert.Equal(WatchRoute.Engine, other.Mode);
+        Assert.DoesNotContain("сервером VPN", other.Rule);
+
+        Assert.Equal(WatchRoute.Engine, WatchEntry.Parse(server.ToLine())!.Mode);
+    }
+
     [Fact]
     public void WithoutAJournalTheSummarySaysSo()
     {

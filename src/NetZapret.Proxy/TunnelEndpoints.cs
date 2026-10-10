@@ -107,6 +107,34 @@ public static class TunnelEndpoints
     }
 
     /// <summary>
+    /// Оба диапазона подставных адресов — IPv4 и IPv6; нет их — пусто.
+    /// </summary>
+    /// <remarks>
+    /// Для наблюдения: IPv6-подставной (<c>fc00::/18</c>) правила считают
+    /// домашней сетью, и без него api.anthropic.com через туннель писался
+    /// «напрямую» (замер 10.10).
+    /// </remarks>
+    public static IReadOnlyList<string> FakeRanges(string configPath)
+    {
+        try
+        {
+            var servers = JsonNode.Parse(File.ReadAllText(configPath))?["dns"]?["servers"] as JsonArray;
+
+            return [.. (servers ?? [])
+                .OfType<JsonObject>()
+                .Where(s => (string?)s["type"] == "fakeip")
+                .SelectMany(s => new[] { (string?)s["inet4_range"], (string?)s["inet6_range"] })
+                .OfType<string>()
+                .Where(r => !string.IsNullOrWhiteSpace(r))
+                .Distinct()];
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>
     /// Адреса нашего TUN (<c>address</c> у входа <c>tun</c>) — без длины префикса.
     /// </summary>
     /// <remarks>
