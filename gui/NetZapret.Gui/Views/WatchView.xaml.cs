@@ -130,6 +130,9 @@ public partial class WatchView : UserControl
 
     // Счёт с последнего «Очистить» — для кольца, счётчиков и «кто шумит».
     private static readonly Dictionary<string, int> _perProcess = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>То же, только наружу — для «кто шумит» при «Куда: наружу».</summary>
+    private static readonly Dictionary<string, int> _perProcessOutside = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, int> _perSite = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, int> _perRule = new(StringComparer.Ordinal);
     private static readonly Dictionary<WatchRoute, int> _perRoute = [];
@@ -376,6 +379,7 @@ public partial class WatchView : UserControl
 
         if (entry.Mode is not (WatchRoute.Local or WatchRoute.Engine))
         {
+            _perProcessOutside[entry.Process] = _perProcessOutside.GetValueOrDefault(entry.Process) + 1;
             _addresses.Add(entry.Ip);
 
             if (entry.Host is { } host)
@@ -489,6 +493,7 @@ public partial class WatchView : UserControl
         change();
         ShowFilters();
         Refill();
+        ShowSide();
     }
 
     private void OnSearch(object sender, TextChangedEventArgs e)
@@ -533,22 +538,25 @@ public partial class WatchView : UserControl
         if (_brushes.Count == 0)
             _brushes = Palette();
 
+        var shown = SideRoutes(_outsideOnly, _route);
+        bool outside = shown.Count < Routes.Length;
+
         Dictionary<WatchRoute, int> routes;
         List<KeyValuePair<string, int>> programs, sites;
 
         lock (Gate)
         {
             routes = new(_perRoute);
-            programs = [.. _perProcess.OrderByDescending(p => p.Value).Take(TopItems)];
+            programs = [.. (outside ? _perProcessOutside : _perProcess).OrderByDescending(p => p.Value).Take(TopItems)];
             sites = [.. _perSite.OrderByDescending(p => p.Value).Take(_narrow ? TopItems : SiteItemsWide)];
         }
 
-        int total = routes.Values.Sum();
+        int total = shown.Sum(r => routes.GetValueOrDefault(r));
 
-        Ring.Show([.. Routes.Select(r => ((double)routes.GetValueOrDefault(r), _brushes[r]))], Brush("Raised", Brushes.DimGray));
+        Ring.Show([.. shown.Select(r => ((double)routes.GetValueOrDefault(r), _brushes[r]))], Brush("Raised", Brushes.DimGray));
         RingTotal.Text = total.ToString("N0");
 
-        RingLegend.ItemsSource = Routes
+        RingLegend.ItemsSource = shown
             .Select(r => new WatchLegendLine(
                 r,
                 _brushes[r],
@@ -560,6 +568,21 @@ public partial class WatchView : UserControl
         TopPrograms.ItemsSource = Top(programs, isSite: false);
         TopSites.ItemsSource = Top(sites, isSite: true);
     }
+
+    /// <summary>Какие виды считают кольцо, легенда и «кто шумит».</summary>
+    /// <remarks>
+    /// При «Куда: наружу» — только туннель, десинк и напрямую, как в таблице
+    /// (владелец 10.10: «сделай чтоб куда: наружу скрывал из кружка и из
+    /// правой части локальные соединения»): иначе мультикаст, DNS к движку
+    /// и sing-box к серверу занимали две трети кольца, а sing-box.exe
+    /// и svchost.exe — верх «кто шумит». Выбран вид «локально» или «движок» —
+    /// смотрят именно его, и кольцо показывает всё. «Сайты» и прежде
+    /// считали только то, что наружу.
+    /// </remarks>
+    internal static IReadOnlyList<WatchRoute> SideRoutes(bool outsideOnly, WatchRoute? route) =>
+        outsideOnly && route is not (WatchRoute.Local or WatchRoute.Engine)
+            ? [.. Routes.Where(r => r is not (WatchRoute.Local or WatchRoute.Engine))]
+            : Routes;
 
     /// <summary>Длина дорожки «кто шумит»: на узком окне вдвое короче — место имени.</summary>
     private double _track = 70;
@@ -1066,6 +1089,7 @@ public partial class WatchView : UserControl
             _store.Clear();
             _pending.Clear();
             _perProcess.Clear();
+            _perProcessOutside.Clear();
             _perSite.Clear();
             _perRule.Clear();
             _perRoute.Clear();
