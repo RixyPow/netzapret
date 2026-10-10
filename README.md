@@ -57,7 +57,7 @@ VPN берёт то, что закрыто по стране, — а NetZapret �
 ## Установка
 
 1. Скачать архив со страницы [релизов](https://github.com/RixyPow/netzapret/releases/latest).
-2. Распаковать в обычную папку, например `C:\NetZapret`.
+2. Распаковать в обычную папку, например `C:\Program Files\NetZapret`.
 3. Запустить `NetZapret.exe`.
 
 Больше ничего ставить не нужно — ни .NET, ни sing-box, ни Zapret: всё внутри.
