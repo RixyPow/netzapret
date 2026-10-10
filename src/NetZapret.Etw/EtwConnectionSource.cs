@@ -139,6 +139,27 @@ public sealed class EtwConnectionSource : IConnectionEventSource
     }
 
     /// <summary>
+    /// Есть ли уже сессия наблюдения — у окна, у <c>nz watch</c> или
+    /// оставшаяся от убитого запуска.
+    /// </summary>
+    /// <remarks>
+    /// Имя сессии одно на машину, и <see cref="Start"/> чужую останавливает.
+    /// <c>nz watch</c> спрашивает раньше, чтобы молча не оборвать наблюдение
+    /// в окне.
+    /// </remarks>
+    public static bool SessionExists()
+    {
+        try
+        {
+            return TraceEventSession.GetActiveSessionNames().Contains(SessionName);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Останавливает сессию, оставшуюся от прерванного запуска.
     /// </summary>
     /// <remarks>

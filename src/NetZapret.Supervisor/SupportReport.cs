@@ -140,6 +140,18 @@ public static class SupportReport
             AddLog(parts, log, At(root, Path.Combine("runtime", log)));
             AddLog(parts, Path.GetFileNameWithoutExtension(log) + ".1.log", At(root, Path.Combine("runtime", log + ".1")));
         }
+        // Наблюдение (владелец 10.10: «и отдельно по программам, и отдельно
+        // полностью журнал»). Сводка — всегда, и без журнала: «не включали»
+        // тоже ответ, а пустое место читалось бы как «не попало в отчёт».
+        // Журнал — целиком, не выдержкой: соединение ищут по времени жалобы,
+        // и оно может быть в любом месте файла.
+        var watch = At(root, ConnectionWatch.DefaultJournal);
+        parts.Add(("watch-summary.txt", Core.Connections.WatchEntry.Summarize(
+            (Read(watch + ".1") ?? string.Empty).Split('\n').Concat((Read(watch) ?? string.Empty).Split('\n'))
+                .Select(l => l.TrimEnd('\r')))));
+        AddFile(parts, "watch.1.log", watch + ".1");
+        AddFile(parts, "watch.log", watch);
+
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
         AddFile(parts, "desync-keep.txt", At(root, Path.Combine("runtime", "desync-keep.txt")));

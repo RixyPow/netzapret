@@ -153,6 +153,47 @@ public sealed class SupportReportTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Наблюдение — в отчёте сводкой по программам и журналом целиком
+    /// (владелец 10.10); без журнала сводка говорит, что не включали.
+    /// </summary>
+    [Fact]
+    public void TheWatchJournalAndItsSummaryAreInTheReport()
+    {
+        var without = SupportReport.Create("0.14.5 (3)", root: _root);
+
+        Assert.Contains("watch-summary.txt", without.Files);
+        Assert.DoesNotContain("watch.log", without.Files);
+        Assert.Contains("не включали", ReadAll(without.Path));
+
+        var entry = Core.Connections.WatchEntry.From(
+            new Core.Connections.ConnectionEvent
+            {
+                Timestamp = DateTimeOffset.Now,
+                Protocol = Core.Connections.ProtocolKind.Tcp,
+                RemoteAddress = System.Net.IPAddress.Parse("142.250.74.46"),
+                RemotePort = 443,
+                ExecutablePath = @"C:\Program Files\chrome.exe",
+                Hostname = "youtube.com",
+            },
+            new Core.Rules.RuleDecision { Mode = Core.Rules.RoutingMode.Desync, Reason = "youtube" });
+
+        File.WriteAllLines(Path.Combine(_root, "runtime", "watch.log"),
+        [
+            Core.Connections.WatchEntry.Session(DateTimeOffset.Now, Core.Connections.WatchEntry.Started + ": режим «Гибрид»"),
+            entry.ToLine(),
+        ]);
+
+        var with = SupportReport.Create("0.14.5 (3)", root: _root, directory: Path.Combine(_root, "second"));
+
+        Assert.Contains("watch.log", with.Files);
+
+        var text = ReadAll(with.Path);
+
+        Assert.Contains("youtube.com:443", text);
+        Assert.Matches(@"chrome\.exe\s+1\s+0\s+1", text);
+    }
+
     [Fact]
     public void WithoutMeasurementsTheReportSaysSo()
     {

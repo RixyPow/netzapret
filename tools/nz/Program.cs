@@ -49,6 +49,7 @@ return command switch
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     "voice" or "голос" => Voice(),
     "doctor" or "диагностика" => DoctorCommand(),
+    "watch" or "наблюдение" => await Watch(args.Skip(1).ToList()),
     null or "help" or "--help" or "-h" => Help(),
     _ => Unknown(command),
 };
@@ -304,6 +305,106 @@ int Voice()
     return found ? 0 : 1;
 }
 
+// Наблюдение — тот же сеанс, что раздел «Наблюдение» окна (ConnectionWatch),
+// и тот же журнал runtime\watch.log. Владелец 10.10: «добавь в nz наблюдение».
+//
+// Единственная команда nz, которой нужны права администратора: сессия ETW
+// ядра без них не создаётся. Просить их nz не станет (см. начало файла) —
+// запускать из терминала администратора.
+async Task<int> Watch(List<string> options)
+{
+    int? seconds = null;
+    string? process = null;
+    bool routed = false, force = false, journal = true;
+
+    for (int i = 0; i < options.Count; i++)
+    {
+        switch (options[i])
+        {
+            case "--seconds" when i + 1 < options.Count && int.TryParse(options[i + 1], out var s) && s > 0:
+                seconds = s;
+                i++;
+                break;
+            case "--process" when i + 1 < options.Count:
+                process = options[++i];
+                break;
+            case "--routed":
+                routed = true;
+                break;
+            case "--force":
+                force = true;
+                break;
+            case "--no-log":
+                journal = false;
+                break;
+            default:
+                Console.Error.WriteLine($"не знаю «{options[i]}». nz watch [--seconds N] [--process имя.exe] [--routed] [--no-log] [--force]");
+                return 2;
+        }
+    }
+
+    // Имя сессии одно на машину, и новая останавливает прежнюю: без вопроса
+    // nz молча оборвала бы наблюдение в окне.
+    if (!force && NetZapret.Etw.EtwConnectionSource.SessionExists())
+    {
+        Console.Error.WriteLine("сессия наблюдения уже есть: наблюдает окно или осталась от прерванного запуска.");
+        Console.Error.WriteLine("nz watch --force заберёт её себе (наблюдение в окне остановится).");
+        return 1;
+    }
+
+    ConnectionWatch watch;
+
+    try
+    {
+        watch = ConnectionWatch.Start(AppSettings.Load(AppSettings.DefaultPath), journal ? ConnectionWatch.DefaultJournal : null);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine("наблюдение не началось: " + ex.GetBaseException().Message);
+        Console.Error.WriteLine("сессии ETW нужны права администратора — запустите nz из терминала администратора.");
+        return 1;
+    }
+
+    using var stop = seconds is { } limit ? new CancellationTokenSource(TimeSpan.FromSeconds(limit)) : new CancellationTokenSource();
+
+    // Ctrl+C — остановка, а не убийство: сессия ETW переживает процесс,
+    // и брошенная останется в системе до перезагрузки.
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;
+        stop.Cancel();
+    };
+
+    Console.WriteLine($"смотрю: режим «{watch.Mode}», правил {watch.RuleCount}"
+        + (journal ? $", журнал {ConnectionWatch.DefaultJournal}" : ", без журнала")
+        + (seconds is null ? "; Ctrl+C — остановить" : $"; {seconds} с"));
+    Console.WriteLine("«куда» — что сказали бы правила, а не что сделал движок");
+    Console.WriteLine();
+
+    int shown = 0;
+
+    await using (watch)
+    {
+        await foreach (var entry in watch.ReadAsync(stop.Token))
+        {
+            if (routed && entry.Mode == NetZapret.Core.Rules.RoutingMode.Direct)
+                continue;
+
+            if (process is not null && !string.Equals(entry.Process, process, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            shown++;
+            Console.WriteLine($"{entry.Time.ToLocalTime():HH:mm:ss.fff}  {entry.ModeWord,-8}  {entry.Protocol}  {entry.Process,-24}  {entry.Endpoint,-40}  {entry.RuleShown}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine($"соединений {watch.Total}, показано {shown}, под правило {watch.Matched}, имён узнано {watch.NamesKnown}"
+        + (watch.Dropped > 0 ? $", потеряно при переполнении {watch.Dropped}" : string.Empty));
+
+    return 0;
+}
+
 // Те же проверки, что раздел «Диагностика» окна и doctor.txt в отчёте.
 // Права не проверяются: nz идёт без администратора намеренно.
 int DoctorCommand()
@@ -412,12 +513,15 @@ int Help()
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
     Console.WriteLine("  nz voice     голос Discord: адреса звука из его журнала против списка голоса —");
     Console.WriteLine("               что сторож окна дописал бы; ничего не пишет");
+    Console.WriteLine("  nz watch [--seconds N] [--process имя.exe] [--routed] [--no-log] [--force]");
+    Console.WriteLine("               наблюдение: соединения и правило к каждому, как раздел окна;");
+    Console.WriteLine("               пишет runtime\\watch.log; нужен терминал администратора");
     Console.WriteLine("  nz dns-mode [авто|напрямую|туннель]");
     Console.WriteLine("               как движок спрашивает имена; с аргументом — переключить");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
     Console.WriteLine("  nz report    отчёт для разбора архивом в reports\\: журналы, настройки, сеть,");
-    Console.WriteLine("               диагностика, голос Discord, hosts, сторож серверов —");
+    Console.WriteLine("               диагностика, голос Discord, hosts, сторож серверов, наблюдение —");
     Console.WriteLine("               без ссылок подписок и ключей");
     Console.WriteLine();
     Console.WriteLine("Поднять и погасить движки можно самой программой:");

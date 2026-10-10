@@ -6,8 +6,7 @@ using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
-using NetZapret.Etw;
-using NetZapret.Zapret;
+using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
@@ -36,12 +35,11 @@ public sealed record WatchRow(
 /// Выключать движки ради него не нужно, и на их работу он не действует.
 /// </para>
 /// <para>
-/// Источник один — ETW, в отличие от консоли, где есть ещё <c>--source wfp</c>.
-/// Тот оставлен там не для пользы, а потому что интероп проверен и пригодится
-/// под фильтры защиты от утечек: на этой системе WFP не отдаёт событий
-/// о <i>разрешённых</i> соединениях, то есть показывает пустую таблицу.
-/// Выпускать такой выбор в окно — значит предложить человеку способ
-/// не увидеть ничего и решить, что соединений нет.
+/// Источник — события ядра (ETW), сеанс — <see cref="ConnectionWatch"/>, общий
+/// с <c>nz watch</c>; каждое соединение пишется в <c>runtime\watch.log</c>,
+/// и журнал со сводкой по программам едет в отчёт. WFP источником не взят:
+/// на этой системе он не отдаёт событий о <i>разрешённых</i> соединениях,
+/// то есть показывал бы пустую таблицу.
 /// </para>
 /// </remarks>
 public partial class WatchView : UserControl
@@ -94,13 +92,15 @@ public partial class WatchView : UserControl
     private readonly DispatcherTimer _flush = new() { Interval = FlushInterval };
 
     private CancellationTokenSource? _work;
-    private EtwConnectionSource? _source;
+    private ConnectionWatch? _watch;
+    private Dictionary<RoutingMode, Brush> _brushes = [];
 
     /// <summary>Показывать только то, что уходит в туннель или под десинк.</summary>
     private bool _interestingOnly;
 
-    private long _total;
-    private long _matched;
+    /// <summary>Счёт сеанса на миг «Очистить»: таблица считает с нуля, журнал — нет.</summary>
+    private long _totalBase;
+    private long _matchedBase;
     private long _hidden;
 
     public WatchView()
@@ -119,7 +119,7 @@ public partial class WatchView : UserControl
 
     private void OnPower(object sender, RoutedEventArgs e)
     {
-        if (_source is not null)
+        if (_watch is not null)
         {
             Stop();
             return;
@@ -127,32 +127,27 @@ public partial class WatchView : UserControl
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            // Тот же сеанс, что у nz watch (ConnectionWatch): те же правила,
+            // что у сборки конфига, и тот же журнал runtime\watch.log.
+            _watch = ConnectionWatch.Start(AppSettings.Load(AppSettings.DefaultPath), ConnectionWatch.DefaultJournal);
+            _totalBase = 0;
+            _matchedBase = 0;
 
-            // Оба слоя правил, как в консоли: наблюдатель показывает, какое
-            // правило применилось бы, и читать он обязан ровно то же, что
-            // читает сборка конфига. Иначе он не диагностика, а источник
-            // ложных выводов.
-            var engine = RuleSetLoader.LoadFor(settings);
-
-            RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
-
-            _source = new EtwConnectionSource(new EtwConnectionSourceOptions
+            // Кисти — здесь, в потоке окна: строки собираются в фоне.
+            _brushes = new Dictionary<RoutingMode, Brush>
             {
-                SkipLoopback = true,
-                ObserveDns = true,
-            });
-
-            _source.Start();
+                [RoutingMode.Proxy] = (Brush)FindResource("Accent"),
+                [RoutingMode.Desync] = (Brush)FindResource("Warn"),
+                [RoutingMode.Direct] = (Brush)FindResource("Muted"),
+            };
 
             _work = new CancellationTokenSource();
-            _ = ReadAsync(engine, _source, _work.Token);
+            _ = ReadAsync(_watch, _work.Token);
 
             _flush.Start();
 
             PowerButton.Content = "Остановить";
-            Status.Text = $"Смотрю. Правил: {engine.RuleSet.Rules.Count}, "
-                + $"режим «{settings.DescribeMode()}».";
+            Status.Text = $"Смотрю. Правил: {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
         }
         catch (Exception ex)
         {
@@ -164,33 +159,32 @@ public partial class WatchView : UserControl
     }
 
     /// <summary>
-    /// Читает события и складывает готовые строки в очередь.
+    /// Читает соединения и складывает готовые строки в очередь.
     /// </summary>
     /// <remarks>
-    /// Решение считается здесь, в фоне, а не при показе: <see cref="RuleEngine"/>
-    /// разворачивает списки доменов, и делать это в потоке разметки означало бы
-    /// подвешивать окно на каждой строке.
+    /// В фоне, а не при показе: решение правил разворачивает списки доменов,
+    /// и в потоке разметки это подвешивало бы окно на каждой строке.
+    /// В журнал соединение уходит всякое — отбор здесь касается только показа.
     /// </remarks>
-    private async Task ReadAsync(RuleEngine engine, EtwConnectionSource source, CancellationToken cancellationToken)
+    private async Task ReadAsync(ConnectionWatch watch, CancellationToken cancellationToken)
     {
         try
         {
-            await foreach (var connection in source.ReadEventsAsync(cancellationToken))
+            await foreach (var entry in watch.ReadAsync(cancellationToken))
             {
-                var decision = engine.Evaluate(connection);
-
-                Interlocked.Increment(ref _total);
-
-                if (decision.Rule is not null)
-                    Interlocked.Increment(ref _matched);
-
-                if (_interestingOnly && decision.Mode == RoutingMode.Direct)
+                if (_interestingOnly && entry.Mode == RoutingMode.Direct)
                 {
                     Interlocked.Increment(ref _hidden);
                     continue;
                 }
 
-                var row = Row(connection, decision);
+                var row = new WatchRow(
+                    entry.Time.ToLocalTime().ToString("HH:mm:ss.fff"),
+                    entry.ModeWord,
+                    _brushes[entry.Mode],
+                    entry.Process,
+                    entry.Endpoint,
+                    entry.RuleShown);
 
                 lock (_pending)
                     _pending.Add(row);
@@ -208,38 +202,6 @@ public partial class WatchView : UserControl
                 Status.Text = "Наблюдение прервалось: " + ex.GetBaseException().Message;
             });
         }
-    }
-
-    private WatchRow Row(ConnectionEvent connection, RuleDecision decision)
-    {
-        // Имя информативнее адреса, поэтому показываем его, когда оно известно.
-        // Известно оно далеко не всегда: браузеры ходят мимо службы DNS-клиента
-        // со своим резолвером, и наблюдать за их запросами нечем.
-        var endpoint = connection.Hostname is { } host
-            ? $"{host}:{connection.RemotePort}"
-            : connection.DescribeEndpoint();
-
-        var rule = decision.Rule is null
-            ? decision.Reason ?? "по умолчанию"
-            : $"#{decision.Rule.Ordinal} {decision.Reason}";
-
-        if (connection.Verdict == ObservedVerdict.Dropped)
-            rule = "система отбросила · " + rule;
-
-        var (mode, colourKey) = decision.Mode switch
-        {
-            RoutingMode.Proxy => ("туннель", "Accent"),
-            RoutingMode.Desync => ("десинк", "Warn"),
-            _ => ("напрямую", "Muted"),
-        };
-
-        return new WatchRow(
-            connection.Timestamp.ToLocalTime().ToString("HH:mm:ss.fff"),
-            mode,
-            (Brush)FindResource(colourKey),
-            connection.ExecutableName ?? "?",
-            endpoint,
-            rule);
     }
 
     /// <summary>Переносит накопленное в таблицу одной пачкой.</summary>
@@ -385,21 +347,18 @@ public partial class WatchView : UserControl
 
     private void ShowStats()
     {
-        if (_source is null)
+        if (_watch is null)
             return;
-
-        long total = Interlocked.Read(ref _total);
-        long matched = Interlocked.Read(ref _matched);
 
         var parts = new List<string>
         {
-            $"соединений: {total}",
-            $"под правило попало: {matched}",
-            $"имён узнано: {_source.DnsNames.Count}",
+            $"соединений: {_watch.Total - _totalBase}",
+            $"под правило попало: {_watch.Matched - _matchedBase}",
+            $"имён узнано: {_watch.NamesKnown}",
         };
 
-        if (_source.DroppedCount > 0)
-            parts.Add($"потеряно при переполнении: {_source.DroppedCount}");
+        if (_watch.Dropped > 0)
+            parts.Add($"потеряно при переполнении: {_watch.Dropped}");
 
         if (_interestingOnly && _hidden > 0)
             parts.Add($"скрыто прямых: {_hidden}");
@@ -416,12 +375,12 @@ public partial class WatchView : UserControl
         _work?.Cancel();
         _work = null;
 
-        if (_source is not null)
+        if (_watch is not null)
         {
             // Синхронно и до конца: сессия ETW переживает процесс, и брошенная
             // она останется в системе именем NetZapret до перезагрузки.
-            _source.DisposeAsync().AsTask().GetAwaiter().GetResult();
-            _source = null;
+            _watch.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            _watch = null;
         }
 
         lock (_pending)
@@ -451,8 +410,8 @@ public partial class WatchView : UserControl
         lock (_pending)
             _pending.Clear();
 
-        Interlocked.Exchange(ref _total, 0);
-        Interlocked.Exchange(ref _matched, 0);
+        _totalBase = _watch?.Total ?? 0;
+        _matchedBase = _watch?.Matched ?? 0;
         _hidden = 0;
     }
 }
