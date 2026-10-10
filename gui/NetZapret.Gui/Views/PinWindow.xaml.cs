@@ -703,7 +703,8 @@ public partial class PinWindow : Window
             [.. _catalog?.Intermediaries() ?? [], .. own.Intermediaries],
             progress,
             CancellationToken.None,
-            probes);
+            probes,
+            _target.Zones.FirstOrDefault()?.TrimStart('*', '.'));
 
         // Итог: выбранный подбором — первым и отмеченным, остальные —
         // в порядке, в каком подбор их оценил, последней — «не прибивать».

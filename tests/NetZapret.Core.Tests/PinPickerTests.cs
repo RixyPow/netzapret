@@ -239,6 +239,134 @@ public sealed class PinPickerTests
     }
 
     /// <summary>
+    /// Переадресация на страницу отказа — отказ по стране, а не ответ сайта.
+    /// </summary>
+    /// <remarks>
+    /// 10.10 настоящий адрес claude.ai отвечал
+    /// <c>302 → claude.com/app-unavailable-in-region</c>, и подбор принял его.
+    /// </remarks>
+    [Theory]
+    [InlineData("https://claude.com/app-unavailable-in-region", true)]
+    [InlineData("https://example.com/unsupported_country", true)]
+    [InlineData("https://example.com/error?reason=not-available-in-your-country", true)]
+    [InlineData("https://www.crunchyroll.com/", false)]
+    [InlineData("https://claude.com/login", false)]
+    [InlineData("https://region-unavailable.example.com/", false)]
+    public void RedirectToARegionRefusalIsARefusal(string location, bool refusal)
+    {
+        Assert.Equal(refusal, PinPicker.IsRegionRefusal(new Uri(location)));
+    }
+
+    private static PinPick Pick(string host, params PinProbe[] probes) =>
+        new(host, null, probes);
+
+    /// <summary>
+    /// Все имена сайта — на один адрес, даже если другому имени лучше
+    /// подошёл бы другой посредник.
+    /// </summary>
+    /// <remarks>
+    /// 10.10 у Claude было три источника разом: claude.ai — настоящий адрес,
+    /// frame.claudeusercontent.com — XBOX, downloads.claude.ai — Comss.
+    /// </remarks>
+    [Fact]
+    public void TheWholeSiteGoesToOneAddress()
+    {
+        var picks = PinPicker.OneAddress(
+        [
+            Pick("claude.ai",
+                Probe("160.79.104.10", PinSource.Honest, PinVerdict.Refused),
+                Probe("95.81.102.20", PinSource.Catalog, PinVerdict.Challenge, "AMS", ms: 1500),
+                Probe("188.68.214.131", PinSource.Catalog, PinVerdict.Dead)),
+            Pick("frame.claudeusercontent.com",
+                Probe("188.68.214.131", PinSource.Catalog, PinVerdict.Works, ms: 50),
+                Probe("95.81.102.20", PinSource.Catalog, PinVerdict.Works, ms: 400)),
+        ], "claude.ai");
+
+        Assert.All(picks, p => Assert.Equal("95.81.102.20", p.Chosen?.Candidate.Address));
+    }
+
+    /// <summary>
+    /// Имя, которому адрес сайта не годится, остаётся без пина, а не уходит
+    /// к другому посреднику.
+    /// </summary>
+    [Fact]
+    public void ANameTheSiteAddressFailsStaysUnpinned()
+    {
+        var picks = PinPicker.OneAddress(
+        [
+            Pick("claude.ai", Probe("95.81.102.20", PinSource.Catalog, PinVerdict.Challenge, "AMS")),
+            Pick("downloads.claude.com",
+                Probe("95.81.102.20", PinSource.Catalog, PinVerdict.Refused),
+                Probe("193.233.112.68", PinSource.Catalog, PinVerdict.Works)),
+        ], "claude.ai");
+
+        Assert.Equal("95.81.102.20", picks[0].Chosen?.Candidate.Address);
+        Assert.Null(picks[1].Chosen);
+        Assert.Equal(2, picks[1].Rejected.Count);
+    }
+
+    /// <summary>
+    /// Адрес, которому не отвечает главное имя, сайт не получит, сколько бы
+    /// прочих имён он ни покрыл.
+    /// </summary>
+    [Fact]
+    public void TheMainNameDecides()
+    {
+        var picks = PinPicker.OneAddress(
+        [
+            Pick("site.example",
+                Probe("1.1.1.1", PinSource.Pool, PinVerdict.Dead),
+                Probe("2.2.2.2", PinSource.Pool, PinVerdict.Works)),
+            Pick("a.site.example", Probe("1.1.1.1", PinSource.Pool, PinVerdict.Works)),
+            Pick("b.site.example", Probe("1.1.1.1", PinSource.Pool, PinVerdict.Works)),
+        ], "site.example");
+
+        Assert.Equal("2.2.2.2", picks[0].Chosen?.Candidate.Address);
+        Assert.Null(picks[1].Chosen);
+        Assert.Null(picks[2].Chosen);
+    }
+
+    /// <summary>
+    /// Из годных главному имени выигрывает тот, кто покрывает больше имён.
+    /// </summary>
+    [Fact]
+    public void AmongAddressesTheMainAcceptsTheWiderWins()
+    {
+        var picks = PinPicker.OneAddress(
+        [
+            Pick("site.example",
+                Probe("1.1.1.1", PinSource.Pool, PinVerdict.Works, ms: 50),
+                Probe("2.2.2.2", PinSource.Pool, PinVerdict.Works, ms: 300)),
+            Pick("cdn.site.example",
+                Probe("1.1.1.1", PinSource.Pool, PinVerdict.Dead),
+                Probe("2.2.2.2", PinSource.Pool, PinVerdict.Works)),
+        ], "site.example");
+
+        Assert.All(picks, p => Assert.Equal("2.2.2.2", p.Chosen?.Candidate.Address));
+    }
+
+    /// <summary>
+    /// Настоящие адреса — один источник: у каждого имени свой адрес, но сайт
+    /// целиком идёт без посредника.
+    /// </summary>
+    [Fact]
+    public void HonestAddressesCountAsOneSource()
+    {
+        var picks = PinPicker.OneAddress(
+        [
+            Pick("site.example",
+                Probe("10.0.0.1", PinSource.Honest, PinVerdict.Works),
+                Probe("9.9.9.9", PinSource.Pool, PinVerdict.Works)),
+            Pick("cdn.site.example",
+                Probe("10.0.0.2", PinSource.Honest, PinVerdict.Works),
+                Probe("9.9.9.9", PinSource.Pool, PinVerdict.Dead)),
+        ], "site.example");
+
+        Assert.Equal("10.0.0.1", picks[0].Chosen?.Candidate.Address);
+        Assert.Equal("10.0.0.2", picks[1].Chosen?.Candidate.Address);
+    }
+
+    /// <summary>
     /// Неудачный подбор объясняет себя в журнале: кто и чем отказал.
     /// </summary>
     /// <remarks>

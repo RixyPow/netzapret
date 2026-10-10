@@ -1828,6 +1828,7 @@ public static class BlockCheck
             int? status = null;
             long? promised = null;
             bool challenged = false;
+            bool regionRefusal = false;
 
             // Длина заголовков считается отдельно: Content-Length обещает
             // только тело, а total растёт с первого байта ответа. Без поправки
@@ -1880,6 +1881,13 @@ public static class BlockCheck
                     promised = ParseContentLength(buffer, read);
                     header = HeaderLength(buffer, read);
                     challenged = IsBotChallenge(buffer, read);
+
+                    // Отказ по стране бывает и переадресацией: claude.ai по
+                    // настоящему адресу — 302 на app-unavailable-in-region
+                    // (замер 10.10). Без этого проба звала его доступным.
+                    regionRefusal = status is >= 300 and < 400
+                        && Uri.TryCreate(HeaderValue(buffer, read, "Location"), UriKind.Absolute, out var location)
+                        && PinPicker.IsRegionRefusal(location);
                 }
 
                 total += read;
@@ -1916,7 +1924,7 @@ public static class BlockCheck
             // сам, а проба — нет. Замер 23.09: openai.com и claude.ai через
             // пин в hosts отвечали именно так, с узла во Франкфурте, и числились
             // «отказывает по стране», пока ChatGPT в браузере работал.
-            bool refused = status is 403 or 451 && !challenged;
+            bool refused = status is 403 or 451 && !challenged || regionRefusal;
 
             return new ProbeOutcome
             {

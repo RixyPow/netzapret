@@ -119,7 +119,8 @@ public static class PinPicker
         IReadOnlyList<PinCandidate> pool,
         IProgress<int>? progress,
         CancellationToken cancellationToken,
-        IProgress<(string Host, PinProbe Probe)>? probes = null)
+        IProgress<(string Host, PinProbe Probe)>? probes = null,
+        string? main = null)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(4) };
         using var names = new SemaphoreSlim(4);
@@ -162,7 +163,136 @@ public static class PinPicker
                 .ToList();
         }
 
-        return picks;
+        main ??= hosts.FirstOrDefault();
+
+        foreach (var (host, probe) in await FillAsync(picks, main, probes, cancellationToken))
+        {
+            int i = picks.FindIndex(p => string.Equals(p.Host, host, StringComparison.OrdinalIgnoreCase));
+            picks[i] = picks[i] with { Rejected = [.. picks[i].Rejected, probe] };
+        }
+
+        return OneAddress(picks, main);
+    }
+
+    /// <summary>
+    /// Чем сайт прибивается целиком: адрес посредника либо, пустой строкой,
+    /// настоящие адреса — у каждого имени свои, но источник один.
+    /// </summary>
+    internal static string SiteKey(PinCandidate candidate) =>
+        candidate.Source == PinSource.Honest ? string.Empty : candidate.Address;
+
+    private static IEnumerable<PinProbe> All(PinPick pick) =>
+        pick.Chosen is { } chosen ? pick.Rejected.Prepend(chosen) : pick.Rejected;
+
+    /// <summary>Сколько посредников проверить на всех именах сайта, прежде чем выбирать.</summary>
+    private const int SiteContenders = 3;
+
+    /// <summary>
+    /// Лучших посредников главного имени — на те имена, где их не пробовали.
+    /// </summary>
+    /// <remarks>
+    /// Посредники каталога пробуются на каждом имени и так, а адрес, который
+    /// посредник отдал сейчас одному имени, другим не предлагался: без
+    /// дозамера сайт достался бы тому, кого просто чаще спрашивали.
+    /// </remarks>
+    private static async Task<List<(string Host, PinProbe Probe)>> FillAsync(
+        IReadOnlyList<PinPick> picks,
+        string? main,
+        IProgress<(string Host, PinProbe Probe)>? probes,
+        CancellationToken cancellationToken)
+    {
+        var usable = picks
+            .SelectMany(p => All(p).Where(probe => probe.Usable).Select(probe => (p.Host, Probe: probe)))
+            .ToList();
+
+        var onMain = usable.Where(x => string.Equals(x.Host, main, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var contenders = (onMain.Count > 0 ? onMain : usable)
+            .Where(x => x.Probe.Candidate.Source != PinSource.Honest)
+            .OrderBy(x => x.Probe.Rank)
+            .Select(x => x.Probe.Candidate)
+            .DistinctBy(c => c.Address)
+            .Take(SiteContenders)
+            .ToList();
+
+        var work = picks
+            .SelectMany(p => contenders
+                .Where(c => All(p).All(probe => probe.Candidate.Address != c.Address))
+                .Select(c => (p.Host, Candidate: c)))
+            .ToList();
+
+        using var slots = new SemaphoreSlim(8);
+
+        return [.. await Task.WhenAll(work.Select(async item =>
+        {
+            await slots.WaitAsync(cancellationToken);
+
+            try
+            {
+                var probe = await ProbeAsync(item.Candidate, item.Host, cancellationToken);
+                probes?.Report((item.Host, probe));
+                return (item.Host, probe);
+            }
+            finally
+            {
+                slots.Release();
+            }
+        }))];
+    }
+
+    /// <summary>
+    /// Один сайт — один адрес: все имена прибиваются туда же, куда главное.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прежде каждое имя получало свой лучший адрес, и сайт расползался:
+    /// 10.10 у claude.ai стоял настоящий адрес Anthropic, у
+    /// frame.claudeusercontent.com — прокси XBOX, у downloads.claude.ai —
+    /// Comss. Страница, собранная из имён на разных посредниках, ломается
+    /// на полпути и по-разному в разные дни, а hosts этого не покажет
+    /// (владелец: «разным доменам в рамках одного сайта давать разные пины —
+    /// плохая идея»).
+    /// </para>
+    /// <para>
+    /// Выбирается адрес, годный главному имени, и из таких — покрывающий
+    /// больше имён, при равенстве — лучший на главном. Имя, которому он
+    /// не годится, остаётся без пина, а не уходит к другому посреднику:
+    /// окно назовёт его среди неподобранных. Настоящие адреса — один
+    /// источник на все имена: сайт целиком без посредника.
+    /// </para>
+    /// </remarks>
+    internal static IReadOnlyList<PinPick> OneAddress(IReadOnlyList<PinPick> picks, string? main)
+    {
+        var usable = picks
+            .SelectMany(p => All(p).Where(probe => probe.Usable).Select(probe => (p.Host, Probe: probe)))
+            .ToList();
+
+        if (usable.Count == 0)
+            return picks;
+
+        var onMain = usable.Where(x => string.Equals(x.Host, main, StringComparison.OrdinalIgnoreCase)).ToList();
+        var judged = onMain.Count > 0 ? onMain : usable;
+
+        var key = judged
+            .Select(x => SiteKey(x.Probe.Candidate))
+            .Distinct()
+            .OrderByDescending(k => usable
+                .Where(x => SiteKey(x.Probe.Candidate) == k)
+                .Select(x => x.Host)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count())
+            .ThenBy(k => judged.Where(x => SiteKey(x.Probe.Candidate) == k).Min(x => x.Probe.Rank))
+            .First();
+
+        return picks.Select(p =>
+        {
+            var chosen = All(p)
+                .Where(probe => probe.Usable && SiteKey(probe.Candidate) == key)
+                .OrderBy(probe => probe.Rank)
+                .FirstOrDefault();
+
+            return new PinPick(p.Host, chosen, All(p).Where(probe => probe != chosen).OrderBy(probe => probe.Rank).ToList());
+        }).ToList();
     }
 
     /// <summary>
@@ -299,7 +429,7 @@ public static class PinPicker
         PinVerdict.Challenge => probe.Candidate.Source == PinSource.Honest || probe.ExitsInRussia
             ? "проверка на робота с российского адреса"
             : "проверка на робота, выбран другой",
-        PinVerdict.Works => "работает, выбран другой",
+        PinVerdict.Works => "работает, но сайт прибит к другому адресу",
         _ => probe.Detail,
     };
 
@@ -330,6 +460,34 @@ public static class PinPicker
             }
         }));
     }
+
+    /// <summary>
+    /// Переадресация на страницу отказа по стране.
+    /// </summary>
+    /// <remarks>
+    /// Настоящий адрес claude.ai отвечает не 403, а
+    /// <c>302 → https://claude.com/app-unavailable-in-region</c> (замер 10.10).
+    /// Проба считала любую переадресацию ответом сайта, и подбор в тот день
+    /// поставил claude.ai и ещё ~30 имён Anthropic на 160.79.104.10, обойдя
+    /// Comss, у которого claude.ai отвечал проверкой Cloudflare с узла AMS,
+    /// а API — 401 без ключа. В журнале это читалось безобидно:
+    /// «ответ 302 → claude.com». Смотрится только путь: в имени слово
+    /// «region» ничего не значит.
+    /// </remarks>
+    internal static bool IsRegionRefusal(Uri? location)
+    {
+        if (location is null)
+            return false;
+
+        var path = Uri.UnescapeDataString(location.PathAndQuery).ToLowerInvariant();
+
+        return RefusalWords.Any(path.Contains) && PlaceWords.Any(path.Contains);
+    }
+
+    private static readonly string[] RefusalWords =
+        ["unavailable", "unsupported", "not-available", "not_available", "notavailable", "restricted", "blocked"];
+
+    private static readonly string[] PlaceWords = ["region", "country", "countries", "territor", "geo"];
 
     /// <summary>Спрашивает у адреса главную страницу имени.</summary>
     public static async Task<PinProbe> ProbeAsync(
@@ -383,17 +541,22 @@ public static class PinPicker
             var ray = BlockCheck.HeaderValue(buffer, read, "CF-RAY");
             var colo = ray is not null && ray.LastIndexOf('-') is var dash and > 0 ? ray[(dash + 1)..] : null;
 
-            var verdict = status is 403 or 451
-                ? BlockCheck.IsBotChallenge(buffer, read) ? PinVerdict.Challenge : PinVerdict.Refused
+            Uri? location = status is >= 300 and < 400
+                && Uri.TryCreate(BlockCheck.HeaderValue(buffer, read, "Location"), UriKind.Absolute, out var parsed)
+                    ? parsed
+                    : null;
+
+            bool regionRefusal = IsRegionRefusal(location);
+
+            var verdict = status is 403 or 451 || regionRefusal
+                ? !regionRefusal && BlockCheck.IsBotChallenge(buffer, read) ? PinVerdict.Challenge : PinVerdict.Refused
                 : PinVerdict.Works;
 
-            var redirect = status is >= 300 and < 400
-                && Uri.TryCreate(BlockCheck.HeaderValue(buffer, read, "Location"), UriKind.Absolute, out var location)
-                    ? location.Host.ToLowerInvariant()
-                    : null;
+            var redirect = location?.Host.ToLowerInvariant();
 
             var detail = verdict switch
             {
+                PinVerdict.Refused when regionRefusal => $"ответ {status} → {redirect}{location!.AbsolutePath} — отказ по стране",
                 PinVerdict.Refused => $"ответ {status} — сайт отказывает",
                 PinVerdict.Challenge => $"проверка на робота, {status}",
                 _ when redirect is not null && redirect != host => $"ответ {status} → {redirect}",
