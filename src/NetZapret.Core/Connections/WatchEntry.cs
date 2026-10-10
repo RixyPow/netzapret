@@ -168,12 +168,13 @@ public sealed record WatchEntry(
     public string Ip => Address[..Address.LastIndexOf(':')].Trim('[', ']');
 
     /// <summary>
-    /// Имена для кнопки «Скопировать домены»: каждое один раз, по алфавиту.
+    /// Имена для пункта «Домены» кнопки «Скопировать»: каждое один раз, по алфавиту.
     /// </summary>
     /// <remarks>
     /// Владелец 10.10: «сделай две кнопки скопировать все домены и скопировать
     /// все ip-адреса». Копируют, чтобы вписать в маршрут или список, поэтому
     /// локальное и соединения движка не берутся — их туда не пишут.
+    /// Имена точные, с www: точное нужно для hosts, он поддоменов не знает.
     /// </remarks>
     public static IReadOnlyList<string> HostsOf(IEnumerable<WatchEntry> entries) =>
         [.. entries
@@ -184,7 +185,24 @@ public sealed record WatchEntry(
             .Order(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>
-    /// Адреса для кнопки «Скопировать IP»: каждый один раз, IPv4 первыми.
+    /// Сайты для пункта «Сайты» кнопки «Скопировать»: имена, сведённые
+    /// к <see cref="SiteOf"/>, каждый один раз, по алфавиту.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 10.10: «может мы как-то уберём www?» — в его копии было девять
+    /// строк на пять сайтов (alive., api., collector.github.com и github.com,
+    /// www.google.com). В «Маршрутах» и в списках имя и так означает зону:
+    /// google.com покрывает www.google.com, а длинные имена с цифрами CDN
+    /// меняются, и правило на точное имя завтра ни с чем не совпало бы.
+    /// </remarks>
+    public static IReadOnlyList<string> SitesOf(IEnumerable<WatchEntry> entries) =>
+        [.. HostsOf(entries)
+            .Select(SiteOf)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>
+    /// Адреса для пункта «IP-адреса» кнопки «Скопировать»: каждый один раз, IPv4 первыми.
     /// </summary>
     /// <remarks>
     /// Без подставных адресов движка: 198.18.x и fc00:: выдаются на время

@@ -187,6 +187,33 @@ public sealed class WatchEntryTests
         Assert.Equal(["9.9.9.9", "142.250.74.14", "142.250.74.46", "2a00:1450:4010:c05::64"], WatchEntry.AddressesOf(entries));
     }
 
+    /// <summary>
+    /// «Сайты» — копия владельца 10.10: девять имён, пять сайтов, www нет.
+    /// «Домены» при этом остаются точными — для hosts.
+    /// </summary>
+    [Fact]
+    public void CopiedSitesFoldSubdomainsAndWww()
+    {
+        var any = new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" };
+
+        string[] hosts =
+        [
+            "alive.github.com", "api.github.com", "collector.github.com", "github.com",
+            "github.githubassets.com", "riot-client.dyn.riotcdn.net", "valorant.secure.dyn.riotcdn.net",
+            "www.google.com", "www.msftconnecttest.com",
+        ];
+
+        var entries = hosts
+            .Select(h => WatchEntry.From(Connection("chrome.exe", h, "140.82.112.3", 443), any, Engine))
+            .Append(WatchEntry.From(Connection("sing-box.exe", "www.example.com", "138.124.32.99", 443), any, Engine))
+            .ToList();
+
+        Assert.Equal(
+            ["github.com", "githubassets.com", "google.com", "msftconnecttest.com", "riotcdn.net"],
+            WatchEntry.SitesOf(entries));
+        Assert.Equal(hosts, WatchEntry.HostsOf(entries));
+    }
+
     /// <summary>Правило коротко — для таблицы и отбора по правилу.</summary>
     [Theory]
     [InlineData("#47 domain www.google.com в списке config/lists/google.txt", "#47 google")]

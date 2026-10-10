@@ -1010,11 +1010,29 @@ public partial class WatchView : UserControl
         }
     }
 
-    private void OnCopyHosts(object sender, RoutedEventArgs e) =>
-        Copy(CopyHostsButton, "Скопировать домены", WatchEntry.HostsOf);
+    /// <summary>
+    /// Одна кнопка с выбором вместо двух (владелец 10.10: «сделаем кнопку
+    /// скопировать где будет выбор сайты домены или айпи»). Сайты первыми:
+    /// копируют, чтобы вписать в маршрут, а там имя и так означает зону.
+    /// </summary>
+    private void OnCopyMenu(object sender, RoutedEventArgs e)
+    {
+        List<WatchEntry> shown;
 
-    private void OnCopyAddresses(object sender, RoutedEventArgs e) =>
-        Copy(CopyAddressesButton, "Скопировать IP", WatchEntry.AddressesOf);
+        lock (Gate)
+            shown = _store.Where(Shows).Select(r => r.Entry).ToList();
+
+        var menu = Menu(CopyButton);
+
+        menu.Items.Add(MenuEntry(string.Empty, $"Сайты — {WatchEntry.SitesOf(shown).Count}",
+            () => Copy(CopyButton, "Скопировать", WatchEntry.SitesOf)));
+        menu.Items.Add(MenuEntry(string.Empty, $"Домены целиком — {WatchEntry.HostsOf(shown).Count}",
+            () => Copy(CopyButton, "Скопировать", WatchEntry.HostsOf)));
+        menu.Items.Add(MenuEntry(string.Empty, $"IP-адреса — {WatchEntry.AddressesOf(shown).Count}",
+            () => Copy(CopyButton, "Скопировать", WatchEntry.AddressesOf)));
+
+        menu.IsOpen = true;
+    }
 
     /// <summary>
     /// Кладёт в буфер всё запомненное по нынешнему отбору, а не только

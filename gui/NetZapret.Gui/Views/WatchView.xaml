@@ -87,12 +87,10 @@
                         Content="Правило: все" Click="OnRuleMenu" Margin="0,0,8,8" gui:ButtonGlyph.Menu="True" />
                 <Button x:Name="ClearButton"
                         Content="Очистить" Click="OnClear" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE74D;" />
-                <Button x:Name="CopyHostsButton"
-                        Content="Скопировать домены" Click="OnCopyHosts" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE8C8;"
-                        ToolTip="Все узнанные имена по нынешнему отбору — по строке, без повторов. Локальное и соединения движка не берутся." />
-                <Button x:Name="CopyAddressesButton"
-                        Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xE8C8;"
-                        ToolTip="Все адреса по нынешнему отбору — по строке, без повторов. Без локальных, соединений движка и его подставных адресов." />
+                <Button x:Name="CopyButton"
+                        Content="Скопировать" Click="OnCopyMenu" Margin="0,0,8,8"
+                        gui:ButtonGlyph.Lead="&#xE8C8;" gui:ButtonGlyph.Menu="True"
+                        ToolTip="Сайты, домены или адреса по нынешнему отбору — по строке, без повторов. Локальное и соединения движка не берутся." />
                 <Button x:Name="SummaryButton" Visibility="Collapsed"
                         Content="Сводка" Click="OnSummary" Margin="0,0,8,8" gui:ButtonGlyph.Lead="&#xEB05;"
                         ToolTip="Кольцо долей, кто шумит и сайты — на узком окне скрыты, чтобы таблице хватило места" />
