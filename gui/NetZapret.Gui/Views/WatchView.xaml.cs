@@ -256,6 +256,12 @@ public partial class WatchView : UserControl
                         _pending.Add(row);
                 }
             }
+
+            // Поток кончился без нашей остановки — сессию погасили снаружи:
+            // имя сессии одно на машину, и nz watch --force её забирает.
+            // Прежде раздел этого не замечал и стоял на «Остановить» с замершим счётом.
+            if (!cancellationToken.IsCancellationRequested)
+                Interrupted("сессию забрал nz watch --force или остановила система");
         }
         catch (OperationCanceledException)
         {
@@ -263,19 +269,22 @@ public partial class WatchView : UserControl
         }
         catch (Exception ex)
         {
-            Application.Current?.Dispatcher.Invoke(() =>
-            {
-                StopSession();
-                _note = "Наблюдение прервалось: " + ex.GetBaseException().Message;
-
-                if (_open is { } view)
-                {
-                    view.PowerButton.Content = "Начать";
-                    view.Status.Text = _note;
-                }
-            });
+            Interrupted(ex.GetBaseException().Message);
         }
     }
+
+    private static void Interrupted(string why) =>
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            StopSession();
+            _note = "Наблюдение прервалось: " + why + ".";
+
+            if (_open is { } view)
+            {
+                view.PowerButton.Content = "Начать";
+                view.Status.Text = _note;
+            }
+        });
 
     /// <summary>Переносит накопленное в таблицу одной пачкой.</summary>
     private void Flush()

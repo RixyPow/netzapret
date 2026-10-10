@@ -399,6 +399,12 @@ async Task<int> Watch(List<string> options)
     }
 
     Console.WriteLine();
+
+    // Кончилось без Ctrl+C и без срока — сессию погасили снаружи: окно,
+    // начиная наблюдение, забирает её себе (имя одно на машину).
+    if (!stop.IsCancellationRequested)
+        Console.WriteLine("наблюдение прервано снаружи: сессию забрало окно («Наблюдение» → «Начать») или остановила система");
+
     Console.WriteLine($"соединений {watch.Total}, показано {shown}, под правило {watch.Matched}, имён узнано {watch.NamesKnown}"
         + (watch.Dropped > 0 ? $", потеряно при переполнении {watch.Dropped}" : string.Empty));
 
