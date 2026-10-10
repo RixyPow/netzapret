@@ -22,18 +22,29 @@
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Соединения по мере их появления и правило, которое к каждому применилось бы. Ничего не перенаправляет и ни на что не влияет — только смотрит." />
 
-            <!-- «Начать» первым: строка теперь слева, и главное действие — в начале. -->
-            <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+            <!--
+                «Начать» первым: строка слева, и главное действие — в начале.
+                WrapPanel: с кнопками копирования ряд шире окна владельца
+                (~830 точек содержимого), и лишнее уходит на вторую строку,
+                а не за край.
+            -->
+            <WrapPanel Margin="0,16,0,-8">
                 <Button x:Name="PowerButton" Style="{StaticResource Primary}"
-                        Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,0" />
+                        Content="Начать" Click="OnPower" MinWidth="110" Margin="0,0,8,8" />
                 <Button x:Name="ProcessButton" Style="{StaticResource Ghost}" MinWidth="180"
-                        Content="Все программы" Click="OnProcessMenu" Margin="0,0,8,0"
+                        Content="Все программы" Click="OnProcessMenu" Margin="0,0,8,8"
                         ToolTip="Показывать соединения одной программы" />
                 <Button x:Name="FilterButton" Style="{StaticResource Ghost}"
-                        Content="Только туннель и десинк" Click="OnFilter" Margin="0,0,8,0" />
+                        Content="Только туннель и десинк" Click="OnFilter" Margin="0,0,8,8" />
                 <Button x:Name="ClearButton" Style="{StaticResource Ghost}"
-                        Content="Очистить" Click="OnClear" />
-            </StackPanel>
+                        Content="Очистить" Click="OnClear" Margin="0,0,8,8" />
+                <Button x:Name="CopyHostsButton" Style="{StaticResource Ghost}"
+                        Content="Скопировать домены" Click="OnCopyHosts" Margin="0,0,8,8"
+                        ToolTip="Все узнанные имена по нынешнему отбору — по строке, без повторов. Локальное и соединения движка не берутся." />
+                <Button x:Name="CopyAddressesButton" Style="{StaticResource Ghost}"
+                        Content="Скопировать IP" Click="OnCopyAddresses" Margin="0,0,8,8"
+                        ToolTip="Все адреса по нынешнему отбору — по строке, без повторов. Без локальных, соединений движка и его подставных адресов." />
+            </WrapPanel>
         </StackPanel>
 
         <TextBlock Grid.Row="1" x:Name="Status" Style="{StaticResource Caption}"

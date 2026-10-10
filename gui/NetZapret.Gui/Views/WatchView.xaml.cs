@@ -17,7 +17,8 @@ public sealed record WatchRow(
     Brush Colour,
     string Process,
     string Endpoint,
-    string Rule);
+    string Rule,
+    WatchEntry Entry);
 
 /// <summary>
 /// Показывает соединения по мере появления и правило, применённое к каждому.
@@ -238,7 +239,8 @@ public partial class WatchView : UserControl
                     _brushes[entry.Mode],
                     entry.Process,
                     entry.Endpoint,
-                    entry.RuleShown);
+                    entry.RuleShown,
+                    entry);
 
                 lock (Gate)
                 {
@@ -459,6 +461,55 @@ public partial class WatchView : UserControl
 
         lock (Gate)
             _pending.Clear();
+    }
+
+    private void OnCopyHosts(object sender, RoutedEventArgs e) =>
+        Copy(CopyHostsButton, "Скопировать домены", WatchEntry.HostsOf);
+
+    private void OnCopyAddresses(object sender, RoutedEventArgs e) =>
+        Copy(CopyAddressesButton, "Скопировать IP", WatchEntry.AddressesOf);
+
+    /// <summary>
+    /// Кладёт в буфер всё запомненное по нынешнему отбору, а не только
+    /// видимые четыреста строк, и отвечает на самой кнопке.
+    /// </summary>
+    private static void Copy(Button button, string caption, Func<IEnumerable<WatchEntry>, IReadOnlyList<string>> pick)
+    {
+        IReadOnlyList<string> values;
+
+        lock (Gate)
+            values = pick(_store.Where(Shows).Select(r => r.Entry).ToList());
+
+        if (values.Count == 0)
+        {
+            Answer(button, caption, "Нечего копировать");
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, values));
+            Answer(button, caption, $"Скопировано: {values.Count}");
+        }
+        catch (Exception)
+        {
+            // Буфер обмена держит другая программа — бывает, и не наша беда.
+            Answer(button, caption, "Буфер занят — ещё раз");
+        }
+    }
+
+    /// <summary>Ответ на кнопке на две секунды, потом прежняя надпись.</summary>
+    private static void Answer(Button button, string caption, string text)
+    {
+        button.Content = text;
+
+        var back = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        back.Tick += (_, _) =>
+        {
+            back.Stop();
+            button.Content = caption;
+        };
+        back.Start();
     }
 
     private void OnFilter(object sender, RoutedEventArgs e)

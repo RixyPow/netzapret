@@ -161,6 +161,32 @@ public sealed class WatchEntryTests
         Assert.Equal(WatchRoute.Engine, WatchEntry.Parse(server.ToLine())!.Mode);
     }
 
+    /// <summary>
+    /// «Скопировать домены» и «Скопировать IP» (владелец 10.10): без повторов,
+    /// без локального, движка и подставных адресов — их в маршрут не пишут.
+    /// </summary>
+    [Fact]
+    public void CopiedHostsAndAddressesAreOnlyTheOutside()
+    {
+        var any = new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" };
+
+        WatchEntry[] entries =
+        [
+            WatchEntry.From(Connection("chrome.exe", "youtube.com", "142.250.74.46", 443), any, Engine),
+            WatchEntry.From(Connection("chrome.exe", "YouTube.com", "142.250.74.46", 443), any, Engine),
+            WatchEntry.From(Connection("chrome.exe", "i.ytimg.com", "142.250.74.14", 443), any, Engine),
+            WatchEntry.From(Connection("game.exe", null, "2a00:1450:4010:c05::64", 443), any, Engine),
+            WatchEntry.From(Connection("game.exe", null, "9.9.9.9", 7777), any, Engine),
+            WatchEntry.From(Connection("claude.exe", "api.anthropic.com", "198.18.0.11", 443), any, Engine),
+            WatchEntry.From(Connection("spotify.exe", null, "239.255.255.250", 1900), any, Engine),
+            WatchEntry.From(Connection("spotify.exe", "printer.local", "192.168.1.145", 8008), any, Engine),
+            WatchEntry.From(Connection("sing-box.exe", null, "138.124.32.99", 443), any, Engine),
+        ];
+
+        Assert.Equal(["api.anthropic.com", "i.ytimg.com", "youtube.com"], WatchEntry.HostsOf(entries));
+        Assert.Equal(["9.9.9.9", "142.250.74.14", "142.250.74.46", "2a00:1450:4010:c05::64"], WatchEntry.AddressesOf(entries));
+    }
+
     [Fact]
     public void WithoutAJournalTheSummarySaysSo()
     {

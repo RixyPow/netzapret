@@ -58,7 +58,7 @@ public sealed record WatchEntry(
                     ? "движок: соединение с сервером VPN, мимо перехвата"
                     : "движок: выход «напрямую» из туннеля или его DNS"),
             not null when context.IsFake(remote) => (WatchRoute.Proxy,
-                "подставной адрес движка — имя идёт через VPN"),
+                FakeRule),
             not null when WatchContext.IsMulticast(remote) => (WatchRoute.Local,
                 "мультикаст — поиск устройств в домашней сети"),
             not null when connection.IsLoopback || LocalNetworks.IsLocal(remote) => (WatchRoute.Local,
@@ -85,6 +85,50 @@ public sealed record WatchEntry(
         RoutingMode.Desync => WatchRoute.Desync,
         _ => WatchRoute.Direct,
     };
+
+    /// <summary>Правило записи с подставным адресом движка.</summary>
+    public const string FakeRule = "подставной адрес движка — имя идёт через VPN";
+
+    /// <summary>Имя без порта; <c>null</c> — имя не узнано.</summary>
+    public string? Host => Endpoint == Address ? null : Endpoint[..Endpoint.LastIndexOf(':')];
+
+    /// <summary>Адрес без порта и без скобок IPv6.</summary>
+    public string Ip => Address[..Address.LastIndexOf(':')].Trim('[', ']');
+
+    /// <summary>
+    /// Имена для кнопки «Скопировать домены»: каждое один раз, по алфавиту.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 10.10: «сделай две кнопки скопировать все домены и скопировать
+    /// все ip-адреса». Копируют, чтобы вписать в маршрут или список, поэтому
+    /// локальное и соединения движка не берутся — их туда не пишут.
+    /// </remarks>
+    public static IReadOnlyList<string> HostsOf(IEnumerable<WatchEntry> entries) =>
+        [.. entries
+            .Where(Outside)
+            .Select(e => e.Host)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)];
+
+    /// <summary>
+    /// Адреса для кнопки «Скопировать IP»: каждый один раз, IPv4 первыми.
+    /// </summary>
+    /// <remarks>
+    /// Без подставных адресов движка: 198.18.x и fc00:: выдаются на время
+    /// и вне движка не значат ничего.
+    /// </remarks>
+    public static IReadOnlyList<string> AddressesOf(IEnumerable<WatchEntry> entries) =>
+        [.. entries
+            .Where(e => Outside(e) && e.Rule != FakeRule)
+            .Select(e => e.Ip)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(ip => (Text: ip, Parsed: System.Net.IPAddress.TryParse(ip, out var a) ? a : null))
+            .OrderBy(x => x.Parsed?.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? 1 : 0)
+            .ThenBy(x => x.Parsed is { } a ? Convert.ToHexString(a.GetAddressBytes()) : x.Text, StringComparer.Ordinal)
+            .Select(x => x.Text)];
+
+    private static bool Outside(WatchEntry entry) => entry.Mode is not (WatchRoute.Local or WatchRoute.Engine);
 
     /// <summary>«Куда» словом — как в таблице окна.</summary>
     public string ModeWord => Word(Mode);
