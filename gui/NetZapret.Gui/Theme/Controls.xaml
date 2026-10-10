@@ -566,7 +566,22 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="10" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter />
+                        <!--
+                            Перенос — здесь, для строки в ToolTip="…": её
+                            ContentPresenter рисует своим TextBlock без
+                            переноса, и всё длиннее MaxWidth срезалось
+                            («…Нужно, есл» у «Перечитать» — №18, и снимки
+                            владельца 10.10). Значки «i» переносили сами —
+                            у них TextBlock свой. BasedOn — чтобы шрифт
+                            и цвет остались общими.
+                        -->
+                        <ContentPresenter>
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
