@@ -675,6 +675,35 @@ public static class ServiceCatalog
             ],
         },
 
+        // Photon — своей папкой, как Riot (владелец 12.10): облако мультиплеера
+        // Unity-игр, R.E.P.O. в их числе. «Ошибка подключения» в R.E.P.O.
+        // у владельца 11.10 — не десинк: UDP игры V11 Lite не перехватывает
+        // (порты не те, game filter выключен), а игровые серверы Photon
+        // в его сети недоступны напрямую ни по TCP, ни, видимо, по UDP —
+        // через туннель отвечают (замер 12.10). Матч — UDP к голым адресам,
+        // поэтому вторая часть по сетям: по имени его не узнать.
+        new ServiceDefinition
+        {
+            Name = "Photon: R.E.P.O. и другие",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Сервер и лобби",
+                    List = "config/lists/photon.txt",
+                    Probe = "ns.photonengine.io",
+                    Note = "по именам: сервер имён и игровые серверы по TCP; в сети владельца игровые серверы закрыты напрямую",
+                },
+                new ServicePart
+                {
+                    Name = "Игровые серверы (адреса)",
+                    List = "config/lists/photon-network.txt",
+                    ByAddress = true,
+                    Note = "сам матч: UDP на голые адреса серверов Photon — сюда тот же путь, что у «Сервера и лобби»",
+                },
+            ],
+        },
+
         new ServiceDefinition
         {
             Name = "Игры",

@@ -156,6 +156,18 @@ rules:
     mode: proxy
     server: "auto"
 
+  # Photon (R.E.P.O. и другие Unity-игры) — через VPN, обе части. Замер
+  # 12.10 из сети владельца: игровые серверы Photon напрямую не ставят даже
+  # TCP (12 из 12), через туннель отвечают; десинк UDP игры не трогает.
+  # Матч — UDP к голым адресам, поэтому и сети: по имени его не видно.
+  - match: hostlist
+    value: config/lists/photon.txt
+    mode: proxy
+
+  - match: ipset
+    value: config/lists/photon-network.txt
+    mode: proxy
+
   # ── Не взято десинком, по данным blockcheck ─────────────────────────────
   - match: domain
     value: "*.rutracker.org"

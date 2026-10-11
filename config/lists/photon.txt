@@ -1,0 +1,12 @@
+# Photon (Exit Games) — облако мультиплеера Unity-игр: R.E.P.O. и другие.
+#
+# Сервер имён ns.photonengine.io, игровые серверы — gclux1113.exitgames.com
+# и подобные (наблюдение владельца 11.10, R.E.P.O.). По этим именам игра
+# ходит TCP 443; сам матч — UDP к голым адресам, он в photon-network.txt.
+#
+# Замер 12.10 из сети владельца, напрямую через Wi-Fi: ns.photonengine.io
+# отвечает, игровые серверы — нет, ни один из 12 (TCP не ставится за 10 с);
+# через туннель — все шесть проверенных, TLS за 0,26–0,77 с.
+exitgames.com
+photonengine.io
+photonengine.com
