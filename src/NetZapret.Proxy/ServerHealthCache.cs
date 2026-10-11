@@ -72,6 +72,22 @@ public sealed record ServerHealth
     /// </summary>
     public bool Flaky => Recent.Count >= 5 && Recent.Count(ok => ok) * 5 < Recent.Count * 4;
 
+    /// <summary>
+    /// Надёжность: сколько процентов последних проверок прошли; <c>null</c> —
+    /// проверок меньше <see cref="ReliabilityMinimum"/>.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 12.10: «каждому серверу выведем справа процент его надёжности,
+    /// как часто он отвечает». Считается по тем же исходам, что «через раз»
+    /// (<see cref="Flaky"/>), — по одной-двум проверкам процент значил бы
+    /// «повезло» или «не повезло», а не надёжность.
+    /// </remarks>
+    public int? Reliability => Recent.Count < ReliabilityMinimum
+        ? null
+        : (int)Math.Round(100.0 * Recent.Count(ok => ok) / Recent.Count);
+
+    public const int ReliabilityMinimum = 3;
+
     public TimeSpan Age => DateTimeOffset.Now - CheckedAt;
 }
 

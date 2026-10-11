@@ -46,6 +46,19 @@ public sealed class FlakyServerTests
         Assert.False(cache.Find("ОБС")!.Flaky);
     }
 
+    /// <summary>Надёжность справа в строке сервера (владелец 12.10) — доля ответов из последних проверок.</summary>
+    [Fact]
+    public void Reliability_is_the_share_of_answers()
+    {
+        Assert.Equal(60, With(true, false, true, false, true).Find("ОБС")!.Reliability);
+        Assert.Equal(90, With(true, true, true, true, false, true, true, true, true, true).Find("ОБС")!.Reliability);
+        Assert.Equal(100, With([.. Enumerable.Repeat(false, 10), .. Enumerable.Repeat(true, 10)]).Find("ОБС")!.Reliability);
+        Assert.Equal(33, With(true, false, false).Find("ОБС")!.Reliability);
+
+        // По одной-двум проверкам это было бы везение, а не надёжность.
+        Assert.Null(With(true, false).Find("ОБС")!.Reliability);
+    }
+
     [Fact]
     public void Too_few_checks_say_nothing()
     {

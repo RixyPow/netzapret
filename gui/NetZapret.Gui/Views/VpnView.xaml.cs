@@ -36,7 +36,15 @@ public sealed record ServerRow(
     Visibility RemoveShown = Visibility.Collapsed,
 
     /// <summary>Пункт меню строки: убрать из автоподбора или вернуть.</summary>
-    string AutoPickLabel = "Не брать в автоподбор");
+    string AutoPickLabel = "Не брать в автоподбор",
+
+    /// <summary>Надёжность справа: «90 %»; пусто — проверок мало (<see cref="ServerHealth.Reliability"/>).</summary>
+    string Reliability = "",
+
+    /// <summary>Подсказка к проценту; null — без подсказки, иначе WPF показал бы пустую.</summary>
+    string? ReliabilityTip = null,
+
+    Brush? ReliabilityColor = null);
 
 /// <summary>Плитка быстрой смены сервера (макет владельца 01.10); тег <c>null</c> — «Авто».</summary>
 public sealed record QuickTile(
@@ -919,6 +927,8 @@ public partial class VpnView : UserControl
 
             var flag = country.Length == 2 ? FlagImages.For(country) : null;
 
+            var (reliability, reliabilityTip, reliabilityColor) = ReliabilityOf(server.Tag);
+
             return new ServerRow(
                 server.Tag,
                 owner,
@@ -936,7 +946,10 @@ public partial class VpnView : UserControl
                 chosen ? "выбран" : "выбрать",
                 !chosen,
                 server.IsMeasurable,
-                AutoPickLabel: excluded ? "Вернуть в автоподбор" : "Не брать в автоподбор");
+                AutoPickLabel: excluded ? "Вернуть в автоподбор" : "Не брать в автоподбор",
+                Reliability: reliability,
+                ReliabilityTip: reliabilityTip,
+                ReliabilityColor: reliabilityColor);
         });
 
         // Сортировка здесь не применяется: список отдаётся в порядке подписки,
@@ -1030,6 +1043,11 @@ public partial class VpnView : UserControl
                     // оставался тем, каким был при чтении подписки, и «17 мин
                     // назад» висело даже на только что замеренном сервере.
                     Detail = Refresh(server.Detail, server.Tag),
+                })
+                .Select(server =>
+                {
+                    var (text, tip, color) = ReliabilityOf(server.Tag);
+                    return server with { Reliability = text, ReliabilityTip = tip, ReliabilityColor = color };
                 })
                 .ToList();
         }
@@ -1166,6 +1184,25 @@ public partial class VpnView : UserControl
         _health.Entries.Values.Select(e => $"{e.Tag}:{e.CheckedAt.Ticks}:{e.Success}")
             .Concat(_engine.Select(e => $"{e.Key}:{e.Value.At.Ticks}"))
             .Order(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Надёжность сервера справа в строке (владелец 12.10) — текст, подсказка, цвет.
+    /// </summary>
+    /// <remarks>
+    /// По файлу замеров, а не по <see cref="Seen"/>: движок помнит одни удачи,
+    /// и с его историей процент врал бы в пользу сервера. Ниже 80 % — жёлтым,
+    /// как «через раз» (<see cref="ServerHealth.Flaky"/>), ниже 50 — красным.
+    /// </remarks>
+    private (string Text, string? Tip, Brush Color) ReliabilityOf(string tag)
+    {
+        if (_health.Find(tag) is not { Reliability: { } percent } history)
+            return (string.Empty, null, (Brush)FindResource("Muted"));
+
+        var tip = $"Надёжность: ответил в {history.Recent.Count(ok => ok)} из {history.Recent.Count} "
+            + "последних проверок — замеров этой вкладки и сторожа";
+
+        return ($"{percent} %", tip, (Brush)FindResource(percent >= 80 ? "Muted" : percent >= 50 ? "Warn" : "Danger"));
+    }
 
     private string Key(string tag) => Seen(tag) switch
     {
