@@ -55,6 +55,38 @@ internal static class EngineControl
         Volatile.Read(ref _stopping) == 0
         && (Volatile.Read(ref _starting) > 0 || IsRunning);
 
+    /// <summary>
+    /// Поднять или погасить прокси Telegram, который окно держит без движков
+    /// (<see cref="TgWsProxyKeeper"/>), — в пуле, не в потоке окна.
+    /// </summary>
+    /// <remarks>
+    /// Зовётся при запуске окна, с выключателя вкладки и после каждого запуска
+    /// и остановки движков: надзор, поднятый до включения настройки, держит свой
+    /// прокси, и пока он жив, второй на тот же порт не встанет.
+    /// </remarks>
+    public static void SyncTelegramProxy() => _ = Task.Run(() =>
+    {
+        // Выход гасит движки той же остановкой — поднимать прокси посреди
+        // выхода незачем: объект задания всё равно унесёт его с окном.
+        if (App.Exiting)
+            return;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            bool enginesHoldIt = state is not null && state.IsSupervisorAlive()
+                && state.Services.Any(s => s.Name == TgWsProxyService.ServiceName);
+
+            TgWsProxyKeeper.Sync(settings, enginesHoldIt);
+        }
+        catch (Exception ex)
+        {
+            Journal.Write("TG Proxy", "без движков не поднялся: " + ex.GetBaseException().Message);
+        }
+    });
+
     /// <summary>Сколько ждать, пока поднятый супервизор станет виден остальным.</summary>
     private static readonly TimeSpan RegisterLimit = TimeSpan.FromSeconds(15);
 
@@ -100,7 +132,9 @@ internal static class EngineControl
             // вместе со сборкой конфига (замер 01.10). Сторож подвисаний
             // писал в миг «Запустить» «поток окна был занят 400 мс» при
             // стольких же мс процессора.
-            return await Task.Run(() => StartCoreAsync(turn), turn);
+            var outcome = await Task.Run(() => StartCoreAsync(turn), turn);
+            SyncTelegramProxy();
+            return outcome;
         }
         catch (OperationCanceledException) when (!caller.IsCancellationRequested)
         {
@@ -227,6 +261,8 @@ internal static class EngineControl
             var result = await SupervisorHost.StopAsync(cancellationToken, _spawned);
             _spawned = null;
 
+            // Остановленный надзор мог держать прокси — теперь его место свободно.
+            SyncTelegramProxy();
             return result;
         }
         finally

@@ -54,6 +54,29 @@
                 </Grid>
             </Border>
 
+            <!-- Без движков (владелец 12.10): прокси держит само окно. -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <TextBlock Text="Держать включённым без движков" FontWeight="SemiBold" FontSize="15" />
+                        <TextBlock x:Name="AlwaysText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Text="Прокси работает, пока открыта программа — и в трее, — даже когда движки остановлены. Без десинка его соединения у части провайдеров режет DPI." />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" x:Name="AlwaysWord" Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                    <ToggleButton Grid.Column="2" x:Name="Always" Style="{StaticResource Switch}"
+                                  Click="OnAlways" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
             <!-- Подключение Telegram. -->
             <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                 <StackPanel>

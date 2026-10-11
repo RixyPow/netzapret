@@ -117,7 +117,9 @@ internal static class SupervisorHost
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";
 
-        if (settings.TelegramProxy)
+        // Прокси, который держит само окно (TelegramProxyAlways), надзор
+        // не поднимает: два прокси дрались бы за один порт.
+        if (settings.TelegramProxyWithEngines)
             arguments += " " + TelegramProxySwitch;
 
         return arguments;

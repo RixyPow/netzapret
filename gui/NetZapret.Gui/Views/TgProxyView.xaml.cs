@@ -41,6 +41,10 @@ public partial class TgProxyView : UserControl
 
         StateText.Text = Describe(settings);
 
+        Always.IsChecked = settings.TelegramProxyAlways;
+        Always.IsEnabled = settings.TelegramProxy;
+        AlwaysWord.Text = settings.TelegramProxyAlways ? "вкл." : "выкл.";
+
         // Без десинка прокси молча не работает: его соединения к Telegram
         // и доменам за Cloudflare режет DPI (жалоба пользователя 11.10 —
         // «включаю только его, Telegram не работает, нужен ещё десинк»).
@@ -61,6 +65,14 @@ public partial class TgProxyView : UserControl
 
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
+        // Держит окно само (TgWsProxyKeeper) — движки тут ни при чём.
+        if (settings.TelegramProxyAlways)
+        {
+            return TgWsProxyKeeper.Running
+                ? $"127.0.0.1:{settings.TelegramProxyPort} — работает без движков, пока открыта программа."
+                : "Включён без движков, но сейчас не запущен: ждёт, пока движки, запущенные до этой настройки, отпустят порт, — перезапустите их.";
+        }
+
         if (state is null || !state.IsSupervisorAlive())
             return "Включён; поднимется вместе с движками — сейчас они остановлены.";
 
@@ -71,6 +83,44 @@ public partial class TgProxyView : UserControl
             : $"127.0.0.1:{settings.TelegramProxyPort} — {EngineHealth.Status(service)}.";
     }
 
+    /// <summary>
+    /// «Держать включённым без движков»: прокси переезжает из надзора движков
+    /// в само окно (<see cref="TgWsProxyKeeper"/>) или обратно.
+    /// </summary>
+    private void OnAlways(object sender, RoutedEventArgs e)
+    {
+        bool on = Always.IsChecked == true;
+
+        try
+        {
+            (AppSettings.Load(AppSettings.DefaultPath) with { TelegramProxyAlways = on }).Save(AppSettings.DefaultPath);
+
+            // Окно поднимает свой прокси сразу, если порт свободен; а надзор
+            // движков держит или отпускает свой только с перезапуском.
+            EngineControl.SyncTelegramProxy();
+
+            Status.Text = on
+                ? "Прокси будет работать и без движков. Если движки запущены, перезапустите их — тогда прокси перейдёт к программе."
+                : "Прокси снова поднимается вместе с движками — перезапустите их.";
+
+            if (EngineControl.IsRunning)
+                (Window.GetWindow(this) as MainWindow)?.OfferRestart(on ? "Прокси Telegram — без движков" : "Прокси Telegram — с движками");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+
+        ShowState();
+
+        // Прокси окна поднимается в пуле — строка состояния догонит его через секунду.
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(1500);
+            StateText.Text = Describe(AppSettings.Load(AppSettings.DefaultPath));
+        });
+    }
+
     private void OnEnabled(object sender, RoutedEventArgs e)
     {
         bool on = Enabled.IsChecked == true;
@@ -78,6 +128,9 @@ public partial class TgProxyView : UserControl
         try
         {
             TgWsProxy.Switch(AppSettings.Load(AppSettings.DefaultPath), on).Save(AppSettings.DefaultPath);
+
+            // Прокси без движков держит окно — включается и гасится сразу.
+            EngineControl.SyncTelegramProxy();
 
             Status.Text = on
                 ? "Прокси включён: поднимется после перезапуска движков. Потом — «Подключить Telegram»."

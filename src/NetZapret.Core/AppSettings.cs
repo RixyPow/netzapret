@@ -299,6 +299,22 @@ public sealed record AppSettings
     public string? TelegramProxySecret { get; init; }
 
     /// <summary>
+    /// Держать прокси Telegram и без движков — пока открыто окно, в том числе в трее.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 12.10: «где настройка держать тг вс прокси включенным даже без
+    /// движков? она должна быть на вкладке тг прокси». Тогда прокси поднимает
+    /// само окно (TgWsProxyKeeper), а надзор движков его не трогает — иначе два
+    /// прокси дрались бы за один порт. Без десинка соединения прокси у части
+    /// провайдеров режет DPI — вкладка об этом говорит.
+    /// </remarks>
+    public bool TelegramProxyAlways { get; init; }
+
+    /// <summary>Прокси поднимает надзор движков — включён и не держится окном сам.</summary>
+    [JsonIgnore]
+    public bool TelegramProxyWithEngines => TelegramProxy && !TelegramProxyAlways;
+
+    /// <summary>
     /// Держать автоподбор сервера подальше от отечественных выходов.
     /// </summary>
     /// <remarks>

@@ -195,6 +195,10 @@ public partial class App : Application
         // в трей. Выход остаётся явным — пунктом в меню значка.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Прокси Telegram без движков (вкладка «TG Proxy», 12.10) — с окном,
+        // в том числе в трее после автозапуска.
+        EngineControl.SyncTelegramProxy();
+
         _tray = new TrayIcon();
         UiStallWatch.Start(Dispatcher);
 

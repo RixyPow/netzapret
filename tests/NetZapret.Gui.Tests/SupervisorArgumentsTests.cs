@@ -273,4 +273,22 @@ public sealed class SupervisorArgumentsTests
         Assert.DoesNotContain(secret, arguments);
         Assert.False(RoundTrip(new AppSettings()).TelegramProxy);
     }
+
+    /// <summary>
+    /// Прокси «без движков» держит окно (TgWsProxyKeeper, 12.10) — надзору ключа нет,
+    /// иначе два прокси дрались бы за один порт.
+    /// </summary>
+    [Fact]
+    public void Telegram_proxy_kept_by_the_window_is_not_given_to_the_engines()
+    {
+        var settings = new AppSettings
+        {
+            TelegramProxy = true,
+            TelegramProxyAlways = true,
+            TelegramProxySecret = NetZapret.Core.TgWsProxy.NewSecret(),
+        };
+
+        Assert.False(RoundTrip(settings).TelegramProxy);
+        Assert.True(RoundTrip(settings with { TelegramProxyAlways = false }).TelegramProxy);
+    }
 }
