@@ -41,6 +41,9 @@
                         </StackPanel>
 
                         <TextBlock x:Name="StateText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap" />
+                        <TextBlock x:Name="DesyncWarning" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12.5"
+                                   Foreground="{DynamicResource Warn}" Visibility="Collapsed"
+                                   Text="Без десинка прокси не работает: его соединения к Telegram и к доменам за Cloudflare режет DPI. Включите десинк на «Главной» или во вкладке «Десинк»." />
                     </StackPanel>
 
                     <TextBlock Grid.Column="2" x:Name="StateWord" Style="{StaticResource Caption}"
@@ -104,7 +107,7 @@
                 <StackPanel>
                     <TextBlock Text="Когда он нужен" FontWeight="SemiBold" FontSize="15" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                               Text="В режиме «Десинк» и вообще без VPN: адреса Telegram закрыты, а через прокси он работает целиком, с фото и видео. В «Гибриде» и «Туннеле» Telegram и так идёт через VPN — прокси там не обязателен, но и не мешает." />
+                               Text="Когда Telegram не идёт через VPN: адреса Telegram закрыты, а через прокси он работает целиком, с фото и видео. Работает прокси только вместе с десинком — без него соединения самого прокси режет DPI, и Telegram не подключится. В «Гибриде» и «Туннеле» Telegram и так идёт через VPN — прокси там не обязателен, но и не мешает." />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Только Telegram Desktop на этом компьютере — телефон через него не подключить. Прокси: tg-ws-proxy-rs (valnesfjord) — порт программы tg-ws-proxy (Flowseal), обе под MIT. Журнал — runtime\tg-ws-proxy.log." />
                 </StackPanel>

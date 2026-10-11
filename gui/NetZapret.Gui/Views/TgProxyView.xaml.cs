@@ -40,6 +40,14 @@ public partial class TgProxyView : UserControl
         CopyButton.IsEnabled = ready;
 
         StateText.Text = Describe(settings);
+
+        // Без десинка прокси молча не работает: его соединения к Telegram
+        // и доменам за Cloudflare режет DPI (жалоба пользователя 11.10 —
+        // «включаю только его, Telegram не работает, нужен ещё десинк»).
+        // Поднимать десинк ради него самим владелец не стал — говорим прямо.
+        DesyncWarning.Visibility = settings.TelegramProxy && !settings.NeedsDesync
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>Что с прокси сейчас — по настройке, наличию файла и состоянию надзора.</summary>
