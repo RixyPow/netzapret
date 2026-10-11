@@ -35,6 +35,7 @@ public sealed class PresetNewnessTests
             ("Default v1 (game filter)", "2.40"),
             ("Default v5 (game filter)", "2.40"),
             ("Universal V10", "2.26"),
+            ("Universal V11", "2.26"),
             ("Universal V11 Lite", "2.26"),
             ("Universal V5 (game filter)", "2.24"),
             ("Universal V5", "2.26"),
@@ -47,7 +48,7 @@ public sealed class PresetNewnessTests
             .Select(p => p.Name);
 
         Assert.Equal(
-            ["Universal V11 Lite", "Universal V10", "Universal V9", "Universal V8", "Universal V8 diag",
+            ["Universal V11 Lite", "Universal V11", "Universal V10", "Universal V9", "Universal V8", "Universal V8 diag",
              "Universal V5", "Universal V5 (game filter)"],
             ours);
 

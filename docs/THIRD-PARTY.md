@@ -159,7 +159,7 @@ MIT разрешает распространение в любом виде, в
   `strategy-lock-manager.lua`, `strategy-stats.lua`, `zapret-16kb.lua`,
   `zapret-multishake.lua`, `zapret-rst-flood.lua`, `zapret-wgobfs.lua` —
   и шесть файлов со стратегиями рядом с ними (`circular-config.txt`,
-  `strategies-*-source.txt`). Наши пресеты Universal V10 и V11 Lite грузят пять из этих
+  `strategies-*-source.txt`). Наши пресеты Universal V10, V11 и V11 Lite грузят пять из этих
   модулей: на одном winws2 от bol-van они бы не поднялись;
 * **списки доменов и адресов** в `engines/zapret/lists/` — мы их не изменяем
   и не дополняем, только читаем. Один из них, `ipset-all.txt`, в установку

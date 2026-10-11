@@ -43,6 +43,11 @@ public static class PresetNewness
         Func<T, string?> builtinVersion) =>
         items
             .OrderByDescending(item => Number(name(item)) ?? -1)
+
+            // При равном номере основной — первым: «Universal V11» (12.10)
+            // иначе встал бы над «Universal V11 Lite» по алфавиту, а основным
+            // владелец оставил Lite.
+            .ThenByDescending(item => string.Equals(name(item), Core.AppSettings.DefaultPresetName, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(item => Version.TryParse(builtinVersion(item), out var version) ? version : null)
             .ThenBy(name, StringComparer.OrdinalIgnoreCase)
             .ToList();
