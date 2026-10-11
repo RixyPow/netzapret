@@ -911,6 +911,7 @@ public partial class RoutesView : UserControl
             // быть не обязано.
             var title = listed ? OwnLists.NameOf(entry.Value) : entry.Value.TrimStart('*', '.');
             var domain = listed ? zones.FirstOrDefault() ?? title : title;
+            var addresses = listed ? OwnLists.Names(entry.Value).Count(n => AddressInput.Normalize(n) is not null) : 0;
 
             var (color, choice) = entry.Off ? ("Muted", PartRow.Off) : entry.Mode switch
             {
@@ -929,7 +930,10 @@ public partial class RoutesView : UserControl
                 // Рецепт называется прямо в подписи: выбранный однажды,
                 // он иначе пропадал бы из виду, и понять, чем чинится имя,
                 // можно было бы только заглянув в yaml.
-                Detail = (listed ? "свой список · " + Count(count, "домен", "домена", "доменов") : "свой домен")
+                Detail = (listed
+                        ? "свой список · " + Count(count, "домен", "домена", "доменов")
+                            + (addresses > 0 ? " · " + Count(addresses, "адрес", "адреса", "адресов") : string.Empty)
+                        : "свой домен")
                     + (entry.Mode == RoutingMode.Desync
                         && !string.IsNullOrWhiteSpace(entry.Recipe)
                             ? $" · рецепт: {entry.Recipe}"
@@ -982,6 +986,37 @@ public partial class RoutesView : UserControl
                 Own = true,
                 Letter = entry.Value.Length > 0 ? entry.Value[..1].ToUpperInvariant() : "·",
                 Icon = ProgramIcon(entry.Value),
+                Lead = 24,
+            };
+
+            rows.Add(new ServiceRow(entry.Value, [part]));
+        }
+
+        // Свои подсети и адреса — правило ip (12.10). Пина и рецепта нет:
+        // имени у них нет, рецепт десинка выбирается по имени в TLS.
+        foreach (var entry in userRules.Entries.Where(e => e.Match == MatchKind.Ip))
+        {
+            var (color, choice) = entry.Off ? ("Muted", PartRow.Off) : entry.Mode switch
+            {
+                RoutingMode.Direct => ("Muted", 0),
+                RoutingMode.Desync => ("Warn", 1),
+                _ => ("Accent", 2),
+            };
+
+            var part = new PartRow
+            {
+                Key = RouteKeys.Make(RouteKeys.Subnet, entry.Value),
+                Title = entry.Value,
+                Detail = entry.Value.Contains('/') ? "своя подсеть" : "свой адрес",
+                Example = entry.Value,
+                Mode = entry.Off ? "выключено — правило не действует" : Describe(entry.Mode),
+                Color = (Brush)Application.Current.FindResource(color),
+                Choice = choice,
+                Applied = choice,
+                CanRoute = true,
+                CanPin = false,
+                Own = true,
+                Letter = "#",
                 Lead = 24,
             };
 
@@ -1492,22 +1527,26 @@ public partial class RoutesView : UserControl
         // Нашлось — значит, такое уже есть, и второе правило на него было бы
         // двойником, спорящим с первым.
         var program = found.Count == 0 ? ProgramInput(needle) : null;
-        var domain = found.Count == 0 && program is null ? DomainInput.Normalize(needle) : null;
+        var subnet = found.Count == 0 && program is null ? AddressInput.Normalize(needle) : null;
+        var domain = found.Count == 0 && program is null && subnet is null ? DomainInput.Normalize(needle) : null;
 
         // Программу добавить не предлагаем: обход по программе на переработке
         // (Rules.ProgramRulesOff, владелец 04.10) — правило обещало бы то, чего
         // в «Гибриде» не делает. Вписанное «.exe» не ищется и сайтом.
-        AddOffer.Visibility = domain is null ? Visibility.Collapsed : Visibility.Visible;
+        AddOffer.Visibility = domain is null && subnet is null ? Visibility.Collapsed : Visibility.Visible;
 
         if (domain is not null)
             AddOfferText.Text = $"«{domain}» в списке нет. Добавить своим доменом — сперва «напрямую», дальше правится в его строке.";
+
+        if (subnet is not null)
+            AddOfferText.Text = $"«{subnet}» — {(subnet.Contains('/') ? "подсеть" : "адрес")}. Добавить своим правилом — сперва «напрямую», дальше правится в его строке.";
 
         Status.Text = found.Count > 0
             ? $"Найдено частей: {found.Sum(s => s.Parts.Count)}."
             : program is not null
                 ? $"«{program}» — программа. Правила по программе на переработке: добавить её сейчас нельзя."
-                : domain is null
-                    ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com."
+                : domain is null && subnet is null
+                    ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com, или подсеть — 203.0.113.0/24."
                     : string.Empty;
     }
 
@@ -1723,12 +1762,12 @@ public partial class RoutesView : UserControl
         // списке ниже, и счёт без них говорил бы «своих правил нет» тому,
         // у кого заведена только игра.
         var own = UserRulesFile.Load().Entries
-            .Where(entry => entry.Match is MatchKind.Domain or MatchKind.Process
+            .Where(entry => entry.Match is MatchKind.Domain or MatchKind.Process or MatchKind.Ip
                 || (entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value)))
             .Select(entry => entry.Match switch
             {
                 MatchKind.Domain => entry.Value.TrimStart('*', '.'),
-                MatchKind.Process => entry.Value,
+                MatchKind.Process or MatchKind.Ip => entry.Value,
                 _ => OwnLists.NameOf(entry.Value),
             })
             .ToList();
@@ -1856,6 +1895,12 @@ public partial class RoutesView : UserControl
             return;
         }
 
+        if (AddressInput.Normalize(Search.Text) is { } subnet)
+        {
+            AddSubnet(subnet);
+            return;
+        }
+
         var name = DomainInput.Normalize(Search.Text);
 
         if (name is null)
@@ -1881,6 +1926,28 @@ public partial class RoutesView : UserControl
                 + "Применится при следующем запуске движков.";
 
             this.Offer($"Добавлен маршрут: {name}");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Своя подсеть или адрес — правилом ip, сперва «напрямую», как свой домен.</summary>
+    private void AddSubnet(string subnet)
+    {
+        try
+        {
+            var file = UserRulesFile.Load();
+            file.Set(MatchKind.Ip, subnet, RoutingMode.Direct, recipe: null);
+            file.Save();
+
+            Reload();
+
+            Status.Text = $"Записано: {subnet} → напрямую. Режим меняется в его строке ниже. "
+                + "Применится при следующем запуске движков.";
+
+            this.Offer($"Добавлен маршрут: {subnet}");
         }
         catch (Exception ex)
         {
@@ -1948,7 +2015,7 @@ public partial class RoutesView : UserControl
     {
         if (sender is not Button { Tag: string key }
             || RouteKeys.Parse(key) is not var (kind, value)
-            || kind is not (RouteKeys.Own or RouteKeys.Program))
+            || kind is not (RouteKeys.Own or RouteKeys.Program or RouteKeys.Subnet))
         {
             return;
         }
@@ -1969,7 +2036,9 @@ public partial class RoutesView : UserControl
             Reload();
             var name = OwnLists.IsOwn(value) ? OwnLists.NameOf(value) : value.TrimStart('*', '.');
 
-            Status.Text = $"Убрано: {name} вместе с его списком. Применится при следующем запуске движков.";
+            Status.Text = kind == RouteKeys.Own
+                ? $"Убрано: {name} вместе с его списком. Применится при следующем запуске движков."
+                : $"Убрано: {name}. Применится при следующем запуске движков.";
             this.Offer($"Убран маршрут: {name}");
         }
         catch (Exception ex)

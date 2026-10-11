@@ -34,6 +34,13 @@ internal static class RouteKeys
     /// <summary>Своя программа: правило по имени процесса (обсуждение №10, 29.09).</summary>
     public const string Program = "prog";
 
+    /// <summary>
+    /// Своя подсеть или адрес — правило <c>ip</c> (владелец 12.10: «добавим
+    /// возможность добавлять подсети»). Его же ставит «Наблюдение» из меню
+    /// строки с голым адресом; до 12.10 «Маршруты» такие правила не показывали.
+    /// </summary>
+    public const string Subnet = "net";
+
     /// <summary>Часть сервиса, заданная подсетями.</summary>
     public const string IpSet = "ipset";
 
@@ -59,6 +66,7 @@ internal static class RouteKeys
     public static MatchKind MatchOf(string kind, string value) => kind switch
     {
         IpSet => MatchKind.IpSet,
+        Subnet => MatchKind.Ip,
         Program => MatchKind.Process,
         Own when !OwnLists.IsOwn(value) => MatchKind.Domain,
         _ => MatchKind.HostList,
@@ -95,13 +103,16 @@ internal static class RouteKeys
         if (kind == Own && !OwnLists.IsOwn(value))
             return [value.TrimStart('*', '.')];
 
-        // У программы имён нет: её трафик узнаётся по процессу.
-        if (kind == Program)
+        // У программы имён нет: её трафик узнаётся по процессу. У подсети — тоже.
+        if (kind is Program or Subnet)
             return [];
 
         try
         {
+            // Адреса своего списка (AddressInput) — не зоны: пина и проб
+            // по имени у них нет.
             return HostListReader.Read(value, zapretRoot, out _)
+                .Where(d => AddressInput.Normalize(d) is null)
                 .Select(d => d.TrimStart('*', '.'))
                 .ToList();
         }

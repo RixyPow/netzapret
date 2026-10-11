@@ -20,6 +20,11 @@ public static class DomainInput
     /// </remarks>
     public static string? Normalize(string? text)
     {
+        // Адрес и подсеть — не имя (AddressInput): «45.82.160.0/24» прежде
+        // проходило сюда именем «45.82.160.0», без маски.
+        if (AddressInput.Normalize(text) is not null)
+            return null;
+
         var raw = (text ?? string.Empty).Trim().Trim('/').ToLowerInvariant();
 
         int scheme = raw.IndexOf("://", StringComparison.Ordinal);

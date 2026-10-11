@@ -205,21 +205,35 @@ public sealed class RoutingRule
             case MatchKind.HostList:
             {
                 var host = connection.Hostname;
-                if (host is null || _hostGlobs is null)
-                    return false;
 
-                if (_hostZones is not null && InZones(_hostZones, host))
+                if (host is not null && _hostGlobs is not null)
                 {
-                    reason = $"domain {host} в списке {Value}";
-                    return true;
+                    if (_hostZones is not null && InZones(_hostZones, host))
+                    {
+                        reason = $"domain {host} в списке {Value}";
+                        return true;
+                    }
+
+                    for (int i = 0; i < _hostGlobs.Count; i++)
+                    {
+                        if (!_hostGlobs[i].IsMatch(host))
+                            continue;
+
+                        reason = $"domain {host} в списке {Value}";
+                        return true;
+                    }
                 }
 
-                for (int i = 0; i < _hostGlobs.Count; i++)
+                var addr = connection.RemoteAddress;
+                if (addr is null || _hostCidrs is null)
+                    return false;
+
+                foreach (var range in _hostCidrs)
                 {
-                    if (!_hostGlobs[i].IsMatch(host))
+                    if (!range.Contains(addr))
                         continue;
 
-                    reason = $"domain {host} в списке {Value}";
+                    reason = $"ip {addr} в списке {Value}";
                     return true;
                 }
 
@@ -259,6 +273,28 @@ public sealed class RoutingRule
 
         IpSetCidrs = cidrs;
         _cidrSet = cidrs.Select(IpCidrRange.Parse).ToList();
+    }
+
+    /// <summary>
+    /// Адреса и подсети из своего списка имён (<see cref="AddressInput"/>).
+    /// </summary>
+    /// <remarks>
+    /// Свой список — то, что человек туда вписал, а вписывают и адреса:
+    /// игровой UDP идёт к голым адресам, имени у него нет (R.E.P.O., 11.10).
+    /// Маршрут у них тот же, что у имён списка. Списки Zapret так
+    /// не читаются: там адресам место в ipset.
+    /// </remarks>
+    public IReadOnlyList<string> HostListCidrs { get; private set; } = Array.Empty<string>();
+
+    private IReadOnlyList<IpCidrRange>? _hostCidrs;
+
+    public void LoadHostListAddresses(IReadOnlyList<string> cidrs)
+    {
+        if (Match != MatchKind.HostList)
+            throw new InvalidOperationException($"Правило #{Ordinal} не ссылается на список доменов.");
+
+        HostListCidrs = cidrs;
+        _hostCidrs = cidrs.Count > 0 ? cidrs.Select(IpCidrRange.Parse).ToList() : null;
     }
 
     /// <summary>

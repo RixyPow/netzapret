@@ -757,6 +757,9 @@ public sealed class SingBoxConfigCompiler
             .Concat(proxied
                 .Where(r => r.Match == MatchKind.IpSet)
                 .SelectMany(r => r.IpSetCidrs))
+            .Concat(proxied
+                .Where(r => r.Match == MatchKind.HostList)
+                .SelectMany(r => r.HostListCidrs))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -1963,19 +1966,35 @@ public sealed class SingBoxConfigCompiler
                 // Непрогруженный список означает, что файл не нашёлся.
                 // Правило без доменов совпало бы со всем подряд, поэтому
                 // выбрасываем его целиком — о пропаже уже сказал разворот.
-                if (rule.HostListDomains.Count == 0)
+                if (rule.HostListDomains.Count == 0 && rule.HostListCidrs.Count == 0)
                     return null;
 
-                var suffixes = new JsonArray();
-
-                foreach (var domain in rule.HostListDomains)
+                if (rule.HostListDomains.Count > 0)
                 {
-                    // Записи в списках Zapret — это зоны: там пишут
-                    // discord.media, подразумевая и russia1234.discord.media.
-                    suffixes.Add(domain.StartsWith("*.", StringComparison.Ordinal) ? domain[2..] : domain);
+                    var suffixes = new JsonArray();
+
+                    foreach (var domain in rule.HostListDomains)
+                    {
+                        // Записи в списках Zapret — это зоны: там пишут
+                        // discord.media, подразумевая и russia1234.discord.media.
+                        suffixes.Add(domain.StartsWith("*.", StringComparison.Ordinal) ? domain[2..] : domain);
+                    }
+
+                    node["domain_suffix"] = suffixes;
                 }
 
-                node["domain_suffix"] = suffixes;
+                // Адреса своего списка — в том же правиле: у sing-box имена
+                // и ip_cidr одного правила складываются через «или».
+                if (rule.HostListCidrs.Count > 0)
+                {
+                    var cidrs = new JsonArray();
+
+                    foreach (var cidr in rule.HostListCidrs)
+                        cidrs.Add(cidr);
+
+                    node["ip_cidr"] = cidrs;
+                }
+
                 break;
             }
 

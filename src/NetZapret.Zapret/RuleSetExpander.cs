@@ -42,6 +42,16 @@ public static class RuleSetExpander
                 continue;
             }
 
+            // Свой список несёт и адреса (AddressInput): игре нужен её UDP
+            // к голым адресам, а имени в нём нет.
+            if (OwnLists.IsOwn(rule.Value))
+            {
+                var (names, addresses) = AddressInput.Split(domains);
+                rule.LoadHostList(names);
+                rule.LoadHostListAddresses(addresses);
+                continue;
+            }
+
             rule.LoadHostList(domains);
         }
 
