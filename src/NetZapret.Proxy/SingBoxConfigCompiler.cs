@@ -1564,12 +1564,13 @@ public sealed class SingBoxConfigCompiler
 
         // uTLS подделывает отпечаток клиента. Для REALITY он обязателен:
         // без него сервер не отвечает.
-        if (!string.IsNullOrEmpty(server.Fingerprint) || reality)
+        string? fingerprint = Fingerprint(server.Fingerprint);
+        if (fingerprint is not null || reality)
         {
             block["utls"] = new JsonObject
             {
                 ["enabled"] = true,
-                ["fingerprint"] = string.IsNullOrEmpty(server.Fingerprint) ? "chrome" : server.Fingerprint,
+                ["fingerprint"] = fingerprint ?? "chrome",
             };
         }
 
@@ -1587,6 +1588,33 @@ public sealed class SingBoxConfigCompiler
         }
 
         return block;
+    }
+
+    // Имена отпечатков, которые знает sing-box 1.14 (проверено `sing-box check`
+    // 11.10), — с учётом регистра. Чужое имя он не пропускает, а валит весь
+    // конфиг: «unknown uTLS fingerprint» — и ни одного сервера подписки.
+    private static readonly HashSet<string> KnownFingerprints = new(StringComparer.Ordinal)
+    {
+        "chrome", "chrome_psk", "chrome_psk_shuffle", "chrome_padding_psk_shuffle",
+        "chrome_pq", "chrome_pq_psk", "firefox", "edge", "safari", "360", "qq",
+        "ios", "android", "random", "randomized",
+    };
+
+    /// <summary>
+    /// Отпечаток из ссылки в имя sing-box; null — родной отпечаток, без uTLS.
+    /// «unsafe» у Xray и значит «подделку выключить»; прочие чужие имена
+    /// (опечатки, «randomizednoalpn» Xray) — так же, лучше родной, чем ни одного.
+    /// </summary>
+    internal static string? Fingerprint(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        string name = value.Trim().ToLowerInvariant();
+        if (name == "randomizednoalpn")
+            return "randomized";
+
+        return KnownFingerprints.Contains(name) ? name : null;
     }
 
     private static JsonObject? BuildTransport(ProxyServer server)
