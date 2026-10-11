@@ -417,7 +417,8 @@ public partial class StatusView : UserControl
         SupervisorState? State,
         bool Running,
         bool SingBoxUp,
-        DateTime? ConfigBuilt);
+        DateTime? ConfigBuilt,
+        bool Coming = false);
 
     private static Seen Read(bool starting)
     {
@@ -464,7 +465,8 @@ public partial class StatusView : UserControl
         {
         }
 
-        return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built);
+        return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built,
+            !running && EngineControl.Coming);
     }
 
     private bool _updating;
@@ -534,7 +536,16 @@ public partial class StatusView : UserControl
         var state = seen.State;
         bool running = seen.Running;
 
-        ShowState(settings, state, running, seen.SingBoxUp);
+        // Движки поднимает не эта кнопка — перезапуск из всплывающего
+        // сообщения, трей, автозапуск: запуск показывается и тогда.
+        if (_startingSince is null && seen.Coming)
+        {
+            _startingSince = DateTimeOffset.Now;
+            _refresh.Interval = StartingInterval;
+            StartAnimations();
+        }
+
+        ShowState(settings, state, running, seen.SingBoxUp, seen.Coming);
         ShowFooter(state, running, seen.ConfigBuilt);
         ShowWarnings(settings);
 
@@ -588,11 +599,11 @@ public partial class StatusView : UserControl
         }
     }
 
-    private void ShowState(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp)
+    private void ShowState(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp, bool coming)
     {
         // Запуск показывается своим чередом: пока он идёт, «остановлено»
         // означает не отказ, а то, что супервизор ещё не дописал состояние.
-        if (_startingSince is not null && ShowStarting(settings, state, running, singBoxUp))
+        if (_startingSince is not null && ShowStarting(settings, state, running, singBoxUp, coming))
             return;
 
         StartButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
@@ -657,7 +668,7 @@ public partial class StatusView : UserControl
     /// либо исчерпанное терпение — иначе окно объявляло бы отказ, пока
     /// внизу ещё идут попытки.
     /// </remarks>
-    private bool ShowStarting(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp)
+    private bool ShowStarting(AppSettings settings, SupervisorState? state, bool running, bool singBoxUp, bool coming)
     {
         var since = _startingSince!.Value;
         var services = running ? state!.Services : [];
@@ -665,7 +676,11 @@ public partial class StatusView : UserControl
         bool ready = services.Count > 0 && services.All(s => s.Health == ServiceHealth.Healthy);
         bool gaveUp = services.Any(s => s.Health == ServiceHealth.Faulted);
 
-        if (ready || gaveUp || DateTimeOffset.Now - since > StartupPatience)
+        // Ни состояния, ни живого супервизора, ни запуска в очереди — значит,
+        // он ушёл, не подняв движков. Ждать тут все 90 с незачем.
+        bool gone = !running && !coming && DateTimeOffset.Now - since > TimeSpan.FromSeconds(3);
+
+        if (ready || gaveUp || gone || DateTimeOffset.Now - since > StartupPatience)
         {
             EndStarting();
             return false;

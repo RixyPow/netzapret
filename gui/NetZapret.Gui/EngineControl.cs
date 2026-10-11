@@ -37,6 +37,24 @@ internal static class EngineControl
     /// <summary>Жив ли супервизор — в том числе поднимающийся, ещё без файла состояния.</summary>
     public static bool IsRunning => SupervisorHost.IsRunning(_spawned);
 
+    private static int _starting;
+    private static int _stopping;
+
+    /// <summary>
+    /// Движки поднимаются: идёт запуск или перезапуск, либо супервизор жив,
+    /// а состояния ещё не написал.
+    /// </summary>
+    /// <remarks>
+    /// «Главная» судила по файлу состояния, а он появляется, когда подняты
+    /// все службы. Перезапуск из всплывающего сообщения шёл без неё, и всё
+    /// это время на ней горело «Запустить»: 11.10 в 21:46 владелец нажал его
+    /// через пять секунд после перезапуска — второй супервизор сменил первый,
+    /// и движки поднимались заново.
+    /// </remarks>
+    public static bool Coming =>
+        Volatile.Read(ref _stopping) == 0
+        && (Volatile.Read(ref _starting) > 0 || IsRunning);
+
     /// <summary>Сколько ждать, пока поднятый супервизор станет виден остальным.</summary>
     private static readonly TimeSpan RegisterLimit = TimeSpan.FromSeconds(15);
 
@@ -48,19 +66,27 @@ internal static class EngineControl
     public static async Task<EngineOutcome> StartAsync(string who, CancellationToken cancellationToken)
     {
         Journal.Write("движки", $"запуск — {who}");
+        Interlocked.Increment(ref _starting);
 
-        using var turn = await Gate.StartAsync(cancellationToken);
-
-        // Пока ждали очереди, движки поднял другой запуск: второй супервизор
-        // сменил бы первый, погасив только что поднятые движки, — а человек
-        // просто нажал кнопку, пока первый ждал подписку.
-        if (turn.Superseded && SupervisorHost.IsRunning(_spawned))
+        try
         {
-            Journal.Write("движки", $"запуск — {who}: движки уже поднимает запуск перед ним, второй не нужен");
-            return new EngineOutcome(true, "Движки уже поднимаются.");
-        }
+            using var turn = await Gate.StartAsync(cancellationToken);
 
-        return await StartTurnAsync(who, turn.Token, cancellationToken);
+            // Пока ждали очереди, движки поднял другой запуск: второй супервизор
+            // сменил бы первый, погасив только что поднятые движки, — а человек
+            // просто нажал кнопку, пока первый ждал подписку.
+            if (turn.Superseded && SupervisorHost.IsRunning(_spawned))
+            {
+                Journal.Write("движки", $"запуск — {who}: движки уже поднимает запуск перед ним, второй не нужен");
+                return new EngineOutcome(true, "Движки уже поднимаются.");
+            }
+
+            return await StartTurnAsync(who, turn.Token, cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _starting);
+        }
     }
 
     /// <summary>Сам запуск — внутри своей очереди.</summary>
@@ -192,19 +218,40 @@ internal static class EngineControl
     public static async Task<string> StopAsync(string who, CancellationToken cancellationToken)
     {
         Journal.Write("движки", $"остановка — {who}");
+        Interlocked.Increment(ref _stopping);
 
-        using var turn = await Gate.StopAsync(cancellationToken);
+        try
+        {
+            using var turn = await Gate.StopAsync(cancellationToken);
 
-        var result = await SupervisorHost.StopAsync(cancellationToken, _spawned);
-        _spawned = null;
+            var result = await SupervisorHost.StopAsync(cancellationToken, _spawned);
+            _spawned = null;
 
-        return result;
+            return result;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _stopping);
+        }
     }
 
     public static async Task<EngineOutcome> RestartAsync(string who, CancellationToken cancellationToken)
     {
         Journal.Write("движки", $"перезапуск — {who}");
+        Interlocked.Increment(ref _starting);
 
+        try
+        {
+            return await RestartTurnAsync(who, cancellationToken);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _starting);
+        }
+    }
+
+    private static async Task<EngineOutcome> RestartTurnAsync(string who, CancellationToken cancellationToken)
+    {
         using var turn = await Gate.RestartAsync(cancellationToken);
 
         try
