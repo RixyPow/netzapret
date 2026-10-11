@@ -726,6 +726,17 @@ public static class ServiceCatalog
                     DefaultOff = true,
                 },
                 new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
+
+                // Wardogs — имена от владельца 12.10. У пользователя на V10
+                // с game filter заходит на серверы, на V11 Lite — нет (11.10);
+                // какие соединения ломаются, не выяснено.
+                new ServicePart
+                {
+                    Name = "Wardogs",
+                    List = "config/lists/wardogs.txt",
+                    Probe = "live.wardogs.bulkhead.pragmaengine.com",
+                    Note = "на V11 Lite, по сообщению, не заходит в игру, на V10 — заходит",
+                },
                 new ServicePart { Name = "itch.io", List = "config/lists/itch.txt" },
                 new ServicePart
                 {

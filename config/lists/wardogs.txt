@@ -1,0 +1,12 @@
+# Wardogs.
+#
+# Имена — от владельца 12.10: сервер игры на Pragma Engine, сайт
+# разработчика и Epic Online Services. Pragma — чужой движок серверов,
+# и зона pragmaengine.com целиком сюда не взята: в ней и другие игры.
+#
+# У пользователя на Universal V10 с game filter игра заходит на серверы,
+# на V11 Lite с ним же — не грузит в игру (11.10). Какие соединения
+# ломаются, не выяснено: имени игрового UDP в этом списке нет.
+wardogs.bulkhead.pragmaengine.com
+firstlook.gg
+api.epicgames.dev
