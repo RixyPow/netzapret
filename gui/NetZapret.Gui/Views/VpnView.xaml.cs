@@ -1260,6 +1260,10 @@ public partial class VpnView : UserControl
         // отвечали 2–3 раза из 5, и зелёный на таком врал бы.
         { Flaky: true } => "Warn",
         { Success: true } => "Accent",
+
+        // Обычно отвечает, промахнулась последняя проверка — жёлтым, а не
+        // красным: красный рядом с «80 %» читался как «мёртв» (12.10).
+        { Success: false, Reliability: >= 80 } => "Warn",
         { Success: false } => "Danger",
         _ => "Faint",
     };
@@ -1270,6 +1274,7 @@ public partial class VpnView : UserControl
         { Flaky: true } => "через раз",
         { Success: true, LatencyMs: { } ms } => $"{ms:0} мс",
         { Success: true } => "отвечает",
+        { Success: false, Reliability: >= 80 } => "промах последней",
         { Success: false } => "не отвечает",
         _ => "не замерян",
     };

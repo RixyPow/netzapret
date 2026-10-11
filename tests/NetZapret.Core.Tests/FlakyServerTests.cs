@@ -59,6 +59,17 @@ public sealed class FlakyServerTests
         Assert.Null(With(true, false).Find("ОБС")!.Reliability);
     }
 
+    /// <summary>Ни одного ответа — мёртвый, а не «через раз» (12.10: «почему 0 % жёлтый»).</summary>
+    [Fact]
+    public void Never_answering_is_dead_not_flaky()
+    {
+        var cache = With(false, false, false, false, false);
+
+        Assert.False(cache.Find("ОБС")!.Flaky);
+        Assert.Equal(0, cache.Find("ОБС")!.Reliability);
+        Assert.Contains("ОБС", cache.Dead(3));
+    }
+
     [Fact]
     public void Too_few_checks_say_nothing()
     {

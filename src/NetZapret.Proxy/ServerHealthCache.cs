@@ -70,7 +70,21 @@ public sealed record ServerHealth
     /// <summary>
     /// Отвечает через раз: из последних проверок (не меньше пяти) удачных меньше 80 %.
     /// </summary>
-    public bool Flaky => Recent.Count >= 5 && Recent.Count(ok => ok) * 5 < Recent.Count * 4;
+    /// <remarks>
+    /// Хотя бы один ответ обязателен (12.10): сервер, не ответивший ни разу,
+    /// — не «через раз», а мёртвый. Прежде у ОБС с «0 %» стояло жёлтое
+    /// «через раз», а у соседа с «80 %» и промахом последней — красное
+    /// «не отвечает», и владелец спросил, почему 0 % жёлтый, а 80 % красный.
+    /// Из автоподбора мёртвый уходит и так — по промахам подряд (<see cref="Failures"/>).
+    /// </remarks>
+    public bool Flaky
+    {
+        get
+        {
+            int answered = Recent.Count(ok => ok);
+            return Recent.Count >= 5 && answered > 0 && answered * 5 < Recent.Count * 4;
+        }
+    }
 
     /// <summary>
     /// Надёжность: сколько процентов последних проверок прошли; <c>null</c> —
