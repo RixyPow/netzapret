@@ -421,6 +421,16 @@ public static class UpdateInstaller
     /// секунд» иногда истекает раньше, чем отпущен файл, и подмена срывается
     /// ровно тогда, когда её труднее всего заметить.
     /// </para>
+    /// <para>
+    /// Пути — аргументами (<see cref="ApplyArguments"/>), а не текстом сценария.
+    /// Сценарий пишется в ASCII — cmd.exe читает батник в кодовой странице
+    /// OEM, — и до 12.10 кириллица в пути (папка пользователя по-русски)
+    /// становилась вопросами: robocopy отвечал «Недопустимый параметр #1:
+    /// C:\Users\???????\Desktop\NetZapret\runtime\update\…», а перезапуск —
+    /// «Не удаётся найти C:\Users\???????\…\NetZapret.exe». Висело несколько
+    /// выпусков. Командная строка процесса — Юникод, и cmd держит такие
+    /// переменные без потерь.
+    /// </para>
     /// </remarks>
     /// <param name="relaunch">
     /// Что запустить после подмены. <c>null</c> — та же программа, которая
@@ -435,9 +445,7 @@ public static class UpdateInstaller
         // которого в поставке больше нет: подмена прошла бы, а программа
         // не открылась — худший исход из возможных, потому что выглядит
         // как «обновление сломало всё».
-        var executable = relaunch
-            ?? Path.GetFileName(Environment.ProcessPath)
-            ?? Canonical;
+        var executable = Launch(relaunch);
 
         var lines = new List<string>
         {
@@ -446,9 +454,11 @@ public static class UpdateInstaller
             "rem ASCII only: cmd.exe reads batch files in the OEM code page.",
             "setlocal",
             "",
-            $"set \"SOURCE={plan.StagedAt}\"",
-            $"set \"TARGET={installedAt.TrimEnd('\\')}\"",
-            $"set \"LAUNCH={executable}\"",
+            "rem Paths come as arguments: %1 process id, %2 source, %3 target,",
+            "rem %4 program to start. Never as text here: this file is ASCII.",
+            "set \"SOURCE=%~2\"",
+            "set \"TARGET=%~3\"",
+            "set \"LAUNCH=%~4\"",
             $"set \"LOG=%TARGET%\\{LogFile}\"",
             "",
             "rem Wait for the program to release its own executable. By process id",
@@ -504,7 +514,7 @@ public static class UpdateInstaller
         // раскрытия переменная внутри скобок читается до присваивания.
         if (!string.Equals(executable, Canonical, StringComparison.OrdinalIgnoreCase))
         {
-            lines.Add($"if exist \"%TARGET%\\{Canonical}\" del /q \"%TARGET%\\{executable}\" >nul 2>&1");
+            lines.Add($"if exist \"%TARGET%\\{Canonical}\" del /q \"%TARGET%\\%LAUNCH%\" >nul 2>&1");
             lines.Add($"if exist \"%TARGET%\\{Canonical}\" set \"LAUNCH={Canonical}\"");
         }
 
@@ -516,7 +526,7 @@ public static class UpdateInstaller
         // пока читает его построчно, — попытка привела бы к молчаливому
         // отказу и мусору вместо обещанной чистоты. Остаток убирает
         // программа при следующем запуске, когда никто его уже не держит.
-        lines.Add($"rd /s /q \"{plan.StagedAt}\" 2>nul");
+        lines.Add("rd /s /q \"%SOURCE%\" 2>nul");
         lines.Add("exit /b 0");
         lines.Add("");
 
@@ -537,6 +547,16 @@ public static class UpdateInstaller
         File.WriteAllLines(script, lines, System.Text.Encoding.ASCII);
         return script;
     }
+
+    /// <summary>Аргументы сценария подмены: номер процесса, откуда, куда и что запустить.</summary>
+    public static string ApplyArguments(int processId, UpdatePlan plan, string installedAt, string? relaunch = null) =>
+        $"{processId} \"{plan.StagedAt.TrimEnd('\\')}\" \"{installedAt.TrimEnd('\\')}\" \"{Launch(relaunch)}\"";
+
+    /// <summary>Что запустить после подмены — имя у себя, а не зашитое в код (см. <see cref="WriteApplyScript"/>).</summary>
+    private static string Launch(string? relaunch) =>
+        relaunch
+            ?? Path.GetFileName(Environment.ProcessPath)
+            ?? Canonical;
 
     /// <summary>Журнал подмены в корне установки — для разбора, едет в отчёт.</summary>
     public static string LogFile => Path.Combine("runtime", "update.log");

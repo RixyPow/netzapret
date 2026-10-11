@@ -84,6 +84,33 @@ public sealed class UpdateApplyScriptTests : IDisposable
         Assert.All(Script(), line => Assert.All(line, c => Assert.True(c < 128, $"не ASCII: {line}")));
     }
 
+    /// <summary>
+    /// Кириллица в пути — аргументами, а не текстом сценария. До 12.10 пути
+    /// вписывались в ASCII-сценарий, и у папки «C:\Users\Иван» robocopy
+    /// получал «C:\Users\????\…» — обновление не вставало несколько выпусков.
+    /// </summary>
+    [Fact]
+    public void CyrillicPathsTravelAsArgumentsNotAsScriptText()
+    {
+        Directory.CreateDirectory(UpdateInstaller.StagingDirectory);
+
+        var plan = new UpdatePlan { StagedAt = @"C:\Users\Иван\Desktop\NetZapret\runtime\update\files-1\NetZapret", Files = 1, Kept = [] };
+        var lines = File.ReadAllLines(UpdateInstaller.WriteApplyScript(plan, @"C:\Users\Иван\Desktop\NetZapret\", relaunch: "NetZapret.exe"));
+
+        Assert.All(lines, line => Assert.All(line, c => Assert.True(c < 128, $"не ASCII: {line}")));
+        Assert.DoesNotContain(lines, l => l.Contains('?'));
+        Assert.Contains("set \"SOURCE=%~2\"", lines);
+        Assert.Contains("set \"TARGET=%~3\"", lines);
+        Assert.Contains("set \"LAUNCH=%~4\"", lines);
+        Assert.Contains("rd /s /q \"%SOURCE%\" 2>nul", lines);
+
+        var arguments = UpdateInstaller.ApplyArguments(4242, plan, @"C:\Users\Иван\Desktop\NetZapret\", relaunch: "NetZapret.exe");
+
+        Assert.Equal(
+            "4242 \"C:\\Users\\Иван\\Desktop\\NetZapret\\runtime\\update\\files-1\\NetZapret\" \"C:\\Users\\Иван\\Desktop\\NetZapret\" \"NetZapret.exe\"",
+            arguments);
+    }
+
     [Fact]
     public void FailedFilesAreReadFromTheLog()
     {

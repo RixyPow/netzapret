@@ -233,7 +233,8 @@ public partial class UpdatePanel : UserControl
             Say("Останавливаю движки…");
             await EngineControl.StopAsync("обновление программы", CancellationToken.None);
 
-            var script = UpdateInstaller.WriteApplyScript(plan, Path.GetFullPath("."));
+            var installedAt = Path.GetFullPath(".");
+            var script = UpdateInstaller.WriteApplyScript(plan, installedAt);
 
             // Что дописано руками в наши списки, переносится в новые — сказать
             // об этом сейчас: после подмены окна, которое могло бы сказать, нет.
@@ -251,7 +252,9 @@ public partial class UpdatePanel : UserControl
             Process.Start(new ProcessStartInfo
             {
                 FileName = script,
-                Arguments = Environment.ProcessId.ToString(),
+                // Пути — аргументами, а не текстом сценария: он в ASCII,
+                // и кириллица в пути становилась вопросами (12.10).
+                Arguments = UpdateInstaller.ApplyArguments(Environment.ProcessId, plan, installedAt),
                 UseShellExecute = true,
             });
 
