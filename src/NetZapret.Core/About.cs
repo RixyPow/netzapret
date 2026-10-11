@@ -32,7 +32,7 @@ public static class About
 
     public const string Telegram = "https://t.me/netzapret23";
 
-    public const string Support = "https://www.donationalerts.com/r/netzapret";
+    public const string Support = "https://tips.tips/000486918";
 
     /// <summary>
     /// Состав поставки, в порядке важности для работы.

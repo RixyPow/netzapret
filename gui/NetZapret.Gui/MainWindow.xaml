@@ -149,7 +149,7 @@
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource Ghost}" Padding="14,7" Margin="0,0,8,0" Click="OnGreetingDonate"
-                                ToolTip="Донат на DonationAlerts">
+                                ToolTip="Донат на tips.tips">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Style="{StaticResource LineGlyph}" Text="&#xEB51;" Margin="0,0,8,0"
                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />

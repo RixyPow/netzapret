@@ -5,7 +5,7 @@
 [![Последний выпуск](https://img.shields.io/github/v/release/RixyPow/netzapret?label=%D0%B2%D1%8B%D0%BF%D1%83%D1%81%D0%BA)](https://github.com/RixyPow/netzapret/releases/latest)
 [![Звёзды](https://img.shields.io/github/stars/RixyPow/netzapret?label=%D0%B7%D0%B2%D1%91%D0%B7%D0%B4&style=flat)](https://github.com/RixyPow/netzapret/stargazers)<br>
 [![Телеграм-канал](https://img.shields.io/badge/%D1%82%D0%B5%D0%BB%D0%B5%D0%B3%D1%80%D0%B0%D0%BC-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB-26A5E4?logo=telegram&logoColor=white)](https://t.me/netzapret23)
-[![Поддержать](https://img.shields.io/badge/%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-DonationAlerts-F57507)](https://www.donationalerts.com/r/netzapret)
+[![Поддержать](https://img.shields.io/badge/%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-tips.tips-F57507)](https://tips.tips/000486918)
 [![VirusTotal](https://img.shields.io/badge/VirusTotal-0.14.4-394EFF?logo=virustotal&logoColor=white)](https://www.virustotal.com/gui/file/2b883f12a96e492cd69ad92352541131cc2519bd0d3be00bb1011c831df1c0d3?nocache=1)
 
 **Для тех, кому мало одного Zapret.** Десинк чинит то, что тормозит провайдер,
@@ -894,7 +894,7 @@ Object с `KILL_ON_JOB_CLOSE`: осиротевший sing-box удержива�
 
 ## Поддержать
 
-[donationalerts.com/r/netzapret](https://www.donationalerts.com/r/netzapret)
+[tips.tips/000486918](https://tips.tips/000486918)
 
 Программа бесплатная и останется такой: лицензия MIT это и закрепляет.
 

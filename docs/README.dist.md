@@ -111,7 +111,7 @@ Windows вдобавок покажет SmartScreen: программа не п�
 
 ## Поддержать
 
-Если программа пригодилась — [donationalerts.com/r/netzapret](https://www.donationalerts.com/r/netzapret).
+Если программа пригодилась — [tips.tips/000486918](https://tips.tips/000486918).
 
 Она бесплатная и останется такой.
 
