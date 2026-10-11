@@ -854,15 +854,18 @@ public partial class WatchView : UserControl
 
         if (outside && entry.Rule != WatchEntry.FakeRule)
         {
-            var (kind, value, shown) = entry.Host is { } host
-                ? (MatchKind.Domain, "*." + WatchEntry.SiteOf(host), WatchEntry.SiteOf(host))
-                : (MatchKind.Ip, entry.Ip, entry.Ip);
+            // В «Маршруты», а не правилом отсюда (владелец 12.10: «кнопка
+            // добавить маршрут должна вести на вкладку маршруты»): там видно,
+            // в какой части имя уже лежит, есть выбор маршрута, рецепт и пин.
+            // Имени нет ни в одной части — оно встаёт в поиск с «Добавить»,
+            // адрес — так же, своей подсетью.
+            var shown = entry.Host is { } host ? WatchEntry.SiteOf(host) : entry.Ip;
 
-            var add = new MenuItem { Header = $"Добавить маршрут для {shown}", Icon = MenuGlyph(Glyph.Route) };
-            add.Items.Add(MenuEntry(Glyph.Vpn, "через VPN", () => AddRoute(kind, value, shown, RoutingMode.Proxy)));
-            add.Items.Add(MenuEntry(Glyph.Desync, "десинк", () => AddRoute(kind, value, shown, RoutingMode.Desync)));
-            add.Items.Add(MenuEntry(Glyph.Direct, "напрямую", () => AddRoute(kind, value, shown, RoutingMode.Direct)));
-            menu.Items.Add(add);
+            menu.Items.Add(MenuEntry(Glyph.Route, $"Добавить маршрут для {shown}", () =>
+            {
+                RoutesView.PendingReveal = shown;
+                (Window.GetWindow(this) as MainWindow)?.Open("routes");
+            }));
         }
 
         menu.Items.Add(new Separator());
@@ -954,39 +957,6 @@ public partial class WatchView : UserControl
         catch (Exception ex)
         {
             ShowDetails(title, "Не вышло: " + ex.GetBaseException().Message);
-        }
-    }
-
-    /// <summary>
-    /// «Добавить маршрут» — своё правило, как «Свой сайт» в «Маршрутах».
-    /// </summary>
-    /// <remarks>
-    /// Для имени — весь сайт (<c>*.сайт</c>): соединение одного поддомена
-    /// почти никогда не всё, что сайту нужно. Просьба Евгения в Telegram 10.10:
-    /// «добавить маршрут прямо по наблюдаемым назначениям». Применится
-    /// при следующем запуске движков — окно предложит перезапуск.
-    /// </remarks>
-    private void AddRoute(MatchKind kind, string value, string shown, RoutingMode mode)
-    {
-        try
-        {
-            var file = UserRulesFile.Load();
-            file.Set(kind, value, mode, recipe: null);
-            file.Save();
-
-            var word = mode switch
-            {
-                RoutingMode.Proxy => "через VPN",
-                RoutingMode.Desync => "десинк",
-                _ => "напрямую",
-            };
-
-            Say($"Записано: {shown} → {word}. Применится при следующем запуске движков; править — в «Маршрутах».");
-            this.Offer($"Добавлен маршрут: {shown}");
-        }
-        catch (Exception ex)
-        {
-            Say("Не удалось записать: " + ex.GetBaseException().Message);
         }
     }
 
