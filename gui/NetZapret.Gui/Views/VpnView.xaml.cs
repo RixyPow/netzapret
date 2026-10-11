@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
@@ -999,6 +1000,55 @@ public partial class VpnView : UserControl
         // пересоздаётся при каждом заходе, а раскрытые папки хранятся в книге
         // (владелец, 01.10: «багается при переходе между страницами»).
         ShowAllButton.Content = _rows.Count > 0 && _rows.All(r => r.Open) ? "Скрыть все" : "Показать все";
+    }
+
+    private DispatcherTimer? _reshowTimer;
+    private DateTime _reshowAllowedAt;
+
+    /// <summary>
+    /// Пересборка на каждом ответе замера — но не чаще, чем окно её тянет.
+    /// </summary>
+    /// <remarks>
+    /// 12.10 у владельца подписка на 403 сервера: «Замерить все» пересобирал
+    /// весь список (455 карточек заново) на каждый ответ, и поток окна был
+    /// занят 59 с подряд — окно «зависло полностью». Теперь пересборка —
+    /// не чаще раза в секунду и не раньше, чем через четыре своих
+    /// длительности: окно занято ею не больше пятой части времени.
+    /// Последний ответ замера показывается пересборкой после него.
+    /// </remarks>
+    private void ReshowSoon()
+    {
+        var now = DateTime.UtcNow;
+
+        if (now >= _reshowAllowedAt)
+        {
+            ReshowTimed();
+            return;
+        }
+
+        if (_reshowTimer is { IsEnabled: true })
+            return;
+
+        _reshowTimer ??= new DispatcherTimer(DispatcherPriority.Background, Dispatcher);
+        _reshowTimer.Interval = _reshowAllowedAt - now;
+        _reshowTimer.Tick -= OnReshowTimer;
+        _reshowTimer.Tick += OnReshowTimer;
+        _reshowTimer.Start();
+    }
+
+    private void OnReshowTimer(object? sender, EventArgs e)
+    {
+        _reshowTimer?.Stop();
+        ReshowTimed();
+    }
+
+    private void ReshowTimed()
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        Reshow();
+
+        var pause = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(1).Ticks, clock.Elapsed.Ticks * 4));
+        _reshowAllowedAt = DateTime.UtcNow + pause;
     }
 
     /// <summary>Пересобирает строки серверов, не перечитывая подписки.</summary>
@@ -2171,7 +2221,7 @@ public partial class VpnView : UserControl
                             MeasureButton.Content = $"Остановить · {done} из {servers.Count}";
 
                         Status.Text = $"Измерено {done} из {servers.Count}…";
-                        Reshow();
+                        ReshowSoon();
                     });
                 },
                 _work.Token,
@@ -2217,6 +2267,7 @@ public partial class VpnView : UserControl
             _measuring.Clear();
 
             ShowBusy([]);
+            _reshowTimer?.Stop();
             Reshow();
         }
     }
