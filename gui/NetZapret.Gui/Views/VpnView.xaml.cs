@@ -133,6 +133,28 @@ public sealed class SubRow
 
     public Visibility ServersShown => Open && Servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>Сколько серверов папки показывать сразу и сколько добавлять кнопкой.</summary>
+    /// <remarks>
+    /// 12.10 у владельца подписка на 403 сервера: раскрытая, она делала
+    /// 455 карточек на вкладке, и каждая пересборка списка стоила потоку окна
+    /// 0,8 с, открытие вкладки — 4 с, «Замерить все» — минуты («вкладка VPN
+    /// люто виснет»). Карточки рисуются все разом, без виртуализации, —
+    /// поэтому показывается начало, а при сортировке по задержке это и есть
+    /// лучшие серверы. Замер тем же списком (тест, окно 1536): по 50 — 335–395 мс
+    /// на пересборку, из них расчёт строк 22–41; по 30 — 206–216.
+    /// </remarks>
+    public const int ShownStep = 30;
+
+    /// <summary>Сколько серверов папки видно сейчас; растёт кнопкой «Показать ещё».</summary>
+    public int ShownLimit { get; set; } = ShownStep;
+
+    public IReadOnlyList<ServerRow> Shown => Servers.Count <= ShownLimit ? Servers : Servers.Take(ShownLimit).ToList();
+
+    public Visibility MoreShown => Open && Servers.Count > ShownLimit ? Visibility.Visible : Visibility.Collapsed;
+
+    public string MoreLabel =>
+        $"Показать ещё {Math.Min(ShownStep, Servers.Count - ShownLimit)} · видно {Math.Min(ShownLimit, Servers.Count)} из {Servers.Count}";
+
     /// <summary>
     /// Поворот значка раскрытия.
     /// </summary>
@@ -1484,6 +1506,16 @@ public partial class VpnView : UserControl
             // Состояние показа не стоит того, чтобы из-за него жаловаться.
         }
 
+        Redraw();
+    }
+
+    /// <summary>«Показать ещё» под большой подпиской — следующие SubRow.ShownStep серверов.</summary>
+    private void OnMoreServers(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: SubRow row })
+            return;
+
+        row.ShownLimit += SubRow.ShownStep;
         Redraw();
     }
 
