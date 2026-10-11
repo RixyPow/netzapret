@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace NetZapret.Subscriptions;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace NetZapret.Subscriptions;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Панели подписок ставят в начало тега флаг эмодзи — пару региональных
+/// Панели подписок ставят в тег флаг эмодзи — пару региональных
 /// букв вроде U+1F1E9 U+1F1EA для Германии. Windows их не рисует: в Segoe UI
 /// Emoji флагов стран нет вовсе, и на экране получается «de», влипшее
 /// в название. Это не наша оплошность и шрифтом не лечится — Microsoft
@@ -15,6 +17,13 @@ namespace NetZapret.Subscriptions;
 /// Раз нарисовать нельзя, обходимся тем, что есть: пара превращается
 /// в обычные заглавные буквы и выносится в значок рядом. Опознавательный
 /// знак вместо опечатки.
+/// </para>
+/// <para>
+/// Флаг ищется во всём имени, а не только в начале (12.10): у подписки
+/// владельца на 403 сервера он в конце — «tg:VLESSFORU 🇵🇱 ⚡», и в строке
+/// стояли буквы «PL» без картинки. Флагов несколько — цепочка вида
+/// «🇷🇺 → 🇩🇪» — страной берётся последний: это выход. Остальные
+/// остаются в имени как были.
 /// </para>
 /// </remarks>
 public static class CountryTag
@@ -26,27 +35,57 @@ public static class CountryTag
     /// <summary>Делит тег на код страны и остальное имя.</summary>
     public static (string Country, string Name) Split(string tag)
     {
-        var letters = new List<char>();
-        int i = 0;
+        // Пары региональных букв: начало пары в тексте и сами буквы.
+        int at = -1;
+        string country = string.Empty;
 
-        while (i < tag.Length)
+        for (int i = 0; i + 3 < tag.Length; i++)
         {
-            if (!char.IsHighSurrogate(tag[i]) || i + 1 >= tag.Length)
-                break;
+            if (Indicator(tag, i) is not { } first || Indicator(tag, i + 2) is not { } second)
+                continue;
 
-            int code = char.ConvertToUtf32(tag[i], tag[i + 1]);
+            at = i;
+            country = new string([first, second]);
 
-            if (code is < FirstIndicator or > LastIndicator)
-                break;
-
-            letters.Add((char)('A' + code - FirstIndicator));
-            i += 2;
+            // Пара занимает четыре символа UTF-16; следующую ищем за ней,
+            // иначе вторая буква этой пары сошла бы за первую следующей.
+            i += 3;
         }
 
         // Пара, а не одна буква: одиночная региональная буква кодом страны
         // не является, и показывать её значком означало бы выдумать страну.
-        return letters.Count == 2
-            ? (new string(letters.ToArray()), tag[i..].Trim())
-            : (string.Empty, tag.Trim());
+        if (at < 0)
+            return (string.Empty, tag.Trim());
+
+        return (country, Tidy(tag.Remove(at, 4)));
+    }
+
+    /// <summary>Региональная буква, начинающаяся с этого места, — как A–Z.</summary>
+    private static char? Indicator(string text, int index)
+    {
+        if (index + 1 >= text.Length || !char.IsSurrogatePair(text[index], text[index + 1]))
+            return null;
+
+        int code = char.ConvertToUtf32(text[index], text[index + 1]);
+
+        return code is >= FirstIndicator and <= LastIndicator
+            ? (char)('A' + code - FirstIndicator)
+            : null;
+    }
+
+    /// <summary>Двойные пробелы, оставшиеся на месте флага, — в один.</summary>
+    private static string Tidy(string name)
+    {
+        var builder = new StringBuilder(name.Length);
+
+        foreach (var c in name.Trim())
+        {
+            if (c == ' ' && builder.Length > 0 && builder[^1] == ' ')
+                continue;
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
     }
 }
