@@ -682,6 +682,10 @@ public static class ServiceCatalog
         // в его сети недоступны напрямую ни по TCP, ни, видимо, по UDP —
         // через туннель отвечают (замер 12.10). Матч — UDP к голым адресам,
         // поэтому вторая часть по сетям: по имени его не узнать.
+        //
+        // Обе части выключены, пока человек не выберет путь (владелец 12.10:
+        // «пусть выключено изначально будет, просто как возможность починить»):
+        // саму игру через туннель не проверял никто.
         new ServiceDefinition
         {
             Name = "Photon: R.E.P.O. и другие",
@@ -692,7 +696,8 @@ public static class ServiceCatalog
                     Name = "Сервер и лобби",
                     List = "config/lists/photon.txt",
                     Probe = "ns.photonengine.io",
-                    Note = "по именам: сервер имён и игровые серверы по TCP; в сети владельца игровые серверы закрыты напрямую",
+                    Note = "по именам: сервер имён и игровые серверы по TCP; в сети владельца игровые серверы закрыты напрямую — чинится VPN",
+                    DefaultOff = true,
                 },
                 new ServicePart
                 {
@@ -700,6 +705,7 @@ public static class ServiceCatalog
                     List = "config/lists/photon-network.txt",
                     ByAddress = true,
                     Note = "сам матч: UDP на голые адреса серверов Photon — сюда тот же путь, что у «Сервера и лобби»",
+                    DefaultOff = true,
                 },
             ],
         },
