@@ -24,7 +24,12 @@ public sealed record ServerRow(
     Visibility CountryShown,
     BitmapImage? Flag,
     Visibility FlagShown,
-    string Detail,
+
+    /// <summary>Протокол словом: «Vless».</summary>
+    string Protocol,
+
+    /// <summary>Адрес и порт сервера.</summary>
+    string Address,
     string Latency,
     Brush Color,
     string ChooseLabel,
@@ -45,7 +50,45 @@ public sealed record ServerRow(
     /// <summary>Подсказка к проценту; null — без подсказки, иначе WPF показал бы пустую.</summary>
     string? ReliabilityTip = null,
 
-    Brush? ReliabilityColor = null);
+    Brush? ReliabilityColor = null,
+
+    /// <summary>Хвост подписи: « · замер 3 мин назад», « · идёт замер» или пусто.</summary>
+    string Measured = "",
+
+    /// <summary>Плашка протокола из самого сервера: «TLS XHTTP», «Reality TCP».</summary>
+    string Chip = "",
+
+    /// <summary>Через этот сервер трафик идёт сейчас — по движку.</summary>
+    Visibility NowShown = Visibility.Collapsed,
+
+    /// <summary>Рамка карточки: у выбранного — цветом кнопки «Выбран».</summary>
+    Brush? Edge = null,
+
+    /// <summary>Полоски надёжности, от низкой к высокой: залитая — цветом надёжности, пустая — цветом рамки.</summary>
+    Brush? Bar1 = null,
+    Brush? Bar2 = null,
+    Brush? Bar3 = null,
+    Brush? Bar4 = null,
+    Brush? Bar5 = null,
+
+    /// <summary>Прозрачность: при WARP подписки на паузе — бледнее.</summary>
+    double Fade = 1,
+
+    /// <summary>Метка «вне подбора» у имени: в колонке задержки она не помещалась.</summary>
+    Visibility ExcludedShown = Visibility.Collapsed)
+{
+    /// <summary>Подпись под именем на узком окне: «Vless, адрес · замер …».</summary>
+    public string Detail => $"{Protocol}, {Address}{Measured}";
+
+    /// <summary>Вторая строка колонки адреса на широком окне: «Vless · замер …».</summary>
+    public string Sub => $"{Protocol}{Measured}";
+
+    public Visibility ChipShown => Chip.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility ChosenShown => CanChoose ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility ChooseShown => CanChoose ? Visibility.Visible : Visibility.Collapsed;
+}
 
 /// <summary>Плитка быстрой смены сервера (макет владельца 01.10); тег <c>null</c> — «Авто».</summary>
 public sealed record QuickTile(
@@ -133,27 +176,8 @@ public sealed class SubRow
 
     public Visibility ServersShown => Open && Servers.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>Сколько серверов папки показывать сразу и сколько добавлять кнопкой.</summary>
-    /// <remarks>
-    /// 12.10 у владельца подписка на 403 сервера: раскрытая, она делала
-    /// 455 карточек на вкладке, и каждая пересборка списка стоила потоку окна
-    /// 0,8 с, открытие вкладки — 4 с, «Замерить все» — минуты («вкладка VPN
-    /// люто виснет»). Карточки рисуются все разом, без виртуализации, —
-    /// поэтому показывается начало, а при сортировке по задержке это и есть
-    /// лучшие серверы. Замер тем же списком (тест, окно 1536): по 50 — 335–395 мс
-    /// на пересборку, из них расчёт строк 22–41; по 30 — 206–216.
-    /// </remarks>
-    public const int ShownStep = 30;
-
-    /// <summary>Сколько серверов папки видно сейчас; растёт кнопкой «Показать ещё».</summary>
-    public int ShownLimit { get; set; } = ShownStep;
-
-    public IReadOnlyList<ServerRow> Shown => Servers.Count <= ShownLimit ? Servers : Servers.Take(ShownLimit).ToList();
-
-    public Visibility MoreShown => Open && Servers.Count > ShownLimit ? Visibility.Visible : Visibility.Collapsed;
-
-    public string MoreLabel =>
-        $"Показать ещё {Math.Min(ShownStep, Servers.Count - ShownLimit)} · видно {Math.Min(ShownLimit, Servers.Count)} из {Servers.Count}";
+    /// <summary>Прозрачность папки: при WARP подписки на паузе — бледнее.</summary>
+    public double Fade { get; set; } = 1;
 
     /// <summary>
     /// Поворот значка раскрытия.
@@ -218,6 +242,14 @@ public partial class VpnView : UserControl
     public VpnView()
     {
         InitializeComponent();
+
+        // Верх вкладки и подпись внизу размечены в Holder, а живут первым
+        // и последним элементом виртуального списка (Page): иначе их
+        // пришлось бы описывать шаблонами, и имена элементов пропали бы.
+        Holder.Children.Clear();
+        ShowPage();
+
+        SizeChanged += (_, e) => ShowWidth(e.NewSize.Width);
 
         Loaded += async (_, _) =>
         {
@@ -295,8 +327,14 @@ public partial class VpnView : UserControl
         {
             // «Движки остановлены» говорит карточка выхода — здесь не повторяем.
             ShowPickLine(_pickBase);
+            bool wasRunning = _live.Running;
             _live = (false, null, false);
-            ShowCurrent();
+
+            if (wasRunning)
+                Reshow();
+            else
+                ShowCurrent();
+
             return;
         }
 
@@ -321,8 +359,14 @@ public partial class VpnView : UserControl
         if (!IsLoaded)
             return;
 
+        bool moved = _live.Server != server || !_live.Running;
         _live = (true, server, automatic);
-        ShowCurrent();
+
+        // «Сейчас» у строки выхода — переезжает вместе с ним.
+        if (moved)
+            Reshow();
+        else
+            ShowCurrent();
 
         // Сам выход и расхождение с выбором — в карточке выше (ShowCurrent):
         // здесь одна короткая строка, чтобы карточка ленты не прыгала по высоте
@@ -644,7 +688,7 @@ public partial class VpnView : UserControl
             });
         }
 
-        Subscriptions.ItemsSource = _rows;
+        ShowPage();
 
         if (_rows.Count == 0)
         {
@@ -896,7 +940,7 @@ public partial class VpnView : UserControl
 
                         return shown with
                         {
-                            Name = name.Length > 0 ? name : own[j].Tag,
+                            Name = WithoutChip(name.Length > 0 ? name : own[j].Tag, shown.Chip),
                             Country = country,
                             Flag = flag,
                             CountryShown = country.Length == 0 || flag is not null ? Visibility.Collapsed : Visibility.Visible,
@@ -923,23 +967,6 @@ public partial class VpnView : UserControl
     {
         var rows = servers.Select(server =>
         {
-            var known = Seen(server.Tag);
-            bool chosen = server.Tag == settings.PreferredServer;
-
-            // Незамеряемого пробником меряет сам движок — и тогда у него
-            // обычный замер, как у всех. «Только в работе» остаётся лишь
-            // на то время, пока движки стоят и спросить некого.
-            var (latency, key) = !server.IsMeasurable && known is null
-                ? ("только в работе", "Faint")
-                : (Latency(server.Tag), Key(server.Tag));
-
-            bool excluded = settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal);
-
-            if (excluded)
-                latency += " · вне подбора";
-
-            var detail = Detail(server.ProtocolName, server.Host, server.Port, server.Tag);
-
             var (country, name) = CountryTag.Split(server.Tag);
 
             // WARP выпускает в ближайшем городе Cloudflare, из России — в Москве
@@ -949,13 +976,13 @@ public partial class VpnView : UserControl
                 country = "RU";
 
             var flag = country.Length == 2 ? FlagImages.For(country) : null;
+            var chip = Transport(server);
+            chip = chip == "—" ? string.Empty : chip;
 
-            var (reliability, reliabilityTip, reliabilityColor) = ReliabilityOf(server.Tag);
-
-            return new ServerRow(
+            var row = new ServerRow(
                 server.Tag,
                 owner,
-                name,
+                WithoutChip(name, chip),
                 country,
 
                 // Ровно одно из двух: картинка либо буквы. Показать оба
@@ -963,22 +990,93 @@ public partial class VpnView : UserControl
                 country.Length == 0 || flag is not null ? Visibility.Collapsed : Visibility.Visible,
                 flag,
                 flag is null ? Visibility.Collapsed : Visibility.Visible,
-                detail,
-                latency,
-                (Brush)FindResource(chosen ? "Accent" : key),
-                chosen ? "выбран" : "выбрать",
-                !chosen,
+                server.ProtocolName,
+                $"{server.Host}:{server.Port}",
+                string.Empty,
+                Brushes.Transparent,
+                "выбрать",
+                true,
                 server.IsMeasurable,
-                AutoPickLabel: excluded ? "Вернуть в автоподбор" : "Не брать в автоподбор",
-                Reliability: reliability,
-                ReliabilityTip: reliabilityTip,
-                ReliabilityColor: reliabilityColor);
+                Chip: chip);
+
+            return Decorate(row, settings);
         });
 
         // Сортировка здесь не применяется: список отдаётся в порядке подписки,
         // а порядок показа выбирается в Reshow. Иначе исходный порядок негде
         // было бы взять обратно.
         return rows.ToList();
+    }
+
+    /// <summary>
+    /// Всё в строке сервера, что зависит от замеров, выбора и движка, — заново
+    /// при каждой перерисовке.
+    /// </summary>
+    /// <remarks>
+    /// Одно место на чтение подписки и на перерисовку: прежде эти два пути
+    /// красили строку каждый по-своему. Возраст замера считается здесь же —
+    /// иначе «замер 17 мин назад» висел бы и на только что замеренном.
+    /// </remarks>
+    private ServerRow Decorate(ServerRow server, AppSettings settings)
+    {
+        bool chosen = server.Tag == settings.PreferredServer;
+        bool excluded = settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal);
+        bool known = server.Measurable || Seen(server.Tag) is not null;
+
+        // Незамеряемого пробником меряет сам движок — и тогда у него обычный
+        // замер, как у всех. «Только в работе» остаётся лишь на то время,
+        // пока движки стоят и спросить некого.
+        var latency = known ? Latency(server.Tag) : "только в работе";
+
+        var (reliability, tip, color, bars) = ReliabilityOf(server.Tag);
+        var empty = (Brush)FindResource("Border");
+        Brush Bar(int n) => n <= bars ? color : empty;
+
+        var (running, live, _) = _live;
+
+        return server with
+        {
+            Color = (Brush)FindResource(known ? Key(server.Tag) : "Faint"),
+            Latency = latency,
+            ChooseLabel = chosen ? "выбран" : "выбрать",
+            CanChoose = !chosen,
+            AutoPickLabel = excluded ? "Вернуть в автоподбор" : "Не брать в автоподбор",
+            Measured = Measured(server.Tag),
+            Reliability = reliability,
+            ReliabilityTip = tip,
+            ReliabilityColor = color,
+            Bar1 = Bar(1),
+            Bar2 = Bar(2),
+            Bar3 = Bar(3),
+            Bar4 = Bar(4),
+            Bar5 = Bar(5),
+            NowShown = running && live == server.Tag ? Visibility.Visible : Visibility.Collapsed,
+            Edge = (Brush)FindResource(chosen ? "AccentFill" : "Border"),
+            Fade = _paused ? 0.55 : 1,
+            ExcludedShown = excluded ? Visibility.Visible : Visibility.Collapsed,
+        };
+    }
+
+    /// <summary>
+    /// Имя без хвоста, повторяющего плашку протокола: «Германия — TLS XHTTP» → «Германия».
+    /// </summary>
+    /// <remarks>
+    /// Плашка берётся из самого сервера, а не из имени (12.10): так она есть
+    /// и у подписок, не пишущих протокол в имени. Хвост срезается, только
+    /// если он с плашкой совпадает; иначе — «Польша — XDNS» — имя остаётся
+    /// целиком: что там написал продавец, мы не знаем.
+    /// </remarks>
+    internal static string WithoutChip(string name, string chip)
+    {
+        if (chip.Length == 0 || !name.EndsWith(chip, StringComparison.OrdinalIgnoreCase))
+            return name;
+
+        var head = name[..^chip.Length].TrimEnd();
+        var trimmed = head.TrimEnd('—', '–', '-', '|', '·', ':', ',').TrimEnd();
+
+        // Срезаем только хвост за разделителем: «VLESS TLS XHTTP» без
+        // разделителя — само имя, а не подпись к нему.
+        return trimmed.Length > 0 && trimmed.Length < head.Length ? trimmed : name;
     }
 
     /// <summary>
@@ -1009,10 +1107,96 @@ public partial class VpnView : UserControl
 
     private double Ms(ServerRow row) => Seen(row.Tag)?.LatencyMs ?? double.MaxValue;
 
+    /// <summary>
+    /// Плоский список вкладки: верх, папки, серверы раскрытых папок, подпись.
+    /// </summary>
+    /// <remarks>
+    /// Список рисует только видимые строки (12.10: подписка на 403 сервера
+    /// вешала вкладку на минуты, а 455 карточек разом стоили 0,8 с на каждую
+    /// пересборку). Контейнеры не переиспользуются (VirtualizationMode
+    /// Standard): папки — те же объекты между пересборками, и
+    /// переиспользованный контейнер с тем же Content не перечитал бы их привязки.
+    /// </remarks>
+    private void ShowPage()
+    {
+        var items = new List<object> { TopBlock };
+
+        foreach (var row in _rows)
+        {
+            row.Fade = _paused ? 0.55 : 1;
+            items.Add(row);
+
+            if (row.Open)
+                items.AddRange(row.Servers);
+        }
+
+        items.Add(Footer);
+
+        // По месту, а не новым списком: замена ItemsSource сбрасывала
+        // прокрутку наверх (снимок 12.10: 633 → 15 после каждой пересборки),
+        // а пересборка идёт и раз в девять секунд, и при смене выхода.
+        // Строки серверов — новые записи, папки — те же объекты с новыми
+        // полями: тех и других заменяем, и список заново рисует только
+        // видимые из них. Верх и подпись — одни и те же элементы, не трогаем.
+        if (Page.ItemsSource != _items)
+            Page.ItemsSource = _items;
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (i >= _items.Count)
+                _items.Add(items[i]);
+            else if (items[i] is not UIElement || !ReferenceEquals(_items[i], items[i]))
+                _items[i] = items[i];
+        }
+
+        while (_items.Count > items.Count)
+            _items.RemoveAt(_items.Count - 1);
+    }
+
+    /// <summary>Содержимое списка вкладки — постоянное, меняется по месту (ShowPage).</summary>
+    private readonly System.Collections.ObjectModel.ObservableCollection<object> _items = [];
+
+    /// <summary>Подписки на паузе — туннель идёт через WARP.</summary>
+    private bool _paused;
+
+    /// <summary>Плашка и адрес колонками — на широком окне; на узком подпись уходит под имя.</summary>
+    public static readonly DependencyProperty WideShownProperty = DependencyProperty.Register(
+        nameof(WideShown), typeof(Visibility), typeof(VpnView), new PropertyMetadata(Visibility.Visible));
+
+    public Visibility WideShown
+    {
+        get => (Visibility)GetValue(WideShownProperty);
+        set => SetValue(WideShownProperty, value);
+    }
+
+    public static readonly DependencyProperty NarrowShownProperty = DependencyProperty.Register(
+        nameof(NarrowShown), typeof(Visibility), typeof(VpnView), new PropertyMetadata(Visibility.Collapsed));
+
+    public Visibility NarrowShown
+    {
+        get => (Visibility)GetValue(NarrowShownProperty);
+        set => SetValue(NarrowShownProperty, value);
+    }
+
+    /// <summary>
+    /// Ширина вкладки, с которой плашка протокола и адрес встают колонками.
+    /// </summary>
+    /// <remarks>
+    /// У владельца окно 1536 и меню слева — вкладка ~1240. Колонки строки
+    /// сервера вместе с отступами — ~800 точек, и имени нужно ещё ~250.
+    /// </remarks>
+    private const double WideFrom = 1100;
+
+    private void ShowWidth(double width)
+    {
+        bool wide = width >= WideFrom;
+        WideShown = wide ? Visibility.Visible : Visibility.Collapsed;
+        NarrowShown = wide ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void Redraw()
     {
-        Subscriptions.ItemsSource = null;
-        Subscriptions.ItemsSource = _rows;
+        ShowPage();
 
         // Лента и сводка строятся из тех же строк — вместе с ними.
         ShowQuick(AppSettings.Load(AppSettings.DefaultPath));
@@ -1091,36 +1275,7 @@ public partial class VpnView : UserControl
             // Раскладка считается от исходного порядка, а не от показанного:
             // иначе она накапливается сама на себе и вернуться некуда.
             row.Servers = InChosenOrder(row.AsGiven)
-                .Select(server => server with
-                {
-                    Color = (Brush)FindResource(
-                        server.Tag == settings.PreferredServer
-                            ? "Accent"
-                            : server.Measurable || Seen(server.Tag) is not null
-                                ? Key(server.Tag)
-                                : "Faint"),
-                    ChooseLabel = server.Tag == settings.PreferredServer ? "выбран" : "выбрать",
-                    CanChoose = server.Tag != settings.PreferredServer,
-
-                    Latency = (server.Measurable || Seen(server.Tag) is not null
-                        ? Latency(server.Tag)
-                        : "только в работе")
-                        + (settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal) ? " · вне подбора" : string.Empty),
-
-                    AutoPickLabel = settings.AutoPickExcluded.Contains(server.Tag, StringComparer.Ordinal)
-                        ? "Вернуть в автоподбор"
-                        : "Не брать в автоподбор",
-
-                    // Возраст замера пересчитывается здесь же: иначе он
-                    // оставался тем, каким был при чтении подписки, и «17 мин
-                    // назад» висело даже на только что замеренном сервере.
-                    Detail = Refresh(server.Detail, server.Tag),
-                })
-                .Select(server =>
-                {
-                    var (text, tip, color) = ReliabilityOf(server.Tag);
-                    return server with { Reliability = text, ReliabilityTip = tip, ReliabilityColor = color };
-                })
+                .Select(server => Decorate(server, settings))
                 .ToList();
         }
 
@@ -1128,44 +1283,18 @@ public partial class VpnView : UserControl
         ShowCurrent();
     }
 
-    /// <summary>
-    /// Подпись под именем сервера: протокол, адрес и возраст замера.
-    /// </summary>
+    /// <summary>Хвост подписи сервера: возраст замера или «идёт замер».</summary>
     /// <remarks>
     /// Считается заново при каждой перерисовке, а не один раз при чтении
     /// подписки. Иначе «замер 17 мин назад» так и висел до перезахода
     /// на вкладку — в том числе на сервере, который только что замерили.
     /// </remarks>
-    private string Detail(string protocol, string host, int port, string tag)
+    private string Measured(string tag)
     {
-        var detail = $"{protocol}, {host}:{port}";
-
         if (_measuring.Contains(tag))
-            return detail + " · идёт замер";
+            return " · идёт замер";
 
-        return Seen(tag) is { } known
-            ? detail + $" · замер {Ago(known.CheckedAt)}"
-            : detail;
-    }
-
-    /// <summary>
-    /// Обновляет хвост подписи, оставив её начало нетронутым.
-    /// </summary>
-    /// <remarks>
-    /// Протокол и адрес заново собирать не из чего — исходного сервера
-    /// у строки уже нет, — зато всё до разделителя от замера не зависит.
-    /// </remarks>
-    private string Refresh(string detail, string tag)
-    {
-        int cut = detail.IndexOf(" · ", StringComparison.Ordinal);
-        var head = cut < 0 ? detail : detail[..cut];
-
-        if (_measuring.Contains(tag))
-            return head + " · идёт замер";
-
-        return Seen(tag) is { } known
-            ? head + $" · замер {Ago(known.CheckedAt)}"
-            : head;
+        return Seen(tag) is { } known ? $" · замер {Ago(known.CheckedAt)}" : string.Empty;
     }
 
     /// <summary>Теги, которые замеряются прямо сейчас.</summary>
@@ -1265,15 +1394,19 @@ public partial class VpnView : UserControl
     /// и с его историей процент врал бы в пользу сервера. Ниже 80 % — жёлтым,
     /// как «через раз» (<see cref="ServerHealth.Flaky"/>), ниже 50 — красным.
     /// </remarks>
-    private (string Text, string? Tip, Brush Color) ReliabilityOf(string tag)
+    private (string Text, string? Tip, Brush Color, int Bars) ReliabilityOf(string tag)
     {
         if (_health.Find(tag) is not { Reliability: { } percent } history)
-            return (string.Empty, null, (Brush)FindResource("Muted"));
+            return (string.Empty, "Надёжность: проверок пока меньше трёх", (Brush)FindResource("Muted"), 0);
 
-        var tip = $"Надёжность: ответил в {history.Recent.Count(ok => ok)} из {history.Recent.Count} "
+        var tip = $"Надёжность {percent} %: ответил в {history.Recent.Count(ok => ok)} из {history.Recent.Count} "
             + "последних проверок — замеров этой вкладки и сторожа";
 
-        return ($"{percent} %", tip, (Brush)FindResource(percent >= 80 ? "Muted" : percent >= 50 ? "Warn" : "Danger"));
+        // Пять полосок по 20 %; хоть один ответ — хоть одна полоска.
+        int bars = percent == 0 ? 0 : Math.Max(1, (int)Math.Round(percent / 20.0));
+        var color = (Brush)FindResource(percent >= 80 ? "Accent" : percent >= 50 ? "Warn" : "Danger");
+
+        return ($"{percent} %", tip, color, bars);
     }
 
     private string Key(string tag) => Seen(tag) switch
@@ -1373,7 +1506,7 @@ public partial class VpnView : UserControl
 
         // Подписки и лента на паузе — видно сразу, а не только в подписи.
         PausedLine.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        Subscriptions.Opacity = on ? 0.55 : 1;
+        _paused = on;
         QuickCard.Opacity = on ? 0.55 : 1;
         QuickServers.IsEnabled = !on;
     }
@@ -1509,15 +1642,6 @@ public partial class VpnView : UserControl
         Redraw();
     }
 
-    /// <summary>«Показать ещё» под большой подпиской — следующие SubRow.ShownStep серверов.</summary>
-    private void OnMoreServers(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { DataContext: SubRow row })
-            return;
-
-        row.ShownLimit += SubRow.ShownStep;
-        Redraw();
-    }
 
     /// <summary>
     /// «Добавить подписку» — окно добавления (владелец 01.10: «как в Happ»).
@@ -2074,12 +2198,80 @@ public partial class VpnView : UserControl
         }
     }
 
+    /// <summary>Порядок серверов — выпадающим списком (макет владельца 12.10).</summary>
     private void OnSort(object sender, RoutedEventArgs e)
     {
-        _byLatency = !_byLatency;
-        SortButton.Content = _byLatency ? "По порядку" : "По задержке";
+        var menu = new ContextMenu { PlacementTarget = SortButton, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        menu.Items.Add(Item(_byLatency ? "\uE73E" : string.Empty, "По задержке", () => Sort(byLatency: true)));
+        menu.Items.Add(Item(_byLatency ? string.Empty : "\uE73E", "По порядку подписки", () => Sort(byLatency: false)));
+
+        menu.IsOpen = true;
+    }
+
+    private void Sort(bool byLatency)
+    {
+        _byLatency = byLatency;
+        SortButton.Content = byLatency ? "По задержке" : "По порядку подписки";
 
         Reshow();
+    }
+
+    /// <summary>
+    /// «⋮» строки сервера: автоподбор, замер этого сервера, адрес, у ключа — убрать.
+    /// </summary>
+    /// <remarks>
+    /// Прежде «Не брать в автоподбор» жило в правом щелчке, о котором не знал
+    /// никто, а кнопка «убрать ключ» пропала из строки при одной из прошлых
+    /// переделок — обработчик остался без кнопки.
+    /// </remarks>
+    private void OnServerMenu(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (sender is not FrameworkElement { Tag: string tag } anchor)
+            return;
+
+        var owner = _rows.FirstOrDefault(r => r.Servers.Any(s => s.Tag == tag));
+        var server = owner?.Servers.First(s => s.Tag == tag);
+
+        if (owner is null || server is null)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        var autoPick = Item("\uE8D0", server.AutoPickLabel, () => { });
+        autoPick.Tag = tag;
+        autoPick.Click += OnAutoPickToggle;
+        menu.Items.Add(autoPick);
+
+        menu.Items.Add(Item("\uEC4A", "Замерить этот", async () => await MeasureAsync([owner], onlyTag: tag),
+            server.Measurable && !_sweeping));
+
+        menu.Items.Add(Item("\uE8C8", "Скопировать адрес", () =>
+        {
+            try
+            {
+                Clipboard.SetText(server.Address);
+                Status.Text = $"Адрес скопирован: {server.Address}.";
+            }
+            catch (Exception ex)
+            {
+                Status.Text = "Не скопировалось: " + ex.GetBaseException().Message;
+            }
+        }));
+
+        if (server.RemoveShown == Visibility.Visible)
+        {
+            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+
+            var remove = Item("\uE74D", "Убрать ключ", () => { });
+            remove.Tag = tag;
+            remove.Click += OnRemoveKey;
+            menu.Items.Add(remove);
+        }
+
+        menu.IsOpen = true;
     }
 
     private static string Size(long bytes) => bytes switch
@@ -2154,7 +2346,8 @@ public partial class VpnView : UserControl
         await MeasureAsync(_rows);
     }
 
-    private async Task MeasureAsync(IReadOnlyList<SubRow> which)
+    /// <param name="onlyTag">Только этот сервер — пункт «Замерить этот» в «⋮» строки.</param>
+    private async Task MeasureAsync(IReadOnlyList<SubRow> which, string? onlyTag = null)
     {
         // Тест пинга одной подписки посреди общего замера оборвал бы его.
         if (_sweeping)
@@ -2176,11 +2369,12 @@ public partial class VpnView : UserControl
             .SelectMany(row => row.Pooled)
             .Where(s => s.IsUsableOutbound && s.IsMeasurable)
             .DistinctBy(s => s.Tag)
+            .Where(s => onlyTag is null || s.Tag == onlyTag)
             .ToList();
 
         // Выходы WARP замеряются вместе со всеми: в конфиге они лежат рядом
         // с серверами подписки, и знать про них надо то же самое.
-        if (settings.WarpEnabled)
+        if (settings.WarpEnabled && onlyTag is null)
         {
             servers.AddRange(Warp.Exits().Where(s => s.IsMeasurable));
 
@@ -2665,7 +2859,7 @@ public partial class VpnView : UserControl
         Redraw();
 
         if (open)
-            Subscriptions.BringIntoView();
+            SubsHeader.BringIntoView();
     }
 
     private string _recentShown = string.Empty;

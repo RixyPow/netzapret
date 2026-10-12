@@ -2,18 +2,272 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:gui="clr-namespace:NetZapret.Gui"
+             xmlns:views="clr-namespace:NetZapret.Gui.Views"
              Background="{DynamicResource Chrome}"
              Focusable="True" FocusVisualStyle="{x:Null}"
              PreviewKeyDown="OnPreviewKeyDown">
 
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+    <!--
+        Вся вкладка — один список, который рисует только видимые строки
+        (владелец 12.10: подписка на 403 сервера вешала вкладку). Верх
+        вкладки и подпись внизу — первым и последним его элементом
+        (VpnView.PageItems), папки и серверы — плоско между ними, каждый
+        своим шаблоном. Прежде страница была прокруткой со вложенными
+        списками, и все карточки рисовались разом.
+    -->
+    <Grid>
+        <ItemsControl x:Name="Page" Focusable="False"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      ScrollViewer.CanContentScroll="True">
+            <ItemsControl.Template>
+                <ControlTemplate TargetType="ItemsControl">
+                    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28"
+                                  CanContentScroll="True" Focusable="False">
+                        <ItemsPresenter />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </ItemsControl.Template>
 
-            <StackPanel Grid.Column="0">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+
+            <ItemsControl.Resources>
+                <!-- Папка подписки. Свёрнутая, но со всеми цифрами в заголовке. -->
+                <DataTemplate DataType="{x:Type views:SubRow}">
+                    <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
+                            Margin="0,10,0,6" Opacity="{Binding Fade}" Click="OnFolder">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Path Grid.Column="0" Style="{StaticResource Chevron}"
+                                  Margin="5,0,6,0">
+                                <Path.RenderTransform>
+                                    <RotateTransform Angle="{Binding ChevronAngle}" />
+                                </Path.RenderTransform>
+                            </Path>
+
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <!--
+                                    Сетка, а не стопка: в горизонтальной стопке
+                                    ширина считается бесконечной, и обрезание
+                                    длинного имени не срабатывает.
+                                -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}"
+                                               FontWeight="SemiBold" FontSize="15"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                    <Border Grid.Column="1" CornerRadius="8" Padding="9,1" Margin="10,0,0,0"
+                                            HorizontalAlignment="Left" VerticalAlignment="Center"
+                                            BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                                            Visibility="{Binding ActiveShown}">
+                                        <TextBlock Text="В работе" FontSize="12" Foreground="{DynamicResource Accent}" />
+                                    </Border>
+                                </Grid>
+
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                           Margin="0,5,0,0" TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <!--
+                                    Выключатель «в работе» вместо «сделать действующей»
+                                    (0.9.0, пул): подписок в работе может быть сколько
+                                    угодно, их серверы идут в один автоподбор.
+                                -->
+                                <ToggleButton Style="{StaticResource Switch}" Margin="0,0,14,0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding Active, Mode=OneWay}"
+                                              ToolTip="В работе: серверы этой подписки идут в пул движка"
+                                              Tag="{Binding Name}" Click="OnActivate" />
+
+                                <!--
+                                    Значками, как в Happ (владелец, 28.09): обновить,
+                                    тест пинга и меню со всем остальным. Подписи —
+                                    во всплывающих подсказках.
+                                -->
+                                <Button Style="{StaticResource IconGhost}" Content="&#xE72C;"
+                                        Margin="0,0,6,0" ToolTip="Обновить: перечитать подписку"
+                                        Tag="{Binding Name}" Click="OnRefreshOne" />
+
+                                <Button Style="{StaticResource IconGhost}" Content="&#xEC4A;"
+                                        Margin="0,0,6,0" ToolTip="{Binding CheckLabel}"
+                                        IsEnabled="{Binding CanCheck}"
+                                        Tag="{Binding Name}" Click="OnCheckOne" />
+                            </StackPanel>
+
+                            <Button Grid.Column="3" Style="{StaticResource IconGhost}" Content="&#xE712;"
+                                    ToolTip="Ещё: закрепить, скопировать ссылку, изменить, удалить"
+                                    Tag="{Binding Name}" Click="OnMore" />
+                        </Grid>
+                    </Button>
+                </DataTemplate>
+
+                <!--
+                    Сервер (макет владельца 12.10): флаг, имя, «Сейчас» у выхода
+                    движка, задержка крупно, полоски надёжности, плашка протокола
+                    из самого сервера, адрес колонкой, «Выбрать» и «⋮». На узком
+                    окне плашки и адреса нет — подпись уходит под имя.
+                -->
+                <DataTemplate DataType="{x:Type views:ServerRow}">
+                    <Border Style="{StaticResource Card}" Margin="20,0,0,6" Padding="14,9"
+                            BorderBrush="{Binding Edge}" Opacity="{Binding Fade}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Ellipse Grid.Column="0" Width="9" Height="9" Margin="2,0,14,0"
+                                     VerticalAlignment="Center" Fill="{Binding Color}" />
+
+                            <!--
+                                Флаг картинкой, а если такой нет — буквы кода.
+                                Windows флаги стран не рисует вовсе: в Segoe UI
+                                Emoji их нет, и пара региональных букв выходит
+                                как «de», влипшее в название.
+                            -->
+                            <Grid Grid.Column="1" Width="38" Margin="0,0,14,0" VerticalAlignment="Center">
+                                <Border CornerRadius="4" ClipToBounds="True"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        Visibility="{Binding FlagShown}">
+                                    <Image Source="{Binding Flag}" Width="36" Height="25"
+                                           Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                </Border>
+
+                                <Border Background="{DynamicResource Raised}"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        CornerRadius="5" Padding="5,3" HorizontalAlignment="Center"
+                                        Visibility="{Binding CountryShown}">
+                                    <TextBlock Text="{Binding Country}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Muted}" />
+                                </Border>
+                            </Grid>
+
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="14.5" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <!-- Через этот сервер трафик идёт прямо сейчас — по движку, не по настройке. -->
+                                        <Border CornerRadius="8" Padding="8,1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource AccentFill}" BorderThickness="1"
+                                                Visibility="{Binding NowShown}"
+                                                ToolTip="Через этот сервер трафик идёт сейчас">
+                                            <TextBlock Text="Сейчас" FontSize="12" Foreground="{DynamicResource Text}" />
+                                        </Border>
+
+                                        <Border CornerRadius="8" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                                Visibility="{Binding ExcludedShown}"
+                                                ToolTip="Автоподбор его не берёт; выбрать руками можно. Вернуть — в «⋯»">
+                                            <TextBlock Text="вне подбора" FontSize="12" Foreground="{DynamicResource Muted}" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                           Margin="0,3,0,0" TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding NarrowShown, RelativeSource={RelativeSource AncestorType=views:VpnView}}" />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="3" Text="{Binding Latency}" Width="104"
+                                       FontSize="15" FontWeight="SemiBold" TextAlignment="Right"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" Margin="0,0,16,0"
+                                       Foreground="{Binding Color}" ToolTip="{Binding Latency}" />
+
+                            <!--
+                                Полоски — надёжность (доля ответов из последних
+                                проверок), а не задержка: задержка уже цифрой рядом.
+                            -->
+                            <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center"
+                                        Width="74" Margin="0,0,14,0" Background="Transparent"
+                                        ToolTip="{Binding ReliabilityTip}">
+                                <Rectangle Width="5" Height="7" RadiusX="1.5" RadiusY="1.5" Margin="0,0,3,0" VerticalAlignment="Bottom" Fill="{Binding Bar1}" />
+                                <Rectangle Width="5" Height="10" RadiusX="1.5" RadiusY="1.5" Margin="0,0,3,0" VerticalAlignment="Bottom" Fill="{Binding Bar2}" />
+                                <Rectangle Width="5" Height="13" RadiusX="1.5" RadiusY="1.5" Margin="0,0,3,0" VerticalAlignment="Bottom" Fill="{Binding Bar3}" />
+                                <Rectangle Width="5" Height="16" RadiusX="1.5" RadiusY="1.5" Margin="0,0,3,0" VerticalAlignment="Bottom" Fill="{Binding Bar4}" />
+                                <Rectangle Width="5" Height="19" RadiusX="1.5" RadiusY="1.5" Margin="0,0,7,0" VerticalAlignment="Bottom" Fill="{Binding Bar5}" />
+                                <TextBlock Text="{Binding Reliability}" FontSize="11" VerticalAlignment="Bottom"
+                                           Foreground="{DynamicResource Muted}" />
+                            </StackPanel>
+
+                            <!-- Протокол — из самого сервера: защита и транспорт. -->
+                            <Grid Grid.Column="5" Width="132" Margin="0,0,14,0"
+                                  Visibility="{Binding WideShown, RelativeSource={RelativeSource AncestorType=views:VpnView}}">
+                                <Border CornerRadius="13" Padding="11,4" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        Background="{DynamicResource Raised}" Visibility="{Binding ChipShown}">
+                                    <TextBlock Text="{Binding Chip}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                </Border>
+                            </Grid>
+
+                            <StackPanel Grid.Column="6" Width="200" Margin="0,0,14,0" VerticalAlignment="Center"
+                                        Visibility="{Binding WideShown, RelativeSource={RelativeSource AncestorType=views:VpnView}}">
+                                <TextBlock Text="{Binding Address}" Style="{StaticResource Mono}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Sub}" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <Grid Grid.Column="7" Width="108" Margin="0,0,8,0">
+                                <Button Style="{StaticResource Primary}" Content="Выбран" Padding="14,7"
+                                        IsHitTestVisible="False" Focusable="False"
+                                        Visibility="{Binding ChosenShown}" />
+                                <Button Style="{StaticResource Ghost}" Content="Выбрать" Padding="14,7"
+                                        Visibility="{Binding ChooseShown}"
+                                        Tag="{Binding Tag}" Click="OnChoose" />
+                            </Grid>
+
+                            <!--
+                                Действия со строкой — кнопкой, а не правым щелчком,
+                                о котором никто не знал (владелец 12.10).
+                            -->
+                            <Button Grid.Column="8" Style="{StaticResource IconGhost}" Content="&#xE712;"
+                                    ToolTip="Ещё: автоподбор, замер, адрес" VerticalAlignment="Center"
+                                    Tag="{Binding Tag}" Click="OnServerMenu" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.Resources>
+        </ItemsControl>
+
+        <!--
+            Верх вкладки и подпись внизу размечены здесь, а показываются
+            первым и последним элементом списка выше — VpnView их туда
+            переносит. Здесь же они только затем, чтобы им достались имена.
+        -->
+        <Grid x:Name="Holder" Visibility="Collapsed">
+            <StackPanel x:Name="TopBlock">
+
 
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -362,7 +616,7 @@
                 </Border>
 
                 <!-- Подписки: заголовок со сводкой, добавление — по кнопке (макет 01.10). -->
-                <Grid Margin="4,24,0,0">
+                <Grid x:Name="SubsHeader" Margin="4,24,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -378,8 +632,8 @@
                     </Border>
 
                     <StackPanel Grid.Column="3" Orientation="Horizontal">
-                        <Button x:Name="SortButton" Style="{StaticResource Ghost}"
-                                Content="По задержке" Click="OnSort" Margin="0,0,8,0" />
+                        <Button x:Name="SortButton" Style="{StaticResource Ghost}" gui:ButtonGlyph.Menu="True"
+                                Content="По порядку подписки" Click="OnSort" Margin="0,0,8,0" />
                         <Button x:Name="AddToggle" Style="{StaticResource Ghost}"
                                 Content="Добавить подписку" Click="OnAddToggle" />
                     </StackPanel>
@@ -417,189 +671,10 @@
                              Background="{DynamicResource Border}"
                              Foreground="{DynamicResource Accent}"
                              BorderThickness="0" />
-
-                <ItemsControl x:Name="Subscriptions" Margin="0,10,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="0,0,0,10">
-
-                                <!-- Папка подписки. Свёрнутая, но со всеми цифрами в заголовке. -->
-                                <Button Style="{StaticResource Choice}" BorderBrush="{Binding Edge}"
-                                        Margin="0" Click="OnFolder">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <Path Grid.Column="0" Style="{StaticResource Chevron}"
-                                              Margin="5,0,6,0">
-                                            <Path.RenderTransform>
-                                                <RotateTransform Angle="{Binding ChevronAngle}" />
-                                            </Path.RenderTransform>
-                                        </Path>
-
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                            <!--
-                                                Сетка, а не стопка: в горизонтальной
-                                                стопке ширина считается бесконечной,
-                                                и обрезание длинного имени
-                                                не срабатывает — оно лезет
-                                                на соседнюю подпись.
-                                            -->
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-
-                                                <TextBlock Grid.Column="0" Text="{Binding Name}"
-                                                           FontWeight="SemiBold" FontSize="14"
-                                                           TextTrimming="CharacterEllipsis" />
-
-                                                <TextBlock Grid.Column="1" Text="в работе" Style="{StaticResource Mono}"
-                                                           Foreground="{DynamicResource Accent}"
-                                                           Margin="10,0,0,0" VerticalAlignment="Center"
-                                                           Visibility="{Binding ActiveShown}" />
-                                            </Grid>
-
-                                            <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                            <!--
-                                                Выключатель «в работе» вместо «сделать действующей»
-                                                (0.9.0, пул): подписок в работе может быть сколько
-                                                угодно, их серверы идут в один автоподбор.
-                                            -->
-                                            <ToggleButton Style="{StaticResource Switch}" Margin="0,0,14,0"
-                                                          VerticalAlignment="Center"
-                                                          IsChecked="{Binding Active, Mode=OneWay}"
-                                                          ToolTip="В работе: серверы этой подписки идут в пул движка"
-                                                          Tag="{Binding Name}" Click="OnActivate" />
-
-                                            <!--
-                                                Значками, как в Happ (владелец, 28.09): обновить,
-                                                тест пинга и меню со всем остальным. Подписи —
-                                                во всплывающих подсказках.
-                                            -->
-                                            <Button Style="{StaticResource IconGhost}" Content="&#xE72C;"
-                                                    Margin="0,0,6,0" ToolTip="Обновить: перечитать подписку"
-                                                    Tag="{Binding Name}" Click="OnRefreshOne" />
-
-                                            <Button Style="{StaticResource IconGhost}" Content="&#xEC4A;"
-                                                    Margin="0,0,6,0" ToolTip="{Binding CheckLabel}"
-                                                    IsEnabled="{Binding CanCheck}"
-                                                    Tag="{Binding Name}" Click="OnCheckOne" />
-                                        </StackPanel>
-
-                                        <Button Grid.Column="3" Style="{StaticResource IconGhost}" Content="&#xE712;"
-                                                ToolTip="Ещё: закрепить, скопировать ссылку, изменить, удалить"
-                                                Tag="{Binding Name}" Click="OnMore" />
-                                    </Grid>
-                                </Button>
-
-                                <ItemsControl ItemsSource="{Binding Shown}"
-                                              Visibility="{Binding ServersShown}"
-                                              Margin="20,8,0,0">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11"
-                                                    ToolTip="Правый щелчок — убрать из автоподбора или вернуть">
-                                                <!--
-                                                    Убрать сервер из автоподбора (владелец 29.09: ОБС у SecureWay
-                                                    отвечают через раз на домашней сети). Выбрать руками — можно.
-                                                -->
-                                                <Border.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="{Binding AutoPickLabel}" Tag="{Binding Tag}" Click="OnAutoPickToggle" />
-                                                    </ContextMenu>
-                                                </Border.ContextMenu>
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,12,0"
-                                                             VerticalAlignment="Center" Fill="{Binding Color}" />
-
-                                                    <!--
-                                                        Флаг картинкой, а если такой нет — буквы кода.
-                                                        Windows флаги стран не рисует вовсе: в Segoe UI
-                                                        Emoji их нет, и пара региональных букв выходит
-                                                        как «de», влипшее в название.
-                                                    -->
-                                                    <Grid Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                                                        <Border CornerRadius="3" ClipToBounds="True"
-                                                                BorderBrush="{DynamicResource Border}" BorderThickness="1"
-                                                                Visibility="{Binding FlagShown}">
-                                                            <Image Source="{Binding Flag}" Width="26" Height="18"
-                                                                   Stretch="UniformToFill"
-                                                                   RenderOptions.BitmapScalingMode="HighQuality" />
-                                                        </Border>
-
-                                                        <Border Background="{DynamicResource Raised}"
-                                                                BorderBrush="{DynamicResource Border}" BorderThickness="1"
-                                                                CornerRadius="5" Padding="7,3"
-                                                                Visibility="{Binding CountryShown}">
-                                                            <TextBlock Text="{Binding Country}" FontSize="11" FontWeight="SemiBold"
-                                                                       Foreground="{DynamicResource Muted}" />
-                                                        </Border>
-                                                    </Grid>
-
-                                                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
-                                                    </StackPanel>
-
-                                                    <!--
-                                                        Надёжность — доля ответов из последних проверок
-                                                        (владелец 12.10). Пусто, пока проверок меньше трёх.
-                                                    -->
-                                                    <TextBlock Grid.Column="3" Text="{Binding Reliability}" Style="{StaticResource Mono}"
-                                                               VerticalAlignment="Center" Margin="12,0,0,0"
-                                                               TextAlignment="Right" MinWidth="44"
-                                                               Foreground="{Binding ReliabilityColor}"
-                                                               ToolTip="{Binding ReliabilityTip}" />
-
-                                                    <TextBlock Grid.Column="4" Text="{Binding Latency}" Style="{StaticResource Mono}"
-                                                               VerticalAlignment="Center" Margin="12,0,14,0"
-                                                               TextAlignment="Right" MinWidth="86"
-                                                               Foreground="{Binding Color}" />
-
-                                                    <Button Grid.Column="5" Style="{StaticResource Ghost}"
-                                                            Content="{Binding ChooseLabel}" Padding="14,7"
-                                                            IsEnabled="{Binding CanChoose}"
-                                                            Tag="{Binding Tag}" Click="OnChoose" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <!-- Большая подписка — частями (12.10: 403 сервера вешали вкладку). -->
-                                <Button Style="{StaticResource Ghost}" Margin="20,2,0,0" Padding="14,7"
-                                        HorizontalAlignment="Left"
-                                        Content="{Binding MoreLabel}" Visibility="{Binding MoreShown}"
-                                        Click="OnMoreServers" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                           Text="Движок берёт серверы всех подписок «в работе» и отдельных ключей, а автоподбор — быстрейший из живых. Замер поднимает движок с локальным входом и ходит через каждый сервер по очереди — TUN не трогается, работающий обход не прерывается." />
-
             </StackPanel>
+
+            <TextBlock x:Name="Footer" Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
+                           Text="Движок берёт серверы всех подписок «в работе» и отдельных ключей, а автоподбор — быстрейший из живых. Замер поднимает движок с локальным входом и ходит через каждый сервер по очереди — TUN не трогается, работающий обход не прерывается." />
         </Grid>
-    </ScrollViewer>
+    </Grid>
 </UserControl>
