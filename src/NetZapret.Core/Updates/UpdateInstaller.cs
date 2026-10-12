@@ -74,7 +74,7 @@ public static class UpdateInstaller
     /// и обновившийся получил бы в папке оба файла — новый рядом со старым,
     /// который никто не убирал.
     /// </remarks>
-    private const string Canonical = "NetZapret.exe";
+    internal const string Canonical = "NetZapret.exe";
 
     /// <summary>Куда складываем распакованное до перезапуска.</summary>
     public static string StagingDirectory => Path.Combine("runtime", "update");
@@ -548,6 +548,48 @@ public static class UpdateInstaller
         return script;
     }
 
+    /// <summary>Ключ, с которым программа становится окном подмены (UpdateApplier).</summary>
+    public const string ApplierSwitch = "--apply-update";
+
+    /// <summary>
+    /// Копирует программу в runtime\update\updater — оттуда окно подмены
+    /// заменит её саму; <c>null</c> — копией не обойтись, нужен сценарий.
+    /// </summary>
+    /// <remarks>
+    /// Только выпуск: там программа — один самодостаточный exe. Рабочая сборка
+    /// (build\) — exe и сотня библиотек рядом, и одинокая копия exe не поднимется:
+    /// ей остаётся apply.cmd. Копия лежит в отстойнике и уходит вместе с ним
+    /// при запуске новой версии (CleanUp).
+    /// </remarks>
+    public static string? PrepareApplier(string? processPath, string installedAt)
+    {
+        if (processPath is null || !File.Exists(processPath))
+            return null;
+
+        var folder = Path.GetDirectoryName(processPath)!;
+
+        if (File.Exists(Path.Combine(folder, "NetZapret.Core.dll")))
+            return null;
+
+        var updater = Path.Combine(installedAt, StagingDirectory, "updater");
+        Directory.CreateDirectory(updater);
+
+        var copy = Path.Combine(updater, Path.GetFileName(processPath));
+        File.Copy(processPath, copy, overwrite: true);
+
+        return copy;
+    }
+
+    /// <summary>
+    /// Аргументы окна подмены: номер процесса, откуда, куда, версии, подпись
+    /// к «Скачано» и чейнджлог — списком, для ProcessStartInfo.ArgumentList.
+    /// </summary>
+    /// <remarks>Списком, а не строкой: пути с пробелами и кириллицей доходят как есть.</remarks>
+    public static IReadOnlyList<string> ApplierArguments(
+        int processId, UpdatePlan plan, string installedAt, string from, string to, string downloaded, string? notesFile) =>
+        [ApplierSwitch, processId.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            plan.StagedAt, installedAt.TrimEnd('\\'), from, to, downloaded, notesFile ?? string.Empty];
+
     /// <summary>Аргументы сценария подмены: номер процесса, откуда, куда и что запустить.</summary>
     public static string ApplyArguments(int processId, UpdatePlan plan, string installedAt, string? relaunch = null) =>
         $"{processId} \"{plan.StagedAt.TrimEnd('\\')}\" \"{installedAt.TrimEnd('\\')}\" \"{Launch(relaunch)}\"";
@@ -584,7 +626,13 @@ public static class UpdateInstaller
             if (!File.Exists(path))
                 return [];
 
-            return File.ReadAllLines(path)
+            var lines = File.ReadAllLines(path);
+
+            // Окно подмены (UpdateApplier) пишет «подмена:» в начале каждой
+            // попытки: сбой первой, снятый «Повторить», — не сбой обновления.
+            int last = Array.FindLastIndex(lines, l => l.Contains(" подмена: ", StringComparison.Ordinal));
+
+            return lines.Skip(Math.Max(0, last))
                 .Where(l => l.Contains("ERROR ", StringComparison.Ordinal))
                 .Select(l => l[l.IndexOf("ERROR ", StringComparison.Ordinal)..].Trim())
                 .Distinct()

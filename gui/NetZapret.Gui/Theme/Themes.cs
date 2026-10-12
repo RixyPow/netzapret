@@ -44,6 +44,25 @@ public static class Themes
     /// <summary>
     /// Применяет тему по имени папки; при отказе — встроенную из XAML.
     /// </summary>
+    /// <summary>
+    /// Встроенная тёмная палитра без картинок и видео — для окна подмены.
+    /// </summary>
+    /// <remarks>
+    /// Тема человека держит свой фон: картинку — пока читается, видео
+    /// «Рыбки» — всё время показа. Окно подмены заменяет файлы той самой
+    /// папки, и открытый им background.mp4 не дал бы его заменить.
+    /// </remarks>
+    public static void ApplyBuiltIn()
+    {
+        var builtIn = new ResourceDictionary { Source = new Uri(DarkPath, UriKind.Absolute) };
+        builtIn["UiScaleTransform"] = Scale(1);
+
+        Swap(builtIn);
+        Glass.Set(null, System.Windows.Media.Stretch.UniformToFill);
+        BackdropVideo.Take(builtIn);
+        Current = DefaultId;
+    }
+
     public static ThemeApplied Apply(string? id, AppSettings? settings = null)
     {
         var wanted = string.IsNullOrWhiteSpace(id) ? DefaultId : id.Trim();

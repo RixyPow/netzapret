@@ -30,6 +30,7 @@ public partial class App : Application
         SingleInstance.QuitSwitch,  // --quit
         TrayIcon.Switch,            // --tray
         Headless.StartSwitch,       // --start
+        Views.UpdateApplyWindow.Switch, // --apply-update: окно подмены файлов
 
         // Разбираются супервизором: он получает ту же командную строку.
         "--no-proxy",
@@ -55,6 +56,16 @@ public partial class App : Application
         static bool Unknown(string argument) =>
             argument.StartsWith("--", StringComparison.Ordinal)
             && !Known.Contains(argument.Split('=')[0]);
+
+        // Окно подмены файлов (UpdateApplyWindow) — раньше всего прочего:
+        // оно запущено копией из runtime\update\updater, прежняя программа
+        // ещё закрывается, и ни переход в корень установки, ни один экземпляр,
+        // ни чтение настроек ему не нужны — только заменить файлы.
+        if (e.Args.Contains(Views.UpdateApplyWindow.Switch))
+        {
+            RunApply(e.Args);
+            return;
+        }
 
         // Тот же поиск, что делает консоль: все пути в настройках, правилах
         // и списках заданы относительно корня установки. У программы,
@@ -420,6 +431,23 @@ public partial class App : Application
     /// и разбор вёлся бы не над тем, что у человека.
     /// </remarks>
     private async void RunStart() => Shutdown(await Headless.StartAsync(CancellationToken.None));
+
+    /// <summary>Окно подмены файлов после закрытия прежней версии.</summary>
+    private void RunApply(string[] args)
+    {
+        if (Views.ApplyOptions.Parse(args) is not { } options)
+        {
+            Shutdown(2);
+            return;
+        }
+
+        Themes.ApplyBuiltIn();
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
+
+        var window = new Views.UpdateApplyWindow(options);
+        MainWindow = window;
+        window.Show();
+    }
 
     private async void RunStop()
     {

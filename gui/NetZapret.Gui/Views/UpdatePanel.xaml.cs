@@ -249,14 +249,19 @@ public partial class UpdatePanel : UserControl
             if (carried.Length > 0)
                 Journal.Write("обновление", $"{_release.Version}:{carried}");
 
-            Process.Start(new ProcessStartInfo
+            // Окно подмены — копией самой программы (UpdateApplier, 12.10);
+            // не вышло (рабочая сборка, нет места) — прежний сценарий cmd.
+            if (!StartApplier(plan, installedAt, via))
             {
-                FileName = script,
-                // Пути — аргументами, а не текстом сценария: он в ASCII,
-                // и кириллица в пути становилась вопросами (12.10).
-                Arguments = UpdateInstaller.ApplyArguments(Environment.ProcessId, plan, installedAt),
-                UseShellExecute = true,
-            });
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = script,
+                    // Пути — аргументами, а не текстом сценария: он в ASCII,
+                    // и кириллица в пути становилась вопросами (12.10).
+                    Arguments = UpdateInstaller.ApplyArguments(Environment.ProcessId, plan, installedAt),
+                    UseShellExecute = true,
+                });
+            }
 
             App.Exiting = true;
             Application.Current.Shutdown();
@@ -268,6 +273,57 @@ public partial class UpdatePanel : UserControl
 
             InstallButton.IsEnabled = true;
             UpdateButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Запускает окно подмены — копию программы с ключом подмены.
+    /// </summary>
+    /// <returns><c>false</c> — копией не обойтись, нужен сценарий cmd.</returns>
+    /// <remarks>
+    /// Без оболочки: копия наследует права администратора этого окна — ей
+    /// гасить драйвер и писать в Program Files. Пути — списком аргументов,
+    /// кириллица доходит как есть.
+    /// </remarks>
+    private bool StartApplier(UpdatePlan plan, string installedAt, string via)
+    {
+        try
+        {
+            var copy = UpdateInstaller.PrepareApplier(Environment.ProcessPath, installedAt);
+
+            if (copy is null || _release is null)
+                return false;
+
+            string? notes = null;
+
+            if (!string.IsNullOrWhiteSpace(_release.Notes))
+            {
+                notes = Path.Combine(installedAt, UpdateInstaller.StagingDirectory, "notes.md");
+                File.WriteAllText(notes, _release.Notes);
+            }
+
+            var size = _release.ArchiveSize > 0 ? $"{_release.ArchiveSize / 1048576.0:0} МБ" : "Архив";
+            var downloaded = size + (via.Length > 0 ? via : " напрямую");
+
+            var start = new ProcessStartInfo(copy)
+            {
+                UseShellExecute = false,
+                WorkingDirectory = Path.GetDirectoryName(copy)!,
+            };
+
+            foreach (var argument in UpdateInstaller.ApplierArguments(
+                Environment.ProcessId, plan, installedAt, UpdateCheck.Current, _release.Version, downloaded, notes))
+            {
+                start.ArgumentList.Add(argument);
+            }
+
+            using var started = Process.Start(start);
+            return started is not null;
+        }
+        catch (Exception ex)
+        {
+            Journal.Write("обновление", "окно подмены не запустилось, иду сценарием: " + ex.GetBaseException().Message);
+            return false;
         }
     }
 }

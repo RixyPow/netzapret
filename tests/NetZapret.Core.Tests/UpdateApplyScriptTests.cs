@@ -111,6 +111,21 @@ public sealed class UpdateApplyScriptTests : IDisposable
             arguments);
     }
 
+    /// <summary>Сбой первой попытки окна подмены, снятый «Повторить», — не сбой обновления.</summary>
+    [Fact]
+    public void ARetriedFailureIsNotReported()
+    {
+        File.WriteAllLines(Path.Combine(_root, UpdateInstaller.LogFile),
+        [
+            "2026/10/12 12:00:00 подмена: 969 файлов, заменено раньше — 0",
+            @"2026/10/12 12:00:09 ERROR 32 Copying File C:\nz\engines\zapret\exe\winws2.exe: занят",
+            "2026/10/12 12:00:30 подмена: 969 файлов, заменено раньше — 412",
+            "2026/10/12 12:00:33 подмена закончена",
+        ]);
+
+        Assert.Empty(UpdateInstaller.FailedFiles(_root));
+    }
+
     [Fact]
     public void FailedFilesAreReadFromTheLog()
     {
