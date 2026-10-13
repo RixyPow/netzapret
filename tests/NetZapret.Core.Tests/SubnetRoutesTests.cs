@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using NetZapret.Zapret;
 using Xunit;
 
@@ -136,4 +137,55 @@ public sealed class SubnetRoutesTests : IDisposable
         var json = new SingBoxConfigCompiler().Compile(ruleSet, [], new SingBoxOptions()).Json;
         Assert.Contains("216.120.180.19", json);
     }
+
+    /// <summary>
+    /// Одиночный адрес — сетью /32 и в маршрутах TUN, и в правиле. 13.10 у
+    /// владельца адрес «через VPN» из «Маршрутов» шёл в route_address без
+    /// маски, и sing-box отвергал весь конфиг — туннель не поднимался.
+    /// Тест выше этого не ловил: он искал адрес в тексте, а движком не проверял.
+    /// </summary>
+    [Fact]
+    public void ASingleAddressGoesAsANetworkAndTheEngineTakesIt()
+    {
+        var value = OwnList("216.120.180.19", "2001:db8::7");
+        var (_, fromList) = Load(value, "proxy");
+        var single = RuleSetLoader.Load("mode: selective\nrules:\n  - match: ip\n    value: \"35.190.80.1\"\n    mode: proxy\n").RuleSet;
+
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Vless,
+            Tag = "NL",
+            Host = "nl.example.com",
+            Port = 443,
+            Credential = "PLACEHOLDER",
+            Transport = "tcp",
+            Security = "tls",
+            Sni = "nl.example.com",
+        };
+
+        foreach (var (ruleSet, expected) in new[] { (fromList, "216.120.180.19/32"), (single, "35.190.80.1/32") })
+        {
+            var json = new SingBoxConfigCompiler().Compile(ruleSet, [server], new SingBoxOptions { Scope = TunnelScope.ProxyOnly }).Json;
+            var root = JsonNode.Parse(json)!;
+
+            var routed = root["inbounds"]!.AsArray().OfType<JsonObject>()
+                .SelectMany(i => i["route_address"]?.AsArray() ?? [])
+                .Select(a => a!.GetValue<string>())
+                .ToList();
+
+            Assert.Contains(expected, routed);
+            Assert.All(routed, a => Assert.Contains("/", a));
+
+            var check = SingBoxCheck.Run(json);
+            Assert.True(check.Ok, check.Said);
+        }
+    }
+
+    [Theory]
+    [InlineData("35.190.80.1", "35.190.80.1/32")]
+    [InlineData("2001:db8::7", "2001:db8::7/128")]
+    [InlineData("45.82.160.0/24", "45.82.160.0/24")]
+    [InlineData(" 8.8.8.8 ", "8.8.8.8/32")]
+    public void AnAddressBecomesANetwork(string value, string expected) =>
+        Assert.Equal(expected, SingBoxConfigCompiler.Prefix(value));
 }

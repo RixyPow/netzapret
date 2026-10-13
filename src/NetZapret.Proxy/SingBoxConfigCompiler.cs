@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -740,6 +742,25 @@ public sealed class SingBoxConfigCompiler
             .ToList();
     }
 
+    /// <summary>Адрес — сетью: «35.190.80.1» → «35.190.80.1/32»; сеть и не адрес — как есть.</summary>
+    /// <remarks>
+    /// <c>route_address</c> и <c>route_exclude_address</c> sing-box принимает
+    /// только с маской, а без неё отвергает весь конфиг: туннель не поднимается
+    /// вовсе. 13.10 у владельца так лёг туннель от одного своего адреса
+    /// «через VPN» из «Маршрутов» — AddressInput хранит одиночный адрес без
+    /// маски, и с 12.10 (0.15.2) он шёл в конфиг как есть. Моя ошибка: проверял
+    /// подсети, а не адрес. В <c>ip_cidr</c> правил — тем же видом, для единообразия.
+    /// </remarks>
+    internal static string Prefix(string value)
+    {
+        var text = value.Trim();
+
+        if (text.Contains('/') || !IPAddress.TryParse(text, out var address))
+            return text;
+
+        return text + (address.AddressFamily == AddressFamily.InterNetworkV6 ? "/128" : "/32");
+    }
+
     private static IReadOnlyList<string> CollectProxyAddresses(RuleSet ruleSet)
     {
         if (ruleSet.Operating != OperatingMode.Selective)
@@ -1065,7 +1086,7 @@ public sealed class SingBoxConfigCompiler
             // Одна сеть приходит и правилом, и секцией capture: список
             // Telegram через VPN стоит в обоих. Повтор движку не нужен.
             var unique = new JsonArray();
-            foreach (var cidr in captured.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var cidr in captured.Select(Prefix).Distinct(StringComparer.OrdinalIgnoreCase))
                 unique.Add(cidr);
 
             tun["route_address"] = unique;
@@ -1077,7 +1098,7 @@ public sealed class SingBoxConfigCompiler
             // и так вне туннеля, но исключение остаётся страховкой: правило
             // mode: proxy может случайно накрыть адрес, который чинит десинк.
             var excluded = new JsonArray();
-            foreach (var cidr in options.DesyncAddresses)
+            foreach (var cidr in options.DesyncAddresses.Select(Prefix).Distinct(StringComparer.OrdinalIgnoreCase))
                 excluded.Add(cidr);
 
             tun["route_exclude_address"] = excluded;
@@ -1990,7 +2011,7 @@ public sealed class SingBoxConfigCompiler
                     var cidrs = new JsonArray();
 
                     foreach (var cidr in rule.HostListCidrs)
-                        cidrs.Add(cidr);
+                        cidrs.Add(Prefix(cidr));
 
                     node["ip_cidr"] = cidrs;
                 }
@@ -1999,7 +2020,7 @@ public sealed class SingBoxConfigCompiler
             }
 
             case MatchKind.Ip:
-                node["ip_cidr"] = new JsonArray { rule.Value };
+                node["ip_cidr"] = new JsonArray { Prefix(rule.Value) };
                 break;
 
             case MatchKind.IpSet:
@@ -2012,7 +2033,7 @@ public sealed class SingBoxConfigCompiler
 
                 var cidrs = new JsonArray();
                 foreach (var cidr in rule.IpSetCidrs)
-                    cidrs.Add(cidr);
+                    cidrs.Add(Prefix(cidr));
 
                 node["ip_cidr"] = cidrs;
                 break;
