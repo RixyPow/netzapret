@@ -40,7 +40,10 @@ public sealed record PartRow : INotifyPropertyChanged
     /// У своего домена ссылка есть и без файла: нажатие предлагает его
     /// завести. Сам файл не заводится (владелец, 26.09) — см. OwnLists.
     /// </remarks>
-    public Visibility ListShown => ListPath is not null || Own ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility ListShown => ListPath is not null || Own ? Visibility.Visible : Visibility.Hidden;
+
+    /// <summary>Подсказка кнопки списка: открыть файл или, у своего домена без файла, завести его.</summary>
+    public string ListHint => ListPath is { } path ? $"Открыть список в Блокноте: {path}" : "Завести файл списка — к нему можно дописать другие имена";
 
     /// <summary>
     /// Настоящее имя из списка — на нём проверяются рецепты.
@@ -2196,7 +2199,7 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnOpenList(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Documents.Hyperlink { DataContext: PartRow row })
+        if (sender is not FrameworkElement { DataContext: PartRow row })
             return;
 
         if (row.ListPath is not { } path)
