@@ -146,15 +146,14 @@
                             Вписать имя в поле по-прежнему можно, но угадать
                             это было нельзя.
 
-                            С 04.10 выключена, с подсказкой «На переработке»
-                            (владелец: «мы их обманываем»): в «Гибриде» правило
-                            по программе не уводило её в VPN — см.
-                            Rules.ProgramRulesOff. Подсказка видна и у
-                            неактивной (ShowOnDisabled).
+                            С 04.10 по 13.10 была выключена: правило по процессу
+                            в «Гибриде» не уводило игру в VPN (Rules.ProgramRulesOff).
+                            С 13.10 заводит папку программы — домены и адреса,
+                            пополняемые наблюдением (ProgramRoutes).
                         -->
                         <Button Grid.Column="1" x:Name="AddProgramButton" Style="{StaticResource Ghost}"
                                 Margin="12,0,0,0" VerticalAlignment="Center" Click="OnAddProgram"
-                                IsEnabled="False" ToolTip="На переработке" ToolTipService.ShowOnDisabled="True">
+                                ToolTip="Папка программы: домены и адреса, которые она открывает. Пополняется по «Наблюдению».">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE710;" FontSize="13"
                                            VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -181,7 +180,7 @@
                                 текста, который читают однажды.
                             -->
                             <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
-                                            Content="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com.&#x0a;&#x0a;Правила по программе — на переработке: в «Гибриде» «через VPN» для программы уводило в туннель только то, что и так шло туда по другим правилам, а серверы игр шли мимо. Добавить программу сейчас нельзя, прежние такие правила сняты.&#x0a;&#x0a;«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего.&#x0a;&#x0a;«Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts.&#x0a;&#x0a;Проверить, что применится, можно в «Проверке блокировок»." />
+                                            Content="Имя означает зону: example.com покрывает и www.example.com, и cdn.example.com.&#x0a;&#x0a;Сервис вроде YouTube — папка, внутри — маршруты. Маршрут можно переложить в другую папку или вынуть кнопкой «⋯» в его строке; куда он идёт, от этого не меняется.&#x0a;&#x0a;Программа — папка из двух маршрутов: «Домены» и «Адреса». Сначала они пустые и выключены; пока идёт «Наблюдение» и включено автопополнение, туда дописывается всё, что программа открывает. Путь каждому выберите сами.&#x0a;&#x0a;«Десинк» означает «мимо туннеля, чинит пресет»: рецепт не назначается, и если имя не попало ни в один список пресета, с ним не сделают ничего.&#x0a;&#x0a;«Напрямую» — мимо туннеля и мимо десинка: имя уходит в исключения, и winws2 его не трогает вовсе, как и прибитое в hosts.&#x0a;&#x0a;Проверить, что применится, можно в «Проверке блокировок»." />
                         </StackPanel>
 
                         <TextBlock x:Name="OwnSummary" Style="{StaticResource Caption}"
@@ -345,6 +344,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <!--
@@ -397,6 +397,27 @@
                                                VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"
                                                ToolTip="{Binding Summary}" />
+
+                                    <!--
+                                        Шапка программы: автопополнение и «убрать»
+                                        (владелец 13.10: «у каждого процесса тумблер
+                                        автопополнения»). Внутри кнопки папки —
+                                        их щелчок до неё не доходит.
+                                    -->
+                                    <StackPanel Grid.Column="5" Orientation="Horizontal"
+                                                Margin="16,0,0,0" VerticalAlignment="Center"
+                                                Visibility="{Binding ProgramShown}">
+                                        <TextBlock Text="автопополнение" Style="{StaticResource Caption}"
+                                                   VerticalAlignment="Center" Margin="0,0,8,0"
+                                                   ToolTip="{Binding AutoFillHint}" />
+                                        <ToggleButton Style="{StaticResource Switch}"
+                                                      IsChecked="{Binding AutoFill, Mode=OneWay}"
+                                                      Tag="{Binding Program}" Click="OnAutoFill"
+                                                      ToolTip="{Binding AutoFillHint}" />
+                                        <Button Style="{StaticResource Ghost}" Content="убрать"
+                                                Padding="12,5" Margin="12,0,0,0"
+                                                Tag="{Binding Program}" Click="OnRemoveProgram" />
+                                    </StackPanel>
                                 </Grid>
                             </Button>
 
@@ -522,6 +543,13 @@
                                                         человеком и никуда не денется — ей
                                                         меняют маршрут, а не существование.
                                                     -->
+                                                    <!-- Перекладка по папкам (RouteFolders, 13.10). -->
+                                                    <Button Style="{StaticResource Ghost}"
+                                                            Content="⋯" Padding="10,7" Margin="8,0,0,0"
+                                                            Tag="{Binding Key}" Click="OnRouteMore"
+                                                            Visibility="{Binding MoreShown}"
+                                                            ToolTip="Переложить в папку или вынуть из неё" />
+
                                                     <Button Style="{StaticResource Ghost}"
                                                             Content="убрать" Padding="12,7"
                                                             Margin="8,0,0,0"

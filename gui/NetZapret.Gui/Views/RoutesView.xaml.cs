@@ -158,6 +158,21 @@ public sealed record PartRow
     public double Lead { get; init; }
 
     public Thickness IconMargin => new(Lead, 0, 12, 0);
+
+    /// <summary>Папка по каталогу; <c>null</c> — маршрут сам по себе.</summary>
+    /// <remarks>
+    /// Человек может переложить маршрут в другую папку или вынуть его
+    /// (RouteFolders, владелец 13.10), и «Вернуть на место» возвращает сюда.
+    /// </remarks>
+    public string? HomeFolder { get; init; }
+
+    /// <summary>Папка, в которой маршрут показан сейчас; <c>null</c> — вне папки.</summary>
+    public string? Folder { get; init; }
+
+    /// <summary>Можно ли перекладывать: маршруты программы живут в её папке.</summary>
+    public bool Movable { get; init; } = true;
+
+    public Visibility MoreShown => Movable ? Visibility.Visible : Visibility.Collapsed;
 }
 
 /// <summary>Строка таблицы порядка вычисления.</summary>
@@ -193,6 +208,28 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public bool Open { get; set; }
 
     /// <summary>
+    /// Папка, даже если маршрут в ней остался один.
+    /// </summary>
+    /// <remarks>
+    /// Из YouTube вынули три маршрута из четырёх — оставшийся всё равно
+    /// лежит в папке YouTube, и без шапки его имя («Интерфейс») ни о чём
+    /// бы не говорило.
+    /// </remarks>
+    public bool IsFolder { get; init; }
+
+    /// <summary>Папка программы (ProgramRoutes, 13.10); <c>null</c> — не программа.</summary>
+    public string? Program { get; init; }
+
+    /// <summary>Пополняется ли маршрут программы по наблюдению.</summary>
+    public bool AutoFill { get; init; }
+
+    public Visibility ProgramShown => Program is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public string AutoFillHint =>
+        "Автопополнение: пока идёт «Наблюдение», всё, что открывает программа, дописывается — "
+        + "имена в «Домены», сети /24 в «Адреса». Маршруты сами не включаются: путь выбираете вы.";
+
+    /// <summary>
     /// Разворачивать нечего: часть одна, и она же вся строка.
     /// </summary>
     /// <remarks>
@@ -201,7 +238,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     /// показываются одной строкой без шапки и без стрелки, а имя сервиса
     /// переходит в саму строку.
     /// </remarks>
-    public bool Single => Parts.Count == 1;
+    public bool Single => !IsFolder && Parts.Count == 1;
 
     /// <summary>Шапка — только у того, что вправду сворачивается.</summary>
     public Visibility HeaderShown => Single ? Visibility.Collapsed : Visibility.Visible;
@@ -282,13 +319,13 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
         int tail = count % 100;
 
         if (tail is >= 11 and <= 14)
-            return "частей";
+            return "маршрутов";
 
         return (count % 10) switch
         {
-            1 => "часть",
-            2 or 3 or 4 => "части",
-            _ => "частей",
+            1 => "маршрут",
+            2 or 3 or 4 => "маршрута",
+            _ => "маршрутов",
         };
     }
 }
@@ -375,7 +412,9 @@ public partial class RoutesView : UserControl
 
             var problems = RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
 
-            var services = new List<ServiceRow>();
+            // Маршруты по порядку, с папкой каталога: перекладка человека
+            // (RouteFolders, 13.10) раскладывает их поверх.
+            var placed = new List<(string? Folder, string Key, PartRow Part)>();
 
             foreach (var service in ServiceCatalog.All)
             {
@@ -392,8 +431,7 @@ public partial class RoutesView : UserControl
                 // и его сервисом. Каждая часть получает свою строку.
                 if (service.Grouping)
                 {
-                    services.AddRange(parts.Select(p =>
-                        new ServiceRow(p.Title, [p with { Lead = 24 }])));
+                    placed.AddRange(parts.Select(p => ((string?)null, p.Key, p)));
                     continue;
                 }
 
@@ -403,17 +441,11 @@ public partial class RoutesView : UserControl
                 // «Всё», и это ничего не говорит в общем списке.
                 if (parts.Count == 1)
                 {
-                    // Поле под стрелку — внутри карточки: строка верхнего уровня
-                    // должна идти во всю ширину, а значок стоять там же, где
-                    // у папки.
-                    services.Add(new ServiceRow(
-                        service.Name,
-                        [parts[0] with { Title = service.Name, Lead = 24 }]));
-
+                    placed.Add((null, parts[0].Key, parts[0] with { Title = service.Name }));
                     continue;
                 }
 
-                services.Add(new ServiceRow(service.Name, parts));
+                placed.AddRange(parts.Select(p => ((string?)service.Name, p.Key, p with { HomeFolder = service.Name })));
             }
 
             // Свои домены — в общий список, наравне с каталожными.
@@ -421,7 +453,13 @@ public partial class RoutesView : UserControl
             // а отдельная карточка ничего этого не давала и вдобавок делила
             // список надвое по признаку, который человеку безразличен —
             // по тому, знали мы это имя заранее или нет.
-            services.AddRange(OwnRows(userRules));
+            placed.AddRange(OwnRows(userRules).Select(p => ((string?)null, p.Key, p)));
+
+            var services = Arranged(placed, settings.RouteFolders);
+
+            // Программы — своими папками, мимо перекладки: их маршруты
+            // живут только вместе с выключателем пополнения в шапке.
+            services.InsertRange(0, ProgramRows(settings, userRules));
 
             MarkPins(services, zapretRoot);
 
@@ -449,7 +487,7 @@ public partial class RoutesView : UserControl
                 // у заголовка: строка эта стояла над списком постоянно,
                 // а нужна была один раз. Счёт сервисов остался — он
                 // меняется и отвечает на вопрос «всё ли прочиталось».
-                ? $"Сервисов: {services.Count}, частей в них: {services.Sum(s => s.Parts.Count)}."
+                ? $"Папок и отдельных маршрутов: {services.Count}, маршрутов всего: {services.Sum(s => s.Parts.Count)}."
                 : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
 
             ShowOrder(engine);
@@ -895,12 +933,14 @@ public partial class RoutesView : UserControl
     /// она вместе с файлом.
     /// </para>
     /// </remarks>
-    private IReadOnlyList<ServiceRow> OwnRows(UserRulesFile userRules)
+    private IReadOnlyList<PartRow> OwnRows(UserRulesFile userRules)
     {
-        var rows = new List<ServiceRow>();
+        var rows = new List<PartRow>();
 
+        // Списки программ — тоже свои, но показываются в папке программы (ProgramRows).
         foreach (var entry in userRules.Entries.Where(e =>
-            e.Match == MatchKind.Domain || (e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value))))
+            e.Match == MatchKind.Domain
+            || (e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value) && !ProgramRoutes.IsProgramList(e.Value))))
         {
             var listed = entry.Match == MatchKind.HostList;
             var zones = RouteKeys.Zones("own|" + entry.Value, _zapretRoot);
@@ -956,7 +996,7 @@ public partial class RoutesView : UserControl
                 Lead = 24,
             };
 
-            rows.Add(new ServiceRow(title, [part]));
+            rows.Add(part);
         }
 
         // Свои программы — правило по имени процесса (обсуждение №10, 29.09).
@@ -989,7 +1029,7 @@ public partial class RoutesView : UserControl
                 Lead = 24,
             };
 
-            rows.Add(new ServiceRow(entry.Value, [part]));
+            rows.Add(part);
         }
 
         // Свои подсети и адреса — правило ip (12.10). Пина и рецепта нет:
@@ -1020,10 +1060,112 @@ public partial class RoutesView : UserControl
                 Lead = 24,
             };
 
-            rows.Add(new ServiceRow(entry.Value, [part]));
+            rows.Add(part);
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Маршруты по папкам — с перекладкой человека (<see cref="RouteFolders"/>).
+    /// </summary>
+    /// <remarks>
+    /// Вынутый из папки маршрут несёт её имя в заголовке: «Видеопоток» сам
+    /// по себе ни о чём не говорит, «YouTube · Видеопоток» — говорит. То же
+    /// у переложенного в чужую папку.
+    /// </remarks>
+    private static List<ServiceRow> Arranged(
+        IReadOnlyList<(string? Folder, string Key, PartRow Part)> placed,
+        IReadOnlyDictionary<string, string> moved)
+    {
+        var rows = new List<ServiceRow>();
+
+        foreach (var (folder, parts) in RouteFolders.Arrange(placed, moved))
+        {
+            string Title(PartRow part) =>
+                part.HomeFolder is { } home && !string.Equals(home, folder, StringComparison.OrdinalIgnoreCase)
+                    ? $"{home} · {part.Title}"
+                    : part.Title;
+
+            if (folder is null)
+            {
+                var single = parts[0] with { Title = Title(parts[0]), Folder = null, Lead = 24 };
+                rows.Add(new ServiceRow(single.Title, [single]));
+                continue;
+            }
+
+            rows.Add(new ServiceRow(folder, parts.Select(p => p with { Title = Title(p), Folder = folder, Lead = 0 }).ToList())
+            {
+                IsFolder = true,
+            });
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Папки программ: «Домены» и «Адреса» (<see cref="ProgramRoutes"/>, 13.10).
+    /// </summary>
+    private static List<ServiceRow> ProgramRows(AppSettings settings, UserRulesFile userRules) =>
+        settings.ProgramRoutes
+            .Select(program => new ServiceRow(program.Program,
+            [
+                ProgramPart(program.Program, ProgramRoutes.DomainsPath(program.Program), domains: true, userRules),
+                ProgramPart(program.Program, ProgramRoutes.AddressesPath(program.Program), domains: false, userRules),
+            ])
+            {
+                IsFolder = true,
+                Program = program.Program,
+                AutoFill = program.AutoFill,
+            })
+            .ToList();
+
+    /// <remarks>
+    /// Ключ — обычный <c>hostlist|путь</c>: выбор пути, «выключено» и рецепт
+    /// работают тем же кодом, что у части сервиса. Рецепт спрашивается
+    /// только у доменов — проба нужна по имени, у адресов его нет.
+    /// </remarks>
+    private static PartRow ProgramPart(string program, string list, bool domains, UserRulesFile userRules)
+    {
+        var entry = userRules.Entries.FirstOrDefault(e => e.Match == MatchKind.HostList && e.Matches(list));
+        var lines = ProgramRoutes.Entries(list);
+        var first = domains ? lines.FirstOrDefault() : null;
+
+        var (color, choice) = entry is null || entry.Off ? ("Muted", PartRow.Off) : entry.Mode switch
+        {
+            RoutingMode.Direct => ("Muted", 0),
+            RoutingMode.Desync => ("Warn", 1),
+            _ => ("Accent", 2),
+        };
+
+        var detail = lines.Count == 0
+            ? domains ? "пусто — сюда лягут имена, которые открывает программа" : "пусто — сюда лягут сети серверов без имени"
+            : (domains ? Count(lines.Count, "домен", "домена", "доменов") : Count(lines.Count, "сеть", "сети", "сетей"))
+                + ": " + string.Join(", ", lines.Take(3)) + (lines.Count > 3 ? " …" : string.Empty);
+
+        return new PartRow
+        {
+            Key = RouteKeys.Make(RouteKeys.HostList, list),
+            Title = domains ? "Домены" : "Адреса",
+            Detail = detail
+                + (entry is { Mode: RoutingMode.Desync, Off: false } && !string.IsNullOrWhiteSpace(entry.Recipe)
+                    ? $" · рецепт: {entry.Recipe}"
+                    : string.Empty),
+            Probe = first,
+            Example = first,
+            ListPath = ListFile(list),
+            Mode = entry is null || entry.Off ? "выключено — маршрут не действует" : Describe(entry.Mode),
+            Color = (Brush)Application.Current.FindResource(color),
+            Choice = choice,
+            Applied = choice,
+            CanRoute = true,
+            CanPin = false,
+            Movable = false,
+            Letter = domains ? "@" : "#",
+            Icon = ProgramIcon(program),
+            HomeFolder = program,
+            Folder = program,
+        };
     }
 
     /// <summary>Пути запущенных программ по имени файла — для значков строк.</summary>
@@ -1517,7 +1659,7 @@ public partial class RoutesView : UserControl
         {
             AddOffer.Visibility = Visibility.Collapsed;
             Status.Text = found.Count > 0
-                ? $"Частей {RouteWords(_route!.Value)}: {found.Sum(s => s.Parts.Count)} — в {found.Count} {InServices(found.Count)}."
+                ? $"Маршрутов {RouteWords(_route!.Value)}: {found.Sum(s => s.Parts.Count)} — в {found.Count} {InServices(found.Count)}."
                 : $"Ничего не идёт {RouteWords(_route!.Value)}.";
             return;
         }
@@ -1530,10 +1672,12 @@ public partial class RoutesView : UserControl
         var subnet = found.Count == 0 && program is null ? AddressInput.Normalize(needle) : null;
         var domain = found.Count == 0 && program is null && subnet is null ? DomainInput.Normalize(needle) : null;
 
-        // Программу добавить не предлагаем: обход по программе на переработке
-        // (Rules.ProgramRulesOff, владелец 04.10) — правило обещало бы то, чего
-        // в «Гибриде» не делает. Вписанное «.exe» не ищется и сайтом.
-        AddOffer.Visibility = domain is null && subnet is null ? Visibility.Collapsed : Visibility.Visible;
+        // Программа с 13.10 — папка из доменов и адресов (ProgramRoutes), а не
+        // правило по процессу, снятое 04.10: его и предлагаем.
+        AddOffer.Visibility = domain is null && subnet is null && program is null ? Visibility.Collapsed : Visibility.Visible;
+
+        if (program is not null)
+            AddOfferText.Text = $"«{program}» — программа. Добавить её папку: домены и адреса, пустые и выключенные, пополняются по наблюдению.";
 
         if (domain is not null)
             AddOfferText.Text = $"«{domain}» в списке нет. Добавить своим доменом — сперва «напрямую», дальше правится в его строке.";
@@ -1542,10 +1686,8 @@ public partial class RoutesView : UserControl
             AddOfferText.Text = $"«{subnet}» — {(subnet.Contains('/') ? "подсеть" : "адрес")}. Добавить своим правилом — сперва «напрямую», дальше правится в его строке.";
 
         Status.Text = found.Count > 0
-            ? $"Найдено частей: {found.Sum(s => s.Parts.Count)}."
-            : program is not null
-                ? $"«{program}» — программа. Правила по программе на переработке: добавить её сейчас нельзя."
-                : domain is null && subnet is null
+            ? $"Найдено маршрутов: {found.Sum(s => s.Parts.Count)}."
+            : domain is null && subnet is null && program is null
                     ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com, или подсеть — 203.0.113.0/24."
                     : string.Empty;
     }
@@ -1763,13 +1905,15 @@ public partial class RoutesView : UserControl
         // у кого заведена только игра.
         var own = UserRulesFile.Load().Entries
             .Where(entry => entry.Match is MatchKind.Domain or MatchKind.Process or MatchKind.Ip
-                || (entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value)))
+                || (entry.Match == MatchKind.HostList && OwnLists.IsOwn(entry.Value) && !ProgramRoutes.IsProgramList(entry.Value)))
             .Select(entry => entry.Match switch
             {
                 MatchKind.Domain => entry.Value.TrimStart('*', '.'),
                 MatchKind.Process or MatchKind.Ip => entry.Value,
                 _ => OwnLists.NameOf(entry.Value),
             })
+            // Программа — одной строкой счёта, а не двумя списками.
+            .Concat(AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Select(p => p.Program))
             .ToList();
 
         OwnSummary.Text = own.Count == 0
@@ -1781,7 +1925,7 @@ public partial class RoutesView : UserControl
         // Снятые правила по программе (Rules.ProgramRulesOff, 04.10) — словами,
         // а не молча: человек ставил игру «через VPN», и правило пропало.
         if (AppSettings.Load(AppSettings.DefaultPath).RemovedProgramRules is { Count: > 0 } removed)
-            OwnSummary.Text += $" Правила по программе сняты — обход по программе на переработке: {string.Join(", ", removed)}.";
+            OwnSummary.Text += $" Прежние правила по программе сняты 04.10: {string.Join(", ", removed)}. Добавьте программу заново — теперь это папка из доменов и адресов.";
     }
 
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
@@ -1832,39 +1976,170 @@ public partial class RoutesView : UserControl
     }
 
     /// <summary>
-    /// Записывает программу — «напрямую», по имени файла — и показывает её строку.
+    /// Заводит папку программы — «Домены» и «Адреса», пустые и выключенные (владелец 13.10).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// По имени, а не по пути, и из окна выбора, и из файла. У Happ на снимке
-    /// владельца восемь строк claude.exe — по одной на версию: путь в
-    /// WindowsApps меняется с каждым обновлением, и правило по пути
-    /// перестаёт совпадать. Имя переживает обновление. Вписанный руками
-    /// путь остаётся путём — это осознанный выбор человека.
+    /// По имени файла, а не по пути, и из окна выбора, и из файла: путь
+    /// в WindowsApps меняется с каждым обновлением (у Happ на снимке
+    /// владельца восемь строк claude.exe), имя переживает обновление.
     /// </para>
     /// <para>
-    /// Поле поиска получает имя программы: список сворачивается до её строки,
-    /// где и меняется маршрут, — как у своего домена.
+    /// Не правило по процессу, а два своих списка (<see cref="ProgramRoutes"/>):
+    /// правило по процессу в «Гибриде» не уводило игру в VPN (снято 04.10).
+    /// Наблюдение начинается сразу — без него пополнять нечем.
     /// </para>
     /// </remarks>
     private void AddProgram(string program)
     {
         try
         {
-            var rules = UserRulesFile.Load();
-            rules.Set(MatchKind.Process, program, RoutingMode.Direct, recipe: null);
-            rules.Save();
+            if (!ProgramRoutes.Add(program, AppSettings.DefaultPath, UserRulesFile.DefaultPath))
+            {
+                Search.Text = program;
+                Status.Text = $"«{program}» уже есть — её папка ниже.";
+                return;
+            }
 
+            _open.Add(program);
             Search.Text = program;
             Reload();
 
-            Status.Text = $"Записано: {program} → напрямую. Режим меняется в её строке ниже. "
-                + "Применится при следующем запуске движков.";
-            this.Offer($"Добавлен маршрут: {program}");
+            Status.Text = WatchView.StartSession()
+                ? $"Добавлена «{program}»: домены и адреса пустые и выключены. Запустите программу — "
+                    + "что она открывает, допишется само, пока идёт «Наблюдение». Путь выберите в строках ниже."
+                : $"Добавлена «{program}», но наблюдение не началось, и пополнять нечем: откройте «Наблюдение».";
         }
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Выключатель автопополнения в шапке папки программы.</summary>
+    private void OnAutoFill(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Primitives.ToggleButton { Tag: string program } toggle)
+            return;
+
+        bool on = toggle.IsChecked == true;
+
+        try
+        {
+            ProgramRoutes.SetAutoFill(program, on, AppSettings.DefaultPath);
+
+            Status.Text = !on
+                ? $"«{program}»: автопополнение выключено, списки остаются как есть."
+                : WatchView.StartSession()
+                    ? $"«{program}»: автопополнение включено — дописывается, пока идёт «Наблюдение»."
+                    : $"«{program}»: автопополнение включено, но наблюдение не началось: откройте «Наблюдение».";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>«Убрать» в шапке папки программы: маршруты, списки и запись — разом.</summary>
+    private void OnRemoveProgram(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string program })
+            return;
+
+        if (MessageBox.Show(Window.GetWindow(this),
+                $"Убрать «{program}» вместе со списками доменов и адресов?",
+                "NetZapret", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            ProgramRoutes.Remove(program, AppSettings.DefaultPath, UserRulesFile.DefaultPath);
+            Reload();
+
+            Status.Text = $"Убрана «{program}». Применится при следующем запуске движков.";
+            this.Offer($"Убран маршрут: {program}");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось убрать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// «⋯» у маршрута: переложить в папку, вынуть из неё, вернуть на место (владелец 13.10).
+    /// </summary>
+    /// <remarks>
+    /// Перекладка — только вид (<see cref="RouteFolders"/>): правило, его
+    /// место в файле и путь маршрута не меняются, перезапуск не нужен.
+    /// </remarks>
+    private void OnRouteMore(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string key } anchor
+            || _all.SelectMany(s => s.Parts).FirstOrDefault(p => p.Key == key) is not { } part)
+        {
+            return;
+        }
+
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        var into = new MenuItem { Header = "Переложить в папку" };
+
+        foreach (var folder in _all.Where(s => s.IsFolder && s.Program is null && s.Name != part.Folder).Select(s => s.Name))
+        {
+            var name = folder;
+            var item = new MenuItem { Header = name };
+            item.Click += (_, _) => MoveRoute(part, name);
+            into.Items.Add(item);
+        }
+
+        if (into.Items.Count > 0)
+            into.Items.Add(new Separator());
+
+        var fresh = new MenuItem { Header = "Новая папка…" };
+        fresh.Click += (_, _) =>
+        {
+            var window = new FolderNameWindow(part.Title) { Owner = Window.GetWindow(this) };
+
+            if (window.ShowDialog() == true && window.Chosen is { } chosen)
+                MoveRoute(part, chosen);
+        };
+        into.Items.Add(fresh);
+        menu.Items.Add(into);
+
+        if (part.Folder is not null)
+            menu.Items.Add(MenuEntry("", "Вынуть из папки", () => MoveRoute(part, string.Empty)));
+
+        if (!string.Equals(part.Folder ?? string.Empty, part.HomeFolder ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+        {
+            menu.Items.Add(MenuEntry("", part.HomeFolder is { } home ? $"Вернуть в «{home}»" : "Вернуть на место",
+                () => MoveRoute(part, part.HomeFolder ?? string.Empty)));
+        }
+
+        menu.IsOpen = true;
+    }
+
+    private void MoveRoute(PartRow part, string folder)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            (settings with { RouteFolders = RouteFolders.Move(settings.RouteFolders, part.Key, folder, part.HomeFolder) })
+                .Save(AppSettings.DefaultPath);
+
+            if (folder.Length > 0)
+                _open.Add(folder.Trim());
+
+            Reload();
+
+            Status.Text = folder.Length == 0
+                ? $"«{part.Title}» — вне папки. Путь маршрута не менялся."
+                : $"«{part.Title}» — в папке «{folder.Trim()}». Путь маршрута не менялся.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось переложить: " + ex.GetBaseException().Message;
         }
     }
 
@@ -1887,11 +2162,10 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void AddOwn()
     {
-        // Программы — на переработке (Rules.ProgramRulesOff, 04.10): «Добавить»
-        // под полем для них и не появляется, но Enter не должен обойти это.
-        if (ProgramInput(Search.Text) is { } program)
+        // Программа — папкой из доменов и адресов (ProgramRoutes, 13.10).
+        if (ProgramRoutes.Normalize(ProgramInput(Search.Text)) is { } program)
         {
-            Status.Text = $"«{program}» — программа. Правила по программе на переработке: добавить её сейчас нельзя.";
+            AddProgram(program);
             return;
         }
 

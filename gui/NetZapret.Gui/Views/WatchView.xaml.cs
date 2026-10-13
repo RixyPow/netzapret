@@ -231,6 +231,21 @@ public partial class WatchView : UserControl
         [WatchRoute.Engine] = EngineBrush,
     };
 
+    /// <summary>Та же палитра без раздела — для наблюдения, начатого при запуске окна.</summary>
+    private static Dictionary<WatchRoute, Brush> ThemePalette()
+    {
+        Brush Of(string key, Brush fallback) => Application.Current?.TryFindResource(key) as Brush ?? fallback;
+
+        return new()
+        {
+            [WatchRoute.Proxy] = Of("Accent", Brushes.SteelBlue),
+            [WatchRoute.Desync] = Of("Warn", Brushes.Goldenrod),
+            [WatchRoute.Direct] = Of("Muted", Brushes.Gray),
+            [WatchRoute.Local] = Of("Faint", Brushes.DimGray),
+            [WatchRoute.Engine] = EngineBrush,
+        };
+    }
+
     /// <summary>Кисть темы; у темы без неё — запасная, а не падение раздела.</summary>
     private Brush Brush(string key, Brush fallback) => TryFindResource(key) as Brush ?? fallback;
 
@@ -264,18 +279,52 @@ public partial class WatchView : UserControl
             return;
         }
 
+        // Кисти — здесь, в потоке окна: строки собираются в фоне.
+        _brushes = Palette();
+
+        if (!StartSession())
+        {
+            Say(_note);
+            return;
+        }
+
+        ShowPower(true);
+        // Строкой под кнопками это отъедало у таблицы высоту — в подсказку.
+        Say(null);
+        ClockText.ToolTip = $"Правил {_watch!.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
+    }
+
+    /// <summary>
+    /// Начинает наблюдение, если оно ещё не идёт, — и без открытого раздела.
+    /// </summary>
+    /// <remarks>
+    /// Нужно автопополнению маршрутов программ (13.10): оно видит соединения
+    /// только через наблюдение, и ждать, пока человек нажмёт «Начать»,
+    /// значило бы молча не пополнять. Зовётся при запуске окна, если у какой-то
+    /// программы пополнение включено, и при включении выключателя.
+    /// </remarks>
+    /// <returns><c>false</c> — не началось; причина в <see cref="_note"/>.</returns>
+    internal static bool StartSession()
+    {
+        if (_watch is not null)
+            return true;
+
+        if (_brushes.Count == 0)
+            _brushes = ThemePalette();
+
         try
         {
             // Тот же сеанс, что у nz watch (ConnectionWatch): те же правила,
             // что у сборки конфига, и тот же журнал runtime\watch.log.
-            _watch = ConnectionWatch.Start(AppSettings.Load(AppSettings.DefaultPath), ConnectionWatch.DefaultJournal);
+            _watch = ConnectionWatch.Start(
+                AppSettings.Load(AppSettings.DefaultPath),
+                ConnectionWatch.DefaultJournal,
+                new ProgramRouteLearner(AppSettings.DefaultPath));
+            _watch.Learned += ProgramRouteNotice.Learned;
             _startedAt = DateTimeOffset.Now;
             _totalBase = 0;
             _matchedBase = 0;
             _note = null;
-
-            // Кисти — здесь, в потоке окна: строки собираются в фоне.
-            _brushes = Palette();
 
             // Сессия ETW переживает процесс: выход из программы обязан её
             // остановить, раз раздел этого больше не делает.
@@ -288,10 +337,10 @@ public partial class WatchView : UserControl
             _work = new CancellationTokenSource();
             _ = ReadAsync(_watch, _work.Token);
 
-            ShowPower(true);
-            // Строкой под кнопками это отъедало у таблицы высоту — в подсказку.
-            Say(null);
-            ClockText.ToolTip = $"Правил {_watch.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
+            if (_open is { } open)
+                open.Dispatcher.BeginInvoke(() => open.ShowPower(true));
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -299,7 +348,7 @@ public partial class WatchView : UserControl
 
             _note = "Не удалось начать: " + ex.GetBaseException().Message
                 + ". Сессия ETW требует прав администратора — окно их запрашивает при запуске.";
-            Say(_note);
+            return false;
         }
     }
 

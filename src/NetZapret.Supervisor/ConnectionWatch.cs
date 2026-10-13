@@ -52,8 +52,18 @@ public sealed class ConnectionWatch : IAsyncDisposable
 
     private readonly WatchContext _context;
 
-    private ConnectionWatch(EtwConnectionSource source, RuleEngine engine, RollingLog? journal, string mode, WatchContext context)
+    /// <summary>Автопополнение маршрутов программ (13.10); <c>null</c> — не пополнять.</summary>
+    private readonly ProgramRouteLearner? _learner;
+
+    /// <summary>
+    /// Дописано в список программы. Зовётся из потока чтения — подписчик
+    /// сам переходит в свой поток.
+    /// </summary>
+    public event Action<ProgramLearned>? Learned;
+
+    private ConnectionWatch(EtwConnectionSource source, RuleEngine engine, RollingLog? journal, string mode, WatchContext context, ProgramRouteLearner? learner)
     {
+        _learner = learner;
         _source = source;
         _engine = engine;
         _journal = journal;
@@ -108,8 +118,9 @@ public sealed class ConnectionWatch : IAsyncDisposable
     /// Начинает наблюдение по тем же правилам, по которым собирается конфиг.
     /// </summary>
     /// <param name="journal">Куда писать; <c>null</c> — не писать.</param>
+    /// <param name="learner">Автопополнение маршрутов программ; <c>null</c> — не пополнять.</param>
     /// <exception cref="Exception">Сессия ETW не создалась — обычно нет прав администратора.</exception>
-    public static ConnectionWatch Start(AppSettings settings, string? journal)
+    public static ConnectionWatch Start(AppSettings settings, string? journal, ProgramRouteLearner? learner = null)
     {
         // Оба слоя правил, как у сборки конфига: наблюдатель показывает, какое
         // правило применилось бы, и читать он обязан ровно то же. Иначе он
@@ -135,7 +146,7 @@ public sealed class ConnectionWatch : IAsyncDisposable
         }
 
         var log = journal is null ? null : new RollingLog(journal, JournalBytes, generations: 1);
-        var watch = new ConnectionWatch(source, engine, log, settings.DescribeMode(), Context(settings));
+        var watch = new ConnectionWatch(source, engine, log, settings.DescribeMode(), Context(settings), learner);
 
         log?.AppendLine(WatchEntry.Session(DateTimeOffset.Now,
             $"{WatchEntry.Started}: режим «{watch.Mode}», правил {watch.RuleCount}"));
@@ -174,12 +185,36 @@ public sealed class ConnectionWatch : IAsyncDisposable
 
                 _journal?.AppendLine(entry.ToLine());
 
+                Learn(connection);
+
                 yield return entry;
             }
         }
         finally
         {
             await events.DisposeAsync();
+        }
+    }
+
+    /// <remarks>
+    /// Сбой записи списка не обрывает наблюдение: оно нужно и без пополнения.
+    /// </remarks>
+    private void Learn(ConnectionEvent connection)
+    {
+        if (_learner is null)
+            return;
+
+        try
+        {
+            if (_learner.Observe(connection) is { } learned)
+            {
+                _journal?.AppendLine(WatchEntry.Session(DateTimeOffset.Now,
+                    $"маршрут программы {learned.Program}: дописано {learned.Value}"));
+                Learned?.Invoke(learned);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

@@ -1,0 +1,34 @@
+<Window x:Class="NetZapret.Gui.Views.FolderNameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
+        Title="Новая папка" Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Backdrop}"
+        ResizeMode="NoResize">
+
+    <!--
+        Папка — только вид (RouteFolders, 13.10): маршрут, положенный в неё,
+        идёт туда же, куда шёл. Окно постоянного размера, как «имя списка».
+    -->
+    <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
+        <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
+
+        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                   Text="Папка собирает маршруты вместе. Куда идёт каждый маршрут, она не меняет. Пустая папка исчезнет сама." />
+
+        <TextBlock Text="Название папки" FontWeight="SemiBold" Margin="0,18,0,6" />
+
+        <TextBox x:Name="NameBox" KeyDown="OnKey" gui:Hint.Text="например, Игры" />
+
+        <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                   TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+            <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
+                    Margin="0,0,8,0" Click="OnCancel" />
+            <Button Style="{StaticResource Primary}" Content="Переложить" IsDefault="True"
+                    Click="OnCreate" />
+        </StackPanel>
+    </StackPanel>
+</Window>

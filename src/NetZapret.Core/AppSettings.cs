@@ -284,6 +284,15 @@ public sealed record AppSettings
     /// </remarks>
     public bool LearnDiscordVoice { get; init; } = true;
 
+    /// <summary>Программы в «Маршрутах» — папки из двух списков (<see cref="Rules.ProgramRoutes"/>, 13.10).</summary>
+    public IReadOnlyList<Rules.ProgramRoute> ProgramRoutes { get; init; } = [];
+
+    /// <summary>
+    /// Куда человек переложил маршрут: ключ строки «Маршрутов» → папка;
+    /// пустая строка — вне папки (<see cref="Services.RouteFolders"/>, 13.10).
+    /// </summary>
+    public IReadOnlyDictionary<string, string> RouteFolders { get; init; } = new Dictionary<string, string>();
+
     /// <summary>Поднимать прокси для Telegram Desktop вместе с движками (<see cref="TgWsProxy"/>).</summary>
     /// <remarks>Выключен по умолчанию: Telegram надо ещё подключить к нему ссылкой.</remarks>
     public bool TelegramProxy { get; init; }

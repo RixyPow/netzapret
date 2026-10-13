@@ -218,6 +218,16 @@ public partial class App : Application
 
         // Новые адреса голоса Discord — в список голоса, пока он «через VPN».
         DiscordVoiceWatch.Start(Dispatcher);
+
+        // Автопополнение маршрутов программ видит соединения только через
+        // наблюдение (13.10): включено у какой-то программы — начинаем сразу,
+        // не дожидаясь «Начать» в разделе.
+        if (AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Any(p => p.AutoFill)
+            && !Views.WatchView.StartSession())
+        {
+            Journal.Write("маршрут программы", "наблюдение для автопополнения не началось");
+        }
+
         SingleInstance.OnShowRequested(TrayIcon.Show);
 
         // Выход по просьбе --quit — тем же путём, что пункт меню трея:
