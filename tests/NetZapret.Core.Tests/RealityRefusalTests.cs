@@ -82,12 +82,18 @@ public sealed class RealityRefusalTests : IDisposable
         Assert.False(RealityRefusal.Recent(null, now));
     }
 
-    /// <summary>Объяснение не валит на подписку то, что делает сервер.</summary>
+    /// <summary>
+    /// Те же слова sing-box пишет и при устаревшем ключе — объяснение называет
+    /// обе причины и не уверяет, что подписка ни при чём.
+    /// </summary>
     [Fact]
-    public void TheExplanationNamesTheServerAndTheWayOut()
+    public void TheExplanationNamesBothCausesAndTheWayOut()
     {
         Assert.Contains("26.7.28", RealityRefusal.Explanation);
         Assert.Contains("26.6.27", RealityRefusal.Explanation);
         Assert.Contains("TLS", RealityRefusal.Explanation);
+        Assert.Contains("ключ в подписке устарел", RealityRefusal.Explanation);
+        Assert.Contains("Обновите подписку", RealityRefusal.Explanation);
+        Assert.DoesNotContain("ни при чём", RealityRefusal.Explanation);
     }
 }
