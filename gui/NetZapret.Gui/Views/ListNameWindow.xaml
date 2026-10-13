@@ -16,7 +16,7 @@
     <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
         <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
 
-        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+        <TextBlock x:Name="Lead" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                    Text="Можно завести файл: в него ляжет этот домен, и к нему можно дописать другие имена того же сайта. Маршрут, режим и рецепт останутся теми же." />
 
         <TextBlock Text="Название списка" FontWeight="SemiBold" Margin="0,18,0,6" />

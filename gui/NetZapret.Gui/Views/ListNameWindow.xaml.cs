@@ -21,12 +21,24 @@ public partial class ListNameWindow : Window
     /// Списки, где этот домен уже есть. С ними правило будет спорить, и сказать
     /// об этом надо до создания, а не после: ради этого окно и заведено.
     /// </param>
-    public ListNameWindow(string domain, IReadOnlyList<string> clashes)
+    /// <param name="address">
+    /// Это свой адрес или подсеть, а не домен (владелец 13.10: «почему у своих
+    /// адресов списка не может быть»): свой список держит и адреса.
+    /// </param>
+    public ListNameWindow(string domain, IReadOnlyList<string> clashes, bool address = false)
     {
         InitializeComponent();
 
         Head.Text = $"Списка у «{domain}» нет";
-        NameBox.Text = domain;
+
+        // Косая черта в имени файла не годится: «45.82.160.0/24» → «45.82.160.0-24».
+        NameBox.Text = domain.Replace('/', '-');
+
+        if (address)
+        {
+            Lead.Text = "Можно завести файл: в него ляжет этот адрес, и к нему можно дописать другие адреса, "
+                + "подсети и имена той же игры или программы. Маршрут останется тем же.";
+        }
 
         if (clashes.Count > 0)
         {

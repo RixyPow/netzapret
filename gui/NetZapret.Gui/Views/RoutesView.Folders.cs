@@ -179,6 +179,32 @@ public partial class RoutesView
         }
     }
 
+    /// <summary>
+    /// Ключ строки сменился (свой домен или адрес стал списком) — перекладка
+    /// и место в порядке переходят к новому ключу, иначе строка выпала бы из папки.
+    /// </summary>
+    private static void RenameKey(string from, string to)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var moved = new Dictionary<string, string>(settings.RouteFolders, StringComparer.Ordinal);
+
+            if (moved.Remove(from, out var folder))
+                moved[to] = folder;
+
+            (settings with
+            {
+                RouteFolders = moved,
+                RouteOrder = settings.RouteOrder.Select(k => k == from ? to : k).ToList(),
+            }).Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не перенеслось — строка встанет на место по умолчанию, маршрут цел.
+        }
+    }
+
     /// <summary>Имена, которые новой папке брать нельзя: программы и уже показанные папки.</summary>
     private IReadOnlyCollection<string> Taken(string? except = null) =>
         ProgramNames()

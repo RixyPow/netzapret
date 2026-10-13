@@ -41,13 +41,15 @@ public sealed record PartRow : INotifyPropertyChanged
     /// завести. Сам файл не заводится (владелец, 26.09) — см. OwnLists.
     /// </remarks>
     /// <remarks>
-    /// Без файла кнопка есть только у своего домена — она предлагает файл
-    /// завести (OfferList). У своего адреса, подсети и старого правила по
-    /// программе заводить нечего: до 13.10 «список» у них показывался
-    /// и по нажатию молчал. Скрыта, а не убрана — пин не уезжает влево.
+    /// Без файла кнопка предлагает файл завести (OfferList) — у своего домена
+    /// и, с 13.10, своего адреса или подсети: свой список держит и адреса.
+    /// У старого правила по программе заводить нечего. Скрыта, а не убрана —
+    /// пин не уезжает влево.
     /// </remarks>
     public Visibility ListShown =>
-        ListPath is not null || (Own && Key.StartsWith(RouteKeys.Own + "|", StringComparison.Ordinal))
+        ListPath is not null
+        || (Own && (Key.StartsWith(RouteKeys.Own + "|", StringComparison.Ordinal)
+            || Key.StartsWith(RouteKeys.Subnet + "|", StringComparison.Ordinal)))
             ? Visibility.Visible
             : Visibility.Hidden;
 
@@ -2069,12 +2071,16 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OfferList(PartRow row)
     {
-        if (RouteKeys.Parse(row.Key) is not (RouteKeys.Own, var value) || OwnLists.IsOwn(value))
+        if (RouteKeys.Parse(row.Key) is not (var kind and (RouteKeys.Own or RouteKeys.Subnet), var value) || OwnLists.IsOwn(value))
             return;
 
-        var domain = value.TrimStart('*', '.');
+        // Свой адрес или подсеть — правило ip; список заводится так же, как
+        // у домена: свой список понимает и адреса (AddressInput.Split).
+        bool address = kind == RouteKeys.Subnet;
+        var match = address ? MatchKind.Ip : MatchKind.Domain;
+        var domain = address ? value : value.TrimStart('*', '.');
 
-        var window = new ListNameWindow(domain, ListsCovering(domain))
+        var window = new ListNameWindow(domain, address ? [] : ListsCovering(domain), address)
         {
             Owner = Window.GetWindow(this),
         };
@@ -2085,7 +2091,7 @@ public partial class RoutesView : UserControl
         try
         {
             var file = UserRulesFile.Load();
-            int index = file.Entries.ToList().FindIndex(en => en.Match == MatchKind.Domain && en.Matches(value));
+            int index = file.Entries.ToList().FindIndex(en => en.Match == match && en.Matches(value));
 
             if (index < 0)
             {
@@ -2095,8 +2101,11 @@ public partial class RoutesView : UserControl
             }
 
             var path = OwnLists.Create(name, [domain]);
-            file.ReplaceAt(index, file.Entries[index] with { Match = MatchKind.HostList, Value = path });
+            file.ReplaceAt(index, file.Entries[index] with { Match = MatchKind.HostList, Value = path, Recipe = address ? null : file.Entries[index].Recipe });
             file.Save();
+
+            // Ключ строки сменился — папка и место в порядке переходят к новому.
+            RenameKey(row.Key, RouteKeys.Make(RouteKeys.Own, path));
 
             Reload();
 
@@ -2108,7 +2117,7 @@ public partial class RoutesView : UserControl
                 })?.Dispose();
             }
 
-            Status.Text = $"Заведён список «{name}» с {domain}. Допишите имена и сохраните — "
+            Status.Text = $"Заведён список «{name}» с {domain}. Допишите {(address ? "адреса, подсети или имена" : "имена")} и сохраните — "
                 + "применится при следующем запуске движков.";
         }
         catch (Exception ex)
