@@ -40,7 +40,16 @@ public sealed record PartRow : INotifyPropertyChanged
     /// У своего домена ссылка есть и без файла: нажатие предлагает его
     /// завести. Сам файл не заводится (владелец, 26.09) — см. OwnLists.
     /// </remarks>
-    public Visibility ListShown => ListPath is not null || Own ? Visibility.Visible : Visibility.Hidden;
+    /// <remarks>
+    /// Без файла кнопка есть только у своего домена — она предлагает файл
+    /// завести (OfferList). У своего адреса, подсети и старого правила по
+    /// программе заводить нечего: до 13.10 «список» у них показывался
+    /// и по нажатию молчал. Скрыта, а не убрана — пин не уезжает влево.
+    /// </remarks>
+    public Visibility ListShown =>
+        ListPath is not null || (Own && Key.StartsWith(RouteKeys.Own + "|", StringComparison.Ordinal))
+            ? Visibility.Visible
+            : Visibility.Hidden;
 
     /// <summary>Подсказка кнопки списка: открыть файл или, у своего домена без файла, завести его.</summary>
     public string ListHint => ListPath is { } path ? $"Открыть список в Блокноте: {path}" : "Завести файл списка — к нему можно дописать другие имена";
