@@ -3,7 +3,7 @@ using System.Windows.Input;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Спрашивает название новой папки, в которую ляжет маршрут.</summary>
+/// <summary>Спрашивает название папки: новой или переименованной.</summary>
 public partial class FolderNameWindow : Window
 {
     /// <summary>Длина названия: шапка папки — одна строка.</summary>
@@ -14,19 +14,27 @@ public partial class FolderNameWindow : Window
 
     private readonly IReadOnlyCollection<string> _reserved;
 
-    /// <param name="route">Маршрут, который перекладывается.</param>
+    /// <param name="head">Заголовок окна.</param>
     /// <param name="reserved">
-    /// Имена программ: их папки — только «Домены» и «Адреса», и папка с тем же
-    /// именем слилась бы с программой.
+    /// Занятые имена. Программы — всегда: их папки только «Домены» и «Адреса»,
+    /// и папка с тем же именем слилась бы с программой.
     /// </param>
-    public FolderNameWindow(string route, IReadOnlyCollection<string> reserved)
+    /// <param name="initial">Что стоит в поле сразу — у переименования прежнее имя.</param>
+    /// <param name="action">Подпись кнопки.</param>
+    public FolderNameWindow(string head, IReadOnlyCollection<string> reserved, string? initial = null, string action = "Создать")
     {
         InitializeComponent();
         _reserved = reserved;
 
-        Head.Text = $"Новая папка для «{route}»";
+        Head.Text = head;
+        NameBox.Text = initial ?? string.Empty;
+        Confirm.Content = action;
 
-        Loaded += (_, _) => NameBox.Focus();
+        Loaded += (_, _) =>
+        {
+            NameBox.Focus();
+            NameBox.SelectAll();
+        };
     }
 
     private void OnKey(object sender, KeyEventArgs e) => Problem.Visibility = Visibility.Collapsed;
@@ -44,7 +52,7 @@ public partial class FolderNameWindow : Window
 
         if (_reserved.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
-            Problem.Text = $"«{name}» — папка программы, в неё кладутся только её домены и адреса.";
+            Problem.Text = $"«{name}» уже занято: такая папка или программа уже есть.";
             Problem.Visibility = Visibility.Visible;
             return;
         }

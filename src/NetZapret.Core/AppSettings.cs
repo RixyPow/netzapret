@@ -299,6 +299,17 @@ public sealed record AppSettings
     /// </summary>
     public IReadOnlyList<string> RouteOrder { get; init; } = [];
 
+    /// <summary>Папки, заведённые человеком кнопкой «Добавить папку», — и пустыми не исчезают.</summary>
+    public IReadOnlyList<string> MadeFolders { get; init; } = [];
+
+    /// <summary>Переименованные папки: прежнее имя → имя на экране.</summary>
+    /// <remarks>
+    /// Имя папки — её ключ в перекладке (<see cref="RouteFolders"/>), и
+    /// переименование его не трогает: иначе пришлось бы переписывать каждую
+    /// перекладку в неё, а папка каталога («Discord») и вовсе не наша.
+    /// </remarks>
+    public IReadOnlyDictionary<string, string> FolderLabels { get; init; } = new Dictionary<string, string>();
+
     /// <summary>Поднимать прокси для Telegram Desktop вместе с движками (<see cref="TgWsProxy"/>).</summary>
     /// <remarks>Выключен по умолчанию: Telegram надо ещё подключить к нему ссылкой.</remarks>
     public bool TelegramProxy { get; init; }

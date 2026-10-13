@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -13,8 +15,17 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Часть сервиса и её маршрут.</summary>
-public sealed record PartRow
+/// <remarks>
+/// Извещает об изменениях (13.10): карточки «Маршрутов» с тех пор не
+/// виртуализированы, и подгруженный значок или пин обновляют строку на месте —
+/// прежде каждый значок пересобирал весь список, а это теперь секунда.
+/// </remarks>
+public sealed record PartRow : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Changed() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+
     public required string Key { get; init; }
     public required string Title { get; init; }
     public required string Detail { get; init; }
@@ -96,7 +107,17 @@ public sealed record PartRow
     public required string Letter { get; init; }
 
     /// <summary>Прибито ли в hosts хоть одно имя этой части.</summary>
-    public bool HasPin { get; set; }
+    public bool HasPin
+    {
+        get => _hasPin;
+        set
+        {
+            _hasPin = value;
+            Changed();
+        }
+    }
+
+    private bool _hasPin;
 
     /// <summary>Адресную часть прибить нечем: hosts понимает только имена.</summary>
     public required bool CanPin { get; init; }
@@ -139,7 +160,17 @@ public sealed record PartRow
     public Brush PinColor =>
         (Brush)Application.Current.FindResource(HasPin ? "Accent" : "Text");
 
-    public BitmapImage? Icon { get; set; }
+    public BitmapImage? Icon
+    {
+        get => _icon;
+        set
+        {
+            _icon = value;
+            Changed();
+        }
+    }
+
+    private BitmapImage? _icon;
 
     public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
 
@@ -173,6 +204,24 @@ public sealed record PartRow
     public bool Movable { get; init; } = true;
 
     public Visibility MoreShown => Movable ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Выбранный путь словом — на кнопке выбора (макет владельца 13.10).</summary>
+    public string RouteLabel => Choice switch
+    {
+        0 => "напрямую",
+        1 => "десинк",
+        Off => "выключено",
+        _ => "через VPN",
+    };
+
+    /// <summary>
+    /// Место пустой папки в порядке, а не маршрут: у пустой, заведённой
+    /// человеком папки маршрутов нет, а место в списке и перетаскивание нужны.
+    /// </summary>
+    public bool Placeholder { get; init; }
+
+    /// <summary>Ручка перетаскивания — у того, что можно тянуть.</summary>
+    public Visibility GripShown => Movable ? Visibility.Visible : Visibility.Hidden;
 }
 
 /// <summary>Строка таблицы порядка вычисления.</summary>
@@ -203,9 +252,88 @@ public sealed record RuleRow(
 /// взглядом. Но заголовок говорит и в свёрнутом виде — сколько частей и куда
 /// они идут, — иначе сворачивание прячет ровно то, ради чего раздел открывают.
 /// </remarks>
-public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
+public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts) : INotifyPropertyChanged
 {
-    public bool Open { get; set; }
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Перечитать все привязки карточки: раскрытие, значок первой части.</summary>
+    public void Refresh() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+
+    public bool Open
+    {
+        get => _open;
+        set
+        {
+            if (_open == value)
+                return;
+
+            _open = value;
+            Refresh();
+        }
+    }
+
+    private bool _open;
+
+    private IReadOnlyList<PartRow>? _narrowed;
+
+    /// <summary>
+    /// Маршруты на экране: при поиске и отборе — найденные, иначе все.
+    /// </summary>
+    /// <remarks>
+    /// Поиск сужает ту же карточку, а не подменяет её копией (13.10): копии
+    /// при сбросе поиска пересоздавали все сто карточек — 1,15 с на замере.
+    /// </remarks>
+    public IReadOnlyList<PartRow> ShownParts => _narrowed ?? Parts;
+
+    private bool _forced;
+    private bool _hidden;
+
+    /// <summary>Сузить до найденного; <c>null</c> — показать всё. Найденное раскрыто.</summary>
+    /// <remarks>
+    /// Ничего не найдено — карточка скрывается, но строки свои держит; найдено
+    /// всё — список строк прежний. Подменяется он, только когда найдена часть:
+    /// иначе при сбросе поиска строились бы заново строки всех карточек
+    /// (0,7 с на замере 13.10).
+    /// </remarks>
+    public void Narrow(IReadOnlyList<PartRow>? found)
+    {
+        bool hidden = found is { Count: 0 };
+        bool forced = found is { Count: > 0 };
+        var narrowed = found is null || hidden || found.Count == Parts.Count ? null : found;
+
+        if (narrowed is not null && _narrowed is not null && narrowed.SequenceEqual(_narrowed))
+            narrowed = _narrowed;
+
+        if (hidden == _hidden && forced == _forced && ReferenceEquals(narrowed, _narrowed))
+            return;
+
+        _hidden = hidden;
+        _forced = forced;
+        _narrowed = narrowed;
+        Refresh();
+    }
+
+    /// <summary>Карточка скрыта: поиск в ней ничего не нашёл.</summary>
+    public Visibility CardShown => _hidden ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>Сколько маршрутов найдено поиском и отбором (у скрытой — ноль).</summary>
+    public int Found => _hidden ? 0 : ShownParts.Count;
+
+    private bool Expanded => Open || _forced;
+
+    /// <summary>
+    /// Всё, что видно на карточке, одной строкой — чтобы при пересборке оставить
+    /// прежнюю карточку, если в ней ничего не поменялось.
+    /// </summary>
+    /// <remarks>
+    /// Значок не входит: его подгружают позже, и у оставленной карточки он уже есть.
+    /// </remarks>
+    internal string Signature() => string.Join('',
+        new[] { Name, Label ?? string.Empty, IsFolder.ToString(), Program ?? string.Empty, AutoFill.ToString(), Made.ToString(), string.Join(',', Keys) }
+            .Concat(Parts.Select(p => string.Join('',
+                p.Key, p.Title, p.Detail, p.Mode, p.Choice, p.Applied, p.HasPin, p.CanRoute, p.CanPin, p.Movable, p.Own,
+                p.ListPath ?? string.Empty, p.Folder ?? string.Empty, p.HomeFolder ?? string.Empty, p.Probe ?? string.Empty,
+                (p.Color as SolidColorBrush)?.Color.ToString() ?? string.Empty, p.Letter))));
 
     /// <summary>
     /// Папка, даже если маршрут в ней остался один.
@@ -224,6 +352,32 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public bool AutoFill { get; init; }
 
     public Visibility ProgramShown => Program is null ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>Имя папки на экране; переименованная хранит прежнее в <see cref="Name"/>.</summary>
+    public string? Label { get; init; }
+
+    public string Shown => Label ?? Name;
+
+    /// <summary>
+    /// Все ключи папки, и место пустой тоже, — от них считается перетаскивание.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="Parts"/>: поиск оставляет в папке только
+    /// найденные маршруты, а переносить надо её целиком.
+    /// </remarks>
+    public IReadOnlyList<string> Keys { get; init; } = [];
+
+    /// <summary>Заведённая человеком папка: её можно переименовать и удалить, пустая не исчезает.</summary>
+    public bool Made { get; init; }
+
+    /// <summary>Пустая папка: в ней пока нет маршрутов.</summary>
+    public Visibility EmptyShown => IsFolder && Open && !_forced && Parts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>«+ Добавить маршрут в эту папку» — у раскрытой папки, кроме программ.</summary>
+    public Visibility AddShown => IsFolder && Open && !_forced && Program is null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Под именем папки: сколько маршрутов и куда идут.</summary>
+    public string Subtitle => Parts.Count == 0 ? "пусто" : $"{Count} · {Summary}";
 
     public string AutoFillHint =>
         "Автопополнение: пока идёт «Наблюдение», всё, что открывает программа, дописывается — "
@@ -244,7 +398,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     public Visibility HeaderShown => Single ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility PartsShown =>
-        Single || Open ? Visibility.Visible : Visibility.Collapsed;
+        (Single || Expanded) && ShownParts.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Отступ строк слева — ровно под ширину колонки со стрелкой.
@@ -274,9 +428,12 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
 
     public string Letter => Parts.Count > 0 ? Parts[0].Letter : "·";
 
-    public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility IconShown => Icon is null || Made ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility LetterShown => Icon is null && !Made ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Значок папки — у заведённой человеком: своего сайта у неё нет.</summary>
+    public Visibility FolderGlyphShown => Made ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Поворот значка раскрытия.
@@ -284,7 +441,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts)
     /// <remarks>
     /// Угол, а не знак: стрелка рисуется фигурой — см. <see cref="Chevrons"/>.
     /// </remarks>
-    public double ChevronAngle => Chevrons.Angle(Open);
+    public double ChevronAngle => Chevrons.Angle(Expanded);
 
     public string Count => Parts.Count + " " + Ending(Parts.Count);
 
@@ -416,7 +573,26 @@ public partial class RoutesView : UserControl
             // (RouteFolders, 13.10) раскладывает их поверх.
             var placed = new List<(string? Folder, string Key, PartRow Part)>();
 
-            // Программы — первыми по умолчанию: их заводит сам человек.
+            // Заведённые папки и программы — первыми по умолчанию: их заводит
+            // сам человек, и новую папку надо видеть сразу.
+            placed.AddRange(settings.MadeFolders.Select(name => ((string?)name, FolderPlace(name), new PartRow
+            {
+                Key = FolderPlace(name),
+                Title = name,
+                Detail = string.Empty,
+                Mode = string.Empty,
+                Color = Brushes.Transparent,
+                Choice = 0,
+                Applied = 0,
+                CanRoute = false,
+                CanPin = false,
+                Letter = string.Empty,
+                Movable = false,
+                Placeholder = true,
+                HomeFolder = name,
+                Folder = name,
+            })));
+
             placed.AddRange(ProgramParts(settings, userRules));
 
             foreach (var service in ServiceCatalog.All)
@@ -473,6 +649,8 @@ public partial class RoutesView : UserControl
             foreach (var service in services)
                 service.Open = _open.Contains(service.Name);
 
+            // Неизменившиеся карточки — прежние: Show тогда их не пересоздаёт.
+            services = Reuse(services);
             _all = services;
 
             // Отбор переживает пересборку. Любое действие внутри строки —
@@ -480,7 +658,8 @@ public partial class RoutesView : UserControl
             // и без этого он возвращался целиком: найденное пропадало,
             // и приходилось дописывать пробел в поле, чтобы отбор случился
             // ещё раз.
-            Services.ItemsSource = InChosenOrder(services);
+            // Показывает Filter — одним разом: второй показ подряд достраивал
+            // бы порционный первый целиком (Show).
             Filter();
 
             ShowOwn();
@@ -632,7 +811,7 @@ public partial class RoutesView : UserControl
                     Dispatcher.Invoke(() =>
                     {
                         part.Icon = icon;
-                        Redraw();
+                        service.Refresh();
                     });
                 }
 
@@ -642,7 +821,7 @@ public partial class RoutesView : UserControl
                 Dispatcher.Invoke(() =>
                 {
                     if (LendServiceIcon(service))
-                        Redraw();
+                        service.Refresh();
                 });
             }
         }, token);
@@ -1093,9 +1272,14 @@ public partial class RoutesView : UserControl
             .ToDictionary(m => m.Key, m => m.Value, StringComparer.Ordinal);
 
         var rows = new List<ServiceRow>();
+        var made = settings.MadeFolders.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        string? Label(string folder) => settings.FolderLabels.TryGetValue(folder, out var label) ? label : null;
 
-        foreach (var (folder, parts) in RouteFolders.Arrange(placed, moved))
+        foreach (var (folder, all) in RouteFolders.Arrange(placed, moved))
         {
+            var keys = all.Select(p => p.Key).ToList();
+            var parts = all.Where(p => !p.Placeholder).ToList();
+
             if (folder is not null && programs.TryGetValue(folder, out var program))
             {
                 rows.Add(new ServiceRow(folder, parts.Select(p => p with { Lead = 0 }).ToList())
@@ -1103,6 +1287,7 @@ public partial class RoutesView : UserControl
                     IsFolder = true,
                     Program = program.Program,
                     AutoFill = program.AutoFill,
+                    Keys = keys,
                 });
 
                 continue;
@@ -1110,19 +1295,22 @@ public partial class RoutesView : UserControl
 
             string Title(PartRow part) =>
                 part.HomeFolder is { } home && !string.Equals(home, folder, StringComparison.OrdinalIgnoreCase)
-                    ? $"{home} · {part.Title}"
+                    ? $"{Label(home) ?? home} · {part.Title}"
                     : part.Title;
 
             if (folder is null)
             {
-                var single = parts[0] with { Title = Title(parts[0]), Folder = null, Lead = 24 };
-                rows.Add(new ServiceRow(single.Title, [single]));
+                var single = parts[0] with { Title = Title(parts[0]), Folder = null, Lead = 0 };
+                rows.Add(new ServiceRow(single.Title, [single]) { Keys = keys });
                 continue;
             }
 
             rows.Add(new ServiceRow(folder, parts.Select(p => p with { Title = Title(p), Folder = folder, Lead = 0 }).ToList())
             {
                 IsFolder = true,
+                Keys = keys,
+                Label = Label(folder),
+                Made = made.Contains(folder),
             });
         }
 
@@ -1132,6 +1320,9 @@ public partial class RoutesView : UserControl
     /// <summary>
     /// Папки программ: «Домены» и «Адреса» (<see cref="ProgramRoutes"/>, 13.10).
     /// </summary>
+    /// <summary>Ключ места пустой папки в порядке.</summary>
+    private static string FolderPlace(string folder) => "folder|" + folder;
+
     private static IEnumerable<(string? Folder, string Key, PartRow Part)> ProgramParts(AppSettings settings, UserRulesFile userRules)
     {
         foreach (var program in settings.ProgramRoutes)
@@ -1192,6 +1383,122 @@ public partial class RoutesView : UserControl
             HomeFolder = program,
             Folder = program,
         };
+    }
+
+    /// <summary>Карточки на экране — меняются по месту (<see cref="Show"/>).</summary>
+    private readonly ObservableCollection<ServiceRow> _cards = [];
+
+    /// <summary>
+    /// Показывает карточки, трогая только изменившиеся.
+    /// </summary>
+    /// <remarks>
+    /// Новый список вместо прежнего пересоздаёт все карточки — сотня их
+    /// без виртуализации стоила 0,8–1,2 с (замер 13.10), и так после каждой
+    /// смены пути. Здесь та же карточка остаётся на месте, сдвигается или
+    /// уходит, и строится заново только новая.
+    /// </remarks>
+    private void Show(IReadOnlyList<ServiceRow> rows)
+    {
+        if (Services.ItemsSource != _cards)
+            Services.ItemsSource = _cards;
+
+        // Любой показ отменяет недостроенный первый: он сам доводит список до нужного.
+        int generation = ++_fill;
+
+        // Первый показ — порциями: сотня карточек разом держала окно ~0,65 с
+        // сверх чтения правил (замер 13.10: повторный заход 1,0 с против
+        // 0,35–0,42 у прежнего виртуального списка). Первые видны сразу,
+        // остальные достраиваются в фоне, и окно между порциями живо.
+        if (_cards.Count == 0 && rows.Count > FirstCards)
+        {
+            foreach (var row in rows.Take(FirstCards))
+                _cards.Add(row);
+
+            FillLater(rows, FirstCards, generation);
+            return;
+        }
+
+        var wanted = rows.ToHashSet(ReferenceEqualityComparer.Instance);
+
+        for (int i = _cards.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(_cards[i]))
+                _cards.RemoveAt(i);
+        }
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (i < _cards.Count && ReferenceEquals(_cards[i], rows[i]))
+                continue;
+
+            int at = -1;
+
+            for (int j = i + 1; j < _cards.Count; j++)
+            {
+                if (ReferenceEquals(_cards[j], rows[i]))
+                {
+                    at = j;
+                    break;
+                }
+            }
+
+            if (at >= 0)
+                _cards.Move(at, i);
+            else
+                _cards.Insert(i, rows[i]);
+        }
+    }
+
+    /// <summary>Сколько карточек строить сразу — хватает на экран и чуть ниже.</summary>
+    private const int FirstCards = 24;
+
+    /// <summary>Сколько достраивать за раз в фоне.</summary>
+    private const int LaterCards = 16;
+
+    /// <summary>Номер показа: недостроенный первый показ сверяется с ним и уступает новому.</summary>
+    private int _fill;
+
+    private void FillLater(IReadOnlyList<ServiceRow> rows, int from, int generation)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (generation != _fill)
+                return;
+
+            foreach (var row in rows.Skip(from).Take(LaterCards))
+                _cards.Add(row);
+
+            if (from + LaterCards < rows.Count)
+                FillLater(rows, from + LaterCards, generation);
+        }, DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// Прежние карточки вместо новых, если на них ничего не поменялось (<see cref="ServiceRow.Signature"/>).
+    /// </summary>
+    private List<ServiceRow> Reuse(List<ServiceRow> fresh)
+    {
+        var old = new Dictionary<string, ServiceRow>(StringComparer.Ordinal);
+
+        foreach (var row in _all)
+            old.TryAdd((row.IsFolder ? "f|" : "r|") + row.Name, row);
+
+        var result = new List<ServiceRow>(fresh.Count);
+
+        foreach (var row in fresh)
+        {
+            if (old.TryGetValue((row.IsFolder ? "f|" : "r|") + row.Name, out var was) && was.Signature() == row.Signature())
+            {
+                was.Open = row.Open;
+                result.Add(was);
+            }
+            else
+            {
+                result.Add(row);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>Пути запущенных программ по имени файла — для значков строк.</summary>
@@ -1438,10 +1745,10 @@ public partial class RoutesView : UserControl
 
         try
         {
-            var shown = Services.ItemsSource;
-
-            Services.ItemsSource = null;
-            Services.ItemsSource = shown;
+            // На месте, а не заменой списка: замена пересоздаёт все карточки,
+            // а их сотня без виртуализации (13.10).
+            foreach (var card in _cards)
+                card.Refresh();
         }
         finally
         {
@@ -1606,13 +1913,13 @@ public partial class RoutesView : UserControl
     /// <summary>Узко — отбор под полем поиска, широко — рядом с ним.</summary>
     private void OnSearchRowSize(object sender, SizeChangedEventArgs e)
     {
-        // Порог — чтобы полю рядом с отбором осталось место под подсказку
-        // хотя бы наполовину: отбор шириной около четырёхсот точек.
-        bool below = e.NewSize.Width < 760;
+        // Порог — чтобы полю рядом с отбором и двумя кнопками осталось место
+        // под подсказку хотя бы наполовину: отбор с кнопками — около семисот точек.
+        bool below = e.NewSize.Width < 1060;
 
-        Grid.SetRow(RouteFilters, below ? 1 : 0);
-        Grid.SetColumn(RouteFilters, below ? 0 : 1);
-        RouteFilters.Margin = below ? new Thickness(0, 8, 0, 0) : new Thickness(10, 0, 0, 0);
+        Grid.SetRow(SearchTools, below ? 1 : 0);
+        Grid.SetColumn(SearchTools, below ? 0 : 1);
+        SearchTools.Margin = below ? new Thickness(0, 8, 0, 0) : new Thickness(10, 0, 0, 0);
     }
 
     /// <summary>«в 1 сервисе», «в 21 сервисе», иначе «сервисах».</summary>
@@ -1633,21 +1940,23 @@ public partial class RoutesView : UserControl
 
         ShowRouteCounts();
 
+        // Карточки всегда одни и те же — поиск и отбор только сужают их
+        // (ServiceRow.Narrow): подмена копиями пересоздавала весь список.
+        Show(InChosenOrder(_all));
+
         // Показ одной части — пока его не сменили поиском или отбором.
         if (_reveal is { } reveal && needle.Length == 0)
         {
-            var shown = _all
-                .Where(s => s.Name == reveal.Service)
-                .Select(s => s with { Parts = s.Parts.Where(p => p.Key == reveal.Key).ToList(), Open = true })
-                .Where(s => s.Parts.Count > 0)
-                .ToList();
+            foreach (var s in _all)
+                s.Narrow(s.Name == reveal.Service ? s.Parts.Where(p => p.Key == reveal.Key).ToList() : []);
+
+            var shown = _all.Where(s => s.Found > 0).ToList();
 
             if (shown.Count > 0)
             {
                 AddOffer.Visibility = Visibility.Collapsed;
-                Services.ItemsSource = shown;
 
-                var part = shown[0].Parts[0];
+                var part = shown[0].ShownParts[0];
                 Status.Text = $"«{reveal.Host}» решает «{reveal.Service} → {part.Title}»: {part.Mode}. "
                     + "Весь список — кнопкой «Все» или поиском.";
                 return;
@@ -1659,7 +1968,10 @@ public partial class RoutesView : UserControl
         if (needle.Length == 0 && _route is null)
         {
             AddOffer.Visibility = Visibility.Collapsed;
-            Services.ItemsSource = InChosenOrder(_all);
+
+            foreach (var s in _all)
+                s.Narrow(null);
+
             return;
         }
 
@@ -1669,26 +1981,22 @@ public partial class RoutesView : UserControl
         //
         // Найденное раскрывается само: искали часть, а не папку, и заставлять
         // открывать её вручную значит отдать половину найденного обратно.
-        var found = _all
-            .Select(s => s with
-            {
-                Parts = s.Parts
-                    .Where(p => needle.Length == 0 || Matches(s.Name, p, needle))
-                    .Where(p => _route is null || p.Applied == _route)
-                    .ToList(),
-                Open = true,
-            })
-            .Where(s => s.Parts.Count > 0)
-            .ToList();
+        foreach (var s in _all)
+        {
+            s.Narrow(s.Parts
+                .Where(p => needle.Length == 0 || Matches(s.Shown, p, needle) || Matches(s.Name, p, needle))
+                .Where(p => _route is null || p.Applied == _route)
+                .ToList());
+        }
 
-        Services.ItemsSource = InChosenOrder(found);
+        var found = _all.Where(s => s.Found > 0).ToList();
 
         // Один отбор, без поиска: предлагать добавить нечего, сказать — сколько.
         if (needle.Length == 0)
         {
             AddOffer.Visibility = Visibility.Collapsed;
             Status.Text = found.Count > 0
-                ? $"Маршрутов {RouteWords(_route!.Value)}: {found.Sum(s => s.Parts.Count)} — в {found.Count} {InServices(found.Count)}."
+                ? $"Маршрутов {RouteWords(_route!.Value)}: {found.Sum(s => s.Found)} — в {found.Count} {InServices(found.Count)}."
                 : $"Ничего не идёт {RouteWords(_route!.Value)}.";
             return;
         }
@@ -1715,7 +2023,7 @@ public partial class RoutesView : UserControl
             AddOfferText.Text = $"«{subnet}» — {(subnet.Contains('/') ? "подсеть" : "адрес")}. Добавить своим правилом — сперва «напрямую», дальше правится в его строке.";
 
         Status.Text = found.Count > 0
-            ? $"Найдено маршрутов: {found.Sum(s => s.Parts.Count)}."
+            ? $"Найдено маршрутов: {found.Sum(s => s.Found)}."
             : domain is null && subnet is null && program is null
                     ? $"По «{needle}» ничего нет. Чтобы добавить свой домен, впишите имя сайта, например example.com, или подсеть — 203.0.113.0/24."
                     : string.Empty;
@@ -1949,7 +2257,7 @@ public partial class RoutesView : UserControl
             ? "Впишите сайт в поле ниже: если его нет в списке, появится «Добавить»."
             : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
               + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
-              + ". Они стоят в списке ниже вместе с сервисами.";
+              + ". Они в списке ниже вместе с сервисами; строки и папки перетаскиваются мышью.";
 
         // Снятые правила по программе (Rules.ProgramRulesOff, 04.10) — словами,
         // а не молча: человек ставил игру «через VPN», и правило пропало.
@@ -1959,7 +2267,10 @@ public partial class RoutesView : UserControl
 
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();
 
-    /// <summary>«Добавить программу»: меню «из запущенных» и «файлом», как в Happ.</summary>
+    /// <summary>
+    /// «Добавить правило» (макет владельца 13.10): свой сайт, адрес или подсеть —
+    /// полем поиска; программа — из запущенных или файлом, как в Happ.
+    /// </summary>
     private void OnAddProgram(object sender, RoutedEventArgs e)
     {
         var menu = new ContextMenu
@@ -1968,8 +2279,15 @@ public partial class RoutesView : UserControl
             Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
         };
 
-        menu.Items.Add(MenuEntry("", "Из запущенных…", PickRunningProgram));
-        menu.Items.Add(MenuEntry("", "Выбрать файл…", PickProgramFile));
+        menu.Items.Add(MenuEntry("", "Сайт, адрес или подсеть…", () =>
+        {
+            Search.Text = string.Empty;
+            Search.Focus();
+            Status.Text = "Впишите сайт (example.com), адрес или подсеть в поле поиска — если такого нет, появится «Добавить».";
+        }));
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+        menu.Items.Add(MenuEntry("", "Программа из запущенных…", PickRunningProgram));
+        menu.Items.Add(MenuEntry("", "Программа файлом…", PickProgramFile));
         menu.IsOpen = true;
     }
 
@@ -2072,9 +2390,12 @@ public partial class RoutesView : UserControl
     /// <summary>«Убрать» в шапке папки программы: маршруты, списки и запись — разом.</summary>
     private void OnRemoveProgram(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: string program })
-            return;
+        if (sender is FrameworkElement { Tag: string program })
+            RemoveProgram(program);
+    }
 
+    private void RemoveProgram(string program)
+    {
         if (MessageBox.Show(Window.GetWindow(this),
                 $"Убрать «{program}» вместе со списками доменов и адресов?",
                 "NetZapret", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK)
@@ -2118,7 +2439,7 @@ public partial class RoutesView : UserControl
 
         menu.Items.Add(MenuEntry("", "В новую папку…", () =>
         {
-            var window = new FolderNameWindow(part.Title, ProgramNames()) { Owner = Window.GetWindow(this) };
+            var window = new FolderNameWindow($"Новая папка для «{part.Title}»", ProgramNames()) { Owner = Window.GetWindow(this) };
 
             if (window.ShowDialog() == true && window.Chosen is { } chosen)
                 MoveRoute(part, chosen);
@@ -2131,6 +2452,13 @@ public partial class RoutesView : UserControl
         {
             menu.Items.Add(MenuEntry("", part.HomeFolder is { } home ? $"Вернуть в «{home}»" : "Вернуть на место",
                 () => MoveRoute(part, part.HomeFolder ?? string.Empty)));
+        }
+
+        // «убрать» стоял кнопкой в строке; по макету 13.10 строка несёт только путь, пин и «⋯».
+        if (part.Own)
+        {
+            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+            menu.Items.Add(MenuEntry(string.Empty, "Убрать маршрут", () => RemoveOwn(part.Key)));
         }
 
         menu.IsOpen = true;
@@ -2206,6 +2534,7 @@ public partial class RoutesView : UserControl
             // ссылкой «список» в строке домена (владелец, 26.09).
             file.Set(MatchKind.Domain, "*." + name, RoutingMode.Direct, recipe: null);
             file.Save();
+            PlaceAdded("own|*." + name);
 
             // Поле не очищается: по нему же отфильтрован список, и добавленный
             // домен остаётся на экране одной строкой — ровно той, где его
@@ -2231,6 +2560,7 @@ public partial class RoutesView : UserControl
             var file = UserRulesFile.Load();
             file.Set(MatchKind.Ip, subnet, RoutingMode.Direct, recipe: null);
             file.Save();
+            PlaceAdded(RouteKeys.Make(RouteKeys.Subnet, subnet));
 
             Reload();
 
@@ -2303,8 +2633,13 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private void OnRemoveOwn(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: string key }
-            || RouteKeys.Parse(key) is not var (kind, value)
+        if (sender is Button { Tag: string key })
+            RemoveOwn(key);
+    }
+
+    private void RemoveOwn(string key)
+    {
+        if (RouteKeys.Parse(key) is not var (kind, value)
             || kind is not (RouteKeys.Own or RouteKeys.Program or RouteKeys.Subnet))
         {
             return;
@@ -2346,81 +2681,57 @@ public partial class RoutesView : UserControl
     /// на выбор в списке — не та цена, на которую человек соглашался.
     /// </remarks>
     /// <summary>
-    /// Список закрыли, ничего не поменяв.
+    /// Кнопка пути в строке: меню из четырёх путей и, у десинка, «Рецепт…».
     /// </summary>
     /// <remarks>
-    /// Выбрав «десинк» при уже выбранном «десинке», человек хочет одного —
-    /// сменить рецепт. Но список не поднимает события: значение то же,
-    /// менять нечего. Приходилось переключать на «напрямую» и обратно,
-    /// то есть дважды переписывать правило ради окна выбора.
-    ///
-    /// Закрытие списка событие даёт всегда, и по нему видно, что человек
-    /// в него лазил. Если выбран десинк и он же был выбран до этого —
-    /// открываем окно рецептов, больше он там ничего и не мог хотеть.
+    /// <para>
+    /// Кнопкой, а не списком выбора (13.10): карточки «Маршрутов» стоят
+    /// в две колонки без виртуализации (MasonryPanel), а список выбора —
+    /// самый тяжёлый элемент строки, и сотня их разом тормозила раздел ещё
+    /// до виртуализации.
+    /// </para>
+    /// <para>
+    /// «Рецепт…» — отдельным пунктом. Прежде, чтобы сменить рецепт, выбирали
+    /// «десинк» при уже выбранном «десинке» и ловили закрытие списка: сам
+    /// список при выборе того же значения события не поднимает.
+    /// </para>
     /// </remarks>
-    private void OnRouteClosed(object sender, EventArgs e)
+    private void OnRouteMenu(object sender, RoutedEventArgs e)
     {
-        if (_filling || sender is not ComboBox box)
+        if (sender is not Button { DataContext: PartRow row } anchor || !row.CanRoute)
             return;
 
-        if (box.DataContext is not PartRow row)
-            return;
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
 
-        // Ключ у строки, а не в Tag — по той же причине, что и в OnRoute.
-        var key = row.Key;
+        foreach (var (choice, text) in new[] { (0, "напрямую"), (1, "десинк"), (2, "через VPN"), (PartRow.Off, "выключено") })
+        {
+            // Отметка — значком: наше меню IsChecked не рисует.
+            menu.Items.Add(MenuEntry(row.Applied == choice ? "" : string.Empty, text, () => Choose(row, choice)));
+        }
 
-        // Только десинк и только без смены: смену обработает OnRoute,
-        // и она же спросит рецепт по дороге.
-        if (box.SelectedIndex != 1 || row.Applied != 1)
-            return;
+        if (row.Applied == 1 && row.Probe is { Length: > 0 } example
+            && RouteKeys.Parse(row.Key) is (var kind, var value) && RouteKeys.TakesRecipe(kind))
+        {
+            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+            menu.Items.Add(MenuEntry("", "Рецепт…", () =>
+                AskLater(row.Key, value, example, RouteKeys.MatchOf(kind, value), RoutingMode.Desync)));
+        }
 
-        // У правил по адресам рецепт не спрашивается: он применяется по имени
-        // в приветствии TLS, а в таких пакетах имени нет вовсе.
-        if (row.Probe is not { Length: > 0 } example)
-            return;
-
-        // Свой домен наравне со списком: рецепт применяется по имени
-        // в приветствии TLS, и своему имени он нужен ровно так же.
-        // У правил по адресам не спрашиваем — имени в таких пакетах нет.
-        if (RouteKeys.Parse(key) is (var kind, var value) && RouteKeys.TakesRecipe(kind))
-            AskLater(key, value, example, RouteKeys.MatchOf(kind, value), RoutingMode.Desync);
+        menu.IsOpen = true;
     }
 
-    private void OnRoute(object sender, SelectionChangedEventArgs e)
+    /// <summary>Записывает выбранный путь строки.</summary>
+    /// <remarks>
+    /// Применяется перезапуском, и об этом сказано прямо. Сами не
+    /// перезапускаем: движки несут весь трафик машины, и ронять их в ответ
+    /// на выбор в списке — не та цена, на которую человек соглашался.
+    /// </remarks>
+    private void Choose(PartRow current, int choice)
     {
-        if (_filling || sender is not ComboBox box)
+        // Выбор того же самого — не выбор: правило не переписываем.
+        if (choice == current.Applied)
             return;
 
-        // Строка обязана быть на месте, и это не придирка к типу. Список
-        // виртуализирован и переиспользует карточки: контейнер получает
-        // то строку, то заглушку BindingOperations.DisconnectedSource,
-        // и на заглушке SelectedIndex съезжает в -1, поднимая событие
-        // выбора. Прежде проверка была написана так, что строка без типа
-        // проваливалась дальше: сверять с Applied было не с чем, ключ брался
-        // из Tag от прошлого жильца карточки, а режим доставался из ветки
-        // по умолчанию — «через VPN». Прокрутка списка переписывала бы
-        // правила молча.
-        if (box.DataContext is not PartRow current)
-            return;
-
-        // Пустой выбор выбором не является: значение -1 ставит сам WPF,
-        // отцепляя привязку, и ни один из трёх режимов ему не соответствует.
-        if (box.SelectedIndex < 0)
-            return;
-
-        // Выбор того же самого — не выбор. Список получает SelectedIndex
-        // при каждой пересборке строк, и без этой проверки открытие папки
-        // писало правило и звало уведомление о перезапуске по разу
-        // на каждую часть внутри.
-        //
-        // Сверяется Applied, а не Choice: в Choice привязка уже положила
-        // новое значение, и сравнение с ним всегда говорило «то же самое».
-        if (box.SelectedIndex == current.Applied)
-            return;
-
-        // Ключ берётся у строки, а не из Tag. Обе привязки обновляются
-        // при смене строки, но порядок между ними не оговорён, и Tag может
-        // ещё нести ключ прошлого жильца карточки. У строки он всегда свой.
         var key = current.Key;
         var parts = key.Split('|', 2);
 
@@ -2429,13 +2740,13 @@ public partial class RoutesView : UserControl
 
         var match = RouteKeys.MatchOf(parts[0], parts[1]);
 
-        if (box.SelectedIndex == PartRow.Off)
+        if (choice == PartRow.Off)
         {
             WriteOff(key, match);
             return;
         }
 
-        var mode = box.SelectedIndex switch
+        var mode = choice switch
         {
             0 => RoutingMode.Direct,
             1 => RoutingMode.Desync,

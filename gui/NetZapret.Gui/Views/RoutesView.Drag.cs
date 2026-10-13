@@ -280,7 +280,7 @@ public partial class RoutesView
                     break;
 
                 case (PartRow route, PartRow other) when drop == DropKind.Into && other.Folder is null:
-                    var window = new FolderNameWindow(route.Title, ProgramNames()) { Owner = Window.GetWindow(this) };
+                    var window = new FolderNameWindow($"Новая папка для «{route.Title}»", ProgramNames()) { Owner = Window.GetWindow(this) };
 
                     if (window.ShowDialog() != true || window.Chosen is not { } name)
                         return;
@@ -327,7 +327,7 @@ public partial class RoutesView
 
     /// <summary>Все маршруты папки — из полного списка, а не из отобранного поиском.</summary>
     private IReadOnlyList<string> Keys(ServiceRow folder) =>
-        (_all.FirstOrDefault(s => s.Name == folder.Name && s.IsFolder) ?? folder).Parts.Select(p => p.Key).ToList();
+        (_all.FirstOrDefault(s => s.Name == folder.Name && s.IsFolder) ?? folder).Keys;
 
     private string FirstKey(ServiceRow folder) => OrderOf(Keys(folder)).First();
 
