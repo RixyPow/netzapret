@@ -131,6 +131,12 @@ public static class XrayConfigParser
             _ => (ProxyProtocol?)null,
         };
 
+        // Hysteria2 в конфиге Xray — не отдельное имя протокола, а hysteria
+        // версии 2: адрес в settings, пароль в hysteriaSettings.auth.
+        // autoXRAY отдаёт его так, а не ссылкой hy2:// (13.10).
+        if (protocol is "hysteria" or "hysteria2")
+            return TryReadHysteria(outbound, protocol, out server, out problem);
+
         if (kind is null)
         {
             problem = $"outbound «{Text(outbound, "tag") ?? protocol}»: протокол {protocol} не поддерживается";
@@ -178,7 +184,12 @@ public static class XrayConfigParser
 
         var stream = outbound.TryGetProperty("streamSettings", out var s) ? s : default;
 
+        // Xray переименовал tcp в raw. У sing-box такого транспорта нет:
+        // отсутствие секции и есть обычный TCP.
         var transport = Empty(Text(stream, "network")) ?? "tcp";
+        if (transport.Equals("raw", StringComparison.OrdinalIgnoreCase))
+            transport = "tcp";
+
         var security = Empty(Text(stream, "security")) ?? "none";
 
         string? sni = null;
@@ -195,7 +206,13 @@ public static class XrayConfigParser
         {
             sni = Empty(Text(tls, "serverName"));
             fingerprint = Empty(Text(tls, "fingerprint"));
+            // Старые конфиги пишут publicKey. Xray с 2025 и autoXRAY кладут
+            // тот же открытый ключ в password: xray x25519 печатает его так.
+            // Пустой ключ sing-box отвергает («invalid public_key») и не
+            // поднимает службу целиком.
             publicKey = Empty(Text(tls, "publicKey"));
+            if (publicKey is null && security == "reality")
+                publicKey = Empty(Text(tls, "password"));
             shortId = Empty(Text(tls, "shortId"));
 
             if (tls.TryGetProperty("alpn", out var names) && names.ValueKind == JsonValueKind.Array)
@@ -223,6 +240,7 @@ public static class XrayConfigParser
             Fingerprint = fingerprint,
             Alpn = alpn,
             Flow = flow,
+            AllowInsecure = Flag(tls, "allowInsecure") || Flag(tls, "insecure"),
             RealityPublicKey = publicKey,
             RealityShortId = shortId,
             Path = path,
@@ -234,6 +252,106 @@ public static class XrayConfigParser
         };
 
         return true;
+    }
+
+    /// <summary>
+    /// Исходящее Hysteria из конфига Xray. Версия 2 — это Hysteria2:
+    /// у sing-box свой тип, пароль и при необходимости salamander.
+    /// </summary>
+    /// <remarks>
+    /// Адрес бывает и полем <c>settings.address</c> (autoXRAY, v2rayN),
+    /// и в <c>settings.servers</c>. Пароль — в <c>hysteriaSettings.auth</c>.
+    /// <c>finalmask</c> целиком в sing-box не переносится: незнакомое поле
+    /// валит весь конфиг. Из него берётся только salamander — без пароля
+    /// обфускации сервер молчит. Отпечаток uTLS тоже не берётся: это
+    /// подделка ClientHello у TCP, а Hysteria2 идёт по QUIC.
+    /// </remarks>
+    private static bool TryReadHysteria(JsonElement outbound, string protocol, out ProxyServer? server, out string? problem)
+    {
+        server = null;
+        problem = null;
+
+        var settings = Section(outbound, "settings");
+        var stream = Section(outbound, "streamSettings");
+        var hysteria = Section(stream, "hysteriaSettings");
+        var tag = Text(outbound, "tag") ?? protocol;
+
+        int version = Number(hysteria, "version");
+        if (version == 0)
+            version = Number(settings, "version");
+        if (protocol == "hysteria2" || version == 0)
+            version = 2;
+
+        var entry = First(settings, "servers");
+        var host = Empty(Text(settings, "address")) ?? Empty(Text(entry, "address"));
+        var port = Port(settings);
+        if (port == 0)
+            port = Port(entry);
+
+        var auth = Empty(Text(hysteria, "auth"))
+            ?? Empty(Text(settings, "auth"))
+            ?? Empty(Text(entry, "auth"))
+            ?? Empty(Text(entry, "password"));
+
+        if (string.IsNullOrWhiteSpace(host) || port == 0 || string.IsNullOrWhiteSpace(auth))
+        {
+            problem = $"outbound «{tag}»: не хватает адреса, порта или ключа";
+            return false;
+        }
+
+        var tls = Section(stream, "tlsSettings");
+        var alpn = new List<string>();
+        if (tls.ValueKind == JsonValueKind.Object
+            && tls.TryGetProperty("alpn", out var names)
+            && names.ValueKind == JsonValueKind.Array)
+        {
+            alpn = names.EnumerateArray().Select(a => a.GetString() ?? string.Empty).Where(a => a.Length > 0).ToList();
+        }
+
+        var (obfsType, obfsPassword) = Salamander(stream);
+        bool second = version >= 2;
+
+        server = new ProxyServer
+        {
+            Protocol = second ? ProxyProtocol.Hysteria2 : ProxyProtocol.Hysteria,
+            Tag = Empty(Text(outbound, "tag")) ?? $"{protocol} {host}",
+            Host = host!,
+            Port = port,
+            Credential = auth!,
+            Transport = "udp",
+            Security = "tls",
+            Sni = Empty(Text(tls, "serverName")),
+            Alpn = alpn,
+            AllowInsecure = Flag(tls, "allowInsecure") || Flag(tls, "insecure"),
+            ObfsType = second ? obfsType : null,
+            ObfsPassword = obfsPassword,
+            UpMbps = second ? 0 : Positive(Mbps(Text(hysteria, "up") ?? Text(settings, "up")), 10),
+            DownMbps = second ? 0 : Positive(Mbps(Text(hysteria, "down") ?? Text(settings, "down")), 50),
+        };
+
+        return true;
+    }
+
+    /// <summary>Обфускация salamander из <c>finalmask.udp</c>, как её пишет v2rayN.</summary>
+    private static (string? Type, string? Password) Salamander(JsonElement stream)
+    {
+        var mask = Section(stream, "finalmask");
+        if (mask.ValueKind != JsonValueKind.Object
+            || !mask.TryGetProperty("udp", out var udp)
+            || udp.ValueKind != JsonValueKind.Array)
+        {
+            return (null, null);
+        }
+
+        foreach (var item in udp.EnumerateArray())
+        {
+            if (!string.Equals(Text(item, "type"), "salamander", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            return ("salamander", Empty(Text(Section(item, "settings"), "password")));
+        }
+
+        return (null, null);
     }
 
     private static (string? Path, string? Host, string? Service) Stream(JsonElement stream, string transport)
@@ -288,6 +406,54 @@ public static class XrayConfigParser
             && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+
+    private static JsonElement First(JsonElement parent, string name)
+    {
+        if (parent.ValueKind != JsonValueKind.Object
+            || !parent.TryGetProperty(name, out var list)
+            || list.ValueKind != JsonValueKind.Array)
+        {
+            return default;
+        }
+
+        foreach (var item in list.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object)
+                return item;
+        }
+
+        return default;
+    }
+
+    private static bool Flag(JsonElement parent, string name) =>
+        parent.ValueKind == JsonValueKind.Object
+            && parent.TryGetProperty(name, out var value)
+            && value.ValueKind == JsonValueKind.True;
+
+    private static int Number(JsonElement parent, string name)
+    {
+        if (parent.ValueKind != JsonValueKind.Object || !parent.TryGetProperty(name, out var value))
+            return 0;
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var number) => number,
+            JsonValueKind.String when int.TryParse(value.GetString(), out var text) => text,
+            _ => 0,
+        };
+    }
+
+    /// <summary>«100 mbps» и «100» — одно и то же; единицы Xray пишет словами.</summary>
+    private static int Mbps(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return 0;
+
+        var number = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+        return int.TryParse(number, out var value) ? value : 0;
+    }
+
+    private static int Positive(int value, int fallback) => value > 0 ? value : fallback;
 
     /// <summary>Порт бывает и числом, и строкой — поставщики пишут по-разному.</summary>
     private static ushort Port(JsonElement parent)
