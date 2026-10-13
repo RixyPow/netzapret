@@ -677,7 +677,31 @@ public sealed class SingBoxService : SupervisedService
         _trafficPortMissingNoted = false;
         _dnsViaTunnel = null;
         _dnsCheckCounter = 0;
+        Volatile.Write(ref _realityRefusedTicks, 0);
     }
+
+    /// <summary>
+    /// Когда движок последний раз написал об отказе REALITY (<see cref="RealityRefusal"/>);
+    /// тики UTC, 0 — не писал.
+    /// </summary>
+    /// <remarks>
+    /// Числом, а не датой: пишет насос вывода, читает проверка — из разных потоков.
+    /// </remarks>
+    private long _realityRefusedTicks;
+
+    /// <remarks>
+    /// Строка на соединение — горячий путь: одно сравнение подстроки, без разбора.
+    /// </remarks>
+    protected override void Observe(string line)
+    {
+        if (RealityRefusal.In(line))
+            Volatile.Write(ref _realityRefusedTicks, DateTimeOffset.UtcNow.UtcTicks);
+    }
+
+    /// <summary>Отказ REALITY объясняет нынешнюю неудачу туннеля.</summary>
+    private bool RealityRefused =>
+        Volatile.Read(ref _realityRefusedTicks) is var ticks and not 0
+        && RealityRefusal.Recent(new DateTimeOffset(ticks, TimeSpan.Zero), DateTimeOffset.UtcNow);
 
     // Ради DNS — своё имя: по «sing-box» окно узнаёт туннель (DnsEngine.ServiceName).
     public override string Name => _dnsOnly ? DnsEngine.ServiceName : "sing-box";
@@ -806,7 +830,9 @@ public sealed class SingBoxService : SupervisedService
         // и сказать об этом должно состояние, а не только журнал.
         if (_bypass.Engaged)
         {
-            LastError = "выходы подписки не отвечают — трафик идёт мимо туннеля";
+            LastError = RealityRefused
+                ? $"трафик идёт мимо туннеля: {RealityRefusal.Explanation}"
+                : "выходы подписки не отвечают — трафик идёт мимо туннеля";
             return ServiceCheck.UpstreamDown;
         }
 
@@ -818,15 +844,18 @@ public sealed class SingBoxService : SupervisedService
         // в журнале движка подряд «stream error: INTERNAL_ERROR; received
         // from peer» и «report handshake success: connection timed out».
         // Супервизор при этом исправно гасил здоровый движок.
-        LastError = "трафик через прокси не проходит — похоже, мёртв выход подписки, а не движок";
+        LastError = RealityRefused
+            ? $"трафик через прокси не проходит: {RealityRefusal.Explanation}"
+            : "трафик через прокси не проходит — похоже, мёртв выход подписки, а не движок";
 
         if (!_upstreamNoted)
         {
             _upstreamNoted = true;
-            Note(
-                "трафик не проходит, но движок отвечает по Clash API. "
-                + "Перезапускать его незачем: скорее всего не отвечают серверы подписки. "
-                + "Проверьте их в разделе «VPN».");
+            Note(RealityRefused
+                ? $"трафик не проходит, но движок отвечает по Clash API: {RealityRefusal.Explanation}."
+                : "трафик не проходит, но движок отвечает по Clash API. "
+                    + "Перезапускать его незачем: скорее всего не отвечают серверы подписки. "
+                    + "Проверьте их в разделе «VPN».");
         }
 
         return ServiceCheck.UpstreamDown;
