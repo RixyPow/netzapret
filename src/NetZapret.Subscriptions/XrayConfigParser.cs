@@ -190,7 +190,7 @@ public static class XrayConfigParser
         if (transport.Equals("raw", StringComparison.OrdinalIgnoreCase))
             transport = "tcp";
 
-        var security = Empty(Text(stream, "security")) ?? "none";
+        var security = (Empty(Text(stream, "security")) ?? "none").ToLowerInvariant();
 
         string? sni = null;
         string? fingerprint = null;
@@ -255,8 +255,8 @@ public static class XrayConfigParser
     }
 
     /// <summary>
-    /// Исходящее Hysteria из конфига Xray. Версия 2 — это Hysteria2:
-    /// у sing-box свой тип, пароль и при необходимости salamander.
+    /// Исходящее Hysteria из конфига Xray — это Hysteria2: другой версии
+    /// у Xray нет (в документации: «version: must be 2»).
     /// </summary>
     /// <remarks>
     /// Адрес бывает и полем <c>settings.address</c> (autoXRAY, v2rayN),
@@ -279,8 +279,12 @@ public static class XrayConfigParser
         int version = Number(hysteria, "version");
         if (version == 0)
             version = Number(settings, "version");
-        if (protocol == "hysteria2" || version == 0)
-            version = 2;
+
+        if (protocol == "hysteria" && version is not (0 or 2))
+        {
+            problem = $"outbound «{tag}»: Hysteria версии {version} движок из конфига Xray не собирает";
+            return false;
+        }
 
         var entry = First(settings, "servers");
         var host = Empty(Text(settings, "address")) ?? Empty(Text(entry, "address"));
@@ -309,11 +313,10 @@ public static class XrayConfigParser
         }
 
         var (obfsType, obfsPassword) = Salamander(stream);
-        bool second = version >= 2;
 
         server = new ProxyServer
         {
-            Protocol = second ? ProxyProtocol.Hysteria2 : ProxyProtocol.Hysteria,
+            Protocol = ProxyProtocol.Hysteria2,
             Tag = Empty(Text(outbound, "tag")) ?? $"{protocol} {host}",
             Host = host!,
             Port = port,
@@ -323,10 +326,8 @@ public static class XrayConfigParser
             Sni = Empty(Text(tls, "serverName")),
             Alpn = alpn,
             AllowInsecure = Flag(tls, "allowInsecure") || Flag(tls, "insecure"),
-            ObfsType = second ? obfsType : null,
+            ObfsType = obfsType,
             ObfsPassword = obfsPassword,
-            UpMbps = second ? 0 : Positive(Mbps(Text(hysteria, "up") ?? Text(settings, "up")), 10),
-            DownMbps = second ? 0 : Positive(Mbps(Text(hysteria, "down") ?? Text(settings, "down")), 50),
         };
 
         return true;
@@ -442,18 +443,6 @@ public static class XrayConfigParser
             _ => 0,
         };
     }
-
-    /// <summary>«100 mbps» и «100» — одно и то же; единицы Xray пишет словами.</summary>
-    private static int Mbps(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return 0;
-
-        var number = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
-        return int.TryParse(number, out var value) ? value : 0;
-    }
-
-    private static int Positive(int value, int fallback) => value > 0 ? value : fallback;
 
     /// <summary>Порт бывает и числом, и строкой — поставщики пишут по-разному.</summary>
     private static ushort Port(JsonElement parent)

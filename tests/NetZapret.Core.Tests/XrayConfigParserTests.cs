@@ -128,6 +128,30 @@ public class XrayConfigParserTests
     }
 
     [Fact]
+    public void RealityIsRecognisedWhateverTheCase()
+    {
+        var server = Assert.Single(SubscriptionParser.ParseBody(
+            RealityWithPassword.Replace("\"security\": \"reality\"", "\"security\": \"REALITY\"")).Servers);
+
+        Assert.Equal("reality", server.Security);
+        Assert.Equal("jNXHt1yRo0vDuchQlIP6Z0ZvjT3KtzVI-T4E7RoLJS0", server.RealityPublicKey);
+    }
+
+    /// <summary>У TLS поле password — не ключ: брать его можно только у REALITY.</summary>
+    [Fact]
+    public void TlsPasswordIsNotTakenForAKey()
+    {
+        var body = RealityWithPassword
+            .Replace("\"security\": \"reality\"", "\"security\": \"tls\"")
+            .Replace("\"realitySettings\"", "\"tlsSettings\"");
+
+        var server = Assert.Single(SubscriptionParser.ParseBody(body).Servers);
+
+        Assert.Equal("tls", server.Security);
+        Assert.Null(server.RealityPublicKey);
+    }
+
+    [Fact]
     public void RealityPublicKeyWinsWhenBothNamesArePresent()
     {
         var body = RealityWithPassword.Replace(
@@ -177,6 +201,17 @@ public class XrayConfigParserTests
 
         Assert.Equal("salamander", server.ObfsType);
         Assert.Equal("hidden", server.ObfsPassword);
+    }
+
+    [Fact]
+    public void HysteriaOfAnotherVersionIsRefusedOutLoud()
+    {
+        var (servers, errors) = SubscriptionParser.ParseBody(Hysteria2Config
+            .Replace("\"version\": 2 },", "\"version\": 1 },")
+            .Replace("\"hysteriaSettings\": { \"version\": 2", "\"hysteriaSettings\": { \"version\": 1"));
+
+        Assert.Empty(servers);
+        Assert.Contains(errors, e => e.Contains("версии 1"));
     }
 
     [Fact]
