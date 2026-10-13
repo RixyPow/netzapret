@@ -243,7 +243,11 @@
                             </StackPanel>
                         </Border>
 
-                        <Button Style="{StaticResource Primary}" Margin="10,0,0,0" VerticalAlignment="Center"
+                        <!--
+                            Залита «Добавить правило», а не папка (владелец 13.10): правило —
+                            главное действие раздела, папка только раскладывает уже добавленное.
+                        -->
+                        <Button Style="{StaticResource Ghost}" Margin="10,0,0,0" VerticalAlignment="Center"
                                 Click="OnAddFolder" ToolTip="Пустая папка — перетащите в неё маршруты.">
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE710;" FontSize="13"
@@ -257,7 +261,7 @@
                             (владелец 01.10): из запущенных или файлом. С 13.10 —
                             папка программы из доменов и адресов (ProgramRoutes).
                         -->
-                        <Button x:Name="AddProgramButton" Style="{StaticResource Ghost}" Margin="8,0,0,0"
+                        <Button x:Name="AddProgramButton" Style="{StaticResource Primary}" Margin="8,0,0,0"
                                 VerticalAlignment="Center" Click="OnAddProgram"
                                 ToolTip="Свой сайт, адрес или подсеть — или программа: папка из доменов и адресов, которые она открывает.">
                             <StackPanel Orientation="Horizontal">
