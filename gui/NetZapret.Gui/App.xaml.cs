@@ -225,10 +225,14 @@ public partial class App : Application
         // Автопополнение маршрутов программ видит соединения только через
         // наблюдение (13.10): включено у какой-то программы — начинаем сразу,
         // не дожидаясь «Начать» в разделе.
-        if (AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Any(p => p.AutoFill)
-            && !Views.WatchView.StartSession())
+        if (AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Any(p => p.AutoFill))
         {
-            Journal.Write("маршрут программы", "наблюдение для автопополнения не началось");
+            // В фоне: начало наблюдения читает правила со списками (StartSessionAsync).
+            _ = Dispatcher.InvokeAsync(async () =>
+            {
+                if (!await Views.WatchView.StartSessionAsync())
+                    Journal.Write("маршрут программы", "наблюдение для автопополнения не началось");
+            });
         }
 
         SingleInstance.OnShowRequested(TrayIcon.Show);

@@ -306,50 +306,103 @@ public partial class WatchView : UserControl
     /// <returns><c>false</c> — не началось; причина в <see cref="_note"/>.</returns>
     internal static bool StartSession()
     {
-        if (_watch is not null)
+        // Начинается в фоне (StartSessionAsync) — второй сеанс ETW с тем же
+        // именем не создался бы, а этот вот-вот будет.
+        if (_watch is not null || _starting)
             return true;
-
-        if (_brushes.Count == 0)
-            _brushes = ThemePalette();
 
         try
         {
-            // Тот же сеанс, что у nz watch (ConnectionWatch): те же правила,
-            // что у сборки конфига, и тот же журнал runtime\watch.log.
-            _watch = ConnectionWatch.Start(
-                AppSettings.Load(AppSettings.DefaultPath),
-                ConnectionWatch.DefaultJournal,
-                new ProgramRouteLearner(AppSettings.DefaultPath));
-            _watch.Learned += ProgramRouteNotice.Learned;
-            _startedAt = DateTimeOffset.Now;
-            _totalBase = 0;
-            _matchedBase = 0;
-            _note = null;
-
-            // Сессия ETW переживает процесс: выход из программы обязан её
-            // остановить, раз раздел этого больше не делает.
-            if (!_exitHooked && Application.Current is { } app)
-            {
-                app.Exit += (_, _) => StopSession();
-                _exitHooked = true;
-            }
-
-            _work = new CancellationTokenSource();
-            _ = ReadAsync(_watch, _work.Token);
-
-            if (_open is { } open)
-                open.Dispatcher.BeginInvoke(() => open.ShowPower(true));
-
+            Begin(Create());
             return true;
         }
         catch (Exception ex)
         {
-            StopSession();
-
-            _note = "Не удалось начать: " + ex.GetBaseException().Message
-                + ". Сессия ETW требует прав администратора — окно их запрашивает при запуске.";
+            Failed(ex);
             return false;
         }
+    }
+
+    /// <summary>Наблюдение начинается в фоне.</summary>
+    private static bool _starting;
+
+    /// <summary>
+    /// То же, что <see cref="StartSession"/>, но правила и сессия ETW — в фоне.
+    /// </summary>
+    /// <remarks>
+    /// Для запуска окна (автопополнение маршрутов программ): ConnectionWatch.Start
+    /// читает правила со всеми списками, и в потоке окна это стоило 0,54–0,64 с
+    /// замирания «Главной» на каждом запуске (журнал сторожа владельца 13.10,
+    /// секунда в секунду с «наблюдение начато»).
+    /// </remarks>
+    internal static async Task<bool> StartSessionAsync()
+    {
+        if (_watch is not null || _starting)
+            return true;
+
+        _starting = true;
+
+        try
+        {
+            var watch = await Task.Run(Create);
+            Begin(watch);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Failed(ex);
+            return false;
+        }
+        finally
+        {
+            _starting = false;
+        }
+    }
+
+    /// <summary>
+    /// Тот же сеанс, что у nz watch (ConnectionWatch): те же правила, что у сборки
+    /// конфига, и тот же журнал наблюдения.
+    /// </summary>
+    private static ConnectionWatch Create() =>
+        ConnectionWatch.Start(
+            AppSettings.Load(AppSettings.DefaultPath),
+            ConnectionWatch.DefaultJournal,
+            new ProgramRouteLearner(AppSettings.DefaultPath));
+
+    private static void Failed(Exception ex)
+    {
+        StopSession();
+
+        _note = "Не удалось начать: " + ex.GetBaseException().Message
+            + ". Сессия ETW требует прав администратора — окно их запрашивает при запуске.";
+    }
+
+    /// <summary>Сеанс создан — дальше всё в потоке окна.</summary>
+    private static void Begin(ConnectionWatch watch)
+    {
+        if (_brushes.Count == 0)
+            _brushes = ThemePalette();
+
+        _watch = watch;
+        _watch.Learned += ProgramRouteNotice.Learned;
+        _startedAt = DateTimeOffset.Now;
+        _totalBase = 0;
+        _matchedBase = 0;
+        _note = null;
+
+        // Сессия ETW переживает процесс: выход из программы обязан её
+        // остановить, раз раздел этого больше не делает.
+        if (!_exitHooked && Application.Current is { } app)
+        {
+            app.Exit += (_, _) => StopSession();
+            _exitHooked = true;
+        }
+
+        _work = new CancellationTokenSource();
+        _ = ReadAsync(_watch, _work.Token);
+
+        if (_open is { } open)
+            open.Dispatcher.BeginInvoke(() => open.ShowPower(true));
     }
 
     /// <summary>
