@@ -342,6 +342,12 @@ public partial class MainWindow : Window
     /// уходе в другой. Это честнее, чем оставлять его гоняться в невидимом
     /// разделе, тратя трафик подписки.
     /// </para>
+    /// <para>
+    /// Исключение — «Маршруты» (13.10, <see cref="RoutesView.Shared"/>): они
+    /// перечитывают всё при каждом показе и обновляют только изменившиеся
+    /// карточки, так что снимка прошлого захода не показывают, а сотню карточек
+    /// заново на каждый заход строить незачем.
+    /// </para>
     /// </remarks>
     private void OnSection(object sender, RoutedEventArgs e)
     {
@@ -361,7 +367,7 @@ public partial class MainWindow : Window
         {
             "vpn" => new VpnView(),
             "desync" => new DesyncView(),
-            "routes" => new RoutesView(),
+            "routes" => RoutesView.Shared(),
             "tgproxy" => new TgProxyView(),
             "check" => new CheckView(),
             "speed" => new SpeedView(),

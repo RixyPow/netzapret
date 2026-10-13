@@ -1409,21 +1409,8 @@ public partial class RoutesView : UserControl
         if (Services.ItemsSource != _cards)
             Services.ItemsSource = _cards;
 
-        // Любой показ отменяет недостроенный первый: он сам доводит список до нужного.
+        // Новый показ отменяет недостроенный прежний: он сам доводит список до нужного.
         int generation = ++_fill;
-
-        // Первый показ — порциями: сотня карточек разом держала окно ~0,65 с
-        // сверх чтения правил (замер 13.10: повторный заход 1,0 с против
-        // 0,35–0,42 у прежнего виртуального списка). Первые видны сразу,
-        // остальные достраиваются в фоне, и окно между порциями живо.
-        if (_cards.Count == 0 && rows.Count > FirstCards)
-        {
-            foreach (var row in rows.Take(FirstCards))
-                _cards.Add(row);
-
-            FillLater(rows, FirstCards, generation);
-            return;
-        }
 
         var wanted = rows.ToHashSet(ReferenceEqualityComparer.Instance);
 
@@ -1433,6 +1420,20 @@ public partial class RoutesView : UserControl
                 _cards.RemoveAt(i);
         }
 
+        // Новые карточки — порциями, и в первый показ, и в любой следующий:
+        // сотня карточек разом держала окно ~0,65 с (замер 13.10), а показ
+        // заранее прочитанного и следом свежего достраивал бы второй показ
+        // целиком. Построенные карточки только двигаются — это дёшево.
+        if (Step(rows, FirstCards))
+            FillLater(rows, generation);
+    }
+
+    /// <summary>
+    /// Доводит список до <paramref name="rows"/>, строя не больше <paramref name="budget"/> новых карточек.
+    /// </summary>
+    /// <returns>Осталось ли что строить.</returns>
+    private bool Step(IReadOnlyList<ServiceRow> rows, int budget)
+    {
         for (int i = 0; i < rows.Count; i++)
         {
             if (i < _cards.Count && ReferenceEquals(_cards[i], rows[i]))
@@ -1450,33 +1451,39 @@ public partial class RoutesView : UserControl
             }
 
             if (at >= 0)
+            {
                 _cards.Move(at, i);
-            else
-                _cards.Insert(i, rows[i]);
+                continue;
+            }
+
+            if (budget-- == 0)
+                return true;
+
+            _cards.Insert(i, rows[i]);
         }
+
+        return false;
     }
 
-    /// <summary>Сколько карточек строить сразу — хватает на экран и чуть ниже.</summary>
-    private const int FirstCards = 24;
+    /// <summary>Сколько карточек строить сразу — свёрнутых хватает на экран владельца (794 точки, две колонки).</summary>
+    /// <remarks>
+    /// Было 24: эта первая порция — одна раскладка, и она держала окно 0,19–0,34 с
+    /// в тесте (13.10). Порция вдвое меньше — вдвое короче замирание.
+    /// </remarks>
+    private const int FirstCards = 12;
 
-    /// <summary>Сколько достраивать за раз в фоне.</summary>
-    private const int LaterCards = 16;
+    /// <summary>Сколько достраивать за раз в фоне — каждая порция тоже одна раскладка.</summary>
+    private const int LaterCards = 8;
 
     /// <summary>Номер показа: недостроенный первый показ сверяется с ним и уступает новому.</summary>
     private int _fill;
 
-    private void FillLater(IReadOnlyList<ServiceRow> rows, int from, int generation)
+    private void FillLater(IReadOnlyList<ServiceRow> rows, int generation)
     {
         Dispatcher.BeginInvoke(() =>
         {
-            if (generation != _fill)
-                return;
-
-            foreach (var row in rows.Skip(from).Take(LaterCards))
-                _cards.Add(row);
-
-            if (from + LaterCards < rows.Count)
-                FillLater(rows, from + LaterCards, generation);
+            if (generation == _fill && Step(rows, LaterCards))
+                FillLater(rows, generation);
         }, DispatcherPriority.Background);
     }
 
