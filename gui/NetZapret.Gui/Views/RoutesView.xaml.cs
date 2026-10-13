@@ -543,15 +543,16 @@ public partial class RoutesView : UserControl
         Unloaded += (_, _) => _icons?.Cancel();
     }
 
-    private void Reload()
+    /// <summary>Собирает строки из прочитанного (<see cref="ReadAll"/>) — в потоке окна.</summary>
+    private void Apply(RoutesData data, string? statusBefore)
     {
         _filling = true;
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var zapretRoot = ZapretPaths.Discover()?.Root;
-            var userRules = UserRulesFile.Load();
+            var settings = data.Settings;
+            var zapretRoot = data.ZapretRoot;
+            var userRules = data.Rules;
 
             // Те же правила держим под рукой при сборке строк: по ним
             // подписывается выбранный рецепт.
@@ -560,28 +561,12 @@ public partial class RoutesView : UserControl
 
             // И пресет: без него «десинк» в списке не отличить от «десинк,
             // но пресет об этом имени не знает и не сделает ничего».
-            _preset = null;
+            _preset = data.Preset;
+            _zones = data.Zones;
+            _providers = data.Providers;
 
-            try
-            {
-                if (settings.PresetName is { } name && ZapretPaths.FindPreset(name) is { } path)
-                    _preset = new PresetReader().Load(path);
-
-                _zones = _preset is null ? null : PresetZones.Build(_preset, zapretRoot);
-
-                _providers = ZapretPaths.Discover() is { } install
-                    ? LuaModules.Providers(LuaModules.Scan(install.LuaDirectory))
-                    : null;
-            }
-            catch (Exception)
-            {
-                // Испорченный пресет не повод не показать маршруты: подпись
-                // просто скажет, что чинить имя нечем.
-            }
-
-            var engine = RuleSetLoader.LoadFor(settings);
-
-            var problems = RuleSetExpander.Expand(engine.RuleSet, zapretRoot);
+            var engine = data.Engine;
+            var problems = data.Problems;
 
             // Маршруты по порядку, с папкой каталога: перекладка человека
             // (RouteFolders, 13.10) раскладывает их поверх.
@@ -609,10 +594,9 @@ public partial class RoutesView : UserControl
 
             placed.AddRange(ProgramParts(settings, userRules));
 
-            foreach (var service in ServiceCatalog.All)
+            foreach (var (service, described) in data.Services)
             {
-                var parts = ServiceRouting
-                    .Describe(service, engine, zapretRoot, userRules)
+                var parts = described
                     .Select(Row)
                     .ToList();
 
@@ -654,7 +638,7 @@ public partial class RoutesView : UserControl
 
             var services = Arranged(ordered, settings);
 
-            MarkPins(services, zapretRoot);
+            MarkPins(services, data.Pins, data.PinZones, zapretRoot);
 
             // Раскрытые папки переживают перерисовку. Прежде любое действие
             // внутри папки — пин, свой маршрут, обновление списка — собирало
@@ -678,17 +662,23 @@ public partial class RoutesView : UserControl
 
             ShowOwn();
 
-            Status.Text = problems.Count == 0
-                // Про то, куда пишется выбор, теперь говорит подсказка
-                // у заголовка: строка эта стояла над списком постоянно,
-                // а нужна была один раз. Счёт сервисов остался — он
-                // меняется и отвечает на вопрос «всё ли прочиталось».
-                ? $"Папок и отдельных маршрутов: {services.Count}, маршрутов всего: {services.Sum(s => s.Parts.Count)}."
-                : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
+            // Счёт — только если пока читали, никто не написал в строку своего:
+            // чтение теперь в фоне (13.10), и «Записано: …» от смены маршрута
+            // появляется раньше, чем пересборка закончится.
+            if (Status.Text == statusBefore || problems.Count > 0)
+            {
+                Status.Text = problems.Count == 0
+                    // Про то, куда пишется выбор, теперь говорит подсказка
+                    // у заголовка: строка эта стояла над списком постоянно,
+                    // а нужна была один раз. Счёт сервисов остался — он
+                    // меняется и отвечает на вопрос «всё ли прочиталось».
+                    ? $"Папок и отдельных маршрутов: {services.Count}, маршрутов всего: {services.Sum(s => s.Parts.Count)}."
+                    : $"Часть списков не нашлась, и эти правила не действуют: {string.Join("; ", problems.Take(3))}";
+            }
 
             ShowOrder(engine);
 
-            ShowShare();
+            ShowShare(data);
             StartIcons(services);
 
             _engine = engine;
@@ -1079,26 +1069,20 @@ public partial class RoutesView : UserControl
     /// Файл читается один раз на весь раздел, а не на каждую часть: их под
     /// семьдесят, а hosts у людей вырастает до тысяч строк.
     /// </remarks>
-    private static void MarkPins(IReadOnlyList<ServiceRow> services, string? zapretRoot)
+    /// <param name="pins">Прибитые имена из hosts — прочитаны в фоне.</param>
+    /// <param name="known">Зоны строк, прочитанные в фоне; чего нет — дочитывается здесь.</param>
+    private static void MarkPins(
+        IReadOnlyList<ServiceRow> services,
+        IReadOnlyList<string> pins,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> known,
+        string? zapretRoot)
     {
-        List<string> pins;
-
-        try
-        {
-            pins = HostsEditor.Pins().Keys.ToList();
-        }
-        catch (Exception)
-        {
-            // Нечитаемый hosts не повод не показать раздел.
-            return;
-        }
-
         if (pins.Count == 0)
             return;
 
         foreach (var part in services.SelectMany(s => s.Parts).Where(p => p.CanPin))
         {
-            var zones = RouteKeys.Zones(part.Key, zapretRoot);
+            var zones = known.TryGetValue(part.Key, out var read) ? read : RouteKeys.Zones(part.Key, zapretRoot);
 
             part.HasPin = pins.Any(name => Covers(zones, name));
 

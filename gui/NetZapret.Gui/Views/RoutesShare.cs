@@ -25,12 +25,13 @@ public partial class RoutesView
     /// <summary>Сколько строк каждого вида перечислять в вопросе — дальше «и ещё N».</summary>
     private const int ListedInQuestion = 6;
 
-    private void ShowShare()
+    /// <remarks>Правила, пины и противоречия прочитаны в фоне (<see cref="RoutesData"/>).</remarks>
+    private void ShowShare(RoutesData data)
     {
         try
         {
-            var rules = UserRulesFile.Load().Entries;
-            var pins = HostsEditor.Pins().Keys.ToList();
+            var rules = data.Rules.Entries;
+            var pins = data.Pins;
 
             var tip = $"Записать ваши маршруты ({rules.Count}) в файл, чтобы отдать другому человеку. "
                 + "Ссылок подписок и ключей в нём нет.";
@@ -43,7 +44,7 @@ public partial class RoutesView
 
             ExportButton.ToolTip = tip;
 
-            var clashes = RouteClashes.FromRules(rules, pins);
+            var clashes = data.Clashes;
 
             Clashes.ItemsSource = clashes;
             ClashesBox.Visibility = clashes.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
