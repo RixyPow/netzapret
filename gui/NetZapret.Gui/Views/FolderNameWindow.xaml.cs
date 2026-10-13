@@ -12,10 +12,17 @@ public partial class FolderNameWindow : Window
     /// <summary>Название; <c>null</c> — отказались.</summary>
     public string? Chosen { get; private set; }
 
+    private readonly IReadOnlyCollection<string> _reserved;
+
     /// <param name="route">Маршрут, который перекладывается.</param>
-    public FolderNameWindow(string route)
+    /// <param name="reserved">
+    /// Имена программ: их папки — только «Домены» и «Адреса», и папка с тем же
+    /// именем слилась бы с программой.
+    /// </param>
+    public FolderNameWindow(string route, IReadOnlyCollection<string> reserved)
     {
         InitializeComponent();
+        _reserved = reserved;
 
         Head.Text = $"Новая папка для «{route}»";
 
@@ -31,6 +38,13 @@ public partial class FolderNameWindow : Window
         if (name.Length == 0 || name.Length > MaxLength)
         {
             Problem.Text = $"Название — от одного до {MaxLength} знаков.";
+            Problem.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (_reserved.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            Problem.Text = $"«{name}» — папка программы, в неё кладутся только её домены и адреса.";
             Problem.Visibility = Visibility.Visible;
             return;
         }

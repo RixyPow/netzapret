@@ -416,6 +416,9 @@ public partial class RoutesView : UserControl
             // (RouteFolders, 13.10) раскладывает их поверх.
             var placed = new List<(string? Folder, string Key, PartRow Part)>();
 
+            // Программы — первыми по умолчанию: их заводит сам человек.
+            placed.AddRange(ProgramParts(settings, userRules));
+
             foreach (var service in ServiceCatalog.All)
             {
                 var parts = ServiceRouting
@@ -455,11 +458,11 @@ public partial class RoutesView : UserControl
             // по тому, знали мы это имя заранее или нет.
             placed.AddRange(OwnRows(userRules).Select(p => ((string?)null, p.Key, p)));
 
-            var services = Arranged(placed, settings.RouteFolders);
+            // Порядок человека (перетаскивание) — поверх порядка каталога.
+            var ordered = RouteFolders.Order(placed, settings.RouteOrder);
+            _keyOrder = ordered.Select(item => item.Key).ToList();
 
-            // Программы — своими папками, мимо перекладки: их маршруты
-            // живут только вместе с выключателем пополнения в шапке.
-            services.InsertRange(0, ProgramRows(settings, userRules));
+            var services = Arranged(ordered, settings);
 
             MarkPins(services, zapretRoot);
 
@@ -1074,14 +1077,37 @@ public partial class RoutesView : UserControl
     /// по себе ни о чём не говорит, «YouTube · Видеопоток» — говорит. То же
     /// у переложенного в чужую папку.
     /// </remarks>
+    /// <remarks>
+    /// Папка программы — только её «Домены» и «Адреса»: перекладка в неё
+    /// и из неё не действует, иначе выключатель пополнения в шапке стоял бы
+    /// над чужими маршрутами.
+    /// </remarks>
     private static List<ServiceRow> Arranged(
         IReadOnlyList<(string? Folder, string Key, PartRow Part)> placed,
-        IReadOnlyDictionary<string, string> moved)
+        AppSettings settings)
     {
+        var programs = settings.ProgramRoutes.ToDictionary(p => p.Program, StringComparer.OrdinalIgnoreCase);
+        var fixedKeys = placed.Where(p => !p.Part.Movable).Select(p => p.Key).ToHashSet(StringComparer.Ordinal);
+        var moved = settings.RouteFolders
+            .Where(m => !fixedKeys.Contains(m.Key) && !programs.ContainsKey(m.Value.Trim()))
+            .ToDictionary(m => m.Key, m => m.Value, StringComparer.Ordinal);
+
         var rows = new List<ServiceRow>();
 
         foreach (var (folder, parts) in RouteFolders.Arrange(placed, moved))
         {
+            if (folder is not null && programs.TryGetValue(folder, out var program))
+            {
+                rows.Add(new ServiceRow(folder, parts.Select(p => p with { Lead = 0 }).ToList())
+                {
+                    IsFolder = true,
+                    Program = program.Program,
+                    AutoFill = program.AutoFill,
+                });
+
+                continue;
+            }
+
             string Title(PartRow part) =>
                 part.HomeFolder is { } home && !string.Equals(home, folder, StringComparison.OrdinalIgnoreCase)
                     ? $"{home} · {part.Title}"
@@ -1106,19 +1132,19 @@ public partial class RoutesView : UserControl
     /// <summary>
     /// Папки программ: «Домены» и «Адреса» (<see cref="ProgramRoutes"/>, 13.10).
     /// </summary>
-    private static List<ServiceRow> ProgramRows(AppSettings settings, UserRulesFile userRules) =>
-        settings.ProgramRoutes
-            .Select(program => new ServiceRow(program.Program,
-            [
-                ProgramPart(program.Program, ProgramRoutes.DomainsPath(program.Program), domains: true, userRules),
-                ProgramPart(program.Program, ProgramRoutes.AddressesPath(program.Program), domains: false, userRules),
-            ])
+    private static IEnumerable<(string? Folder, string Key, PartRow Part)> ProgramParts(AppSettings settings, UserRulesFile userRules)
+    {
+        foreach (var program in settings.ProgramRoutes)
+        {
+            foreach (var domains in new[] { true, false })
             {
-                IsFolder = true,
-                Program = program.Program,
-                AutoFill = program.AutoFill,
-            })
-            .ToList();
+                var list = domains ? ProgramRoutes.DomainsPath(program.Program) : ProgramRoutes.AddressesPath(program.Program);
+                var part = ProgramPart(program.Program, list, domains, userRules);
+
+                yield return (program.Program, part.Key, part);
+            }
+        }
+    }
 
     /// <remarks>
     /// Ключ — обычный <c>hostlist|путь</c>: выбор пути, «выключено» и рецепт
@@ -1382,6 +1408,9 @@ public partial class RoutesView : UserControl
 
     /// <summary>Какие папки раскрыты. Переживает перерисовку списка.</summary>
     private readonly HashSet<string> _open = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Все ключи маршрутов в показанном порядке — от него считает перетаскивание.</summary>
+    private List<string> _keyOrder = [];
 
     /// <summary>
     /// Перерисовывает показанное.
@@ -2082,31 +2111,18 @@ public partial class RoutesView : UserControl
             return;
         }
 
+        // В существующую папку — перетаскиванием: подменю со списком папок
+        // наше меню не раскрывает (13.10, «переложить в папку ничего не
+        // делает»), а список из двадцати папок в меню и не нужен.
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
 
-        var into = new MenuItem { Header = "Переложить в папку" };
-
-        foreach (var folder in _all.Where(s => s.IsFolder && s.Program is null && s.Name != part.Folder).Select(s => s.Name))
+        menu.Items.Add(MenuEntry("", "В новую папку…", () =>
         {
-            var name = folder;
-            var item = new MenuItem { Header = name };
-            item.Click += (_, _) => MoveRoute(part, name);
-            into.Items.Add(item);
-        }
-
-        if (into.Items.Count > 0)
-            into.Items.Add(new Separator());
-
-        var fresh = new MenuItem { Header = "Новая папка…" };
-        fresh.Click += (_, _) =>
-        {
-            var window = new FolderNameWindow(part.Title) { Owner = Window.GetWindow(this) };
+            var window = new FolderNameWindow(part.Title, ProgramNames()) { Owner = Window.GetWindow(this) };
 
             if (window.ShowDialog() == true && window.Chosen is { } chosen)
                 MoveRoute(part, chosen);
-        };
-        into.Items.Add(fresh);
-        menu.Items.Add(into);
+        }));
 
         if (part.Folder is not null)
             menu.Items.Add(MenuEntry("", "Вынуть из папки", () => MoveRoute(part, string.Empty)));

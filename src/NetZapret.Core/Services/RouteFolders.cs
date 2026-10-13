@@ -67,6 +67,85 @@ public static class RouteFolders
     }
 
     /// <summary>
+    /// Порядок человека поверх порядка каталога (перетаскивание, 13.10).
+    /// </summary>
+    /// <param name="items">Маршруты в порядке каталога.</param>
+    /// <param name="saved">Ключи в порядке, который человек оставил перетаскиванием.</param>
+    /// <remarks>
+    /// Маршрут, которого в сохранённом порядке нет, — новый сервис после
+    /// обновления или свой домен — встаёт за последним из тех, кто стоял
+    /// перед ним в каталоге: туда же, где был бы без перетаскивания, и не
+    /// разрезая чужую папку.
+    /// </remarks>
+    public static IReadOnlyList<(string? Folder, string Key, T Item)> Order<T>(
+        IReadOnlyList<(string? Folder, string Key, T Item)> items,
+        IReadOnlyList<string> saved)
+    {
+        if (saved.Count == 0)
+            return items;
+
+        var place = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        for (int i = 0; i < saved.Count; i++)
+            place.TryAdd(saved[i], i);
+
+        int last = -1;
+        var keyed = new List<(int Anchor, int Late, int Index, (string? Folder, string Key, T Item) Item)>();
+
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (place.TryGetValue(items[i].Key, out var at))
+            {
+                last = Math.Max(last, at);
+                keyed.Add((at, 0, i, items[i]));
+            }
+            else
+            {
+                keyed.Add((last, 1, i, items[i]));
+            }
+        }
+
+        return keyed
+            .OrderBy(k => k.Anchor)
+            .ThenBy(k => k.Late)
+            .ThenBy(k => k.Index)
+            .Select(k => k.Item)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Переносит ключи перед или за целью — целым куском, в прежнем порядке.
+    /// </summary>
+    /// <param name="order">Все ключи в нынешнем порядке.</param>
+    /// <param name="moving">Что переносится: маршрут или все маршруты папки.</param>
+    /// <param name="target">Ключ, у которого встать.</param>
+    /// <param name="after">За целью, а не перед ней.</param>
+    /// <returns>Новый порядок; цель среди переносимых — прежний.</returns>
+    public static IReadOnlyList<string> MoveKeys(
+        IReadOnlyList<string> order,
+        IReadOnlyCollection<string> moving,
+        string target,
+        bool after)
+    {
+        if (moving.Contains(target))
+            return order;
+
+        var block = order.Where(moving.Contains).ToList();
+
+        // Переносимого в порядке нет — он новый, встаёт как есть.
+        block.AddRange(moving.Where(k => !order.Contains(k)));
+
+        var rest = order.Where(k => !moving.Contains(k)).ToList();
+        int at = rest.IndexOf(target);
+
+        if (at < 0)
+            return [.. rest, .. block];
+
+        rest.InsertRange(after ? at + 1 : at, block);
+        return rest;
+    }
+
+    /// <summary>
     /// Перекладывает маршрут: в папку, вне папки или обратно на место каталога.
     /// </summary>
     /// <param name="folder">Папка; пустая строка — вне папки.</param>

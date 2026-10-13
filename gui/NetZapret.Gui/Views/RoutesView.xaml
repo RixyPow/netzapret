@@ -286,6 +286,7 @@
                 строкой перепрыгивал бы через полэкрана.
             -->
             <ItemsControl Grid.Row="1" x:Name="Services" Margin="0,14,0,0"
+                          AllowDrop="True" PreviewDragOver="OnListDragOver"
                           VirtualizingPanel.IsVirtualizing="True"
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           VirtualizingPanel.ScrollUnit="Pixel">
@@ -324,8 +325,11 @@
                                 открывать YouTube, а чтобы окинуть взглядом
                                 всё — открыть все двадцать две.
                             -->
+                            <!-- Перетаскивание (RoutesView.Drag.cs, 13.10): папку тянут за шапку. -->
                             <Button Style="{StaticResource Folder}" Click="OnFolder"
                                     Margin="0,0,0,6"
+                                    PreviewMouseLeftButtonDown="OnDragPress" PreviewMouseMove="OnDragMove"
+                                    AllowDrop="True" DragOver="OnRowDragOver" DragLeave="OnRowDragLeave" Drop="OnRowDrop"
                                     Visibility="{Binding HeaderShown}">
                                 <!--
                                     Резиновая колонка — у итога, а не у числа
@@ -438,7 +442,9 @@
                                             и без этого строки шли ступеньками.
                                         -->
                                         <Border Style="{StaticResource Card}" Margin="0,0,0,6"
-                                                Padding="14,10" MinHeight="64">
+                                                Padding="14,10" MinHeight="64"
+                                                PreviewMouseLeftButtonDown="OnDragPress" PreviewMouseMove="OnDragMove"
+                                                AllowDrop="True" DragOver="OnRowDragOver" DragLeave="OnRowDragLeave" Drop="OnRowDrop">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
@@ -548,7 +554,7 @@
                                                             Content="⋯" Padding="10,7" Margin="8,0,0,0"
                                                             Tag="{Binding Key}" Click="OnRouteMore"
                                                             Visibility="{Binding MoreShown}"
-                                                            ToolTip="Переложить в папку или вынуть из неё" />
+                                                            ToolTip="Новая папка, вынуть из папки, вернуть на место. В папку — перетащите строку на неё." />
 
                                                     <Button Style="{StaticResource Ghost}"
                                                             Content="убрать" Padding="12,7"

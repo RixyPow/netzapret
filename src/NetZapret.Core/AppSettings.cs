@@ -293,6 +293,12 @@ public sealed record AppSettings
     /// </summary>
     public IReadOnlyDictionary<string, string> RouteFolders { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>
+    /// Порядок маршрутов «Маршрутов», оставленный перетаскиванием: ключи строк
+    /// (<see cref="Services.RouteFolders"/>, 13.10). Пусто — порядок каталога.
+    /// </summary>
+    public IReadOnlyList<string> RouteOrder { get; init; } = [];
+
     /// <summary>Поднимать прокси для Telegram Desktop вместе с движками (<see cref="TgWsProxy"/>).</summary>
     /// <remarks>Выключен по умолчанию: Telegram надо ещё подключить к нему ссылкой.</remarks>
     public bool TelegramProxy { get; init; }
