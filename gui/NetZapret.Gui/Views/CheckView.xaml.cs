@@ -1165,7 +1165,8 @@ public partial class CheckView : UserControl
             sections.Add(complaints.Count > 0
                 ? new SectionRow(
                     "Что об этом сказал сам движок",
-                    string.Join("\n", complaints.Select(c => $"{c.Host} через {c.Outbound}: {c.Error}"))
+                    string.Join("\n", complaints.Select(c => $"{c.Host} через {c.Outbound}: {c.Error}"
+                        + (RealityRefusal.In(c.Error) ? $"\n    — {RealityRefusal.Explanation}." : "")))
                     + "\n\nИмя движок разобрал верно — значит рукопожатие дошло до него целым, "
                     + "и десинк его не портил. Выход назван тот, через который шло на самом деле.",
                     (Brush)FindResource("Warn"))
