@@ -120,8 +120,21 @@ public sealed record RecentRow(
     FontWeight Weight);
 
 /// <summary>Папка одной подписки.</summary>
-public sealed class SubRow
+public sealed class SubRow : System.ComponentModel.INotifyPropertyChanged
 {
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Перечитать все привязки папки.</summary>
+    /// <remarks>
+    /// Папка — один и тот же объект между пересборками, а поля у неё меняются
+    /// на месте. Замена в списке тем же объектом привязки не трогает (опыт
+    /// 13.10): после 0.15.3 папка так и показывала «читаю…» над прочитанной
+    /// подпиской. Поля по одному не извещают — пересборка всё равно меняет
+    /// их пачкой.
+    /// </remarks>
+    public void Refresh() =>
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(string.Empty));
+
     public required SubscriptionEntry Entry { get; init; }
 
     /// <summary>Папка отдельных ключей, а не подписки (0.9.0).</summary>
@@ -1135,9 +1148,10 @@ public partial class VpnView : UserControl
         // По месту, а не новым списком: замена ItemsSource сбрасывала
         // прокрутку наверх (снимок 12.10: 633 → 15 после каждой пересборки),
         // а пересборка идёт и раз в девять секунд, и при смене выхода.
-        // Строки серверов — новые записи, папки — те же объекты с новыми
-        // полями: тех и других заменяем, и список заново рисует только
-        // видимые из них. Верх и подпись — одни и те же элементы, не трогаем.
+        // Строки серверов — новые записи, их заменяем, и список заново рисует
+        // только видимые из них. Папки — те же объекты с новыми полями:
+        // замена тем же объектом их не перерисовывает, папка извещает сама
+        // (SubRow.Refresh). Верх и подпись — одни и те же элементы, не трогаем.
         if (Page.ItemsSource != _items)
             Page.ItemsSource = _items;
 
@@ -1145,8 +1159,10 @@ public partial class VpnView : UserControl
         {
             if (i >= _items.Count)
                 _items.Add(items[i]);
-            else if (items[i] is not UIElement || !ReferenceEquals(_items[i], items[i]))
+            else if (!ReferenceEquals(_items[i], items[i]))
                 _items[i] = items[i];
+            else if (items[i] is SubRow folder)
+                folder.Refresh();
         }
 
         while (_items.Count > items.Count)
