@@ -234,6 +234,12 @@ public sealed record PartRow : INotifyPropertyChanged
     /// </summary>
     public bool Placeholder { get; init; }
 
+    /// <summary>Путь задан своим правилом — его можно сбросить «по умолчанию».</summary>
+    public bool Explicit { get; init; }
+
+    /// <summary>Путь без своего правила словом («десинк»); <c>null</c> — у маршрута нет умолчания (свой).</summary>
+    public string? DefaultLabel { get; init; }
+
     /// <summary>Ручка перетаскивания — у того, что можно тянуть.</summary>
     public Visibility GripShown => Movable ? Visibility.Visible : Visibility.Hidden;
 }
@@ -345,7 +351,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts) : INo
     internal string Signature() => string.Join('',
         new[] { Name, Label ?? string.Empty, IsFolder.ToString(), Program ?? string.Empty, AutoFill.ToString(), Made.ToString(), string.Join(',', Keys) }
             .Concat(Parts.Select(p => string.Join('',
-                p.Key, p.Title, p.Detail, p.Mode, p.Choice, p.Applied, p.HasPin, p.CanRoute, p.CanPin, p.Movable, p.Own,
+                p.Key, p.Title, p.Detail, p.Mode, p.Choice, p.Applied, p.HasPin, p.CanRoute, p.CanPin, p.Movable, p.Own, p.Explicit, p.DefaultLabel ?? string.Empty,
                 p.ListPath ?? string.Empty, p.Folder ?? string.Empty, p.HomeFolder ?? string.Empty, p.Probe ?? string.Empty,
                 (p.Color as SolidColorBrush)?.Color.ToString() ?? string.Empty, p.Letter))));
 
@@ -768,6 +774,9 @@ public partial class RoutesView : UserControl
             // Адресную часть прибить нечем: hosts понимает только имена,
             // а подсеть в него не записать.
             CanPin = !part.Part.ByAddress,
+
+            Explicit = part.Explicit,
+            DefaultLabel = part.DescribeDefault(),
         };
     }
 
@@ -2708,10 +2717,25 @@ public partial class RoutesView : UserControl
 
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
 
+        // «По умолчанию» — у каждого маршрута каталога (владелец 13.10): снимает
+        // своё правило, и маршрут идёт, как задано базовыми правилами. Что это
+        // будет, сказано сразу. Без своего правила маршрут уже по умолчанию —
+        // пункт отмечен и ничего не делает; у своих маршрутов умолчания нет.
+        if (row.DefaultLabel is { } fallback)
+        {
+            menu.Items.Add(MenuEntry(row.Explicit ? string.Empty : "", $"по умолчанию — {fallback}", () =>
+            {
+                if (row.Explicit)
+                    ResetRoute(row);
+            }));
+            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+        }
+
         foreach (var (choice, text) in new[] { (0, "напрямую"), (1, "десинк"), (2, "через VPN"), (PartRow.Off, "выключено") })
         {
-            // Отметка — значком: наше меню IsChecked не рисует.
-            menu.Items.Add(MenuEntry(row.Applied == choice ? "" : string.Empty, text, () => Choose(row, choice)));
+            // Отметка — значком: наше меню IsChecked не рисует. У маршрута по
+            // умолчанию отмечено «по умолчанию», а не путь, который оно дало.
+            menu.Items.Add(MenuEntry(row.Applied == choice && (row.Explicit || row.DefaultLabel is null) ? "" : string.Empty, text, () => Choose(row, choice)));
         }
 
         if (row.Applied == 1 && row.Probe is { Length: > 0 } example
@@ -2723,6 +2747,32 @@ public partial class RoutesView : UserControl
         }
 
         menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Снимает своё правило маршрута — он идёт, как задано базовыми правилами.
+    /// </summary>
+    private void ResetRoute(PartRow row)
+    {
+        if (RouteKeys.Parse(row.Key) is not var (kind, value))
+            return;
+
+        try
+        {
+            var file = UserRulesFile.Load();
+
+            if (file.Remove(RouteKeys.MatchOf(kind, value), value))
+                file.Save();
+
+            Reload();
+
+            Status.Text = $"«{row.Title}» — по умолчанию: {row.DefaultLabel}. Применится при следующем запуске движков.";
+            this.Offer("Маршрут изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>Записывает выбранный путь строки.</summary>

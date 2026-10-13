@@ -371,6 +371,51 @@ public sealed class ServiceRoutingTests : IDisposable
         Assert.All(shared.SelectMany(g => g), p => Assert.StartsWith("общая с ", p.Note));
     }
 
+    /// <summary>
+    /// «По умолчанию» в меню пути — то, чем станет маршрут без своего правила
+    /// (владелец 13.10): базовое правило, а не умолчание режима и не нынешний путь.
+    /// </summary>
+    [Fact]
+    public void TheDefaultIsWhatTheRouteBecomesWithoutMyRule()
+    {
+        var basePath = Path.Combine(_root, "rules.yaml");
+        File.WriteAllText(basePath, """
+            mode: selective
+            rules:
+              - match: hostlist
+                value: "config/lists/discord.txt"
+                mode: desync
+            default:
+              mode: direct
+            """);
+
+        var userPath = Path.Combine(_root, "rules.user.yaml");
+        var user = UserRulesFile.Load(userPath);
+        user.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Proxy);
+        user.SetOff(MatchKind.HostList, "config/lists/discord-media.txt");
+        user.Save();
+
+        var engine = RuleSetLoader.LoadLayered(basePath, userPath);
+        RuleSetExpander.Expand(engine.RuleSet, _root);
+
+        var parts = ServiceRouting.Describe(Discord, engine, _root, UserRulesFile.Load(userPath));
+        var (voice, text) = (parts[0], parts[1]);
+
+        Assert.True(text.Explicit);
+        Assert.Equal(RoutingMode.Proxy, text.Mode);
+        Assert.Equal(RoutingMode.Desync, text.DefaultMode);
+        Assert.Equal("десинк", text.DescribeDefault());
+
+        // Выключенная своим правилом часть по умолчанию не выключена — идёт умолчанием режима.
+        Assert.True(voice.Off);
+        Assert.False(voice.DefaultOff);
+        Assert.Equal(RoutingMode.Direct, voice.DefaultMode);
+
+        // Без своего правила «по умолчанию» — то же, что сейчас.
+        var plain = ServiceRouting.Describe(Discord, engine, _root, EmptyUserRules());
+        Assert.All(plain, part => Assert.Equal(part.Mode, part.DefaultMode));
+    }
+
     private static UserRulesFile EmptyUserRules() =>
         UserRulesFile.Load(Path.Combine(Path.GetTempPath(), $"netzapret-none-{Guid.NewGuid():N}.yaml"));
 }

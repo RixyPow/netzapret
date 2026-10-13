@@ -59,6 +59,27 @@ public static class ServiceRouting
         /// </remarks>
         public IReadOnlyList<string> Domains { get; init; } = [];
 
+        /// <summary>
+        /// Куда часть пойдёт, если снять своё правило на неё, — для «по умолчанию»
+        /// в меню пути (владелец 13.10: «кнопку по умолчанию каждому маршруту»).
+        /// </summary>
+        /// <remarks>
+        /// Считается тем же движком без своего правила на этот список: базовые
+        /// правила, режим и прочие свои правила остаются, и ответ тот же, что
+        /// покажет строка после сброса. Без своего правила — то же, что сейчас.
+        /// </remarks>
+        public RoutingMode DefaultMode { get; init; }
+
+        /// <summary>Выключена ли часть по умолчанию (<see cref="ServicePart.DefaultOff"/>).</summary>
+        public bool DefaultOff { get; init; }
+
+        public string DescribeDefault() => DefaultOff ? "выключено" : DefaultMode switch
+        {
+            RoutingMode.Proxy => "VPN",
+            RoutingMode.Desync => "десинк",
+            _ => "напрямую",
+        };
+
         public string DescribeMode() => Off ? "выключено" : Mode switch
         {
             RoutingMode.Proxy => "VPN",
@@ -106,10 +127,15 @@ public static class ServiceRouting
             var own = userRules.Entries.FirstOrDefault(e =>
                 e.Match == kind && e.Enabled && e.Matches(part.List));
 
+            var mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine);
+            var plain = own is null ? engine : Without(engine, kind, part.List);
+
             result.Add(new PartStatus
             {
                 Part = part,
-                Mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine),
+                Mode = mode,
+                DefaultMode = own is null ? mode : part.ByAddress ? AddressMode(entries[0], plain) : ModeFor(entries[0], plain),
+                DefaultOff = part.DefaultOff,
                 DomainCount = entries.Count,
                 Explicit = own is not null,
 
@@ -123,6 +149,19 @@ public static class ServiceRouting
 
         return result;
     }
+
+    /// <summary>Тот же движок без своего правила на этот список.</summary>
+    /// <remarks>
+    /// Правила уже развёрнуты — списки прочитаны, — и пересборка движка
+    /// из них не читает файлов.
+    /// </remarks>
+    private static RuleEngine Without(RuleEngine engine, MatchKind kind, string list) =>
+        RuleEngine.Build(
+            engine.RuleSet.Rules.Where(r => !(r.Source == RuleSource.User && r.Match == kind
+                && string.Equals(r.Value, list, StringComparison.OrdinalIgnoreCase))).ToList(),
+            engine.RuleSet.DefaultMode,
+            engine.RuleSet.DefaultServer,
+            engine.RuleSet.Operating);
 
     /// <summary>
     /// Куда движок отправит соединение на этот адрес.
