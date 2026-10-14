@@ -103,6 +103,20 @@ public sealed record ServicePart
     /// не дошёл бы (UserRulesFile.Set, <c>before</c>).
     /// </remarks>
     public string? Within { get; init; }
+
+    /// <summary>
+    /// Перечень на десятки тысяч имён, а не состав одного сервиса.
+    /// </summary>
+    /// <remarks>
+    /// «Реестр блокировок РФ» (владелец 15.10): 117 тысяч имён. Проверка
+    /// блокировок его имена не берёт — первые записи реестра мёртвые домены
+    /// вроде a1b1.ru, от них в отчёте только шум. Пометка «есть пин» ему
+    /// не нужна, а сверка полутора сотен пинов со 117 тысячами зон шла бы
+    /// на каждом обновлении «Маршрутов». Компилятор конфига не пишет такой
+    /// список в sing-box, пока он ведёт мимо туннеля: десинк и «напрямую»
+    /// для sing-box одно и то же (<c>SingBoxConfigCompiler</c>).
+    /// </remarks>
+    public bool Bulk { get; init; }
 }
 
 /// <summary>
@@ -175,6 +189,21 @@ public sealed record ServiceDefinition
 /// </remarks>
 public static class ServiceCatalog
 {
+    /// <summary>Список маршрута «Реестр блокировок РФ».</summary>
+    public const string RegistryList = "config/lists/russia-blacklist.txt";
+
+    /// <summary>Большой ли это перечень (<see cref="ServicePart.Bulk"/>) — по пути списка.</summary>
+    /// <remarks>
+    /// Выводится из частей каталога лениво: статические поля встают по порядку
+    /// текста, а <see cref="All"/> объявлен ниже.
+    /// </remarks>
+    public static bool IsBulk(string? list) =>
+        list is not null
+        && (_bulk ??= All.SelectMany(s => s.Parts).Where(p => p.Bulk).Select(p => p.List)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase)).Contains(list.Trim());
+
+    private static HashSet<string>? _bulk;
+
     /// <summary>
     /// Видео Amazon IVS (live-video.net) — одна часть у Twitch и Kick.
     /// </summary>
@@ -383,6 +412,28 @@ public static class ServiceCatalog
         {
             Name = "DonationAlerts",
             Parts = [new ServicePart { Name = "Всё", List = "config/lists/donationalerts.txt" }],
+        },
+
+        // Реестр блокировок РФ (владелец 15.10) — перечень Zapret GUI
+        // russia-blacklist, 117 тысяч имён. Стоит выше правила «.ru, .su, .рф —
+        // напрямую» (RuZones): заблокированный российский сайт решает этот
+        // маршрут, остальной российский трафик — зона. Заводское правило —
+        // «десинк» (config/rules.yaml): эти имена лечит секция пресета
+        // «Russia blacklist TCP 443», как и до маршрута; в «Туннеле» это VPN.
+        new ServiceDefinition
+        {
+            Name = "Реестр блокировок РФ",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Всё",
+                    List = RegistryList,
+                    Note = "перечень заблокированных в России сайтов из Zapret GUI, 117 тысяч имён; "
+                        + "по умолчанию их лечит десинк, в «Туннеле» — VPN",
+                    Bulk = true,
+                },
+            ],
         },
 
         new ServiceDefinition

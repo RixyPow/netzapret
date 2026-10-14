@@ -209,7 +209,7 @@ public partial class RoutesView
         {
             var keys = services
                 .SelectMany(s => s.Item2)
-                .Where(part => !part.Part.ByAddress)
+                .Where(part => !part.Part.ByAddress && !part.Part.Bulk)
                 .Select(part => RouteKeys.Make(RouteKeys.HostList, part.Part.List))
                 .Concat(userRules.Entries
                     .Where(e => e.Match == MatchKind.Domain || (e.Match == MatchKind.HostList && OwnLists.IsOwn(e.Value)))

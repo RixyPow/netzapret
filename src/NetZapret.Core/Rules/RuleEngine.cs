@@ -78,6 +78,9 @@ public sealed class RuleEngine
         });
     }
 
+    /// <summary>Группа нижнего слоя — больше любой группы обычных классов.</summary>
+    public const int FallbackTier = 100;
+
     /// <summary>
     /// Группа, внутри которой решает порядок в файле; меньше — раньше.
     /// </summary>
@@ -98,6 +101,11 @@ public sealed class RuleEngine
     /// </remarks>
     public static int Tier(MatchKind match, RuleSource source, string? value = null)
     {
+        // Нижний слой (RuZones, 15.10) — после всех классов, и адресных тоже:
+        // «если нет никаких других правил» значит и своих по адресу.
+        if (source == RuleSource.Fallback)
+            return FallbackTier;
+
         bool user = source == RuleSource.User;
         bool ownName = match == MatchKind.Domain
             || (match == MatchKind.HostList && OwnLists.IsOwn(value));

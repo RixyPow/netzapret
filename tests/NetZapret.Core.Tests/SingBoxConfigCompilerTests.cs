@@ -1152,7 +1152,7 @@ public class SingBoxConfigCompilerTests
         Assert.Equal(server.Host, outbound.GetProperty("tls").GetProperty("server_name").GetString());
     }
 
-    private static string? FindSingBox()
+    internal static string? FindSingBox()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
 

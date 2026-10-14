@@ -1805,13 +1805,21 @@ public sealed class SingBoxConfigCompiler
         // без этой оговорки означает «интернет наполовину сломан».
         // Остальные правила при этом действительно лишние: всё, что не выведено
         // явно, и так уходит в туннель по final.
+        var final = ResolveFinal(ruleSet, options, haveServers);
+
         IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
-            OperatingMode.Selective => ruleSet.Rules,
-
-            OperatingMode.ProxyAll => ruleSet.Rules
-                .Where(r => r.Mode == RoutingMode.Direct)
+            // Большой перечень (реестр блокировок, ServicePart.Bulk, 15.10),
+            // ведущий туда же, куда final, — мимо: в «Гибриде» десинк и
+            // «напрямую» для sing-box одно и то же, и 117 тысяч имён в конфиге
+            // ничего бы не решили. До маршрута этих правил не было вовсе, так
+            // что поведение движка то же. Отправленный через VPN — пишется.
+            OperatingMode.Selective => ruleSet.Rules
+                .Where(r => !(Core.Services.ServiceCatalog.IsBulk(r.Value)
+                    && ResolveOutbound(r.Mode, r.Server, tags, options, haveServers) == final))
                 .ToList(),
+
+            OperatingMode.ProxyAll => ForProxyAll(ruleSet.Rules),
 
             // ProxyStrict — «без исключений» буквально: ни одного правила,
             // включая прямые. Российские сервисы при этом сломаются, и это
@@ -1868,7 +1876,7 @@ public sealed class SingBoxConfigCompiler
         return new JsonObject
         {
             ["rules"] = rules,
-            ["final"] = ResolveFinal(ruleSet, options, haveServers),
+            ["final"] = final,
             ["auto_detect_interface"] = true,
 
             // Обязателен начиная с sing-box 1.12: без него запуск падает.
@@ -2045,6 +2053,124 @@ public sealed class SingBoxConfigCompiler
 
         node["outbound"] = outbound;
         return node;
+    }
+
+    /// <summary>
+    /// Правила «всё через VPN»: «напрямую» — все, прочие по именам — только
+    /// те имена, которые ниже перекрыло бы какое-нибудь «напрямую».
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Прочие правила здесь прежде отбрасывались целиком как лишние: final
+    /// и так туннель. Это верно, пока ниже нет «напрямую» на те же имена.
+    /// С российскими зонами (RuZones, нижний слой, 15.10) оно есть всегда:
+    /// реестр блокировок «десинк» (в «Туннеле» значит VPN) выброшенным
+    /// отдал бы свои 37 тысяч российских имён правилу «.ru — напрямую»,
+    /// и заблокированные сайты пошли бы мимо туннеля. То же со своим «через
+    /// VPN» над заводским «напрямую» — оно проигрывало и до зон.
+    /// </para>
+    /// <para>
+    /// Оставляется не правило целиком, а имена, которые иначе ушли бы
+    /// напрямую: ниже есть «напрямую», покрывающее имя (zone «ru» над
+    /// amdm.ru), либо лежащее внутри его зоны (avito.ru под «*.ru»). Так
+    /// реестр приходит в конфиг 37 тысячами российских имён, а не 117-ю.
+    /// Правила по адресам и программам — как прежде: с зонами они не спорят.
+    /// </para>
+    /// </remarks>
+    private static List<RoutingRule> ForProxyAll(IReadOnlyList<RoutingRule> rules)
+    {
+        // Последнее «напрямую» на зону — и на каждую зону, внутри которой
+        // оно лежит: по ним видно, есть ли «напрямую» ниже данного места.
+        var coversLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var insideLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < rules.Count; i++)
+        {
+            if (rules[i].Mode != RoutingMode.Direct)
+                continue;
+
+            foreach (var zone in NameZones(rules[i]))
+            {
+                coversLast[zone] = i;
+
+                for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
+                    insideLast[zone[(dot + 1)..]] = i;
+            }
+        }
+
+        bool DirectBelow(string zone, int at)
+        {
+            if (coversLast.TryGetValue(zone, out var same) && same > at)
+                return true;
+
+            if (insideLast.TryGetValue(zone, out var inner) && inner > at)
+                return true;
+
+            for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
+            {
+                if (coversLast.TryGetValue(zone[(dot + 1)..], out var outer) && outer > at)
+                    return true;
+            }
+
+            return false;
+        }
+
+        var applicable = new List<RoutingRule>();
+
+        for (int i = 0; i < rules.Count; i++)
+        {
+            var rule = rules[i];
+
+            if (rule.Mode == RoutingMode.Direct)
+            {
+                applicable.Add(rule);
+                continue;
+            }
+
+            if (rule.Match is not (MatchKind.Domain or MatchKind.HostList))
+                continue;
+
+            var kept = NameZones(rule).Where(zone => DirectBelow(zone, i)).ToList();
+
+            if (kept.Count == 0)
+                continue;
+
+            // Десинка в этом режиме нет — «десинк» здесь значит туннель
+            // (EngineChoice.Effective), как и всё невыведенное.
+            var narrowed = new RoutingRule
+            {
+                Match = MatchKind.HostList,
+                Value = rule.Value,
+                Mode = RoutingMode.Proxy,
+                Server = rule.Server,
+                Source = rule.Source,
+                Ordinal = rule.Ordinal,
+            };
+
+            narrowed.LoadHostList(kept);
+            applicable.Add(narrowed);
+        }
+
+        return applicable;
+    }
+
+    /// <summary>Зоны правила по имени, без «*.»; с подстановкой внутри — мимо.</summary>
+    private static IEnumerable<string> NameZones(RoutingRule rule)
+    {
+        IEnumerable<string> raw = rule.Match switch
+        {
+            MatchKind.Domain => [rule.Value],
+            MatchKind.HostList => rule.HostListDomains,
+            _ => [],
+        };
+
+        foreach (var value in raw)
+        {
+            var zone = value.Trim().TrimStart('*', '.');
+
+            if (zone.Length > 0 && zone.IndexOfAny(['*', '?']) < 0)
+                yield return zone;
+        }
     }
 
     private static string ResolveFinal(RuleSet ruleSet, SingBoxOptions options, bool haveServers) =>

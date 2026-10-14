@@ -707,8 +707,10 @@ public partial class CheckView : UserControl
             foreach (var part in service.Parts)
             {
                 // Адресные части проверять нечем: у них нет имени, а стучаться
-                // в подсеть наугад — не проверка.
-                if (part.ByAddress)
+                // в подсеть наугад — не проверка. Большой перечень (реестр
+                // блокировок, 15.10) — тоже мимо: его первые записи — мёртвые
+                // домены вроде a1b1.ru, в отчёте от них был бы только шум.
+                if (part.ByAddress || part.Bulk)
                     continue;
 
                 int taken = 0;

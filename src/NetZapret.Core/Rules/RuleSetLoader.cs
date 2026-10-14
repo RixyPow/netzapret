@@ -119,15 +119,15 @@ public static class RuleSetLoader
     {
         var engine = LoadLayered(settings.RulesPath, userPath ?? UserRulesFile.DefaultPath, mode ?? settings.Mode);
 
-        if (!settings.HideVpnFromRussianApps)
-            return engine;
-
         var rules = engine.RuleSet.Rules;
         var own = rules.Where(r => r.Source == RuleSource.User).ToList();
         var rest = rules.Where(r => r.Source != RuleSource.User);
+        var hiding = settings.HideVpnFromRussianApps ? VpnHiding.Rules() : [];
 
+        // Российские зоны — всегда, нижним слоем (RuZones, владелец 15.10):
+        // решают, только если ничто выше не решило.
         return RuleEngine.Build(
-                own.Concat(VpnHiding.Rules()).Concat(rest).ToList(),
+                own.Concat(hiding).Concat(rest).Concat(RuZones.Rules()).ToList(),
                 engine.RuleSet.DefaultMode,
                 engine.RuleSet.DefaultServer,
                 engine.RuleSet.Operating)

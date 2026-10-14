@@ -230,6 +230,19 @@ rules:
     value: "*.oaiusercontent.com"
     mode: proxy
 
+  # Реестр блокировок РФ — маршрут каталога (владелец 15.10): 117 тысяч имён
+  # russia-blacklist из Zapret GUI. «Десинк» — то, что с этими именами и так
+  # происходило: их лечит секция пресета «Russia blacklist TCP 443». Правило
+  # нужно ради порядка: оно выше правила «.ru, .su, .рф — напрямую» (RuZones,
+  # нижний слой), и заблокированный российский сайт решает этот маршрут,
+  # а не зона; в щите winws2 такие имена становятся дырами. В «Туннеле»
+  # «десинк» без десинка значит VPN (EngineChoice.Effective). sing-box этот
+  # список не получает, пока он ведёт мимо туннеля (ServicePart.Bulk). Выше
+  # зон Akamai — по той же причине, что и всё именное.
+  - match: hostlist
+    value: config/lists/russia-blacklist.txt
+    mode: desync
+
   # Зоны Akamai — напрямую, мимо приёмов пресета (03.10). Пресеты ссылаются
   # на списки Zapret GUI, а там в epicgames-fortnite.txt стоит весь
   # akamaized.net, в steam.txt — весь akamaihd.net, и приёмы этих секций

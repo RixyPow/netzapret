@@ -53,8 +53,13 @@ public static class RouteConflicts
         // уже разложил их по приоритету класса и по слою. Полагаться на него
         // обязательно — спор решается именно очерёдностью, и своя сортировка
         // отвечала бы на вопрос про другой движок.
+        // Реестр блокировок и российские зоны (15.10) — мимо: перечень на
+        // 117 тысяч имён и нижний слой «если ничто не решило» перекрыты всем,
+        // что выше, по замыслу, и спором это не назвать. Владелец: «можно их
+        // просто не высчитывать, как было и до этого».
         var byName = ruleSet.Rules
             .Where(r => r.Enabled && r.Match is MatchKind.Domain or MatchKind.HostList)
+            .Where(r => r.Source != RuleSource.Fallback && !Services.ServiceCatalog.IsBulk(r.Value))
             .Select(rule => (Rule: rule, Zones: Zones(rule).ToList()))
             .Where(pair => pair.Zones.Count > 0)
             .ToList();

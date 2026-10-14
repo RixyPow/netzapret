@@ -773,7 +773,10 @@ public partial class RoutesView : UserControl
 
             // Адресную часть прибить нечем: hosts понимает только имена,
             // а подсеть в него не записать.
-            CanPin = !part.Part.ByAddress,
+            // У большого перечня (реестр блокировок, 15.10) пина быть не может
+            // осмысленно, а сверка пинов со 117 тысячами зон шла бы на каждом
+            // обновлении раздела.
+            CanPin = !part.Part.ByAddress && !part.Part.Bulk,
 
             Explicit = part.Explicit,
             DefaultLabel = part.DescribeDefault(),
