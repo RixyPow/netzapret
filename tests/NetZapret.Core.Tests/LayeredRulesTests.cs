@@ -362,5 +362,12 @@ public sealed class LayeredRulesTests : IDisposable
         Assert.True(ownList < baseName);
         Assert.True(baseName < ip);
         Assert.Equal(baseName, RuleEngine.Tier(MatchKind.HostList, RuleSource.Base));
+
+        // «Прятать VPN» — после своего имени и раньше своих списков (14.10:
+        // checkip.amazonaws.com проигрывал списку Amazon владельца).
+        int setting = RuleEngine.Tier(MatchKind.Domain, RuleSource.Setting);
+
+        Assert.True(ownName < setting);
+        Assert.True(setting < ownList);
     }
 }
