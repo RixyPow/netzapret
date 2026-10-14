@@ -139,9 +139,7 @@ public static class SiteFixer
             {
                 Save(host, RoutingMode.Proxy);
 
-                return new(host, steps, RoutingMode.Proxy, true,
-                    $"{host} открывается только через VPN. Записал маршрут «через VPN» для {RuleValue(host)} — "
-                    + "заработает после перезапуска движков.");
+                return new(host, steps, RoutingMode.Proxy, true, ViaVpnSummary(host, steps));
             }
         }
 
@@ -150,6 +148,25 @@ public static class SiteFixer
         return new(host, steps, null, false,
             $"{host} не открылся ни одним путём ({tried}). Маршрут не менял. "
             + (settings.NeedsProxy ? "Возможно, лежит сам сайт." : "Включите туннель — через VPN он, возможно, откроется."));
+    }
+
+    /// <summary>
+    /// Итог, когда открыл только VPN: что опробовано и чего не пробовали.
+    /// </summary>
+    /// <remarks>
+    /// Стояло «открывается только через VPN» — неправда: рецепты десинка этот
+    /// путь не перебирает вовсе, а у имени «напрямую» не пробует и десинк
+    /// пресета. Владелец 14.10: modrinth.com стоял «напрямую», итог сказал
+    /// «только через VPN», а открылся он своим рецептом medium.
+    /// </remarks>
+    public static string ViaVpnSummary(string host, IReadOnlyList<SiteFixStep> steps)
+    {
+        var failed = steps.Where(s => !s.Works).Select(s => s.Path).ToList();
+
+        return $"{host} не открылся ({string.Join(", ", failed)}), а через VPN открывается. "
+            + $"Записал маршрут «через VPN» для {RuleValue(host)} — заработает после перезапуска движков. "
+            + "Другие рецепты десинка я не пробовал: если хотите без VPN, поставьте сайту «десинк» "
+            + "и выберите рецепт в «Маршрутах».";
     }
 
     /// <summary>

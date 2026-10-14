@@ -28,4 +28,23 @@ public sealed class SiteFixerTests
         Assert.Equal("*.aternos.org", SiteFixer.RuleValue("www.aternos.org"));
         Assert.Equal("*.translate.google.com", SiteFixer.RuleValue("translate.google.com"));
     }
+
+    /// <summary>
+    /// Открыл только VPN — итог называет опробованное и не обещает «только»:
+    /// рецепты десинка не перебирались (14.10 — modrinth.com открылся рецептом medium).
+    /// </summary>
+    [Fact]
+    public void Vpn_summary_does_not_claim_vpn_is_the_only_way()
+    {
+        var text = SiteFixer.ViaVpnSummary("modrinth.com",
+        [
+            new("как есть (напрямую)", false, "DPI по TLS"),
+            new("через VPN", true, "ответ 200"),
+        ]);
+
+        Assert.StartsWith("modrinth.com не открылся (как есть (напрямую)), а через VPN открывается.", text);
+        Assert.Contains("«через VPN» для *.modrinth.com", text);
+        Assert.Contains("рецепты десинка я не пробовал", text);
+        Assert.DoesNotContain("только через VPN", text);
+    }
 }
