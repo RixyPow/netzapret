@@ -202,13 +202,21 @@ public static class OwnLists
             {
                 var label = ListLabelPrefix + NameOf(entry.Value);
 
-                foreach (var host in Names(entry.Value, root).Where(n => n.Contains('.')).Take(perList))
+                // Адреса и подсети — мимо: проверка стучится по имени, а свой
+                // список с 0.16.0 бывает смешанным. 14.10 адреса маршрута
+                // программы repo.exe (82.117.225.0/24) попали в отчёт строками
+                // «нет адреса у имени».
+                foreach (var host in Names(entry.Value, root).Where(n => n.Contains('.') && !IsAddress(n)).Take(perList))
                     targets.Add((host, label));
             }
         }
 
         return targets;
     }
+
+    /// <summary>Адрес или подсеть, а не имя: 82.117.225.0/24, 2a02:e00::1.</summary>
+    private static bool IsAddress(string value) =>
+        System.Net.IPAddress.TryParse(value.Split('/')[0].Trim(), out _);
 
     /// <summary>Удаляет файл своего списка; чужой путь не трогает.</summary>
     public static void Delete(string value, string? root = null)

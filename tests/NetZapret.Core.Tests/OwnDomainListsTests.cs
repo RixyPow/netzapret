@@ -145,6 +145,19 @@ public sealed class OwnDomainListsTests : IDisposable
         return file;
     }
 
+    /// <summary>
+    /// Адреса и подсети из смешанного списка в проверку не идут: она стучится
+    /// по имени (14.10 — адреса маршрута repo.exe в отчёте «нет адреса у имени»).
+    /// </summary>
+    [Fact]
+    public void Addresses_in_an_own_list_are_not_checked()
+    {
+        var file = UserRulesFile.Load(Full("rules.user.yaml"));
+        file.Set(MatchKind.HostList, OwnLists.Create("repo", ["82.117.225.0/24", "94.177.131.7", "2a02:e00::/32", "game.example"], _root), RoutingMode.Proxy);
+
+        Assert.Equal([("game.example", "свой · repo")], OwnLists.CheckTargets(file, perList: 2, _root));
+    }
+
     /// <summary>Комментарии и пустые строки своего списка — не имена.</summary>
     [Fact]
     public void Comments_are_not_names()
