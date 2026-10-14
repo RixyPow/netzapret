@@ -1856,6 +1856,10 @@ public static class BlockCheck
             long? promised = null;
             bool challenged = false;
             bool regionRefusal = false;
+            bool chunked = false;
+
+            // Последние байты потока — узнать конец ответа кусками (LastChunk).
+            var tail = Array.Empty<byte>();
 
             // Длина заголовков считается отдельно: Content-Length обещает
             // только тело, а total растёт с первого байта ответа. Без поправки
@@ -1916,9 +1920,13 @@ public static class BlockCheck
                     regionRefusal = status is >= 300 and < 400
                         && Uri.TryCreate(HeaderValue(buffer, read, "Location"), UriKind.Absolute, out var location)
                         && PinPicker.IsRegionRefusal(location);
+
+                    chunked = HeaderValue(buffer, read, "Transfer-Encoding")?
+                        .Contains("chunked", StringComparison.OrdinalIgnoreCase) == true;
                 }
 
                 total += read;
+                tail = Tail(tail, buffer, read, LastChunk.Length);
 
                 // Тело пришло целиком — дальше ждать нечего.
                 //
@@ -1930,6 +1938,17 @@ public static class BlockCheck
                 // сервером к этому отношения не имеет и зависит от его
                 // настроек, а не от нашей связи.
                 if (promised is { } body && header > 0 && total - header >= body)
+                    break;
+
+                // Ответ кусками закончен последним, пустым куском — длины у него
+                // нет, и прежде проба читала до закрытия соединения. На закрытии
+                // и падала: 14.10 reborder.app (Next.js на Vercel, через туннель)
+                // восемь раз из восьми — «оборвано на 3844 Б: указанные данные
+                // не могут быть расшифрованы», при том что 3844 Б — это весь ответ
+                // (643 Б заголовков, 3179 Б brotli и разметка кусков), а curl,
+                // знающий конец кусков, получал страницу шесть раз из шести.
+                // Вердикт выходил «туннель не доставил» у работающего сайта.
+                if (chunked && tail.AsSpan().SequenceEqual(LastChunk))
                     break;
 
                 // Ответ, которому тело не положено, закончен на заголовках.
@@ -2003,6 +2022,26 @@ public static class BlockCheck
         }
 
         return 0;
+    }
+
+    /// <summary>Последний кусок ответа кусками: пустой кусок без хвостовых заголовков.</summary>
+    /// <remarks>
+    /// Узнаётся по концу потока, а не разбором кусков: тело сжатое и двоичное,
+    /// и эти семь байт посреди него на границе чтения почти невозможны.
+    /// Хвостовые заголовки после пустого куска сайты не шлют; пришли бы —
+    /// проба дочитала бы до закрытия, как раньше.
+    /// </remarks>
+    internal static readonly byte[] LastChunk = "\r\n0\r\n\r\n"u8.ToArray();
+
+    /// <summary>Последние <paramref name="keep"/> байт потока после очередного чтения.</summary>
+    internal static byte[] Tail(byte[] previous, byte[] buffer, int read, int keep)
+    {
+        var joined = new byte[previous.Length + read];
+
+        previous.CopyTo(joined, 0);
+        Array.Copy(buffer, 0, joined, previous.Length, read);
+
+        return joined.Length <= keep ? joined : joined[^keep..];
     }
 
     /// <summary>
