@@ -1084,6 +1084,18 @@ public partial class CheckView : UserControl
                     + Cure(g.First().Host))),
                 (Brush)FindResource("Warn")));
 
+        // Почерки — то, чего одно имя не покажет: байты до обрыва, адрес
+        // из hosts, общий узел у нескольких имён (Signatures, 14.10). Сразу
+        // за итогом: при массовом отказе находка одна, и она отменяет
+        // всё, что ниже.
+        foreach (var finding in Signatures.Find(_reports, ReadHosts()))
+        {
+            sections.Add(new SectionRow(
+                finding.Headline,
+                finding.Describe(),
+                (Brush)FindResource(finding.Calm ? "Muted" : "Warn")));
+        }
+
         if (engine is not null)
         {
             var conflicts = RouteConflicts.Find(engine.RuleSet);
@@ -1348,6 +1360,19 @@ public partial class CheckView : UserControl
         {
             // Подписка могла не ответить, сервер — не подняться. Это незнание,
             // и раздела просто не будет: пустая проверка лучше выдуманной.
+        }
+    }
+
+    /// <summary>Файл hosts целиком; не прочитался — <c>null</c>, и почерк пина не ищется.</summary>
+    private static IReadOnlyDictionary<string, List<System.Net.IPAddress>>? ReadHosts()
+    {
+        try
+        {
+            return HostsFile.Read();
+        }
+        catch (Exception)
+        {
+            return null;
         }
     }
 

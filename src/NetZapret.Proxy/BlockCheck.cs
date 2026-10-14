@@ -248,6 +248,21 @@ public sealed record ProbeOutcome
 
     public string? Detail { get; init; }
 
+    /// <summary>
+    /// Сколько байт ответа пришло, пока стадия шла; у стадий без передачи — <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Полем, а не только словами в <see cref="Detail"/>: по числу узнаётся
+    /// почерк (<see cref="Signatures"/>) — заморозка ТСПУ встаёт на одних
+    /// и тех же 13–20 КБ, медленная страница — где придётся.
+    /// </remarks>
+    public int? Received { get; init; }
+
+    /// <summary>
+    /// Адреса имени, которые молчали, пока другой ответил; у прочих стадий пусто.
+    /// </summary>
+    public IReadOnlyList<string> Silent { get; init; } = [];
+
     public string Describe() => Ok
         ? "ок"
         : Reset ? "RST"
@@ -311,6 +326,16 @@ public sealed record TargetReport
     public DnsSpoofResult Spoof { get; init; } = DnsSpoofResult.Unknown;
 
     public IReadOnlyList<string> Addresses { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Адрес, с которым встало соединение; <c>null</c> — не встало ни с одним.
+    /// </summary>
+    /// <remarks>
+    /// Не первый из <see cref="Addresses"/>: проба перебирает адреса, и закрытый
+    /// узел виден только по тому, на котором она на деле застряла
+    /// (<see cref="Signatures"/>, 14.10 — fandom.com на 172.66.2.166).
+    /// </remarks>
+    public string? Answered { get; init; }
 
     /// <summary>
     /// Замер вправду ушёл в туннель — по адресу, в который разрешилось имя.
@@ -1017,6 +1042,7 @@ public static class BlockCheck
             Spoof = viaTunnel ? DnsSpoofResult.Unknown : await SettleSpoofAsync(host, real, walk.Spoof, cancellationToken),
 
             Addresses = shown,
+            Answered = answered?.ToString(),
             Tunnelled = viaTunnel,
             ExpectedTunnel = throughTunnel,
         };
@@ -1404,6 +1430,7 @@ public static class BlockCheck
                     Detail = silent.Count == 0
                         ? null
                         : $"{address}:{port} ответил; молчали {string.Join(", ", silent)}",
+                    Silent = silent.Select(a => a.ToString()).ToList(),
                 });
             }
             catch (Exception ex)
@@ -1864,6 +1891,7 @@ public static class BlockCheck
                         Detail = promised is { } expected
                             ? $"поток замер на {total} из {expected} Б, тишина {StallWindow.TotalSeconds:0} с"
                             : $"поток замер на {total} Б, тишина {StallWindow.TotalSeconds:0} с",
+                        Received = total,
                     };
                 }
 
@@ -1936,6 +1964,7 @@ public static class BlockCheck
                     : challenged
                         ? "Cloudflare проверяет на робота — связь исправна, браузер проверку пройдёт"
                         : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
+                Received = total,
             };
         }
         catch (Exception ex)
@@ -1949,6 +1978,7 @@ public static class BlockCheck
                 Detail = total > 0
                     ? $"оборвано на {total} Б: {Explain(ex, dialled, 443)}"
                     : Explain(ex, dialled, 443),
+                Received = total,
             };
         }
     }
