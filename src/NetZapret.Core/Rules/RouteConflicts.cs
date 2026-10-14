@@ -75,8 +75,11 @@ public static class RouteConflicts
                     // Первое совпавшее и решает: дальше по списку до этого
                     // имени дело уже не дойдёт, и правило, стоящее третьим,
                     // проигрывает не нам, а второму.
-                    if (byName[winner].Rule.Mode != byName[loser].Rule.Mode)
+                    if (byName[winner].Rule.Mode != byName[loser].Rule.Mode
+                        && !Overrides(byName[winner].Rule, byName[loser].Rule))
+                    {
                         shadowed.Add((zone, byName[winner].Rule));
+                    }
 
                     break;
                 }
@@ -97,6 +100,21 @@ public static class RouteConflicts
 
         return found;
     }
+
+    /// <summary>
+    /// Выбор человека поверх заводского правила на тот же список или домен — не спор.
+    /// </summary>
+    /// <remarks>
+    /// Так и задумано: «Маршруты» пишут свой путь сервису, а заводское правило
+    /// остаётся умолчанием под ним. 14.10 карточка звала спором github.txt
+    /// «через VPN» (выбор владельца) против заводского github.txt «десинк, pass»,
+    /// и рядом с настоящими поломками это приучало раздел пропускать.
+    /// </remarks>
+    private static bool Overrides(RoutingRule winner, RoutingRule loser) =>
+        winner.Source == RuleSource.User
+        && loser.Source == RuleSource.Base
+        && winner.Match == loser.Match
+        && string.Equals(winner.Value.TrimStart('*', '.'), loser.Value.TrimStart('*', '.'), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Зоны, на которые правило распространяется.</summary>
     /// <remarks>

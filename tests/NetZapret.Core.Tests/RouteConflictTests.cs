@@ -222,6 +222,41 @@ public sealed class RouteConflictTests : IDisposable
         Assert.Empty(RouteConflicts.Find(engine.RuleSet));
     }
 
+    /// <summary>
+    /// Свой путь сервиса поверх заводского правила на тот же список — выбор, а не спор
+    /// (14.10: github.txt «через VPN» против заводского «десинк, pass»).
+    /// </summary>
+    [Fact]
+    public void AUserChoiceOverTheSameBaseListIsNotAConflict()
+    {
+        Write("github.txt", "github.com", "githubusercontent.com");
+        Write("chatgpt.txt", "chatgpt.com");
+
+        var engine = LoadLayers("""
+            rules:
+              - match: hostlist
+                value: "config/lists/github.txt"
+                mode: desync
+              - match: domain
+                value: "*.chatgpt.com"
+                mode: proxy
+            default:
+              mode: desync
+            """, file =>
+        {
+            file.Set(MatchKind.HostList, "config/lists/github.txt", RoutingMode.Proxy);
+            file.Set(MatchKind.HostList, "config/lists/chatgpt.txt", RoutingMode.Direct);
+        });
+
+        var conflicts = RouteConflicts.Find(engine.RuleSet);
+
+        // github.txt против github.txt — выбор; chatgpt.txt против заводского
+        // домена — тот самый спор, ради которого раздел заведён.
+        var conflict = Assert.Single(conflicts);
+        Assert.Equal("config/lists/chatgpt.txt", conflict.Winner.Value);
+        Assert.Equal("*.chatgpt.com", conflict.Loser.Value);
+    }
+
     [Fact]
     public void TheShippedRulesDoNotArgueWithThemselves()
     {
