@@ -546,7 +546,11 @@ internal static class SupervisorHost
             ? []
             : TunnelEndpoints.TunAddresses(options.ProxyConfig);
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture, keep);
+        // Виртуальные локалки Радмина и Hamachi — всегда, и без туннеля тоже:
+        // это расшифрованная игра на их адаптере (LocalNetworks.VirtualLans, 14.10).
+        var lans = NetZapret.Core.Rules.LocalNetworks.VirtualLans;
+
+        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture, keep, lans);
 
         // Ширина перехвата (PresetCapture): в журнал — что вышло на деле,
         // а не что выбрано: пресет с полным фильтром уровню не поддаётся.
@@ -557,7 +561,10 @@ internal static class SupervisorHost
                 : "Перехват: у пресета полный фильтр (--wf-raw), уровень не применён.");
         }
 
-        bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff, tun);
+        bool carried = TunnelCapture.Carries(arguments, servers, fakeRange, udpOff, tun, lans);
+
+        if (carried)
+            Console.WriteLine($"Десинк не перехватывает виртуальные локалки Радмина и Hamachi: {string.Join(", ", lans)}.");
 
         if (fakeRange is not null && carried)
             Console.WriteLine($"Десинк не перехватывает трафик в туннель: подменные адреса {fakeRange}.");
@@ -574,7 +581,7 @@ internal static class SupervisorHost
 
         if (servers.Count > 0)
         {
-            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange, udpOff, tun);
+            int skipped = TunnelCapture.Applied(arguments, servers, fakeRange, udpOff, tun, lans);
 
             Console.WriteLine(skipped == 0
                 ? "Серверы туннеля остались в перехвате десинка: у пресета свой --wf-raw-filter файлом."

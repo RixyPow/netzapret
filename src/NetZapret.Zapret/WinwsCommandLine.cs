@@ -91,6 +91,10 @@ public static class WinwsCommandLine
     /// Дыры в щите: имена внутри его зон, которым человек оставил десинк
     /// (<see cref="DefaultKeepListPath"/>). Пустой или <c>null</c> — щит как был.
     /// </param>
+    /// <param name="lans">
+    /// Виртуальные локалки Радмина и Hamachi: десинк их не перехватывает
+    /// (<see cref="TunnelCapture"/>). Без сетей строка остаётся как была.
+    /// </param>
     public static IReadOnlyList<string> Build(
         ZapretPreset preset,
         string? excludeList = null,
@@ -101,7 +105,8 @@ public static class WinwsCommandLine
         IReadOnlyList<string>? udpOff = null,
         IReadOnlyList<IPAddress>? tunAddresses = null,
         Core.CaptureWidth capture = Core.CaptureWidth.Preset,
-        string? keepList = null)
+        string? keepList = null,
+        IReadOnlyList<string>? lans = null)
     {
         var arguments = BuildPreset(preset, excludeList, own, keepList);
 
@@ -110,7 +115,7 @@ public static class WinwsCommandLine
         if (gameFilter)
             GameFilter.Apply(arguments);
 
-        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff, tunAddresses);
+        TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff, tunAddresses, lans);
 
         return arguments;
     }

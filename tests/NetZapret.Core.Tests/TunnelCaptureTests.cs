@@ -318,6 +318,39 @@ public sealed class TunnelCaptureTests
         Assert.False(TunnelCapture.Carries(arguments, [], null, ["185.40.64.0/22"]));
     }
 
+    /// <summary>
+    /// Виртуальные локалки Радмина и Hamachi (14.10): весь трафик к ним и от них,
+    /// соседние 25/8 и 26/8 — одним диапазоном; ключ встаёт и без туннеля.
+    /// </summary>
+    [Fact]
+    public void VirtualLansLeaveTheCapture()
+    {
+        Assert.Equal(
+            "((ip.DstAddr>=25.0.0.0 and ip.DstAddr<=26.255.255.255)"
+            + " or (ip.SrcAddr>=25.0.0.0 and ip.SrcAddr<=26.255.255.255)"
+            + " or (ipv6.DstAddr>=2620:9b:: and ipv6.DstAddr<=2620:9b::ffff:ffff)"
+            + " or (ipv6.SrcAddr>=2620:9b:: and ipv6.SrcAddr<=2620:9b::ffff:ffff) ? false : true)",
+            TunnelCapture.Filter([], null, null, null, LocalNetworks.VirtualLans));
+
+        // Вместе с прочим — сразу после подменных адресов.
+        var all = TunnelCapture.Filter(Servers, "198.18.0.0/15", null, null, LocalNetworks.VirtualLans);
+
+        Assert.StartsWith("((ip.DstAddr>=198.18.0.0 and ip.DstAddr<=198.19.255.255)"
+            + " or (ip.SrcAddr>=198.18.0.0 and ip.SrcAddr<=198.19.255.255)"
+            + " or (ip.DstAddr>=25.0.0.0 ", all);
+        Assert.EndsWith(" or ip.DstAddr=77.1.1.1 or ip.SrcAddr=77.1.1.1"
+            + " or ipv6.DstAddr=2a01:4f8:c0c:1::1 or ipv6.SrcAddr=2a01:4f8:c0c:1::1 ? false : true)", all);
+
+        var arguments = WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), lans: LocalNetworks.VirtualLans);
+
+        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=((ip.DstAddr>=25.0.0.0 ", StringComparison.Ordinal));
+        Assert.True(TunnelCapture.Carries(arguments, [], null, null, null, LocalNetworks.VirtualLans));
+
+        // Без сетей — прежняя строка, знак в знак.
+        Assert.Equal(TunnelCapture.Filter(Servers), TunnelCapture.Filter(Servers, null, null, null, []));
+        Assert.Equal(WinwsCommandLine.Build(WithHead("--wf-tcp-out=443")), WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), lans: []));
+    }
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
     private delegate bool CompileFilter(
         string filter, int layer, byte[] compiled, uint length, out IntPtr error, out uint position);
@@ -358,6 +391,7 @@ public sealed class TunnelCaptureTests
                 "(ip.TTL>1) and " + TunnelCapture.Filter(many),
                 TunnelCapture.Filter(many, "198.18.0.0/15"),
                 TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks()),
+                TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks(), null, LocalNetworks.VirtualLans),
             })
             {
                 bool ok = compile(filter, 0, new byte[65536], 65536, out var error, out uint position);

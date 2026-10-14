@@ -271,6 +271,30 @@ public class RuleEngineTests
         Assert.Equal(RoutingMode.Proxy, engine.Evaluate(Connection(remoteIp: "8.8.8.8")).Mode);
     }
 
+    /// <summary>
+    /// Радмин (26/8) и Hamachi (25/8, 2620:9b::/96) — локальная сеть (14.10):
+    /// это игра по виртуальной локалке, туннелю и десинку там делать нечего.
+    /// </summary>
+    [Theory]
+    [InlineData("26.12.34.56", true)]
+    [InlineData("25.0.0.1", true)]
+    [InlineData("2620:9b::1932:a0b", true)]
+    [InlineData("24.255.255.255", false)]
+    [InlineData("27.0.0.1", false)]
+    [InlineData("2620:9b:0:1::1", false)]
+    [InlineData("2620:9c::1", false)]
+    public void VirtualLansAreLocal(string address, bool local)
+    {
+        Assert.Equal(local, LocalNetworks.IsLocal(System.Net.IPAddress.Parse(address)));
+
+        var engine = RuleSetLoader.Load("""
+            mode: proxy
+            rules: []
+            """);
+
+        Assert.Equal(local ? RoutingMode.Direct : RoutingMode.Proxy, engine.Evaluate(Connection(remoteIp: address)).Mode);
+    }
+
     [Fact]
     public void SelectiveModeDefaultsToDesyncWhenDefaultIsOmitted()
     {

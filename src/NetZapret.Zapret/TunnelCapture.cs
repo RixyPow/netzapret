@@ -47,6 +47,9 @@ public static class TunnelCapture
     /// Вместе с подменными адресами и сетями Riot (30.09, winws2 <c>--wf-save</c>
     /// и тот же WinDivert): Default v1 с game filter принимает 52 адреса
     /// и не принимает 56, V10 — 56.
+    /// С виртуальными локалками (14.10, полный фильтр winws2 <c>--wf-save</c>
+    /// по всем 13 пресетам, с адресами TUN): Default v1 с game filter — 48
+    /// вместо 52, V10 и V11 — 58 вместо 62; при сорока собираются все.
     /// </remarks>
     public const int Limit = 40;
 
@@ -58,14 +61,19 @@ public static class TunnelCapture
     /// Сети, UDP к которым десинку не отдаётся вовсе (<see cref="UdpOffDesync"/>).
     /// </param>
     /// <param name="tun">Адреса нашего TUN: пакеты в туннель и из него.</param>
+    /// <param name="lans">
+    /// Виртуальные локалки Радмина и Hamachi (<c>LocalNetworks.VirtualLans</c>):
+    /// весь трафик к ним и от них.
+    /// </param>
     public static void Apply(
         List<string> arguments,
         IReadOnlyList<IPAddress>? servers,
         string? fakeRange = null,
         IReadOnlyList<string>? udpOff = null,
-        IReadOnlyList<IPAddress>? tun = null)
+        IReadOnlyList<IPAddress>? tun = null,
+        IReadOnlyList<string>? lans = null)
     {
-        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange, udpOff, tun);
+        var filter = Filter((servers ?? []).Take(Limit).ToList(), fakeRange, udpOff, tun, lans);
 
         if (filter.Length == 0)
             return;
@@ -95,8 +103,9 @@ public static class TunnelCapture
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
         IReadOnlyList<string>? udpOff = null,
-        IReadOnlyList<IPAddress>? tun = null) =>
-        Carries(arguments, servers, fakeRange, udpOff, tun) ? Math.Min(servers.Count, Limit) : 0;
+        IReadOnlyList<IPAddress>? tun = null,
+        IReadOnlyList<string>? lans = null) =>
+        Carries(arguments, servers, fakeRange, udpOff, tun, lans) ? Math.Min(servers.Count, Limit) : 0;
 
     /// <summary>Встало ли исключение в строку запуска.</summary>
     /// <remarks>
@@ -108,9 +117,10 @@ public static class TunnelCapture
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
         IReadOnlyList<string>? udpOff = null,
-        IReadOnlyList<IPAddress>? tun = null)
+        IReadOnlyList<IPAddress>? tun = null,
+        IReadOnlyList<string>? lans = null)
     {
-        var filter = Filter(servers.Take(Limit).ToList(), fakeRange, udpOff, tun);
+        var filter = Filter(servers.Take(Limit).ToList(), fakeRange, udpOff, tun, lans);
 
         return filter.Length > 0
             && arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase)
@@ -142,12 +152,19 @@ public static class TunnelCapture
     /// дают 13 диапазонов и 27 проверок вместо 45. Место в фильтре общее
     /// с серверами туннеля (см. <see cref="Limit"/>).
     /// </para>
+    /// <para>
+    /// С виртуальными локалками <paramref name="lans"/> — «не к ним и не от них»,
+    /// любой протокол: это расшифрованная игра на адаптере Радмина или Hamachi
+    /// (14.10). 25/8 и 26/8 соседние и сливаются в один диапазон — четыре
+    /// проверки, вместе с 2620:9b::/96 — восемь, место четырёх адресов.
+    /// </para>
     /// </remarks>
     public static string Filter(
         IReadOnlyList<IPAddress> servers,
         string? fakeRange = null,
         IReadOnlyList<string>? udpOff = null,
-        IReadOnlyList<IPAddress>? tun = null)
+        IReadOnlyList<IPAddress>? tun = null,
+        IReadOnlyList<string>? lans = null)
     {
         var tests = new List<string>();
 
@@ -155,6 +172,14 @@ public static class TunnelCapture
         {
             tests.Add($"(ip.DstAddr>={first} and ip.DstAddr<={last})");
             tests.Add($"(ip.SrcAddr>={first} and ip.SrcAddr<={last})");
+        }
+
+        foreach (var (low, high) in Ranges(lans ?? []))
+        {
+            var field = low.AddressFamily == AddressFamily.InterNetwork ? "ip" : "ipv6";
+
+            tests.Add($"({field}.DstAddr>={low} and {field}.DstAddr<={high})");
+            tests.Add($"({field}.SrcAddr>={low} and {field}.SrcAddr<={high})");
         }
 
         var ranges = Ranges(udpOff ?? []);

@@ -61,8 +61,35 @@ public enum OperatingMode
 public static class LocalNetworks
 {
     /// <summary>
+    /// Сети виртуальных локалок для игр: Radmin VPN — 26.0.0.0/8, Hamachi —
+    /// 25.0.0.0/8 и 2620:9b::/96.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 14.10: функцию Радмина не встраиваем, но и мешать ему не должны.
+    /// Пакеты к этим адресам идут через адаптер Радмина или Hamachi уже
+    /// расшифрованными — это сама игра по «локальной сети». Десинк в них
+    /// вставлял бы подделки, туннелю и правилам там делать нечего.
+    /// </para>
+    /// <para>
+    /// Сети чужие — их «одолжили» у военных ведомств Великобритании и США.
+    /// В ipset-all Flowseal, по которому работает game filter, лежат три куска
+    /// 25/8 (25.25.25.0/24, 25.26.27.0/24, 25.129.196.0/22, сверка 14.10):
+    /// с ним winws2 подделывал бы игру через Hamachi. Откуда они там —
+    /// не выяснено.
+    /// </para>
+    /// <para>
+    /// Сети записаны по общеизвестному, не сняты с адаптера: ни Радмина,
+    /// ни Hamachi у владельца нет. Чем Radmin адресует IPv6, не проверено;
+    /// если это fc00::/7, он и так локальный и winws2 его не берёт.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> VirtualLans { get; } = ["25.0.0.0/8", "26.0.0.0/8", "2620:9b::/96"];
+
+    /// <summary>
     /// Проверяет, относится ли адрес к локальным: loopback, приватные диапазоны
-    /// RFC 1918, link-local, CGNAT, а также их аналоги в IPv6.
+    /// RFC 1918, link-local, CGNAT, виртуальные локалки (<see cref="VirtualLans"/>),
+    /// а также их аналоги в IPv6.
     /// </summary>
     public static bool IsLocal(IPAddress address)
     {
@@ -70,7 +97,7 @@ public static class LocalNetworks
             return true;
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
-            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || IsUniqueLocalV6(address);
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || IsUniqueLocalV6(address) || IsHamachiV6(address);
 
         if (address.AddressFamily != AddressFamily.InterNetwork)
             return false;
@@ -80,6 +107,7 @@ public static class LocalNetworks
         return octets[0] switch
         {
             10 => true,                                     // 10.0.0.0/8
+            25 or 26 => true,                               // Hamachi и Radmin VPN
             127 => true,                                    // 127.0.0.0/8
             169 when octets[1] == 254 => true,              // 169.254.0.0/16 link-local
             172 when octets[1] >= 16 && octets[1] <= 31 => true, // 172.16.0.0/12
@@ -92,4 +120,13 @@ public static class LocalNetworks
     /// <summary>fc00::/7 — unique local addresses.</summary>
     private static bool IsUniqueLocalV6(IPAddress address) =>
         (address.GetAddressBytes()[0] & 0xFE) == 0xFC;
+
+    /// <summary>2620:9b::/96 — Hamachi.</summary>
+    private static bool IsHamachiV6(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+
+        return bytes[0] == 0x26 && bytes[1] == 0x20 && bytes[2] == 0x00 && bytes[3] == 0x9b
+            && bytes[4..12].All(b => b == 0);
+    }
 }
