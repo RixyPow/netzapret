@@ -38,9 +38,7 @@ internal static class ProgramRouteNotice
 
         _offeredAt = DateTime.UtcNow;
 
-        Application.Current?.Dispatcher.BeginInvoke(() =>
-            Application.Current.Windows.OfType<MainWindow>().FirstOrDefault()
-                ?.OfferRestart($"{learned.Program}: в маршрут дописано {learned.Value}"));
+        RestartOffer.Show($"{learned.Program}: в маршрут дописано {learned.Value}");
     }
 
     /// <summary>Включён ли маршрут этого списка.</summary>

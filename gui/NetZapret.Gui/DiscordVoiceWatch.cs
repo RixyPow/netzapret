@@ -19,8 +19,8 @@ namespace NetZapret.Gui;
 /// <para>
 /// Маршруты TUN движок берёт при запуске, поэтому дописанное заработает
 /// после перезапуска. Сам сторож не перезапускает — звонок оборвался бы
-/// посреди разговора: предлагает тем же уведомлением, что и смена маршрута
-/// (<see cref="MainWindow.OfferRestart"/>), и пишет в журнал.
+/// посреди разговора: предлагает (<see cref="RestartOffer"/> — плашкой в окне
+/// или уведомлением от значка в трее, если окна не видно) и пишет в журнал.
 /// </para>
 /// <para>
 /// Правила читаются <see cref="RulesShare.Read"/>, а не <see cref="UserRulesFile.Load"/>:
@@ -65,9 +65,7 @@ internal static class DiscordVoiceWatch
 
                 Journal.Write("голос Discord", $"дописаны сети из журнала Discord: {networks} — заработают после перезапуска движков");
 
-                _ = ui.BeginInvoke(() =>
-                    Application.Current?.Windows.OfType<MainWindow>().FirstOrDefault()
-                        ?.OfferRestart($"Голос Discord: новые адреса серверов — {networks}"));
+                RestartOffer.Show($"Голос Discord: новые адреса серверов — {networks}");
 
                 _lastFailure = null;
             }
