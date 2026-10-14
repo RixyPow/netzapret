@@ -201,14 +201,14 @@ public static class HostsFile
         // сборщик всё равно находил по нему прибитый адрес и заводил его
         // в туннель. Пин при этом был жив: с остановленной программой сайт
         // открывался, с запущенной умирал сразу.
-        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+        var order = RuleOrder.Of(ruleSet);
 
         foreach (var (name, addresses) in hosts)
         {
             if (addresses.Count == 0)
                 continue;
 
-            var mode = FirstMatch(order, name);
+            var mode = order.FirstMatch(name);
 
             if (mode != Core.Rules.RoutingMode.Proxy)
                 continue;
@@ -318,11 +318,14 @@ public static class HostsFile
         bool tunnelUp = true)
     {
         var found = new List<(string Name, DesyncBypass Why)>();
-        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+        var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var order = RuleOrder.Of(ruleSet);
 
+        // Множеством, а не перебором найденного: с реестром «через VPN»
+        // (117 тысяч имён, 15.10) перебор на каждое имя стал бы квадратом.
         void Add(string name, DesyncBypass why)
         {
-            if (!found.Any(each => string.Equals(each.Name, name, StringComparison.OrdinalIgnoreCase)))
+            if (added.Add(name))
                 found.Add((name, why));
         }
 
@@ -348,14 +351,14 @@ public static class HostsFile
         // имя забирает список сайта, стоящий выше и покрывающий ту же зону.
         // Записав такое имя в исключения, мы отменили бы десинк там, где
         // человек его не отменял.
-        foreach (var (mode, domains) in order)
+        foreach (var (mode, domains) in order.Pairs)
         {
             if (mode != Core.Rules.RoutingMode.Direct)
                 continue;
 
             foreach (var domain in domains)
             {
-                if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Direct)
+                if (order.FirstMatch(domain) == Core.Rules.RoutingMode.Direct)
                     Add(domain, DesyncBypass.Direct);
             }
         }
@@ -364,14 +367,14 @@ public static class HostsFile
         // Тем же порядком и с той же оговоркой: имя достаётся тому правилу,
         // до которого очередь доходит раньше, и «через VPN», перекрытое
         // десинком выше, остаётся десинку.
-        foreach (var (mode, domains) in order)
+        foreach (var (mode, domains) in order.Pairs)
         {
             if (mode != Core.Rules.RoutingMode.Proxy)
                 continue;
 
             foreach (var domain in domains)
             {
-                if (FirstMatch(order, domain) == Core.Rules.RoutingMode.Proxy)
+                if (order.FirstMatch(domain) == Core.Rules.RoutingMode.Proxy)
                     Add(domain, tunnelUp ? DesyncBypass.Tunnel : DesyncBypass.VpnWithoutTunnel);
             }
         }
@@ -437,34 +440,47 @@ public static class HostsFile
         Core.Rules.RuleSet ruleSet,
         IReadOnlyList<(string Name, DesyncBypass Why)> exclusions)
     {
-        var order = ruleSet.Rules.Select(r => (r.Mode, Domains: DomainsOf(r).ToList())).ToList();
+        var order = RuleOrder.Of(ruleSet);
         var holes = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var (mode, domains) in order)
+        // Множествами, а не перебором исключений на каждое имя: с российскими
+        // зонами в щите дырами становятся десятки тысяч имён реестра (15.10).
+        var pins = exclusions.Where(each => each.Why == DesyncBypass.Pin)
+            .Select(each => each.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var shield = exclusions.Select(each => each.Name.TrimStart('*', '.'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (mode, domains) in order.Pairs)
         {
             if (mode != Core.Rules.RoutingMode.Desync)
                 continue;
 
             foreach (var domain in domains)
             {
-                if (FirstMatch(order, domain) != Core.Rules.RoutingMode.Desync)
+                if (order.FirstMatch(domain) != Core.Rules.RoutingMode.Desync || pins.Contains(domain))
                     continue;
 
-                if (exclusions.Any(each => each.Why == DesyncBypass.Pin
-                        && string.Equals(each.Name, domain, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                bool inside = exclusions.Any(each =>
-                    domain.EndsWith("." + each.Name.TrimStart('*', '.'), StringComparison.OrdinalIgnoreCase));
-
-                if (inside && !holes.Contains(domain, StringComparer.OrdinalIgnoreCase))
+                if (InsideAny(shield, domain) && seen.Add(domain))
                     holes.Add(domain);
             }
         }
 
         return holes;
+    }
+
+    /// <summary>Лежит ли имя строго внутри одной из зон: её хвост после точки.</summary>
+    private static bool InsideAny(HashSet<string> zones, string name)
+    {
+        for (int dot = name.IndexOf('.'); dot >= 0; dot = name.IndexOf('.', dot + 1))
+        {
+            if (zones.Contains(name[(dot + 1)..]))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Покрывает ли запись списка имя: сама она или её поддомен.</summary>
@@ -491,33 +507,41 @@ public static class HostsFile
     };
 
     /// <summary>
-    /// Режим первого правила, покрывающего имя; <c>null</c> — ни одного.
+    /// Правила по порядку вычисления: имена каждого и первое совпадение по зоне.
     /// </summary>
     /// <remarks>
     /// Повторяет порядок вычисления движка: правила проверяются сверху вниз,
     /// решает первое совпавшее, остальные не смотрятся вовсе. Сравнение
     /// по зоне — запись <c>openai.com</c> покрывает <c>api.openai.com</c>,
-    /// как и в самих списках.
+    /// как и в самих списках. Поиск — словарём зон (<see cref="Core.Rules.ZoneIndex"/>):
+    /// прежний перебор всех зон всех правил на каждое имя с реестром блокировок
+    /// (15.10) стал бы миллиардами сравнений на каждый запуск движков.
     /// </remarks>
-    private static Core.Rules.RoutingMode? FirstMatch(
-        IReadOnlyList<(Core.Rules.RoutingMode Mode, List<string> Domains)> order,
-        string name)
+    private sealed class RuleOrder
     {
-        foreach (var (mode, domains) in order)
-        {
-            foreach (var domain in domains)
-            {
-                var zone = domain.TrimStart('*', '.');
+        private readonly IReadOnlyList<Core.Rules.RoutingMode> _modes;
+        private readonly Core.Rules.ZoneIndex _index;
 
-                if (string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
-                    || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase))
-                {
-                    return mode;
-                }
-            }
+        private RuleOrder(IReadOnlyList<(Core.Rules.RoutingMode Mode, List<string> Domains)> pairs)
+        {
+            Pairs = pairs;
+            _modes = pairs.Select(p => p.Mode).ToList();
+            _index = new Core.Rules.ZoneIndex(pairs.Select(p => p.Domains));
         }
 
-        return null;
+        /// <summary>Режим и имена каждого правила — по порядку.</summary>
+        public IReadOnlyList<(Core.Rules.RoutingMode Mode, List<string> Domains)> Pairs { get; }
+
+        public static RuleOrder Of(Core.Rules.RuleSet ruleSet) =>
+            new([.. ruleSet.Rules.Select(r => (r.Mode, DomainsOf(r).ToList()))]);
+
+        /// <summary>Режим первого правила, покрывающего имя; <c>null</c> — ни одного.</summary>
+        public Core.Rules.RoutingMode? FirstMatch(string name)
+        {
+            int at = _index.First(name);
+
+            return at < 0 ? null : _modes[at];
+        }
     }
 
     /// <summary>Несколько имён для примера и хвост числом.</summary>
