@@ -322,6 +322,23 @@ public sealed class RoutingRule
 
         HostListDomains = domains;
 
+        // Тот же список — то же множество: движков в окне несколько
+        // («Маршруты», «Наблюдение», проверка блокировок), и у каждого было
+        // своё множество зон реестра на 117 тысяч имён. Замер 15.10: движок
+        // с развёрнутыми списками — 10 МБ. Список из HostListReader один
+        // на файл, пока тот не изменился, а множество только читается —
+        // делить его между потоками безопасно.
+        var compiled = CompiledLists.GetValue(domains, CompileList);
+        _hostZones = compiled.Zones;
+        _hostGlobs = compiled.Globs;
+    }
+
+    private sealed record CompiledList(HashSet<string> Zones, IReadOnlyList<GlobMatcher> Globs);
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<string>, CompiledList> CompiledLists = new();
+
+    private static CompiledList CompileList(IReadOnlyList<string> domains)
+    {
         // Обычная запись — зона без звёздочек внутри — ищется по множеству,
         // а не своим выражением. Прежде у каждой записи было своё Regex,
         // и имя прогонялось через все подряд: замер 24.09 — открытие
@@ -348,8 +365,7 @@ public sealed class RoutingRule
                 globs.Add(GlobMatcher.Compile(trimmed.StartsWith("*.", StringComparison.Ordinal) ? trimmed : "*." + trimmed));
         }
 
-        _hostZones = zones;
-        _hostGlobs = globs;
+        return new CompiledList(zones, globs);
     }
 
     /// <summary>Само имя или любой его хвост после точки — в множестве зон.</summary>

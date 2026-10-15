@@ -39,6 +39,34 @@ public static class HostListReader
             return found;
         }
 
+        // Прочитанный и не изменившийся с тех пор файл — тот же список, а не
+        // копия: правила, щит, подписи «Маршрутов» и «Наблюдение» читают одни
+        // и те же файлы, и реестр блокировок (117 тысяч имён) лежал в окне
+        // копией на каждого — замер 15.10: 7 МБ за чтение. С одним экземпляром
+        // и множество зон у правил одно (RoutingRule.LoadHostList).
+        FileInfo info;
+        try
+        {
+            info = new FileInfo(full);
+            info.Refresh();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            issues.Add($"{path}: {ex.Message}");
+            return found;
+        }
+
+        var key = Path.GetFullPath(full);
+
+        if (Kept.TryGetValue(key, out var kept) && kept.Written == info.LastWriteTimeUtc && kept.Length == info.Length
+            && kept.Names.TryGetTarget(out var shared))
+        {
+            if (shared.Length == 0)
+                issues.Add($"{path}: список пуст");
+
+            return shared;
+        }
+
         string[] lines;
         try
         {
@@ -70,8 +98,30 @@ public static class HostListReader
         if (found.Count == 0)
             issues.Add($"{path}: список пуст");
 
-        return found;
+        var names = found.ToArray();
+
+        // Только что записанный файл не запоминается: две записи подряд могут
+        // лечь в одну отметку времени при той же длине, и вторая читалась бы
+        // как первая. Свой список, правленный окном, перечитается и так.
+        if (DateTime.UtcNow - info.LastWriteTimeUtc > TimeSpan.FromSeconds(2))
+            Kept[key] = new KeptList(info.LastWriteTimeUtc, info.Length, new WeakReference<string[]>(names));
+
+        return names;
     }
+
+    /// <summary>
+    /// Прочитанный файл: когда он был записан, сколько весил и что в нём.
+    /// </summary>
+    /// <remarks>
+    /// Список — слабой ссылкой: один на всех, пока он кому-то нужен, и не
+    /// держится, когда не нужен никому. Окно в трее с 15.10 закрывается
+    /// по-настоящему, и сильная ссылка оставила бы за процессом реестр
+    /// блокировок с его множествами (~25 МБ, замер того же дня) навсегда.
+    /// </remarks>
+    private sealed record KeptList(DateTime Written, long Length, WeakReference<string[]> Names);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, KeptList> Kept =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Разрешает путь: сперва относительно корня Zapret, затем как есть.
