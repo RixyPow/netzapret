@@ -38,6 +38,19 @@
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Всё здесь применяется при следующем запуске движков. Подписки и серверы остались на вкладке «VPN»." />
 
+            <Border Style="{StaticResource SettingsGroup}" Margin="0,16,0,0">
+                <Grid Margin="16,13">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Margin="0,0,12,0">
+                        <TextBlock Text="Перечитывать подписку, если нет живых серверов" TextWrapping="Wrap" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Text="Только после штатного поиска ExitWatch. Не чаще раза в 30 минут, одна подписка за попытку. Изменённый список применяется через обычное предложение перезапуска, не автоматически. Без дополнительного перебора и порога пинга." />
+                    </StackPanel>
+                    <ToggleButton Grid.Column="1" x:Name="RefreshNoLive" Style="{StaticResource Switch}"
+                                  Click="OnRefreshNoLive" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
             <TextBlock Text="КУДА ИДЁТ ТРАФИК" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
 
             <Border Style="{StaticResource SettingsGroup}">
