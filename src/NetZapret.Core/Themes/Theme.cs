@@ -121,19 +121,23 @@ public sealed record ThemeBackground
     public double Blur { get; init; } = 24;
 
     /// <summary>
-    /// Точка картинки, которая встаёт в середину колонки «Главной», по ширине:
-    /// 0 — левый край, 1 — правый (<see cref="SideArtLayout"/>).
+    /// Где на «Главной» середина картинки, долей ширины страницы; <c>null</c> —
+    /// как прежде, по середине колонки арта (<see cref="SideArtLayout"/>).
     /// </summary>
     /// <remarks>
-    /// Владелец 15.10 («двигать фото для главной»): колонка ставила в свою
-    /// середину середину картинки, и персонаж, стоящий правее, — мечник
-    /// в одноимённой теме — уходил под карточки.
+    /// Владелец 15.10: «сделай миниатюру главной и дай возможность разместить
+    /// там фон, всё остальное заливается градиентом». Картинка кладётся
+    /// в редакторе тем куда угодно и любого размера; что она не закрывает —
+    /// градиент из фона окна в цвет картинки.
     /// </remarks>
-    public double FocusX { get; init; } = 0.5;
+    public double? HomeX { get; init; }
 
-    /// <summary>То же по высоте: 0 — верх, 1 — низ.</summary>
-    public double FocusY { get; init; } = 0.5;
+    /// <summary>Где середина картинки по высоте, долей высоты страницы.</summary>
+    public double? HomeY { get; init; }
 
-    /// <summary>Увеличение картинки в колонке «Главной», от 1 до <see cref="SideArtLayout.MaxZoom"/>.</summary>
-    public double Zoom { get; init; } = 1;
+    /// <summary>Высота картинки долей высоты страницы.</summary>
+    public double? HomeSize { get; init; }
+
+    /// <summary>Картинка на «Главной» уложена руками.</summary>
+    public bool HomePlaced => HomeX is not null && HomeY is not null && HomeSize is not null;
 }

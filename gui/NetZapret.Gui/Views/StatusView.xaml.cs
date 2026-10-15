@@ -137,6 +137,7 @@ public partial class StatusView : UserControl
         if (art is not { } content || width <= 0 || height <= 0 || content.Size.Height <= 0 || content.Size.Width <= 0)
         {
             Art.Fill = null;
+            ArtGround.Fill = null;
             ArtShade.Fill = null;
             return;
         }
@@ -147,13 +148,14 @@ public partial class StatusView : UserControl
         bool side = column >= ArtColumnMin;
         double centre = side ? width - column / 2 : width / 2;
 
-        // В середину колонки — выбранная в редакторе точка картинки, с выбранным
-        // увеличением (владелец 15.10); без выбора — её середина, как прежде.
-        var (left, top, w, h) = SideArtLayout.Place(
-            width, height, centre, aspect,
-            TryFindResource("SideArtFocusX") is double fx ? fx : 0.5,
-            TryFindResource("SideArtFocusY") is double fy ? fy : 0.5,
-            TryFindResource("SideArtZoom") is double zoom ? zoom : 1);
+        // Уложенная руками на миниатюре в редакторе тем (владелец 15.10) —
+        // где положили, а под ней градиент; иначе как прежде: по высоте
+        // страницы, середина — посередине колонки.
+        var placement = TryFindResource(HomePlacement.Key) as HomePlacement;
+
+        var (left, top, w, h) = placement is { } placed
+            ? SideArtLayout.Place(width, height, aspect, placed.X, placed.Y, placed.Size)
+            : SideArtLayout.Fit(width, height, centre, aspect);
 
         var fill = content.Make();
         fill.Stretch = Stretch.Fill;
@@ -161,6 +163,16 @@ public partial class StatusView : UserControl
         fill.ViewportUnits = BrushMappingMode.Absolute;
         fill.Viewport = new Rect(left, top, w, h);
         Art.Fill = fill;
+
+        if (placement is not null)
+        {
+            ArtGround.Fill = TryFindResource(HomePlacement.GroundKey) as Brush;
+            Art.OpacityMask = HomePlacement.Feather(new Rect(left, top, w, h));
+            Shade(width, column, side);
+            return;
+        }
+
+        ArtGround.Fill = null;
 
         // Левый край картинки — в подложку, без черты. Растворение кончается
         // до колонки с артом (не позже 80 % пути от края картинки до неё),
@@ -183,6 +195,12 @@ public partial class StatusView : UserControl
                 },
             };
 
+        Shade(width, column, side);
+    }
+
+    /// <summary>Затемнение поверх арта: плотное под карточками, лёгкое в колонке.</summary>
+    private void Shade(double width, double column, bool side)
+    {
         var backdrop = TryFindResource("BackdropColor") is Color c ? c : Colors.Black;
         double dim = TryFindResource("BackdropDim") is double d ? d : 1.0;
 

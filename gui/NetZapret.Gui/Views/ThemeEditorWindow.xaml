@@ -134,40 +134,31 @@
                             </Grid>
 
                             <!--
-                                Картинка на «Главной» (владелец 15.10: «двигать фото для
-                                главной»): точка центра — щелчком или протяжкой по картинке,
-                                увеличение — ползунком. Справа — что попадёт в колонку
-                                (SideArtLayout, тот же расчёт, что у «Главной»).
+                                Картинка на «Главной» (владелец 15.10: «сделай миниатюру главной
+                                и дай возможность разместить там фон, всё остальное заливается
+                                градиентом»). Миниатюра рисуется тем же расчётом, что «Главная»
+                                (SideArtLayout, HomePlacement): тянуть — двигать, колесо или
+                                ползунок — размер.
                             -->
                             <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,14" />
 
                             <TextBlock Text="Картинка на «Главной»" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                       Text="Щёлкните или потяните по картинке — эта точка встанет в середину колонки справа на «Главной». Рядом — что в колонку попадёт." />
+                                       Text="Тяните картинку по миниатюре «Главной», колесом или ползунком — размер. Что картинка не закрывает, зальётся градиентом из фона окна в её цвет." />
 
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Grid x:Name="FocusPad" HorizontalAlignment="Left" VerticalAlignment="Top"
-                                      Cursor="Cross" Background="Transparent"
-                                      MouseLeftButtonDown="OnFocusDown" MouseMove="OnFocusMove" MouseLeftButtonUp="OnFocusUp">
-                                    <Image x:Name="FocusImage" Stretch="Uniform" MaxHeight="220"
-                                           HorizontalAlignment="Left" VerticalAlignment="Top"
-                                           RenderOptions.BitmapScalingMode="HighQuality" />
-                                    <Canvas IsHitTestVisible="False">
-                                        <Ellipse x:Name="FocusMark" Width="20" Height="20"
-                                                 Stroke="White" StrokeThickness="2" Fill="#55000000" />
-                                    </Canvas>
+                            <Border x:Name="HomeMini" Width="480" Height="307" Margin="0,10,0,0"
+                                    HorizontalAlignment="Left" CornerRadius="10" ClipToBounds="True"
+                                    BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                    Background="{DynamicResource Backdrop}" Cursor="SizeAll"
+                                    MouseLeftButtonDown="OnMiniDown" MouseMove="OnMiniMove"
+                                    MouseLeftButtonUp="OnMiniUp" MouseWheel="OnMiniWheel">
+                                <Grid>
+                                    <Rectangle x:Name="MiniGround" />
+                                    <Rectangle x:Name="MiniArt" />
+                                    <Rectangle x:Name="MiniShade" />
+                                    <Canvas x:Name="MiniCards" IsHitTestVisible="False" />
                                 </Grid>
-
-                                <Border Grid.Column="1" x:Name="ColumnPreview" Width="110" Height="220"
-                                        Margin="16,0,0,0" CornerRadius="10" ClipToBounds="True"
-                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
-                                        ToolTip="Колонка справа на «Главной»" />
-                            </Grid>
+                            </Border>
 
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
@@ -175,16 +166,15 @@
                                     <ColumnDefinition Width="200" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Увеличение" VerticalAlignment="Center" />
-                                <Slider Grid.Column="1" x:Name="ZoomSlider" Minimum="1" Maximum="3"
-                                        TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center"
-                                        ValueChanged="OnZoom" />
-                                <TextBlock Grid.Column="2" x:Name="ZoomText" Style="{StaticResource Mono}"
-                                           Width="44" TextAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock Text="Размер" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" x:Name="SizeSlider" Minimum="0.2" Maximum="3"
+                                        VerticalAlignment="Center" ValueChanged="OnSize" />
+                                <TextBlock Grid.Column="2" x:Name="SizeText" Style="{StaticResource Mono}"
+                                           Width="52" TextAlignment="Right" VerticalAlignment="Center" />
                             </Grid>
 
-                            <Button Style="{StaticResource Ghost}" Content="Как было: середина, без увеличения"
-                                    HorizontalAlignment="Left" Margin="0,10,0,0" Click="OnFocusReset" />
+                            <Button Style="{StaticResource Ghost}" Content="Как было: по высоте, посередине колонки"
+                                    HorizontalAlignment="Left" Margin="0,10,0,0" Click="OnHomeReset" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

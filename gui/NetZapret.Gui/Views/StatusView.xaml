@@ -76,6 +76,8 @@
             зависит от ширины колонок. Не прокручивается — это фон.
         -->
         <Grid x:Name="ArtLayer" Grid.ColumnSpan="2" IsHitTestVisible="False" SizeChanged="OnArtSize">
+            <!-- Градиент под картинкой, уложенной руками (HomePlacement, 15.10). -->
+            <Rectangle x:Name="ArtGround" />
             <Rectangle x:Name="Art" />
             <Rectangle x:Name="ArtShade" />
         </Grid>

@@ -275,10 +275,13 @@ public static class Themes
 
             dictionary["BackdropDim"] = dim;
 
-            // Точка центра и увеличение арта на «Главной» (SideArtLayout, 15.10).
-            dictionary["SideArtFocusX"] = background.FocusX;
-            dictionary["SideArtFocusY"] = background.FocusY;
-            dictionary["SideArtZoom"] = background.Zoom;
+            // Картинка на «Главной», уложенная руками, и градиент под ней
+            // (SideArtLayout, владелец 15.10: «всё остальное заливается градиентом»).
+            if (background.HomePlaced)
+            {
+                dictionary[HomePlacement.Key] = new HomePlacement(background.HomeX!.Value, background.HomeY!.Value, background.HomeSize!.Value);
+                dictionary[HomePlacement.GroundKey] = Frozen(HomePlacement.Ground(sample, theme[ThemeSlots.Backdrop]));
+            }
 
             // Разделы прозрачные: под ними тот же фон, что под всем окном
             // (владелец, 23.09: «давай попробуем и под боковым меню»).

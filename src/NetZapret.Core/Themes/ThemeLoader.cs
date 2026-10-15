@@ -211,22 +211,22 @@ public static class ThemeLoader
             if (blur is < 0 or > 80)
                 problems.Add($"размытие фона {blur} — нужно число от 0 до 80");
 
-            // Точка центра и увеличение арта на «Главной» (15.10).
-            double focusX = 0.5, focusY = 0.5;
+            // Картинка на «Главной», уложенная руками (15.10).
+            double? homeX = null, homeY = null, homeSize = null;
 
-            if (bg.TryGetProperty("focus", out var focus) && focus.ValueKind == JsonValueKind.Object)
+            if (bg.TryGetProperty("home", out var home) && home.ValueKind == JsonValueKind.Object)
             {
-                focusX = Number(focus, "x") ?? 0.5;
-                focusY = Number(focus, "y") ?? 0.5;
+                homeX = Number(home, "x");
+                homeY = Number(home, "y");
+                homeSize = Number(home, "size");
 
-                if (focusX is < 0 or > 1 || focusY is < 0 or > 1)
-                    problems.Add($"точка центра фона {focusX}, {focusY} — нужны числа от 0 до 1");
+                if (homeX is null || homeY is null || homeSize is null)
+                    problems.Add("картинка на «Главной» — нужны x, y и size");
+                else if (homeX is < 0 or > 1 || homeY is < 0 or > 1)
+                    problems.Add($"середина картинки на «Главной» {homeX}, {homeY} — нужны числа от 0 до 1");
+                else if (homeSize is < SideArtLayout.MinSize or > SideArtLayout.MaxSize)
+                    problems.Add($"размер картинки на «Главной» {homeSize} — нужно от {SideArtLayout.MinSize} до {SideArtLayout.MaxSize}");
             }
-
-            double zoom = Number(bg, "zoom") ?? 1;
-
-            if (zoom is < 1 or > SideArtLayout.MaxZoom)
-                problems.Add($"увеличение фона {zoom} — нужно число от 1 до {SideArtLayout.MaxZoom}");
 
             if (image is not null)
             {
@@ -236,9 +236,9 @@ public static class ThemeLoader
                     Fit = fit,
                     Dim = Math.Clamp(dim, 0, 1),
                     Blur = Math.Clamp(blur, 0, 80),
-                    FocusX = Math.Clamp(focusX, 0, 1),
-                    FocusY = Math.Clamp(focusY, 0, 1),
-                    Zoom = Math.Clamp(zoom, 1, SideArtLayout.MaxZoom),
+                    HomeX = homeX is { } x ? Math.Clamp(x, 0, 1) : null,
+                    HomeY = homeY is { } y ? Math.Clamp(y, 0, 1) : null,
+                    HomeSize = homeSize is { } size ? Math.Clamp(size, SideArtLayout.MinSize, SideArtLayout.MaxSize) : null,
                 };
             }
         }

@@ -31,13 +31,12 @@ public sealed record ThemeDraft
 
     public double Blur { get; init; } = 24;
 
-    /// <summary>Точка центра арта на «Главной» (<see cref="ThemeBackground.FocusX"/>).</summary>
-    public double FocusX { get; init; } = 0.5;
+    /// <summary>Картинка на «Главной», уложенная руками (<see cref="ThemeBackground.HomeX"/>); <c>null</c> — как прежде.</summary>
+    public double? HomeX { get; init; }
 
-    public double FocusY { get; init; } = 0.5;
+    public double? HomeY { get; init; }
 
-    /// <summary>Увеличение арта на «Главной» (<see cref="ThemeBackground.Zoom"/>).</summary>
-    public double Zoom { get; init; } = 1;
+    public double? HomeSize { get; init; }
 
     /// <summary>
     /// «Главная» на всю ширину с этой темой (<see cref="Theme.HomeFullWidth"/>).
@@ -131,12 +130,9 @@ public static class ThemeWriter
                 ["blur"] = Math.Round(draft.Blur),
             };
 
-            // Только если сдвинуто: тема без них читается по-старому, середина и 1.
-            if (Math.Abs(draft.FocusX - 0.5) > 0.005 || Math.Abs(draft.FocusY - 0.5) > 0.005)
-                background["focus"] = new JsonObject { ["x"] = Math.Round(draft.FocusX, 3), ["y"] = Math.Round(draft.FocusY, 3) };
-
-            if (draft.Zoom > 1.005)
-                background["zoom"] = Math.Round(draft.Zoom, 2);
+            // Только если уложена руками: без этого «Главная» раскладывает как прежде.
+            if (draft.HomeX is { } x && draft.HomeY is { } y && draft.HomeSize is { } size)
+                background["home"] = new JsonObject { ["x"] = Math.Round(x, 3), ["y"] = Math.Round(y, 3), ["size"] = Math.Round(size, 3) };
 
             json["background"] = background;
         }
