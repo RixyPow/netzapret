@@ -166,6 +166,32 @@ public sealed class ThemeLoaderTests : IDisposable
         Assert.Equal(30, background.Blur);
         Assert.EndsWith("wall.jpg", background.Image);
         Assert.False(background.IsVideo);
+
+        // Без точки центра — середина и без увеличения, как до 15.10.
+        Assert.Equal(0.5, background.FocusX);
+        Assert.Equal(0.5, background.FocusY);
+        Assert.Equal(1, background.Zoom);
+    }
+
+    /// <summary>Точка центра и увеличение арта на «Главной» (15.10); за пределами — замечание.</summary>
+    [Fact]
+    public void TheFocusAndZoomAreReadAndChecked()
+    {
+        var load = Write("focus", """
+            { "base": "dark", "background": { "image": "wall.jpg", "focus": { "x": 0.65, "y": 0.3 }, "zoom": 1.8 } }
+            """, ("wall.jpg", 16));
+
+        Assert.True(load.Ok, string.Join("; ", load.Problems));
+        Assert.Equal(0.65, load.Theme!.Background!.FocusX);
+        Assert.Equal(0.3, load.Theme.Background.FocusY);
+        Assert.Equal(1.8, load.Theme.Background.Zoom);
+
+        var wrong = Write("wrong", """
+            { "base": "dark", "background": { "image": "wall.jpg", "focus": { "x": 1.5, "y": 0.3 }, "zoom": 9 } }
+            """, ("wall.jpg", 16));
+
+        Assert.Contains(wrong.Problems, p => p.Contains("точка центра"));
+        Assert.Contains(wrong.Problems, p => p.Contains("увеличение"));
     }
 
     /// <summary>

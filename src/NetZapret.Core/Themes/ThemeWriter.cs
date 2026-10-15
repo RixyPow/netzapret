@@ -31,6 +31,14 @@ public sealed record ThemeDraft
 
     public double Blur { get; init; } = 24;
 
+    /// <summary>Точка центра арта на «Главной» (<see cref="ThemeBackground.FocusX"/>).</summary>
+    public double FocusX { get; init; } = 0.5;
+
+    public double FocusY { get; init; } = 0.5;
+
+    /// <summary>Увеличение арта на «Главной» (<see cref="ThemeBackground.Zoom"/>).</summary>
+    public double Zoom { get; init; } = 1;
+
     /// <summary>
     /// «Главная» на всю ширину с этой темой (<see cref="Theme.HomeFullWidth"/>).
     /// </summary>
@@ -115,13 +123,22 @@ public static class ThemeWriter
                 File.Copy(source, copy, overwrite: true);
             }
 
-            json["background"] = new JsonObject
+            var background = new JsonObject
             {
                 ["image"] = name,
                 ["fit"] = draft.Fit.ToString().ToLowerInvariant(),
                 ["dim"] = Math.Round(draft.Dim, 2),
                 ["blur"] = Math.Round(draft.Blur),
             };
+
+            // Только если сдвинуто: тема без них читается по-старому, середина и 1.
+            if (Math.Abs(draft.FocusX - 0.5) > 0.005 || Math.Abs(draft.FocusY - 0.5) > 0.005)
+                background["focus"] = new JsonObject { ["x"] = Math.Round(draft.FocusX, 3), ["y"] = Math.Round(draft.FocusY, 3) };
+
+            if (draft.Zoom > 1.005)
+                background["zoom"] = Math.Round(draft.Zoom, 2);
+
+            json["background"] = background;
         }
         else
         {

@@ -211,8 +211,36 @@ public static class ThemeLoader
             if (blur is < 0 or > 80)
                 problems.Add($"размытие фона {blur} — нужно число от 0 до 80");
 
+            // Точка центра и увеличение арта на «Главной» (15.10).
+            double focusX = 0.5, focusY = 0.5;
+
+            if (bg.TryGetProperty("focus", out var focus) && focus.ValueKind == JsonValueKind.Object)
+            {
+                focusX = Number(focus, "x") ?? 0.5;
+                focusY = Number(focus, "y") ?? 0.5;
+
+                if (focusX is < 0 or > 1 || focusY is < 0 or > 1)
+                    problems.Add($"точка центра фона {focusX}, {focusY} — нужны числа от 0 до 1");
+            }
+
+            double zoom = Number(bg, "zoom") ?? 1;
+
+            if (zoom is < 1 or > SideArtLayout.MaxZoom)
+                problems.Add($"увеличение фона {zoom} — нужно число от 1 до {SideArtLayout.MaxZoom}");
+
             if (image is not null)
-                background = new ThemeBackground { Image = image, Fit = fit, Dim = Math.Clamp(dim, 0, 1), Blur = Math.Clamp(blur, 0, 80) };
+            {
+                background = new ThemeBackground
+                {
+                    Image = image,
+                    Fit = fit,
+                    Dim = Math.Clamp(dim, 0, 1),
+                    Blur = Math.Clamp(blur, 0, 80),
+                    FocusX = Math.Clamp(focusX, 0, 1),
+                    FocusY = Math.Clamp(focusY, 0, 1),
+                    Zoom = Math.Clamp(zoom, 1, SideArtLayout.MaxZoom),
+                };
+            }
         }
 
         if (problems.Count > 0 && colors.Count < ThemeSlots.All.Count)

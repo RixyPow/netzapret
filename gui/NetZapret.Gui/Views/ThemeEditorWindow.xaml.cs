@@ -2,7 +2,10 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using NetZapret.Core;
 using NetZapret.Core.Themes;
@@ -71,6 +74,19 @@ public partial class ThemeEditorWindow : Window
     private readonly bool _editingWasFine;
     private string? _image;
     private bool _ready;
+
+    // Арт на «Главной»: точка центра и увеличение (SideArtLayout, 15.10).
+    private double _focusX = 0.5, _focusY = 0.5, _zoom = 1;
+    private bool _dragging;
+
+    /// <summary>Картинка для превью точки центра; у видео — его кадр.</summary>
+    private BitmapSource? _poster;
+
+    /// <summary>
+    /// Применить на окне — не на каждое движение мыши: сборка темы считает
+    /// стекло (размытие всей картинки), и протяжка точки им захлебнулась бы.
+    /// </summary>
+    private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private bool _saved;
 
     /// <summary>Тема, которую записали и применили; <c>null</c> — отменили.</summary>
@@ -91,6 +107,16 @@ public partial class ThemeEditorWindow : Window
         _editingWasFine = editing is not null && ThemeLoader.Load(editing).Ok;
         _colors = ThemeSlots.All.ToDictionary(s => s, s => from[s] with { A = s == ThemeSlots.Surface ? from[s].A : (byte)255 });
         _image = from.Background?.Image;
+        _focusX = from.Background?.FocusX ?? 0.5;
+        _focusY = from.Background?.FocusY ?? 0.5;
+        _zoom = from.Background?.Zoom ?? 1;
+        // Метка ставится по размеру разложенной картинки — до показа окна его нет.
+        FocusImage.SizeChanged += (_, _) => ShowFocus();
+        _settle.Tick += (_, _) =>
+        {
+            _settle.Stop();
+            Changed();
+        };
 
         Heading.Text = editing is null ? "Своя тема" : $"Правка темы «{from.Name}»";
         Title = Heading.Text;
@@ -160,6 +186,9 @@ public partial class ThemeEditorWindow : Window
                 Fit = (BackgroundFit)Math.Max(0, FitChoice.SelectedIndex),
                 Dim = Dims[Math.Max(0, DimChoice.SelectedIndex)],
                 Blur = Blurs[Math.Max(0, BlurChoice.SelectedIndex)],
+                FocusX = _focusX,
+                FocusY = _focusY,
+                Zoom = _zoom,
             },
         HomeFullWidth = _from.HomeFullWidth,
     };
@@ -202,6 +231,124 @@ public partial class ThemeEditorWindow : Window
         ImageName.Text = _image is null ? "нет — фон сплошной, цветом «Фон окна»" : Path.GetFileName(_image);
         ClearImage.IsEnabled = _image is not null;
         ImageSettings.Visibility = _image is null ? Visibility.Collapsed : Visibility.Visible;
+
+        _poster = _image is null ? null : Poster(_image);
+        FocusImage.Source = _poster;
+
+        var was = _ready;
+        _ready = false;
+        ZoomSlider.Value = _zoom;
+        _ready = was;
+
+        ShowFocus();
+    }
+
+    /// <summary>Картинка для превью: сама картинка в малом размере, у видео — его кадр.</summary>
+    private static BitmapSource? Poster(string path)
+    {
+        try
+        {
+            if (Path.GetExtension(path).Equals(".mp4", StringComparison.OrdinalIgnoreCase))
+                return VideoPoster.Load(path, size: 480);
+
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.UriSource = new Uri(path);
+            image.DecodePixelWidth = 640;
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception)
+        {
+            // Нечитаемая картинка — превью без неё; сама тема скажет о ней проверкой.
+            return null;
+        }
+    }
+
+    /// <summary>Метка на картинке и окошко колонки — по нынешней точке и увеличению.</summary>
+    private void ShowFocus()
+    {
+        ZoomText.Text = $"×{_zoom:0.0}";
+
+        if (_poster is not { PixelWidth: > 0, PixelHeight: > 0 } poster)
+        {
+            FocusMark.Visibility = Visibility.Collapsed;
+            ColumnPreview.Background = null;
+            return;
+        }
+
+        FocusImage.UpdateLayout();
+        FocusMark.Visibility = Visibility.Visible;
+        Canvas.SetLeft(FocusMark, _focusX * FocusImage.ActualWidth - FocusMark.Width / 2);
+        Canvas.SetTop(FocusMark, _focusY * FocusImage.ActualHeight - FocusMark.Height / 2);
+
+        // Колонка — как у «Главной»: та же раскладка, страницей служит сама колонка.
+        double width = ColumnPreview.Width, height = ColumnPreview.Height;
+        var (left, top, w, h) = SideArtLayout.Place(width, height, width / 2,
+            (double)poster.PixelWidth / poster.PixelHeight, _focusX, _focusY, _zoom);
+
+        ColumnPreview.Background = new ImageBrush(poster)
+        {
+            Stretch = Stretch.Fill,
+            ViewportUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(left, top, w, h),
+        };
+    }
+
+    private void OnFocusDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragging = true;
+        FocusPad.CaptureMouse();
+        PlaceFocus(e.GetPosition(FocusImage));
+    }
+
+    private void OnFocusMove(object sender, MouseEventArgs e)
+    {
+        if (_dragging)
+            PlaceFocus(e.GetPosition(FocusImage));
+    }
+
+    private void OnFocusUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragging = false;
+        FocusPad.ReleaseMouseCapture();
+    }
+
+    private void PlaceFocus(Point at)
+    {
+        if (FocusImage.ActualWidth <= 0 || FocusImage.ActualHeight <= 0)
+            return;
+
+        _focusX = Math.Clamp(at.X / FocusImage.ActualWidth, 0, 1);
+        _focusY = Math.Clamp(at.Y / FocusImage.ActualHeight, 0, 1);
+        ShowFocus();
+        Settle();
+    }
+
+    private void OnZoom(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_ready)
+            return;
+
+        _zoom = Math.Round(e.NewValue, 1);
+        ShowFocus();
+        Settle();
+    }
+
+    private void OnFocusReset(object sender, RoutedEventArgs e)
+    {
+        (_focusX, _focusY, _zoom) = (0.5, 0.5, 1);
+        ShowImage();
+        Changed();
+    }
+
+    /// <summary>Применить на окне, когда протяжка или ползунок затихнут.</summary>
+    private void Settle()
+    {
+        _settle.Stop();
+        _settle.Start();
     }
 
     private void OnColor(object sender, RoutedEventArgs e)
@@ -274,6 +421,9 @@ public partial class ThemeEditorWindow : Window
         }
 
         _image = dialog.FileName;
+
+        // Новая картинка — новый кадр: прежняя точка центра к ней не относится.
+        (_focusX, _focusY, _zoom) = (0.5, 0.5, 1);
         ShowImage();
         Changed();
     }
@@ -344,6 +494,9 @@ public partial class ThemeEditorWindow : Window
             Fit = (BackgroundFit)Math.Max(0, FitChoice.SelectedIndex),
             Dim = Dims[Math.Max(0, DimChoice.SelectedIndex)],
             Blur = Blurs[Math.Max(0, BlurChoice.SelectedIndex)],
+            FocusX = _focusX,
+            FocusY = _focusY,
+            Zoom = _zoom,
             HomeFullWidth = _from.HomeFullWidth,
         };
 

@@ -132,6 +132,59 @@
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" x:Name="AlphaChoice" VerticalAlignment="Center" SelectionChanged="OnChanged" />
                             </Grid>
+
+                            <!--
+                                Картинка на «Главной» (владелец 15.10: «двигать фото для
+                                главной»): точка центра — щелчком или протяжкой по картинке,
+                                увеличение — ползунком. Справа — что попадёт в колонку
+                                (SideArtLayout, тот же расчёт, что у «Главной»).
+                            -->
+                            <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,14" />
+
+                            <TextBlock Text="Картинка на «Главной»" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                       Text="Щёлкните или потяните по картинке — эта точка встанет в середину колонки справа на «Главной». Рядом — что в колонку попадёт." />
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid x:Name="FocusPad" HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Cursor="Cross" Background="Transparent"
+                                      MouseLeftButtonDown="OnFocusDown" MouseMove="OnFocusMove" MouseLeftButtonUp="OnFocusUp">
+                                    <Image x:Name="FocusImage" Stretch="Uniform" MaxHeight="220"
+                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <Canvas IsHitTestVisible="False">
+                                        <Ellipse x:Name="FocusMark" Width="20" Height="20"
+                                                 Stroke="White" StrokeThickness="2" Fill="#55000000" />
+                                    </Canvas>
+                                </Grid>
+
+                                <Border Grid.Column="1" x:Name="ColumnPreview" Width="110" Height="220"
+                                        Margin="16,0,0,0" CornerRadius="10" ClipToBounds="True"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                        ToolTip="Колонка справа на «Главной»" />
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="200" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Увеличение" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" x:Name="ZoomSlider" Minimum="1" Maximum="3"
+                                        TickFrequency="0.1" IsSnapToTickEnabled="True" VerticalAlignment="Center"
+                                        ValueChanged="OnZoom" />
+                                <TextBlock Grid.Column="2" x:Name="ZoomText" Style="{StaticResource Mono}"
+                                           Width="44" TextAlignment="Right" VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Button Style="{StaticResource Ghost}" Content="Как было: середина, без увеличения"
+                                    HorizontalAlignment="Left" Margin="0,10,0,0" Click="OnFocusReset" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

@@ -119,4 +119,21 @@ public sealed record ThemeBackground
 
     /// <summary>Радиус размытия под карточками и меню, в точках; 0 — без размытия.</summary>
     public double Blur { get; init; } = 24;
+
+    /// <summary>
+    /// Точка картинки, которая встаёт в середину колонки «Главной», по ширине:
+    /// 0 — левый край, 1 — правый (<see cref="SideArtLayout"/>).
+    /// </summary>
+    /// <remarks>
+    /// Владелец 15.10 («двигать фото для главной»): колонка ставила в свою
+    /// середину середину картинки, и персонаж, стоящий правее, — мечник
+    /// в одноимённой теме — уходил под карточки.
+    /// </remarks>
+    public double FocusX { get; init; } = 0.5;
+
+    /// <summary>То же по высоте: 0 — верх, 1 — низ.</summary>
+    public double FocusY { get; init; } = 0.5;
+
+    /// <summary>Увеличение картинки в колонке «Главной», от 1 до <see cref="SideArtLayout.MaxZoom"/>.</summary>
+    public double Zoom { get; init; } = 1;
 }

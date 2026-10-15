@@ -7,6 +7,7 @@ using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
+using NetZapret.Core.Themes;
 using NetZapret.Core.Updates;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
@@ -141,26 +142,24 @@ public partial class StatusView : UserControl
         }
 
         double aspect = content.Size.Width / content.Size.Height;
-        double w = height * aspect, h = height;
-
-        // Уже страницы — растягиваем до её ширины: пустая полоса справа хуже обрезки.
-        if (w < width)
-        {
-            w = width;
-            h = width / aspect;
-        }
 
         double column = ArtColumn.ActualWidth;
         bool side = column >= ArtColumnMin;
         double centre = side ? width - column / 2 : width / 2;
 
-        double left = centre - w / 2;
+        // В середину колонки — выбранная в редакторе точка картинки, с выбранным
+        // увеличением (владелец 15.10); без выбора — её середина, как прежде.
+        var (left, top, w, h) = SideArtLayout.Place(
+            width, height, centre, aspect,
+            TryFindResource("SideArtFocusX") is double fx ? fx : 0.5,
+            TryFindResource("SideArtFocusY") is double fy ? fy : 0.5,
+            TryFindResource("SideArtZoom") is double zoom ? zoom : 1);
 
         var fill = content.Make();
         fill.Stretch = Stretch.Fill;
         fill.TileMode = TileMode.None;
         fill.ViewportUnits = BrushMappingMode.Absolute;
-        fill.Viewport = new Rect(left, (height - h) / 2, w, h);
+        fill.Viewport = new Rect(left, top, w, h);
         Art.Fill = fill;
 
         // Левый край картинки — в подложку, без черты. Растворение кончается
