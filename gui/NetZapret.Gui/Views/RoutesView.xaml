@@ -453,7 +453,7 @@
                                                                        MaxWidth="240" TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
                                                             <TextBlock Grid.Column="1" Style="{StaticResource Caption}"
                                                                        Foreground="{Binding Color}" TextTrimming="CharacterEllipsis"
-                                                                       ToolTip="{Binding Mode}">
+                                                                       ToolTip="{Binding ModeHint}">
                                                                 <Run Text=" · " Foreground="{DynamicResource Muted}" /><Run Text="{Binding Mode, Mode=OneWay}" />
                                                             </TextBlock>
                                                         </Grid>
