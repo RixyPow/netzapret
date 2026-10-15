@@ -9,7 +9,7 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui;
 
 /// <summary>Чем закончилась сборка конфига.</summary>
-internal sealed record BuildOutcome(bool Ok, string Message);
+internal sealed record BuildOutcome(bool Ok, string Message, string? Warning = null);
 
 /// <summary>
 /// Собирает конфиг туннеля из настроек, правил и подписки.
@@ -50,6 +50,10 @@ internal static class TunnelConfig
 
         try
         {
+            var requestedDns = settings;
+            var routerDns = RouterDnsConnection.Resolve(settings);
+            settings = routerDns.Settings;
+            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
             var (ruleSet, zapretRoot) = LoadRules(settings);
 
             // WARP и подписки — одно из двух (владелец, 01.10; Warp.TunnelExits).
@@ -186,14 +190,17 @@ internal static class TunnelConfig
             {
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
-                DnsServer = settings.DnsServer,
+                DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
+                DnsServerType = settings.UseRouterDns ? "udp" : "https",
+                RouterDns = settings.UseRouterDns,
+                RouterDnsInterface = routerDns.Interface?.Name,
 
                 // Имя сертификата и путь — у провайдера из списка выбора.
                 // Адрес, вписанный руками, идёт как прежде: без имени.
                 DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
                 DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
-                DnsThroughTunnel = settings.DnsVia == DnsRoute.Tunnel,
-                DnsViaAuto = settings.DnsVia == DnsRoute.Auto,
+                DnsThroughTunnel = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Tunnel,
+                DnsViaAuto = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto,
 
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.
@@ -254,6 +261,7 @@ internal static class TunnelConfig
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
+            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
 
             var note = settings.WarpEnabled
                 ? "Конфиг собран: туннель через WARP, подписки на паузе"
@@ -275,7 +283,7 @@ internal static class TunnelConfig
             if (result.SkippedServers.Count > 0)
                 note += $", {result.SkippedServers.Count} пропущено";
 
-            return new BuildOutcome(true, note + ".");
+            return new BuildOutcome(true, note + ".", routerDns.Warning);
         }
         catch (Exception ex)
         {
@@ -295,6 +303,10 @@ internal static class TunnelConfig
     {
         try
         {
+            var requestedDns = settings;
+            var routerDns = RouterDnsConnection.Resolve(settings);
+            settings = routerDns.Settings;
+            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
             var resolvers = SystemResolvers.Discover();
 
             // Без адресов резолверов движку нечего ловить: TUN поднялся бы
@@ -303,11 +315,14 @@ internal static class TunnelConfig
                 return new BuildOutcome(false, "DNS через движок не поднят: резолверы Windows не нашлись.");
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
-            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate());
+            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(), routerDns.Interface?.Name);
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
+            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
 
-            return new BuildOutcome(true, $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.");
+            return new BuildOutcome(true, settings.UseRouterDns
+                ? $"DNS через движок: UDP/53 к роутеру {settings.RouterDnsAddress} через LAN."
+                : $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.", routerDns.Warning);
         }
         catch (Exception ex)
         {

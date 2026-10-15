@@ -217,6 +217,10 @@ public sealed record AppSettings
     /// </remarks>
     public string DnsServer { get; init; } = GoogleDns;
 
+    /// <summary>Для PBR роутер должен получить реальные DNS-запросы, а не только прямой трафик сайта.</summary>
+    public bool UseRouterDns { get; init; }
+    public string RouterDnsAddress { get; init; } = "192.168.1.1";
+
     /// <summary>Адрес Google, который работает по DoH и там, где 8.8.8.8 закрыт.</summary>
     public const string GoogleDns = "8.8.4.4";
 
@@ -1052,7 +1056,7 @@ public sealed record AppSettings
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    public bool NeedsDnsEngine => !NeedsProxy && NeedsDesync && DnsVia == DnsRoute.Tunnel;
+    public bool NeedsDnsEngine => !NeedsProxy && NeedsDesync && (UseRouterDns || DnsVia == DnsRoute.Tunnel);
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 

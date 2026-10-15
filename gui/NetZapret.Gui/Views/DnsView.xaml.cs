@@ -280,7 +280,7 @@ public partial class DnsView : UserControl
                 Name = p.Name,
                 Address = p.TlsAddress ?? p.Udp[0],
                 Note = p.Note ?? string.Empty,
-                Chosen = p.Choosable && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
+                Chosen = !settings.UseRouterDns && p.Choosable && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
                 Own = p.Own,
                 Choosable = p.Choosable,
                 Udp = p.Udp.Count > 0 ? p.Udp[0] : string.Empty,
@@ -303,8 +303,20 @@ public partial class DnsView : UserControl
             ? settings.DnsServer
             : $"{known.Name} · {known.TlsAddress}";
 
-        if (settings.DnsAuto)
+        if (settings.UseRouterDns)
+            ChosenName.Text = $"Роутер · {settings.RouterDnsAddress}:53 · UDP/LAN";
+        else if (settings.DnsAuto)
             ChosenName.Text += " · автовыбор";
+        var fallback = RouterDnsConnection.ConfigWarning(settings);
+        RouterDnsStatus.Text = fallback ?? "Сохранение не блокируется таймаутом теста. После выбора перезапустите движки.";
+        if (fallback is not null)
+        {
+            ChosenName.Text = "Запасной DoH · DNS роутера не применяется в текущем конфиге";
+            RouterDnsStatus.Text = fallback;
+        }
+        RouterDnsSwitch.IsChecked = settings.UseRouterDns;
+        RouterDnsIp.Text = settings.RouterDnsAddress;
+        TunnelMode.IsEnabled = !settings.UseRouterDns;
 
         AutoDnsSwitch.IsChecked = settings.DnsAuto;
 
@@ -322,6 +334,65 @@ public partial class DnsView : UserControl
 
         // Цена пути — те же слова, что в мастере первого запуска.
         TunnelHint.Text = DnsRoutes.Explain(settings);
+    }
+
+    private bool SaveRouterDns()
+    {
+        if (!RouterDnsSettings.TryNormalize(RouterDnsIp.Text, out var address))
+        {
+            RouterDnsStatus.Text = "Введите LAN IPv4 роутера, например 192.168.1.1. IPv6, URL и публичный DNS здесь не поддерживаются.";
+            return false;
+        }
+        try
+        {
+            var settings = RouterDnsSettings.Select(AppSettings.Load(), address);
+            settings.Save(AppSettings.DefaultPath);
+            ShowChosen(settings);
+            RouterDnsStatus.Text = "Сохранено. Запросы к DNS пойдут по UDP/53 через LAN, без VPN NetZapret. Перезапустите движки. Тест UDP необязателен.";
+            Status.Text = "DNS роутера выбран. Перезапустите движки для применения.";
+            this.Offer("DNS роутера выбран");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            RouterDnsStatus.Text = "Не удалось сохранить: " + ex.GetBaseException().Message;
+            return false;
+        }
+    }
+
+    private void OnRouterDnsUse(object sender, RoutedEventArgs e) => SaveRouterDns();
+
+    private void OnRouterDnsToggle(object sender, RoutedEventArgs e)
+    {
+        if (RouterDnsSwitch.IsChecked == true)
+        {
+            if (!SaveRouterDns()) RouterDnsSwitch.IsChecked = false;
+            return;
+        }
+        try
+        {
+            var settings = AppSettings.Load() with { UseRouterDns = false };
+            settings.Save(AppSettings.DefaultPath);
+            ShowChosen(settings);
+            RouterDnsStatus.Text = "DNS роутера выключен. Вернётся сохранённый DoH-резолвер. Перезапустите движки.";
+            this.Offer("DNS роутера выключен");
+        }
+        catch (Exception ex)
+        { RouterDnsSwitch.IsChecked = true; RouterDnsStatus.Text = "Не удалось сохранить: " + ex.GetBaseException().Message; }
+    }
+
+    private async void OnRouterDnsTest(object sender, RoutedEventArgs e)
+    {
+        if (!RouterDnsSettings.TryNormalize(RouterDnsIp.Text, out var address))
+        { RouterDnsStatus.Text = "Введите LAN IPv4 роутера."; return; }
+        RouterDnsTest.IsEnabled = false;
+        try
+        {
+            RouterDnsStatus.Text = "Проверяю example.com по UDP/53 через LAN…";
+            RouterDnsStatus.Text = await RouterDnsConnection.CheckAsync(address, CancellationToken.None);
+        }
+        catch (Exception ex) { RouterDnsStatus.Text = "Проверка не выполнена: " + ex.GetBaseException().Message; }
+        finally { RouterDnsTest.IsEnabled = true; }
     }
 
     /// <summary>Показывает, кого спрашивает сама Windows.</summary>
@@ -386,7 +457,7 @@ public partial class DnsView : UserControl
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address, DnsAuto = false };
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address, DnsAuto = false, UseRouterDns = false };
             settings.Save(AppSettings.DefaultPath);
 
             ShowChosen(settings);
@@ -531,7 +602,7 @@ public partial class DnsView : UserControl
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var next = settings with { DnsAuto = !settings.DnsAuto };
+            var next = settings with { DnsAuto = !settings.DnsAuto, UseRouterDns = false };
 
             next.Save(AppSettings.DefaultPath);
             ShowChosen(next);
@@ -564,7 +635,7 @@ public partial class DnsView : UserControl
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        if (!settings.DnsAuto)
+        if (!settings.DnsAuto || settings.UseRouterDns)
             return;
 
         if (DnsSurvey.Fastest(all) is not { TlsAddress: { } address } best)
@@ -608,7 +679,7 @@ public partial class DnsView : UserControl
         // при разборе разметки: соседние элементы к тому мгновению ещё
         // не созданы. На вкладке маршрутов это стоило падения при
         // создании вкладки, и повторять его здесь незачем.
-        if (!IsInitialized || _filling || sender is not ComboBox box || box.SelectedIndex < 0)
+        if (!IsInitialized || _filling || AppSettings.Load().UseRouterDns || sender is not ComboBox box || box.SelectedIndex < 0)
             return;
 
         try

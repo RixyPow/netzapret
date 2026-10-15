@@ -272,6 +272,31 @@
                 </Grid>
             </Button>
 
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="DNS роутера / OpenWRT" FontWeight="SemiBold" FontSize="16" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Обычный UDP DNS в локальной сети. Без DoH и без VPN NetZapret. Отключает DoH-автовыбор." />
+                        </StackPanel>
+                        <ToggleButton Grid.Column="1" x:Name="RouterDnsSwitch" Style="{StaticResource Switch}"
+                                      VerticalAlignment="Center" Click="OnRouterDnsToggle" />
+                    </Grid>
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Text="ВАЖНО: режим для роутера со своим DoH/DoT (https-dns-proxy, stubby). Если он пересылает обычный DNS провайдеру, YouTube и домены под десинком могут получить NXDOMAIN или заглушку. Если нужная LAN не найдена, включится запасной DoH с предупреждением; PBR роутера может перестать действовать." />
+                    <WrapPanel Margin="0,14,0,0">
+                        <TextBox x:Name="RouterDnsIp" Width="170" Margin="0,0,8,6" VerticalContentAlignment="Center"
+                                 ToolTip="LAN IPv4 роутера, например 192.168.1.1" />
+                        <Button Style="{StaticResource Ghost}" Content="Использовать" Click="OnRouterDnsUse" Margin="0,0,8,6" />
+                        <Button x:Name="RouterDnsTest" Style="{StaticResource Ghost}" Content="Проверить UDP" Click="OnRouterDnsTest" Margin="0,0,0,6" />
+                    </WrapPanel>
+                    <TextBlock x:Name="RouterDnsStatus" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Сохранение не блокируется таймаутом теста. После выбора перезапустите движки." />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="Резолверы туннеля" FontWeight="SemiBold" FontSize="16" Margin="2,22,0,0" />
             <TextBlock Style="{StaticResource Caption}" Margin="2,4,0,0" TextWrapping="Wrap"
                        Text="Задержка — по DoH из обзора выше. Нажмите на строку, чтобы туннель спрашивал этого резолвера." />
