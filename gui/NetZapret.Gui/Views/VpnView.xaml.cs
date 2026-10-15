@@ -151,6 +151,31 @@ public sealed class SubRow : System.ComponentModel.INotifyPropertyChanged
 
     public string Detail { get; set; } = "читаю…";
 
+    /// <summary>
+    /// Что поставщик шлёт заголовками сверх квоты и срока (15.10, как в Happ):
+    /// поддержка, страница подписки, объявление.
+    /// </summary>
+    public string? SupportUrl { get; set; }
+
+    public string? WebPageUrl { get; set; }
+
+    public string? Announce { get; set; }
+
+    /// <summary>Срок кончается или кончился — строкой цвета предупреждения.</summary>
+    public string? Warning { get; set; }
+
+    public Visibility SupportShown => SupportUrl is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility WebPageShown => WebPageUrl is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility AnnounceShown => Announce is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public Visibility WarningShown => Warning is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public string SupportTip => SupportUrl is { } url && url.Contains("t.me/", StringComparison.OrdinalIgnoreCase)
+        ? "Поддержка поставщика в Telegram"
+        : "Поддержка поставщика";
+
     public IReadOnlyList<ServerRow> Servers { get; set; } = [];
 
     /// <summary>Серверы в том порядке, в каком их дала подписка.</summary>
@@ -856,8 +881,26 @@ public partial class VpnView : UserControl
                 : info.TotalBytes > 0 ? "квота кончилась" : "без ограничения");
 
             parts.Add(info.ExpiresAt is { } until
-                ? $"{(until - DateTimeOffset.Now).Days} дн"
+                ? until > DateTimeOffset.Now ? $"{(until - DateTimeOffset.Now).Days} дн" : "срок истёк"
                 : "без срока");
+
+            // Ключи (KeyRing) заголовков не шлют: у них этих полей нет и не будет.
+            row.SupportUrl = info.SupportUrl;
+            row.WebPageUrl = info.WebPageUrl;
+            row.Announce = info.Announce;
+            row.Warning = info.ExpiryWarningText(DateTimeOffset.Now);
+
+            // Поставщик перенёс подписку — ссылка в книге новая, и в этой
+            // книге тоже: вкладка держит свою и записала бы старую обратно.
+            if (read.Source != SubscriptionReadSource.Reserve)
+            {
+                SubscriptionBook.Follow(_book, row.Entry.Url, info.NewUrl);
+                SubscriptionNotices.RemindExpiry(row.Entry.Name, row.Entry.Url, info);
+            }
+
+            // Основная панель молчала, а запасной адрес поставщика ответил.
+            if (read.Source == SubscriptionReadSource.Panel && read.Error is { } rescued)
+                parts.Add(rescued);
 
             // Пусто, а панель ответила — причина называется. Молча выходило
             // «0 серверов · 14 дн» (issue #3), и понять, что сломан разбор,
@@ -1899,6 +1942,34 @@ public partial class VpnView : UserControl
     }
 
     /// <summary>⟳ у подписки: перечитать только её.</summary>
+    /// <summary>Кнопка «Поддержка» у подписки — ссылка из её же заголовка (проверена: только http/https).</summary>
+    private void OnSupport(object sender, RoutedEventArgs e) =>
+        OpenProviderLink(sender, e, row => row.SupportUrl);
+
+    /// <summary>Кнопка «Сайт подписки»: продлить, сменить тариф.</summary>
+    private void OnWebPage(object sender, RoutedEventArgs e) =>
+        OpenProviderLink(sender, e, row => row.WebPageUrl);
+
+    private void OpenProviderLink(object sender, RoutedEventArgs e, Func<SubRow, string?> pick)
+    {
+        // Кнопка внутри кнопки папки — без этого щелчок раскрыл бы и папку.
+        e.Handled = true;
+
+        if (sender is not FrameworkElement { Tag: string name }
+            || _rows.FirstOrDefault(r => r.Entry.Name == name) is not { } row
+            || pick(row) is not { } url)
+            return;
+
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Ссылку открыть не вышло: " + ex.GetBaseException().Message;
+        }
+    }
+
     private async void OnRefreshOne(object sender, RoutedEventArgs e)
     {
         e.Handled = true;

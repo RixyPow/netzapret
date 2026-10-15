@@ -188,10 +188,53 @@ public static class SubscriptionPool
                 : PanelError.Describe(ex);
         }
 
+        if (await ReadFallbackAsync(folder, url, cancellationToken) is { } rescued)
+            return rescued with { Error = $"{error} — прочитана по запасному адресу поставщика" };
+
         if (LoadReserve(folder, url) is { } reserve && reserve.Info.Servers.Count > 0)
             return new SubscriptionRead(reserve.Info, reserve.At, SubscriptionReadSource.Reserve, error);
 
         return new SubscriptionRead(null, null, SubscriptionReadSource.None, error);
+    }
+
+    /// <summary>
+    /// Запасной адрес панели (<c>fallback-url</c>), если основной не ответил.
+    /// </summary>
+    /// <remarks>
+    /// Адрес поставщик называет заранее, в прошлом удачном ответе, — потому он
+    /// и лежит в запасе. Как в Happ: на ошибку, тишину или срок. Прочитанное
+    /// ложится в запас под основной ссылкой: в книге подписка та же, и ссылка
+    /// в ней не меняется (этим занят <c>new-url</c>). Неудача запасного не
+    /// заменяет причину основного: человеку важнее, почему не ответила его панель.
+    /// </remarks>
+    private static async Task<SubscriptionRead?> ReadFallbackAsync(string folder, string url, CancellationToken cancellationToken)
+    {
+        if (LoadReserve(folder, url)?.Info.FallbackUrl is not { } fallback
+            || string.Equals(fallback, url, StringComparison.Ordinal))
+            return null;
+
+        try
+        {
+            using var client = new SubscriptionClient();
+            var info = await client.FetchAsync(new Uri(fallback), cancellationToken);
+
+            if (info.Servers.Count == 0 || client.LastBody is not { } body)
+                return null;
+
+            // Запасная панель могла не назвать запасного адреса — прежний остаётся.
+            info = info with { FallbackUrl = info.FallbackUrl ?? fallback };
+            SaveReserve(folder, url, body, info);
+
+            return new SubscriptionRead(info, DateTimeOffset.Now, SubscriptionReadSource.Panel, null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private static async Task<PoolPart> ReadAsync(PoolSource source, string folder, CancellationToken cancellationToken)
@@ -380,7 +423,15 @@ public static class SubscriptionPool
     /// Квота и срок лежат рядом с телом: они приходят заголовками, а не в теле,
     /// и без них строка подписки из запаса теряла бы «86 дн» и остаток трафика.
     /// </summary>
-    private sealed record ReserveMeta(string? Title, long Upload, long Download, long Total, DateTimeOffset? Expires, double? Interval);
+    /// <remarks>
+    /// С 15.10 — и остальное, что поставщик шлёт заголовками: поддержка, сайт,
+    /// объявление и запасной адрес панели. Без них карточка подписки из запаса
+    /// теряла бы кнопки, а запасной адрес и нужен ровно тогда, когда панель
+    /// не отвечает, — то есть когда кроме запаса взять его неоткуда.
+    /// </remarks>
+    private sealed record ReserveMeta(
+        string? Title, long Upload, long Download, long Total, DateTimeOffset? Expires, double? Interval,
+        string? Support = null, string? WebPage = null, string? Announce = null, string? Fallback = null);
 
     internal static void SaveReserve(string folder, string url, string body, SubscriptionInfo? info = null)
     {
@@ -392,7 +443,9 @@ public static class SubscriptionPool
 
             if (info is not null)
             {
-                var meta = new ReserveMeta(info.Title, info.UploadBytes, info.DownloadBytes, info.TotalBytes, info.ExpiresAt, info.UpdateIntervalHours);
+                var meta = new ReserveMeta(
+                    info.Title, info.UploadBytes, info.DownloadBytes, info.TotalBytes, info.ExpiresAt, info.UpdateIntervalHours,
+                    info.SupportUrl, info.WebPageUrl, info.Announce, info.FallbackUrl);
                 File.WriteAllText(path + ".meta", System.Text.Json.JsonSerializer.Serialize(meta), new UTF8Encoding(false));
             }
 
@@ -405,6 +458,36 @@ public static class SubscriptionPool
         catch (Exception)
         {
             // Запас — страховка, а не условие работы.
+        }
+    }
+
+    /// <summary>
+    /// Запас подписки — под новым адресом, когда поставщик её перенёс (<c>new-url</c>).
+    /// </summary>
+    /// <remarks>
+    /// Запас лежит под отпечатком ссылки: без копии новая ссылка начинала бы
+    /// с пустого места, и первый же отказ новой панели оставил бы без серверов.
+    /// Старый запас уберёт обычная уборка — его ссылки в книге больше нет.
+    /// Копия хранит время файла, и свежесть запаса не врёт.
+    /// </remarks>
+    public static void MoveReserve(string oldUrl, string newUrl, string? reserveDirectory = null)
+    {
+        var folder = reserveDirectory ?? DefaultReserveDirectory;
+
+        try
+        {
+            var from = ReservePath(folder, oldUrl);
+            var to = ReservePath(folder, newUrl);
+
+            if (File.Exists(from + ".meta"))
+                File.Copy(from + ".meta", to + ".meta", overwrite: true);
+
+            if (File.Exists(from))
+                File.Copy(from, to, overwrite: true);
+        }
+        catch (Exception)
+        {
+            // Запас — страховка: новая ссылка прочитается и без него.
         }
     }
 
@@ -452,6 +535,10 @@ public static class SubscriptionPool
                 TotalBytes = meta?.Total ?? 0,
                 ExpiresAt = meta?.Expires,
                 UpdateIntervalHours = meta?.Interval,
+                SupportUrl = meta?.Support,
+                WebPageUrl = meta?.WebPage,
+                Announce = meta?.Announce,
+                FallbackUrl = meta?.Fallback,
             };
 
             return (info, File.GetLastWriteTime(path));

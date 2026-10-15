@@ -69,12 +69,17 @@ public static class SubscriptionParser
     /// <param name="userInfo">Заголовок <c>subscription-userinfo</c>.</param>
     /// <param name="title">Заголовок <c>profile-title</c>.</param>
     /// <param name="updateInterval">Заголовок <c>profile-update-interval</c>.</param>
+    /// <param name="extra">
+    /// Остальные заголовки поставщика по имени (<c>support-url</c>, <c>announce</c>…);
+    /// <c>null</c> — их нет. Те же, что читает Happ (владелец 15.10: «делай»).
+    /// </param>
     public static SubscriptionInfo BuildInfo(
         IReadOnlyList<ProxyServer> servers,
         IReadOnlyList<string> errors,
         string? userInfo,
         string? title,
-        string? updateInterval)
+        string? updateInterval,
+        Func<string, string?>? extra = null)
     {
         var fields = ParseUserInfo(userInfo);
 
@@ -95,7 +100,73 @@ public static class SubscriptionParser
             UpdateIntervalHours = double.TryParse(updateInterval, NumberStyles.Float, CultureInfo.InvariantCulture, out var hours)
                 ? hours
                 : null,
+            SupportUrl = WebLink(extra?.Invoke("support-url")),
+            WebPageUrl = WebLink(extra?.Invoke("profile-web-page-url")),
+            Announce = DecodeAnnounce(extra?.Invoke("announce")),
+            FallbackUrl = PanelLink(extra?.Invoke("fallback-url")),
+            NewUrl = PanelLink(extra?.Invoke("new-url")),
         };
+    }
+
+    /// <summary>
+    /// Адрес панели от самой панели — только https.
+    /// </summary>
+    /// <remarks>
+    /// По нему уйдёт сама подписка, то есть пароль: по открытому http его
+    /// прочитал бы любой на пути, а переносом подписки панель могла бы
+    /// незаметно понизить защиту навсегда.
+    /// </remarks>
+    internal static string? PanelLink(string? value) =>
+        WebLink(value) is { } link && link.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? link : null;
+
+    /// <summary>Сколько знаков объявления показывать — столько же пускает Happ.</summary>
+    public const int AnnounceLimit = 200;
+
+    /// <summary>
+    /// Ссылка от панели — только http или https.
+    /// </summary>
+    /// <remarks>
+    /// Кнопки «Поддержка» и «Сайт» открывают её системой, а система откроет
+    /// и <c>file:</c>, и <c>ms-settings:</c>, и путь к программе. Панель —
+    /// чужой сервер, и запускать по её слову что-то, кроме страницы, нельзя.
+    /// Ссылки Telegram у поставщиков — <c>https://t.me/…</c>, их это пропускает.
+    /// </remarks>
+    internal static string? WebLink(string? value)
+    {
+        var text = value?.Trim();
+
+        if (string.IsNullOrEmpty(text) || text.Length > 2048 || text.Any(char.IsWhiteSpace))
+            return null;
+
+        return Uri.TryCreate(text, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+            && !string.IsNullOrEmpty(uri.Host)
+                ? text
+                : null;
+    }
+
+    /// <summary>
+    /// Объявление: открытым текстом или с <c>base64:</c>, одной строкой и не длиннее <see cref="AnnounceLimit"/>.
+    /// </summary>
+    /// <remarks>
+    /// Управляющие знаки вычищаются: строка встаёт в карточку подписки,
+    /// и перевод строки или знак направления письма из чужого ответа
+    /// разламывал бы её.
+    /// </remarks>
+    internal static string? DecodeAnnounce(string? value)
+    {
+        var text = DecodeTitle(value);
+
+        if (text is null)
+            return null;
+
+        var clean = new string(text.Select(c => char.IsControl(c) || char.GetUnicodeCategory(c) == UnicodeCategory.Format ? ' ' : c).ToArray());
+        clean = string.Join(' ', clean.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+        if (clean.Length == 0)
+            return null;
+
+        return clean.Length > AnnounceLimit ? clean[..(AnnounceLimit - 1)] + "…" : clean;
     }
 
     /// <summary>

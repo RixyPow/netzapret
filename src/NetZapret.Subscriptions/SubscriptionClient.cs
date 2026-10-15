@@ -191,7 +191,8 @@ public sealed class SubscriptionClient : IDisposable
             errors,
             Header(response, "subscription-userinfo"),
             Header(response, "profile-title"),
-            Header(response, "profile-update-interval"));
+            Header(response, "profile-update-interval"),
+            name => Header(response, name));
     }
 
     /// <summary>

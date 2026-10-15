@@ -88,6 +88,14 @@ internal static class TunnelConfig
                         + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
                 }
 
+                // Что поставщик сказал заголовками (15.10): перенёс подписку —
+                // ссылка в книге новая; срок кончается — напомнить, раз в сутки.
+                foreach (var part in pool.Parts.Where(p => p.Info is not null))
+                {
+                    SubscriptionBook.Follow(book, part.Source.Url, part.Info!.NewUrl);
+                    SubscriptionNotices.RemindExpiry(part.Source.Name, part.Source.Url, part.Info);
+                }
+
                 // Кто пришёл из запаса — в журнал: без этого «сервер из вчерашнего
                 // списка» было бы нечем объяснить.
                 foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))

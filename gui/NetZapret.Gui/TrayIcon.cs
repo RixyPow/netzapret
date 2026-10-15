@@ -88,6 +88,9 @@ internal sealed class TrayIcon : IDisposable
     /// <summary>Что предложено уведомлением; <c>null</c> — уведомление не про перезапуск.</summary>
     private string? _offered;
 
+    /// <summary>Страница, которую открывает нажатие на уведомление (<see cref="Notify"/>); <c>null</c> — никакая.</summary>
+    private string? _link;
+
     public TrayIcon()
     {
         Current = this;
@@ -113,8 +116,23 @@ internal sealed class TrayIcon : IDisposable
 
         _icon.DoubleClick += (_, _) => Show();
 
-        _icon.BalloonTipClicked += (_, _) => RestartFromNotice();
-        _icon.BalloonTipClosed += (_, _) => _offered = null;
+        _icon.BalloonTipClicked += (_, _) =>
+        {
+            if (_link is { } link)
+            {
+                _link = null;
+                OpenLink(link);
+                return;
+            }
+
+            RestartFromNotice();
+        };
+
+        _icon.BalloonTipClosed += (_, _) =>
+        {
+            _offered = null;
+            _link = null;
+        };
 
         // Оболочка объявляет о создании области уведомлений один раз. Мы
         // запускаемся автозапуском в ту же секунду, что и проводник, и если
@@ -358,6 +376,7 @@ internal sealed class TrayIcon : IDisposable
             return;
 
         _offered = what;
+        _link = null;
 
         // Заголовок уведомления Windows режет на 63 знаках.
         _icon.ShowBalloonTip(
@@ -366,6 +385,39 @@ internal sealed class TrayIcon : IDisposable
             "Движки работают со старой настройкой. Нажмите, чтобы перезапустить: "
                 + "соединения оборвутся на пару секунд.",
             ToolTipIcon.Info);
+    }
+
+    /// <summary>
+    /// Уведомление Windows с делом, а не с перезапуском: нажатие открывает <paramref name="link"/>.
+    /// </summary>
+    /// <remarks>
+    /// Для конца срока подписки (15.10): напоминание должно дойти и тогда, когда
+    /// окно в трее, — как предложение перезапуска. Нажатие ведёт на страницу
+    /// подписки, если поставщик её назвал: там и продлевают.
+    /// </remarks>
+    public void Notify(string title, string text, string? link) =>
+        System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            _offered = null;
+            _link = link;
+
+            _icon.ShowBalloonTip(
+                15_000,
+                title.Length > 63 ? title[..62] + "…" : title,
+                text,
+                ToolTipIcon.Info);
+        });
+
+    private static void OpenLink(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception)
+        {
+            // Нет браузера по умолчанию — та же ссылка есть в карточке подписки.
+        }
     }
 
     private async void RestartFromNotice()

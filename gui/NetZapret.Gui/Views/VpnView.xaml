@@ -81,9 +81,20 @@
 
                                 <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
+
+                                <!-- Срок кончается — заметно, а не тем же серым (15.10, как в Happ). -->
+                                <TextBlock Text="{Binding Warning}" Style="{StaticResource Caption}"
+                                           Foreground="{DynamicResource Warn}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Visibility="{Binding WarningShown}" />
+
+                                <!-- Объявление поставщика из заголовка announce: его слова, не наши. -->
+                                <TextBlock Text="{Binding Announce}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                           FontSize="13" Foreground="{DynamicResource Text}"
+                                           Visibility="{Binding AnnounceShown}"
+                                           ToolTip="Объявление поставщика подписки" />
                             </StackPanel>
 
-                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                 <!--
                                     Выключатель «в работе» вместо «сделать действующей»
                                     (0.9.0, пул): подписок в работе может быть сколько
@@ -100,6 +111,20 @@
                                     тест пинга и меню со всем остальным. Подписи —
                                     во всплывающих подсказках.
                                 -->
+                                <!--
+                                    Поддержка и страница подписки — если поставщик
+                                    их назвал (support-url, profile-web-page-url).
+                                -->
+                                <Button Style="{StaticResource IconGhost}" Content="&#xE8F2;"
+                                        Margin="0,0,6,0" ToolTip="{Binding SupportTip}"
+                                        Visibility="{Binding SupportShown}"
+                                        Tag="{Binding Name}" Click="OnSupport" />
+
+                                <Button Style="{StaticResource IconGhost}" Content="&#xE8A7;"
+                                        Margin="0,0,6,0" ToolTip="Страница подписки у поставщика: продлить, сменить тариф"
+                                        Visibility="{Binding WebPageShown}"
+                                        Tag="{Binding Name}" Click="OnWebPage" />
+
                                 <Button Style="{StaticResource IconGhost}" Content="&#xE72C;"
                                         Margin="0,0,6,0" ToolTip="Обновить: перечитать подписку"
                                         Tag="{Binding Name}" Click="OnRefreshOne" />
@@ -110,7 +135,7 @@
                                         Tag="{Binding Name}" Click="OnCheckOne" />
                             </StackPanel>
 
-                            <Button Grid.Column="3" Style="{StaticResource IconGhost}" Content="&#xE712;"
+                            <Button Grid.Column="3" Style="{StaticResource IconGhost}" Content="&#xE712;" VerticalAlignment="Center"
                                     ToolTip="Ещё: закрепить, скопировать ссылку, изменить, удалить"
                                     Tag="{Binding Name}" Click="OnMore" />
                         </Grid>

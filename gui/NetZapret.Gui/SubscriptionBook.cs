@@ -200,6 +200,43 @@ public sealed class SubscriptionBook
         File.WriteAllText(target, JsonSerializer.Serialize(this, Options), new UTF8Encoding(false));
     }
 
+    /// <summary>
+    /// Поставщик перенёс подписку (<c>new-url</c>): ссылка в книге, в настройках и запас — новые.
+    /// </summary>
+    /// <remarks>
+    /// Как в Happ (владелец 15.10: «делай»): поставщик меняет адрес панели,
+    /// а люди узнают об этом, когда старый перестаёт отвечать. Правится
+    /// переданная книга, а не перечитанная с диска: вкладка VPN держит свою
+    /// в памяти и при следующей записи вернула бы старую ссылку. Ссылки —
+    /// пароли: в журнале только имя подписки.
+    /// </remarks>
+    /// <returns>Перенесено ли хоть что-то.</returns>
+    public static bool Follow(SubscriptionBook book, string oldUrl, string? newUrl)
+    {
+        if (string.IsNullOrWhiteSpace(newUrl) || Same(oldUrl, newUrl))
+            return false;
+
+        var moved = book.Entries.Where(e => Same(e.Url, oldUrl)).ToList();
+
+        if (moved.Count == 0)
+            return false;
+
+        foreach (var entry in moved)
+            entry.Url = newUrl;
+
+        book.Save();
+
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (Same(settings.SubscriptionUrl, oldUrl))
+            (settings with { SubscriptionUrl = newUrl }).Save(AppSettings.DefaultPath);
+
+        NetZapret.Subscriptions.SubscriptionPool.MoveReserve(oldUrl, newUrl);
+        Journal.Write("подписка", $"«{moved[0].Name}»: поставщик перенёс подписку на новый адрес — ссылка заменена");
+
+        return true;
+    }
+
     /// <summary>Действующая — та, чью ссылку читает консоль: первая в работе.</summary>
     public SubscriptionEntry? Active(AppSettings settings) =>
         Entries.FirstOrDefault(e => Same(e.Url, settings.SubscriptionUrl));
