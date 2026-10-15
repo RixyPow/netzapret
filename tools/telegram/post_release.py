@@ -30,6 +30,11 @@ LIMIT = 4096
 
 FOOTER = "## Чем это собрано"
 
+# Кнопка под постом (владелец 15.10: «добавь кнопку поддержать в чейнджлоги
+# на гитхабе и в тг»). Та же ссылка, что About.Support в программе: сменится
+# донат — менять и здесь.
+DONATE_URL = "https://t.me/tribute/app?startapp=g6vq"
+
 
 def inline(text: str) -> str:
     """Экранирует HTML и переводит **жирный** и `код` в теги Telegram."""
@@ -127,6 +132,9 @@ def send(text: str) -> None:
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": "true",
+        # Кнопка под сообщением, а не ссылка в тексте: так её видно сразу,
+        # и пост не удлиняется.
+        "reply_markup": json.dumps({"inline_keyboard": [[{"text": "💛 Поддержать", "url": DONATE_URL}]]}),
     }).encode()
 
     request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
@@ -159,7 +167,8 @@ def main() -> None:
 
     if "--dry-run" in sys.argv:
         print(text)
-        print(f"\n[{len(text)} символов из {LIMIT}]")
+        print(f"\n[кнопка под постом: 💛 Поддержать → {DONATE_URL}]")
+        print(f"[{len(text)} символов из {LIMIT}]")
         return
 
     send(text)

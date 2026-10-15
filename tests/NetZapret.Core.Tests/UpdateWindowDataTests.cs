@@ -147,6 +147,41 @@ public sealed class UpdateWindowDataTests
         Assert.Null(Assert.Single(ReleaseNotesText.Parse("Просто текст.")).Lead);
     }
 
+    /// <summary>
+    /// Кнопка «Поддержать» из подвала выпуска (15.10) — для GitHub; окно её сырой разметкой не показывает.
+    /// </summary>
+    [Fact]
+    public void DonateBadgeIsNotShownAsRawMarkup()
+    {
+        var blocks = ReleaseNotesText.Parse("""
+            **Пункт.** Текст.
+
+            [![Поддержать](https://img.shields.io/badge/x-Tribute-26A5E4)](https://t.me/tribute/app?startapp=g6vq)
+
+            ## Чем это собрано и как сверить
+            """);
+
+        Assert.DoesNotContain(blocks, b => b.Spans.Any(s => s.Text.Contains("img.shields.io")));
+        Assert.Equal(2, blocks.Count);
+    }
+
+    /// <summary>Ссылка доната одна на программу, подвал выпуска и пост в Telegram.</summary>
+    [Fact]
+    public void DonateLinkIsTheSameEverywhere()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "NetZapret.sln")))
+            directory = directory.Parent;
+
+        if (directory is null)
+            return;
+
+        Assert.Contains($"({About.Support})", File.ReadAllText(Path.Combine(directory.FullName, "docs", "release-notes.footer.md")));
+        Assert.Contains($"\"{About.Support}\"", File.ReadAllText(Path.Combine(directory.FullName, "tools", "telegram", "post_release.py")));
+        Assert.Contains($"[\"{About.Support}\"]", File.ReadAllText(Path.Combine(directory.FullName, ".github", "FUNDING.yml")));
+    }
+
     [Fact]
     public void ItemsAreCountedPerSection()
     {

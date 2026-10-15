@@ -128,6 +128,16 @@ public static class ReleaseNotesText
                 continue;
             }
 
+            // Значок-картинка со ссылкой — кнопка «Поддержать» для страницы
+            // выпуска на GitHub (подвал, 15.10). Картинок окно не рисует,
+            // и строка вышла бы сырой разметкой; в программе «Поддержать» —
+            // на «Главной» и в «Ещё».
+            if (line.StartsWith("[![", StringComparison.Ordinal))
+            {
+                Flush();
+                continue;
+            }
+
             if (line.StartsWith('#'))
             {
                 Flush();
