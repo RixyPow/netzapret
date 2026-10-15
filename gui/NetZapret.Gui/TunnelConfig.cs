@@ -31,7 +31,8 @@ internal static class TunnelConfig
 {
     public static async Task<BuildOutcome> BuildAsync(
         AppSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool recoveryBuild = false)
     {
         // Выхода нет вовсе — ни подписки, ни WARP. Дальше идти незачем:
         // конфиг вышел бы с пустой группой выходов, и движок держал бы TUN,
@@ -113,7 +114,9 @@ internal static class TunnelConfig
             // в сеть не ходит и судить о живости не может, поэтому список
             // приносим ей мы.
             var options = new SingBoxOptions();
-            var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
+            var dead = recoveryBuild
+                ? new HashSet<string>(StringComparer.Ordinal)
+                : ServerHealthCache.Load().Dead(options.DeadAfterFailures);
 
             // «В пуле только рабочие» (владелец, 28.09) — буквально: мёртвый
             // по замерам сервер в конфиг не идёт вовсе, а не только выводится
@@ -230,7 +233,7 @@ internal static class TunnelConfig
                 // умолчанию включённому: с 29.09 они выводились всегда.
                 DeadServerTags = dead
                     .Concat(settings.AutoPickExcluded)
-                    .Concat(settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
+                    .Concat(!recoveryBuild && settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
                     .ToHashSet(StringComparer.Ordinal),
 
                 // Проверка серверов — как настроил человек (AppSettings).

@@ -1,0 +1,13 @@
+{
+  "Enabled": true,
+  "MaxLatencyMs": 300,
+  "BadChecks": 3,
+  "CheckSeconds": 30,
+  "ProbeTimeoutSeconds": 3,
+  "CandidatesPerRound": 12,
+  "SweepRetrySeconds": 60,
+  "MinRefreshSeconds": 300,
+  "MaxRefreshBackoffSeconds": 1800,
+  "AutoRefreshMinutes": 360,
+  "AllowPinnedReplacement": false
+}

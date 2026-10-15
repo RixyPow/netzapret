@@ -48,6 +48,7 @@ public partial class TunnelSettingsWindow : Window
         MaxHeight = Math.Min(MaxHeight, SystemParameters.WorkArea.Height - 40);
 
         Show(AppSettings.Load(AppSettings.DefaultPath));
+        ShowRecovery();
     }
 
     /// <summary>
@@ -397,5 +398,75 @@ public partial class TunnelSettingsWindow : Window
         }
     }
 
-    private void OnClose(object sender, RoutedEventArgs e) => Close();
+    private bool _recoveryReady;
+    private string _savedLatency = string.Empty;
+
+    private void ShowRecovery()
+    {
+        _recoveryReady = false;
+        try
+        {
+            var options = RecoverySettingsFile.Load();
+            RecoveryEnabled.IsChecked = options.Enabled;
+            Word(RecoveryWord, options.Enabled);
+            RecoveryLatency.Text = options.MaxLatencyMs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _savedLatency = RecoveryLatency.Text;
+            RecoveryLine.Text = "Применяется после перезапуска движков. Работает в режиме «Авто», без WARP. Выключение возвращает штатную логику NetZapret.";
+            _recoveryReady = true;
+        }
+        catch (Exception)
+        {
+            RecoveryEnabled.IsEnabled = false;
+            RecoveryLatency.IsEnabled = false;
+            RecoveryLine.Text = "Не удалось прочитать config/subscription-recovery.json. Исправьте файл и откройте настройки заново; повреждённый файл не перезаписывается.";
+        }
+    }
+
+    private bool SaveRecovery()
+    {
+        if (!_recoveryReady) return false;
+        if (!RecoverySettingsFile.TryParseLatency(RecoveryLatency.Text, out var ms))
+        {
+            Status.Text = "Введите целое число от 1 до 60000 мс или оставьте поле пустым (300 мс).";
+            return false;
+        }
+        try
+        {
+            RecoverySettingsFile.SaveUi(RecoveryEnabled.IsChecked == true, ms);
+            RecoveryLatency.Text = ms.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            _savedLatency = RecoveryLatency.Text;
+            Word(RecoveryWord, RecoveryEnabled.IsChecked == true);
+            Changed = true;
+            Status.Text = "Автообновление и лимит пинга сохранены. Перезапустите движки для применения.";
+            return true;
+        }
+        catch (Exception)
+        {
+            Status.Text = "Не удалось сохранить настройки восстановления. Проверьте файл и права записи.";
+            return false;
+        }
+    }
+
+    private void OnRecoveryToggle(object sender, RoutedEventArgs e)
+    {
+        if (!SaveRecovery()) RecoveryEnabled.IsChecked = RecoveryEnabled.IsChecked != true;
+    }
+
+    private void OnRecoverySave(object sender, RoutedEventArgs e) => SaveRecovery();
+
+    private void OnRecoveryLatencyKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter) { SaveRecovery(); e.Handled = true; }
+    }
+
+    private void OnRecoveryLatencyLostFocus(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (_recoveryReady && RecoveryLatency.Text != _savedLatency) SaveRecovery();
+    }
+
+    private void OnClose(object sender, RoutedEventArgs e)
+    {
+        if (_recoveryReady && RecoveryLatency.Text != _savedLatency && !SaveRecovery()) return;
+        Close();
+    }
 }

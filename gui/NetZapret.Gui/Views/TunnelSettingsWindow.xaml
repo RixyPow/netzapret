@@ -38,6 +38,48 @@
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Всё здесь применяется при следующем запуске движков. Подписки и серверы остались на вкладке «VPN»." />
 
+            <TextBlock Text="ПОДПИСКИ И ВОССТАНОВЛЕНИЕ" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
+            <Border Style="{StaticResource SettingsGroup}">
+                <StackPanel>
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Автообновление подписки" TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Раз в 6 часов и при отсутствии подходящих серверов. Включает поиск замены по лимиту пинга." />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" x:Name="RecoveryWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ToggleButton Grid.Column="2" x:Name="RecoveryEnabled" Style="{StaticResource Switch}"
+                                      Click="OnRecoveryToggle" VerticalAlignment="Center"
+                                      ToolTip="Контроллер автообновления и восстановления. Интервалы можно изменить в config/subscription-recovery.json. Работает в режиме Авто, без WARP." />
+                    </Grid>
+                    <Border Style="{StaticResource RowLine}" />
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Максимальный пинг, мс" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Пустое поле — 300 мс. Допустимо 1–60000. Это задержка запроса через прокси, не ICMP." />
+                        </StackPanel>
+                        <TextBox Grid.Column="1" x:Name="RecoveryLatency" Width="84" VerticalAlignment="Center"
+                                 MaxLength="5" ToolTip="По умолчанию 300 мс"
+                                 KeyDown="OnRecoveryLatencyKey" LostKeyboardFocus="OnRecoveryLatencyLostFocus" />
+                        <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Сохранить"
+                                Margin="8,0,0,0" VerticalAlignment="Center" Click="OnRecoverySave" />
+                    </Grid>
+                    <TextBlock x:Name="RecoveryLine" Style="{StaticResource Caption}" Margin="16,0,16,13" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Text="КУДА ИДЁТ ТРАФИК" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
 
             <Border Style="{StaticResource SettingsGroup}">

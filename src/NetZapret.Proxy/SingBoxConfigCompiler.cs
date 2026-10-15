@@ -1315,6 +1315,9 @@ public sealed class SingBoxConfigCompiler
         return endpoints;
     }
 
+    /// <summary>При восстановлении действует та же эвристика российских тегов, что при автоподборе.</summary>
+    public static bool IsDomesticExitTag(string tag) => LooksDomestic(tag);
+
     /// <summary>
     /// Похож ли сервер на отечественный по его названию.
     /// </summary>
