@@ -67,6 +67,7 @@ public partial class TunnelSettingsWindow : Window
     private void Show(AppSettings settings)
     {
         var engines = settings.Engines;
+        RefreshNoLive.IsChecked = settings.RefreshSubscriptionWhenNoLiveExits;
 
         Word(RussianWord, engines.IgnoreExclusions);
         Russian.IsChecked = engines.IgnoreExclusions;
@@ -396,6 +397,10 @@ public partial class TunnelSettingsWindow : Window
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
         }
     }
+
+    private void OnRefreshNoLive(object sender, RoutedEventArgs e) =>
+        Save(s => s with { RefreshSubscriptionWhenNoLiveExits = RefreshNoLive.IsChecked == true },
+            "Перечитывание после отказа выходов изменено.");
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 }

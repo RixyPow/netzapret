@@ -471,7 +471,7 @@ internal static class SupervisorHost
         // остальные такие решения.
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        services.Add(new SingBoxService(
+        var service = new SingBoxService(
             singBox, options.ProxyConfig, 9090, trafficPort,
             bypassWhenDead: settings.BypassWhenTunnelDead,
             preferredExit: Warp.PreferredExit(settings),
@@ -481,7 +481,27 @@ internal static class SupervisorHost
             watchUrl: Ping.UrlOf(settings))
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
-        });
+        };
+        var refresher = new NetZapret.Subscriptions.NoLiveSubscriptionRefresh(
+            Path.Combine("runtime", "no-live-subscription-refresh.state.json"));
+        service.NoLiveExitsAsync = async ct =>
+        {
+            var current = AppSettings.Load(AppSettings.DefaultPath);
+            if (!current.RefreshSubscriptionWhenNoLiveExits || current.WarpEnabled) return;
+            var urls = SubscriptionBook.Load().Pool.Select(entry => entry.Url).ToList();
+            if (urls.Count == 0 && !string.IsNullOrWhiteSpace(current.SubscriptionUrl)) urls.Add(current.SubscriptionUrl);
+            var result = await refresher.TryAsync(urls, ct);
+            if (!result.Attempted) return;
+            Console.WriteLine(result.Downloaded
+                ? "[подписки] после отказа всех выходов перечитана одна подписка; проверки и обход сохранены"
+                : "[подписки] панель недоступна; старый список сохранён, повтор с увеличенной паузой");
+            if (result.Changed)
+            {
+                SubscriptionRefreshNotice.Write(Environment.ProcessId);
+                Console.WriteLine("[подписки] список изменился; применится через штатный перезапуск, не из надзора");
+            }
+        };
+        services.Add(service);
 
         return true;
     }

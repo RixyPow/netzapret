@@ -202,8 +202,19 @@ internal sealed class TrayIcon : IDisposable
         return SystemIcons.Application;
     }
 
+    private string? _subscriptionNotice;
+
     private void Update()
     {
+        var notice = SubscriptionRefreshNotice.Load();
+        if (notice is not null && notice.Id != _subscriptionNotice
+            && SupervisorState.Load(SupervisorState.DefaultPath) is { } live
+            && live.IsSupervisorAlive() && live.SupervisorProcessId == notice.SupervisorProcessId)
+        {
+            _subscriptionNotice = notice.Id;
+            RestartOffer.Show("Подписка перечитана после отказа всех выходов. Применить обновлённый список");
+        }
+
         // Две попытки в первые шесть секунд, и только они.
         //
         // Рассылки от оболочки может не быть вовсе: при входе в систему она

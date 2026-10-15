@@ -234,6 +234,9 @@ public sealed record AppSettings
     /// </remarks>
     public bool DnsAuto { get; init; }
 
+    /// <summary>Перечитать подписку только после того, как штатный сторож не нашёл живых выходов.</summary>
+    public bool RefreshSubscriptionWhenNoLiveExits { get; init; }
+
     /// <summary>
     /// Game filter поверх пресета: десинк начала соединений игр.
     /// </summary>

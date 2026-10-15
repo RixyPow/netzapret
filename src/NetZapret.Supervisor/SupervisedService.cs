@@ -459,6 +459,33 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
     private readonly ExitWatch _watch;
 
+    /// <summary>Сигнал после неудачного штатного поиска, не замена проверок и обхода.</summary>
+    public Func<CancellationToken, Task>? NoLiveExitsAsync { get; set; }
+    private CancellationTokenSource _refreshStop = new();
+    private int _refreshing;
+
+    private void RequestSubscriptionRefresh()
+    {
+        var callback = NoLiveExitsAsync;
+        if (callback is null || Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0) return;
+        int run = _run;
+        var stop = _refreshStop.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (run != _run || stop.IsCancellationRequested) return;
+                using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+                // Неисправный API лечит обычный надзор, а не чтение панели.
+                if (await api.AliveAsync(stop) && run == _run) await callback(stop);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+            catch (Exception ex) { Note("перечитать подписку не удалось: " + ex.GetType().Name); }
+            finally { Interlocked.Exchange(ref _refreshing, 0); }
+        }, CancellationToken.None);
+    }
+
+
     /// <summary>
     /// Закреплённый выход есть в конфиге и встал на старте.
     /// </summary>
@@ -660,6 +687,9 @@ public sealed class SingBoxService : SupervisedService
 
     protected override void ForgetRunState()
     {
+        _refreshStop.Cancel();
+        _refreshStop.Dispose();
+        _refreshStop = new CancellationTokenSource();
         _bypass.Forget();
 
         // Заодно и остальная память о прежнем запуске. Держать её врозь
@@ -950,7 +980,7 @@ public sealed class SingBoxService : SupervisedService
 
         // Выбранный автоподбором молчит — ищем живого по одному. Найден —
         // обход снимется, и селектор встанет прямо на него (_returnTo).
-        _returnTo = await PickOneByOneAsync(api, cancellationToken);
+        _returnTo = await PickOneByOneAsync(api, cancellationToken, notifyNoLive: true);
         return _returnTo is not null;
     }
 
@@ -991,12 +1021,17 @@ public sealed class SingBoxService : SupervisedService
     /// <param name="except">Кого не проверять: закреплённый сервер, которому ищем замену.</param>
     /// <returns>Поставленный сервер; <c>null</c> — живых нет.</returns>
     private async Task<string?> PickOneByOneAsync(
-        ClashApi api, CancellationToken cancellationToken, string? except = null)
+        ClashApi api, CancellationToken cancellationToken, string? except = null, bool notifyNoLive = false)
     {
+        int run = _run;
         var members = await api.MembersAsync(LatencyGroup, cancellationToken);
 
-        if (members is null || members.Count == 0)
+        if (members is null) return null;
+        if (members.Count == 0)
+        {
+            if (notifyNoLive && run == _run) RequestSubscriptionRefresh();
             return null;
+        }
 
         // Первый ответивший, в порядке последних замеров, — а не лучший из
         // всех. Владелец 29.09: «туннель очень долго переключается при смерти
@@ -1019,6 +1054,8 @@ public sealed class SingBoxService : SupervisedService
                 return tag;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        if (notifyNoLive && run == _run) RequestSubscriptionRefresh();
         return null;
     }
 
@@ -1187,7 +1224,7 @@ public sealed class SingBoxService : SupervisedService
             try
             {
                 using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
-                var best = await PickOneByOneAsync(api, CancellationToken.None, except);
+                var best = await PickOneByOneAsync(api, CancellationToken.None, except, notifyNoLive: true);
 
                 // Пока искали, движок могли перезапустить — тогда не наше дело.
                 if (run != _run)
