@@ -971,7 +971,9 @@ public sealed class SingBoxConfigCompiler
         var applicable = (ruleSet.Operating switch
         {
             OperatingMode.Selective => ruleSet.Rules.AsEnumerable(),
-            OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct),
+            // Как в маршрутах: VPN-имена перед нижестоящим direct, затем
+            // прямые исключения и общий FakeIP. Иначе *.ru перехватит dtf.ru.
+            OperatingMode.ProxyAll => ForProxyAll(ruleSet.Rules),
             _ => Enumerable.Empty<RoutingRule>(),
         }).Where(r => r.Enabled && !r.Off).ToArray();
         var laterProxy = new DomainOverlapIndex();

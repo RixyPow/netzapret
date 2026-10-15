@@ -308,6 +308,7 @@ public partial class DnsView : UserControl
         else if (settings.DnsAuto)
             ChosenName.Text += " · автовыбор";
         var fallback = RouterDnsConnection.ConfigWarning(settings);
+        RouterDnsStatus.Text = fallback ?? "Сохранение не блокируется таймаутом теста. После выбора перезапустите движки.";
         if (fallback is not null)
         {
             ChosenName.Text = "Запасной DoH · DNS роутера не применяется в текущем конфиге";

@@ -25,19 +25,12 @@ public static class RouterDnsConnection
         }
     }
 
+    /// <summary>Читаем сохранённый результат сборки, не сам конфиг; маленькое состояние кэшируется.</summary>
     public static string? ConfigWarning(AppSettings requested)
     {
-        if (!requested.UseRouterDns || !File.Exists(requested.ProxyConfigPath)) return null;
-        try
-        {
-            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(requested.ProxyConfigPath));
-            var remote = json?["dns"]?["servers"]?.AsArray().FirstOrDefault(n => (string?)n?["tag"] == "remote");
-            return remote is not null && (string?)remote["type"] != "udp"
-                ? $"ВНИМАНИЕ: в текущем собранном конфиге используется DoH {(string?)remote["server"]}, а не DNS роутера. "
-                  + "PBR может не работать. После возвращения в свою LAN перезапустите движки." : null;
-        }
-        catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
-        { return null; }
+        if (!requested.UseRouterDns) return null;
+        var state = RouterDnsBuildState.Load(requested.ProxyConfigPath);
+        return state?.RequestedRouterAddress == requested.RouterDnsAddress ? state.Warning : null;
     }
 
     public static bool SameSubnet(IPAddress local, IPAddress remote, IPAddress mask)

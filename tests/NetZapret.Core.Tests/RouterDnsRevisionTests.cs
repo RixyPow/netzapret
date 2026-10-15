@@ -62,14 +62,17 @@ public sealed class RouterDnsRevisionTests
     }
     [Fact] public void DisabledRouterDoesNotInspectNetwork()
     { Assert.Null(RouterDnsConnection.Resolve(new(), _ => throw new Exception("must not run")).Warning); }
-    [Fact] public void SavedFallbackConfigIsClearlyReported()
+    [Fact] public void SavedFallbackBuildIsClearlyReported()
     {
-        string path = Path.GetTempFileName();
+        string folder = Path.Combine(Path.GetTempPath(), "nz-dns-state-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(folder, "singbox.json");
         try
         {
-            File.WriteAllText(path, """{"dns":{"servers":[{"tag":"remote","type":"https","server":"1.1.1.1"}]}}""");
-            Assert.Contains("DoH", RouterDnsConnection.ConfigWarning(new() { UseRouterDns = true, ProxyConfigPath = path }));
+            var requested = new AppSettings { UseRouterDns = true, RouterDnsAddress = "192.168.1.1", ProxyConfigPath = path };
+            var selection = RouterDnsConnection.Resolve(requested, _ => throw new InvalidOperationException());
+            RouterDnsBuildState.Save(path, requested, selection.Warning);
+            Assert.Equal(selection.Warning, RouterDnsConnection.ConfigWarning(requested));
         }
-        finally { File.Delete(path); }
+        finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
     }
 }

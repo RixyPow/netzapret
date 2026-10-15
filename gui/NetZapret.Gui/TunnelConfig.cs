@@ -50,6 +50,7 @@ internal static class TunnelConfig
 
         try
         {
+            var requestedDns = settings;
             var routerDns = RouterDnsConnection.Resolve(settings);
             settings = routerDns.Settings;
             if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
@@ -252,6 +253,7 @@ internal static class TunnelConfig
             });
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
+            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
 
             var note = settings.WarpEnabled
                 ? "Конфиг собран: туннель через WARP, подписки на паузе"
@@ -293,6 +295,7 @@ internal static class TunnelConfig
     {
         try
         {
+            var requestedDns = settings;
             var routerDns = RouterDnsConnection.Resolve(settings);
             settings = routerDns.Settings;
             if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
@@ -307,6 +310,7 @@ internal static class TunnelConfig
             var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(), routerDns.Interface?.Name);
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
+            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
 
             return new BuildOutcome(true, settings.UseRouterDns
                 ? $"DNS через движок: UDP/53 к роутеру {settings.RouterDnsAddress} через LAN."
