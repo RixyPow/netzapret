@@ -779,9 +779,10 @@ public partial class CheckView : UserControl
             : HostsFile.DescribeDesyncExclusions(engine.RuleSet, tunnelUp: tunnelInUse);
 
         // И дыры в щите — имена внутри его зон, которым оставлен десинк.
-        IReadOnlyList<string> holes = engine is null
+        // Множеством: с реестром блокировок их десятки тысяч (15.10).
+        var holes = HostsFile.ShieldHoleSet(engine is null
             ? []
-            : HostsFile.CollectShieldHoles(engine.RuleSet, bypassed);
+            : HostsFile.CollectShieldHoles(engine.RuleSet, bypassed));
 
         var running = targets.Select(async target =>
         {

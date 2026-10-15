@@ -87,6 +87,34 @@ public sealed class PresetZones
         AllFor(domains).FirstOrDefault();
 
     /// <summary>
+    /// Первая секция, которая берёт этот список файлом; <c>null</c> — ни одна.
+    /// </summary>
+    /// <remarks>
+    /// Для большого перечня (реестр блокировок, 15.10) вместо <see cref="FirstFor"/>:
+    /// «первая секция, покрывающая хоть одно имя из ста семнадцати тысяч», —
+    /// не ответ про перечень. Замер 15.10: <see cref="FirstFor"/> по реестру —
+    /// 0,2–0,3 с в потоке окна и ответ «GitHub», потому что среди имён реестра
+    /// есть покрытые его секцией. Имена, которые забирают секции выше, получают
+    /// их рецепт, остальные — рецепт этой. Свой список в поставке называется
+    /// <c>nz-</c>…, у пресета — без приставки: сравнивается имя файла.
+    /// </remarks>
+    public ZapretSection? ForList(string list)
+    {
+        var wanted = ListName(list);
+
+        return _sections
+            .Select(s => s.Section)
+            .FirstOrDefault(section => section.HostListPaths.Any(path =>
+                string.Equals(ListName(path), wanted, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static string ListName(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path.Trim().Trim('"'));
+        return name.StartsWith("nz-", StringComparison.OrdinalIgnoreCase) ? name[3..] : name;
+    }
+
+    /// <summary>
     /// Та же первая секция, но с подробностями для отчёта.
     /// </summary>
     /// <remarks>

@@ -3072,7 +3072,7 @@ public partial class RoutesView : UserControl
         // и каждый раз читался весь пресет: в russia-blacklist.txt сто
         // семнадцать тысяч имён, и он оказывался прочитан восемьдесят раз.
         // Раздел от этого открывался секундами.
-        var section = _zones?.FirstFor(part.Domains);
+        var section = part.Part.Bulk ? _zones?.ForList(part.Part.List) : _zones?.FirstFor(part.Domains);
 
         // Здесь 23.09 стояло «по факту напрямую: пресет не чинит / пропускает»,
         // серым, как «напрямую». Это была моя ошибка, и дорогая. Смотрелись
