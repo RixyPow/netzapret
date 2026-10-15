@@ -40,11 +40,22 @@ public partial class MainWindow : Window
 
         _toastTimer.Tick += (_, _) => HideToast();
 
-        UpdateNotice.Changed += () => Dispatcher.InvokeAsync(() =>
+        // Подписка на статическое событие держала бы закрытое окно живым:
+        // с 15.10 окно в трее закрывается по-настоящему (Release).
+        _onUpdate = () => Dispatcher.InvokeAsync(() =>
         {
             ShowUpdateBadge();
             OfferUpdateOnce();
         });
+        UpdateNotice.Changed += _onUpdate;
+
+        Closed += (_, _) =>
+        {
+            UpdateNotice.Changed -= _onUpdate;
+
+            if (ReferenceEquals(Glass.Root, Root))
+                Glass.Root = null;
+        };
 
         // Запуск в трей: окно появится позже — тогда и предложим.
         IsVisibleChanged += (_, _) => OfferUpdateOnce();
@@ -54,8 +65,69 @@ public partial class MainWindow : Window
         IsVisibleChanged += (_, _) => BackdropVideo.Update();
         StateChanged += (_, _) => BackdropVideo.Update();
 
-        _ = CheckForUpdateAsync();
-        _ = WarmRoutesAsync();
+        _release.Tick += (_, _) => Release();
+        IsVisibleChanged += (_, _) =>
+        {
+            if (IsVisible)
+                _release.Stop();
+        };
+
+        // Раз за запуск программы, а не за окно: окно теперь создаётся заново
+        // при каждом открытии из трея.
+        if (!_startedOnce)
+        {
+            _startedOnce = true;
+            _ = CheckForUpdateAsync();
+            _ = WarmRoutesAsync();
+        }
+    }
+
+    private readonly Action _onUpdate;
+
+    /// <summary>Проверка обновления и прогрев «Маршрутов» уже запускались в этом процессе.</summary>
+    private static bool _startedOnce;
+
+    /// <summary>
+    /// Сколько окно, спрятанное в трей, ждёт, прежде чем закрыться по-настоящему.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 15.10 («1 2 делай»): окно в трее держало ~300 МБ своей памяти
+    /// (замер того же дня: 315 МБ частной памяти при 399 МБ рабочего набора),
+    /// а в трее программа проводит почти всё время. Закрытое окно создаётся
+    /// заново из значка (TrayIcon.Show) — так уже работал автозапуск в трей.
+    /// Минута — чтобы «спрятать и сразу открыть» не платило пересозданием.
+    /// </remarks>
+    private static readonly TimeSpan ReleaseAfter = TimeSpan.FromMinutes(1);
+
+    private readonly DispatcherTimer _release = new() { Interval = ReleaseAfter };
+
+    /// <summary>Окно закрывается по-настоящему — крестик это не отменяет.</summary>
+    private bool _releasing;
+
+    /// <summary>Закрыть спрятанное окно и отдать его память.</summary>
+    private void Release()
+    {
+        _release.Stop();
+
+        // Вернулось на экран или держит открытое дочернее окно — не трогаем.
+        if (IsVisible || OwnedWindows.Cast<Window>().Any(w => w.IsVisible))
+            return;
+
+        _releasing = true;
+        Close();
+
+        // «Маршруты» живут в статическом поле, чтобы заходы не строили их
+        // заново, — и держали бы закрытое окно и свои данные.
+        RoutesView.Release();
+
+        // Отдать системе, а не только освободить: без сборки с уплотнением
+        // занятое так и висело бы за процессом до следующей сборки мусора.
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+        }));
     }
 
     /// <summary>
@@ -116,8 +188,8 @@ public partial class MainWindow : Window
     private void ShowUpdateBadge() =>
         RailBadge.SetShown(RailStatus, UpdateNotice.Available is not null);
 
-    /// <summary>Окно обновления уже предлагалось в этом запуске.</summary>
-    private bool _updateOffered;
+    /// <summary>Окно обновления уже предлагалось в этом запуске программы — не окна (окно пересоздаётся, Release).</summary>
+    private static bool _updateOffered;
 
     /// <summary>
     /// Показывает «Доступно обновление» один раз за запуск — когда окно на виду.
@@ -272,10 +344,13 @@ public partial class MainWindow : Window
     /// </remarks>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
-        if (!App.Exiting)
+        if (!App.Exiting && !_releasing)
         {
             e.Cancel = true;
             Hide();
+
+            // Через минуту в трее — закрыть по-настоящему (Release, 15.10).
+            _release.Start();
 
             return;
         }
