@@ -84,7 +84,8 @@ public static class RouterDnsConnection
     /// открывает по настоящему адресу (301 и 200), не открывались вовсе.
     /// Поэтому роутер спрашивается о тех же закрытых именах, что и резолверы
     /// в обзоре (<see cref="DnsSurvey.SpoofProbes"/>), и судит тот же
-    /// <see cref="DnsSurvey.IsSpoofed"/>.
+    /// <see cref="DnsSurvey.IsSpoofed"/>. Подмена включения не запрещает —
+    /// только предупреждает (<see cref="RouterDnsCheck.Allows"/>).
     /// </remarks>
     public static async Task<RouterDnsCheck> CheckAsync(string address, CancellationToken ct)
     {
@@ -147,7 +148,7 @@ public static class RouterDnsConnection
             return new(RouterDnsFit.Spoofs,
                 $"Роутер подменяет ответы: {spoofed.Count} из {compared.Count} заблокированных имён получили не настоящий адрес "
                 + $"(например, {name} → {said}). С таким DNS перестанут открываться сайты под десинком и напрямую. "
-                + "Подойдёт роутер, который сам спрашивает DNS по DoH или DoT (https-dns-proxy, stubby).");
+                + "Так не будет, если роутер сам спрашивает DNS по DoH или DoT (https-dns-proxy, stubby).");
         }
 
         if (compared.Count == 0)
@@ -204,6 +205,16 @@ public enum RouterDnsFit
 /// <summary>Приговор проверки роутера и его объяснение для человека.</summary>
 public sealed record RouterDnsCheck(RouterDnsFit Fit, string Text)
 {
-    /// <summary>Можно ли включать: подмена и молчание закрыли бы сайты.</summary>
-    public bool Allows => Fit is RouterDnsFit.Fits or RouterDnsFit.Unknown;
+    /// <summary>Можно ли включать.</summary>
+    /// <remarks>
+    /// Подменяющий роутер включить можно — с предупреждением (владелец 16.10:
+    /// «можно всё-таки включить, но будет предупреждение жёлтым»): у кого-то
+    /// закрытые имена и так идут через VPN, а прямым и десинку роутер нужен
+    /// ради своей маршрутизации. Молчащий — нельзя: движок остался бы без DNS
+    /// вовсе, и не открывалось бы ничего.
+    /// </remarks>
+    public bool Allows => Fit is not RouterDnsFit.Silent;
+
+    /// <summary>Включить можно, но предупредить надо.</summary>
+    public bool Warns => Fit is RouterDnsFit.Spoofs or RouterDnsFit.Unknown;
 }

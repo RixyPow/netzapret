@@ -28,7 +28,9 @@ public sealed class RouterDnsCheckTests
         var check = RouterDnsConnection.Judge("Беспроводная сеть", router, Honest);
 
         Assert.Equal(RouterDnsFit.Spoofs, check.Fit);
-        Assert.False(check.Allows);
+        // Включить можно, но с предупреждением (владелец 16.10).
+        Assert.True(check.Allows);
+        Assert.True(check.Warns);
         Assert.Contains("4 из 4", check.Text);
         Assert.Contains("81.200.2.238", check.Text);
     }
@@ -40,6 +42,16 @@ public sealed class RouterDnsCheckTests
 
         Assert.Equal(RouterDnsFit.Fits, check.Fit);
         Assert.True(check.Allows);
+        Assert.False(check.Warns);
+    }
+
+    [Fact]
+    public void SilentRouterIsNotAllowed()
+    {
+        // Без ответа движок остался бы без DNS вовсе.
+        var check = new RouterDnsCheck(RouterDnsFit.Silent, "не ответил");
+
+        Assert.False(check.Allows);
     }
 
     [Fact]
@@ -70,5 +82,6 @@ public sealed class RouterDnsCheckTests
 
         Assert.Equal(RouterDnsFit.Unknown, check.Fit);
         Assert.True(check.Allows);
+        Assert.True(check.Warns);
     }
 }
