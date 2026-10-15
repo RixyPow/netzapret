@@ -308,7 +308,9 @@ public partial class DnsView : UserControl
         else if (settings.DnsAuto)
             ChosenName.Text += " · автовыбор";
         var fallback = RouterDnsConnection.ConfigWarning(settings);
-        RouterDnsStatus.Text = fallback ?? "Сохранение не блокируется таймаутом теста. После выбора перезапустите движки.";
+        RouterDnsStatus.Text = fallback ?? (settings.UseRouterDns
+            ? "Включён. Действует после перезапуска движков."
+            : "Перед включением программа проверит роутер: отвечает ли он и не подменяет ли заблокированные имена.");
         if (fallback is not null)
         {
             ChosenName.Text = "Запасной DoH · DNS роутера не применяется в текущем конфиге";
@@ -318,7 +320,8 @@ public partial class DnsView : UserControl
         RouterDnsIp.Text = settings.RouterDnsAddress;
         TunnelMode.IsEnabled = !settings.UseRouterDns;
 
-        AutoDnsSwitch.IsChecked = settings.DnsAuto;
+        // Автовыбор при DNS роутера хранится, но не действует (RouterDnsSettings.Select).
+        AutoDnsSwitch.IsChecked = settings.DnsAuto && !settings.UseRouterDns;
 
         // Заполняем, не поднимая события выбора: иначе показ состояния
         // тут же записал бы его обратно в настройки и позвал уведомление
@@ -336,21 +339,32 @@ public partial class DnsView : UserControl
         TunnelHint.Text = DnsRoutes.Explain(settings);
     }
 
-    private bool SaveRouterDns()
+    /// <summary>Проверить роутер и, если годится, включить его DNS.</summary>
+    /// <remarks>
+    /// Включение идёт только через проверку: роутер, подменяющий закрытые
+    /// имена, молча закрыл бы сайты под десинком (замер 15.10 у владельца,
+    /// <see cref="RouterDnsConnection.CheckAsync"/>).
+    /// </remarks>
+    private async Task<bool> SaveRouterDnsAsync()
     {
         if (!RouterDnsSettings.TryNormalize(RouterDnsIp.Text, out var address))
         {
-            RouterDnsStatus.Text = "Введите LAN IPv4 роутера, например 192.168.1.1. IPv6, URL и публичный DNS здесь не поддерживаются.";
+            RouterDnsStatus.Text = "Введите адрес роутера в домашней сети, например 192.168.1.1. IPv6, имена и публичные DNS здесь не подходят.";
             return false;
         }
+
+        var check = await CheckRouterAsync(address);
+        if (check is null || !check.Allows)
+            return false;
+
         try
         {
             var settings = RouterDnsSettings.Select(AppSettings.Load(), address);
             settings.Save(AppSettings.DefaultPath);
             ShowChosen(settings);
-            RouterDnsStatus.Text = "Сохранено. Запросы к DNS пойдут по UDP/53 через LAN, без VPN NetZapret. Перезапустите движки. Тест UDP необязателен.";
-            Status.Text = "DNS роутера выбран. Перезапустите движки для применения.";
-            this.Offer("DNS роутера выбран");
+            RouterDnsStatus.Text = check.Text + " Включён — действует после перезапуска движков.";
+            Status.Text = "DNS роутера включён. Перезапустите движки.";
+            this.Offer("DNS роутера включён");
             return true;
         }
         catch (Exception ex)
@@ -360,13 +374,41 @@ public partial class DnsView : UserControl
         }
     }
 
-    private void OnRouterDnsUse(object sender, RoutedEventArgs e) => SaveRouterDns();
+    /// <summary>Проверка роутера с запертыми на её время кнопками; <c>null</c> — сорвалась.</summary>
+    private async Task<RouterDnsCheck?> CheckRouterAsync(string address)
+    {
+        RouterDnsSwitch.IsEnabled = RouterDnsUse.IsEnabled = RouterDnsTest.IsEnabled = false;
+        RouterDnsStatus.Text = "Проверяю роутер: отвечает ли он и не подменяет ли заблокированные имена…";
+        try
+        {
+            var check = await RouterDnsConnection.CheckAsync(address, CancellationToken.None);
+            RouterDnsStatus.Text = check.Allows ? check.Text : check.Text + " DNS роутера не включён.";
+            return check;
+        }
+        catch (Exception ex)
+        {
+            RouterDnsStatus.Text = "Проверка не выполнена: " + ex.GetBaseException().Message;
+            return null;
+        }
+        finally
+        {
+            RouterDnsSwitch.IsEnabled = RouterDnsUse.IsEnabled = RouterDnsTest.IsEnabled = true;
+        }
+    }
 
-    private void OnRouterDnsToggle(object sender, RoutedEventArgs e)
+    private async void OnRouterDnsUse(object sender, RoutedEventArgs e)
+    {
+        if (await SaveRouterDnsAsync())
+            RouterDnsSwitch.IsChecked = true;
+    }
+
+    private async void OnRouterDnsToggle(object sender, RoutedEventArgs e)
     {
         if (RouterDnsSwitch.IsChecked == true)
         {
-            if (!SaveRouterDns()) RouterDnsSwitch.IsChecked = false;
+            // Выключатель встаёт сам, только когда проверка пропустила.
+            RouterDnsSwitch.IsChecked = false;
+            RouterDnsSwitch.IsChecked = await SaveRouterDnsAsync();
             return;
         }
         try
@@ -374,7 +416,7 @@ public partial class DnsView : UserControl
             var settings = AppSettings.Load() with { UseRouterDns = false };
             settings.Save(AppSettings.DefaultPath);
             ShowChosen(settings);
-            RouterDnsStatus.Text = "DNS роутера выключен. Вернётся сохранённый DoH-резолвер. Перезапустите движки.";
+            RouterDnsStatus.Text = $"DNS роутера выключен. Вернулись прежние: {ChosenName.Text}, путь — {DnsRoutes.Word(settings.DnsVia)}. Перезапустите движки.";
             this.Offer("DNS роутера выключен");
         }
         catch (Exception ex)
@@ -384,15 +426,9 @@ public partial class DnsView : UserControl
     private async void OnRouterDnsTest(object sender, RoutedEventArgs e)
     {
         if (!RouterDnsSettings.TryNormalize(RouterDnsIp.Text, out var address))
-        { RouterDnsStatus.Text = "Введите LAN IPv4 роутера."; return; }
-        RouterDnsTest.IsEnabled = false;
-        try
-        {
-            RouterDnsStatus.Text = "Проверяю example.com по UDP/53 через LAN…";
-            RouterDnsStatus.Text = await RouterDnsConnection.CheckAsync(address, CancellationToken.None);
-        }
-        catch (Exception ex) { RouterDnsStatus.Text = "Проверка не выполнена: " + ex.GetBaseException().Message; }
-        finally { RouterDnsTest.IsEnabled = true; }
+        { RouterDnsStatus.Text = "Введите адрес роутера в домашней сети, например 192.168.1.1."; return; }
+
+        await CheckRouterAsync(address);
     }
 
     /// <summary>Показывает, кого спрашивает сама Windows.</summary>
@@ -602,7 +638,10 @@ public partial class DnsView : UserControl
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var next = settings with { DnsAuto = !settings.DnsAuto, UseRouterDns = false };
+            // При DNS роутера выключатель показан выключенным, хотя автовыбор
+            // мог сохраниться включённым: щелчок по нему — «включить», а не
+            // переворот сохранённого.
+            var next = settings with { DnsAuto = settings.UseRouterDns || !settings.DnsAuto, UseRouterDns = false };
 
             next.Save(AppSettings.DefaultPath);
             ShowChosen(next);

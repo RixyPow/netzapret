@@ -279,7 +279,7 @@
                         <StackPanel Margin="0,0,16,0">
                             <TextBlock Text="DNS роутера / OpenWRT" FontWeight="SemiBold" FontSize="16" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Обычный UDP DNS в локальной сети. Без DoH и без VPN NetZapret. Отключает DoH-автовыбор." />
+                                       Text="Движок спрашивает роутер обычным DNS в домашней сети, без DoH и без VPN. Пока включён, автовыбор резолвера и путь DNS не действуют; выключите — вернутся прежние." />
                         </StackPanel>
                         <ToggleButton Grid.Column="1" x:Name="RouterDnsSwitch" Style="{StaticResource Switch}"
                                       VerticalAlignment="Center" Click="OnRouterDnsToggle" />
@@ -289,11 +289,11 @@
                     <WrapPanel Margin="0,14,0,0">
                         <TextBox x:Name="RouterDnsIp" Width="170" Margin="0,0,8,6" VerticalContentAlignment="Center"
                                  ToolTip="LAN IPv4 роутера, например 192.168.1.1" />
-                        <Button Style="{StaticResource Ghost}" Content="Использовать" Click="OnRouterDnsUse" Margin="0,0,8,6" />
-                        <Button x:Name="RouterDnsTest" Style="{StaticResource Ghost}" Content="Проверить UDP" Click="OnRouterDnsTest" Margin="0,0,0,6" />
+                        <Button x:Name="RouterDnsUse" Style="{StaticResource Ghost}" Content="Использовать" Click="OnRouterDnsUse" Margin="0,0,8,6" />
+                        <Button x:Name="RouterDnsTest" Style="{StaticResource Ghost}" Content="Проверить роутер" Click="OnRouterDnsTest" Margin="0,0,0,6" />
                     </WrapPanel>
                     <TextBlock x:Name="RouterDnsStatus" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Сохранение не блокируется таймаутом теста. После выбора перезапустите движки." />
+                               Text="Перед включением программа проверит роутер: отвечает ли он и не подменяет ли заблокированные имена." />
                 </StackPanel>
             </Border>
 

@@ -25,11 +25,13 @@ public sealed class RouterDnsTests
     public void UnsafeOrUnsupportedRejected(string? value) => Assert.False(RouterDnsSettings.TryNormalize(value, out _));
     [Fact] public void DefaultsAreOptIn()
     { var s = new AppSettings(); Assert.False(s.UseRouterDns); Assert.Equal("192.168.1.1", s.RouterDnsAddress); }
-    [Fact] public void SelectDisablesDohAutoAndProxyDnsWithoutChangingOldProvider()
+    [Fact] public void SelectKeepsDohChoiceSoTurningOffReturnsIt()
     {
-        var s = RouterDnsSettings.Select(new() { DnsAuto = true, DnsVia = DnsRoute.Tunnel, DnsServer = "1.1.1.1" }, "192.168.1.1");
-        Assert.True(s.UseRouterDns); Assert.False(s.DnsAuto); Assert.Equal(DnsRoute.Direct, s.DnsVia);
+        var before = new AppSettings { DnsAuto = true, DnsVia = DnsRoute.Tunnel, DnsServer = "1.1.1.1" };
+        var s = RouterDnsSettings.Select(before, "192.168.1.1");
+        Assert.True(s.UseRouterDns); Assert.True(s.DnsAuto); Assert.Equal(DnsRoute.Tunnel, s.DnsVia);
         Assert.Equal("1.1.1.1", s.DnsServer);
+        Assert.Equal(before, s with { UseRouterDns = false });
     }
     [Fact] public void InvalidSelectionThrows() => Assert.Throws<ArgumentException>(() => RouterDnsSettings.Select(new(), "127.0.0.1"));
     [Theory]

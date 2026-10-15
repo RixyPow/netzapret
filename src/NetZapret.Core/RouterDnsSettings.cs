@@ -21,11 +21,17 @@ public static class RouterDnsSettings
         return true;
     }
 
+    /// <remarks>
+    /// Автовыбор резолвера и путь DNS не трогаются: пока DNS роутера включён,
+    /// их не читают ни сборка, ни автовыбор, а выключение должно вернуть
+    /// прежнее. До 15.10 включение ставило автовыбор в «выкл» и путь
+    /// в «напрямую», а выключение их не возвращало — у владельца после
+    /// пробы так и осталось.
+    /// </remarks>
     public static AppSettings Select(AppSettings settings, string address)
     {
         if (!TryNormalize(address, out var normalized))
             throw new ArgumentException("Нужен IPv4 DNS роутера из локальной сети, например 192.168.1.1.");
-        return settings with { UseRouterDns = true, RouterDnsAddress = normalized,
-            DnsAuto = false, DnsVia = DnsRoute.Direct };
+        return settings with { UseRouterDns = true, RouterDnsAddress = normalized };
     }
 }
