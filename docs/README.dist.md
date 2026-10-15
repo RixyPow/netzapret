@@ -111,7 +111,7 @@ Windows вдобавок покажет SmartScreen: программа не п�
 
 ## Поддержать
 
-Если программа пригодилась — [tips.tips/000486918](https://tips.tips/000486918).
+Если программа пригодилась — [Tribute в Telegram](https://t.me/tribute/app?startapp=g6vq).
 
 Она бесплатная и останется такой.
 
