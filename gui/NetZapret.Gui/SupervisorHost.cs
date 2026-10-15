@@ -471,7 +471,7 @@ internal static class SupervisorHost
         // остальные такие решения.
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
-        var service = new SingBoxService(
+        services.Add(new SingBoxService(
             singBox, options.ProxyConfig, 9090, trafficPort,
             bypassWhenDead: settings.BypassWhenTunnelDead,
             preferredExit: Warp.PreferredExit(settings),
@@ -481,23 +481,7 @@ internal static class SupervisorHost
             watchUrl: Ping.UrlOf(settings))
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
-        };
-        SubscriptionRecovery.Attach(service, options.ProxyConfig, singBox, async ct =>
-        {
-            var runningWinws = services.OfType<WinwsService>().FirstOrDefault();
-            if (runningWinws is null) return true;
-            var replacement = new List<SupervisedService>();
-            AddWinws(options, replacement); // Новые адреса прокси должны попасть в исключения перехвата.
-            var updated = replacement.OfType<WinwsService>().FirstOrDefault();
-            if (updated is null) return false;
-            await runningWinws.StopAsync(ct);
-            runningWinws.SetArgumentsWhileStopped(updated.Arguments);
-            await Task.Delay(TimeSpan.FromSeconds(1), ct);
-            return await runningWinws.StartAsync(TimeSpan.FromSeconds(20), ct);
-        }, async (candidateSettings, ct) =>
-            (await TunnelConfig.BuildAsync(candidateSettings, ct, recoveryBuild: true)).Ok,
-            () => SubscriptionBook.Load().Pool.Select(entry => entry.Url).ToList());
-        services.Add(service);
+        });
 
         return true;
     }

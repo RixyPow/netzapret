@@ -155,6 +155,7 @@ internal static class EngineControl
         {
             var built = await TunnelConfig.BuildAsync(settings, cancellationToken);
 
+            if (built.Warning is not null) note += built.Warning + " ";
             if (!built.Ok)
             {
                 // Прежний конфиг — не повод не запуститься: он мог просто
@@ -175,6 +176,7 @@ internal static class EngineControl
         {
             var built = TunnelConfig.BuildDnsOnly(settings);
             dnsEngine = built.Ok;
+            if (built.Warning is not null) note += built.Warning + " ";
 
             if (!built.Ok)
                 note += built.Message + " ";

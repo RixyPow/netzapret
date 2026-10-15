@@ -322,9 +322,6 @@ public abstract class SupervisedService
 /// </remarks>
 public sealed class SingBoxService : SupervisedService
 {
-    /// <summary>Контроллер восстановления вызывается только последовательной проверкой надзора.</summary>
-    public Func<CancellationToken, Task<ServiceCheck>>? RecoveryCheck { get; set; }
-
     private readonly string _executablePath;
     private readonly string _configPath;
     private readonly int _healthPort;
@@ -520,15 +517,6 @@ public sealed class SingBoxService : SupervisedService
         }
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
-
-        if (RecoveryCheck is not null)
-        {
-            // Второй фоновый прогрев спорил бы с контроллером; оставляем только начальный выбор.
-            foreach (var exit in StartExits(_preferredExit))
-                if (await api.SelectAsync(SelectorGroup, exit, cancellationToken)) break;
-            _warm = true;
-            return;
-        }
 
         bool placed = false;
 
@@ -765,16 +753,6 @@ public sealed class SingBoxService : SupervisedService
         // Ради DNS сторожить выход и проверять проход трафика нечем: выхода нет.
         if (!_warm || _dnsOnly)
             return ServiceCheck.Healthy;
-
-        if (RecoveryCheck is not null)
-        {
-            var recovery = await RecoveryCheck(cancellationToken);
-            LastError = recovery == ServiceCheck.Healthy ? null
-                : "Subscription recovery: no acceptable exit yet; see supervisor.log.";
-            if (_dnsViaAuto)
-                await ApplyDnsPathAsync(recovery == ServiceCheck.Healthy, cancellationToken);
-            return recovery; // Прежние обход напрямую и сторож выхода не должны конкурировать с контроллером.
-        }
 
         await WatchExitAsync(cancellationToken);
 
@@ -1284,13 +1262,7 @@ public sealed class SingBoxService : SupervisedService
 public sealed class WinwsService : SupervisedService
 {
     private readonly string _executablePath;
-    private IReadOnlyList<string> _arguments;
-    public IReadOnlyList<string> Arguments => _arguments;
-    public void SetArgumentsWhileStopped(IReadOnlyList<string> arguments)
-    {
-        if (IsProcessAlive) throw new InvalidOperationException("Stop winws before changing arguments.");
-        _arguments = arguments.ToArray();
-    }
+    private readonly IReadOnlyList<string> _arguments;
     private readonly string _workingDirectory;
 
     public WinwsService(string executablePath, IReadOnlyList<string> arguments, string workingDirectory)

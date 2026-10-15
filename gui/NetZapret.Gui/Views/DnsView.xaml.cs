@@ -307,6 +307,12 @@ public partial class DnsView : UserControl
             ChosenName.Text = $"Роутер · {settings.RouterDnsAddress}:53 · UDP/LAN";
         else if (settings.DnsAuto)
             ChosenName.Text += " · автовыбор";
+        var fallback = RouterDnsConnection.ConfigWarning(settings);
+        if (fallback is not null)
+        {
+            ChosenName.Text = "Запасной DoH · DNS роутера не применяется в текущем конфиге";
+            RouterDnsStatus.Text = fallback;
+        }
         RouterDnsSwitch.IsChecked = settings.UseRouterDns;
         RouterDnsIp.Text = settings.RouterDnsAddress;
         TunnelMode.IsEnabled = !settings.UseRouterDns;

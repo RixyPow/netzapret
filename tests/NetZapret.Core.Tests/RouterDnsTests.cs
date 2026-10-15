@@ -83,9 +83,10 @@ public sealed class RouterDnsTests
     [Fact] public void DirectAndDesyncUseRealDnsWhileProxyKeepsFakeIp()
     {
         var rules = Compile(Rules)["dns"]!["rules"]!.AsArray();
-        Assert.Equal("remote", (string?)rules[0]!["server"]); Assert.Equal("chatgpt.com", (string?)rules[0]!["domain"]![0]);
-        Assert.Equal("remote", (string?)rules[1]!["server"]); Assert.Equal("youtube.com", (string?)rules[1]!["domain_suffix"]![0]);
-        Assert.Equal("fake", (string?)rules[2]!["server"]); Assert.Equal("discord.gg", (string?)rules[2]!["domain_suffix"]![0]);
+        Assert.Single(rules);
+        Assert.Equal("fake", (string?)rules[0]!["server"]);
+        Assert.Equal("discord.gg", (string?)rules[0]!["domain_suffix"]![0]);
+        Assert.Equal("remote", (string?)Compile(Rules)["dns"]!["final"]);
     }
     [Fact] public void NoProxyExitMeansNoFakeIpRules()
     { Assert.DoesNotContain(Compile(Rules, server: false)["dns"]!["rules"]!.AsArray(), n => (string?)n!["server"] == "fake"); }

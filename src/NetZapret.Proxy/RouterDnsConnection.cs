@@ -9,6 +9,37 @@ public static class RouterDnsConnection
 {
     public sealed record Lan(string Name, int Index, IPAddress LocalAddress, int PrefixLength);
 
+    public sealed record Selection(AppSettings Settings, Lan? Interface, string? Warning);
+
+    public static Selection Resolve(AppSettings requested, Func<string, Lan>? find = null)
+    {
+        if (!requested.UseRouterDns) return new(requested, null, null);
+        try { return new(requested, (find ?? Find)(requested.RouterDnsAddress), null); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+            or NetworkInformationException or SocketException or PlatformNotSupportedException)
+        {
+            return new(requested with { UseRouterDns = false, DnsAuto = false, DnsVia = DnsRoute.Direct }, null,
+                $"ВНИМАНИЕ: DNS роутера {requested.RouterDnsAddress} недоступен в этой LAN. "
+                + $"Используется запасной DoH {requested.DnsServer}, напрямую. PBR роутера может не получить DNS-запросы. "
+                + "После подключения к нужной сети перезапустите движки для повторной попытки.");
+        }
+    }
+
+    public static string? ConfigWarning(AppSettings requested)
+    {
+        if (!requested.UseRouterDns || !File.Exists(requested.ProxyConfigPath)) return null;
+        try
+        {
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(requested.ProxyConfigPath));
+            var remote = json?["dns"]?["servers"]?.AsArray().FirstOrDefault(n => (string?)n?["tag"] == "remote");
+            return remote is not null && (string?)remote["type"] != "udp"
+                ? $"ВНИМАНИЕ: в текущем собранном конфиге используется DoH {(string?)remote["server"]}, а не DNS роутера. "
+                  + "PBR может не работать. После возвращения в свою LAN перезапустите движки." : null;
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        { return null; }
+    }
+
     public static bool SameSubnet(IPAddress local, IPAddress remote, IPAddress mask)
     {
         var a = local.GetAddressBytes(); var b = remote.GetAddressBytes(); var m = mask.GetAddressBytes();

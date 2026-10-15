@@ -9,7 +9,7 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui;
 
 /// <summary>Чем закончилась сборка конфига.</summary>
-internal sealed record BuildOutcome(bool Ok, string Message);
+internal sealed record BuildOutcome(bool Ok, string Message, string? Warning = null);
 
 /// <summary>
 /// Собирает конфиг туннеля из настроек, правил и подписки.
@@ -31,8 +31,7 @@ internal static class TunnelConfig
 {
     public static async Task<BuildOutcome> BuildAsync(
         AppSettings settings,
-        CancellationToken cancellationToken,
-        bool recoveryBuild = false)
+        CancellationToken cancellationToken)
     {
         // Выхода нет вовсе — ни подписки, ни WARP. Дальше идти незачем:
         // конфиг вышел бы с пустой группой выходов, и движок держал бы TUN,
@@ -51,6 +50,9 @@ internal static class TunnelConfig
 
         try
         {
+            var routerDns = RouterDnsConnection.Resolve(settings);
+            settings = routerDns.Settings;
+            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
             var (ruleSet, zapretRoot) = LoadRules(settings);
 
             // WARP и подписки — одно из двух (владелец, 01.10; Warp.TunnelExits).
@@ -114,9 +116,7 @@ internal static class TunnelConfig
             // в сеть не ходит и судить о живости не может, поэтому список
             // приносим ей мы.
             var options = new SingBoxOptions();
-            var dead = recoveryBuild
-                ? new HashSet<string>(StringComparer.Ordinal)
-                : ServerHealthCache.Load().Dead(options.DeadAfterFailures);
+            var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
 
             // «В пуле только рабочие» (владелец, 28.09) — буквально: мёртвый
             // по замерам сервер в конфиг не идёт вовсе, а не только выводится
@@ -184,7 +184,7 @@ internal static class TunnelConfig
                 DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
                 DnsServerType = settings.UseRouterDns ? "udp" : "https",
                 RouterDns = settings.UseRouterDns,
-                RouterDnsInterface = settings.UseRouterDns ? RouterDnsConnection.Find(settings.RouterDnsAddress).Name : null,
+                RouterDnsInterface = routerDns.Interface?.Name,
 
                 // Имя сертификата и путь — у провайдера из списка выбора.
                 // Адрес, вписанный руками, идёт как прежде: без имени.
@@ -236,7 +236,7 @@ internal static class TunnelConfig
                 // умолчанию включённому: с 29.09 они выводились всегда.
                 DeadServerTags = dead
                     .Concat(settings.AutoPickExcluded)
-                    .Concat(!recoveryBuild && settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
+                    .Concat(settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
                     .ToHashSet(StringComparer.Ordinal),
 
                 // Проверка серверов — как настроил человек (AppSettings).
@@ -273,7 +273,7 @@ internal static class TunnelConfig
             if (result.SkippedServers.Count > 0)
                 note += $", {result.SkippedServers.Count} пропущено";
 
-            return new BuildOutcome(true, note + ".");
+            return new BuildOutcome(true, note + ".", routerDns.Warning);
         }
         catch (Exception ex)
         {
@@ -293,6 +293,9 @@ internal static class TunnelConfig
     {
         try
         {
+            var routerDns = RouterDnsConnection.Resolve(settings);
+            settings = routerDns.Settings;
+            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
             var resolvers = SystemResolvers.Discover();
 
             // Без адресов резолверов движку нечего ловить: TUN поднялся бы
@@ -301,13 +304,13 @@ internal static class TunnelConfig
                 return new BuildOutcome(false, "DNS через движок не поднят: резолверы Windows не нашлись.");
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
-            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate());
+            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(), routerDns.Interface?.Name);
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
             return new BuildOutcome(true, settings.UseRouterDns
                 ? $"DNS через движок: UDP/53 к роутеру {settings.RouterDnsAddress} через LAN."
-                : $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.");
+                : $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.", routerDns.Warning);
         }
         catch (Exception ex)
         {

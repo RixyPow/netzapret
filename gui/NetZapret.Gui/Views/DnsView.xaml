@@ -284,6 +284,8 @@
                         <ToggleButton Grid.Column="1" x:Name="RouterDnsSwitch" Style="{StaticResource Switch}"
                                       VerticalAlignment="Center" Click="OnRouterDnsToggle" />
                     </Grid>
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
+                               Text="ВАЖНО: режим для роутера со своим DoH/DoT (https-dns-proxy, stubby). Если он пересылает обычный DNS провайдеру, YouTube и домены под десинком могут получить NXDOMAIN или заглушку. Если нужная LAN не найдена, включится запасной DoH с предупреждением; PBR роутера может перестать действовать." />
                     <WrapPanel Margin="0,14,0,0">
                         <TextBox x:Name="RouterDnsIp" Width="170" Margin="0,0,8,6" VerticalContentAlignment="Center"
                                  ToolTip="LAN IPv4 роутера, например 192.168.1.1" />

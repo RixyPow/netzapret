@@ -968,34 +968,89 @@ public sealed class SingBoxConfigCompiler
 
     private static IEnumerable<JsonObject> RouterDomainRules(RuleSet ruleSet, bool haveServers)
     {
-        IEnumerable<RoutingRule> applicable = ruleSet.Operating switch
+        var applicable = (ruleSet.Operating switch
         {
-            OperatingMode.Selective => ruleSet.Rules,
+            OperatingMode.Selective => ruleSet.Rules.AsEnumerable(),
             OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct),
-            _ => [],
-        };
-        foreach (var rule in applicable.Where(r => r.Enabled && !r.Off))
+            _ => Enumerable.Empty<RoutingRule>(),
+        }).Where(r => r.Enabled && !r.Off).ToArray();
+        var laterProxy = new DomainOverlapIndex();
+        var result = new List<JsonObject>();
+        // В гибриде remote уже является умолчанием. Запись remote нужна только
+        // раньше пересекающегося fake-правила, а не для всего реестра блокировок.
+        foreach (var rule in applicable.Reverse())
         {
+            bool proxy = haveServers && rule.Mode == RoutingMode.Proxy;
             var node = new JsonObject();
             if (rule.Match == MatchKind.Domain)
             {
-                if (rule.Value.StartsWith("*.", StringComparison.Ordinal))
-                    node["domain_suffix"] = new JsonArray { rule.Value[2..] };
-                else if (rule.Value.Contains('*')) node["domain_regex"] = new JsonArray { GlobToRegex(rule.Value) };
-                else node["domain"] = new JsonArray { rule.Value };
+                var value = rule.Value;
+                bool suffix = value.StartsWith("*.", StringComparison.Ordinal);
+                string name = suffix ? value[2..] : value;
+                bool glob = name.Contains('*');
+                if (!proxy && ruleSet.Operating == OperatingMode.Selective
+                    && !laterProxy.Overlaps(name, suffix, glob)) continue;
+                node[glob ? "domain_regex" : suffix ? "domain_suffix" : "domain"] =
+                    new JsonArray { glob ? GlobToRegex(value) : name };
+                if (proxy) laterProxy.Add(name, suffix, glob);
             }
             else if (rule.Match == MatchKind.HostList && rule.HostListDomains.Count > 0)
             {
                 var names = new JsonArray();
-                foreach (var name in rule.HostListDomains)
-                    names.Add(name.StartsWith("*.", StringComparison.Ordinal) ? name[2..] : name);
+                foreach (var entry in rule.HostListDomains)
+                {
+                    string name = entry.StartsWith("*.", StringComparison.Ordinal) ? entry[2..] : entry;
+                    if (!proxy && ruleSet.Operating == OperatingMode.Selective
+                        && !laterProxy.Overlaps(name, suffix: true, glob: false)) continue;
+                    names.Add(name);
+                    if (proxy) laterProxy.Add(name, suffix: true, glob: false);
+                }
+                if (names.Count == 0) continue;
                 node["domain_suffix"] = names;
             }
             else continue;
-            bool proxy = rule.Mode == RoutingMode.Proxy && haveServers;
             node["server"] = proxy ? "fake" : "remote";
             if (proxy) node["query_type"] = new JsonArray { "A", "AAAA" };
-            yield return node;
+            result.Add(node);
+        }
+        result.Reverse();
+        return result;
+    }
+
+    /// <summary>Индекс суффиксов не перемножает 117 тысяч имён на каждый список VPN.</summary>
+    private sealed class DomainOverlapIndex
+    {
+        private readonly HashSet<string> _exact = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _suffix = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _ancestors = new(StringComparer.OrdinalIgnoreCase);
+        private bool _glob, _any;
+        public void Add(string name, bool suffix, bool glob)
+        {
+            _any = true;
+            if (glob) { _glob = true; return; }
+            name = name.TrimEnd('.');
+            (suffix ? _suffix : _exact).Add(name);
+            foreach (var part in Parents(name)) _ancestors.Add(part);
+        }
+        public bool Overlaps(string name, bool suffix, bool glob)
+        {
+            // Для сложной маски сохраняем исключение: лишняя короткая запись
+            // безопаснее, чем неверное направление DNS. Обычные зоны индексируются.
+            if (!_any) return false;
+            if (_glob || glob) return true;
+            name = name.TrimEnd('.');
+            return (suffix ? _ancestors.Contains(name) : _exact.Contains(name))
+                || Parents(name).Any(_suffix.Contains);
+        }
+        private static IEnumerable<string> Parents(string name)
+        {
+            for (int pos = 0; ;)
+            {
+                yield return name[pos..];
+                int dot = name.IndexOf('.', pos);
+                if (dot < 0) yield break;
+                pos = dot + 1;
+            }
         }
     }
 
@@ -1367,9 +1422,6 @@ public sealed class SingBoxConfigCompiler
 
         return endpoints;
     }
-
-    /// <summary>При восстановлении действует та же эвристика российских тегов, что при автоподборе.</summary>
-    public static bool IsDomesticExitTag(string tag) => LooksDomestic(tag);
 
     /// <summary>
     /// Похож ли сервер на отечественный по его названию.
