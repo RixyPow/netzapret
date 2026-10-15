@@ -273,6 +273,23 @@
 
 --new
 
+# 15.10: тот же рецепт QUIC — по имени, а не только по ipset-youtube.
+# QUIC провайдер режет по имени в рукопожатии: на 173.194.179.91 с именем
+# www.google.com оно проходит за 15 мс, с именем googlevideo — нет; на
+# 172.217.115.4 так же. Узлы видео (173.194.x, 142.251.x) и www.youtube.com
+# в ipset-youtube не входят, и QUIC к ним шёл без подделки — рукопожатие
+# 0 из 4, а Хром ждал его и подвисал. По адресу секция выше их не узнаёт.
+--name=youtube.com (QUIC по имени)
+--filter-udp=443
+--filter-l7=quic
+--hostlist=lists/googlevideo.txt
+--hostlist=lists/youtube.txt
+--out-range=-n8
+--payload=all
+--lua-desync=fake:blob=quic_google:ip_autottl=-2,3-20:ip6_autottl=-2,3-20:repeats=10:payload=all
+
+--new
+
 # Discord: send+syndata. НЕ применять hostfakesplit_multi:tcp_md5 — ломает TLS.
 --name=updates.discord.com
 --filter-tcp=443
