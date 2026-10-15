@@ -51,7 +51,7 @@ public static class DnsEngine
         AppSettings settings,
         IReadOnlyList<string> systemResolvers,
         IReadOnlyDictionary<string, string> addressOverrides,
-        EngineKeys keys)
+        EngineKeys keys, string? routerInterface = null)
     {
         var provider = DnsSurvey.ByAddress(settings.DnsServer);
 
@@ -59,7 +59,11 @@ public static class DnsEngine
         {
             Scope = TunnelScope.ProxyOnly,
             DnsServerAddresses = systemResolvers,
-            DnsServer = settings.DnsServer,
+            DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
+            DnsServerType = settings.UseRouterDns ? "udp" : "https",
+            RouterDns = settings.UseRouterDns,
+            RouterDnsInterface = settings.UseRouterDns
+                ? routerInterface ?? RouterDnsConnection.Find(settings.RouterDnsAddress).Name : null,
             DnsServerName = provider?.TlsName,
             DnsServerPath = provider?.DohPath,
 

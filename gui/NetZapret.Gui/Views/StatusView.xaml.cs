@@ -530,7 +530,7 @@ public partial class StatusView : UserControl
         PresetValue.Text = settings.DescribePreset();
         ShowPresetNote(settings.PresetName);
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
-        DnsValue.Text = settings.DnsServer;
+        DnsValue.Text = settings.UseRouterDns ? $"Роутер · {settings.RouterDnsAddress}:53 · UDP" : settings.DnsServer;
         SubscriptionValue.Text = seen.Subscriptions;
 
         var state = seen.State;

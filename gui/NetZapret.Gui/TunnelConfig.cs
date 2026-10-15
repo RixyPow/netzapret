@@ -181,14 +181,17 @@ internal static class TunnelConfig
             {
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
-                DnsServer = settings.DnsServer,
+                DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
+                DnsServerType = settings.UseRouterDns ? "udp" : "https",
+                RouterDns = settings.UseRouterDns,
+                RouterDnsInterface = settings.UseRouterDns ? RouterDnsConnection.Find(settings.RouterDnsAddress).Name : null,
 
                 // Имя сертификата и путь — у провайдера из списка выбора.
                 // Адрес, вписанный руками, идёт как прежде: без имени.
                 DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
                 DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
-                DnsThroughTunnel = settings.DnsVia == DnsRoute.Tunnel,
-                DnsViaAuto = settings.DnsVia == DnsRoute.Auto,
+                DnsThroughTunnel = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Tunnel,
+                DnsViaAuto = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto,
 
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.
@@ -302,7 +305,9 @@ internal static class TunnelConfig
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
 
-            return new BuildOutcome(true, $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.");
+            return new BuildOutcome(true, settings.UseRouterDns
+                ? $"DNS через движок: UDP/53 к роутеру {settings.RouterDnsAddress} через LAN."
+                : $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.");
         }
         catch (Exception ex)
         {

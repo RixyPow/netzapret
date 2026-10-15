@@ -453,8 +453,8 @@ public static class Doctor
     {
         var lines = new List<DoctorCheck>
         {
-            Ok($"Апстрим туннеля: {settings.DnsServer}"
-                + $", путь — {DnsRoutes.Word(settings.DnsVia)}."),
+            Ok(settings.UseRouterDns ? $"DNS роутера: {settings.RouterDnsAddress}:53, UDP напрямую через LAN."
+                : $"Апстрим туннеля: {settings.DnsServer}, путь — {DnsRoutes.Word(settings.DnsVia)}."),
         };
 
         try

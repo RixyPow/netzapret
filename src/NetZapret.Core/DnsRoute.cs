@@ -44,6 +44,10 @@ public static class DnsRoutes
     /// </remarks>
     public static string Explain(AppSettings settings)
     {
+        if (settings.UseRouterDns)
+            return $"DNS роутера: {settings.RouterDnsAddress}:53 по UDP напрямую в локальную сеть. "
+                + "DoH-автовыбор и путь через VPN не используются. Прямым доменам выдаются реальные IP; "
+                + "для явно проксируемых доменов сохраняется FakeIP. Браузерный DoH и DNS-кэш могут обходить этот путь.";
         if (!settings.NeedsProxy && settings.NeedsDesync)
         {
             return settings.DnsVia == DnsRoute.Tunnel

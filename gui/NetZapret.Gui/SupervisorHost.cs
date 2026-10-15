@@ -111,7 +111,7 @@ internal static class SupervisorHost
         if (settings.NeedsDesync)
             arguments += $" --preset \"{settings.PresetName}\"";
 
-        if (settings.NeedsProxy && settings.DnsVia == DnsRoute.Auto)
+        if (settings.NeedsProxy && !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto)
             arguments += " --dns-via-auto";
 
         if (settings.VerifyTraffic)

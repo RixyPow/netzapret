@@ -95,6 +95,8 @@ public sealed class SingBoxOptions
     public string DnsServer { get; init; } = NetZapret.Core.AppSettings.GoogleDns;
 
     public string DnsServerType { get; init; } = "https";
+    public bool RouterDns { get; init; }
+    public string? RouterDnsInterface { get; init; }
 
     /// <summary>
     /// Имя в сертификате апстрима; <c>null</c> — сертификат выписан на сам адрес.
@@ -451,6 +453,10 @@ public sealed class SingBoxConfigCompiler
 
     public CompilationResult Compile(RuleSet ruleSet, IReadOnlyList<ProxyServer> servers, SingBoxOptions options)
     {
+        if (options.RouterDns && (options.DnsServerType != "udp"
+            || !RouterDnsSettings.TryNormalize(options.DnsServer, out _)
+            || string.IsNullOrWhiteSpace(options.RouterDnsInterface)))
+            throw new ArgumentException("DNS роутера требует LAN IPv4, UDP и физический LAN-интерфейс.");
         var usable = servers.Where(s => s.IsUsableOutbound).ToList();
         var skipped = servers.Where(s => !s.IsUsableOutbound).ToList();
 
@@ -459,7 +465,7 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
-            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0),
+            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0, ruleSet),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options),
             ["route"] = BuildRoute(ruleSet, tags, options),
@@ -788,7 +794,7 @@ public sealed class SingBoxConfigCompiler
     private static JsonObject BuildDns(
         SingBoxOptions options,
         IReadOnlyList<string> proxyDomains,
-        bool haveServers)
+        bool haveServers, RuleSet ruleSet)
     {
         var remote = new JsonObject
         {
@@ -797,6 +803,11 @@ public sealed class SingBoxConfigCompiler
             ["server"] = options.DnsServer,
         };
 
+        if (options.RouterDns)
+        {
+            remote["server_port"] = 53;
+            remote["bind_interface"] = options.RouterDnsInterface;
+        }
         if (options.DnsServerType == "https")
         {
             if (!string.IsNullOrEmpty(options.DnsServerName))
@@ -809,10 +820,10 @@ public sealed class SingBoxConfigCompiler
         // Через туннель — только если ему есть куда вести. Иначе detour
         // указывал бы на селектор без единого сервера, и разрешение имён
         // умерло бы целиком.
-        bool throughTunnel = options.DnsThroughTunnel && haveServers;
+        bool throughTunnel = !options.RouterDns && options.DnsThroughTunnel && haveServers;
 
         // «Авто» — через переключатель пути DNS, который ставит надзор.
-        bool viaPath = options.DnsViaAuto && !options.DnsThroughTunnel && haveServers;
+        bool viaPath = !options.RouterDns && options.DnsViaAuto && !options.DnsThroughTunnel && haveServers;
 
         // Имена серверов подписки и панелей — мимо туннеля в обоих случаях.
         bool bootstrap = throughTunnel || viaPath;
@@ -893,7 +904,16 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
-        if (options.Scope == TunnelScope.ProxyOnly && proxyDomains.Count > 0)
+        if (options.RouterDns)
+        {
+            // Сохраняем порядок доменных правил: прямым доменам нужны реальные ответы роутера,
+            // в том числе прямым исключениям полного туннеля; проксируемым оставляем FakeIP.
+            foreach (var rule in RouterDomainRules(ruleSet, haveServers)) rules.Add(rule);
+            if (options.Scope != TunnelScope.ProxyOnly && haveServers
+                && ruleSet.Operating is OperatingMode.ProxyAll or OperatingMode.ProxyStrict)
+                rules.Add(new JsonObject { ["query_type"] = new JsonArray { "A", "AAAA" }, ["server"] = "fake" });
+        }
+        else if (options.Scope == TunnelScope.ProxyOnly && proxyDomains.Count > 0)
         {
             // Выборочный fakeip: подменяем ответ только тем доменам, которые
             // идут в прокси. Всем остальным отдаётся настоящий адрес, и их
@@ -944,6 +964,39 @@ public sealed class SingBoxConfigCompiler
         dns["final"] = "remote";
 
         return dns;
+    }
+
+    private static IEnumerable<JsonObject> RouterDomainRules(RuleSet ruleSet, bool haveServers)
+    {
+        IEnumerable<RoutingRule> applicable = ruleSet.Operating switch
+        {
+            OperatingMode.Selective => ruleSet.Rules,
+            OperatingMode.ProxyAll => ruleSet.Rules.Where(r => r.Mode == RoutingMode.Direct),
+            _ => [],
+        };
+        foreach (var rule in applicable.Where(r => r.Enabled && !r.Off))
+        {
+            var node = new JsonObject();
+            if (rule.Match == MatchKind.Domain)
+            {
+                if (rule.Value.StartsWith("*.", StringComparison.Ordinal))
+                    node["domain_suffix"] = new JsonArray { rule.Value[2..] };
+                else if (rule.Value.Contains('*')) node["domain_regex"] = new JsonArray { GlobToRegex(rule.Value) };
+                else node["domain"] = new JsonArray { rule.Value };
+            }
+            else if (rule.Match == MatchKind.HostList && rule.HostListDomains.Count > 0)
+            {
+                var names = new JsonArray();
+                foreach (var name in rule.HostListDomains)
+                    names.Add(name.StartsWith("*.", StringComparison.Ordinal) ? name[2..] : name);
+                node["domain_suffix"] = names;
+            }
+            else continue;
+            bool proxy = rule.Mode == RoutingMode.Proxy && haveServers;
+            node["server"] = proxy ? "fake" : "remote";
+            if (proxy) node["query_type"] = new JsonArray { "A", "AAAA" };
+            yield return node;
+        }
     }
 
     private static JsonArray BuildInbounds(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
@@ -1889,7 +1942,7 @@ public sealed class SingBoxConfigCompiler
             // Для этого и заведён bootstrap.
             ["default_domain_resolver"] = new JsonObject
             {
-                ["server"] = (options.DnsThroughTunnel || options.DnsViaAuto) && haveServers ? BootstrapTag : "remote",
+                ["server"] = !options.RouterDns && (options.DnsThroughTunnel || options.DnsViaAuto) && haveServers ? BootstrapTag : "remote",
 
                 // Сперва IPv4, IPv6 — запасным. Журнал владельца 25.09: сотни
                 // «dial tcp [2001:4860:…]:443: unreachable network» за 1 мс —
