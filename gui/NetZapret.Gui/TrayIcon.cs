@@ -212,7 +212,9 @@ internal sealed class TrayIcon : IDisposable
             && live.IsSupervisorAlive() && live.SupervisorProcessId == notice.SupervisorProcessId)
         {
             _subscriptionNotice = notice.Id;
-            RestartOffer.Show("Подписка перечитана после отказа всех выходов. Применить обновлённый список");
+            // Заголовок уведомления Windows режет на 63 знаках — прежний текст
+            // в 85 знаков обрывался на полуслове.
+            RestartOffer.Show("Подписка перечитана: серверы в ней сменились");
         }
 
         // Две попытки в первые шесть секунд, и только они.

@@ -67,6 +67,7 @@ public partial class TunnelSettingsWindow : Window
     private void Show(AppSettings settings)
     {
         var engines = settings.Engines;
+        Word(RefreshNoLiveWord, settings.RefreshSubscriptionWhenNoLiveExits);
         RefreshNoLive.IsChecked = settings.RefreshSubscriptionWhenNoLiveExits;
 
         Word(RussianWord, engines.IgnoreExclusions);
@@ -398,9 +399,17 @@ public partial class TunnelSettingsWindow : Window
         }
     }
 
-    private void OnRefreshNoLive(object sender, RoutedEventArgs e) =>
-        Save(s => s with { RefreshSubscriptionWhenNoLiveExits = RefreshNoLive.IsChecked == true },
-            "Перечитывание после отказа выходов изменено.");
+    private void OnRefreshNoLive(object sender, RoutedEventArgs e)
+    {
+        bool on = RefreshNoLive.IsChecked == true;
+
+        Word(RefreshNoLiveWord, on);
+
+        Save(s => s with { RefreshSubscriptionWhenNoLiveExits = on },
+            on
+                ? "Когда живых серверов не останется, подписка перечитается сама — не чаще раза в 30 минут."
+                : "Подписка перечитывается как прежде: при запуске движков, во вкладке VPN и кнопкой «Обновить».");
+    }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
 }

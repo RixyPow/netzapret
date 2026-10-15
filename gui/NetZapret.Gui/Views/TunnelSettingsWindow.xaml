@@ -38,19 +38,6 @@
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                        Text="Всё здесь применяется при следующем запуске движков. Подписки и серверы остались на вкладке «VPN»." />
 
-            <Border Style="{StaticResource SettingsGroup}" Margin="0,16,0,0">
-                <Grid Margin="16,13">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <StackPanel Margin="0,0,12,0">
-                        <TextBlock Text="Перечитывать подписку, если нет живых серверов" TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                   Text="Только после штатного поиска ExitWatch. Не чаще раза в 30 минут, одна подписка за попытку. Изменённый список применяется через обычное предложение перезапуска, не автоматически. Без дополнительного перебора и порога пинга." />
-                    </StackPanel>
-                    <ToggleButton Grid.Column="1" x:Name="RefreshNoLive" Style="{StaticResource Switch}"
-                                  Click="OnRefreshNoLive" VerticalAlignment="Center" />
-                </Grid>
-            </Border>
-
             <TextBlock Text="КУДА ИДЁТ ТРАФИК" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
 
             <Border Style="{StaticResource SettingsGroup}">
@@ -443,6 +430,38 @@
 
                         <ToggleButton Grid.Column="2" x:Name="MeasureOnStart" Style="{StaticResource Switch}"
                                       Click="OnMeasureOnStart" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!--
+                        PR №27 (SuzuyaJ74, 15.10): живых серверов не нашлось — перечитать
+                        подписку (NoLiveSubscriptionRefresh). Выключено по умолчанию.
+                    -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Перечитывать подписку, когда живых серверов нет" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Поставщик мог сменить адреса или ключи, а у программы остался старый список. Когда проверка выхода прошла по всем серверам и не нашла ни одного живого, подписка перечитывается — одна за раз, не чаще раза в 30 минут; если панель не ответила, пауза растёт до двух часов.&#x0a;&#x0a;Серверы сверх обычного не проверяются. Если список изменился, программа предложит перезапустить движки — сама их не перезапускает." />
+                            </StackPanel>
+
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Новый список подписки — без нажатия «Обновить», когда старый весь умер." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="RefreshNoLiveWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="RefreshNoLive" Style="{StaticResource Switch}"
+                                      Click="OnRefreshNoLive" VerticalAlignment="Center" />
                     </Grid>
 
                     <Border Style="{StaticResource RowLine}" />
