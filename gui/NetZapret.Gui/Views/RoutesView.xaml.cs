@@ -75,6 +75,22 @@ public sealed record PartRow : INotifyPropertyChanged
     public required string Mode { get; set; }
 
     /// <summary>
+    /// Подсказка к подписи пути: выбранный рецепт по имени и его шаги.
+    /// </summary>
+    /// <remarks>
+    /// Подпись называет приёмы («десинк: hostfakesplit + multidisorder»), а имя
+    /// рецепта («Выбрано вручную: valheim») с 15.10 живёт здесь. Прежде у своего
+    /// домена оно стояло в первой подписи, а та не шире 240 точек: у владельца
+    /// от него оставалось «Выбрано вручную: v…», и рецепт не было видно нигде.
+    /// </remarks>
+    public string? ModeTip { get; init; }
+
+    public string ModeHint => ModeTip ?? Mode;
+
+    /// <summary>Имя выбранного рецепта — для поиска; <c>null</c> — своего рецепта нет.</summary>
+    public string? Recipe { get; init; }
+
+    /// <summary>
     /// Куда идёт часть, одним словом — для шапки папки.
     /// </summary>
     /// <remarks>
@@ -351,7 +367,7 @@ public sealed record ServiceRow(string Name, IReadOnlyList<PartRow> Parts) : INo
     internal string Signature() => string.Join('',
         new[] { Name, Label ?? string.Empty, IsFolder.ToString(), Program ?? string.Empty, AutoFill.ToString(), Made.ToString(), string.Join(',', Keys) }
             .Concat(Parts.Select(p => string.Join('',
-                p.Key, p.Title, p.Detail, p.Mode, p.Choice, p.Applied, p.HasPin, p.CanRoute, p.CanPin, p.Movable, p.Own, p.Explicit, p.DefaultLabel ?? string.Empty,
+                p.Key, p.Title, p.Detail, p.Mode, p.ModeTip ?? string.Empty, p.Choice, p.Applied, p.HasPin, p.CanRoute, p.CanPin, p.Movable, p.Own, p.Explicit, p.DefaultLabel ?? string.Empty,
                 p.ListPath ?? string.Empty, p.Folder ?? string.Empty, p.HomeFolder ?? string.Empty, p.Probe ?? string.Empty,
                 (p.Color as SolidColorBrush)?.Color.ToString() ?? string.Empty, p.Letter))));
 
@@ -734,6 +750,7 @@ public partial class RoutesView : UserControl
         var host = (part.Example ?? part.Part.Name).TrimStart('*', '.');
 
         var mode = Describe(part);
+        var recipe = ChosenRecipe(part);
 
         return new PartRow
         {
@@ -761,6 +778,8 @@ public partial class RoutesView : UserControl
             // сам по себе не говорит ничего: решает пресет, и решить он может
             // в том числе «не знаю такого имени».
             Mode = mode,
+            ModeTip = recipe is null ? null : RecipeLabel(recipe).Tip,
+            Recipe = recipe,
 
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
@@ -1152,6 +1171,15 @@ public partial class RoutesView : UserControl
                 _ => ("Accent", 2),
             };
 
+            // Рецепт называется в подписи пути, как у маршрутов каталога:
+            // выбранный однажды, он иначе пропадал бы из виду, и понять, чем
+            // чинится имя, можно было бы только заглянув в yaml.
+            var (mode, tip) = entry.Off
+                ? ("выключено — правило не действует", null)
+                : entry.Mode == RoutingMode.Desync && !string.IsNullOrWhiteSpace(entry.Recipe)
+                    ? RecipeLabel(entry.Recipe)
+                    : (Describe(entry.Mode), (string?)null);
+
             var part = new PartRow
             {
                 Icon = SiteIcons.Cached(domain),
@@ -1159,17 +1187,10 @@ public partial class RoutesView : UserControl
                 Title = title,
                 Probe = domain,
 
-                // Рецепт называется прямо в подписи: выбранный однажды,
-                // он иначе пропадал бы из виду, и понять, чем чинится имя,
-                // можно было бы только заглянув в yaml.
-                Detail = (listed
-                        ? "свой список · " + Count(count, "домен", "домена", "доменов")
-                            + (addresses > 0 ? " · " + Count(addresses, "адрес", "адреса", "адресов") : string.Empty)
-                        : "свой домен")
-                    + (entry.Mode == RoutingMode.Desync
-                        && !string.IsNullOrWhiteSpace(entry.Recipe)
-                            ? $" · рецепт: {entry.Recipe}"
-                            : string.Empty),
+                Detail = listed
+                    ? "свой список · " + Count(count, "домен", "домена", "доменов")
+                        + (addresses > 0 ? " · " + Count(addresses, "адрес", "адреса", "адресов") : string.Empty)
+                    : "свой домен",
 
                 Example = domain,
 
@@ -1177,7 +1198,9 @@ public partial class RoutesView : UserControl
                 // завести (OnOpenList); у списка — открывает его.
                 ListPath = listed ? ListFile(entry.Value) : null,
 
-                Mode = entry.Off ? "выключено — правило не действует" : Describe(entry.Mode),
+                Mode = mode,
+                ModeTip = tip,
+                Recipe = tip is null ? null : entry.Recipe,
                 Color = (Brush)Application.Current.FindResource(color),
                 Choice = choice,
                 Applied = choice,
@@ -1333,7 +1356,7 @@ public partial class RoutesView : UserControl
     /// <summary>Ключ места пустой папки в порядке.</summary>
     private static string FolderPlace(string folder) => "folder|" + folder;
 
-    private static IEnumerable<(string? Folder, string Key, PartRow Part)> ProgramParts(AppSettings settings, UserRulesFile userRules)
+    private IEnumerable<(string? Folder, string Key, PartRow Part)> ProgramParts(AppSettings settings, UserRulesFile userRules)
     {
         foreach (var program in settings.ProgramRoutes)
         {
@@ -1352,7 +1375,7 @@ public partial class RoutesView : UserControl
     /// работают тем же кодом, что у части сервиса. Рецепт спрашивается
     /// только у доменов — проба нужна по имени, у адресов его нет.
     /// </remarks>
-    private static PartRow ProgramPart(string program, string list, bool domains, UserRulesFile userRules)
+    private PartRow ProgramPart(string program, string list, bool domains, UserRulesFile userRules)
     {
         var entry = userRules.Entries.FirstOrDefault(e => e.Match == MatchKind.HostList && e.Matches(list));
         var lines = ProgramRoutes.Entries(list);
@@ -1370,18 +1393,23 @@ public partial class RoutesView : UserControl
             : (domains ? Count(lines.Count, "домен", "домена", "доменов") : Count(lines.Count, "сеть", "сети", "сетей"))
                 + ": " + string.Join(", ", lines.Take(3)) + (lines.Count > 3 ? " …" : string.Empty);
 
+        var (mode, tip) = entry is null || entry.Off
+            ? ("выключено — маршрут не действует", null)
+            : entry.Mode == RoutingMode.Desync && !string.IsNullOrWhiteSpace(entry.Recipe)
+                ? RecipeLabel(entry.Recipe)
+                : (Describe(entry.Mode), (string?)null);
+
         return new PartRow
         {
             Key = RouteKeys.Make(RouteKeys.HostList, list),
             Title = domains ? "Домены" : "Адреса",
-            Detail = detail
-                + (entry is { Mode: RoutingMode.Desync, Off: false } && !string.IsNullOrWhiteSpace(entry.Recipe)
-                    ? $" · рецепт: {entry.Recipe}"
-                    : string.Empty),
+            Detail = detail,
             Probe = first,
             Example = first,
             ListPath = ListFile(list),
-            Mode = entry is null || entry.Off ? "выключено — маршрут не действует" : Describe(entry.Mode),
+            Mode = mode,
+            ModeTip = tip,
+            Recipe = tip is null ? null : entry!.Recipe,
             Color = (Brush)Application.Current.FindResource(color),
             Choice = choice,
             Applied = choice,
@@ -2056,7 +2084,8 @@ public partial class RoutesView : UserControl
         service.Contains(needle, StringComparison.OrdinalIgnoreCase)
         || part.Title.Contains(needle, StringComparison.OrdinalIgnoreCase)
         || part.Detail.Contains(needle, StringComparison.OrdinalIgnoreCase)
-        || (part.Example?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false);
+        || (part.Example?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false)
+        || (part.Recipe?.Contains(needle, StringComparison.OrdinalIgnoreCase) ?? false);
 
     /// <summary>
     /// Предлагает своему домену завести файл списка.
@@ -3021,6 +3050,44 @@ public partial class RoutesView : UserControl
     /// </remarks>
     private IReadOnlyDictionary<string, string>? _providers;
 
+    /// <summary>
+    /// Выбранный рецепт: подпись пути приёмами и подсказка с его именем и шагами.
+    /// </summary>
+    /// <remarks>
+    /// Одно место на маршруты каталога, свои домены и маршруты программ: у своих
+    /// строк подпись пути прежде была просто «десинк», а имя рецепта — в первой
+    /// подписи, где обрезалось.
+    /// </remarks>
+    private (string Mode, string? Tip) RecipeLabel(string stored)
+    {
+        var tip = $"Рецепт «{stored}»";
+
+        if (_preset is null)
+            return ($"десинк: {stored} — пресет не выбран", tip);
+
+        // По обоим источникам. Пока спрашивали один пресет, рецепт,
+        // выбранный из каталога, объявлялся отсутствующим — сразу
+        // после того, как человек его выбрал.
+        var found = RecipeResolver.Find(_preset, stored, _providers);
+
+        if (!found.Found)
+            return ($"десинк: {stored} — не найден ни в пресете, ни в каталоге", tip);
+
+        // Нехватка модуля названа отдельно и не сглажена: с таким
+        // рецептом winws2 не поднимется вовсе, и без десинка останется
+        // не одно это имя, а все.
+        if (found.MissingModules.Count > 0)
+            return ($"десинк: {stored} — нужен модуль " + string.Join(", ", found.MissingModules), tip);
+
+        return ("десинк: " + Technique(found.Steps), tip + ":\n" + string.Join("\n", found.Steps));
+    }
+
+    /// <summary>Свой рецепт части каталога, если он действует; иначе <c>null</c>.</summary>
+    private string? ChosenRecipe(ServiceRouting.PartStatus part) =>
+        !part.Off && part.Mode == RoutingMode.Desync && RecipeFor(part.Part.List) is { } stored && !string.IsNullOrWhiteSpace(stored)
+            ? stored
+            : null;
+
     private string Describe(ServiceRouting.PartStatus part)
     {
         // Режим выключенной части — чужой: тот, куда её имена уводит
@@ -3035,29 +3102,7 @@ public partial class RoutesView : UserControl
         // Свой выбор важнее пресетовского: он и стоит первым в командной
         // строке. Хранится имя секции, показывается название приёма.
         if (RecipeFor(part.Part.List) is { } stored && !string.IsNullOrWhiteSpace(stored))
-        {
-            if (_preset is null)
-                return $"десинк: {stored} — пресет не выбран";
-
-            // По обоим источникам. Пока спрашивали один пресет, рецепт,
-            // выбранный из каталога, объявлялся отсутствующим — сразу
-            // после того, как человек его выбрал.
-            var found = RecipeResolver.Find(_preset, stored, _providers);
-
-            if (!found.Found)
-                return $"десинк: {stored} — не найден ни в пресете, ни в каталоге";
-
-            // Нехватка модуля названа отдельно и не сглажена: с таким
-            // рецептом winws2 не поднимется вовсе, и без десинка останется
-            // не одно это имя, а все.
-            if (found.MissingModules.Count > 0)
-            {
-                return $"десинк: {stored} — нужен модуль "
-                    + string.Join(", ", found.MissingModules);
-            }
-
-            return "десинк: " + Technique(found.Steps);
-        }
+            return RecipeLabel(stored).Mode;
 
         if (_preset is null)
             return "десинк: пресет не выбран";
@@ -3072,7 +3117,7 @@ public partial class RoutesView : UserControl
         // и каждый раз читался весь пресет: в russia-blacklist.txt сто
         // семнадцать тысяч имён, и он оказывался прочитан восемьдесят раз.
         // Раздел от этого открывался секундами.
-        var section = _zones?.FirstFor(part.Domains);
+        var section = part.Part.Bulk ? _zones?.ForList(part.Part.List) : _zones?.FirstFor(part.Domains);
 
         // Здесь 23.09 стояло «по факту напрямую: пресет не чинит / пропускает»,
         // серым, как «напрямую». Это была моя ошибка, и дорогая. Смотрелись

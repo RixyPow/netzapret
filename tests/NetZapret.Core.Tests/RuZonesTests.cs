@@ -87,6 +87,35 @@ public sealed class RuZonesTests
 
         Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(shield, "www.gosuslugi.ru", holes));
         Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(shield, "amdm.ru", holes));
+
+        // Множеством — то же, что списком: проверка блокировок спрашивает так.
+        var set = HostsFile.ShieldHoleSet(holes);
+        Assert.Equal(DesyncBypass.Direct, HostsFile.BypassFor(shield, "www.gosuslugi.ru", set));
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(shield, "amdm.ru", set));
+        Assert.Equal(DesyncBypass.None, HostsFile.BypassFor(shield, "www.amdm.ru", set));
+    }
+
+    /// <summary>
+    /// Пересборка движка не компилирует выражения правил заново.
+    /// </summary>
+    /// <remarks>
+    /// «Маршруты» собирают движок «без своего правила» на каждую часть со своим
+    /// маршрутом, и до 15.10 каждая сборка компилировала заново все доменные
+    /// правила: чтение раздела у владельца стоило 7,5 с, после — 0,3–0,6 с.
+    /// </remarks>
+    [Fact]
+    public void RebuildingTheEngineKeepsCompiledRules()
+    {
+        var rule = new RoutingRule { Match = MatchKind.Domain, Value = "*.example.com", Mode = RoutingMode.Proxy };
+        var glob = typeof(RoutingRule).GetField("_glob", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        RuleEngine.Build([rule], RoutingMode.Direct);
+        var first = glob.GetValue(rule);
+        var engine = RuleEngine.Build([rule], RoutingMode.Direct);
+
+        Assert.NotNull(first);
+        Assert.Same(first, glob.GetValue(rule));
+        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(To("www.example.com")).Mode);
     }
 
     private static JsonElement Compile(RuleEngine engine, TunnelScope scope)

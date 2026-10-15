@@ -117,17 +117,26 @@ public sealed class RoutingRule
     /// Готовит правило к использованию и валидирует <see cref="Value"/>.
     /// Бросает <see cref="RuleConfigurationException"/> на неразбираемом значении.
     /// </summary>
+    /// <remarks>
+    /// Один раз на правило: <see cref="Match"/> и <see cref="Value"/> задаются
+    /// только при создании. Прежде каждая сборка движка компилировала выражения
+    /// заново, а первый проход по свежему скомпилированному выражению стоит
+    /// ~0,15 мс. «Маршруты» собирают движок «без своего правила» на каждую
+    /// часть со своим маршрутом (ServiceRouting.Describe): замер 15.10 на
+    /// правилах владельца — 155 правил, сотни частей, чтение раздела 7,5 с,
+    /// из них 3,6–5,2 с на это.
+    /// </remarks>
     public void Compile()
     {
         switch (Match)
         {
             case MatchKind.Process:
             case MatchKind.Domain:
-                _glob = GlobMatcher.Compile(Value);
+                _glob ??= GlobMatcher.Compile(Value);
                 break;
 
             case MatchKind.Ip:
-                _cidr = IpCidrRange.Parse(Value);
+                _cidr ??= IpCidrRange.Parse(Value);
                 break;
 
             case MatchKind.IpSet:

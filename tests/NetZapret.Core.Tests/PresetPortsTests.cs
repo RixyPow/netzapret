@@ -200,6 +200,21 @@ public class PresetPortsTests : IDisposable
         Assert.Empty(PresetZones.Build(Load(Preset), _root).AllFor([]));
     }
 
+    /// <summary>
+    /// Большой перечень — секцией, которая берёт его файлом, а не первой,
+    /// покрывшей хоть одно его имя (реестр блокировок, 15.10).
+    /// </summary>
+    [Fact]
+    public void ABulkListIsNamedByTheSectionThatTakesItsFile()
+    {
+        var zones = PresetZones.Build(Load(Preset), _root);
+
+        // Свой список в поставке — lists/nz-discord.txt, у пресета — lists/discord.txt.
+        Assert.Equal("discord.com", zones.ForList("config/lists/discord.txt")?.Name);
+        Assert.Equal("discord.com", zones.ForList("lists/nz-discord.txt")?.Name);
+        Assert.Null(zones.ForList("config/lists/russia-blacklist.txt"));
+    }
+
     /// <summary>Без портов профиль остаётся на прежнем умолчании.</summary>
     [Fact]
     public void ProfileWithoutPortsKeepsTheDefault()

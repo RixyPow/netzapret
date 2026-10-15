@@ -396,11 +396,11 @@ public static class HostsFile
     public static DesyncBypass BypassFor(
         IReadOnlyList<(string Name, DesyncBypass Why)> exclusions,
         string host,
-        IReadOnlyList<string>? holes = null)
+        IReadOnlyCollection<string>? holes = null)
     {
         // Дыра в щите — как у winws2: --hostlist-exclude профиля щита берёт
         // и поддомены, и такое имя до щита не доходит вовсе.
-        if (holes is not null && holes.Any(hole => Covers(hole, host)))
+        if (holes is not null && Holed(holes, host))
             return DesyncBypass.None;
 
         foreach (var (name, why) in exclusions)
@@ -482,6 +482,35 @@ public static class HostsFile
 
         return false;
     }
+
+    /// <summary>Лежит ли имя в одной из дыр щита: сама она или её поддомен.</summary>
+    /// <remarks>
+    /// Дыр с реестром блокировок — десятки тысяч (15.10), и множество
+    /// (<see cref="ShieldHoleSet"/>) спрашивается по хвостам имени, а не
+    /// перебором на каждое имя проверки блокировок.
+    /// </remarks>
+    private static bool Holed(IReadOnlyCollection<string> holes, string host)
+    {
+        if (holes is not IReadOnlySet<string> set)
+            return holes.Any(hole => Covers(hole, host));
+
+        if (set.Contains(host))
+            return true;
+
+        for (int dot = host.IndexOf('.'); dot >= 0; dot = host.IndexOf('.', dot + 1))
+        {
+            if (set.Contains(host[(dot + 1)..]))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Дыры щита множеством — для многих вопросов <see cref="BypassFor"/> подряд.
+    /// </summary>
+    public static IReadOnlySet<string> ShieldHoleSet(IEnumerable<string> holes) =>
+        holes.Select(hole => hole.TrimStart('*', '.')).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Покрывает ли запись списка имя: сама она или её поддомен.</summary>
     private static bool Covers(string entry, string host)

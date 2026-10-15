@@ -32,7 +32,7 @@ public static class About
 
     public const string Telegram = "https://t.me/netzapret23";
 
-    public const string Support = "https://tips.tips/000486918";
+    public const string Support = "https://t.me/tribute/app?startapp=g6vq";
 
     /// <summary>
     /// Состав поставки, в порядке важности для работы.
