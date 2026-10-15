@@ -751,6 +751,8 @@ public partial class UpdateWindow : Window
 
     private void OnTelegram(object sender, RoutedEventArgs e) => Open(Telegram);
 
+    private void OnDonate(object sender, RoutedEventArgs e) => Open(NetZapret.Core.About.Support);
+
     private static void Open(string address)
     {
         try

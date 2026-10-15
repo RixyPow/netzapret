@@ -10,7 +10,7 @@
         Владелец 06.10, по образцу окна обновления Zapret GUI: при найденной
         версии — окно с «Что нового» за все версии между установленной
         и новой, «Подробностями» и кнопками «Открыть в браузере», «Telegram»,
-        «Пропустить версию», «Позже», «Обновить». Карточка на «Главной»
+        «Поддержать» (с 15.10), «Пропустить версию», «Позже», «Обновить». Карточка на «Главной»
         остаётся — она для тех, кто окно закрыл.
     -->
     <Window.Resources>
@@ -131,28 +131,41 @@
 
         <Grid Grid.Row="3" Margin="24,14,24,20">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Style="{StaticResource Ghost}" Click="OnBrowser" Padding="12,8">
+            <!--
+                Ссылки — переносом, а не в строку: с «Поддержать» (15.10) на
+                наименьшей ширине окна (760) ряд не влезал, и «Обновить» уходила
+                за край. Кнопки решения справа важнее — ссылки уступают им место.
+            -->
+            <WrapPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                <Button Style="{StaticResource Ghost}" Click="OnBrowser" Padding="12,8" Margin="0,3,8,3">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xE774;" Margin="0,0,8,0" VerticalAlignment="Center" />
                         <TextBlock Text="Открыть в браузере" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
-                <Button Style="{StaticResource Ghost}" Click="OnTelegram" Padding="12,8" Margin="8,0,0,0">
+                <Button Style="{StaticResource Ghost}" Click="OnTelegram" Padding="12,8" Margin="0,3,8,3">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xE724;" Margin="0,0,8,0" VerticalAlignment="Center" />
                         <TextBlock Text="Telegram" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-            </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Владелец 15.10: «добавь кнопку поддержать … рядом с открыть в браузере и телеграм». -->
+                <Button Style="{StaticResource Ghost}" Click="OnDonate" Padding="12,8" Margin="0,3,8,3"
+                        ToolTip="Донат через Tribute в Telegram">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xEB51;" Margin="0,0,8,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Поддержать" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </WrapPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="SkipButton" Style="{StaticResource Ghost}" Content="Пропустить версию" Click="OnSkip" Padding="14,8" Margin="0,0,8,0" />
                 <Button x:Name="LaterButton" Style="{StaticResource Ghost}" Content="Позже" Click="OnLater" Padding="14,8" />
                 <Button x:Name="InstallButton" Style="{StaticResource Primary}" Click="OnInstall"
