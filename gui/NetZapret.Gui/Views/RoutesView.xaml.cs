@@ -561,6 +561,9 @@ public partial class RoutesView : UserControl
     {
         InitializeComponent();
 
+        // Список, вставленный в поле поиска, — в окно «Добавить списком» (RoutesView.List).
+        DataObject.AddPastingHandler(Search, OnSearchPaste);
+
         Loaded += (_, _) => Reload();
         Unloaded += (_, _) => _icons?.Cancel();
     }
@@ -2338,6 +2341,7 @@ public partial class RoutesView : UserControl
             Search.Focus();
             Status.Text = "Впишите сайт (example.com), адрес или подсеть в поле поиска — если такого нет, появится «Добавить».";
         }));
+        menu.Items.Add(MenuEntry("", "Списком…", () => AddList(string.Empty)));
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(MenuEntry("", "Программа из запущенных…", PickRunningProgram));
         menu.Items.Add(MenuEntry("", "Программа файлом…", PickProgramFile));
