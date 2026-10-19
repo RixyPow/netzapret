@@ -41,10 +41,31 @@
         <Border Grid.Column="0" Style="{StaticResource RailPanel}">
             <DockPanel LastChildFill="True">
 
-                <StackPanel DockPanel.Dock="Top" Margin="22,26,22,22">
-                    <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
-                    <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,3,0,0" />
-                </StackPanel>
+                <!--
+                    Плитка «NZ» рядом с именем — владелец 19.10 («это тоже делай»),
+                    по макету «Главной»; до того было решено «логотипа нет —
+                    пока оставим что есть». Цвета наоборот к странице — текст
+                    фоном, фон текстом: так плитка видна и в светлой теме,
+                    и в тёмной, без своих цветов у каждой темы.
+                -->
+                <Grid DockPanel.Dock="Top" Margin="20,24,18,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="42" Height="42" CornerRadius="11" Background="{DynamicResource Text}"
+                            VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Text="NZ" FontSize="17" FontWeight="Bold" FontFamily="{DynamicResource DisplayFont}"
+                                   Foreground="{DynamicResource Backdrop}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
+                        <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Grid>
 
                 <!--
                     Полоса прокручивается: разделов девять, и на невысоком
@@ -89,7 +110,16 @@
                         <!-- «Журнал» — с 07.10 окном из «Диагностики» (LogWindow): место в меню отдано «TG Proxy». -->
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" local:MenuIcon.Glyph="&#xE9D9;" Checked="OnSection" />
 
-                        <Border Height="1" Background="{DynamicResource Border}" Margin="22,12,22,10" />
+                        <!-- Подписью, как «Разбор» (макет 19.10): голая черта читалась пустым местом. -->
+                        <Grid Margin="22,20,22,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource RailGroup}" Text="ПРОЧЕЕ" />
+                            <Border Grid.Column="1" Height="1" Background="{DynamicResource Border}"
+                                    VerticalAlignment="Center" Margin="10,1,0,0" />
+                        </Grid>
                         <RadioButton Style="{StaticResource RailItem}" Content="Оформление" Tag="look" local:MenuIcon.Glyph="&#xE790;" Checked="OnSection" />
                         <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" local:MenuIcon.Glyph="&#xE713;" Checked="OnSection" />
                     </StackPanel>
