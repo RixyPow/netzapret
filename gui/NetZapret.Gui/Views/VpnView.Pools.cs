@@ -467,14 +467,22 @@ public partial class VpnView
         if (_poolRows.Count == 0)
             return;
 
+        // Событий перетаскивания WPF не шлёт элементу, который сброс не
+        // принимает: без AllowDrop у списка прокрутка у края не срабатывала
+        // ни разу (владелец 19.10: «страница не прокручивается наверх, если
+        // тащу сервер в пул»). Только на время перетаскивания — свойство
+        // наследуется всеми строками.
+        Page.AllowDrop = true;
+        Page.PreviewDragOver += OnPageDragOver;
+
         try
         {
-            Page.PreviewDragOver += OnPageDragOver;
             DragDrop.DoDragDrop(card, new DataObject(ServerDragFormat, row), DragDropEffects.Copy);
         }
         finally
         {
             Page.PreviewDragOver -= OnPageDragOver;
+            Page.AllowDrop = false;
             Cool();
         }
     }
@@ -537,18 +545,27 @@ public partial class VpnView
     /// <summary>Прокрутка у края списка, пока тянут: пулы над подписками, и тянут вверх.</summary>
     private void OnPageDragOver(object sender, DragEventArgs e)
     {
+        // Мимо папки пула бросать некуда — курсор «нельзя»; папка, если она
+        // под курсором, разрешит сама (её обработчик идёт после этого).
+        e.Effects = DragDropEffects.None;
+
         _pageScroll ??= Below<ScrollViewer>(Page);
 
         if (_pageScroll is null)
             return;
 
-        const double edge = 48;
+        // Чем ближе к краю, тем быстрее: подписки раскрываются на сотни строк,
+        // и тащить сервер наверх к пулам по 14 точек было бы долго.
+        const double edge = 90;
         double y = e.GetPosition(_pageScroll).Y;
+        double bottom = _pageScroll.ActualHeight - y;
 
         if (y < edge)
-            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset - 14);
-        else if (y > _pageScroll.ActualHeight - edge)
-            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset + 14);
+            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset - Step(y));
+        else if (bottom < edge)
+            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset + Step(bottom));
+
+        static double Step(double from) => 10 + 50 * (1 - Math.Clamp(from, 0, edge) / edge);
     }
 
     private static T? Below<T>(DependencyObject root) where T : DependencyObject
