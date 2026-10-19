@@ -4,213 +4,345 @@
              xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+    <UserControl.Resources>
 
-            <StackPanel Grid.Column="0">
-
+        <!--
+            Плитка раздела проверок. Подпись — первая строка худшего уровня
+            в разделе, как её пишет Doctor: своих коротких слов окно не
+            выдумывает, иначе плитка и отчёт говорили бы разное.
+        -->
+        <DataTemplate x:Key="TileTemplate">
+            <Button Style="{StaticResource Choice}" Margin="0" Padding="12,9"
+                    Tag="{Binding}" Click="OnTile">
                 <Grid>
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Диагностика" Style="{StaticResource Title}" TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                   Text="Всё, от чего зависит работа: права, движки, правила, конфиг, резолвер, супервизор." />
+                    <Border Grid.Column="0" Style="{StaticResource IconTile}" Width="34" Height="34"
+                            CornerRadius="10" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <TextBlock Style="{StaticResource TileGlyph}" FontSize="17" Text="{Binding Glyph}"
+                                   Foreground="{Binding GlyphColor}" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                            <Ellipse Width="7" Height="7" Margin="10,1,6,0" VerticalAlignment="Center"
+                                     Fill="{Binding Color}" />
+                            <TextBlock Text="{Binding State}" FontSize="12" VerticalAlignment="Center"
+                                       Foreground="{Binding Color}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" Text="{Binding Detail}"
+                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding Detail}" />
                     </StackPanel>
 
-                    <Button Grid.Column="1" x:Name="RunButton" Style="{StaticResource Primary}"
-                            Content="Проверить" Click="OnRun" VerticalAlignment="Center" />
+                    <Path Grid.Column="2" Style="{StaticResource Chevron}" Margin="12,0,2,0">
+                        <Path.RenderTransform>
+                            <RotateTransform Angle="{Binding Angle}" />
+                        </Path.RenderTransform>
+                    </Path>
                 </Grid>
+            </Button>
+        </DataTemplate>
+
+        <!-- Строка проверки: в раскрытой плитке и в подробностях. -->
+        <DataTemplate x:Key="LineTemplate">
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
                 <!--
-                    Отчёт для разбора — здесь, первым под шапкой (владелец 03.10;
-                    прежде жил в «Ещё»). За ним идут с той же неполадкой, с какой
-                    открывают диагностику, и просят его первым же сообщением.
+                    Сдвиг вниз обязателен: выравнивание по верху ставит точку
+                    вровень с верхом строки, а не с её серединой. По центру
+                    нельзя — у переносимого текста точка уехала бы в середину
+                    абзаца.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,22,0,0">
-                    <Grid>
+                <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,6,12,0" VerticalAlignment="Top"
+                         Fill="{Binding Color}" />
+
+                <TextBlock Grid.Column="1" Text="{Binding Section}" Width="190" Margin="0,0,12,0"
+                           FontWeight="SemiBold" TextWrapping="Wrap" Visibility="{Binding SectionShown}" />
+
+                <TextBlock Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap" />
+
+                <!-- Действие у строки — только там, где его можно сделать отсюда. -->
+                <Button Grid.Column="3" Margin="12,-3,0,0" Padding="12,5" VerticalAlignment="Top"
+                        Content="{Binding ActionLabel}" Tag="{Binding}" Click="OnLineAction">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ActionLabel}" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Звено цепочки ответа «куда пойдёт соединение». -->
+        <DataTemplate x:Key="LinkTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18" Margin="0,0,10,0"
+                        Background="{DynamicResource Surface}" BorderThickness="1.5"
+                        BorderBrush="{Binding Color}" VerticalAlignment="Top">
+                    <TextBlock Style="{StaticResource TileGlyph}" FontSize="15" Text="{Binding Glyph}"
+                               Foreground="{Binding Color}" />
+                </Border>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource Caption}" Text="{Binding Label}" />
+                    <TextBlock Text="{Binding Value}" Margin="0,2,0,0" FontWeight="SemiBold"
+                               Foreground="{Binding ValueColor}"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}" />
+                    <TextBlock Style="{StaticResource Caption}" Text="{Binding Note}" Margin="0,1,0,0"
+                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Note}"
+                               Visibility="{Binding NoteShown}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
+        <StackPanel x:Name="Page" SizeChanged="OnPageSize">
+
+            <!--
+                Отчёт — главной кнопкой шапки (владелец 03.10: за ним идут с той же
+                неполадкой, с какой открывают диагностику). Журнал рядом — его читают
+                с той же неполадкой. Повтор проверки — последним: раздел проверяет
+                всё сам при каждом заходе.
+            -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                    <TextBlock Text="Диагностика" Style="{StaticResource Title}" TextWrapping="Wrap" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Всё, от чего зависит работа: права, движки, правила, конфиг, резолвер, надзор." />
+                </StackPanel>
+
+                <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                    <Button x:Name="ReportButton" Style="{StaticResource Primary}" Click="OnReport"
+                            Content="Собрать отчёт" gui:ButtonGlyph.Lead="&#xE896;" Margin="0,0,8,0"
+                            ToolTip="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                    <Button Style="{StaticResource Ghost}" Click="OnLog" Content="Журнал"
+                            gui:ButtonGlyph.Lead="&#xE8FD;" Margin="0,0,8,0"
+                            ToolTip="Что говорят sing-box, winws2, надзор и окно. Открывается отдельным окном — его можно держать рядом." />
+                    <Button x:Name="RunButton" Style="{StaticResource Ghost}" Click="OnRun"
+                            Content="Проверить снова" gui:ButtonGlyph.Lead="&#xE72C;" />
+                </WrapPanel>
+            </Grid>
+
+            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,10,0,0"
+                       TextWrapping="Wrap" Visibility="Collapsed" />
+
+            <!--
+                Сводка. Плитки — отбор подробностей: «Поломок» и «Оговорок»
+                оставляют в списке только замечания. Плитка «Проверок» — счёт
+                и только счёт: галочка на ней обещала бы порядок и при поломке.
+            -->
+            <UniformGrid x:Name="Summary" Rows="1" Margin="0,22,0,0">
+                <Button Style="{StaticResource Choice}" Margin="0,0,6,0" Click="OnShowAll">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Style="{StaticResource IconTile}" Width="40" Height="40" CornerRadius="20"
+                                VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" FontSize="17" Text="&#xE9D9;"
+                                       Foreground="{DynamicResource Muted}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Caption}" Text="Проверок" />
+                            <TextBlock x:Name="TotalCount" Text="…" FontSize="22" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource Choice}" Margin="6,0,6,0" Click="OnShowProblems">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="BadBadge" Style="{StaticResource IconTile}" Width="40" Height="40"
+                                CornerRadius="20" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock x:Name="BadGlyph" Style="{StaticResource TileGlyph}" FontSize="17"
+                                       Text="&#xE783;" Foreground="{DynamicResource Muted}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Caption}" Text="Поломок" />
+                            <TextBlock x:Name="BadCount" Text="…" FontSize="22" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource Choice}" Margin="6,0,0,0" Click="OnShowProblems">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="WarnBadge" Style="{StaticResource IconTile}" Width="40" Height="40"
+                                CornerRadius="20" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock x:Name="WarnGlyph" Style="{StaticResource TileGlyph}" FontSize="17"
+                                       Text="&#xE7BA;" Foreground="{DynamicResource Muted}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Caption}" Text="Оговорок" />
+                            <TextBlock x:Name="WarnCount" Text="…" FontSize="22" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+            </UniformGrid>
+
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
+                       Visibility="Collapsed" />
+
+            <!--
+                «Куда пойдёт соединение» рядом с диагностикой, а не в маршрутах.
+                Вопрос задают, когда сервис уходит не туда, — то есть в ту же
+                минуту, когда открывают этот раздел.
+            -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <StackPanel>
+                    <TextBlock Text="Куда пойдёт соединение" FontWeight="SemiBold" FontSize="15" />
+
+                    <TextBox x:Name="Host" Margin="0,12,0,0" KeyDown="OnHostKey"
+                             gui:Hint.Text="Сайт или домен, например web.whatsapp.com" />
+
+                    <!--
+                        Процесс, адрес и порт. Правило бывает привязано не к имени:
+                        у Discord голос уходит по адресам, имени в этих пакетах нет
+                        вовсе, и одним доменом такой случай не проверить. Пустое поле
+                        означает «не задано», а не «пусто» — ровно как у консоли.
+                    -->
+                    <Grid Margin="0,8,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="120" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Собрать отчёт для разбора" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его и прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
-                            <TextBlock x:Name="ReportValue" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                        <TextBox Grid.Column="0" Margin="0,0,8,0" x:Name="Exe" KeyDown="OnHostKey"
+                                 gui:Hint.Text="Программа, discord.exe" />
+
+                        <TextBox Grid.Column="1" Margin="0,0,8,0" x:Name="Address" KeyDown="OnHostKey"
+                                 gui:Hint.Text="Адрес, 1.2.3.4" />
+
+                        <TextBox Grid.Column="2" Margin="0,0,8,0" x:Name="Port" KeyDown="OnHostKey"
+                                 gui:Hint.Text="Порт 443" />
+
+                        <Button Grid.Column="3" Style="{StaticResource Primary}" Content="Проверить"
+                                Click="OnAsk" Padding="22,9" />
+                    </Grid>
+
+                    <Border x:Name="AnswerCard" Background="{DynamicResource Raised}" CornerRadius="10"
+                            Padding="14,12" Margin="0,12,0,0" Visibility="Collapsed">
+                        <StackPanel>
+                            <!--
+                                Цепочка «программа → правило → путь → назначение».
+                                Цвет — пути, а не «маршрут определён»: ответ есть
+                                всегда, и зелёная галочка ничего бы не сообщала.
+                                Страны выхода и секции пресета здесь нет: движок
+                                правил их не знает, а секции по адресам не знает
+                                и PresetZones — назвал бы не ту.
+                            -->
+                            <Grid x:Name="Chain">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <ContentControl x:Name="LinkProgram" Grid.Column="0" Focusable="False"
+                                                ContentTemplate="{StaticResource LinkTemplate}" />
+                                <Path x:Name="Arrow1" Grid.Column="1" Style="{StaticResource Chevron}" Margin="10,0" />
+                                <ContentControl x:Name="LinkRule" Grid.Column="2" Focusable="False"
+                                                ContentTemplate="{StaticResource LinkTemplate}" />
+                                <Path x:Name="Arrow2" Grid.Column="3" Style="{StaticResource Chevron}" Margin="10,0" />
+                                <ContentControl x:Name="LinkPath" Grid.Column="4" Focusable="False"
+                                                ContentTemplate="{StaticResource LinkTemplate}" />
+                                <Path x:Name="Arrow3" Grid.Column="5" Style="{StaticResource Chevron}" Margin="10,0" />
+                                <ContentControl x:Name="LinkTarget" Grid.Column="6" Focusable="False"
+                                                ContentTemplate="{StaticResource LinkTemplate}" />
+                            </Grid>
+
+                            <TextBlock x:Name="AnswerMode" FontSize="15" FontWeight="SemiBold"
                                        TextWrapping="Wrap" Visibility="Collapsed" />
+                            <TextBlock x:Name="AnswerWhy" Style="{StaticResource Caption}"
+                                       Margin="0,10,0,0" TextWrapping="Wrap" />
                         </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
 
-                        <Button Grid.Column="1" x:Name="ReportButton" Style="{StaticResource Ghost}"
-                                Content="Собрать" Click="OnReport" VerticalAlignment="Center" />
-                    </Grid>
-                </Border>
+            <TextBlock Text="Состояние компонентов" FontWeight="SemiBold" FontSize="15" Margin="4,24,0,10" />
 
-                <!--
-                    Журнал — отдельным окном отсюда (владелец 07.10): пункт меню
-                    уступил место вкладке «TG Proxy». Рядом с отчётом: журнал
-                    читают с той же неполадкой, с которой собирают отчёт.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+            <!-- Плитки по две в ряд; раскрытая встаёт под своим рядом на всю ширину. -->
+            <StackPanel x:Name="Components" />
+
+            <!--
+                Подробности. При поломках и оговорках раскрыты сразу и стоят на
+                «Только замечания»: свёрнутый список прятал бы красное за щелчком.
+            -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,12">
+                <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Журнал движков" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Что говорят sing-box, winws2, надзор и окно: через какой выход шло имя, что ответил сервер, где споткнулся запуск. Открывается отдельным окном — его можно держать рядом." />
-                        </StackPanel>
+                        <Border Grid.Column="1" Background="Transparent" Cursor="Hand"
+                                MouseLeftButtonUp="OnToggleDetails" />
 
-                        <Button Grid.Column="1" Style="{StaticResource Ghost}" Click="OnLog" VerticalAlignment="Center" Padding="12,8">
+                        <Border Grid.Column="0" Background="Transparent" Cursor="Hand" Padding="0,8"
+                                MouseLeftButtonUp="OnToggleDetails" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,8,0" />
-                                <TextBlock Text="Открыть журнал" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </Grid>
-                </Border>
-
-                <!--
-                    «Куда пойдёт имя» рядом с диагностикой, а не в маршрутах.
-                    Вопрос задают, когда сервис уходит не туда, — то есть
-                    в ту же минуту, когда открывают этот раздел.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Куда пойдёт соединение" FontWeight="SemiBold" />
-
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0" Margin="0,0,8,0" x:Name="Host"
-                                     KeyDown="OnHostKey"
-                                     gui:Hint.Text="Например, web.whatsapp.com" />
-
-                            <Button Grid.Column="1" Style="{StaticResource Ghost}"
-                                    Content="Спросить" Click="OnAsk" />
-                        </Grid>
-
-                        <!--
-                            Процесс, адрес и порт. Правило бывает привязано
-                            не к имени: у Discord голос уходит по адресам,
-                            имени в этих пакетах нет вовсе, и одним доменом
-                            такой случай не проверить. Пустое поле означает
-                            «не задано», а не «пусто» — ровно как у консоли.
-                        -->
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="90" />
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0" Margin="0,0,8,0" x:Name="Exe"
-                                     KeyDown="OnHostKey"
-                                     gui:Hint.Text="Программа, discord.exe" />
-
-                            <TextBox Grid.Column="1" Margin="0,0,8,0" x:Name="Address"
-                                     KeyDown="OnHostKey"
-                                     gui:Hint.Text="Адрес, 1.2.3.4" />
-
-                            <TextBox Grid.Column="2" x:Name="Port"
-                                     KeyDown="OnHostKey"
-                                     gui:Hint.Text="443" />
-                        </Grid>
-
-                        <Border x:Name="AnswerCard" Background="{DynamicResource Raised}" CornerRadius="10"
-                                Padding="14,12" Margin="0,12,0,0" Visibility="Collapsed">
-                            <StackPanel>
-                                <TextBlock x:Name="AnswerMode" FontSize="15" FontWeight="SemiBold" />
-                                <TextBlock x:Name="AnswerWhy" Style="{StaticResource Caption}"
-                                           Margin="0,6,0,0" TextWrapping="Wrap" />
+                                <Path x:Name="DetailsChevron" Style="{StaticResource Chevron}" Margin="2,0,12,0" />
+                                <TextBlock Text="Подробности проверок" FontWeight="SemiBold" FontSize="15"
+                                           VerticalAlignment="Center" />
+                                <TextBlock x:Name="DetailsCount" Style="{StaticResource Caption}" Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                   Text="Отвечает тот же движок правил, что решает судьбу настоящих соединений, — не поиск по строкам. Поэтому ответ верен и там, где правила перекрывают друг друга, то есть ровно там, где вопрос и возникает." />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" x:Name="DetailsTools"
+                                    Visibility="Collapsed">
+                            <TextBox x:Name="Search" Width="220" Margin="0,0,8,0" TextChanged="OnSearch"
+                                     gui:Hint.Text="Найти проверку…" />
+                            <Button x:Name="AllFilter" Style="{StaticResource Ghost}" Padding="14,7"
+                                    Margin="0,0,6,0" Click="OnShowAll" />
+                            <Button x:Name="ProblemFilter" Style="{StaticResource Ghost}" Padding="14,7"
+                                    Click="OnShowProblems" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel x:Name="DetailsBody" Visibility="Collapsed" Margin="0,14,0,0">
+                        <ItemsControl x:Name="Details" ItemTemplate="{StaticResource LineTemplate}" />
+                        <TextBlock x:Name="DetailsEmpty" Style="{StaticResource Caption}" Visibility="Collapsed"
+                                   Text="Ничего не нашлось." Margin="4,0,0,8" />
                     </StackPanel>
-                </Border>
+                </StackPanel>
+            </Border>
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap"
-                           Text="Проверка читает файлы и спрашивает резолвер: несколько секунд." />
-
-                <ItemsControl x:Name="Sections" Margin="0,12,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Margin="0,0,0,16">
-                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15"
-                                           Margin="4,0,0,8" />
-
-                                <ItemsControl ItemsSource="{Binding Lines}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Style="{StaticResource Card}" Margin="0,0,0,5" Padding="14,11">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <!--
-                                                        Сдвиг вниз обязателен:
-                                                        выравнивание по верху
-                                                        ставит точку вровень
-                                                        с верхом строки, а не
-                                                        с её серединой, и она
-                                                        висит над текстом.
-                                                        По центру нельзя —
-                                                        у переносимого текста
-                                                        точка уехала бы
-                                                        в середину абзаца.
-                                                    -->
-                                                    <Ellipse Grid.Column="0" Width="8" Height="8"
-                                                             Margin="2,6,14,0" VerticalAlignment="Top"
-                                                             Fill="{Binding Color}" />
-
-                                                    <TextBlock Grid.Column="1" Text="{Binding Text}"
-                                                               TextWrapping="Wrap" />
-
-                                                    <!-- Действие у строки — только там, где его можно сделать отсюда. -->
-                                                    <Button Grid.Column="2" Margin="12,0,0,0" Padding="12,5"
-                                                            VerticalAlignment="Top"
-                                                            Content="{Binding ActionLabel}" Tag="{Binding}"
-                                                            Click="OnLineAction">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button" BasedOn="{StaticResource Ghost}">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ActionLabel}" Value="{x:Null}">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Button.Style>
-                                                    </Button>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-            </StackPanel>
-        </Grid>
+        </StackPanel>
     </ScrollViewer>
 </UserControl>
