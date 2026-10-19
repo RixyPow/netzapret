@@ -238,6 +238,33 @@ public partial class StatusView : UserControl
         };
     }
 
+    /// <summary>
+    /// Плитки быстрых действий — в ряд, а на узком окне по две, по тем же половинам,
+    /// что карточки выше.
+    /// </summary>
+    /// <remarks>
+    /// С подписью и значком (макет 19.10) плитке нужно около 205 точек: на окне
+    /// в 1000 точек в ряд выходило «Проверить бл…» и «Открыть журн…» (снимок
+    /// из теста). Решается по ширине самой сетки, а не окна: её сужает и масштаб.
+    /// </remarks>
+    private void OnActionsSize(object sender, SizeChangedEventArgs e)
+    {
+        bool two = e.NewSize.Width < NarrowActions;
+
+        Button[] tiles = [ActionCheck, ActionLog, ActionDoctor, ActionConfig];
+
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            Grid.SetRow(tiles[i], two ? i / 2 : 0);
+            Grid.SetColumn(tiles[i], two ? (i % 2) * 4 : i * 2);
+            Grid.SetColumnSpan(tiles[i], two ? 3 : 1);
+            tiles[i].Margin = new Thickness(0, two && i >= 2 ? 8 : 0, 0, 0);
+        }
+    }
+
+    /// <summary>Уже этой ширины сетки плитки встают по две.</summary>
+    private const double NarrowActions = 850;
+
     private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
 
     private void OnQuickLog(object sender, RoutedEventArgs e) => LogWindow.Open();
@@ -550,6 +577,7 @@ public partial class StatusView : UserControl
         PresetValue.Text = settings.DescribePreset();
         ShowPresetNote(settings.PresetName);
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
+        ShowServerFlag(_exit ?? NetZapret.Subscriptions.Warp.PreferredExit(settings));
         DnsValue.Text = settings.UseRouterDns
             ? RouterDnsConnection.ConfigWarning(settings) is not null
                 ? $"Запасной DoH · {settings.DnsServer} (DNS роутера недоступен)"
@@ -570,10 +598,17 @@ public partial class StatusView : UserControl
         }
 
         ShowState(settings, state, running, seen.SingBoxUp, seen.Coming);
-        ShowFooter(state, running, seen.ConfigBuilt);
+        ShowFooter(settings, state, running, seen.ConfigBuilt);
         ShowWarnings(settings);
 
-        _ = ReadExitAsync(settings, running && state!.Services.Any(s => s.Name == "sing-box"));
+        bool tunnel = running && state!.Services.Any(s => s.Name == "sing-box");
+
+        _ = ReadExitAsync(settings, tunnel);
+
+        if (running)
+            _ = ReadMetersAsync(state, tunnel);
+        else
+            Meters.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>Выход, который держит движок; <c>null</c> — не знаем или туннеля нет.</summary>
@@ -616,6 +651,7 @@ public partial class StatusView : UserControl
 
             _exit = server;
             ServerValue.Text = TunnelStatus.ServerLine(settings, server);
+            ShowServerFlag(server);
         }
         finally
         {
@@ -828,7 +864,7 @@ public partial class StatusView : UserControl
             RepeatBehavior = RepeatBehavior.Forever,
         });
 
-        Dot.BeginAnimation(OpacityProperty, new DoubleAnimation
+        RingBox.BeginAnimation(OpacityProperty, new DoubleAnimation
         {
             From = 1,
             To = 0.2,
@@ -846,8 +882,8 @@ public partial class StatusView : UserControl
         // продолжает удерживать своё последнее значение, и точка осталась бы
         // навсегда полупрозрачной, а «работает» выглядело бы приглушённым.
         StartProgressShift.BeginAnimation(TranslateTransform.XProperty, null);
-        Dot.BeginAnimation(OpacityProperty, null);
-        Dot.Opacity = 1;
+        RingBox.BeginAnimation(OpacityProperty, null);
+        RingBox.Opacity = 1;
     }
 
     /// <summary>
@@ -869,19 +905,138 @@ public partial class StatusView : UserControl
     {
         var brush = (Brush)FindResource(colourKey);
 
-        Dot.Fill = brush;
+        Ring.Stroke = brush;
+        RingGlyph.Foreground = brush;
         FooterDot.Fill = brush;
         DotGlow.Color = colourKey != "Faint" && brush is SolidColorBrush solid ? solid.Color : Colors.Transparent;
     }
 
-    /// <summary>
-    /// Строка внизу: состояние с длительностью и время сборки конфига туннеля.
-    /// </summary>
-    private void ShowFooter(SupervisorState? state, bool running, DateTime? configBuilt)
+    /// <summary>Флаг выхода у строки «Сервер» — картинкой (FlagImages); нет картинки — без флага.</summary>
+    private void ShowServerFlag(string? tag)
     {
-        FooterState.Text = running && _startingSince is null
+        var country = tag is null ? string.Empty : NetZapret.Subscriptions.CountryTag.Split(tag).Country;
+        var flag = country.Length == 2 ? FlagImages.For(country) : null;
+
+        ServerFlagImage.Source = flag;
+        ServerFlag.Visibility = flag is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Нагрузка движков между замерами: доля ядра считается по разнице, поэтому замер один на окно.</summary>
+    private static readonly EngineLoad Load = new();
+
+    private bool _readingMeters;
+
+    /// <summary>
+    /// Счётчики под кнопкой: трафик движка туннеля с запуска, процессор и память движков.
+    /// </summary>
+    /// <remarks>
+    /// В пуле: замер процессов и запрос к Clash API — ожидания, а поток окна
+    /// на «Главной» уже ловили на ожиданиях (сторож подвисаний, 01.10).
+    /// </remarks>
+    private async Task ReadMetersAsync(SupervisorState? state, bool tunnel)
+    {
+        if (_readingMeters)
+            return;
+
+        _readingMeters = true;
+
+        try
+        {
+            var (engines, totals) = await Task.Run(async () =>
+            {
+                var used = Load.Sample(state);
+                (long Up, long Down)? moved = null;
+
+                if (tunnel)
+                {
+                    using var api = new ClashApi();
+                    moved = await api.TotalsAsync(CancellationToken.None);
+                }
+
+                return (used, moved);
+            });
+
+            Meters.Visibility = engines.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            TrafficMeter.Visibility = totals is null ? Visibility.Collapsed : Visibility.Visible;
+
+            if (totals is { } moved)
+            {
+                UpValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Up);
+                DownValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Down);
+            }
+
+            CpuValue.Text = EngineLoad.Cores(engines);
+            RamValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(engines.Sum(e => e.Memory));
+            LoadMeter.ToolTip = EngineLoad.Explain(engines, NetZapret.Subscriptions.SubscriptionUsage.Size);
+        }
+        catch (Exception)
+        {
+            // Счётчики — показ, а не работа: не прочиталось — покажем в следующий раз.
+        }
+        finally
+        {
+            _readingMeters = false;
+        }
+    }
+
+    /// <summary>
+    /// Меню у «Остановить» (макет 19.10): перезапуск и оба выхода, как в трее.
+    /// </summary>
+    private void OnEngineMenu(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = EngineMenuButton,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        var restart = new MenuItem { Header = "Перезапустить", IsEnabled = EngineControl.IsRunning };
+        restart.Click += async (_, _) =>
+        {
+            BeginStarting();
+
+            var outcome = await EngineControl.RestartAsync("меню у «Остановить» на «Главной»", CancellationToken.None);
+
+            if (!outcome.Ok)
+            {
+                EndStarting();
+                ShowProblem(outcome.Message);
+                Update();
+            }
+        };
+        menu.Items.Add(restart);
+
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+
+        // Те же два выхода, что в трее (TrayMenu): «убрать окно» и «выключить
+        // обход» — разные желания, и ошибка в любую сторону дорогая.
+        var keep = new MenuItem { Header = "Выйти, движки остаются работать" };
+        keep.Click += (_, _) => TrayIcon.Exit(stopEngines: false);
+        menu.Items.Add(keep);
+
+        var stop = new MenuItem { Header = "Выйти и остановить движки" };
+        stop.SetResourceReference(ForegroundProperty, "Danger");
+        stop.Click += (_, _) => TrayIcon.Exit(stopEngines: true);
+        menu.Items.Add(stop);
+
+        menu.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Строка внизу: состояние с длительностью, режим и пресет — и время сборки конфига туннеля.
+    /// </summary>
+    /// <remarks>
+    /// Режим и пресет — по макету 19.10: внизу их видно одной строкой, не читая карточек.
+    /// </remarks>
+    private void ShowFooter(AppSettings settings, SupervisorState? state, bool running, DateTime? configBuilt)
+    {
+        var said = running && _startingSince is null
             ? $"{StateLine.Text} · {Span(DateTimeOffset.Now - state!.StartedAt)}"
             : StateLine.Text;
+
+        FooterState.Text = $"{said} · Режим: {settings.DescribeMode()}"
+            + (settings.NeedsDesync ? $" · Пресет: {settings.DescribePreset()}" : string.Empty);
 
         FooterConfig.Text = configBuilt is { } at
             ? $"Конфиг туннеля собран {at:dd.MM.yyyy} в {at:HH:mm}"

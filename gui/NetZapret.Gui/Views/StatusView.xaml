@@ -15,11 +15,26 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Shape" Background="Transparent"
-                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
-                                CornerRadius="11" Padding="12,9">
-                            <ContentPresenter HorizontalAlignment="Center" />
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Shape" Background="Transparent"
+                                    BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                    CornerRadius="11" Padding="12,9">
+                                <ContentPresenter HorizontalAlignment="Center" />
+                            </Border>
+
+                            <!--
+                                Галочка в углу выбранного (макет 19.10): одна обводка
+                                отличала выбранный режим только цветом рамки, и на
+                                светлой теме его приходилось искать.
+                            -->
+                            <Border x:Name="Mark" Width="18" Height="18" CornerRadius="9"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,6,0"
+                                    Background="{DynamicResource AccentFill}" Visibility="Collapsed">
+                                <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE73E;" FontSize="10"
+                                           Foreground="{DynamicResource OnAccent}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
@@ -28,6 +43,35 @@
                                 <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
                                 <Setter TargetName="Shape" Property="BorderThickness" Value="2" />
                                 <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
+            Плитка быстрого действия: та же рамка, что у Ghost, но содержимое
+            во всю ширину — у Ghost оно по середине, и значки четырёх плиток
+            стояли бы вразнобой.
+        -->
+        <Style x:Key="QuickAction" TargetType="Button" BasedOn="{StaticResource Ghost}">
+            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Shape" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1.5"
+                                CornerRadius="12" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -241,10 +285,12 @@
                 </Border>
 
                 <!--
-                    Карточка состояния. Крупная точка и одна строка словами:
+                    Карточка состояния. Крупный знак и одна строка словами:
                     первое, зачем окно открывают, — понять, идёт ли обход.
-                    Точка со свечением её же цвета (макет 30.09): свечение
-                    красится вместе с точкой, в ShowDot, и разойтись им нечем.
+                    С 19.10 по макету владельца — кольцо с кнопкой питания
+                    вместо точки: его видно и с другого конца комнаты. Кольцо,
+                    знак и свечение красятся вместе, в ShowDot, и разойтись
+                    им нечем.
                 -->
                 <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,18,0,0" Padding="22,16,22,14">
                     <StackPanel>
@@ -255,14 +301,17 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <Ellipse x:Name="Dot" Grid.Column="0" Width="26" Height="26"
-                                     VerticalAlignment="Center" Margin="4,0,20,0"
-                                     Fill="{DynamicResource Faint}">
-                                <Ellipse.Effect>
-                                    <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
-                                                      Opacity="0.7" Color="Transparent" />
-                                </Ellipse.Effect>
-                            </Ellipse>
+                            <Grid x:Name="RingBox" Grid.Column="0" Width="68" Height="68"
+                                  VerticalAlignment="Center" Margin="2,0,20,0">
+                                <Ellipse x:Name="Ring" StrokeThickness="4" Stroke="{DynamicResource Faint}">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
+                                                          Opacity="0.7" Color="Transparent" />
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                                <TextBlock x:Name="RingGlyph" Style="{StaticResource LineGlyph}" Text="&#xE7E8;"
+                                           FontSize="28" HorizontalAlignment="Center" Foreground="{DynamicResource Faint}" />
+                            </Grid>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
@@ -278,7 +327,8 @@
                                 а не опасное — остановленный обход поднимается
                                 той же кнопкой через секунду.
                             -->
-                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="34,14"
                                         MinWidth="210" Click="OnStart" Visibility="Collapsed">
                                     <StackPanel Orientation="Horizontal">
@@ -297,6 +347,51 @@
                                                    Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </StackPanel>
                                 </Button>
+
+                                <!--
+                                    Вторая половина кнопки (макет 19.10): перезапуск
+                                    и оба выхода, как в трее. Перезапуск нужен после
+                                    любой правки маршрутов, а прежде был только
+                                    во всплывающем предложении.
+                                -->
+                                <Button x:Name="EngineMenuButton" Style="{StaticResource Primary}" Padding="14,14"
+                                        MinWidth="0" Margin="3,0,0,0" Click="OnEngineMenu" ToolTip="Перезапуск и выход">
+                                    <Path Style="{StaticResource Chevron}" Margin="0,1,0,0"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                        <Path.RenderTransform>
+                                            <RotateTransform Angle="90" />
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Button>
+                            </StackPanel>
+
+                            <!--
+                                Счётчики под кнопкой (макет 19.10): что провёз движок
+                                туннеля с запуска и что берут наши движки. Процессор —
+                                в долях одного ядра: winws2 однопоточный (EngineLoad).
+                            -->
+                            <StackPanel x:Name="Meters" Orientation="Horizontal" HorizontalAlignment="Right"
+                                        Margin="0,10,2,0" Visibility="Collapsed">
+                                <StackPanel x:Name="TrafficMeter" Orientation="Horizontal" VerticalAlignment="Bottom"
+                                            Margin="0,0,18,0" Background="Transparent"
+                                            ToolTip="Трафик через движок туннеля с его запуска. В «Гибриде» это то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
+                                    <TextBlock Text="↑" Foreground="{DynamicResource Accent}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="UpValue" Text="—" FontSize="12.5" Margin="5,0,14,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="↓" Foreground="{DynamicResource Accent}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="DownValue" Text="—" FontSize="12.5" Margin="5,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel x:Name="LoadMeter" Orientation="Horizontal" Background="Transparent">
+                                    <StackPanel Margin="0,0,14,0">
+                                        <TextBlock Text="ЦП" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="CpuValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel>
+                                        <TextBlock Text="Память" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="RamValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
                             </StackPanel>
                         </Grid>
 
@@ -407,8 +502,19 @@
                                 <TextBlock Grid.Row="0" Style="{StaticResource LineGlyph}" Text="&#xE8CE;" Margin="0,0,0,9" />
                                 <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource Caption}" Text="Сервер"
                                            Margin="0,0,14,9" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="0" Grid.Column="2" x:Name="ServerValue" Text="—" Margin="0,0,0,9"
-                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <!-- Флаг выхода — картинкой, как на вкладке VPN (FlagImages): Windows флагов не рисует. -->
+                                <Grid Grid.Row="0" Grid.Column="2" Margin="0,0,0,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="ServerFlag" Width="22" Height="15" CornerRadius="3" Margin="0,0,8,0"
+                                            VerticalAlignment="Center" ClipToBounds="True" Visibility="Collapsed">
+                                        <Image x:Name="ServerFlagImage" Stretch="UniformToFill" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1" x:Name="ServerValue" Text="—"
+                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                </Grid>
 
                                 <TextBlock Grid.Row="1" Style="{StaticResource LineGlyph}" Text="&#xE774;" Margin="0,0,0,9" />
                                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Caption}" Text="DNS"
@@ -621,7 +727,11 @@
                     каждая — пополам. Равные четверти от UniformGrid середину
                     сдвигали, и край кнопки не сходился с краем карточки (04.10).
                 -->
-                <Grid Grid.Row="15" Margin="0,10,0,0">
+                <Grid Grid.Row="15" x:Name="Actions" Margin="0,10,0,0" SizeChanged="OnActionsSize">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="8" />
@@ -632,30 +742,24 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="0" Style="{StaticResource Ghost}" Padding="10,8" Click="OnQuickCheck">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" Margin="0,0,8,0" />
-                            <TextBlock Text="Проверить блокировки" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                    <!--
+                        Плитками со значком и подписью (макет 19.10): новичку голое
+                        «Диагностика» не говорило, зачем туда идти. Содержимое
+                        прижато влево (QuickAction), а не по середине кнопки, —
+                        иначе значки четырёх плиток стояли бы вразнобой.
+                    -->
+                    <Button x:Name="ActionCheck" Grid.Column="0" Style="{StaticResource QuickAction}" Click="OnQuickCheck">
+                        <views:HomeAction Glyph="&#xE721;" Title="Проверить блокировки" Note="Что закрыто и чем лечится" />
                     </Button>
-                    <Button Grid.Column="2" Style="{StaticResource Ghost}" Padding="10,8" Click="OnQuickLog">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8FD;" Margin="0,0,8,0" />
-                            <TextBlock Text="Открыть журнал" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                    <Button x:Name="ActionLog" Grid.Column="2" Style="{StaticResource QuickAction}" Click="OnQuickLog">
+                        <views:HomeAction Glyph="&#xE8FD;" Title="Открыть журнал" Note="Журналы движков" />
                     </Button>
-                    <Button Grid.Column="4" Style="{StaticResource Ghost}" Padding="10,8" Click="OnQuickDoctor">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE756;" Margin="0,0,8,0" />
-                            <TextBlock Text="Диагностика" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                    <Button x:Name="ActionDoctor" Grid.Column="4" Style="{StaticResource QuickAction}" Click="OnQuickDoctor">
+                        <views:HomeAction Glyph="&#xE756;" Title="Диагностика" Note="Что мешает работе" />
                     </Button>
-                    <Button Grid.Column="6" Style="{StaticResource Ghost}" Padding="10,8" Click="OnQuickConfig"
+                    <Button x:Name="ActionConfig" Grid.Column="6" Style="{StaticResource QuickAction}" Click="OnQuickConfig"
                             ToolTip="Папка config в проводнике, файл настроек выделен">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE8B7;" Margin="0,0,8,0" />
-                            <TextBlock Text="Открыть конфиг" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                        </StackPanel>
+                        <views:HomeAction Glyph="&#xE8B7;" Title="Открыть конфиг" Note="Папка с настройками" />
                     </Button>
                 </Grid>
 
