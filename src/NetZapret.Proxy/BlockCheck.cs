@@ -2365,48 +2365,67 @@ public static class BlockCheck
         IReadOnlyList<string> hosts,
         CancellationToken cancellationToken)
     {
-        var suspicious = new List<string>();
+        // По четыре разом, а не по одному. Имена закрытые, и почти каждое
+        // ждёт свои четыре секунды на молчащем адресе: замер 19.10 у владельца,
+        // 12 имён по одному — 21–24 с в конце каждой проверки блокировок.
+        // Порядок ответа — порядок имён: по нему строка и читается.
+        using var slots = new SemaphoreSlim(4);
 
-        foreach (var host in hosts)
+        var verdicts = await Task.WhenAll(hosts.Select(async host =>
         {
+            await slots.WaitAsync(cancellationToken);
+
             try
             {
-                var system = (await Dns.GetHostAddressesAsync(host, cancellationToken))
-                    .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-                    .Select(a => a.ToString())
-                    .ToHashSet(StringComparer.Ordinal);
-
-                if (system.Count == 0)
-                    continue;
-
-                var doh = await DohResolveAsync(host, cancellationToken);
-
-                if (doh.Count == 0)
-                    continue;
-
-                if (system.Overlaps(doh))
-                    continue;
-
-                // Адрес от DoH — точка отсчёта. Если и он не предъявляет
-                // сертификата на это имя, сравнивать не с чем: так ведут себя
-                // домены, у которых TLS живёт только на поддоменах
-                // (googlevideo.com — ровно такой). Молчим.
-                if (!await CertificateMatchesAsync(host, doh.First(), cancellationToken))
-                    continue;
-
-                // Точка отсчёта есть: имя обслуживается по TLS, и честный
-                // адрес это подтверждает. Раз системный не подтверждает,
-                // дело именно в адресе — SNI-то в обоих случаях настоящий.
-                if (!await CertificateMatchesAsync(host, system.First(), cancellationToken))
-                    suspicious.Add(host);
+                return await SystemAddressIsBadAsync(host, cancellationToken);
             }
-            catch (Exception)
+            finally
             {
-                // Неразрешимое имя — забота другой проверки.
+                slots.Release();
             }
-        }
+        }));
 
-        return suspicious;
+        return hosts.Where((_, i) => verdicts[i]).ToList();
+    }
+
+    /// <summary>Системный адрес имени не предъявляет его сертификата, а честный предъявляет.</summary>
+    private static async Task<bool> SystemAddressIsBadAsync(string host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var system = (await Dns.GetHostAddressesAsync(host, cancellationToken))
+                .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
+                .Select(a => a.ToString())
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (system.Count == 0)
+                return false;
+
+            var doh = await DohResolveAsync(host, cancellationToken);
+
+            if (doh.Count == 0)
+                return false;
+
+            if (system.Overlaps(doh))
+                return false;
+
+            // Адрес от DoH — точка отсчёта. Если и он не предъявляет
+            // сертификата на это имя, сравнивать не с чем: так ведут себя
+            // домены, у которых TLS живёт только на поддоменах
+            // (googlevideo.com — ровно такой). Молчим.
+            if (!await CertificateMatchesAsync(host, doh.First(), cancellationToken))
+                return false;
+
+            // Точка отсчёта есть: имя обслуживается по TLS, и честный
+            // адрес это подтверждает. Раз системный не подтверждает,
+            // дело именно в адресе — SNI-то в обоих случаях настоящий.
+            return !await CertificateMatchesAsync(host, system.First(), cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Неразрешимое имя — забота другой проверки.
+            return false;
+        }
     }
 
     /// <summary>
