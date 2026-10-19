@@ -71,11 +71,14 @@ if %errorlevel% neq 0 (
 
 rem Checked against the built file rather than trusted: the version lives in
 rem Directory.Build.props, and forgetting to raise it there is the easy mistake.
-for /f "delims=" %%V in ('powershell -NoProfile -Command "(Get-Item '%ROOT%dist\NetZapret\NetZapret.exe').VersionInfo.FileVersion"') do set "BUILT=%%V"
+rem ProductVersion, not FileVersion: only it keeps a prerelease suffix
+rem (1.0.0-pre.1); FileVersion is digits only, 1.0.0.0. The build metadata after
+rem "+" (commit hash) is cut off, and the match is exact - a substring match
+rem would let a 1.0.0-pre.1 build pass as 1.0.0.
+for /f "delims=" %%V in ('powershell -NoProfile -Command "((Get-Item '%ROOT%dist\NetZapret\NetZapret.exe').VersionInfo.ProductVersion -split '\+')[0]"') do set "BUILT=%%V"
 
 echo Tag %VERSION%, built %BUILT%
-echo %BUILT% | find "%VERSION%" >nul
-if errorlevel 1 (
+if /i not "%BUILT%"=="%VERSION%" (
     echo.
     echo The built program reports %BUILT%, which does not match %VERSION%.
     echo Update ^<Version^> in Directory.Build.props and commit.

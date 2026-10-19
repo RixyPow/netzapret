@@ -125,7 +125,7 @@ public partial class UpdateWindow : Window
     private void ShowReleases(IReadOnlyList<ReleaseInfo> releases)
     {
         _releases = releases
-            .OrderByDescending(r => Version.TryParse(r.Version, out var v) ? v : new Version(0, 0))
+            .OrderByDescending(r => r.Version, UpdateCheck.Order)
             .ToList();
 
         ShowTimeline(_releases);

@@ -30,6 +30,29 @@ public class UpdateCheckTests
     /// от человека десятый выпуск подряд — ровно тогда, когда накопится больше
     /// всего починок.
     /// </remarks>
+    /// <summary>Предварительные версии (19.10, 1.0.0-pre.1) — по SemVer.</summary>
+    [Theory]
+    [InlineData("1.0.0", "1.0.0-pre.1", true)]
+    [InlineData("1.0.0-pre.1", "1.0.0", false)]
+    [InlineData("1.0.0-pre.2", "1.0.0-pre.1", true)]
+    [InlineData("1.0.0-pre.10", "1.0.0-pre.9", true)]
+    [InlineData("1.0.0-pre.1", "0.17.1", true)]
+    [InlineData("v1.0.0-pre.1", "1.0.0-pre.1", false)]
+    [InlineData("1.0.1", "1.0.0-pre.1+abc123", true)]
+    [InlineData("1.0.0-rc.1", "1.0.0-pre.3", true)]
+    public void PrereleasesCompareLikeSemVer(string candidate, string current, bool expected)
+    {
+        Assert.Equal(expected, UpdateCheck.IsNewer(candidate, current));
+    }
+
+    [Fact]
+    public void TheOrderPutsTheFinalAfterItsPrereleases()
+    {
+        string[] sorted = ["1.0.0", "0.17.1", "1.0.0-pre.2", "1.0.0-pre.1"];
+
+        Assert.Equal(["0.17.1", "1.0.0-pre.1", "1.0.0-pre.2", "1.0.0"], sorted.Order(UpdateCheck.Order));
+    }
+
     [Fact]
     public void TenIsNewerThanNine()
     {

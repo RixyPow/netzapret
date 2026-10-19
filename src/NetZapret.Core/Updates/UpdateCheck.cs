@@ -135,7 +135,7 @@ public static class UpdateCheck
             .Where(r => IsNewer(r.Version, current) && !IsNewer(r.Version, latest))
             .GroupBy(r => r.Version, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
-            .OrderByDescending(r => Version.TryParse(Normalise(r.Version), out var v) ? v : new Version(0, 0))
+            .OrderByDescending(r => r.Version, Order)
             .ToList();
 
     /// <summary>Один выпуск из ответа GitHub; архива нет — пустая ссылка.</summary>
@@ -185,15 +185,74 @@ public static class UpdateCheck
     /// как строка меньше. Неразобранная версия считается не новее — ошибиться
     /// в эту сторону безопаснее, чем предлагать откат, приняв мусор за номер.
     /// </remarks>
-    public static bool IsNewer(string candidate, string current)
+    public static bool IsNewer(string candidate, string current) =>
+        Parse(candidate) is { } newer && Parse(current) is { } running && Compare(newer, running) > 0;
+
+    /// <summary>
+    /// Порядок версий от старой к новой — для лент выпусков; неразобранные — первыми.
+    /// </summary>
+    public static IComparer<string> Order { get; } = Comparer<string>.Create((a, b) =>
+        (Parse(a), Parse(b)) switch
+        {
+            ({ } x, { } y) => Compare(x, y),
+            (null, null) => 0,
+            (null, _) => -1,
+            _ => 1,
+        });
+
+    /// <summary>
+    /// Номер и суффикс предварительной версии: «v1.0.0-pre.1» → (1.0.0, «pre», 1).
+    /// </summary>
+    /// <remarks>
+    /// С 19.10 версия бывает и с суффиксом (владелец: «поменяй версию на pre1
+    /// 1.0.0» — записано по SemVer, 1.0.0-pre.1). Прежний разбор брал только
+    /// числа и на «0-pre» отказывал: такой выпуск никогда не был бы новее,
+    /// а установленный 1.0.0-pre.1 считался бы 1.0.0, и сам 1.0.0 ему не
+    /// предложился бы. Метаданные после «+» (хеш коммита у InformationalVersion)
+    /// в сравнение не идут.
+    /// </remarks>
+    private static (Version Number, string? Label, int Step)? Parse(string value)
     {
-        if (!Version.TryParse(Normalise(candidate), out var newer))
-            return false;
+        var text = value.Trim().TrimStart('v', 'V').Split('+')[0];
+        int dash = text.IndexOf('-');
+        var number = dash < 0 ? text : text[..dash];
 
-        if (!Version.TryParse(Normalise(current), out var running))
-            return false;
+        if (!Version.TryParse(Normalise(number), out var parsed))
+            return null;
 
-        return newer > running;
+        if (dash < 0)
+            return (parsed, null, 0);
+
+        // «pre.1», «pre1», «rc.2»: буквы — метка, хвостовые цифры — шаг.
+        var suffix = text[(dash + 1)..];
+        int digits = suffix.Length;
+
+        while (digits > 0 && char.IsAsciiDigit(suffix[digits - 1]))
+            digits--;
+
+        var label = suffix[..digits].TrimEnd('.', '-').ToLowerInvariant();
+        int step = digits < suffix.Length && int.TryParse(suffix[digits..], out var n) ? n : 0;
+
+        return (parsed, label, step);
+    }
+
+    /// <summary>
+    /// Числа первыми; при равных числах окончательная новее предварительной
+    /// (1.0.0 &gt; 1.0.0-pre.1, как в SemVer), предварительные — по метке и шагу.
+    /// </summary>
+    private static int Compare((Version Number, string? Label, int Step) a, (Version Number, string? Label, int Step) b)
+    {
+        int byNumber = a.Number.CompareTo(b.Number);
+
+        if (byNumber != 0)
+            return byNumber;
+
+        if (a.Label is null || b.Label is null)
+            return (a.Label is null ? 1 : 0) - (b.Label is null ? 1 : 0);
+
+        int byLabel = string.CompareOrdinal(a.Label, b.Label);
+
+        return byLabel != 0 ? byLabel : a.Step.CompareTo(b.Step);
     }
 
     /// <summary>Приводит «v0.3.2» и «0.3.2.0» к виду, понятному разбору.</summary>
@@ -211,6 +270,17 @@ public static class UpdateCheck
     {
         get
         {
+            // InformationalVersion несёт суффикс («1.0.0-pre.1»), а номер сборки —
+            // только числа: по нему 1.0.0-pre.1 выглядел бы как 1.0.0, и сам 1.0.0
+            // не предложился бы обновлением.
+            var informational = typeof(UpdateCheck).Assembly
+                .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                .FirstOrDefault()?.InformationalVersion.Split('+')[0];
+
+            if (!string.IsNullOrWhiteSpace(informational) && Parse(informational) is not null)
+                return informational;
+
             var version = typeof(UpdateCheck).Assembly.GetName().Version;
             return version is null ? "0.0.0" : $"{version.Major}.{version.Minor}.{version.Build}";
         }
