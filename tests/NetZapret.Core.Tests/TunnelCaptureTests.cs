@@ -444,6 +444,19 @@ public sealed class TunnelCaptureTests
         Assert.Equal(["77.1.1.3", "77.1.1.1", "77.1.1.2"], TunnelEndpoints.Hosts(config, "DE"));
     }
 
+    /// <summary>Серверы пулов — сразу за закреплённым (идеи №6): иначе за чертой в 40 адресов.</summary>
+    [Fact]
+    public void PoolServersComeRightAfterThePinnedOne()
+    {
+        var config = Compile(("NL", "77.1.1.1"), ("EE", "77.1.1.2"), ("DE", "77.1.1.3"), ("FI", "77.1.1.4"));
+
+        var first = ServerPools.CaptureFirst("DE",
+            [new ServerPool("p1", "Север", ["EE", "FI"], Preferred: "FI")]);
+
+        Assert.Equal(["DE", "FI", "EE"], first);
+        Assert.Equal(["77.1.1.3", "77.1.1.4", "77.1.1.2", "77.1.1.1"], TunnelEndpoints.Hosts(config, first));
+    }
+
     [Fact]
     public void WireGuardPeersCount()
     {

@@ -137,8 +137,15 @@ internal static class TunnelConfig
             // и тогда пусть движок перебирает всех. В списке вкладки мёртвые
             // видны по-прежнему; удачный замер вернёт сервер со следующим
             // запуском.
+            //
+            // Так же закреплённые в пулах и пул, мёртвый целиком (идеи №6, 19.10):
+            // выброшенный пул без серверов исчез бы из конфига, и его маршруты
+            // молча ушли бы в пул по умолчанию — даже когда человек велел ждать.
+            var keep = ServerPools.KeptDespiteDeath(settings.Pools, servers.Select(s => s.Tag), dead);
+
             var alive = servers
-                .Where(s => !dead.Contains(s.Tag) || s.Tag == Warp.PreferredExit(settings) || s.IsSelfRegistering)
+                .Where(s => !dead.Contains(s.Tag) || s.Tag == Warp.PreferredExit(settings) || s.IsSelfRegistering
+                    || keep.Contains(s.Tag))
                 .ToList();
 
             int dropped = servers.Count - alive.Count;
@@ -207,6 +214,10 @@ internal static class TunnelConfig
                 PanelHosts = SubscriptionHosts.From(
                     [settings.SubscriptionUrl, .. SubscriptionBook.Load().Entries.Select(e => e.Url)]),
                 PreferredServerTag = Warp.PreferredExit(settings),
+
+                // При WARP подписки на паузе, и пулам вести некуда — их маршруты
+                // идут в пул по умолчанию, то есть в WARP.
+                Pools = settings.WarpEnabled ? [] : settings.Pools,
 
                 // «Игнорировать исключения» сюда больше не передаётся:
                 // с 23.09 она отменяет все прямые правила, а не одно

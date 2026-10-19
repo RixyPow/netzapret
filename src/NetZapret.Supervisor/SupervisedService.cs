@@ -382,8 +382,12 @@ public sealed class SingBoxService : SupervisedService
         bool replacePinned = false,
         bool dnsOnly = false,
         bool dnsViaAuto = false,
-        string? watchUrl = null)
+        string? watchUrl = null,
+        IReadOnlyList<ServerPool>? pools = null,
+        bool deadPoolToDefault = true)
     {
+        _pools = [.. (pools ?? []).Select(p => new PoolState(p, replacePinned))];
+        _deadPoolToDefault = deadPoolToDefault;
         _watchUrl = string.IsNullOrWhiteSpace(watchUrl) ? Ping.Cloudflare : watchUrl;
         _dnsOnly = dnsOnly;
         _dnsViaAuto = dnsViaAuto;
@@ -603,6 +607,12 @@ public sealed class SingBoxService : SupervisedService
         {
             _warm = true;
         }
+
+        if (_pools.Count > 0)
+        {
+            int run = _run;
+            _ = Task.Run(() => WarmPoolsAsync(run, cancellationToken), CancellationToken.None);
+        }
     }
 
     /// <summary>
@@ -708,6 +718,9 @@ public sealed class SingBoxService : SupervisedService
         _dnsViaTunnel = null;
         _dnsCheckCounter = 0;
         Volatile.Write(ref _realityRefusedTicks, 0);
+
+        foreach (var pool in _pools)
+            pool.Forget();
     }
 
     /// <summary>
@@ -785,6 +798,7 @@ public sealed class SingBoxService : SupervisedService
             return ServiceCheck.Healthy;
 
         await WatchExitAsync(cancellationToken);
+        await WatchPoolsAsync(cancellationToken);
 
         if (_trafficPort is null)
         {
@@ -1019,12 +1033,14 @@ public sealed class SingBoxService : SupervisedService
     /// </para>
     /// </remarks>
     /// <param name="except">Кого не проверять: закреплённый сервер, которому ищем замену.</param>
+    /// <param name="group">Чей автоподбор перебирать: пула по умолчанию или пула серверов.</param>
     /// <returns>Поставленный сервер; <c>null</c> — живых нет.</returns>
     private async Task<string?> PickOneByOneAsync(
-        ClashApi api, CancellationToken cancellationToken, string? except = null, bool notifyNoLive = false)
+        ClashApi api, CancellationToken cancellationToken, string? except = null, bool notifyNoLive = false,
+        string group = LatencyGroup)
     {
         int run = _run;
-        var members = await api.MembersAsync(LatencyGroup, cancellationToken);
+        var members = await api.MembersAsync(group, cancellationToken);
 
         if (members is null) return null;
         if (members.Count == 0)
@@ -1257,6 +1273,309 @@ public sealed class SingBoxService : SupervisedService
 
     /// <summary>Группа автоподбора — куда возвращаемся.</summary>
     private const string LatencyGroup = "auto-latency";
+
+    /// <summary>Пулы серверов с маршрутами — у каждого своя группа выбора и свой сторож.</summary>
+    private readonly IReadOnlyList<PoolState> _pools;
+
+    /// <summary>Молчащий пул уводит маршруты в пул по умолчанию (AppSettings.DeadPoolToDefault).</summary>
+    private readonly bool _deadPoolToDefault;
+
+    /// <summary>
+    /// Сторож пула: то же, что у пула по умолчанию, только над группой пула.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 19.10 (идеи №6): «внутри пула — как сейчас: автоподбор с заменой
+    /// мёртвого или закреплённый сервер; у каждого пула свой сторож и своё
+    /// закрепление». Решения о замене и возврате закреплённого — та же
+    /// <see cref="ExitWatch"/>, что у <c>auto</c>.
+    /// </remarks>
+    private sealed class PoolState(ServerPool pool, bool replacePinned)
+    {
+        public ServerPool Pool { get; } = pool;
+
+        public string Selector { get; } = ServerPools.SelectorTag(pool.Id);
+
+        public string Latency { get; } = ServerPools.LatencyTag(pool.Id);
+
+        public string? Pinned { get; } = string.IsNullOrWhiteSpace(pool.Preferred) ? null : pool.Preferred;
+
+        public ExitWatch Watch { get; } = new(pool.Preferred, replacePinned);
+
+        /// <summary>Группа пула есть в конфиге и поставлена на место.</summary>
+        public volatile bool Present;
+
+        /// <summary>Прогрев пула закончен — можно сторожить.</summary>
+        public volatile bool Warm;
+
+        /// <summary>Закреплённый в пуле сервер встал на старте.</summary>
+        public volatile bool PinnedPlaced;
+
+        /// <summary>Маршруты пула уведены в пул по умолчанию — живых в пуле не было.</summary>
+        public volatile bool Fallen;
+
+        /// <summary>О молчании пула уже сказано в журнале — до первого ответа не повторять.</summary>
+        public volatile bool SilenceNoted;
+
+        public int Counter;
+
+        /// <summary>Идёт подбор в пуле — второй не начинаем.</summary>
+        public int Picking;
+
+        public void Forget()
+        {
+            Present = false;
+            Warm = false;
+            PinnedPlaced = false;
+            Fallen = false;
+            SilenceNoted = false;
+            Counter = 0;
+            Interlocked.Exchange(ref Picking, 0);
+            Watch.Forget();
+        }
+    }
+
+    /// <summary>
+    /// Ставит группы пулов на место и прогревает их — после пула по умолчанию,
+    /// по одному пулу и по одному серверу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Тот же довод, что у прогрева <c>auto</c>: автоподбор пула при запуске
+    /// ещё никого не мерил, и судить о нём рано. Пулы прогреваются по очереди,
+    /// а не разом, — серверы одного продавца в разных пулах сидят на одном
+    /// входе, и залп по нему закрывал вход Trust (28.09).
+    /// </para>
+    /// <para>
+    /// Заодно это и опознание: группа пула есть в конфиге, только если в пул
+    /// ведёт маршрут (<c>SingBoxConfigCompiler.PoolsInUse</c>). Не встала —
+    /// пула в конфиге нет, и сторожить нечего.
+    /// </para>
+    /// </remarks>
+    private async Task WarmPoolsAsync(int run, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Сперва пусть прогреется пул по умолчанию: через него идёт всё прочее.
+            for (int i = 0; i < 60 && !_warm && run == _run; i++)
+                await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+        foreach (var pool in _pools)
+        {
+            if (run != _run)
+                return;
+
+            try
+            {
+                foreach (var exit in StartExits(pool.Pinned).Select(e => e == LatencyGroup ? pool.Latency : e))
+                {
+                    if (await api.SelectAsync(pool.Selector, exit, cancellationToken))
+                    {
+                        pool.Present = true;
+                        pool.PinnedPlaced = exit == pool.Pinned;
+                        break;
+                    }
+                }
+
+                if (!pool.Present || pool.PinnedPlaced)
+                    continue;
+
+                if (await PickOneByOneAsync(api, cancellationToken, group: pool.Latency) is { } best && run == _run)
+                    await api.SelectAsync(pool.Selector, best, cancellationToken);
+            }
+            catch (Exception)
+            {
+                // Не вышло — пул останется на своём автоподборе.
+            }
+            finally
+            {
+                if (run == _run)
+                    pool.Warm = pool.Present;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Следит за выходом каждого пула — как <see cref="WatchExitAsync"/> за пулом по умолчанию.
+    /// </summary>
+    /// <remarks>
+    /// Обход туннеля пулы не останавливает: он про пул по умолчанию, а у пула
+    /// свои серверы. Сервер, стоящий сразу в нескольких пулах, мерится за опрос
+    /// один раз (идеи №6) — общий замер у сервера и так один.
+    /// </remarks>
+    private async Task WatchPoolsAsync(CancellationToken cancellationToken)
+    {
+        if (_exitCheckSeconds <= 0 || _pools.Count == 0)
+            return;
+
+        var measured = new Dictionary<string, TimeSpan?>(StringComparer.Ordinal);
+        ClashApi? api = null;
+
+        try
+        {
+            foreach (var pool in _pools)
+            {
+                if (!pool.Present || !pool.Warm || Volatile.Read(ref pool.Picking) != 0)
+                    continue;
+
+                bool planned = !pool.Watch.Rechecking;
+
+                if (planned && pool.Counter++ % ExitWatchEvery != 0)
+                    continue;
+
+                api ??= new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+                await WatchPoolAsync(api, pool, planned, measured, cancellationToken);
+            }
+        }
+        finally
+        {
+            api?.Dispose();
+        }
+    }
+
+    /// <summary>Замер сервера, не больше одного за опрос; итог — в общий файл замеров.</summary>
+    private async Task<TimeSpan?> MeasureOnceAsync(
+        ClashApi api, string tag, Dictionary<string, TimeSpan?> measured, CancellationToken cancellationToken)
+    {
+        if (measured.TryGetValue(tag, out var known))
+            return known;
+
+        var delay = await api.MeasureAsync(tag, _watchUrl, CheckTimeout, cancellationToken);
+        measured[tag] = delay;
+        Record(tag, delay);
+
+        return delay;
+    }
+
+    private async Task WatchPoolAsync(
+        ClashApi api, PoolState pool, bool planned, Dictionary<string, TimeSpan?> measured,
+        CancellationToken cancellationToken)
+    {
+        var selected = await api.SelectedAsync(pool.Selector, cancellationToken);
+
+        if (selected is null)
+            return;
+
+        // Пул уведён в пул по умолчанию — на плановой проверке смотрим, не ожил ли он.
+        if (pool.Fallen || selected == SelectorGroup)
+        {
+            pool.Fallen = true;
+
+            if (planned)
+                StartPoolPick(pool, except: null, returning: true);
+
+            return;
+        }
+
+        var exit = selected == pool.Latency
+            ? await api.SelectedAsync(pool.Latency, cancellationToken)
+            : selected;
+
+        var delay = exit is null
+            ? await api.MeasureAsync(pool.Selector, _watchUrl, CheckTimeout, cancellationToken)
+            : await MeasureOnceAsync(api, exit, measured, cancellationToken);
+
+        bool replaced = pool.PinnedPlaced && pool.Watch.Replaced(exit);
+
+        if (planned && replaced)
+        {
+            var pinned = await MeasureOnceAsync(api, pool.Pinned!, measured, cancellationToken);
+
+            if (pool.Watch.OnPinned(pinned is not null) == ExitAction.Restore
+                && await api.SelectAsync(pool.Selector, pool.Pinned!, cancellationToken))
+            {
+                Note($"пул «{pool.Pool.Name}»: выбранный сервер «{pool.Pinned}» снова отвечает — пул возвращён на него.");
+                return;
+            }
+        }
+
+        if (pool.Watch.OnCurrent(delay is not null) != ExitAction.Replace)
+            return;
+
+        bool standIn = pool.PinnedPlaced && exit == pool.Pinned;
+
+        StartPoolPick(pool, except: standIn ? exit : null, returning: false, silent: exit);
+    }
+
+    /// <summary>
+    /// Подбор в пуле в фоне: первый ответивший ставится; никто не ответил —
+    /// пул уводится в пул по умолчанию или ждёт, как велит настройка.
+    /// </summary>
+    /// <param name="except">Закреплённый сервер, которому ищем замену.</param>
+    /// <param name="returning">Пул уведён и ищет, куда вернуться.</param>
+    /// <param name="silent">Выход, который не ответил, — для журнала.</param>
+    private void StartPoolPick(PoolState pool, string? except, bool returning, string? silent = null)
+    {
+        if (Interlocked.Exchange(ref pool.Picking, 1) != 0)
+            return;
+
+        int run = _run;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+                // Закреплённый — первым: вернуть пул на выбор человека, а не на замену.
+                var best = returning && pool.PinnedPlaced && pool.Pinned is { } pinned
+                    && await api.MeasureAsync(pinned, _watchUrl, CheckTimeout, CancellationToken.None) is not null
+                        ? pinned
+                        : await PickOneByOneAsync(api, CancellationToken.None, except, group: pool.Latency);
+
+                if (run != _run)
+                    return;
+
+                if (best is not null)
+                {
+                    if (!await api.SelectAsync(pool.Selector, best, CancellationToken.None))
+                        return;
+
+                    bool wasSilent = pool.Fallen || pool.SilenceNoted;
+                    pool.Fallen = false;
+                    pool.SilenceNoted = false;
+                    pool.Watch.Forget();
+
+                    Note(wasSilent
+                        ? $"пул «{pool.Pool.Name}» ожил — его маршруты снова идут через «{best}»."
+                        : $"пул «{pool.Pool.Name}»: выход «{silent}» не ответил дважды подряд — поставлен «{best}», первый ответивший.");
+                    return;
+                }
+
+                if (returning || pool.SilenceNoted)
+                    return;
+
+                pool.SilenceNoted = true;
+
+                if (_deadPoolToDefault && await api.SelectAsync(pool.Selector, SelectorGroup, CancellationToken.None))
+                {
+                    pool.Fallen = true;
+                    Note($"пул «{pool.Pool.Name}»: ни один сервер не ответил — его маршруты уведены в пул "
+                        + "по умолчанию. Вернём, как только пул ответит.");
+                }
+                else
+                {
+                    Note($"пул «{pool.Pool.Name}»: ни один сервер не ответил — ждём, как велит настройка; "
+                        + "его маршруты пока не открываются.");
+                }
+            }
+            catch (Exception)
+            {
+                // Не вышло сейчас — выйдет на следующей проверке.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref pool.Picking, 0);
+            }
+        }, CancellationToken.None);
+    }
 
     private async Task<bool> CheckTrafficAsync(int proxyPort, CancellationToken cancellationToken)
     {

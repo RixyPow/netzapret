@@ -523,6 +523,27 @@ public sealed record AppSettings
     public IReadOnlyList<string> AutoPickExcluded { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Пулы серверов, заведённые человеком (<see cref="Core.ServerPools"/>, 19.10).
+    /// </summary>
+    /// <remarks>
+    /// Пула по умолчанию здесь нет: он — все серверы, и закрепление у него
+    /// прежнее (<see cref="PreferredServer"/>). Пусто — у человека один пул,
+    /// как до пулов.
+    /// </remarks>
+    public IReadOnlyList<ServerPool> Pools { get; init; } = [];
+
+    /// <summary>
+    /// Пул без живых серверов уводит свои маршруты в пул по умолчанию; иначе — ждёт.
+    /// </summary>
+    /// <remarks>
+    /// Выбор владельца 19.10 — настройкой. По умолчанию уводить: пул заводят
+    /// ради страны или скорости, но молчащий пул — это сайты, которые
+    /// не открываются вовсе. Кому страна важнее, выключит. Уведённые
+    /// возвращаются, как только пул ответит.
+    /// </remarks>
+    public bool DeadPoolToDefault { get; init; } = true;
+
+    /// <summary>
     /// Тема окна — имя папки в <c>themes\</c>: <c>dark</c>, <c>light</c> или чужая.
     /// </summary>
     /// <remarks>

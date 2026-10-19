@@ -274,6 +274,12 @@ public sealed class SingBoxOptions
     /// </summary>
     public string? PreferredServerTag { get; init; }
 
+    /// <summary>
+    /// Пулы серверов (<see cref="ServerPools"/>): своя группа выбора у каждого,
+    /// на который ссылается хоть одно правило.
+    /// </summary>
+    public IReadOnlyList<ServerPool> Pools { get; init; } = [];
+
     public string LogLevel { get; init; } = "warn";
 
     /// <summary>
@@ -467,7 +473,7 @@ public sealed class SingBoxConfigCompiler
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
             ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0, ruleSet),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
-            ["outbounds"] = BuildOutbounds(usable, tags, options),
+            ["outbounds"] = BuildOutbounds(usable, tags, options, PoolsInUse(ruleSet, options)),
             ["route"] = BuildRoute(ruleSet, tags, options),
             ["experimental"] = new JsonObject
             {
@@ -1220,7 +1226,8 @@ public sealed class SingBoxConfigCompiler
     private static JsonArray BuildOutbounds(
         IReadOnlyList<ProxyServer> servers,
         IReadOnlyDictionary<ProxyServer, string> tags,
-        SingBoxOptions options)
+        SingBoxOptions options,
+        IReadOnlyList<ServerPool> pools)
     {
         var outbounds = new JsonArray
         {
@@ -1342,6 +1349,9 @@ public sealed class SingBoxConfigCompiler
             ["outbounds"] = selectorMembers,
             ["default"] = pinned ?? LatencyTag,
         });
+
+        foreach (var pool in pools)
+            AddPool(outbounds, pool, servers, tags, options);
 
         // «Авто» для DNS (владелец, 05.10): резолвер ходит через свой
         // переключатель — при запуске напрямую, пока туннель не прогрет,
@@ -1875,6 +1885,114 @@ public sealed class SingBoxConfigCompiler
         return servers.Where(keep.Contains).ToList();
     }
 
+    /// <summary>Пулы, в которые ведёт хоть одно действующее правило «через VPN».</summary>
+    /// <remarks>
+    /// Группа пула без маршрутов — лишний автоподбор: движок мерил бы его
+    /// серверы, а трафика через него нет. Цена пула — проверки (идеи №6),
+    /// и платить её стоит только за пулы с маршрутами.
+    /// </remarks>
+    private static IReadOnlyList<ServerPool> PoolsInUse(RuleSet ruleSet, SingBoxOptions options)
+    {
+        if (options.Pools.Count == 0)
+            return [];
+
+        var servers = ruleSet.Rules
+            .Where(r => r.Enabled && !r.Off && r.Mode == RoutingMode.Proxy)
+            .Select(r => r.Server)
+            .Append(ruleSet.DefaultMode == RoutingMode.Proxy ? ruleSet.DefaultServer : null);
+
+        var used = ServerPools.Referenced(servers, options.Pools);
+
+        return [.. options.Pools.Where(p => used.Contains(p.Id))];
+    }
+
+    /// <summary>Серверы пула, попавшие в конфиг, — в порядке подписки.</summary>
+    private static List<ProxyServer> PoolMembers(
+        ServerPool pool, IEnumerable<ProxyServer> servers, IReadOnlyDictionary<ProxyServer, string> tags)
+    {
+        var wanted = pool.Servers.ToHashSet(StringComparer.Ordinal);
+
+        return servers.Where(s => wanted.Contains(s.Tag) || wanted.Contains(tags[s])).ToList();
+    }
+
+    /// <summary>
+    /// Группы пула: свой автоподбор и своя группа выбора поверх него.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Устроено так же, как пул по умолчанию (<c>auto</c> над <c>auto-latency</c>):
+    /// надзор ставит в группу выбора первый ответивший сервер пула, человек —
+    /// закреплённый. Мёртвые по замерам — мимо автоподбора, но не до пустоты;
+    /// «только зарубежные» пулу не указ: пул «Россия» заводят ради своих.
+    /// </para>
+    /// <para>
+    /// В группе выбора есть и пул по умолчанию — туда надзор уводит маршруты
+    /// молчащего пула (<see cref="AppSettings.DeadPoolToDefault"/>), — и прямой
+    /// выход, как у <c>auto</c>. Ни одного сервера пула в конфиге нет (все
+    /// пропали из подписок) — группы нет, и правила пула ведут в пул по
+    /// умолчанию (<see cref="ResolveOutbound"/>).
+    /// </para>
+    /// </remarks>
+    private static void AddPool(
+        JsonArray outbounds,
+        ServerPool pool,
+        IReadOnlyList<ProxyServer> servers,
+        IReadOnlyDictionary<ProxyServer, string> tags,
+        SingBoxOptions options)
+    {
+        var members = PoolMembers(pool, servers, tags);
+
+        if (members.Count == 0)
+            return;
+
+        var alive = members.Where(s => !options.DeadServerTags.Contains(tags[s])).ToList();
+        var picked = CapPerEntry(alive.Count > 0 ? alive : members, options);
+
+        var latency = new JsonArray();
+        foreach (var server in picked)
+            latency.Add(tags[server]);
+
+        outbounds.Add(new JsonObject
+        {
+            ["type"] = "urltest",
+            ["tag"] = ServerPools.LatencyTag(pool.Id),
+            ["outbounds"] = latency,
+            ["url"] = options.LatencyTestUrl,
+            ["interval"] = options.LatencyTestInterval,
+            ["tolerance"] = options.LatencyTolerance,
+        });
+
+        var selector = new JsonArray { ServerPools.LatencyTag(pool.Id) };
+        foreach (var server in members)
+            selector.Add(tags[server]);
+
+        selector.Add(options.SelectorTag);
+        selector.Add("direct");
+
+        var pinned = pool.Preferred is { } wanted
+            ? members.Select(s => tags[s]).FirstOrDefault(t => t == wanted)
+                ?? members.Where(s => s.Tag == wanted).Select(s => tags[s]).FirstOrDefault()
+            : null;
+
+        outbounds.Add(new JsonObject
+        {
+            ["type"] = "selector",
+            ["tag"] = ServerPools.SelectorTag(pool.Id),
+            ["outbounds"] = selector,
+            ["default"] = pinned ?? ServerPools.LatencyTag(pool.Id),
+        });
+    }
+
+    /// <summary>Группа выбора пула, если она есть в конфиге; <c>null</c> — пула нет или он пуст.</summary>
+    private static string? PoolOutbound(
+        string? server, IReadOnlyDictionary<ProxyServer, string> tags, SingBoxOptions options)
+    {
+        if (ServerPools.Find(options.Pools, ServerPools.IdOf(server)) is not { } pool)
+            return null;
+
+        return PoolMembers(pool, tags.Keys, tags).Count > 0 ? ServerPools.SelectorTag(pool.Id) : null;
+    }
+
     private static JsonObject BuildRoute(
         RuleSet ruleSet,
         IReadOnlyDictionary<ProxyServer, string> tags,
@@ -1915,7 +2033,7 @@ public sealed class SingBoxConfigCompiler
         // без этой оговорки означает «интернет наполовину сломан».
         // Остальные правила при этом действительно лишние: всё, что не выведено
         // явно, и так уходит в туннель по final.
-        var final = ResolveFinal(ruleSet, options, haveServers);
+        var final = ResolveFinal(ruleSet, tags, options, haveServers);
 
         IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
@@ -2283,7 +2401,8 @@ public sealed class SingBoxConfigCompiler
         }
     }
 
-    private static string ResolveFinal(RuleSet ruleSet, SingBoxOptions options, bool haveServers) =>
+    private static string ResolveFinal(
+        RuleSet ruleSet, IReadOnlyDictionary<ProxyServer, string> tags, SingBoxOptions options, bool haveServers) =>
         ruleSet.Operating switch
         {
             // Десинк туннеля не касается вовсе, так что для sing-box этот
@@ -2291,7 +2410,12 @@ public sealed class SingBoxConfigCompiler
             OperatingMode.Off or OperatingMode.DesyncOnly => "direct",
             OperatingMode.ProxyAll or OperatingMode.ProxyStrict =>
                 haveServers ? options.SelectorTag : "direct",
-            _ => ResolveOutbound(ruleSet.DefaultMode, ruleSet.DefaultServer, null, options, haveServers),
+            // Сервер умолчания тегом движку не передавался и прежде (null вместо
+            // тегов) — так и осталось; пул умолчания — передаётся.
+            _ => ruleSet.DefaultMode == RoutingMode.Proxy && haveServers
+                && PoolOutbound(ruleSet.DefaultServer, tags, options) is { } pool
+                    ? pool
+                    : ResolveOutbound(ruleSet.DefaultMode, ruleSet.DefaultServer, null, options, haveServers),
         };
 
     private static string ResolveOutbound(
@@ -2311,6 +2435,11 @@ public sealed class SingBoxConfigCompiler
 
         if (string.IsNullOrWhiteSpace(server) || server.Equals("auto", StringComparison.OrdinalIgnoreCase))
             return options.SelectorTag;
+
+        // Пул: его группа, если она в конфиге; пропавший или опустевший —
+        // пул по умолчанию, как и неизвестный сервер ниже.
+        if (ServerPools.IdOf(server) is not null)
+            return tags is not null && PoolOutbound(server, tags, options) is { } pool ? pool : options.SelectorTag;
 
         if (tags is not null)
         {

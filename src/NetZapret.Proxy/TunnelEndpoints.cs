@@ -39,7 +39,13 @@ public static class TunnelEndpoints
     /// Тег выхода, чей адрес идёт первым, — закреплённый сервер. В фильтр
     /// перехвата помещаются не все адреса, и закреплённый не должен остаться за чертой.
     /// </param>
-    public static IReadOnlyList<IPAddress> Read(string configPath, string? first = null)
+    public static IReadOnlyList<IPAddress> Read(string configPath, string? first = null) =>
+        Read(configPath, first is null ? [] : [first]);
+
+    /// <summary>Адреса серверов из конфига sing-box; не прочитался — пусто.</summary>
+    /// <param name="configPath">Конфиг sing-box.</param>
+    /// <param name="first">Теги выходов, чьи адреса идут первыми, по порядку (<see cref="Hosts(JsonNode?, IReadOnlyList{string})"/>).</param>
+    public static IReadOnlyList<IPAddress> Read(string configPath, IReadOnlyList<string> first)
     {
         JsonNode? config;
 
@@ -195,8 +201,22 @@ public static class TunnelEndpoints
     /// отзыва Let's Encrypt (CLAUDE.md). Нагрузка на winws2 — цена работающего WARP.
     /// </para>
     /// </remarks>
-    internal static IReadOnlyList<string> Hosts(JsonNode? config, string? first = null)
+    internal static IReadOnlyList<string> Hosts(JsonNode? config, string? first = null) =>
+        Hosts(config, first is null ? [] : [first]);
+
+    /// <param name="config">Конфиг sing-box.</param>
+    /// <param name="first">
+    /// Теги выходов, чьи адреса идут первыми и в этом порядке: закреплённый
+    /// сервер, за ним серверы пулов (идеи №6, 19.10) — маршрут, ведущий
+    /// в пул, должен выйти из перехвата так же, как пул по умолчанию.
+    /// </param>
+    internal static IReadOnlyList<string> Hosts(JsonNode? config, IReadOnlyList<string> first)
     {
+        var ranks = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < first.Count; i++)
+            ranks.TryAdd(first[i], i);
+
+        var front = new List<(int Rank, string Host)>();
         var hosts = new List<string>();
 
         foreach (var outbound in (config?["outbounds"] as JsonArray ?? []).OfType<JsonObject>())
@@ -204,11 +224,15 @@ public static class TunnelEndpoints
             if ((string?)outbound["server"] is not { Length: > 0 } server)
                 continue;
 
-            if (first is not null && (string?)outbound["tag"] == first)
-                hosts.Insert(0, server);
+            int rank = (string?)outbound["tag"] is { } tag && ranks.TryGetValue(tag, out var r) ? r : -1;
+
+            if (rank >= 0)
+                front.Add((rank, server));
             else
                 hosts.Add(server);
         }
+
+        hosts.InsertRange(0, front.OrderBy(f => f.Rank).Select(f => f.Host));
 
         foreach (var endpoint in (config?["endpoints"] as JsonArray ?? []).OfType<JsonObject>())
         {
