@@ -201,7 +201,7 @@ public partial class WatchView : UserControl
             ShowCounters();
 
             ShowPower(_watch is not null);
-            Say(_watch is null ? _note : null);
+            Say(_watch is null ? _note : AutoNote());
 
             _flush.Start();
         };
@@ -271,6 +271,9 @@ public partial class WatchView : UserControl
 
     private void OnPower(object sender, RoutedEventArgs e)
     {
+        // Нажатое человеком — его: остановка по выходу программы такой сеанс не тронет.
+        _auto = null;
+
         if (_watch is not null)
         {
             StopSession();
@@ -325,6 +328,68 @@ public partial class WatchView : UserControl
 
     /// <summary>Наблюдение начинается в фоне.</summary>
     private static bool _starting;
+
+    /// <summary>
+    /// Программа, чей запуск начал сеанс (<see cref="AutoFillWatch"/>); <c>null</c> —
+    /// сеанс начал человек кнопкой или его нет.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 19.10 спросил, почему наблюдение идёт и после пересборки, —
+    /// его начинало окно ради автопополнения REPO.exe, и в разделе об этом
+    /// не было ни слова. Теперь начатое программой так и подписано и с её
+    /// выходом останавливается; начатое человеком — нет.
+    /// </remarks>
+    private static string? _auto;
+
+    private static string? AutoNote() => _auto is { } program
+        ? $"Начато само: запущена {program}, у её маршрута включено автопополнение. Остановится через полминуты после её выхода."
+        : null;
+
+    /// <summary>Начинает наблюдение ради запущенной программы — если его ещё нет.</summary>
+    /// <remarks>Идущий сеанс человека остаётся его: остановка по выходу программы его не тронет.</remarks>
+    internal static async Task StartForProgramAsync(string program)
+    {
+        if (_watch is not null || _starting)
+            return;
+
+        _auto = program;
+
+        if (!await StartSessionAsync())
+        {
+            _auto = null;
+            Journal.Write("маршрут программы", $"запущена {program}, а наблюдение для автопополнения не началось: {_note}");
+            return;
+        }
+
+        Journal.Write("маршрут программы", $"запущена {program} — наблюдение начато для автопополнения");
+
+        if (_open is { } open)
+            _ = open.Dispatcher.BeginInvoke(() => open.Say(AutoNote()));
+    }
+
+    /// <summary>Останавливает наблюдение, начатое ради программы, — она закрылась.</summary>
+    internal static void StopForProgram()
+    {
+        if (_auto is not { } program || _watch is null)
+        {
+            _auto = null;
+            return;
+        }
+
+        _auto = null;
+        StopSession();
+        Journal.Write("маршрут программы", $"{program} закрыта — наблюдение для автопополнения остановлено");
+
+        if (_open is { } open)
+        {
+            open.Dispatcher.BeginInvoke(() =>
+            {
+                open.ShowPower(false);
+                open.ShowCounters();
+                open.Say($"Остановлено само: {program} закрыта. Начать вручную — кнопкой «Начать».");
+            });
+        }
+    }
 
     /// <summary>
     /// То же, что <see cref="StartSession"/>, но правила и сессия ETW — в фоне.

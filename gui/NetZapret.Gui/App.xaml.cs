@@ -223,17 +223,9 @@ public partial class App : Application
         Views.RoutesView.Prepare();
 
         // Автопополнение маршрутов программ видит соединения только через
-        // наблюдение (13.10): включено у какой-то программы — начинаем сразу,
-        // не дожидаясь «Начать» в разделе.
-        if (AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Any(p => p.AutoFill))
-        {
-            // В фоне: начало наблюдения читает правила со списками (StartSessionAsync).
-            _ = Dispatcher.InvokeAsync(async () =>
-            {
-                if (!await Views.WatchView.StartSessionAsync())
-                    Journal.Write("маршрут программы", "наблюдение для автопополнения не началось");
-            });
-        }
+        // наблюдение (13.10). С 19.10 оно идёт, пока программа запущена,
+        // а не с запуска окна до выхода (AutoFillWatch).
+        AutoFillWatch.Start(Dispatcher);
 
         SingleInstance.OnShowRequested(TrayIcon.Show);
 
