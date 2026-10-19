@@ -472,7 +472,7 @@ public sealed class SingBoxConfigCompiler
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
             ["certificate"] = Certificates(),
-            ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0, ruleSet),
+            ["dns"] = BuildDns(options, tags.Count > 0, ruleSet),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options, PoolsInUse(ruleSet, options)),
             ["route"] = BuildRoute(ruleSet, tags, options),
@@ -751,39 +751,6 @@ public sealed class SingBoxConfigCompiler
         return tags;
     }
 
-    /// <summary>
-    /// Домены, которые по правилам уходят в прокси. При выборочном перехвате
-    /// только им выдаётся адрес fakeip — и только они попадают в туннель.
-    /// </summary>
-    /// <param name="haveServers">
-    /// Есть ли куда вести. Без серверов домен регистрации WARP получил бы
-    /// fakeip и ушёл в <c>direct</c> с подменённым адресом — то есть никуда.
-    /// </param>
-    private static IReadOnlyList<string> CollectProxyDomains(RuleSet ruleSet, bool haveServers)
-    {
-        if (ruleSet.Operating != OperatingMode.Selective)
-            return Array.Empty<string>();
-
-        var proxied = ruleSet.Rules.Where(r => r.Mode == RoutingMode.Proxy);
-
-        // Домены из правил по одному имени и из списков — вперемешку: для
-        // fakeip разницы нет, а для человека список это тот же набор доменов,
-        // только записанный одной строкой.
-        var domains = proxied
-            .Where(r => r.Match == MatchKind.Domain)
-            .Select(r => r.Value)
-            .Concat(proxied
-                .Where(r => r.Match == MatchKind.HostList)
-                .SelectMany(r => r.HostListDomains));
-
-        return domains
-            .Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v)
-            .Where(v => !v.Contains('*'))
-
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
-
     /// <summary>Адрес — сетью: «35.190.80.1» → «35.190.80.1/32»; сеть и не адрес — как есть.</summary>
     /// <remarks>
     /// <c>route_address</c> и <c>route_exclude_address</c> sing-box принимает
@@ -829,7 +796,6 @@ public sealed class SingBoxConfigCompiler
 
     private static JsonObject BuildDns(
         SingBoxOptions options,
-        IReadOnlyList<string> proxyDomains,
         bool haveServers, RuleSet ruleSet)
     {
         var remote = new JsonObject
@@ -959,27 +925,30 @@ public sealed class SingBoxConfigCompiler
         {
             // Сохраняем порядок доменных правил: прямым доменам нужны реальные ответы роутера,
             // в том числе прямым исключениям полного туннеля; проксируемым оставляем FakeIP.
-            foreach (var rule in RouterDomainRules(ruleSet, haveServers)) rules.Add(rule);
+            foreach (var rule in OrderedDomainRules(ruleSet, haveServers)) rules.Add(rule);
             if (options.Scope != TunnelScope.ProxyOnly && haveServers
                 && ruleSet.Operating is OperatingMode.ProxyAll or OperatingMode.ProxyStrict)
                 rules.Add(new JsonObject { ["query_type"] = new JsonArray { "A", "AAAA" }, ["server"] = "fake" });
         }
-        else if (options.Scope == TunnelScope.ProxyOnly && proxyDomains.Count > 0)
+        else if (options.Scope == TunnelScope.ProxyOnly && ruleSet.Operating == OperatingMode.Selective)
         {
             // Выборочный fakeip: подменяем ответ только тем доменам, которые
             // идут в прокси. Всем остальным отдаётся настоящий адрес, и их
             // трафик в туннель не попадает — этим и достигается развод
             // с десинком.
-            var suffixes = new JsonArray();
-            foreach (var domain in proxyDomains)
-                suffixes.Add(domain);
-
-            rules.Add(new JsonObject
-            {
-                ["domain_suffix"] = suffixes,
-                ["query_type"] = new JsonArray { "A", "AAAA" },
-                ["server"] = "fake",
-            });
+            //
+            // В очереди маршрутов, а не списком всех имён «через VPN» (19.10).
+            // Список не знал очереди: правило VPN, перекрытое правилом выше
+            // («напрямую», «десинк»), всё равно давало имени fakeip — с 0.11.2.
+            // Маршрут вёл имя мимо туннеля, а адрес у него был подменный:
+            // соединение заходило в TUN и шло через движок, а после перезапуска
+            // кэш Windows отдавал адрес, которого движок уже не помнил, —
+            // «missing fakeip record». Теперь, как у DNS роутера, правило выше,
+            // пересекающееся с VPN ниже, пишется раньше и получает настоящий
+            // адрес. Имена с маской посередине fakeip не получают, как и прежде
+            // (у DNS роутера — получают регуляркой; там это было и до 19.10).
+            foreach (var rule in Merged(OrderedDomainRules(ruleSet, haveServers, proxyGlobs: false)))
+                rules.Add(rule);
         }
         else if (options.Scope != TunnelScope.ProxyOnly)
         {
@@ -1017,7 +986,12 @@ public sealed class SingBoxConfigCompiler
         return dns;
     }
 
-    private static IEnumerable<JsonObject> RouterDomainRules(RuleSet ruleSet, bool haveServers)
+    /// <summary>
+    /// Доменные правила DNS в очереди маршрутов: VPN — fakeip, а правило выше,
+    /// пересекающееся с VPN ниже, — настоящий адрес.
+    /// </summary>
+    /// <param name="proxyGlobs">Давать ли fakeip именам с маской посередине (регуляркой).</param>
+    private static IEnumerable<JsonObject> OrderedDomainRules(RuleSet ruleSet, bool haveServers, bool proxyGlobs = true)
     {
         var applicable = (ruleSet.Operating switch
         {
@@ -1041,6 +1015,7 @@ public sealed class SingBoxConfigCompiler
                 bool suffix = value.StartsWith("*.", StringComparison.Ordinal);
                 string name = suffix ? value[2..] : value;
                 bool glob = name.Contains('*');
+                if (proxy && glob && !proxyGlobs) continue;
                 if (!proxy && ruleSet.Operating == OperatingMode.Selective
                     && !laterProxy.Overlaps(name, suffix, glob)) continue;
                 node[glob ? "domain_regex" : suffix ? "domain_suffix" : "domain"] =
@@ -1053,6 +1028,10 @@ public sealed class SingBoxConfigCompiler
                 foreach (var entry in rule.HostListDomains)
                 {
                     string name = entry.StartsWith("*.", StringComparison.Ordinal) ? entry[2..] : entry;
+
+                    // domain_suffix звёздочку посередине не понимает: такая строка
+                    // молча не совпала бы ни с чем (так же отбрасывал прежний сбор).
+                    if (name.Contains('*')) continue;
                     if (!proxy && ruleSet.Operating == OperatingMode.Selective
                         && !laterProxy.Overlaps(name, suffix: true, glob: false)) continue;
                     names.Add(name);
@@ -1068,6 +1047,51 @@ public sealed class SingBoxConfigCompiler
         }
         result.Reverse();
         return result;
+    }
+
+    /// <summary>
+    /// Соседние правила с одним резолвером и одними суффиксами — одним правилом.
+    /// </summary>
+    /// <remarks>
+    /// Очередь от склейки не меняется: склеиваются только стоящие подряд.
+    /// Без неё «Гибрид» получал бы правило DNS на каждый список VPN, тогда как
+    /// прежде все они шли одним.
+    /// </remarks>
+    private static IEnumerable<JsonObject> Merged(IEnumerable<JsonObject> rules)
+    {
+        JsonObject? open = null;
+
+        foreach (var rule in rules)
+        {
+            if (open is not null && Mergeable(open, rule))
+            {
+                var into = open["domain_suffix"]!.AsArray();
+
+                foreach (var name in rule["domain_suffix"]!.AsArray())
+                    into.Add(name!.GetValue<string>());
+
+                continue;
+            }
+
+            if (open is not null)
+                yield return open;
+
+            open = rule;
+        }
+
+        if (open is not null)
+            yield return open;
+    }
+
+    private static bool Mergeable(JsonObject a, JsonObject b)
+    {
+        static bool OnlySuffixes(JsonObject rule) =>
+            rule.ContainsKey("domain_suffix")
+            && rule.Select(p => p.Key).All(k => k is "domain_suffix" or "server" or "query_type");
+
+        return OnlySuffixes(a) && OnlySuffixes(b)
+            && a.Count == b.Count
+            && (string?)a["server"] == (string?)b["server"];
     }
 
     /// <summary>Индекс суффиксов не перемножает 117 тысяч имён на каждый список VPN.</summary>
