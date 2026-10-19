@@ -5,260 +5,493 @@
              Background="{DynamicResource Chrome}">
 
     <!--
-        Строка одна на оба списка — наш и чужой. Вид у неё один, и держать
-        две копии разметки значило бы чинить каждую правку дважды.
-        Отличается только правая кнопка: у своей записи «снять», у чужой
-        «удалить» — разные действия и разная цена, поэтому и слова разные.
+        По макету владельца 19.10: счётчики, поиск с отбором, одна таблица
+        на весь файл с выбором и выключателем у строки, справа добавление,
+        источники и что делает запись. Не взяты кнопка «Сохранить» (правка
+        пишется сразу, с копией файла рядом), импорт и экспорт (их делают
+        вкладка «Список» и «Открыть файл») и свободный комментарий к записи —
+        вместо него колонка «Вид»: от неё зависит, тронет ли имя десинк.
     -->
     <UserControl.Resources>
-        <DataTemplate x:Key="PinItem">
-            <Border Style="{StaticResource Card}" Margin="0,0,0,6" Padding="14,11">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+        <Style x:Key="StatGlyph" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource IconFont}" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="2,0,12,0" />
+        </Style>
 
-                    <Ellipse Grid.Column="0" Width="8" Height="8" Margin="2,0,12,0"
-                             VerticalAlignment="Center" Fill="{Binding Color}" />
+        <Style x:Key="StatNumber" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
-                                   Margin="0,3,0,0" TextTrimming="CharacterEllipsis" />
-                    </StackPanel>
+        <!-- Флажок выбора строки: своего стиля у программы не было, флажков нигде нет. -->
+        <Style x:Key="Tick" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Border x:Name="Box" Width="18" Height="18" CornerRadius="4"
+                                Background="Transparent" BorderThickness="1.5"
+                                BorderBrush="{DynamicResource Border}">
+                            <TextBlock x:Name="Mark" Text="&#xE73E;" FontFamily="{DynamicResource IconFont}"
+                                       FontSize="11" Foreground="White" Visibility="Collapsed"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
-                    <TextBlock Grid.Column="2" Text="{Binding Note}" Style="{StaticResource Caption}"
-                               VerticalAlignment="Center" Margin="12,0,14,0"
-                               Foreground="{Binding Color}" />
-
-                    <Button Grid.Column="3" Style="{StaticResource Ghost}"
-                            Content="снять" Padding="14,7"
-                            Visibility="{Binding UnpinShown}"
-                            Tag="{Binding Name}" Click="OnUnpin" />
-
-                    <!--
-                        Чужая строка удаляется совсем — решение владельца.
-                        Отменить нажатием нельзя, поэтому спрашиваем перед
-                        правкой и всегда кладём копию файла рядом.
-                    -->
-                    <Button Grid.Column="3" Style="{StaticResource Ghost}"
-                            Content="удалить" Padding="14,7"
-                            Foreground="{DynamicResource Danger}"
-                            Visibility="{Binding ForeignShown}"
-                            Tag="{Binding Line}" Click="OnRemoveForeign" />
-                </Grid>
-            </Border>
-        </DataTemplate>
+        <!-- Кружок живости: полый — не проверен или выключен, залитый — ответ проверки. -->
+        <Style x:Key="HealthDot" TargetType="Ellipse">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Height" Value="9" />
+            <Setter Property="StrokeThickness" Value="1.6" />
+            <Setter Property="Stroke" Value="{DynamicResource Faint}" />
+            <Setter Property="Fill" Value="Transparent" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding State}" Value="Alive">
+                    <Setter Property="Stroke" Value="{DynamicResource Accent}" />
+                    <Setter Property="Fill" Value="{DynamicResource Accent}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Dead">
+                    <Setter Property="Stroke" Value="{DynamicResource Danger}" />
+                    <Setter Property="Fill" Value="{DynamicResource Danger}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Untested">
+                    <Setter Property="Stroke" Value="{DynamicResource Warn}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Stub">
+                    <Setter Property="Stroke" Value="{DynamicResource Muted}" />
+                    <Setter Property="Fill" Value="{DynamicResource Muted}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding State}" Value="Off">
+                    <Setter Property="Stroke" Value="{DynamicResource Muted}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </UserControl.Resources>
 
-    <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
-        <Grid>
+    <Grid Margin="32,28,32,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="470" />
+                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
+            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                <TextBlock Text="Файл hosts" Style="{StaticResource Title}" />
+                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"
+                           Text="Имена, прибитые к адресам. Windows разрешает их сама, раньше всякого DNS — и нашего тоже." />
+            </StackPanel>
 
+            <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+                <Button x:Name="SideButton" Style="{StaticResource Ghost}" Content="Добавить запись"
+                        Click="OnSide" Margin="0,0,8,0" Visibility="Collapsed"
+                        gui:ButtonGlyph.Lead="&#xE710;" />
+                <Button x:Name="OpenButton" Style="{StaticResource Ghost}" Content="Открыть файл"
+                        Click="OnOpen" Margin="0,0,8,0" gui:ButtonGlyph.Lead="&#xE8E5;"
+                        ToolTip="Блокнотом, целиком — вместе с комментариями, которых таблица не показывает" />
+                <Button x:Name="CheckButton" Style="{StaticResource Primary}" Content="Проверить адреса"
+                        Click="OnCheck" gui:ButtonGlyph.Lead="&#xE72C;"
+                        ToolTip="Стучится по 443 в каждый адрес действующих записей, по восемь разом" />
+            </WrapPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="1">
+            <!-- Стёртый защитником файл: сказать до того, как человек решит, что ничего не прибивал. -->
+            <Border x:Name="ReplacedCard" Style="{StaticResource Card}" Margin="0,16,0,0"
+                    BorderBrush="{DynamicResource Danger}" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock x:Name="ReplacedTitle" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
+                               Text="Изменённый hosts он считает признаком заражения и вернул файл к своему умолчанию — вместе со всеми пинами. Пин на этой машине не живёт, пока файл не внесён в доверенные в настройках защитника." />
+                </StackPanel>
+            </Border>
+
+            <!--
+                Повторы: имя прибито не в первый раз. Windows берёт первую
+                запись, так что повтор ничего не делает, но выглядит рабочим.
+                Замер 23.09: 68 повторов, из них 29 — тот же адрес в блоке
+                ZapretGUI, 39 — ChatGPT на старом адресе под нашим пином.
+            -->
+            <Border x:Name="RepeatsCard" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,10"
+                    Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <TextBlock Text="Файл hosts" Style="{StaticResource Title}" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                   TextTrimming="CharacterEllipsis"
-                                   Text="Прибитые имена. Запись здесь отменяет любой наш маршрут." />
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="RepeatsTitle" FontWeight="SemiBold" />
+                        <TextBlock x:Name="RepeatsText" Style="{StaticResource Caption}"
+                                   TextWrapping="Wrap" Margin="0,4,0,0" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="OpenButton" Style="{StaticResource Ghost}"
-                                Content="Открыть файл" Click="OnOpen" Margin="0,0,8,0" />
-                        <Button x:Name="CheckButton" Style="{StaticResource Primary}"
-                                Content="Проверить адреса" Click="OnCheck" />
-                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Показать"
+                            Click="OnShowRepeats" Margin="12,0,0,0" VerticalAlignment="Center" />
+                    <Button Grid.Column="2" x:Name="RepeatsButton" Style="{StaticResource Ghost}"
+                            Click="OnRemoveRepeats" Margin="8,0,0,0" VerticalAlignment="Center" />
                 </Grid>
+            </Border>
 
-                <!-- Стёртый защитником файл: сказать до того, как человек решит, что ничего не прибивал. -->
-                <Border x:Name="ReplacedCard" Style="{StaticResource Card}" Margin="0,20,0,0"
-                        BorderBrush="{DynamicResource Danger}" Visibility="Collapsed">
-                    <StackPanel>
-                        <TextBlock x:Name="ReplacedTitle" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
-                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                   Text="Изменённый hosts он считает признаком заражения и вернул файл к своему умолчанию — вместе со всеми пинами. Пин на этой машине не живёт, пока файл не внесён в доверенные в настройках защитника." />
-                    </StackPanel>
-                </Border>
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="2,12,0,0"
+                       TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
 
-                <!--
-                    Повторы: имя прибито не в первый раз. Windows берёт первую
-                    запись, так что повтор ничего не делает, но в списке ниже
-                    выглядит рабочим. Замер 23.09: 68 повторов, из них 29 —
-                    тот же адрес в блоке ZapretGUI, 39 — ChatGPT на старом
-                    адресе под нашим пином.
-                -->
-                <Border x:Name="RepeatsCard" Style="{StaticResource Card}" Margin="0,20,0,0"
-                        Visibility="Collapsed">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+        <Grid Grid.Row="2" x:Name="Body" Margin="0,16,0,0" SizeChanged="OnBodySize">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="SideColumn" Width="320" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition x:Name="SideRow" Height="0" />
+            </Grid.RowDefinitions>
 
-                        <StackPanel>
-                            <TextBlock x:Name="RepeatsTitle" FontWeight="SemiBold" />
-                            <TextBlock x:Name="RepeatsText" Style="{StaticResource Caption}"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" />
-                        </StackPanel>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                        <Button Grid.Column="1" x:Name="RepeatsButton" Style="{StaticResource Ghost}"
-                                Content="Убрать повторы" Click="OnRemoveRepeats"
-                                Margin="12,0,0,0" VerticalAlignment="Top" />
-                    </Grid>
-                </Border>
-
-                <!--
-                    Своё имя руками. Отдельно от окна пина, которое подбирает
-                    живой адрес пробами: здесь адрес уже известен — его дали,
-                    подсмотрели или взяли из чужой записи, — и подбирать нечего.
-                -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                    <StackPanel>
-                        <TextBlock Text="Прибить вручную" FontWeight="SemiBold" />
-
-                        <Grid Margin="0,10,0,0">
+                <UniformGrid Grid.Row="0" Rows="1">
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <Grid>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0" x:Name="NewName" Margin="0,0,8,0"
-                                     KeyDown="OnNewKey" gui:Hint.Text="Имя, например example.com" />
-
-                            <TextBox Grid.Column="1" x:Name="NewAddress" Width="190" Margin="0,0,8,0"
-                                     KeyDown="OnNewKey" gui:Hint.Text="Адрес, 93.184.216.34" />
-
-                            <Button Grid.Column="2" Style="{StaticResource Primary}"
-                                    Content="Прибить" Click="OnAddPin" />
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE8A5;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="TotalText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="записей всего" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Grid>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE718;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="OursText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="поставлено нами" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource StatGlyph}" Text="&#xE711;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="OffText" Text="0" Style="{StaticResource StatNumber}" />
+                                <TextBlock Text="отключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <Border Style="{StaticResource Card}" Padding="14,10">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="DeadGlyph" Style="{StaticResource StatGlyph}" Text="&#xE783;" />
+                            <StackPanel Grid.Column="1">
+                                <TextBlock x:Name="DeadText" Text="—" Style="{StaticResource StatNumber}" />
+                                <TextBlock x:Name="DeadCaption" Text="молчат: не проверено" Style="{StaticResource Caption}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </UniformGrid>
 
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Слева имя, справа адрес: example.com и 93.184.216.34. Запись ложится в наш блок в начале файла — при двух записях на одно имя Windows берёт первую, и дописанная в конец проиграла бы чужой молча." />
-
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                   Text="Пин бьёт любой резолв, включая наш: имя не получит fakeip, и правило «через VPN» на него молча не сработает. Десинк такое имя тоже не тронет." />
-                    </StackPanel>
-                </Border>
-
-                <!--
-                    Поиск: у владельца в файле сто три наши записи и семьсот
-                    восемьдесят две чужие, и глазами такое не перебрать.
-                    Ищет по обоим спискам разом — разделение на своё и чужое
-                    полезно при осмотре, но мешает, когда ищешь одно имя
-                    и не знаешь, чьё оно.
-
-                    С подсказкой внутри поля, как в маршрутах: пустое поле
-                    без неё читается как карточка, поставленная по ошибке.
-                -->
-                <!--
-                    «Удалить найденные» — только при поиске и только отобранное
-                    им. Заведено 26.09: пин на мёртвый прокси стоял на сто двадцать
-                    две записи jetbrains, и снимать их по одной было нельзя.
-                -->
-                <Grid Margin="0,18,0,0">
+                <!-- Лупа поверх поля: отступ 17, шаблон складывает Padding дважды (см. Hint.cs). -->
+                <Grid Grid.Row="1" Margin="0,12,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBox x:Name="Search" TextChanged="OnSearch"
-                             gui:Hint.Text="Поиск по имени или адресу" />
+                    <TextBox x:Name="Search" TextChanged="OnSearch" Padding="17,7,11,7"
+                             gui:Hint.Text="Поиск по имени, адресу, источнику или подписи" />
+                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE721;" FontSize="14"
+                               HorizontalAlignment="Left" Margin="14,0,0,0" IsHitTestVisible="False" />
 
-                    <Button Grid.Column="1" x:Name="RemoveFoundButton" Style="{StaticResource Ghost}"
-                            Foreground="{DynamicResource Danger}" Margin="8,0,0,0"
-                            Visibility="Collapsed" Click="OnRemoveFound" />
+                    <Button Grid.Column="1" x:Name="ShowButton" Style="{StaticResource Ghost}" MinWidth="150"
+                            Content="Все записи" Click="OnShowMenu" Margin="8,0,0,0" gui:ButtonGlyph.Menu="True" />
                 </Grid>
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
-
                 <!--
-                    Наши и чужие врозь, тем же приёмом, что у пресетов.
-                    За свои мы отвечаем и снимаем их кнопкой; чужие ведёт
-                    кто-то ещё — редактор Zapret GUI, антивирус, рука, — и
-                    удаляются они по одной, с вопросом. Видеть их обязательно:
-                    именно чужой пин на Canva и RuTracker выглядел как неисправный
-                    VPN, и разбор стоил дня.
+                    Таблица виртуальная: у владельца в файле ~690 записей. Прокрутка
+                    внутри шаблона списка, а не снаружи: иначе VirtualizingStackPanel
+                    получает бесконечную высоту и строит всё. Заголовок — отдельной
+                    строкой над списком, чтобы не уезжал.
                 -->
-                <TextBlock x:Name="OursHeader" Text="Прибито нами"
-                           FontWeight="SemiBold" FontSize="15" Margin="4,20,0,4" />
-                <TextBlock x:Name="OursNote" Style="{StaticResource Caption}" Margin="4,0,0,10"
-                           TextWrapping="Wrap"
-                           Text="Эти записи поставила программа, и она же их снимает." />
-
-                <ItemsControl x:Name="Pins" ItemTemplate="{StaticResource PinItem}" />
-
-                <!--
-                    Чужих у людей бывают сотни — на этой машине семьсот
-                    восемьдесят два. Плоским списком их класть нельзя: раздел
-                    целиком лежит в свитке, и на бесконечной высоте
-                    виртуализация выключается сама. Отсюда своя высота
-                    и свой свиток, как у «Порядка вычисления» в маршрутах.
-                -->
-                <Button x:Name="ForeignToggle" Style="{StaticResource Choice}"
-                        Margin="0,22,0,0" Click="OnForeignToggle">
+                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0" Margin="0,12,0,0">
                     <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
 
-                        <Path x:Name="ForeignChevron" Grid.Column="0"
-                              Style="{StaticResource Chevron}" Margin="0,0,12,0" />
+                        <Grid Margin="16,10,16,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30" />
+                                <ColumnDefinition Width="20" />
+                                <ColumnDefinition Width="3*" />
+                                <ColumnDefinition Width="1.4*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="1.2*" />
+                                <ColumnDefinition Width="58" />
+                                <ColumnDefinition Width="32" />
+                            </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Чужие записи" FontWeight="SemiBold" />
-                            <TextBlock x:Name="ForeignSummary" Style="{StaticResource Caption}"
-                                       Margin="0,5,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
+                            <CheckBox x:Name="AllBox" Style="{StaticResource Tick}" Click="OnSelectAll"
+                                      ToolTip="Выбрать всё, что показано сейчас" />
+                            <TextBlock Grid.Column="2" Text="ИМЯ" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="3" Text="АДРЕС" Style="{StaticResource Caption}" />
+                            <TextBlock Grid.Column="4" Text="ИСТОЧНИК" Style="{StaticResource Caption}" />
+                            <StackPanel Grid.Column="5" Orientation="Horizontal">
+                                <TextBlock Text="ВИД" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Посредник — чужой узел, через который ходит имя (XBOX DNS, Comss, GeoHide): щит десинка пропускает его без обработки.&#x0a;&#x0a;Адрес сервиса — сам сервис, пин только выбирает незакрытый адрес: щит такое имя не берёт, и его обрабатывает рецепт.&#x0a;&#x0a;Заглушка — петля или нули, имя закрыто намеренно." />
+                            </StackPanel>
+                            <TextBlock Grid.Column="6" Text="ВКЛ." Style="{StaticResource Caption}" />
+                        </Grid>
+
+                        <ItemsControl x:Name="Rows" Grid.Row="1"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      VirtualizingPanel.ScrollUnit="Pixel"
+                                      ScrollViewer.CanContentScroll="True">
+                            <ItemsControl.Template>
+                                <ControlTemplate TargetType="ItemsControl">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,0,16,8"
+                                                  CanContentScroll="True" Focusable="False">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </ControlTemplate>
+                            </ItemsControl.Template>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <VirtualizingStackPanel />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderThickness="0,1,0,0" BorderBrush="{DynamicResource Border}">
+                                        <Grid Margin="0,4" MinHeight="32">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="30" />
+                                                <ColumnDefinition Width="20" />
+                                                <ColumnDefinition Width="3*" />
+                                                <ColumnDefinition Width="1.4*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                                <ColumnDefinition Width="58" />
+                                                <ColumnDefinition Width="32" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <CheckBox Style="{StaticResource Tick}" IsChecked="{Binding Selected, Mode=TwoWay}"
+                                                      Click="OnRowTick" />
+
+                                            <Ellipse Grid.Column="1" Style="{StaticResource HealthDot}" ToolTip="{Binding StateHint}" />
+
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                <TextBlock Text="{Binding Sub}" FontSize="11.5"
+                                                           Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Sub}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasSub}" Value="False">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="3" Text="{Binding Address}" Style="{StaticResource Mono}"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+
+                                            <TextBlock Grid.Column="4" Text="{Binding Source}" ToolTip="{Binding SourceHint}"
+                                                       Foreground="{DynamicResource Muted}"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+
+                                            <TextBlock Grid.Column="5" Text="{Binding Kind}" ToolTip="{Binding KindHint}"
+                                                       Foreground="{DynamicResource Muted}"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0" />
+
+                                            <ToggleButton Grid.Column="6" Style="{StaticResource Switch}"
+                                                          IsChecked="{Binding Row.Enabled, Mode=OneWay}"
+                                                          Click="OnToggle" HorizontalAlignment="Left"
+                                                          ToolTip="Выключенная запись остаётся в файле под решёткой и возвращается этим же выключателем" />
+
+                                            <Button Grid.Column="7" Style="{StaticResource Ghost}" Content="⋮"
+                                                    Padding="0,2" MinWidth="28" HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center" Click="OnRowMenu"
+                                                    ToolTip="Что сделать с этой записью" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock x:Name="EmptyText" Grid.Row="1" Style="{StaticResource Caption}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
                     </Grid>
-                </Button>
+                </Border>
 
-                <StackPanel x:Name="ForeignPanel" Visibility="Collapsed" Margin="0,10,0,0">
-                    <ItemsControl x:Name="Foreign" MaxHeight="360"
-                                  ItemTemplate="{StaticResource PinItem}"
-                                  VirtualizingPanel.IsVirtualizing="True"
-                                  VirtualizingPanel.VirtualizationMode="Recycling"
-                                  VirtualizingPanel.ScrollUnit="Pixel">
-                        <ItemsControl.Template>
-                            <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer CanContentScroll="True" Focusable="False"
-                                              VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled">
-                                    <ItemsPresenter />
-                                </ScrollViewer>
-                            </ControlTemplate>
-                        </ItemsControl.Template>
+                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="14,8" Margin="0,12,0,0">
+                    <WrapPanel>
+                        <TextBlock x:Name="SelectedText" Text="Выбрано: 0" VerticalAlignment="Center"
+                                   Margin="0,0,14,0" MinWidth="90" />
+                        <Button x:Name="DeleteButton" Style="{StaticResource Ghost}" Content="Удалить"
+                                Foreground="{DynamicResource Danger}" Click="OnDeleteSelected" Margin="0,0,8,0"
+                                IsEnabled="False" gui:ButtonGlyph.Lead="&#xE74D;" />
+                        <Button x:Name="EnableButton" Style="{StaticResource Ghost}" Content="Включить"
+                                Click="OnEnableSelected" Margin="0,0,8,0" IsEnabled="False" />
+                        <Button x:Name="DisableButton" Style="{StaticResource Ghost}" Content="Отключить"
+                                Click="OnDisableSelected" Margin="0,0,8,0" IsEnabled="False" />
+                        <Button x:Name="ClearSelectionButton" Style="{StaticResource Ghost}" Content="Снять выбор"
+                                Click="OnClearSelection" IsEnabled="False" />
+                    </WrapPanel>
+                </Border>
+            </Grid>
 
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <VirtualizingStackPanel />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+            <!-- Правая колонка; на узком окне — под таблицей, по кнопке «Добавить запись» (OnBodySize). -->
+            <ScrollViewer x:Name="SideHost" Grid.Column="1" Style="{StaticResource PageScroll}"
+                          Margin="16,0,0,0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <TextBlock Text="Добавить запись" FontWeight="SemiBold" FontSize="15" />
 
-                    <TextBlock Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                               Text="Удаляются по одной либо разом — всё, что нашёл поиск, кнопкой рядом с ним. Перед удалением вопрос, копия файла ложится рядом. Кнопки «почистить всё» нет намеренно: файл общий, записи ведёт кто-то ещё, и она однажды сотрёт то, на чём всё держалось. Правку вручную никто не отменял — кнопка «Открыть файл» выше." />
+                            <UniformGrid Rows="1" Margin="0,12,0,0">
+                                <Button x:Name="OneTab" Content="Одна запись" Click="OnOneTab" Margin="0,0,4,0" />
+                                <Button x:Name="ListTab" Content="Список" Click="OnListTab" Margin="4,0,0,0" />
+                            </UniformGrid>
+
+                            <StackPanel x:Name="OnePanel" Margin="0,12,0,0">
+                                <TextBlock Text="Имя" Style="{StaticResource Caption}" Margin="2,0,0,4" />
+                                <TextBox x:Name="NewName" KeyDown="OnNewKey" gui:Hint.Text="example.com" />
+                                <TextBlock Text="Адрес" Style="{StaticResource Caption}" Margin="2,10,0,4" />
+                                <TextBox x:Name="NewAddress" KeyDown="OnNewKey" gui:Hint.Text="93.184.216.34" />
+                            </StackPanel>
+
+                            <StackPanel x:Name="ListPanel" Margin="0,12,0,0" Visibility="Collapsed">
+                                <TextBlock Style="{StaticResource Caption}" Margin="2,0,0,4" TextWrapping="Wrap"
+                                           Text="По строке: адрес и имя в любом порядке, можно несколько имён. Решётка и всё за ней — подпись." />
+                                <TextBox x:Name="NewList" AcceptsReturn="True" Height="130" TextWrapping="NoWrap"
+                                         VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"
+                                         Style="{StaticResource {x:Type TextBox}}" FontFamily="{DynamicResource MonoFont}"
+                                         gui:Hint.Text="93.184.216.34 example.com" />
+                            </StackPanel>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Адрес самого сервиса" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <ToggleButton x:Name="NewService" Grid.Column="1" Style="{StaticResource Switch}" Margin="10,0,0,0" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Включите, если адрес — сам сервис (Meta, Twitter), а не посредник: тогда десинк имя не пропустит. Для XBOX DNS, Comss и им подобных — выключено." />
+
+                            <Button x:Name="AddButton" Style="{StaticResource Primary}" Content="Добавить запись"
+                                    Click="OnAddPin" Margin="0,14,0,0" HorizontalAlignment="Stretch"
+                                    gui:ButtonGlyph.Lead="&#xE710;" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Источники записей" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Кто ведёт строку — по блоку файла, в котором она лежит. Программы размечают свои записи блоками и могут вернуть удалённое при следующей своей правке.&#x0a;&#x0a;«Неизвестно» — строка вне блоков: вы сами, антивирус или программа, которой уже нет.&#x0a;&#x0a;Щелчок — показать в таблице только этот источник." />
+                            </StackPanel>
+                            <ItemsControl x:Name="Sources">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Padding="6,4" CornerRadius="6" Cursor="Hand" Background="{Binding Back}"
+                                                MouseLeftButtonUp="OnSourceClick" ToolTip="Показать только эти записи">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" FontWeight="SemiBold" Margin="8,0,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Подсказка обязана говорить правду (владелец 19.10): «отменяет любой маршрут» — неверно. -->
+                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Что делает запись" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       Text="Имя из hosts Windows разрешает сама, до всякого DNS, и адрес берётся из файла." />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="VPN: в «Гибриде» туннель забирает имена через подставные адреса, а прибитое имя их не получит — правило «через VPN» на него не сработает. Где трафик и так идёт через движок, правило по домену действует: имя видно из рукопожатия." />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Десинк: имя с видом «посредник» щит пропускает без обработки, «адрес сервиса» — оставляет рецепту." />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Перед каждой правкой рядом с файлом ложится его копия." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Расположение файла" FontWeight="SemiBold" />
+                            <TextBlock x:Name="PathText" Style="{StaticResource Mono}" FontSize="12" Margin="0,8,0,0"
+                                       TextWrapping="Wrap" Foreground="{DynamicResource Muted}" />
+                            <Button Style="{StaticResource Ghost}" Content="Открыть папку" Click="OnOpenFolder"
+                                    Margin="0,10,0,0" HorizontalAlignment="Stretch" gui:ButtonGlyph.Lead="&#xE838;" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-
-                <TextBlock Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap"
-                           Text="Имя разрешается до нашего резолвера, fakeip не выдаётся, и адрес берётся из файла. Но маршрут этим не отменяется: имя вынюхивается из рукопожатия, и правило по домену срабатывает всё равно. Чужие записи мы не трогаем — их ведёт кто-то ещё." />
-
-            </StackPanel>
+            </ScrollViewer>
         </Grid>
-    </ScrollViewer>
+    </Grid>
 </UserControl>

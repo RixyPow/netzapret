@@ -1,11 +1,11 @@
-using System.Windows.Media;
 using NetZapret.Gui.Views;
+using NetZapret.Proxy;
 using Xunit;
 
 namespace NetZapret.Gui.Tests;
 
 /// <summary>
-/// Поиск по файлу hosts.
+/// Поиск и отбор по файлу hosts.
 /// </summary>
 /// <remarks>
 /// Просьба владельца 21.09. На его машине в файле сто три наши записи
@@ -14,15 +14,32 @@ namespace NetZapret.Gui.Tests;
 /// </remarks>
 public sealed class HostsFilterTests
 {
-    private static PinRow Row(string name, string address, string note = "не проверен") =>
-        new(name, address, note, Brushes.Transparent);
+    private static HostsLine Line(
+        string name,
+        string address,
+        string? source = HostsTable.OurSource,
+        bool enabled = true,
+        bool repeat = false,
+        HostsHealth health = HostsHealth.Unknown) =>
+        new(new HostsRow
+        {
+            Line = 0,
+            Name = name,
+            Address = address,
+            Enabled = enabled,
+            Source = source,
+            Ours = source == HostsTable.OurSource,
+            Kind = HostsPinKind.Proxy,
+            Repeat = repeat,
+        })
+        { Health = health };
 
-    private static readonly PinRow[] Rows =
+    private static readonly HostsLine[] Rows =
     [
-        Row("instagram.com", "163.70.151.174"),
-        Row("www.instagram.com", "163.70.151.174"),
-        Row("chatgpt.com", "104.18.32.7"),
-        Row("rutracker.org", "195.82.146.214", "чужая"),
+        Line("instagram.com", "163.70.151.174"),
+        Line("www.instagram.com", "163.70.151.174", health: HostsHealth.Dead),
+        Line("chatgpt.com", "104.18.32.7", source: "Zapret GUI", repeat: true),
+        Line("rutracker.org", "195.82.146.214", source: null, enabled: false),
     ];
 
     [Fact]
@@ -57,37 +74,22 @@ public sealed class HostsFilterTests
     {
         // «Кто у меня прибит на этот адрес» — вопрос не реже обратного:
         // так ловятся адреса, оставшиеся от давно сменившейся сети доставки.
-        var found = HostsFilter.Apply(Rows, "163.70.151.174");
-
-        Assert.Equal(2, found.Count);
-    }
-
-    [Fact]
-    public void Part_of_an_address_is_enough()
-    {
+        Assert.Equal(2, HostsFilter.Apply(Rows, "163.70.151.174").Count);
         Assert.Equal(2, HostsFilter.Apply(Rows, "163.70").Count);
     }
 
     [Fact]
-    public void Case_does_not_matter()
+    public void Case_and_surrounding_spaces_do_not_matter()
     {
-        Assert.Equal(2, HostsFilter.Apply(Rows, "INSTAGRAM").Count);
         Assert.Equal(2, HostsFilter.Apply(Rows, "InStaGram").Count);
-    }
-
-    [Fact]
-    public void Surrounding_spaces_are_ignored()
-    {
-        // Имя чаще всего вставляют из буфера, а туда оно попадает с пробелом.
         Assert.Equal(2, HostsFilter.Apply(Rows, "  instagram  ").Count);
     }
 
     [Fact]
-    public void The_note_is_searchable()
+    public void The_source_is_searchable()
     {
-        // По слову «чужая» находится то, что ведёт кто-то ещё, — иначе
-        // отделить своё от чужого можно только глазами по двум спискам.
-        Assert.Single(HostsFilter.Apply(Rows, "чужая"));
+        Assert.Single(HostsFilter.Apply(Rows, "zapret gui"));
+        Assert.Single(HostsFilter.Apply(Rows, "неизвестно"));
     }
 
     [Fact]
@@ -96,40 +98,32 @@ public sealed class HostsFilterTests
         Assert.Empty(HostsFilter.Apply(Rows, "такого-имени-нет"));
     }
 
-    private static NetZapret.Proxy.HostsEntry Entry(int line, string address, params string[] names) =>
-        new() { Line = line, Address = address, Names = names, Enabled = true };
-
-    private static readonly NetZapret.Proxy.HostsEntry[] Entries =
-    [
-        Entry(3, "72.56.93.144", "jetbrains.com", "academy.jetbrains.com"),
-        Entry(4, "149.154.167.220", "t.me", "api.telegram.org"),
-        Entry(5, "72.56.93.144", "notion.so"),
-    ];
-
-    /// <summary>Совпало имя — уходит только оно, сосед по строке остаётся.</summary>
-    [Fact]
-    public void Removal_by_name_takes_only_that_name()
+    [Theory]
+    [InlineData(HostsShow.All, 4)]
+    [InlineData(HostsShow.Ours, 2)]
+    [InlineData(HostsShow.Foreign, 2)]
+    [InlineData(HostsShow.Off, 1)]
+    [InlineData(HostsShow.Dead, 1)]
+    [InlineData(HostsShow.Repeats, 1)]
+    public void The_menu_picks_its_rows(HostsShow show, int count)
     {
-        Assert.Equal([(4, "t.me")], HostsFilter.Targets(Entries, "t.me"));
+        Assert.Equal(count, HostsFilter.Apply(Rows, null, show).Count);
     }
 
-    /// <summary>Совпал адрес — уходят все имена на нём.</summary>
     [Fact]
-    public void Removal_by_address_takes_every_name_on_it()
+    public void A_disabled_dead_address_is_not_dead()
     {
-        var found = HostsFilter.Targets(Entries, "72.56.93.144");
+        // Выключенную запись Windows не читает: молчит ли её адрес — неважно.
+        var off = Line("x.example", "1.2.3.4", enabled: false, health: HostsHealth.Dead);
 
-        Assert.Equal(3, found.Count);
-        Assert.Contains((5, "notion.so"), found);
+        Assert.False(HostsFilter.Shows(off, HostsShow.Dead));
+        Assert.Equal("Off", off.State);
     }
 
-    /// <summary>
-    /// Пустой запрос не отбирает ничего — иначе это «почистить всё».
-    /// </summary>
     [Fact]
-    public void An_empty_query_removes_nothing()
+    public void The_source_card_narrows_with_the_search()
     {
-        Assert.Empty(HostsFilter.Targets(Entries, null));
-        Assert.Empty(HostsFilter.Targets(Entries, "   "));
+        Assert.Equal(2, HostsFilter.Apply(Rows, "instagram", HostsShow.All, HostsTable.OurSource).Count);
+        Assert.Empty(HostsFilter.Apply(Rows, "instagram", HostsShow.All, "Zapret GUI"));
     }
 }

@@ -285,16 +285,14 @@ public static class HostsEditor
                 continue;
             }
 
-            content[group.Key] = (entry.Enabled ? string.Empty : "# ")
-                + entry.Address + " " + string.Join(' ', left)
-                + (entry.Note is { } note ? " # " + note : string.Empty);
+            content[group.Key] = Format(entry.Enabled, entry.Address, left, entry.Note);
         }
 
         // Опустевший наш блок уходит вместе с отметками — как и у Unpin:
         // иначе в файле копятся следы от сервисов, которых давно нет.
         var (start, end) = FindBlock(content);
 
-        if (start >= 0 && !content.Skip(start + 1).Take(end - start - 1).Any(l => Split(l) is not null))
+        if (start >= 0 && !content.Skip(start + 1).Take(end - start - 1).Any(l => (Split(l) ?? SplitDisabled(l)) is not null))
             content.RemoveRange(start, end - start + 1);
 
         Write(target, content);
@@ -320,9 +318,16 @@ public static class HostsEditor
     /// он означает, что хост есть.
     /// </para>
     /// </remarks>
+    /// <param name="progress">Каждый проверенный адрес — сразу, как ответил или промолчал.</param>
+    /// <remarks>
+    /// По восемь адресов разом (19.10): раздел проверяет теперь весь файл,
+    /// у владельца это 43 адреса, и молчащий ждёт 4 с — по одному вышло бы
+    /// под три минуты. Адреса разные, так что залпом в один узел это не бьёт.
+    /// </remarks>
     public static async Task<IReadOnlyList<PinHealth>> CheckAsync(
         IReadOnlyList<HostsEntry> entries,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<PinHealth>? progress = null)
     {
         var byAddress = entries
             .Where(e => e.Enabled)
@@ -335,43 +340,59 @@ public static class HostsEditor
         // и без этой поправки проверка объявила бы мёртвыми рабочие записи.
         bool haveIpV6 = await HasIpV6Async(cancellationToken);
 
-        foreach (var group in byAddress)
-        {
-            if (cancellationToken.IsCancellationRequested)
-                break;
+        using var gate = new SemaphoreSlim(8);
 
+        async Task CheckOne(IGrouping<string, HostsEntry> group)
+        {
             // Петля и нули ставят, чтобы имя не открывалось. Это не мёртвый
             // адрес, а намеренная заглушка, и тревожить о ней незачем.
             if (IPAddress.TryParse(group.Key, out var parsed) && BlockCheck.IsStub(parsed))
-                continue;
+                return;
 
             int names = group.Sum(g => g.Names.Count);
+            PinHealth health;
 
             if (!haveIpV6 && parsed?.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
             {
-                result.Add(new PinHealth
+                health = new PinHealth
                 {
                     Address = group.Key,
                     Names = names,
                     Alive = false,
                     Tested = false,
                     Skipped = "в этой сети нет IPv6",
-                });
+                };
+            }
+            else
+            {
+                await gate.WaitAsync(cancellationToken);
 
-                continue;
+                try
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    bool alive = await AnswersAsync(group.Key, cancellationToken);
+
+                    health = new PinHealth
+                    {
+                        Address = group.Key,
+                        Names = names,
+                        Alive = alive,
+                        Elapsed = watch.Elapsed,
+                    };
+                }
+                finally
+                {
+                    gate.Release();
+                }
             }
 
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            bool alive = await AnswersAsync(group.Key, cancellationToken);
+            lock (result)
+                result.Add(health);
 
-            result.Add(new PinHealth
-            {
-                Address = group.Key,
-                Names = names,
-                Alive = alive,
-                Elapsed = watch.Elapsed,
-            });
+            progress?.Report(health);
         }
+
+        await Task.WhenAll(byAddress.Select(CheckOne));
 
         return result.OrderByDescending(r => r.Names).ToList();
     }
@@ -618,6 +639,10 @@ public static class HostsEditor
         var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Выключенные в окне строки блока (SetEnabled) переживают перезапись
+        // как есть: без этого первое же закрепление стирало бы их молча.
+        var disabled = new List<(string Name, string Line)>();
+
         // Без новой подписи блок сохраняет прежнюю: её пишет окно при закреплении
         // («Claude — XBOX DNS»), а само обновление пинов (PinRefresh) ничего
         // нового о происхождении блока не знает.
@@ -634,6 +659,12 @@ public static class HostsEditor
         {
             foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
             {
+                if (SplitDisabled(line) is { } off)
+                {
+                    disabled.Add((off.Name, line.Trim()));
+                    continue;
+                }
+
                 if (Split(line) is not { } pair)
                     continue;
 
@@ -687,6 +718,13 @@ public static class HostsEditor
                 block.Add($"{address} {name}{mark}");
         }
 
+        // Прибитое заново заменяет и выключенную строку того же имени.
+        foreach (var (name, line) in disabled)
+        {
+            if (!entries.Keys.Any(n => string.Equals(n.TrimStart('*', '.'), name, StringComparison.OrdinalIgnoreCase)))
+                block.Add(line);
+        }
+
         block.Add(BlockEnd);
         block.Add(string.Empty);
 
@@ -724,16 +762,27 @@ public static class HostsEditor
         var backup = Backup(target);
         var drop = new HashSet<string>(names.Select(n => n.TrimStart('*', '.')), StringComparer.OrdinalIgnoreCase);
         var left = 0;
+        var pinned = 0;
 
+        // Выключенные строки блока тоже наши: снимаются по имени вместе
+        // с действующими и держат блок, пока они в нём есть.
         for (int i = end - 1; i > start; i--)
         {
-            if (Split(lines[i]) is not { } pair)
+            bool on = Split(lines[i]) is not null;
+
+            if ((Split(lines[i]) ?? SplitDisabled(lines[i])) is not { } pair)
                 continue;
 
             if (drop.Contains(pair.Name))
+            {
                 lines.RemoveAt(i);
-            else
-                left++;
+                continue;
+            }
+
+            left++;
+
+            if (on)
+                pinned++;
         }
 
         // Пустой блок убирается целиком — иначе в файле копятся наши следы
@@ -748,7 +797,7 @@ public static class HostsEditor
 
         Write(target, lines);
 
-        return new PinResult { Backup = backup, Pinned = left, Shadowed = [] };
+        return new PinResult { Backup = backup, Pinned = pinned, Shadowed = [] };
     }
 
     /// <summary>
@@ -976,6 +1025,85 @@ public static class HostsEditor
             ? (parts[0], parts[1])
             : null;
     }
+
+    /// <summary>Адрес и первое имя выключенной строки; <c>null</c> — не выключенная запись.</summary>
+    /// <remarks>
+    /// Под решёткой должны стоять адрес и имя, иначе это настоящий комментарий —
+    /// заголовок нашего блока, подпись сервиса.
+    /// </remarks>
+    private static (string Address, string Name)? SplitDisabled(string line)
+    {
+        var text = line.Trim().TrimStart('﻿');
+
+        return text.StartsWith('#') ? Split(text.TrimStart('#')) : null;
+    }
+
+    /// <summary>
+    /// Включает или выключает имена в названных строках — решёткой в начале строки.
+    /// </summary>
+    /// <param name="targets">Номер строки из <see cref="HostsEntry.Line"/> и имя в ней.</param>
+    /// <returns>Путь к копии и сколько имён сменило состояние.</returns>
+    /// <remarks>
+    /// <para>
+    /// Заведено 19.10 под редизайн раздела: выключенная запись лежит в файле
+    /// и возвращается одним нажатием — так пин снимают на время, для замера
+    /// A/B/A, не набирая потом адрес заново.
+    /// </para>
+    /// <para>
+    /// Имя, а не строка: в строке их бывает несколько, и выключить
+    /// <c>t.me</c> не значит выключить соседний <c>api.telegram.org</c>.
+    /// Выбранные имена тогда уходят отдельной строкой сразу под прежней,
+    /// с тем же адресом и подписью.
+    /// </para>
+    /// <para>
+    /// Строка правится по свежему разбору; имя, которого в ней уже нет, пропускается —
+    /// между показом и нажатием файл мог переписать кто угодно.
+    /// </para>
+    /// </remarks>
+    public static (string Backup, int Changed) SetEnabled(
+        IReadOnlyCollection<(int Line, string Name)> targets,
+        bool enabled,
+        string? path = null)
+    {
+        var target = path ?? HostsFile.DefaultPath;
+        var content = File.ReadAllLines(target).ToList();
+        var backup = Backup(target);
+
+        var entries = Parse(target).ToDictionary(e => e.Line);
+        int changed = 0;
+
+        // С конца: вставленная строка не должна сдвигать ещё не тронутые.
+        foreach (var group in targets.GroupBy(t => t.Line).OrderByDescending(g => g.Key))
+        {
+            if (!entries.TryGetValue(group.Key, out var entry) || entry.Enabled == enabled)
+                continue;
+
+            var wanted = group.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var picked = entry.Names.Where(wanted.Contains).ToList();
+            var rest = entry.Names.Where(n => !wanted.Contains(n)).ToList();
+
+            if (picked.Count == 0)
+                continue;
+
+            changed += picked.Count;
+
+            if (rest.Count == 0)
+            {
+                content[group.Key] = Format(enabled, entry.Address, entry.Names, entry.Note);
+                continue;
+            }
+
+            content[group.Key] = Format(entry.Enabled, entry.Address, rest, entry.Note);
+            content.Insert(group.Key + 1, Format(enabled, entry.Address, picked, entry.Note));
+        }
+
+        Write(target, content);
+        return (backup, changed);
+    }
+
+    private static string Format(bool enabled, string address, IEnumerable<string> names, string? note) =>
+        (enabled ? string.Empty : "# ") + address + " " + string.Join(' ', names)
+        + (note is { } text ? " # " + text : string.Empty);
 
     private static string Backup(string path)
     {

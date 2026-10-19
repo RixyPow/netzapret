@@ -1,7 +1,141 @@
+using System.ComponentModel;
+using NetZapret.Proxy;
+
 namespace NetZapret.Gui.Views;
 
+/// <summary>Что известно о том, отвечает ли адрес записи.</summary>
+public enum HostsHealth
+{
+    Unknown,
+    Alive,
+    Dead,
+
+    /// <summary>Не проверялся: адрес IPv6 в сети без IPv6.</summary>
+    Untested,
+}
+
+/// <summary>Отбор таблицы — кнопка «Все записи ▾».</summary>
+public enum HostsShow
+{
+    All,
+    Ours,
+    Foreign,
+    Off,
+    Dead,
+    Repeats,
+}
+
+/// <summary>Строка таблицы раздела «Файл hosts»: имя из одной строки файла.</summary>
+/// <remarks>
+/// Живость и выбор меняются на месте, без пересборки списка: проверка
+/// приходит по адресу за адресом, и пересобирать восемьсот строк на каждый
+/// ответ значило бы занимать поток окна десятки раз подряд.
+/// </remarks>
+public sealed class HostsLine(HostsRow row) : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public HostsRow Row { get; } = row;
+
+    public string Name => Row.Name;
+
+    public string Address => Row.Address;
+
+    public string Source => Row.Source ?? "неизвестно";
+
+    public string SourceHint => Row.Source is null
+        ? "Строка вне всех блоков: её поставил кто-то без подписи — вы сами, антивирус или программа, которой уже нет."
+        : Row.Ours
+        ? "Наш блок: эти записи поставила NetZapret."
+        : $"Строка лежит в блоке «{Row.Source}» — его ведёт эта программа и может вернуть записи при следующей своей правке.";
+
+    public string Kind => Row.Kind switch
+    {
+        HostsPinKind.Service => "адрес сервиса",
+        HostsPinKind.Stub => "заглушка",
+        _ => "посредник",
+    };
+
+    public string KindHint => Row.Kind switch
+    {
+        HostsPinKind.Service =>
+            "Адрес самого сервиса: пин только выбирает незакрытый адрес, а имя провайдер режет и там. "
+            + "Щит десинка такое имя не берёт — его обрабатывает рецепт.",
+        HostsPinKind.Stub =>
+            "Петля или нули: имя закрыто намеренно, открываться оно не должно.",
+        _ when Row.Ours =>
+            "Посредник — чужой узел, через который ходит имя (XBOX DNS, Comss, GeoHide). "
+            + "Щит десинка пропускает такое имя без обработки: рецепт, выверенный на настоящем сервисе, "
+            + "рвёт соединение с посредником. Если адрес — сам сервис, смените вид в меню строки.",
+        _ =>
+            "Чужую строку щит десинка считает посредником и пропускает без обработки: пометку "
+            + "«адрес сервиса» ставит только NetZapret, своей записью.",
+    };
+
+    /// <summary>Строка под именем: почему запись не действует либо её подпись.</summary>
+    public string Sub =>
+        Row.Repeat ? "повтор — действует запись выше"
+        : Note is { Length: > 0 } note ? note
+        : string.Empty;
+
+    /// <summary>Подпись строки без нашей служебной пометки — та видна колонкой «Вид».</summary>
+    public string? Note => Row.Note?.Replace(HostsEditor.DesyncMark, string.Empty, StringComparison.OrdinalIgnoreCase).Trim(' ', ',', ';');
+
+    public bool HasSub => Sub.Length > 0;
+
+    private bool _selected;
+
+    public bool Selected
+    {
+        get => _selected;
+        set
+        {
+            if (_selected == value)
+                return;
+
+            _selected = value;
+            Changed(nameof(Selected));
+        }
+    }
+
+    private HostsHealth _health;
+
+    public HostsHealth Health
+    {
+        get => _health;
+        set
+        {
+            if (_health == value)
+                return;
+
+            _health = value;
+            Changed(nameof(Health));
+            Changed(nameof(State));
+            Changed(nameof(StateHint));
+        }
+    }
+
+    /// <summary>Для кружка: выключенная и заглушка важнее живости.</summary>
+    public string State =>
+        !Row.Enabled ? "Off"
+        : Row.Kind == HostsPinKind.Stub ? "Stub"
+        : Health.ToString();
+
+    public string StateHint => State switch
+    {
+        "Off" => "Запись выключена: строка в файле под решёткой, Windows её не читает.",
+        "Stub" => "Заглушка — проверять нечего.",
+        nameof(HostsHealth.Alive) => "Адрес отвечает на 443.",
+        nameof(HostsHealth.Dead) => "Адрес молчит на 443: пин ведёт в никуда и выглядит блокировкой.",
+        nameof(HostsHealth.Untested) => "Не проверялся: в этой сети нет IPv6.",
+        _ => "Не проверен — «Проверить адреса».",
+    };
+
+    private void Changed(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
 /// <summary>
-/// Отбор строк файла hosts по строке поиска.
+/// Отбор строк файла hosts: поиск и кнопка «Все записи ▾».
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,53 +160,50 @@ internal static class HostsFilter
     /// <remarks>
     /// Пустой запрос подходит всем: это не «ничего не найдено», а «не ищем».
     /// </remarks>
-    public static bool Matches(PinRow row, string? needle)
-    {
-        if (string.IsNullOrWhiteSpace(needle))
-            return true;
-
-        var wanted = needle.Trim();
-
-        return Has(row.Name, wanted)
-            || Has(row.Detail, wanted)
-            || Has(row.Note, wanted);
-    }
-
-    public static IReadOnlyList<PinRow> Apply(IEnumerable<PinRow> rows, string? needle) =>
-        rows.Where(row => Matches(row, needle)).ToList();
-
-    /// <summary>
-    /// Что удалит «Удалить найденные»: строка файла и имя в ней.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// По свежему разбору файла, а не по строкам на экране: те собраны
-    /// при показе, и номера в них могли устареть.
-    /// </para>
-    /// <para>
-    /// Тем же правилом, что и показ, — по имени, адресу и подписи. Совпал
-    /// адрес — уходят все имена строки: искали «кто прибит на этот адрес».
-    /// Совпало имя — только оно: соседи по строке не искались.
-    /// </para>
-    /// <para>
-    /// Пустой запрос не отбирает ничего. У показа он значит «все», но здесь
-    /// это была бы та самая кнопка «почистить всё», которой быть не должно.
-    /// </para>
-    /// </remarks>
-    public static IReadOnlyList<(int Line, string Name)> Targets(
-        IEnumerable<NetZapret.Proxy.HostsEntry> entries, string? needle)
+    public static bool Matches(HostsLine line, string? needle)
     {
         if (!Searching(needle))
-            return [];
+            return true;
 
         var wanted = needle!.Trim();
 
-        return entries
-            .SelectMany(e => e.Names
-                .Where(n => Has(n, wanted) || Has(e.Address, wanted) || Has(e.Note, wanted))
-                .Select(n => (e.Line, n)))
-            .ToList();
+        return Has(line.Name, wanted)
+            || Has(line.Address, wanted)
+            || Has(line.Source, wanted)
+            || Has(line.Kind, wanted)
+            || Has(line.Row.Note, wanted);
     }
+
+    public static bool Shows(HostsLine line, HostsShow show) => show switch
+    {
+        HostsShow.Ours => line.Row.Ours,
+        HostsShow.Foreign => !line.Row.Ours,
+        HostsShow.Off => !line.Row.Enabled,
+        HostsShow.Dead => line.Row.Enabled && line.Health == HostsHealth.Dead,
+        HostsShow.Repeats => line.Row.Repeat,
+        _ => true,
+    };
+
+    /// <param name="source">Источник из карточки «Источники»; <c>null</c> — все.</param>
+    public static IReadOnlyList<HostsLine> Apply(
+        IEnumerable<HostsLine> lines,
+        string? needle,
+        HostsShow show = HostsShow.All,
+        string? source = null) =>
+        lines.Where(line => Shows(line, show)
+                && (source is null || line.Source == source)
+                && Matches(line, needle))
+            .ToList();
+
+    public static string Word(HostsShow show) => show switch
+    {
+        HostsShow.Ours => "Наши",
+        HostsShow.Foreign => "Чужие",
+        HostsShow.Off => "Отключённые",
+        HostsShow.Dead => "Молчат",
+        HostsShow.Repeats => "Повторы",
+        _ => "Все записи",
+    };
 
     /// <summary>
     /// Ищем ли мы вообще.
