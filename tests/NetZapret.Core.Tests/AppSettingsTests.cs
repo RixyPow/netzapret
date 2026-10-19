@@ -114,11 +114,12 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Всех переводят на V11 Lite один раз (03.10); выключенный десинк так и остаётся.
+    /// Всех переводят на пресет по умолчанию один раз (03.10, тогда V11 Lite,
+    /// с 19.10 — V12 Lite); выключенный десинк так и остаётся.
     /// </summary>
     [Theory]
-    [InlineData("""{ "PresetName": "Universal V10" }""", "Universal V11 Lite")]
-    [InlineData("""{ "PresetName": "Default v1 (game filter)" }""", "Universal V11 Lite")]
+    [InlineData("""{ "PresetName": "Universal V10" }""", AppSettings.DefaultPresetName)]
+    [InlineData("""{ "PresetName": "Default v1 (game filter)" }""", AppSettings.DefaultPresetName)]
     [InlineData("""{ "PresetName": null }""", null)]
     [InlineData("""{ "PresetV11Lite": true, "PresetName": "Universal V10" }""", "Universal V10")]
     public void PresetIsMovedToV11LiteOnce(string json, string? expected)

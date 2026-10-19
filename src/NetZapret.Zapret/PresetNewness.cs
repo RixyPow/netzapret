@@ -48,6 +48,11 @@ public static class PresetNewness
             // иначе встал бы над «Universal V11 Lite» по алфавиту, а основным
             // владелец оставил Lite.
             .ThenByDescending(item => string.Equals(name(item), Core.AppSettings.DefaultPresetName, StringComparison.OrdinalIgnoreCase))
+
+            // Затем Lite над полным: основным в паре владелец держит Lite
+            // (V11 — 12.10, V12 — 19.10), и с умолчанием на V12 Lite пара V11
+            // иначе перевернулась бы по алфавиту.
+            .ThenByDescending(item => name(item).EndsWith(" Lite", StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(item => Version.TryParse(builtinVersion(item), out var version) ? version : null)
             .ThenBy(name, StringComparer.OrdinalIgnoreCase)
             .ToList();
