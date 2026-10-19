@@ -4,8 +4,8 @@
 # перепишет. Свои записи — в catalog.yaml: он при обновлении сохраняется,
 # а этот файл заменяется новым.
 #
-# Снят 14.10.2026 21:48 с машины, где стоит Zapret: записей 6667,
-# адресов 465, принимали соединение 369;
+# Снят 20.10.2026 00:59 с машины, где стоит Zapret: записей 6581,
+# адресов 464, принимали соединение 369;
 # имён 1304, рабочий адрес нашёлся у 693.
 #
 # Рабочая — значит сертификат этого сайта и ответ не отказ, как у автоподбора
@@ -17,172 +17,241 @@
 # и то, чего в каталоге нет.
 
 intermediaries:
-  - address: 83.217.211.149
-    source: "Zapret DNS"
-  - address: 159.194.200.33
-    source: "GeoHide"
   - address: 193.233.112.67
     source: "GeoHide"
   - address: 193.233.112.88
     source: "GeoHide"
   - address: 193.233.112.68
     source: "GeoHide"
-  - address: 157.22.177.90
-    source: "Comss DNS"
-  - address: 157.22.178.170
-    source: "Comss DNS"
-  - address: 132.243.112.221
-    source: "Comss DNS"
+  - address: 83.217.211.149
+    source: "Zapret DNS"
   - address: 217.60.179.6
     source: "AstraCat"
   - address: 62.60.230.61
     source: "DNS-AI"
-  - address: 160.79.104.10
-    source: "Comss DNS"
 
 services:
-  - name: "37signals (Basecamp) — Zapret DNS"
+  - name: "37signals (Basecamp) — GeoHide"
     names:
       - 37signals.com
       - basecamp.com
+    addresses:
+      - 193.233.112.67
+  - name: "37signals (Basecamp) — GeoHide"
+    names:
       - www.37signals.com
+    addresses:
+      - 193.233.112.68
+  - name: "37signals (Basecamp) — GeoHide"
+    names:
       - www.basecamp.com
     addresses:
-      - 83.217.211.149
-  - name: "Aave — Zapret DNS"
+      - 193.233.112.88
+  - name: "Aave — GeoHide"
     names:
       - aave.com
+    addresses:
+      - 193.233.112.88
+  - name: "Aave — GeoHide"
+    names:
       - www.aave.com
     addresses:
-      - 83.217.211.149
-  - name: "Adobe AI — Zapret DNS"
+      - 193.233.112.68
+  - name: "Adobe AI — GeoHide"
     names:
-      - adobe.io
       - www.adobe.io
     addresses:
-      - 83.217.211.149
-  - name: "Affinity Studio — Zapret DNS"
+      - 193.233.112.88
+  - name: "Adobe AI — GeoHide"
+    names:
+      - adobe.io
+    addresses:
+      - 193.233.112.68
+  - name: "Affinity Studio — GeoHide"
     names:
       - affinity.studio
+    addresses:
+      - 193.233.112.88
+  - name: "Affinity Studio — GeoHide"
+    names:
       - www.affinity.studio
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
+  - name: "AMD — GeoHide"
+    names:
+      - www.amd.com
+    addresses:
+      - 193.233.112.68
   - name: "AMD — Zapret DNS"
     names:
       - amd.com
-      - www.amd.com
     addresses:
       - 83.217.211.149
-  - name: "Analog Devices — Zapret DNS"
+  - name: "Analog Devices — GeoHide"
     names:
       - analog.com
     addresses:
-      - 83.217.211.149
-  - name: "Arduino — Zapret DNS"
+      - 193.233.112.67
+  - name: "Arduino — GeoHide"
     names:
       - arduino.cc
+    addresses:
+      - 193.233.112.67
+  - name: "Arduino — GeoHide"
+    names:
       - www.arduino.cc
     addresses:
-      - 83.217.211.149
-  - name: "Arkose Labs — Zapret DNS"
+      - 193.233.112.68
+  - name: "Arkose Labs — GeoHide"
     names:
       - arkoselabs.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
+  - name: "Arkose Labs — GeoHide"
+    names:
+      - www.arkoselabs.com
+    addresses:
+      - 193.233.112.67
   - name: "Arrow Electronics — Zapret DNS"
     names:
       - arrow.com
     addresses:
       - 83.217.211.149
-  - name: "Autodesk — AstraCat"
-    names:
-      - autodesk.com
-    addresses:
-      - 23.21.189.113
-  - name: "Autodesk — Comss DNS"
+  - name: "Autodesk — GeoHide"
     names:
       - accounts.autodesk.com
     addresses:
-      - 157.22.178.170
-  - name: "Autodesk — Zapret DNS"
+      - 193.233.112.68
+  - name: "Autodesk — GeoHide"
     names:
       - qualtrics.com
+    addresses:
+      - 193.233.112.67
+  - name: "Autodesk — Zapret DNS"
+    names:
+      - autodesk.com
       - www.qualtrics.com
     addresses:
       - 83.217.211.149
-  - name: "Avast — Zapret DNS"
+  - name: "Avast — GeoHide"
     names:
       - avast.com
       - avast.ru
+    addresses:
+      - 193.233.112.88
+  - name: "Avast — GeoHide"
+    names:
       - www.avast.com
+    addresses:
+      - 193.233.112.68
+  - name: "Avast — Zapret DNS"
+    names:
       - www.avast.ru
     addresses:
       - 83.217.211.149
-  - name: "Badoo — Zapret DNS"
+  - name: "Badoo — GeoHide"
     names:
       - badoo.app
-      - badoo.com
+    addresses:
+      - 193.233.112.67
+  - name: "Badoo — GeoHide"
+    names:
       - badoocdn.com
       - eu1.ecdn2.badoocdn.com
+    addresses:
+      - 193.233.112.88
+  - name: "Badoo — GeoHide"
+    names:
+      - badoo.com
       - www.badoo.com
     addresses:
-      - 83.217.211.149
-  - name: "Best Buy — Zapret DNS"
+      - 193.233.112.68
+  - name: "Best Buy — GeoHide"
     names:
       - bestbuy.com
     addresses:
-      - 83.217.211.149
-  - name: "Bike24 — Zapret DNS"
+      - 193.233.112.68
+  - name: "Bike24 — GeoHide"
     names:
       - bike-components.de
       - www.bike-components.de
     addresses:
-      - 83.217.211.149
-  - name: "Brave — Zapret DNS"
+      - 193.233.112.88
+  - name: "Brave — GeoHide"
     names:
       - brave.com
       - www.brave.com
     addresses:
-      - 83.217.211.149
-  - name: "Broadcom — Zapret DNS"
+      - 193.233.112.88
+  - name: "Broadcom — AstraCat"
     names:
-      - access.broadcom.com
       - knowledge.broadcom.com
-      - profile.broadcom.com
+    addresses:
+      - 217.60.179.6
+  - name: "Broadcom — GeoHide"
+    names:
       - support.broadcom.com
     addresses:
-      - 83.217.211.149
-  - name: "Camel AI — Zapret DNS"
+      - 193.233.112.88
+  - name: "Broadcom — GeoHide"
+    names:
+      - access.broadcom.com
+      - profile.broadcom.com
+    addresses:
+      - 193.233.112.68
+  - name: "Camel AI — GeoHide"
     names:
       - camelai.com
       - stream.camelai.com
+    addresses:
+      - 193.233.112.67
+  - name: "Camel AI — GeoHide"
+    names:
       - www.camelai.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Canva — Comss DNS"
     names:
       - canva.com
     addresses:
-      - 3.164.68.55
-  - name: "CapCut — Zapret DNS"
+      - 3.164.68.123
+  - name: "CapCut — GeoHide"
     names:
       - capcut.com
+    addresses:
+      - 193.233.112.67
+  - name: "CapCut — GeoHide"
+    names:
       - www.capcut.com
     addresses:
-      - 83.217.211.149
-  - name: "Cerebras — Zapret DNS"
+      - 193.233.112.88
+  - name: "Cerebras — GeoHide"
+    names:
+      - cerebras.ai
+    addresses:
+      - 193.233.112.88
+  - name: "Cerebras — GeoHide"
     names:
       - api.cerebras.ai
-      - cerebras.ai
       - www.cerebras.ai
     addresses:
-      - 83.217.211.149
-  - name: "Chaos (V-Ray, Enscape) — Zapret DNS"
+      - 193.233.112.68
+  - name: "Chaos (V-Ray, Enscape) — GeoHide"
     names:
       - accounts.chaos.com
+      - my.chaos.com
+    addresses:
+      - 193.233.112.88
+  - name: "Chaos (V-Ray, Enscape) — GeoHide"
+    names:
+      - enscape3d.com
+    addresses:
+      - 193.233.112.67
+  - name: "Chaos (V-Ray, Enscape) — GeoHide"
+    names:
       - www.chaos.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
   - name: "ChatGPT & Sora (OpenAI) — AstraCat"
     names:
       - d.docs.live.net
@@ -193,80 +262,18 @@ services:
       - cdn.auth0.com
     addresses:
       - 65.9.68.34
-  - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
-    names:
-      - arena.openai.com
-      - auth0.openai.com
-      - contest.openai.com
-      - microscope.openai.com
-      - universe.openai.com
-    addresses:
-      - 157.22.178.170
-  - name: "ChatGPT & Sora (OpenAI) — Comss DNS"
-    names:
-      - debate-game.openai.com
-      - discuss.openai.com
-      - gym.openai.com
-      - labs.openai.com
-      - sora.com
-    addresses:
-      - 132.243.112.221
   - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
     names:
-      - cdn.oaistatic.com
-      - oaistatic.com
-    addresses:
-      - 104.18.41.158
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - auth.openai.com
-    addresses:
-      - 62.60.230.61
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - blog.openai.com
-      - help.openai.com
-      - www.openai.com
-    addresses:
-      - 104.18.33.45
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - files.oaiusercontent.com
-      - sdmntprpolandcentral.oaiusercontent.com
-      - sdmntprukwest.oaiusercontent.com
-    addresses:
-      - 104.18.43.204
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - operator.chatgpt.com
-    addresses:
-      - 172.64.150.41
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - sdmntpritalynorth.oaiusercontent.com
-      - sdmntprnortheu.oaiusercontent.com
-    addresses:
-      - 172.64.144.52
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - chat.openai.com
-    addresses:
-      - 172.64.150.28
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - tcr9i.chat.openai.com
-    addresses:
-      - 172.64.154.211
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
-      - spinningup.openai.com
-    addresses:
-      - 104.18.1.163
-  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
-    names:
+      - cdn.openai.com
       - jukebox.openai.com
     addresses:
       - 150.171.109.198
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - blog.openai.com
+      - www.openai.com
+    addresses:
+      - 104.18.33.45
   - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
     names:
       - www.chatgpt.com
@@ -274,166 +281,211 @@ services:
       - 104.18.32.47
   - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
     names:
-      - deploymentsafety.openai.com
+      - chat.openai.com
     addresses:
-      - 64.239.109.65
+      - 104.18.37.228
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - tcr9i.chat.openai.com
+    addresses:
+      - 172.64.154.211
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - cdn.oaistatic.com
+    addresses:
+      - 172.64.146.98
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - operator.chatgpt.com
+    addresses:
+      - 104.18.37.215
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - sdmntpritalynorth.oaiusercontent.com
+      - sdmntprnortheu.oaiusercontent.com
+      - sdmntprukwest.oaiusercontent.com
+    addresses:
+      - 104.18.43.204
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - files.oaiusercontent.com
+      - sdmntprpolandcentral.oaiusercontent.com
+    addresses:
+      - 172.64.144.52
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - oaistatic.com
+    addresses:
+      - 104.18.41.158
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - auth0.openai.com
+    addresses:
+      - 172.65.90.20
+  - name: "ChatGPT & Sora (OpenAI) — DNS-AI"
+    names:
+      - spinningup.openai.com
+    addresses:
+      - 104.18.1.163
   - name: "ChatGPT & Sora (OpenAI) — GeoHide"
     names:
-      - api.openai.com
       - beta.api.openai.com
-      - chatgpt.com
-      - developers.openai.com
-    addresses:
-      - 193.233.112.67
-  - name: "ChatGPT & Sora (OpenAI) — GeoHide"
-    names:
-      - beta.openai.com
-      - cdn.platform.openai.com
+      - community.openai.com
+      - deploymentsafety.openai.com
+      - help.openai.com
       - openai.com
       - platform.api.openai.com
+      - platform.openai.com
+      - realtime.chatgpt.com
       - sentinel.openai.com
-      - sora.chatgpt.com
-      - videos.openai.com
-      - webrtc.chatgpt.com
-      - ws.chatgpt.com
     addresses:
       - 193.233.112.88
   - name: "ChatGPT & Sora (OpenAI) — GeoHide"
     names:
-      - community.openai.com
-      - realtime.chatgpt.com
+      - api.openai.com
+      - beta.openai.com
+      - cdn.platform.openai.com
+      - chatgpt.com
+      - videos.openai.com
+      - webrtc.chatgpt.com
+      - ws.chatgpt.com
     addresses:
       - 193.233.112.68
   - name: "ChatGPT & Sora (OpenAI) — GeoHide"
     names:
-      - platform.openai.com
+      - auth.openai.com
+      - developers.openai.com
+      - sora.chatgpt.com
     addresses:
-      - 159.194.200.33
+      - 193.233.112.67
   - name: "ChatGPT & Sora (OpenAI) — Zapret DNS"
     names:
       - mobile.events.data.microsoft.com
     addresses:
       - 52.178.17.2
-  - name: "ChatGPT & Sora (OpenAI) — Zapret DNS"
+  - name: "Chess — GeoHide"
     names:
-      - cdn.openai.com
+      - chess.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
   - name: "Chess — Zapret DNS"
     names:
       - assets-configurator.chess.com
-      - chess.com
     addresses:
       - 83.217.211.149
-  - name: "Claude — Comss DNS"
+  - name: "Claude — DNS-AI"
     names:
+      - a-cdn.anthropic.com
+    addresses:
+      - 34.36.57.103
+  - name: "Claude — GeoHide"
+    names:
+      - a.claude.ai
       - api.anthropic.com
-      - brand.anthropic.com
-      - s-cdn.anthropic.com
-    addresses:
-      - 157.22.178.170
-  - name: "Claude — Comss DNS"
-    names:
-      - api.claude.ai
-      - api.console.anthropic.com
+      - assets.anthropic.com
+      - bridge.claudeusercontent.com
+      - claude.ai
+      - claude.com
+      - console.anthropic.com
       - console.claude.ai
-      - statsig.anthropic.com
+      - docs.anthropic.com
+      - institute.anthropic.com
+      - legal.anthropic.com
+      - mcp-proxy.anthropic.com
+      - s-cdn.anthropic.com
+      - tai.anthropic.com
+      - www.claude.ai
     addresses:
-      - 132.243.112.221
-  - name: "Claude — Comss DNS"
-    names:
-      - auth.anthropic.com
-    addresses:
-      - 157.22.177.90
-  - name: "Claude — Comss DNS"
+      - 193.233.112.88
+  - name: "Claude — GeoHide"
     names:
       - a.claude.com
-      - academy.claude.com
       - admin.claude.com
+      - alignment.anthropic.com
       - assets.claude.com
-      - bridge.claudeusercontent.com
-      - claude.com
-      - claudeusercontent.com
+      - claude.anthropic.com
       - code.claude.com
       - console.claude.com
       - docs.claude.com
       - econ-index.mcp.claude.com
+      - frame.claudeusercontent.com
       - hcls.mcp.claude.com
-      - plaid.mcp.claude.com
       - privacy.claude.com
       - pubmed.mcp.claude.com
-      - www.claude.com
+      - releases.claude.com
+      - status.anthropic.com
+      - status.claude.ai
+      - support.anthropic.com
+      - www.anthropic.com
       - www.claudeusercontent.com
     addresses:
-      - 160.79.104.10
-  - name: "Claude — DNS-AI"
+      - 193.233.112.68
+  - name: "Claude — GeoHide"
     names:
-      - alignment.anthropic.com
+      - academy.claude.com
       - anthropic.com
-      - assets.anthropic.com
-      - claude.anthropic.com
-      - console.anthropic.com
+      - brand.anthropic.com
+      - claudeusercontent.com
       - earlyaccess.anthropic.com
-      - institute.anthropic.com
-      - legal.anthropic.com
-      - status.anthropic.com
-      - tai.anthropic.com
-    addresses:
-      - 160.79.104.10
-  - name: "Claude — DNS-AI"
-    names:
-      - mcp-proxy.anthropic.com
       - platform.claude.com
-      - support.anthropic.com
-      - support.claude.com
-      - www.claude.ai
+      - www.claude.com
     addresses:
-      - 62.60.230.61
+      - 193.233.112.67
   - name: "Claude — Zapret DNS"
     names:
-      - a-cdn.anthropic.com
-      - a.claude.ai
-      - claude.ai
-      - docs.anthropic.com
-      - frame.claudeusercontent.com
-      - releases.claude.com
-      - status.claude.ai
-      - www.anthropic.com
+      - plaid.mcp.claude.com
+      - support.claude.com
     addresses:
       - 83.217.211.149
-  - name: "ClickUp — AstraCat"
+  - name: "ClickUp — GeoHide"
     names:
       - clickup.com
       - www.clickup.com
     addresses:
-      - 217.60.179.6
-  - name: "CoreWeave — Zapret DNS"
+      - 193.233.112.88
+  - name: "CoreWeave — GeoHide"
     names:
       - coreweave.com
+    addresses:
+      - 193.233.112.67
+  - name: "CoreWeave — Zapret DNS"
+    names:
       - www.coreweave.com
     addresses:
       - 83.217.211.149
-  - name: "Corsair — Zapret DNS"
+  - name: "Corsair — GeoHide"
     names:
       - corsair.com
+    addresses:
+      - 193.233.112.67
+  - name: "Corsair — GeoHide"
+    names:
       - www.corsair.com
     addresses:
-      - 83.217.211.149
-  - name: "Crunchyroll — Zapret DNS"
+      - 193.233.112.88
+  - name: "Crunchyroll — GeoHide"
     names:
       - crunchyroll.com
+    addresses:
+      - 193.233.112.88
+  - name: "Crunchyroll — GeoHide"
+    names:
       - www.crunchyroll.com
     addresses:
-      - 83.217.211.149
-  - name: "Cummins — Zapret DNS"
+      - 193.233.112.68
+  - name: "Cummins — GeoHide"
     names:
       - cummins.com
       - www.cummins.com
     addresses:
-      - 83.217.211.149
-  - name: "Cursor — Zapret DNS"
+      - 193.233.112.68
+  - name: "Cursor — GeoHide"
     names:
       - agentn.api2.cursor.sh
+    addresses:
+      - 193.233.112.68
+  - name: "Cursor — Zapret DNS"
+    names:
       - api2.cursor.sh
       - api3.cursor.sh
       - api4.cursor.sh
@@ -449,65 +501,113 @@ services:
       - www.cursor.com
     addresses:
       - 83.217.211.149
-  - name: "DeepL — AstraCat"
+  - name: "DeepL — GeoHide"
     names:
-      - api.deepl.com
+      - auth.deepl.com
+      - checkout.www.deepl.com
+      - clearance.deepl.com
+      - deepl.com
       - dict-audio.deepl.com
       - experimentation.deepl.com
-      - ita-free.www.deepl.com
-      - oneshot-free.www.deepl.com
-      - s.deepl.com
-      - support.deepl.com
-      - write-free.www.deepl.com
-      - www.deepl.com
-    addresses:
-      - 217.60.179.6
-  - name: "DeepL — Comss DNS"
-    names:
-      - hs.deepl.com
+      - gtm.deepl.com
+      - jobs.deepl.com
       - sl.deepl.com
     addresses:
-      - 157.22.178.170
+      - 193.233.112.88
+  - name: "DeepL — GeoHide"
+    names:
+      - community-auth.deepl.com
+      - developers.deepl.com
+      - ita-free.app.deepl.com
+      - support.deepl.com
+      - www.deepl.com
+    addresses:
+      - 193.233.112.67
+  - name: "DeepL — GeoHide"
+    names:
+      - home.deepl.com
+      - login-wall.deepl.com
+      - static.deepl.com
+    addresses:
+      - 193.233.112.68
   - name: "DeepL — Zapret DNS"
     names:
       - api-free.deepl.com
-      - auth.deepl.com
+      - api.deepl.com
       - backend.deepl.com
-      - checkout.www.deepl.com
-      - clearance.deepl.com
-      - community-auth.deepl.com
-      - deepl.com
-      - developers.deepl.com
       - errortracking.deepl.com
       - experimentation-grpc.deepl.com
-      - gtm.deepl.com
-      - home.deepl.com
+      - hs.deepl.com
       - internal.deepl.com
-      - ita-free.app.deepl.com
-      - jobs.deepl.com
-      - login-wall.deepl.com
+      - ita-free.www.deepl.com
+      - oneshot-free.www.deepl.com
       - ott.deepl.com
+      - s.deepl.com
       - shield.deepl.com
-      - static.deepl.com
       - w.deepl.com
+      - write-free.www.deepl.com
     addresses:
       - 83.217.211.149
   - name: "Deezer — AstraCat"
     names:
-      - account.deezer.com
-      - affiliate.deezer.com
-      - ansync.deezer.com
-      - api.deezer.com
-      - backstage.deezer.com
-      - creators.deezer.com
-      - dataconnect.deezer.com
-      - homepod.deezer.com
-      - oauth.deezer.com
-      - tv2.deezer.com
-      - vdp.deezer.com
+      - hhe.deezer.com
+      - podcasters.deezer.com
+      - queue.deezer.com
       - www.deezer.com
     addresses:
       - 217.60.179.6
+  - name: "Deezer — GeoHide"
+    names:
+      - account.deezer.com
+      - api.deezer.com
+      - pay.deezer.com
+      - platform.deezer.com
+      - tv2.deezer.com
+    addresses:
+      - 193.233.112.67
+  - name: "Deezer — GeoHide"
+    names:
+      - affiliate.deezer.com
+      - ansync.deezer.com
+      - api-websub.deezer.com
+      - auth.deezer.com
+      - backstage.deezer.com
+      - bo-partners.deezer.com
+      - bo-playlist.deezer.com
+      - deezer.com
+      - dev-gcast.deezer.com
+      - games.deezer.com
+      - homepod.deezer.com
+      - partners.deezer.com
+      - pipe.deezer.com
+      - preprod-preview.deezer.com
+      - preview.deezer.com
+      - research.deezer.com
+      - shaker.deezer.com
+      - vdp.deezer.com
+      - wellbeing.deezer.com
+      - widget.deezer.com
+    addresses:
+      - 193.233.112.88
+  - name: "Deezer — GeoHide"
+    names:
+      - activation.deezer.com
+      - creators.deezer.com
+      - creatorsupport.deezer.com
+      - dataconnect.deezer.com
+      - games-servers.deezer.com
+      - gcast.deezer.com
+      - m.deezer.com
+      - mydeezerstory.deezer.com
+      - oauth.deezer.com
+      - papi.deezer.com
+      - payment.deezer.com
+      - support.deezer.com
+      - webviews.deezer.com
+      - ws.deezer.com
+      - zen.deezer.com
+    addresses:
+      - 193.233.112.68
   - name: "Deezer — GeoHide"
     names:
       - weight-images.deezer.com
@@ -515,62 +615,36 @@ services:
       - 184.51.88.56
   - name: "Deezer — Zapret DNS"
     names:
-      - activation.deezer.com
-      - api-websub.deezer.com
-      - auth.deezer.com
-      - bo-partners.deezer.com
-      - bo-playlist.deezer.com
-      - creatorsupport.deezer.com
       - dalida.deezer.com
-      - deezer.com
-      - dev-gcast.deezer.com
-      - games-servers.deezer.com
-      - games.deezer.com
-      - gcast.deezer.com
-      - hhe.deezer.com
-      - m.deezer.com
-      - mydeezerstory.deezer.com
-      - papi.deezer.com
-      - partners.deezer.com
-      - pay.deezer.com
-      - payment.deezer.com
-      - pipe.deezer.com
-      - platform.deezer.com
-      - podcasters.deezer.com
-      - preprod-preview.deezer.com
-      - preview.deezer.com
-      - queue.deezer.com
-      - research.deezer.com
-      - shaker.deezer.com
-      - support.deezer.com
-      - webviews.deezer.com
-      - wellbeing.deezer.com
-      - widget.deezer.com
-      - ws.deezer.com
-      - zen.deezer.com
     addresses:
       - 83.217.211.149
-  - name: "Dola (Cici) — Zapret DNS"
+  - name: "Dola (Cici) — GeoHide"
     names:
       - cici.com
+    addresses:
+      - 193.233.112.67
+  - name: "Dola (Cici) — GeoHide"
+    names:
       - dola.com
-      - www.cici.com
       - www.dola.com
     addresses:
-      - 83.217.211.149
-  - name: "Dyson — Zapret DNS"
+      - 193.233.112.88
+  - name: "Dola (Cici) — GeoHide"
+    names:
+      - www.cici.com
+    addresses:
+      - 193.233.112.68
+  - name: "Dyson — GeoHide"
     names:
       - dyson.com
-      - dyson.de
       - dyson.se
     addresses:
-      - 83.217.211.149
-  - name: "ElevenLabs — AstraCat"
+      - 193.233.112.67
+  - name: "Dyson — GeoHide"
     names:
-      - elevenlabs.io
-      - try.elevenlabs.io
+      - dyson.de
     addresses:
-      - 217.60.179.6
+      - 193.233.112.88
   - name: "ElevenLabs — AstraCat"
     names:
       - elevenmusic.io
@@ -579,14 +653,20 @@ services:
       - 35.190.88.92
   - name: "ElevenLabs — Comss DNS"
     names:
-      - api.elevenlabs.io
+      - payload.elevenlabs.io
+      - www.elevenlabs.io
     addresses:
-      - 34.8.184.191
+      - 34.54.252.193
   - name: "ElevenLabs — Comss DNS"
     names:
       - help.elevenlabs.io
     addresses:
       - 216.198.54.6
+  - name: "ElevenLabs — Comss DNS"
+    names:
+      - api.elevenlabs.io
+    addresses:
+      - 34.8.184.191
   - name: "ElevenLabs — Comss DNS"
     names:
       - api.us.elevenlabs.io
@@ -597,85 +677,87 @@ services:
       - elevenreader.io
     addresses:
       - 34.117.39.235
-  - name: "ElevenLabs — Comss DNS"
+  - name: "ElevenLabs — GeoHide"
     names:
-      - payload.elevenlabs.io
-      - www.elevenlabs.io
+      - elevenlabs.io
+      - try.elevenlabs.io
     addresses:
-      - 34.54.252.193
+      - 193.233.112.67
   - name: "Elgato — AstraCat"
     names:
       - elgato.com
     addresses:
-      - 3.174.2.15
-  - name: "Elgato — Zapret DNS"
+      - 3.174.2.124
+  - name: "Elgato — GeoHide"
     names:
       - www.elgato.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
   - name: "Fitbit — AstraCat"
     names:
       - fitbit-pa.googleapis.com
       - fitbit.google.com
-      - fitbitvestibuleshim-pa.googleapis.com
     addresses:
       - 217.60.179.6
-  - name: "Fitbit — Zapret DNS"
+  - name: "Fitbit — GeoHide"
+    names:
+      - fitbitvestibuleshim-pa.googleapis.com
+    addresses:
+      - 193.233.112.67
+  - name: "Fitbit — GeoHide"
     names:
       - api.fitbit.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
+  - name: "Formula 1 — GeoHide"
+    names:
+      - www.formula1.com
+    addresses:
+      - 193.233.112.88
   - name: "Formula 1 — Zapret DNS"
     names:
       - formula1.com
-      - www.formula1.com
     addresses:
       - 83.217.211.149
-  - name: "Framer — Zapret DNS"
+  - name: "Framer — GeoHide"
     names:
       - framer.com
       - www.framer.com
     addresses:
-      - 83.217.211.149
-  - name: "Game8 — Zapret DNS"
+      - 193.233.112.88
+  - name: "Game8 — GeoHide"
     names:
       - game8.co
+    addresses:
+      - 193.233.112.68
+  - name: "Game8 — GeoHide"
+    names:
+      - www.game8.co.jp
+    addresses:
+      - 193.233.112.67
+  - name: "Game8 — GeoHide"
+    names:
       - game8.co.jp
       - game8.jp
-      - www.game8.co.jp
       - www.game8.jp
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Gemini AI — Comss DNS"
     names:
       - assistant-s3-pa.googleapis.com
     addresses:
-      - 172.217.117.4
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - apis.google.com
-    addresses:
-      - 157.22.178.170
+      - 172.217.118.4
   - name: "Gemini AI — Comss DNS"
     names:
       - daily-cloudcode-pa.googleapis.com
     addresses:
-      - 172.217.118.4
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - deepmind.google
-    addresses:
-      - 216.239.36.21
+      - 172.217.112.4
   - name: "Gemini AI — Comss DNS"
     names:
       - deepmind.com
+      - deepmind.google
     addresses:
-      - 216.239.32.21
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - geller-pa.googleapis.com
-    addresses:
-      - 172.217.115.4
+      - 216.239.34.21
   - name: "Gemini AI — Comss DNS"
     names:
       - flow.google
@@ -685,27 +767,32 @@ services:
       - 216.239.32.29
   - name: "Gemini AI — Comss DNS"
     names:
+      - labs.google.com
+    addresses:
+      - 108.177.14.102
+  - name: "Gemini AI — Comss DNS"
+    names:
+      - geller-pa.googleapis.com
+    addresses:
+      - 172.217.117.4
+  - name: "Gemini AI — Comss DNS"
+    names:
       - jules.google
     addresses:
       - 216.239.32.27
   - name: "Gemini AI — Comss DNS"
     names:
-      - labs.google.com
-    addresses:
-      - 142.251.1.139
-  - name: "Gemini AI — Comss DNS"
-    names:
       - lookerstudio.google.com
     addresses:
-      - 173.194.73.100
+      - 173.194.73.138
+  - name: "Gemini AI — Comss DNS"
+    names:
+      - o.pki.goog
+    addresses:
+      - 108.177.14.94
   - name: "Gemini AI — Comss DNS"
     names:
       - makersuite.google.com
-    addresses:
-      - 74.125.131.100
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - opal.google.com
     addresses:
       - 74.125.131.102
   - name: "Gemini AI — Comss DNS"
@@ -717,18 +804,17 @@ services:
     names:
       - suggestqueries.google.com
     addresses:
-      - 108.177.14.113
+      - 64.233.163.100
   - name: "Gemini AI — Comss DNS"
     names:
-      - opal.withgoogle.com
-      - waa-pa.clients6.google.com
+      - opal.google.com
     addresses:
-      - 132.243.112.221
+      - 108.177.14.100
   - name: "Gemini AI — Comss DNS"
     names:
       - datastudio.google.com
     addresses:
-      - 64.233.163.102
+      - 64.233.163.101
   - name: "Gemini AI — Comss DNS"
     names:
       - flowmusic.app
@@ -737,74 +823,72 @@ services:
       - 8.6.112.0
   - name: "Gemini AI — Comss DNS"
     names:
+      - geminiweb-pa.clients.google.com
+    addresses:
+      - 173.194.222.102
+  - name: "Gemini AI — Comss DNS"
+    names:
       - geminiweb-pa.clients6.google.com
     addresses:
       - 173.194.73.95
   - name: "Gemini AI — Comss DNS"
     names:
-      - geminiweb-pa.clients.google.com
-    addresses:
-      - 173.194.222.113
-  - name: "Gemini AI — Comss DNS"
-    names:
       - www.antigravity.google
     addresses:
       - 216.239.32.61
-  - name: "Gemini AI — Comss DNS"
-    names:
-      - aicode.googleapis.com
-      - notebook-pa.googleapis.com
-    addresses:
-      - 172.217.114.4
   - name: "Gemini AI — GeoHide"
     names:
-      - ai.google.dev
-      - appcatalyst.pa.googleapis.com
-      - developerprofiles-pa.googleapis.com
-    addresses:
-      - 193.233.112.88
-  - name: "Gemini AI — Zapret DNS"
-    names:
-      - aisandbox-pa.googleapis.com
-      - aistudio.google.com
+      - aicode.googleapis.com
       - aitestkitchen.withgoogle.com
-      - alkalicore-pa.clients6.google.com
       - alkalimakersuite-pa.clients6.google.com
       - antigravity.google
-      - bard.google.com
-      - gemini.google
-      - gemini.google.com
+      - apis.google.com
+      - appcatalyst.pa.googleapis.com
       - generativelanguage.googleapis.com
       - jules.google.com
       - labs.google
       - notebook.google
-      - notebook.google.com
-      - notebooklm-pa.googleapis.com
-      - notebooklm.google
-      - notebooklm.google.com
-      - opal.google
-      - proactivebackend-pa.googleapis.com
       - robinfrontend-pa.googleapis.com
-      - signaler-pa.clients6.google.com
-      - stitch.withgoogle.com
+      - waa-pa.clients6.google.com
       - webchannel-alkalimakersuite-pa.clients6.google.com
     addresses:
-      - 83.217.211.149
-  - name: "Gemini AI — Zapret DNS"
+      - 193.233.112.88
+  - name: "Gemini AI — GeoHide"
     names:
-      - o.pki.goog
+      - ai.google.dev
+      - aisandbox-pa.googleapis.com
+      - developerprofiles-pa.googleapis.com
+      - gemini.google.com
+      - notebook-pa.googleapis.com
+      - notebooklm.google
     addresses:
-      - 142.251.1.94
+      - 193.233.112.67
+  - name: "Gemini AI — GeoHide"
+    names:
+      - aistudio.google.com
+      - alkalicore-pa.clients6.google.com
+      - bard.google.com
+      - gemini.google
+      - notebook.google.com
+      - notebooklm-pa.googleapis.com
+      - notebooklm.google.com
+      - opal.google
+      - opal.withgoogle.com
+      - proactivebackend-pa.googleapis.com
+      - signaler-pa.clients6.google.com
+      - stitch.withgoogle.com
+    addresses:
+      - 193.233.112.68
   - name: "GitHub — каталог Zapret"
     names:
       - camo.githubassets.com
     addresses:
-      - 185.199.109.154
+      - 185.199.108.154
   - name: "GitHub — каталог Zapret"
     names:
       - github.com
     addresses:
-      - 140.82.121.4
+      - 140.82.121.3
   - name: "GitHub — каталог Zapret"
     names:
       - github.githubassets.com
@@ -823,6 +907,7 @@ services:
       - avatars2.githubusercontent.com
       - avatars3.githubusercontent.com
       - avatars4.githubusercontent.com
+      - avatars5.githubusercontent.com
       - avatars6.githubusercontent.com
       - avatars7.githubusercontent.com
       - avatars8.githubusercontent.com
@@ -835,89 +920,89 @@ services:
       - release-assets.githubusercontent.com
     addresses:
       - 146.75.22.132
-  - name: "Grok — AstraCat"
-    names:
-      - us-west-1.api.x.ai
-    addresses:
-      - 217.60.179.6
   - name: "Grok — Comss DNS"
     names:
-      - api.x.ai
-      - eu-west-1.api.x.ai
+      - www.grok.com
     addresses:
-      - 157.22.178.170
+      - 8.6.112.0
   - name: "Grok — Comss DNS"
     names:
       - livekit.grok.com
     addresses:
       - 35.227.192.44
-  - name: "Grok — Comss DNS"
-    names:
-      - www.grok.com
-    addresses:
-      - 8.47.69.0
-  - name: "Grok — DNS-AI"
-    names:
-      - grok.x.ai
-    addresses:
-      - 104.18.18.80
   - name: "Grok — DNS-AI"
     names:
       - www.x.ai
     addresses:
       - 104.18.19.80
-  - name: "Grok — DNS-AI"
+  - name: "Grok — GeoHide"
     names:
+      - grok.x.ai
+      - us-east-1.api.x.ai
+    addresses:
+      - 193.233.112.88
+  - name: "Grok — GeoHide"
+    names:
+      - eu-west-1.api.x.ai
+      - grok.com
+      - us-west-1.api.x.ai
+    addresses:
+      - 193.233.112.67
+  - name: "Grok — GeoHide"
+    names:
+      - api.x.ai
+      - assets.grok.com
+      - docs.x.ai
+      - jf.x.ai
       - trust.x.ai
     addresses:
-      - 104.18.26.175
-  - name: "Grok — DNS-AI"
+      - 193.233.112.68
+  - name: "Grok — Zapret DNS"
     names:
       - us-east-4-raw.api.x.ai
     addresses:
-      - 34.48.4.24
-  - name: "Grok — Zapret DNS"
-    names:
-      - assets.grok.com
-      - docs.x.ai
-      - grok.com
-      - jf.x.ai
-      - us-east-1.api.x.ai
-    addresses:
       - 83.217.211.149
-  - name: "Groq — AstraCat"
+  - name: "Groq — GeoHide"
     names:
       - api.groq.com
       - console.groq.com
     addresses:
-      - 217.60.179.6
+      - 193.233.112.88
   - name: "Guilded — Comss DNS"
     names:
       - guilded.gg
     addresses:
       - 52.85.154.53
-  - name: "Guilded — Zapret DNS"
+  - name: "Guilded — GeoHide"
     names:
       - www.guilded.gg
     addresses:
-      - 83.217.211.149
-  - name: "Hume AI — AstraCat"
+      - 193.233.112.88
+  - name: "Hume AI — GeoHide"
     names:
       - hume.ai
+    addresses:
+      - 193.233.112.88
+  - name: "Hume AI — Zapret DNS"
+    names:
       - www.hume.ai
     addresses:
-      - 217.60.179.6
-  - name: "IKEA — Zapret DNS"
+      - 83.217.211.149
+  - name: "IKEA — GeoHide"
     names:
       - ikea.com
+    addresses:
+      - 193.233.112.88
+  - name: "IKEA — GeoHide"
+    names:
       - www.ikea.com
     addresses:
-      - 83.217.211.149
-  - name: "Imgur — AstraCat"
+      - 193.233.112.68
+  - name: "Imgur — GeoHide"
     names:
       - api.imgur.com
     addresses:
-      - 217.60.179.6
+      - 193.233.112.88
   - name: "Intel — Comss DNS"
     names:
       - intel.com
@@ -925,39 +1010,67 @@ services:
       - 13.91.95.74
   - name: "JetBrains — Comss DNS"
     names:
-      - api.jetbrains.ai
-      - blog.jetbrains.com
-      - codewithme-lobby-production.api.jetbrains.com
-      - codewithme-lobby-staging.api.jetbrains.com
-      - hub.jetbrains.com
-      - lp.jetbrains.com
-      - teamcity.jetbrains.com
-    addresses:
-      - 157.22.178.170
-  - name: "JetBrains — Comss DNS"
-    names:
-      - code-with-me.jetbrains.com
-      - data.services.jetbrains.com
-      - marketplace.jetbrains.com
-      - www.jetbrains.com
-    addresses:
-      - 132.243.112.221
-  - name: "JetBrains — Comss DNS"
-    names:
-      - code2art.jetbrains.com
-      - jetbrains.com
-    addresses:
-      - 157.22.177.90
-  - name: "JetBrains — Comss DNS"
-    names:
       - myjetbrains.com
     addresses:
-      - 13.33.235.17
+      - 13.33.235.99
   - name: "JetBrains — Comss DNS"
     names:
       - www.myjetbrains.com
     addresses:
       - 52.28.82.191
+  - name: "JetBrains — GeoHide"
+    names:
+      - api.jetbrains.ai
+      - blog.jetbrains.com
+      - cloudconfig.jetbrains.com
+      - code2art.jetbrains.com
+      - codewithme-lobby-staging.api.jetbrains.com
+      - configr.jetbrains.com
+      - confluence.jetbrains.com
+      - jetbrains.com
+      - teamcity-support.jetbrains.com
+    addresses:
+      - 193.233.112.68
+  - name: "JetBrains — GeoHide"
+    names:
+      - blogs.jetbrains.com
+      - comments.blog.jetbrains.com
+      - dc.jetbrains.space
+      - dotcover-support.jetbrains.com
+      - dotmemory-support.jetbrains.com
+      - download.jetbrains.com
+      - element.jetbrains.space
+      - hello.jetbrains.com
+      - resharper-plugins.jetbrains.com
+      - support.jetbrains.com
+      - www.jetbrains.space
+    addresses:
+      - 193.233.112.67
+  - name: "JetBrains — GeoHide"
+    names:
+      - ca.jetbrains.com
+      - code-with-me.jetbrains.com
+      - codewithme-lobby-production.api.jetbrains.com
+      - corona.jetbrains.space
+      - datalore.jetbrains.com
+      - dotnet-ea.services.jetbrains.com
+      - dotpeek-support.jetbrains.com
+      - dottrace-support.jetbrains.com
+      - download-cdn.jetbrains.com
+      - eap.jetbrains.com
+      - employee-guides.jetbrains.com
+      - index-cdn.jetbrains.com
+      - jbstats.jetbrains.com
+      - jetbrains.space
+      - lp.jetbrains.com
+      - marketplace.jetbrains.com
+      - plugins.jetbrains.com
+      - sales.jetbrains.com
+      - uploads.jetbrains.com
+      - uploads.services.jetbrains.com
+      - www.jetbrains.com
+    addresses:
+      - 193.233.112.88
   - name: "JetBrains — Zapret DNS"
     names:
       - academy.jetbrains.com
@@ -965,40 +1078,19 @@ services:
       - adobe.fls.jetbrains.com
       - amazon.fls.jetbrains.com
       - awsproxy.pkg-cdn.jetbrains.space
-      - blogs.jetbrains.com
       - byid.eu-1.jetbrains.space
       - byid.jetbrains.space
-      - ca.jetbrains.com
       - cai.jetbrains.com
-      - cloudconfig.jetbrains.com
-      - comments.blog.jetbrains.com
-      - configr.jetbrains.com
-      - confluence.jetbrains.com
-      - corona.jetbrains.space
+      - data.services.jetbrains.com
       - datalore-forum.jetbrains.com
-      - datalore.jetbrains.com
-      - dc.jetbrains.space
-      - dotcover-support.jetbrains.com
-      - dotmemory-support.jetbrains.com
-      - dotnet-ea.services.jetbrains.com
-      - dotpeek-support.jetbrains.com
-      - dottrace-support.jetbrains.com
-      - download-cdn.jetbrains.com
-      - download.jetbrains.com
       - dunnhumby.fls.jetbrains.com
       - ea.jetbrains.com
-      - eap.jetbrains.com
-      - element.jetbrains.space
-      - employee-guides.jetbrains.com
       - eu-1.jetbrains.space
       - geo2.datalore.jetbrains.com
-      - hello.jetbrains.com
-      - index-cdn.jetbrains.com
+      - hub.jetbrains.com
       - internship.jetbrains.com
       - jb-team.fls.jetbrains.com
-      - jbstats.jetbrains.com
       - jetarchive.jetbrains.com
-      - jetbrains.space
       - jetpeople.jetbrains.com
       - justtoplay.jetbrains.space
       - maven.jetbrains.space
@@ -1006,122 +1098,125 @@ services:
       - mta-sts.jetbrains.com
       - oauth.account.jetbrains.com
       - package-search.jetbrains.com
-      - plugins.jetbrains.com
       - registry.jetbrains.space
       - renew-your-ssl-certificate.jetbrains.com
-      - resharper-plugins.jetbrains.com
       - ruhlaender.jetbrains.space
-      - sales.jetbrains.com
       - skyscanner.fls.jetbrains.com
       - slack-bdt.mau.jetbrains.com
       - slack-mps.jetbrains.com
       - slack.jetbrains.com
       - space-cdn.jetbrains.space
       - spotify.fls.jetbrains.com
-      - support.jetbrains.com
       - sv.fls.jetbrains.com
       - swu-acm.jetbrains.space
-      - teamcity-support.jetbrains.com
+      - teamcity.jetbrains.com
       - tiles.datalore.jetbrains.com
       - tiles2.datalore.jetbrains.com
-      - uploads.jetbrains.com
-      - uploads.services.jetbrains.com
       - upsource.jetbrains.com
       - view.datalore.jetbrains.com
       - walx.jetbrains.space
-      - www.jetbrains.space
       - youtrack.jetbrains.com
       - zillow.fls.jetbrains.com
     addresses:
       - 83.217.211.149
-  - name: "LEGO — Zapret DNS"
+  - name: "LEGO — GeoHide"
     names:
       - lego.com
+    addresses:
+      - 193.233.112.68
+  - name: "LEGO — GeoHide"
+    names:
       - www.lego.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.67
   - name: "Linear.app — AstraCat"
     names:
-      - www.linear.app
+      - linear.app
     addresses:
       - 217.60.179.6
-  - name: "Linear.app — Zapret DNS"
+  - name: "Linear.app — GeoHide"
+    names:
+      - constellation.linear.app
+      - s.linear.app
+      - www.linear.app
+    addresses:
+      - 193.233.112.67
+  - name: "Linear.app — GeoHide"
     names:
       - client-api.linear.app
-      - constellation.linear.app
-      - linear.app
-      - s.linear.app
       - uploads.linear.app
     addresses:
-      - 83.217.211.149
-  - name: "Makita — Zapret DNS"
+      - 193.233.112.68
+  - name: "Make — Zapret DNS"
     names:
-      - makita.ca
-      - makita.cl
+      - make.com
+      - www.make.com
+    addresses:
+      - 83.217.211.149
+  - name: "Makita — GeoHide"
+    names:
       - makita.com.au
-      - makita.com.kh
-      - makita.com.tw
       - makita.sk
       - makitalatinamerica.com
-      - www.makita.ca
       - www.makita.cl
-      - www.makita.com.au
+    addresses:
+      - 193.233.112.67
+  - name: "Makita — GeoHide"
+    names:
+      - makita.cl
+      - makita.com.kh
+      - makita.com.tw
+      - www.makita.co.nz
       - www.makita.com.tw
       - www.makita.sk
+    addresses:
+      - 193.233.112.68
+  - name: "Makita — GeoHide"
+    names:
+      - makita.ca
+      - makita.co.nz
+      - www.makita.ca
+      - www.makita.com.au
       - www.makitalatinamerica.com
     addresses:
-      - 83.217.211.149
-  - name: "MangaLib — Zapret DNS"
-    names:
-      - api.cdnlibs.org
-    addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Manus — Comss DNS"
     names:
       - files.manuscdn.com
     addresses:
-      - 143.204.238.94
+      - 13.33.235.95
   - name: "Manus — DNS-AI"
-    names:
-      - manus.im
-    addresses:
-      - 62.60.230.61
-  - name: "Manus — Zapret DNS"
     names:
       - api.manus.im
     addresses:
-      - 83.217.211.149
-  - name: "Microchip — Zapret DNS"
+      - 62.60.230.61
+  - name: "Manus — GeoHide"
+    names:
+      - manus.im
+    addresses:
+      - 193.233.112.88
+  - name: "Microchip — GeoHide"
     names:
       - microchip.com
     addresses:
-      - 83.217.211.149
-  - name: "Microsoft (Copilot, Designer, Xbox) — Comss DNS"
-    names:
-      - copilot.microsoft.com
-      - xsts.auth.xboxlive.com
-    addresses:
-      - 132.243.112.38
-  - name: "Microsoft (Copilot, Designer, Xbox) — Comss DNS"
-    names:
-      - xgpuwebf2p.gssv-play-prod.xboxlive.com
-    addresses:
-      - 51.12.31.0
-  - name: "Microsoft (Copilot, Designer, Xbox) — DNS-AI"
-    names:
-      - xboxdesignlab.xbox.com
-    addresses:
-      - 151.101.129.124
+      - 193.233.112.88
   - name: "Microsoft (Copilot, Designer, Xbox) — DNS-AI"
     names:
       - ecs.office.com
     addresses:
-      - 52.123.129.14
+      - 52.123.128.14
   - name: "Microsoft (Copilot, Designer, Xbox) — DNS-AI"
     names:
-      - rewards.bing.com
+      - xboxdesignlab.xbox.com
     addresses:
-      - 150.171.29.10
+      - 151.101.1.124
+  - name: "Microsoft (Copilot, Designer, Xbox) — GeoHide"
+    names:
+      - copilot.microsoft.com
+      - rewards.bing.com
+      - xgpuwebf2p.gssv-play-prod.xboxlive.com
+    addresses:
+      - 193.233.112.88
   - name: "Microsoft (Copilot, Designer, Xbox) — GeoHide"
     names:
       - designerapp.officeapps.live.com
@@ -1134,206 +1229,244 @@ services:
       - 23.210.168.176
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
     names:
+      - edgeservices.bing.com
+    addresses:
+      - 184.51.252.57
+  - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
+    names:
       - sydney.bing.com
     addresses:
-      - 150.171.28.10
+      - 150.171.27.10
   - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
+    names:
+      - xsts.auth.xboxlive.com
+    addresses:
+      - 87.228.47.196
+  - name: "Microsoft (Copilot, Designer, Xbox) — Zapret DNS"
     names:
       - xgpuweb.gssv-play-prod.xboxlive.com
     addresses:
-      - 87.228.47.196
-  - name: "Microsoft (Copilot, Designer, Xbox) — XBOX DNS"
-    names:
-      - edgeservices.bing.com
-    addresses:
-      - 184.51.252.54
-  - name: "Modivo — Zapret DNS"
+      - 83.217.211.149
+  - name: "Modivo — GeoHide"
     names:
       - img.modivo.cloud
+    addresses:
+      - 193.233.112.68
+  - name: "Modivo — GeoHide"
+    names:
       - modivo.pl
       - www.modivo.pl
     addresses:
-      - 83.217.211.149
-  - name: "MongoDB — AstraCat"
+      - 193.233.112.88
+  - name: "MongoDB — GeoHide"
     names:
       - mongodb.com
+      - www.mongodb.com
     addresses:
-      - 217.60.179.6
+      - 193.233.112.68
   - name: "MongoDB — Zapret DNS"
     names:
       - api.blue.mongodb.com
-      - www.mongodb.com
     addresses:
       - 83.217.211.149
-  - name: "Monica — Zapret DNS"
+  - name: "Monica — GeoHide"
     names:
       - monica.im
       - www.monica.im
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
+  - name: "Naukri — GeoHide"
+    names:
+      - aeronube.csm.naukri.com
+      - apis.naukri.com
+      - chatclient.naukri.com
+      - csm.naukri.com
+      - hiring.naukri.com
+      - maestrorecruiter.naukri.com
+      - posting.naukri.com
+      - referral.naukri.com
+      - staging.fn-hackathon-ui.nc.naukri.com
+      - streamgenai.naukri.com
+      - trust.naukri.com
+      - w5.naukri.com
+      - www.naukri.com
+    addresses:
+      - 193.233.112.67
+  - name: "Naukri — GeoHide"
+    names:
+      - apply.naukri.com
+      - autodiscover.csm.naukri.com
+      - ccs-service.naukri.com
+      - chatbot.naukri.com
+      - chatclient-mobile.naukri.com
+      - csmmail.naukri.com
+      - engineering.naukri.com
+      - enterprise.naukri.com
+      - files.naukri.com
+      - freesearch.naukri.com
+      - insights.naukri.com
+      - login.recruit.naukri.com
+      - logs.naukri.com
+      - media.naukri.com
+      - mobile.naukri.com
+      - naukri.com
+      - naukrirecruiter.naukri.com
+      - np.naukimg.com
+      - pg.naukri.com
+      - recruiterfaq.naukri.com
+      - recruiterzone.naukri.com
+      - resbilling.naukri.com
+      - rmsmail.naukri.com
+      - staging.contest.nc.naukri.com
+      - staging.onlinetest.nc.naukri.com
+      - static.staging.assessment.nc.naukri.com
+      - taxonomy-suggest.naukri.com
+      - webhooks.naukri.com
+      - wtg.csm.naukri.com
+    addresses:
+      - 193.233.112.88
   - name: "Naukri — GeoHide"
     names:
       - assessments.nc.naukri.com
     addresses:
       - 172.202.104.163
-  - name: "Naukri — Zapret DNS"
+  - name: "Naukri — GeoHide"
     names:
-      - apply.naukri.com
-      - assessment.nc.naukri.com
-      - blogs.naukri.com
-      - ccs-service.naukri.com
-      - chatbot.naukri.com
-      - chatclient-mobile.naukri.com
-      - chatclient.naukri.com
       - cm.naukri.com
       - communication.naukri.com
       - companies.naukri.com
       - corp.naukri.com
       - cps.naukri.com
-      - csm.naukri.com
-      - csmmail.naukri.com
       - e-learning.naukri.com
       - echo.naukri.com
-      - engineering.naukri.com
-      - enterprise.naukri.com
       - fflms.naukri.com
-      - files.naukri.com
-      - filevalidation.naukri.com
-      - freesearch.naukri.com
-      - hiring.naukri.com
-      - insights.naukri.com
       - jatracking.naukri.com
-      - jobsearch.naukri.com
-      - learning.naukri.com
-      - lg.naukri.com
       - login.naukri.com
-      - login.recruit.naukri.com
-      - logs.naukri.com
       - m.naukri.com
-      - m9.naukri.com
-      - maestrorecruiter.naukri.com
-      - mailersystem.naukri.com
-      - mailtracking.naukri.com
-      - media.naukri.com
-      - mobile.naukri.com
-      - my.naukri.com
-      - naukri.com
-      - naukrirecruiter.naukri.com
       - notifications.naukri.com
-      - np.naukimg.com
-      - pg.naukri.com
-      - posting.naukri.com
-      - productupdates.naukri.com
       - pt.naukri.com
       - pulse.naukri.com
-      - rdxfootmark.naukri.com
-      - recruit.naukri.com
-      - recruiterfaq.naukri.com
       - recruiters.naukri.com
       - recruitersurvey.naukri.com
-      - recruiterzone.naukri.com
-      - referral.naukri.com
-      - resbilling.naukri.com
-      - resdex.naukri.com
-      - resht.naukri.com
       - restservices.naukri.com
       - resume.naukri.com
       - rmsbulkupload.naukri.com
-      - rmsmail.naukri.com
-      - staging.assessment.nc.naukri.com
-      - staging.contest.nc.naukri.com
-      - staging.fn-hackathon-ui.nc.naukri.com
-      - staging.onlinetest.nc.naukri.com
-      - static.staging.assessment.nc.naukri.com
-      - streamgenai.naukri.com
       - suggest.naukri.com
       - suggestor.naukri.com
-      - taxonomy-suggest.naukri.com
-      - trust.naukri.com
       - w16.naukri.com
       - w4.naukri.com
-      - w5.naukri.com
-      - webhooks.naukri.com
+    addresses:
+      - 193.233.112.68
+  - name: "Naukri — Zapret DNS"
+    names:
+      - assessment.nc.naukri.com
+      - blogs.naukri.com
+      - filevalidation.naukri.com
+      - jobsearch.naukri.com
+      - learning.naukri.com
+      - lg.naukri.com
+      - m9.naukri.com
+      - mailersystem.naukri.com
+      - mailtracking.naukri.com
+      - my.naukri.com
+      - productupdates.naukri.com
+      - rdxfootmark.naukri.com
+      - recruit.naukri.com
+      - resdex.naukri.com
+      - resht.naukri.com
+      - rms.naukri.com
+      - staging.assessment.nc.naukri.com
       - whitehat.naukri.com
-      - www.naukri.com
     addresses:
       - 83.217.211.149
-  - name: "Notion — Comss DNS"
+  - name: "Notion — GeoHide"
     names:
       - calendar.notion.com
-      - calendar.notion.so
-    addresses:
-      - 132.243.112.221
-  - name: "Notion — Comss DNS"
-    names:
-      - notion.so
-    addresses:
-      - 157.22.178.170
-  - name: "Notion — Zapret DNS"
-    names:
-      - app.notion.com
       - notion.com
       - www.notion.com
+    addresses:
+      - 193.233.112.68
+  - name: "Notion — GeoHide"
+    names:
+      - app.notion.com
+      - notion.so
+    addresses:
+      - 193.233.112.67
+  - name: "Notion — GeoHide"
+    names:
+      - calendar.notion.so
       - www.notion.so
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Nvidia — AstraCat"
     names:
       - ngc.nvidia.com
     addresses:
-      - 13.33.235.57
+      - 13.33.235.85
+  - name: "Nvidia — AstraCat"
+    names:
+      - developer.nvidia.com
+    addresses:
+      - 217.60.179.6
   - name: "Nvidia — Zapret DNS"
     names:
       - build.nvidia.com
-      - developer.nvidia.com
     addresses:
       - 83.217.211.149
-  - name: "OpenCode — Zapret DNS"
+  - name: "OpenCode — GeoHide"
     names:
       - opencode.ai
       - www.opencode.ai
     addresses:
-      - 83.217.211.149
-  - name: "OpenRouter — Zapret DNS"
+      - 193.233.112.88
+  - name: "OpenRouter — GeoHide"
     names:
       - eu.openrouter.ai
       - openrouter.ai
       - us.openrouter.ai
+    addresses:
+      - 193.233.112.68
+  - name: "OpenRouter — GeoHide"
+    names:
       - www.openrouter.ai
     addresses:
-      - 83.217.211.149
-  - name: "Oracle — Zapret DNS"
+      - 193.233.112.88
+  - name: "Oracle — GeoHide"
     names:
       - oracle.com
     addresses:
-      - 83.217.211.149
-  - name: "Posthog — Zapret DNS"
+      - 193.233.112.67
+  - name: "Posthog — GeoHide"
     names:
       - eu.posthog.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Pump.fun — AstraCat"
     names:
-      - pump.fun
-      - swap-api.pump.fun
-    addresses:
-      - 217.60.179.6
-  - name: "Pump.fun — Zapret DNS"
-    names:
-      - frontend-api-v3.pump.fun
       - images.pump.fun
     addresses:
-      - 83.217.211.149
-  - name: "Qwant — AstraCat"
+      - 217.60.179.6
+  - name: "Pump.fun — GeoHide"
+    names:
+      - pump.fun
+    addresses:
+      - 193.233.112.68
+  - name: "Pump.fun — GeoHide"
+    names:
+      - frontend-api-v3.pump.fun
+      - swap-api.pump.fun
+    addresses:
+      - 193.233.112.67
+  - name: "Qwant — GeoHide"
     names:
       - qwant.com
     addresses:
-      - 217.60.179.6
-  - name: "Qwant — Zapret DNS"
+      - 193.233.112.68
+  - name: "Qwant — GeoHide"
     names:
       - www.qwant.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.88
   - name: "Reve — Comss DNS"
     names:
       - reve.com
@@ -1345,137 +1478,154 @@ services:
       - www.reve.art
     addresses:
       - 34.102.145.198
-  - name: "Reve — Zapret DNS"
+  - name: "Reve — GeoHide"
     names:
       - app.reve.com
       - preview.reve.art
+    addresses:
+      - 193.233.112.88
+  - name: "Reve — GeoHide"
+    names:
       - reve.art
     addresses:
-      - 83.217.211.149
-  - name: "Scribd — Zapret DNS"
+      - 193.233.112.67
+  - name: "Rutor — каталог Zapret"
+    names:
+      - d.rutor.info
+    addresses:
+      - 193.46.255.29
+  - name: "Scribd — GeoHide"
     names:
       - scribd.com
       - www.scribd.com
       - www.scribdassets.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
   - name: "SketchUp — Comss DNS"
     names:
       - sketchup.com
     addresses:
-      - 13.33.235.71
-  - name: "SketchUp — Comss DNS"
+      - 13.33.235.100
+  - name: "SketchUp — GeoHide"
     names:
       - sketchup.trimble.com
       - www.sketchup.com
     addresses:
-      - 15.197.167.90
+      - 193.233.112.88
   - name: "Spotify — AstraCat"
     names:
       - accounts.spotify.com
-      - www.spotify.com
-    addresses:
-      - 217.60.179.6
-  - name: "Spotify — Zapret DNS"
-    names:
       - aet.spotify.com
-      - api-partner.spotify.com
-      - api.spotify.com
-      - gew1-dealer.spotify.com
       - gew1-spclient.spotify.com
       - login5.spotify.com
       - open.spotify.com
       - spclient.wg.spotify.com
       - spotify.com
-    addresses:
-      - 83.217.211.149
-  - name: "Square — AstraCat"
-    names:
-      - api.squareup.com
+      - www.spotify.com
     addresses:
       - 217.60.179.6
-  - name: "Square — Zapret DNS"
+  - name: "Spotify — Zapret DNS"
+    names:
+      - api-partner.spotify.com
+      - api.spotify.com
+      - gew1-dealer.spotify.com
+    addresses:
+      - 83.217.211.149
+  - name: "Square — GeoHide"
     names:
       - api-global.squareup.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.68
+  - name: "Square — GeoHide"
+    names:
+      - api.squareup.com
+    addresses:
+      - 193.233.112.88
   - name: "Strava — AstraCat"
     names:
-      - c.strava.com
+      - cdn-1.strava.com
       - communityhub.strava.com
       - content-a.strava.com
-      - email1.strava.com
-      - graphql.strava.com
-      - links.strava.com
-      - metro.strava.com
-      - mi.strava.com
-      - stories.strava.com
-      - strava.com
-      - support.strava.com
-      - tiles.strava.com
-      - www.blog.strava.com
     addresses:
       - 217.60.179.6
-  - name: "Strava — Comss DNS"
-    names:
-      - blog.strava.com
-    addresses:
-      - 157.22.178.170
-  - name: "Strava — Zapret DNS"
+  - name: "Strava — GeoHide"
     names:
       - business.strava.com
-      - cdn-1.strava.com
-      - email.strava.com
-      - promo.strava.com
-      - shop.strava.com
-      - status.strava.com
       - store.strava.com
-      - www.promo.strava.com
+      - strava.com
+      - www.blog.strava.com
       - www.strava.com
+    addresses:
+      - 193.233.112.67
+  - name: "Strava — GeoHide"
+    names:
+      - blog.strava.com
+      - graphql.strava.com
+      - metro.strava.com
+      - shop.strava.com
+      - support.strava.com
+    addresses:
+      - 193.233.112.88
+  - name: "Strava — GeoHide"
+    names:
+      - promo.strava.com
+      - stories.strava.com
+      - tiles.strava.com
+    addresses:
+      - 193.233.112.68
+  - name: "Strava — Zapret DNS"
+    names:
+      - c.strava.com
+      - email.strava.com
+      - email1.strava.com
+      - links.strava.com
+      - mi.strava.com
+      - status.strava.com
+      - www.promo.strava.com
     addresses:
       - 83.217.211.149
   - name: "Supercell — каталог Zapret"
     names:
       - store.supercell.com
     addresses:
-      - 143.20.64.192
-  - name: "Tailscale — Zapret DNS"
+      - 217.60.179.6
+  - name: "Tailscale — GeoHide"
     names:
       - controlplane.tailscale.com
     addresses:
-      - 83.217.211.149
-  - name: "TeamViewer — Zapret DNS"
+      - 193.233.112.68
+  - name: "TeamViewer — GeoHide"
     names:
       - dl.teamviewer.com
+    addresses:
+      - 193.233.112.88
+  - name: "TeamViewer — GeoHide"
+    names:
       - download.teamviewer.com
     addresses:
-      - 83.217.211.149
+      - 193.233.112.67
   - name: "Trae.ai — AstraCat"
     names:
-      - api.trae.ai
+      - api-sg-central.trae.ai
+      - trae-api-sg.mchost.guru
     addresses:
       - 217.60.179.6
   - name: "Trae.ai — Comss DNS"
     names:
       - api16-normal-alisg.mchost.guru
     addresses:
-      - 2.20.255.138
-  - name: "Trae.ai — Comss DNS"
+      - 2.19.181.25
+  - name: "Trae.ai — GeoHide"
     names:
-      - api-sg-central.trae.ai
+      - api.trae.ai
     addresses:
-      - 2.19.181.91
-  - name: "Trae.ai — Comss DNS"
-    names:
-      - trae-api-sg.mchost.guru
-    addresses:
-      - 157.22.178.170
-  - name: "Tria.ge — Zapret DNS"
+      - 193.233.112.88
+  - name: "Tria.ge — GeoHide"
     names:
       - tria.ge
       - www.tria.ge
     addresses:
-      - 83.217.211.149
+      - 193.233.112.67
   - name: "Twitch — Zapret DNS"
     names:
       - gql.twitch.tv
@@ -1483,23 +1633,23 @@ services:
       - 83.217.211.149
   - name: "Weather Underground — Comss DNS"
     names:
-      - wunderground.com
-    addresses:
-      - 157.22.178.170
-  - name: "Weather Underground — Comss DNS"
-    names:
       - wxug.com
     addresses:
       - 18.158.212.228
+  - name: "Weather Underground — Zapret DNS"
+    names:
+      - wunderground.com
+    addresses:
+      - 83.217.211.149
   - name: "Weather.com — AstraCat"
     names:
       - upsx.weather.com
+      - www.weather.com
     addresses:
       - 217.60.179.6
   - name: "Weather.com — Zapret DNS"
     names:
       - weather.com
-      - www.weather.com
     addresses:
       - 83.217.211.149
   - name: "Web Archive — Zapret DNS"
@@ -1507,45 +1657,49 @@ services:
       - web.archive.org
     addresses:
       - 83.217.211.149
-  - name: "Windsurf — AstraCat"
+  - name: "Windsurf — Comss DNS"
     names:
-      - marketplace.windsurf.com
-      - server.codeium.com
-      - unleash.codeium.com
       - windsurf.com
     addresses:
-      - 217.60.179.6
-  - name: "Windsurf — Comss DNS"
+      - 76.76.21.21
+  - name: "Windsurf — GeoHide"
     names:
       - codeium.com
-    addresses:
-      - 157.22.178.170
-  - name: "Windsurf — Comss DNS"
-    names:
+      - marketplace.windsurf.com
       - windsurf-telemetry.codeium.com
-    addresses:
-      - 132.243.112.221
-  - name: "Windsurf — Zapret DNS"
-    names:
-      - inference.codeium.com
-      - web-backend.codeium.com
-      - windsurf-stable.codeium.com
       - www.codeium.com
     addresses:
+      - 193.233.112.67
+  - name: "Windsurf — GeoHide"
+    names:
+      - inference.codeium.com
+      - unleash.codeium.com
+      - windsurf-stable.codeium.com
+    addresses:
+      - 193.233.112.88
+  - name: "Windsurf — Zapret DNS"
+    names:
+      - server.codeium.com
+      - web-backend.codeium.com
+    addresses:
       - 83.217.211.149
-  - name: "Wix — Zapret DNS"
+  - name: "Wix — GeoHide"
     names:
       - users.wix.com
     addresses:
-      - 83.217.211.149
-  - name: "WorkOS — Zapret DNS"
+      - 193.233.112.68
+  - name: "WorkOS — GeoHide"
     names:
       - api.workos.com
     addresses:
-      - 83.217.211.149
-  - name: "Xerox — Zapret DNS"
+      - 193.233.112.67
+  - name: "Xerox — GeoHide"
     names:
       - www.xerox.com
+    addresses:
+      - 193.233.112.88
+  - name: "Xerox — Zapret DNS"
+    names:
       - xerox.com
     addresses:
       - 83.217.211.149
