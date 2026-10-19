@@ -175,20 +175,6 @@
 
                 <Button Style="{StaticResource Choice}" Margin="6,0,6,0" Click="OnShowProblems">
                     <StackPanel Orientation="Horizontal">
-                        <Border x:Name="BadBadge" Style="{StaticResource IconTile}" Width="40" Height="40"
-                                CornerRadius="20" VerticalAlignment="Center" Margin="0,0,14,0">
-                            <TextBlock x:Name="BadGlyph" Style="{StaticResource TileGlyph}" FontSize="17"
-                                       Text="&#xE783;" Foreground="{DynamicResource Muted}" />
-                        </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource Caption}" Text="Поломок" />
-                            <TextBlock x:Name="BadCount" Text="…" FontSize="22" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </StackPanel>
-                </Button>
-
-                <Button Style="{StaticResource Choice}" Margin="6,0,0,0" Click="OnShowProblems">
-                    <StackPanel Orientation="Horizontal">
                         <Border x:Name="WarnBadge" Style="{StaticResource IconTile}" Width="40" Height="40"
                                 CornerRadius="20" VerticalAlignment="Center" Margin="0,0,14,0">
                             <TextBlock x:Name="WarnGlyph" Style="{StaticResource TileGlyph}" FontSize="17"
@@ -197,6 +183,20 @@
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Style="{StaticResource Caption}" Text="Оговорок" />
                             <TextBlock x:Name="WarnCount" Text="…" FontSize="22" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </StackPanel>
+                </Button>
+
+                <Button Style="{StaticResource Choice}" Margin="6,0,0,0" Click="OnShowProblems">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="BadBadge" Style="{StaticResource IconTile}" Width="40" Height="40"
+                                CornerRadius="20" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock x:Name="BadGlyph" Style="{StaticResource TileGlyph}" FontSize="17"
+                                       Text="&#xE783;" Foreground="{DynamicResource Muted}" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Caption}" Text="Поломок" />
+                            <TextBlock x:Name="BadCount" Text="…" FontSize="22" FontWeight="SemiBold" />
                         </StackPanel>
                     </StackPanel>
                 </Button>
