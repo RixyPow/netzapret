@@ -303,6 +303,36 @@ public sealed class ClashApi : IDisposable
         }
     }
 
+    /// <summary>
+    /// Сколько движок провёз с запуска: отдано и получено, байтами;
+    /// <c>null</c> — не ответил.
+    /// </summary>
+    /// <remarks>
+    /// Итоги <c>/connections</c> — счётчик движка, а не сумма живых соединений:
+    /// закрытые в нём остаются. Ответ несёт и сами соединения (замер 19.10:
+    /// 18 соединений — 8,7 КБ), их здесь не разбираем.
+    /// </remarks>
+    public async Task<(long Up, long Down)?> TotalsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, $"{Root}/connections", null, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var body = JsonNode.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+            return body?["uploadTotal"]?.GetValue<long>() is { } up && body["downloadTotal"]?.GetValue<long>() is { } down
+                ? (up, down)
+                : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>На что сейчас указывает группа; <c>null</c> — не выяснилось.</summary>
     public async Task<string?> SelectedAsync(string group, CancellationToken cancellationToken)
     {
