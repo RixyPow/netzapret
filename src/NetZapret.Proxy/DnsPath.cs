@@ -175,7 +175,7 @@ public static class DnsPath
 
         return server["detour"] is { } detour
             ? (string?)detour == SingBoxOptions.DnsPathTag
-                ? $"{kind} к {target}, авто — через туннель, пока он пропускает трафик, иначе напрямую"
+                ? $"{kind} к {target}, авто — напрямую, а если резолвер напрямую не отвечает — через туннель"
                 : $"{kind} к {target} через туннель (выход «{(string?)detour}») — зависит от здоровья VPN-сервера"
             : $"{kind} к {target} напрямую, мимо туннеля";
     }
