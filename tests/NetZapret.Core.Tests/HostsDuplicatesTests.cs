@@ -45,7 +45,7 @@ public sealed class HostsDuplicatesTests : IDisposable
 
         // Строка с claude.ai — повтор целиком; downloads.claude.ai — впервые.
         Assert.Equal([5], report.Removable);
-        Assert.Equal(["zapretgui:hosts managed begin"], report.ForeignBlocks);
+        Assert.Equal(["Zapret GUI"], report.ForeignBlocks);
     }
 
     /// <summary>

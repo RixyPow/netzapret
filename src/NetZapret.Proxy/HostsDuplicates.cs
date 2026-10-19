@@ -147,41 +147,15 @@ public static class HostsDuplicates
     }
 
     /// <summary>
-    /// Строка → имя блока, в котором она стоит.
+    /// Строка → кто её ведёт: самый внутренний блок или раздел.
     /// </summary>
     /// <remarks>
-    /// Блоком считается всё между строками вида <c># &gt;&gt;&gt; … &gt;&gt;&gt;</c>
-    /// и <c># &lt;&lt;&lt; … &lt;&lt;&lt;</c>: так размечают свои записи и мы,
-    /// и ZapretGUI. Имя блока — текст открывающей строки без стрелок.
+    /// Тот же разбор, что у таблицы раздела (<see cref="HostsTable.SourcesOf"/>).
+    /// До 19.10 здесь был свой, плоский: закрывающая строка вложенного блока
+    /// Zapret GUI обнуляла блок, и остаток нашего считался строками вне блоков —
+    /// «Убрать повторы» могла удалить нашу же запись как чужую.
     /// </remarks>
-    private static Dictionary<int, string> BlocksOf(IReadOnlyList<string> lines)
-    {
-        var result = new Dictionary<int, string>();
-        string? current = null;
+    private static Dictionary<int, string> BlocksOf(IReadOnlyList<string> lines) => HostsTable.SourcesOf(lines);
 
-        for (int i = 0; i < lines.Count; i++)
-        {
-            var line = lines[i].Trim();
-
-            if (line.StartsWith("# >>>", StringComparison.Ordinal))
-            {
-                current = line.Trim('#', ' ', '>');
-                continue;
-            }
-
-            if (line.StartsWith("# <<<", StringComparison.Ordinal))
-            {
-                current = null;
-                continue;
-            }
-
-            if (current is not null)
-                result[i] = current;
-        }
-
-        return result;
-    }
-
-    private static bool IsOurs(string? block) =>
-        block is not null && ("# >>> " + block + " >>>").Equals(HostsEditor.BlockBegin, StringComparison.Ordinal);
+    private static bool IsOurs(string? block) => block == HostsTable.OurSource;
 }

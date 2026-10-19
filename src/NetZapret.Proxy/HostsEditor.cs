@@ -292,8 +292,8 @@ public static class HostsEditor
         // иначе в файле копятся следы от сервисов, которых давно нет.
         var (start, end) = FindBlock(content);
 
-        if (start >= 0 && !content.Skip(start + 1).Take(end - start - 1).Any(l => (Split(l) ?? SplitDisabled(l)) is not null))
-            content.RemoveRange(start, end - start + 1);
+        if (start >= 0 && !Own(content, start, end).Any(l => (Split(l) ?? SplitDisabled(l)) is not null))
+            DropBlock(content, start, end);
 
         Write(target, content);
         return (backup, removed);
@@ -521,7 +521,7 @@ public static class HostsEditor
             if (start < 0)
                 return result;
 
-            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            foreach (var line in Own(lines, start, end))
             {
                 if (Split(line) is { } pair && Marked(line))
                     result.Add(pair.Name);
@@ -604,7 +604,7 @@ public static class HostsEditor
 
         if (start >= 0)
         {
-            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            foreach (var line in Own(lines, start, end))
             {
                 if (Split(line) is not { } pair)
                     continue;
@@ -655,9 +655,12 @@ public static class HostsEditor
 
         // Уже прибитое нами сохраняется: закрепляют по одному сервису,
         // и переписывать блок целиком значило бы снимать все прежние.
+        var nested = new List<string>();
+        var at = -1;
+
         if (start >= 0)
         {
-            foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+            foreach (var line in Own(lines, start, end))
             {
                 if (SplitDisabled(line) is { } off)
                 {
@@ -678,6 +681,9 @@ public static class HostsEditor
                     marked.Add(pair.Name);
             }
 
+            // Чужой блок внутри нашего — не наш: см. Nested.
+            nested = Nested(lines, start, end);
+            at = start;
             lines.RemoveRange(start, end - start + 1);
         }
 
@@ -728,9 +734,22 @@ public static class HostsEditor
         block.Add(BlockEnd);
         block.Add(string.Empty);
 
-        // В начало, но после шапки из комментариев: она объясняет формат файла,
-        // и вытеснять её вниз незачем.
-        lines.InsertRange(HeaderLength(lines), block);
+        // Блок встаёт на прежнее место, а впервые — в начало, после шапки
+        // из комментариев: она объясняет формат файла, и вытеснять её вниз
+        // незачем. Вложенные чужие блоки — прямо перед нашим: их строки
+        // стояли выше наших записей и выше и остаются, так что разрешение
+        // имён от нашей перезаписи не меняется.
+        if (nested.Count > 0)
+            block.InsertRange(0, nested);
+
+        int place = at >= 0 ? at : HeaderLength(lines);
+
+        // Пустая строка после блока уже есть — вторую не добавляем, иначе
+        // каждая перезапись на прежнем месте копила бы их по одной.
+        if (place < lines.Count && lines[place].Trim().Length == 0)
+            block.RemoveAt(block.Count - 1);
+
+        lines.InsertRange(place, block);
 
         Write(target, lines);
 
@@ -764,10 +783,16 @@ public static class HostsEditor
         var left = 0;
         var pinned = 0;
 
+        var foreign = NestedLines(lines, start, end);
+
         // Выключенные строки блока тоже наши: снимаются по имени вместе
-        // с действующими и держат блок, пока они в нём есть.
+        // с действующими и держат блок, пока они в нём есть. Строки
+        // вложенного чужого блока не наши и не трогаются.
         for (int i = end - 1; i > start; i--)
         {
+            if (foreign.Contains(i))
+                continue;
+
             bool on = Split(lines[i]) is not null;
 
             if ((Split(lines[i]) ?? SplitDisabled(lines[i])) is not { } pair)
@@ -792,7 +817,7 @@ public static class HostsEditor
             (start, end) = FindBlock(lines);
 
             if (start >= 0)
-                lines.RemoveRange(start, end - start + 1);
+                DropBlock(lines, start, end);
         }
 
         Write(target, lines);
@@ -913,7 +938,7 @@ public static class HostsEditor
         if (start < 0)
             return result;
 
-        foreach (var line in lines.Skip(start + 1).Take(end - start - 1))
+        foreach (var line in Own(lines, start, end))
         {
             if (Split(line) is { } pair)
                 result[pair.Name] = pair.Address;
@@ -963,6 +988,82 @@ public static class HostsEditor
     }
 
     /// <summary>
+    /// Строки нашего блока без вложенных чужих блоков.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zapret GUI ставит свой блок «перед первой строкой-записью»
+    /// (<c>_insert_managed_hosts_block</c> в <c>src/hosts/hosts.py</c>,
+    /// прочитано 19.10). Наш блок стоит первым, первая запись файла — наша,
+    /// и всякий раз, как Zapret GUI применяет пины, его блок встаёт внутрь
+    /// нашего: так у владельца 19.10, строки 136–190 внутри 131–275.
+    /// Помешать этому мы не можем, значит, обязаны так жить.
+    /// </para>
+    /// <para>
+    /// До 19.10 всё между нашими отметками считалось нашим: 82 записи Zapret GUI
+    /// числились нашими пинами, а первое же закрепление стирало его разметку
+    /// и переписывало его записи в наш блок как свои.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> Own(IReadOnlyList<string> lines, int start, int end)
+    {
+        var nested = NestedLines(lines, start, end);
+
+        for (int i = start + 1; i < end; i++)
+        {
+            if (!nested.Contains(i))
+                yield return lines[i];
+        }
+    }
+
+    /// <summary>Номера строк вложенных чужих блоков — вместе с их отметками.</summary>
+    private static HashSet<int> NestedLines(IReadOnlyList<string> lines, int start, int end)
+    {
+        var result = new HashSet<int>();
+        int depth = 0;
+
+        for (int i = start + 1; i < end; i++)
+        {
+            var text = lines[i].Trim();
+
+            if (text.StartsWith("# >>>", StringComparison.Ordinal))
+                depth++;
+
+            if (depth > 0)
+                result.Add(i);
+
+            if (depth > 0 && text.StartsWith("# <<<", StringComparison.Ordinal))
+                depth--;
+        }
+
+        return result;
+    }
+
+    /// <summary>Вложенные чужие блоки дословно, в прежнем порядке.</summary>
+    private static List<string> Nested(IReadOnlyList<string> lines, int start, int end) =>
+        NestedLines(lines, start, end).Order().Select(i => lines[i]).ToList();
+
+    /// <summary>
+    /// Убирает наш блок, оставляя на его месте вложенные чужие.
+    /// </summary>
+    /// <remarks>
+    /// Опустевший наш блок уходит, но блок Zapret GUI внутри него — не наш,
+    /// и стереть его значило бы снять чужие пины молча.
+    /// </remarks>
+    private static void DropBlock(List<string> lines, int start, int end)
+    {
+        var nested = Nested(lines, start, end);
+
+        lines.RemoveRange(start, end - start + 1);
+        lines.InsertRange(start, nested);
+    }
+
+    /// <summary>Открывает ли строка чужой блок или раздел (<c># &gt;&gt;&gt;</c>, <c># --- … ---</c>).</summary>
+    private static bool OpensForeign(string text) =>
+        text.StartsWith("# >>>", StringComparison.Ordinal)
+        || (text.StartsWith("# ---", StringComparison.Ordinal) && text.EndsWith("---", StringComparison.Ordinal));
+
+    /// <summary>
     /// Сколько строк занимает шапка файла.
     /// </summary>
     /// <remarks>
@@ -981,6 +1082,11 @@ public static class HostsEditor
             if (text.Length != 0 && !text.StartsWith('#'))
                 break;
 
+            // Чужой блок или раздел — уже не шапка: встав после его
+            // открывающей строки, наш блок оказался бы внутри чужого.
+            if (OpensForeign(text))
+                break;
+
             i++;
         }
 
@@ -992,11 +1098,13 @@ public static class HostsEditor
     {
         var watch = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
         var (start, end) = FindBlock(lines);
+        var nested = start >= 0 ? NestedLines(lines, start, end) : [];
         var found = new List<string>();
 
         for (int i = 0; i < lines.Count; i++)
         {
-            if (start >= 0 && i >= start && i <= end)
+            // Вложенный чужой блок — чужие строки, хоть и внутри нашего.
+            if (start >= 0 && i >= start && i <= end && !nested.Contains(i))
                 continue;
 
             if (Split(lines[i]) is { } pair && watch.Contains(pair.Name))
