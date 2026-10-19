@@ -764,7 +764,7 @@ winget install Microsoft.DotNet.SDK.8
 [shtorm-7/sing-box-extended](https://github.com/shtorm-7/sing-box-extended/releases)
 и распаковать в `tools\` целиком, вместе с `wintun.dll` — без неё не поднимется
 TUN. Нужна именно extended: обычный sing-box не знает xhttp, выхода MASQUE
-для WARP и маскировки AmneziaWG. Проверялось на 1.14.1-extended-2.7.2.
+для WARP и маскировки AmneziaWG. В поставке — 1.14.3-extended-2.7.3 (с 20.10; до того 1.14.1-extended-2.7.2).
 
 **3. Zapret 2** — для десинка. Ставится отдельно, в `C:\Zapret` или
 `C:\Zapret\Dev`; `build.cmd` берёт из установки только то, что читает движок:
