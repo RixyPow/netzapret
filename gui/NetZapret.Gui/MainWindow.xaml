@@ -54,11 +54,16 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Width="42" Height="42" CornerRadius="11" Background="{DynamicResource Text}"
-                            VerticalAlignment="Center" Margin="0,0,12,0">
-                        <TextBlock Text="NZ" FontSize="17" FontWeight="Bold" FontFamily="{DynamicResource DisplayFont}"
-                                   Foreground="{DynamicResource Backdrop}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <!--
+                        Буквы — фигурой по их собственным границам (MainWindow.Logo),
+                        а не строкой текста: у строки сверху и снизу запас шрифта
+                        под надстрочные и подстрочные, и «NZ» стояло ниже середины
+                        плитки (владелец 19.10: «логотип какой-то кривой»).
+                    -->
+                    <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Text}"
+                            VerticalAlignment="Center" Margin="0,0,13,0" Padding="9,12">
+                        <Path x:Name="LogoLetters" Stretch="Uniform" Fill="{DynamicResource Backdrop}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">

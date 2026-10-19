@@ -15,6 +15,36 @@ namespace NetZapret.Gui;
 
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// «NZ» фигурой — для плитки в меню.
+    /// </summary>
+    /// <remarks>
+    /// Фигура вписывается в плитку по границам самих букв (Stretch у Path),
+    /// и середина у неё настоящая. Строка текста центрировалась по своей высоте
+    /// с запасом шрифта под надстрочные и подстрочные — буквы стояли ниже
+    /// середины (владелец 19.10: «логотип какой-то кривой»). Segoe UI Black —
+    /// есть в каждой Windows, а не шрифт темы, который бывает и тонким.
+    /// </remarks>
+    internal static readonly System.Windows.Media.Geometry Logo = BuildLogo();
+
+    private static System.Windows.Media.Geometry BuildLogo()
+    {
+        var text = new System.Windows.Media.FormattedText(
+            "NZ",
+            System.Globalization.CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight,
+            new System.Windows.Media.Typeface(
+                new System.Windows.Media.FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Black, FontStretches.Normal),
+            100,
+            System.Windows.Media.Brushes.Black,
+            1.0);
+
+        var geometry = text.BuildGeometry(new Point(0, 0));
+        geometry.Freeze();
+
+        return geometry;
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -29,6 +59,7 @@ public partial class MainWindow : Window
         Closed += (_, _) => BackdropVideo.Detach(BackdropLayer);
 
         VersionLabel.Text = "версия " + Version();
+        LogoLetters.Data = Logo;
         ShowOnboardingIfNeeded();
         Loaded += (_, _) => ShowGreetingIfDue();
 
