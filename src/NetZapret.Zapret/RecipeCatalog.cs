@@ -244,7 +244,8 @@ public static class RecipeCatalog
             What = "Перед настоящим приветствием кладёт чужое, с именем 4pda.to, "
                 + "на место, которое сервер выбросит, а фильтр прочтёт.",
             Steps = ["multisplit:pos=1:seqovl=568:seqovl_pattern=tls_4pda"],
-            Note = "Рецепт Flowseal для его списка general и сетей Hetzner. "
+            Note = "Рецепт Flowseal: в его general.bat им идут list-general и ipset-all, "
+                + "где лежат и сети Hetzner. "
                 + "Против заморозки сайтов на иностранном хостинге, когда "
                 + "пускают только «белые» имена: 19.10 на адресе 7tv (Hetzner) "
                 + "с именем 4pda.to ответ пришёл целиком, со своим — замёрз.",
