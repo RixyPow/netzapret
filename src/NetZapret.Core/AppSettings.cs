@@ -172,7 +172,9 @@ public sealed record AppSettings
     /// <para>
     /// Смена касается только новых установок. Настройки переживают обновление
     /// намеренно — в них работа человека, — поэтому у тех, кто уже запускался,
-    /// останется прежний выбор, и меняется он в меню.
+    /// останется прежний выбор, и меняется он в меню. Исключения — разовые
+    /// переводы по слову владельца: всех на V11 Lite (<see cref="PresetOnce"/>,
+    /// 03.10) и с V11 Lite на V12 Lite (<see cref="LiteToV12Once"/>, 19.10).
     /// </para>
     /// </remarks>
     public string? PresetName { get; init; } = DefaultPresetName;
@@ -788,6 +790,38 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// Переведён ли V11 Lite на Universal V12 Lite разовым переводом (19.10); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? PresetV12Lite { get; init; }
+
+    /// <summary>
+    /// Разовый перевод с Universal V11 Lite на V12 Lite (владелец, 19.10).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец: «переводи разово всех с V11 Lite на V12 Lite — как перевод
+    /// 03.10, остальные пресеты не трогай». V12 Lite — тот же V11 Lite
+    /// и секция «Hetzner TCP» (замер — у <see cref="PresetName"/>), а на
+    /// V11 Lite стоит почти всякий: он был умолчанием и целью перевода 03.10.
+    /// </para>
+    /// <para>
+    /// В отличие от 03.10 переводится только V11 Lite: выбравший другой пресет
+    /// выбрал его сам. Один раз: вернувшийся после перевода на V11 Lite
+    /// на нём и остаётся.
+    /// </para>
+    /// </remarks>
+    private static AppSettings LiteToV12Once(AppSettings read) =>
+        read.PresetV12Lite == true
+            ? read
+            : read with
+            {
+                PresetName = string.Equals(read.PresetName, "Universal V11 Lite", StringComparison.OrdinalIgnoreCase)
+                    ? "Universal V12 Lite"
+                    : read.PresetName,
+                PresetV12Lite = true,
+            };
+
+    /// <summary>
     /// Сняты ли правила по программе разовым переводом (04.10, <see cref="Rules.ProgramRulesOff"/>); <c>null</c> — ещё нет.
     /// </summary>
     public bool? ProgramRulesRemoved { get; init; }
@@ -814,7 +848,7 @@ public sealed record AppSettings
     /// и следующее чтение перевело бы их ещё раз: включённый человеком game
     /// filter молча выключился бы.
     /// </remarks>
-    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true };
+    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true, PresetV12Lite = true };
 
     /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
     [JsonIgnore]
@@ -875,11 +909,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            })));
+            }))));
         }
         catch (Exception)
         {
