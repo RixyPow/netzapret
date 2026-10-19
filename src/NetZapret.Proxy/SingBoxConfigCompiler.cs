@@ -471,6 +471,7 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = new JsonObject { ["level"] = options.LogLevel },
+            ["certificate"] = Certificates(),
             ["dns"] = BuildDns(options, CollectProxyDomains(ruleSet, tags.Count > 0), tags.Count > 0, ruleSet),
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options, PoolsInUse(ruleSet, options)),
@@ -528,6 +529,28 @@ public sealed class SingBoxConfigCompiler
             ServerTags = tags,
         };
     }
+
+    /// <summary>
+    /// Чем движок проверяет сертификаты: встроенным списком корней Mozilla,
+    /// а не хранилищем Windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// sing-box падал сам с 0xc0000005 в <c>crypto/x509</c> (<c>systemVerify</c>) —
+    /// <c>root_windows.go</c>, <c>CertFreeCertificateChain</c>: 11.10, 12.10
+    /// и ещё четыре раза в журнале владельца к 19.10; надзор поднимал его
+    /// за 2–10 с, и туннель на это время пропадал. Своим списком Go проверяет цепочку сам и к
+    /// Windows не обращается вовсе — тот путь, где падало, не вызывается.
+    /// </para>
+    /// <para>
+    /// Цена: корни, поставленные в Windows руками, движок больше не знает.
+    /// Это корпоративный перехват и проверка HTTPS антивирусом, если она
+    /// перехватывает и сам sing-box, — тогда его DoH и серверы с настоящим
+    /// TLS не пройдут проверку. Серверы REALITY и с <c>insecure</c> сертификат
+    /// так не проверяют и не заденутся. Вживую не проверено (19.10).
+    /// </para>
+    /// </remarks>
+    private static JsonObject Certificates() => new() { ["store"] = "mozilla" };
 
     /// <summary>
     /// Собирает минимальный конфиг для проверки одного сервера.
@@ -591,6 +614,10 @@ public sealed class SingBoxConfigCompiler
         var root = new JsonObject
         {
             ["log"] = log,
+
+            // Тем же, что у движка: замер сервера обязан проверять его
+            // сертификат так же, как потом будет проверять туннель.
+            ["certificate"] = Certificates(),
             ["inbounds"] = new JsonArray { probe },
             ["outbounds"] = server.IsEndpoint
                 ? new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } }

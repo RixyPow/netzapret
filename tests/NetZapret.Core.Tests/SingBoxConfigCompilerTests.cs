@@ -72,6 +72,20 @@ public class SingBoxConfigCompilerTests
         Assert.Contains("fdfe:dcba:9876::1/126", tun.GetProperty("address").EnumerateArray().Select(a => a.GetString()));
     }
 
+    /// <summary>
+    /// Сертификаты — списком Mozilla (19.10): проверка через Windows роняла
+    /// движок с 0xc0000005 в root_windows.go.
+    /// </summary>
+    [Fact]
+    public void EngineAndProbeVerifyCertificatesWithoutWindows()
+    {
+        var engine = CompileProxyOnly(ProxyOnlyRules);
+        var probe = JsonDocument.Parse(new SingBoxConfigCompiler().CompileProbeConfig(Server(), 24080, null)).RootElement;
+
+        Assert.Equal("mozilla", engine.GetProperty("certificate").GetProperty("store").GetString());
+        Assert.Equal("mozilla", probe.GetProperty("certificate").GetProperty("store").GetString());
+    }
+
     [Theory]
     [InlineData("172.19.0.1/30", "172.19.0.2")]
     [InlineData("10.0.0.255/24", "10.0.1.0")]
