@@ -73,6 +73,55 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!--
+            Половинки одной плашки «Остановить ▾» (владелец 19.10: «склей две
+            кнопки»). Подложка у плашки, у половинок — только подсветка при
+            наведении и нажатии, со своим скруглением с внешней стороны:
+            Border детей не обрезает, и квадратная подсветка вылезла бы за угол.
+        -->
+        <Style x:Key="SplitPart" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource OnAccent}" />
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <ControlTemplate x:Key="SplitShape" TargetType="Button">
+            <Border x:Name="Shape" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding Tag}">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Shape" Property="Background" Value="#22FFFFFF" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Shape" Property="Background" Value="#22000000" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45" />
+                    <Setter Property="Cursor" Value="Arrow" />
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <Style x:Key="SplitLeft" TargetType="Button" BasedOn="{StaticResource SplitPart}">
+            <Setter Property="Tag">
+                <Setter.Value>
+                    <CornerRadius>12,0,0,12</CornerRadius>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template" Value="{StaticResource SplitShape}" />
+        </Style>
+
+        <Style x:Key="SplitRight" TargetType="Button" BasedOn="{StaticResource SplitPart}">
+            <Setter Property="Tag">
+                <Setter.Value>
+                    <CornerRadius>0,12,12,0</CornerRadius>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Template" Value="{StaticResource SplitShape}" />
+        </Style>
     </UserControl.Resources>
 
     <!--
@@ -287,9 +336,53 @@
                     знак и свечение красятся вместе, в ShowDot, и разойтись
                     им нечем.
                 -->
-                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,18,0,0" Padding="22,16,22,14">
-                    <StackPanel>
-                        <Grid>
+                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0">
+                    <Grid>
+                        <!--
+                            Волна на фоне карточки (владелец 19.10: «статичную зелёную
+                            полоску можно переделать в красивую анимированную кривую
+                            на заднем фоне»). Цвет — состояния, как у кольца (ShowWave);
+                            движется, только пока движки работают и анимации включены,
+                            и только пока раздел на экране (StartWave). Края гаснут
+                            маской: углы карточки скруглены, а слой — прямоугольник.
+                        -->
+                        <Canvas x:Name="WaveLayer" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWaveSize">
+                            <Canvas.OpacityMask>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                    <GradientStop Offset="0" Color="#00000000" />
+                                    <GradientStop Offset="0.2" Color="#FF000000" />
+                                    <GradientStop Offset="0.85" Color="#FF000000" />
+                                    <GradientStop Offset="1" Color="#00000000" />
+                                </LinearGradientBrush>
+                            </Canvas.OpacityMask>
+
+                            <Path x:Name="WaveFill">
+                                <Path.CacheMode>
+                                    <BitmapCache EnableClearType="False" />
+                                </Path.CacheMode>
+                                <Path.RenderTransform>
+                                    <TranslateTransform x:Name="WaveFillShift" />
+                                </Path.RenderTransform>
+                            </Path>
+                            <Path x:Name="WaveEcho" StrokeThickness="1.2">
+                                <Path.CacheMode>
+                                    <BitmapCache EnableClearType="False" />
+                                </Path.CacheMode>
+                                <Path.RenderTransform>
+                                    <TranslateTransform x:Name="WaveEchoShift" />
+                                </Path.RenderTransform>
+                            </Path>
+                            <Path x:Name="WaveLine" StrokeThickness="2">
+                                <Path.CacheMode>
+                                    <BitmapCache EnableClearType="False" />
+                                </Path.CacheMode>
+                                <Path.RenderTransform>
+                                    <TranslateTransform x:Name="WaveLineShift" />
+                                </Path.RenderTransform>
+                            </Path>
+                        </Canvas>
+
+                        <Grid Margin="22,18,22,18">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -316,108 +409,94 @@
                             </StackPanel>
 
                             <!--
-                                Одна кнопка на месте: «Запустить» или «Остановить».
-                                Обе залиты цветом кнопки (макет), а не «Остановить»
-                                красной рамкой: это главное действие карточки,
-                                а не опасное — остановленный обход поднимается
-                                той же кнопкой через секунду.
+                                Кнопка и счётчики — постоянной ширины (владелец 19.10):
+                                счётчики растут с трафиком, и без неё блок дышал бы
+                                от «390.4 КБ» к «1.2 ГБ».
                             -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="16,0,0,0">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button x:Name="StartButton" Style="{StaticResource Primary}" Padding="34,14"
-                                        MinWidth="210" Click="OnStart" Visibility="Collapsed">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                        <TextBlock Text="Запустить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="StopButton" Style="{StaticResource Primary}" Padding="34,14"
-                                        MinWidth="210" Click="OnStop" Visibility="Collapsed">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                        <TextBlock Text="Остановить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
-                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    </StackPanel>
-                                </Button>
+                            <StackPanel Grid.Column="2" Width="300" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <!--
+                                    Одна плашка с чертой (владелец 19.10: «склей две кнопки»):
+                                    слева «Запустить» или «Остановить» — главное действие
+                                    карточки, справа ▾ — перезапуск и оба выхода, как в трее.
+                                    Залита цветом кнопки, а не «Остановить» красной рамкой:
+                                    остановленный обход поднимается той же кнопкой через секунду.
+                                -->
+                                <Border Height="50" CornerRadius="12" Background="{DynamicResource AccentFill}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="50" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button x:Name="StartButton" Style="{StaticResource SplitLeft}" Click="OnStart" Visibility="Collapsed">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                                <TextBlock Text="Запустить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button x:Name="StopButton" Style="{StaticResource SplitLeft}" Click="OnStop" Visibility="Collapsed">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                                <TextBlock Text="Остановить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                            </StackPanel>
+                                        </Button>
+
+                                        <Rectangle Grid.Column="1" Width="1" Margin="0,12" Fill="{DynamicResource OnAccent}" Opacity="0.35" />
+
+                                        <Button Grid.Column="2" x:Name="EngineMenuButton" Style="{StaticResource SplitRight}"
+                                                Click="OnEngineMenu" ToolTip="Перезапуск и выход">
+                                            <Path Style="{StaticResource Chevron}" Margin="0,1,0,0"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
+                                                <Path.RenderTransform>
+                                                    <RotateTransform Angle="90" />
+                                                </Path.RenderTransform>
+                                            </Path>
+                                        </Button>
+                                    </Grid>
+                                </Border>
 
                                 <!--
-                                    Вторая половина кнопки (макет 19.10): перезапуск
-                                    и оба выхода, как в трее. Перезапуск нужен после
-                                    любой правки маршрутов, а прежде был только
-                                    во всплывающем предложении.
+                                    Счётчики под кнопкой — всегда, а не только при работе
+                                    (владелец 19.10): при остановленных движках — прочерки.
+                                    Отдано и получено — движком туннеля с его запуска;
+                                    процессор — в долях одного ядра: winws2 однопоточный
+                                    (EngineLoad). Колонки равные: числа растут, а блок нет.
                                 -->
-                                <Button x:Name="EngineMenuButton" Style="{StaticResource Primary}" Padding="14,14"
-                                        MinWidth="0" Margin="3,0,0,0" Click="OnEngineMenu" ToolTip="Перезапуск и выход">
-                                    <Path Style="{StaticResource Chevron}" Margin="0,1,0,0"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}">
-                                        <Path.RenderTransform>
-                                            <RotateTransform Angle="90" />
-                                        </Path.RenderTransform>
-                                    </Path>
-                                </Button>
-                            </StackPanel>
+                                <Grid x:Name="Meters" Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                            <!--
-                                Счётчики под кнопкой (макет 19.10): что провёз движок
-                                туннеля с запуска и что берут наши движки. Процессор —
-                                в долях одного ядра: winws2 однопоточный (EngineLoad).
-                            -->
-                            <StackPanel x:Name="Meters" Orientation="Horizontal" HorizontalAlignment="Right"
-                                        Margin="0,10,2,0" Visibility="Collapsed">
-                                <StackPanel x:Name="TrafficMeter" Orientation="Horizontal" VerticalAlignment="Bottom"
-                                            Margin="0,0,18,0" Background="Transparent"
-                                            ToolTip="Трафик через движок туннеля с его запуска. В «Гибриде» это то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
-                                    <TextBlock Text="↑" Foreground="{DynamicResource Accent}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="UpValue" Text="—" FontSize="12.5" Margin="5,0,14,0" VerticalAlignment="Center" />
-                                    <TextBlock Text="↓" Foreground="{DynamicResource Accent}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="DownValue" Text="—" FontSize="12.5" Margin="5,0,0,0" VerticalAlignment="Center" />
-                                </StackPanel>
-
-                                <StackPanel x:Name="LoadMeter" Orientation="Horizontal" Background="Transparent">
-                                    <StackPanel Margin="0,0,14,0">
+                                    <StackPanel x:Name="UpMeter" Grid.Column="0" Background="Transparent"
+                                                ToolTip="Отдано через движок туннеля с его запуска. В «Гибриде» — то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
+                                        <TextBlock Text="↑ Отдано" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="UpValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="DownMeter" Grid.Column="1" Background="Transparent"
+                                                ToolTip="Получено через движок туннеля с его запуска. В «Гибриде» — то, что пришло из туннеля; в «Туннеле» — всё, включая «напрямую».">
+                                        <TextBlock Text="↓ Получено" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="DownValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
+                                    </StackPanel>
+                                    <StackPanel x:Name="CpuMeter" Grid.Column="2" Background="Transparent">
                                         <TextBlock Text="ЦП" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
                                         <TextBlock x:Name="CpuValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
                                     </StackPanel>
-                                    <StackPanel>
+                                    <StackPanel x:Name="RamMeter" Grid.Column="3" Background="Transparent">
                                         <TextBlock Text="Память" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
                                         <TextBlock x:Name="RamValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
                                     </StackPanel>
-                                </StackPanel>
-                            </StackPanel>
+                                </Grid>
                             </StackPanel>
                         </Grid>
-
-                        <!--
-                            Полоса состояния — внизу карточки, во всю её ширину.
-                            Внутри, но под строкой с кнопкой и постоянной высоты:
-                            прежде появлявшаяся внутри полоса раздвигала карточку,
-                            и та прыгала при каждом запуске.
-
-                            Цвет несёт то же, что и точка, — серый «стоит», жёлтый
-                            «поднимается», зелёный «работает», красный «беда».
-                            Бегущая засечка только при подъёме, и она неопределённая
-                            намеренно: сколько он займёт, заранее не известно.
-                        -->
-                        <Border x:Name="StateBar" Height="4" CornerRadius="2" Margin="0,14,0,0"
-                                Background="{DynamicResource Border}" ClipToBounds="True"
-                                HorizontalAlignment="Stretch">
-                            <Grid>
-                                <Rectangle x:Name="StateBarFill" RadiusX="2" RadiusY="2"
-                                           Fill="{DynamicResource Faint}" />
-
-                                <Rectangle x:Name="StartProgressMark" Width="140" RadiusX="2" RadiusY="2"
-                                           HorizontalAlignment="Left" Visibility="Collapsed"
-                                           Fill="{DynamicResource WarnFill}">
-                                    <Rectangle.RenderTransform>
-                                        <TranslateTransform x:Name="StartProgressShift" />
-                                    </Rectangle.RenderTransform>
-                                </Rectangle>
-                            </Grid>
-                        </Border>
-                    </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- Пресет и параметры подключения — рядом, как в макете. -->

@@ -364,6 +364,7 @@ public partial class StatusView : UserControl
             // Анимация на скрытом виде продолжала бы будить композитор
             // впустую. Само состояние запуска при этом сохраняется.
             StopAnimations();
+            MoveWave(false);
         };
     }
 
@@ -606,9 +607,15 @@ public partial class StatusView : UserControl
         _ = ReadExitAsync(settings, tunnel);
 
         if (running)
+        {
             _ = ReadMetersAsync(state, tunnel);
+        }
         else
-            Meters.Visibility = Visibility.Collapsed;
+        {
+            // Счётчики видны всегда (владелец 19.10) — у остановленных движков прочерками.
+            UpValue.Text = DownValue.Text = CpuValue.Text = RamValue.Text = "—";
+            CpuMeter.ToolTip = RamMeter.ToolTip = "Движки не запущены.";
+        }
     }
 
     /// <summary>Выход, который держит движок; <c>null</c> — не знаем или туннеля нет.</summary>
@@ -672,7 +679,7 @@ public partial class StatusView : UserControl
         if (!running)
         {
             ShowDot("Faint");
-            ShowStateBar("Faint");
+            ShowWave("Faint");
 
             StateLine.Text = "Остановлено";
 
@@ -703,7 +710,7 @@ public partial class StatusView : UserControl
         var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
 
         ShowDot(colour);
-        ShowStateBar(colour);
+        ShowWave(colour);
 
         StateLine.Text = healthy
             ? "Работает"
@@ -751,7 +758,7 @@ public partial class StatusView : UserControl
         StopButton.IsEnabled = true;
 
         ShowDot("Warn");
-        ShowStateBar("Warn");
+        ShowWave("Warn");
 
         StateLine.Text = "Запускается…";
 
@@ -839,30 +846,12 @@ public partial class StatusView : UserControl
 
     private void StartAnimations()
     {
-        // Анимации выключены — запуск видно цветом полосы, без бега и мигания.
+        // Анимации выключены — запуск видно цветом кольца и волны, без мигания.
         if (!Motion.Enabled)
         {
-            ShowStateBar("Warn");
+            ShowWave("Warn");
             return;
         }
-
-        // Дорожка тусклая, засечка яркая. Прежде оба красились в Warn,
-        // и бегущая метка была невидима: она ехала по полосе своего же цвета.
-        ShowStateBar("Border");
-        StartProgressMark.Visibility = Visibility.Visible;
-
-        // Ширину берём измеренную: полоса на экране уже есть, потому что
-        // кнопку только что нажали. Запасное значение — на случай, если
-        // раскладка почему-то ещё не прошла: метка уехала бы мимо полосы.
-        var span = StateBar.ActualWidth > 0 ? StateBar.ActualWidth : 520;
-
-        StartProgressShift.BeginAnimation(TranslateTransform.XProperty, new DoubleAnimation
-        {
-            From = -StartProgressMark.Width,
-            To = span,
-            Duration = new Duration(TimeSpan.FromSeconds(1.3)),
-            RepeatBehavior = RepeatBehavior.Forever,
-        });
 
         RingBox.BeginAnimation(OpacityProperty, new DoubleAnimation
         {
@@ -876,30 +865,145 @@ public partial class StatusView : UserControl
 
     private void StopAnimations()
     {
-        StartProgressMark.Visibility = Visibility.Collapsed;
-
         // Снятие анимации передачей null обязательно: остановленная анимация
-        // продолжает удерживать своё последнее значение, и точка осталась бы
-        // навсегда полупрозрачной, а «работает» выглядело бы приглушённым.
-        StartProgressShift.BeginAnimation(TranslateTransform.XProperty, null);
+        // продолжает удерживать своё последнее значение, и кольцо осталось бы
+        // навсегда полупрозрачным, а «работает» выглядело бы приглушённым.
         RingBox.BeginAnimation(OpacityProperty, null);
         RingBox.Opacity = 1;
     }
 
+    // --- Волна на фоне карточки состояния (владелец 19.10) ---------------------
+
+    /// <summary>Цвет, которым волна нарисована сейчас; при повторе на тике ничего не делаем.</summary>
+    private string? _waveColour;
+
+    /// <summary>Идёт ли сейчас движение волны.</summary>
+    private bool _waveMoving;
+
+    private void OnWaveSize(object sender, SizeChangedEventArgs e)
+    {
+        BuildWave();
+
+        // Сдвиг на цикл равен ширине: новая ширина — новый цикл.
+        if (_waveMoving)
+        {
+            MoveWave(false);
+            MoveWave(true);
+        }
+    }
+
+    private void BuildWave()
+    {
+        double w = WaveLayer.ActualWidth, h = WaveLayer.ActualHeight;
+
+        if (w <= 0 || h <= 0)
+            return;
+
+        WaveFill.Data = WaveShape.Curve(w, h, 0.68, 0.13, 0.04, 0, closed: true);
+        WaveLine.Data = WaveShape.Curve(w, h, 0.68, 0.13, 0.04, 0, closed: false);
+        WaveEcho.Data = WaveShape.Curve(w, h, 0.76, 0.07, 0.05, 1.9, closed: false);
+    }
+
     /// <summary>
-    /// Красит полосу состояния в тот же цвет, что и точка.
+    /// Красит волну цветом состояния и пускает её, пока движки работают.
     /// </summary>
     /// <remarks>
-    /// Один источник цвета на оба показа: разойдясь, они дали бы зелёную
-    /// точку над красной полосой — и человеку пришлось бы решать, какой
-    /// из них верить.
+    /// Тот же цвет, что у кольца: серая «стоит», жёлтая «поднимается», зелёная
+    /// «работает», красная «беда» — прежде это несла полоса под строкой.
+    /// Стоит на месте, пока движки стоят: движение без работы читалось бы
+    /// как работа.
     /// </remarks>
+    private void ShowWave(string colourKey)
+    {
+        if (colourKey != _waveColour)
+        {
+            _waveColour = colourKey;
+
+            // Точки и полосы берут насыщенный жёлтый: текстовый на светлой теме
+            // у тонкой линии выглядит выцветшей серостью, а не предупреждением.
+            var brush = FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush;
+            var colour = brush?.Color ?? Colors.Gray;
+            bool idle = colourKey == "Faint";
+
+            WaveLine.Stroke = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.25 : 0.6)));
+            WaveEcho.Stroke = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.12 : 0.28)));
+            WaveFill.Fill = Frozen(new LinearGradientBrush(
+                WaveShape.Fade(colour, idle ? 0.06 : 0.16), WaveShape.Fade(colour, 0), new Point(0, 0), new Point(0, 1)));
+        }
+
+        MoveWave(colourKey != "Faint" && IsLoaded && Motion.Enabled);
+    }
+
+    private static Brush Frozen(Brush brush)
+    {
+        brush.Freeze();
+        return brush;
+    }
+
     /// <summary>
-    /// Красит точку состояния, её свечение и точку в строке внизу — одним цветом.
+    /// Пускает или останавливает волну.
     /// </summary>
     /// <remarks>
-    /// Серая «стоит» — без свечения: светящаяся серая точка выглядит
-    /// включённой лампочкой, а обход в это время не идёт.
+    /// Двигается слой целиком сдвигом, а не перерисовкой кривой: кривая
+    /// длиной в две ширины, и сдвиг на ширину возвращает её в начало, так что
+    /// круг бесшовный. Кривые закешированы картинкой (BitmapCache в разметке),
+    /// и кадр — только перенос готового, 30 раз в секунду (WaveFrameRate).
+    /// Останавливается при уходе с «Главной» (Unloaded): анимация на скрытом
+    /// виде будила бы композитор впустую — так уже было с «Замером скорости».
+    /// </remarks>
+    private void MoveWave(bool on)
+    {
+        if (on == _waveMoving)
+            return;
+
+        double w = WaveLayer.ActualWidth;
+
+        if (on && w <= 0)
+            return;
+
+        _waveMoving = on;
+
+        Shift(WaveLineShift, on, w, 16);
+        Shift(WaveFillShift, on, w, 16);
+        Shift(WaveEchoShift, on, w, 27);
+
+        static void Shift(TranslateTransform shift, bool on, double w, double seconds)
+        {
+            if (!on)
+            {
+                shift.BeginAnimation(TranslateTransform.XProperty, null);
+                return;
+            }
+
+            var move = new DoubleAnimation(0, -w, new Duration(TimeSpan.FromSeconds(seconds)))
+            {
+                RepeatBehavior = RepeatBehavior.Forever,
+            };
+
+            Timeline.SetDesiredFrameRate(move, WaveFrameRate);
+            shift.BeginAnimation(TranslateTransform.XProperty, move);
+        }
+    }
+
+    /// <summary>
+    /// Кадров в секунду у волны: она медленная (цикл 16 с), и 60 ей незачем.
+    /// </summary>
+    /// <remarks>
+    /// Замер 19.10, тест окна на настройках владельца, четыре пары по 5 с
+    /// попеременно: процесс с волной — 688 мс процессора в среднем, без неё —
+    /// 528, то есть около 3 % одного ядра (разброс пар от −125 до +469 мс).
+    /// При 60 кадрах прибавка в шуме не отличалась — замер тот грубее.
+    /// </remarks>
+    private const int WaveFrameRate = 30;
+
+    /// <summary>
+    /// Красит кольцо состояния, его знак и свечение и точку в строке внизу — одним цветом.
+    /// </summary>
+    /// <remarks>
+    /// Серое «стоит» — без свечения: светящееся серое кольцо выглядит
+    /// включённой лампочкой, а обход в это время не идёт. Волна берёт тот же
+    /// ключ цвета (ShowWave): разойдясь, они дали бы зелёное кольцо над
+    /// красной волной — и человеку пришлось бы решать, чему верить.
     /// </remarks>
     private void ShowDot(string colourKey)
     {
@@ -956,19 +1060,17 @@ public partial class StatusView : UserControl
                 return (used, moved);
             });
 
-            Meters.Visibility = engines.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
-            TrafficMeter.Visibility = totals is null ? Visibility.Collapsed : Visibility.Visible;
-
-            if (totals is { } moved)
-            {
-                UpValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Up);
-                DownValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Down);
-            }
+            // Туннеля нет («Десинк») или движок не ответил — прочерк, а не пропавшая колонка:
+            // блок постоянной ширины (владелец 19.10), и колонки в нём не прыгают.
+            UpValue.Text = totals is { } moved ? NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Up) : "—";
+            DownValue.Text = totals is { } back ? NetZapret.Subscriptions.SubscriptionUsage.Size(back.Down) : "—";
 
             CpuValue.Text = EngineLoad.Cores(engines);
-            RamValue.Text = NetZapret.Subscriptions.SubscriptionUsage.Size(engines.Sum(e => e.Memory));
-            LoadMeter.ToolTip = EngineLoad.Explain(engines, NetZapret.Subscriptions.SubscriptionUsage.Size);
+            RamValue.Text = engines.Count > 0 ? NetZapret.Subscriptions.SubscriptionUsage.Size(engines.Sum(e => e.Memory)) : "—";
+
+            var explained = EngineLoad.Explain(engines, NetZapret.Subscriptions.SubscriptionUsage.Size);
+            CpuMeter.ToolTip = explained;
+            RamMeter.ToolTip = explained;
         }
         catch (Exception)
         {
@@ -1199,13 +1301,6 @@ public partial class StatusView : UserControl
             ShowProblem("Не удалось записать выбор: " + ex.GetBaseException().Message);
         }
     }
-
-    private void ShowStateBar(string colourKey) =>
-        StateBarFill.Fill = (Brush)FindResource(
-            // Точки и полосы берут насыщенный жёлтый: текстовый на светлой
-            // теме выглядит у мелкой метки не предупреждением, а выцветшей
-            // серостью — у неё нет площади, чтобы донести приглушённый оттенок.
-            colourKey == "Warn" ? "WarnFill" : colourKey);
 
     /// <summary>
     /// Движки, которые поднимутся при нынешней настройке.
