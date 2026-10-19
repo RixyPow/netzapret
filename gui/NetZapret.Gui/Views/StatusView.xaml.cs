@@ -284,6 +284,9 @@ public partial class StatusView : UserControl
 
         if (window.Changed)
         {
+            // И режим: «Игнорировать исключения» живёт в этом окне и меняет
+            // пояснение «Гибрида» и «Туннеля», а ShowModes зовётся не по времени.
+            ShowModes(AppSettings.Load(AppSettings.DefaultPath));
             Update();
             this.Offer("Настройки туннеля изменены");
         }
@@ -1128,26 +1131,42 @@ public partial class StatusView : UserControl
             return;
 
         _engines = rows;
+        ShowEngines(rows);
+    }
 
+    private void ShowEngines(IReadOnlyList<EngineRow> rows)
+    {
         // Движки — в карточке «Режим» (04.10), оба при любом режиме (владелец:
         // «пусть эти движки будут и в десинке, и в туннеле»): не нужный режиму
         // скажет «выключен», как в трее, а высота карточки от режима не зависит.
-        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid);
+        ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid, _desyncIdle);
         ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
     }
+
+    /// <summary>
+    /// Десинк включён, а не поднимается: всё забрал туннель.
+    /// </summary>
+    /// <remarks>
+    /// Так при «Игнорировать исключения» (<see cref="EngineChoice.DesyncRuns"/>).
+    /// 19.10 в чате у XesSarix «Гибрид» был выбран, а десинк стоял «выключен»,
+    /// и он спросил почему: причина была только красной строкой под карточкой.
+    /// </remarks>
+    private string? _desyncIdle;
 
     /// <summary>Строка состояния движка в его карточке.</summary>
     /// <remarks>
     /// Нет строки — движок в этот запуск не поднимали: выключен или нет
     /// подписки. «Остановлен» здесь соврало бы, что он был.
     /// </remarks>
-    private void ShowEngine(EngineRow? row, System.Windows.Shapes.Ellipse dot, TextBlock state, TextBlock pid)
+    /// <param name="idle">Почему не поднимали включённый; <c>null</c> — выключен.</param>
+    private void ShowEngine(EngineRow? row, System.Windows.Shapes.Ellipse dot, TextBlock state, TextBlock pid, string? idle = null)
     {
         if (row is null)
         {
             dot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Faint");
-            state.Text = "выключен";
-            pid.Text = string.Empty;
+            state.Text = idle is null ? "выключен" : "не нужен";
+            pid.Text = idle is null ? string.Empty : "всё через VPN";
+            pid.ToolTip = idle;
             return;
         }
 
@@ -1267,13 +1286,25 @@ public partial class StatusView : UserControl
 
         // Пояснение — выбранного режима. «Без исключений» — настройка внутри
         // «Туннеля»: включённая, она меняет смысл режима, и молчать о ней нельзя.
+        // У «Гибрида» она отменяет само пояснение: маршруты не решают ничего,
+        // всё уходит в VPN, а десинк не поднимается (EngineChoice.DesyncRuns).
         ModeText.Text = mode is not { } chosen
             ? "Режим не выбран — движки не поднимутся."
-            : WorkModes.Explain(chosen)
-                + (chosen == WorkMode.Tunnel && engines.IgnoreExclusions
-                    ? " Сейчас без исключений: в VPN идёт и «напрямую»."
-                    : string.Empty);
+            : chosen == WorkMode.Route && engines.IgnoreExclusions
+                ? "Сейчас без исключений: всё идёт через VPN, маршруты и десинк не действуют."
+                : WorkModes.Explain(chosen)
+                    + (chosen == WorkMode.Tunnel && engines.IgnoreExclusions
+                        ? " Сейчас без исключений: в VPN идёт и «напрямую»."
+                        : string.Empty);
         ModeText.ToolTip = ModeText.Text;
+
+        _desyncIdle = engines.Desync && !engines.DesyncRuns
+            ? "Включено «Игнорировать исключения» в настройках туннеля: всё идёт через VPN, "
+                + "и десинку чинить нечего. Выключите его — заработают маршруты и десинк."
+            : null;
+
+        if (_engines is { } shown)
+            ShowEngines(shown);
 
         // «Ничего не поднято» режимом не считается — ни один сегмент не выбран.
         ModeDesync.IsChecked = mode == WorkMode.Desync;
