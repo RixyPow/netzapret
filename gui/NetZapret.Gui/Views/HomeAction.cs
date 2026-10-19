@@ -20,6 +20,30 @@ public sealed class HomeAction : Grid
     /// <summary>Чем это поможет — одной строкой.</summary>
     public string Note { get; set; } = string.Empty;
 
+    private TextBlock? _title;
+    private TextBlock? _note;
+
+    /// <summary>
+    /// Сжатый вид: заголовок в две строки, без подписи.
+    /// </summary>
+    /// <remarks>
+    /// Для узкого окна: плитки остаются в одном ряду. По две в ряд вторая строка
+    /// стоила 58 точек, и «Главная» в окне 1067×712 (не развёрнутом, у владельца
+    /// 19.10) уходила под прокрутку.
+    /// </remarks>
+    public bool Compact
+    {
+        set
+        {
+            if (_title is null || _note is null)
+                return;
+
+            _title.TextWrapping = value ? TextWrapping.Wrap : TextWrapping.NoWrap;
+            _title.MaxHeight = value ? 36 : double.PositiveInfinity;
+            _note.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
     protected override void OnInitialized(EventArgs e)
     {
         base.OnInitialized(e);
@@ -52,7 +76,7 @@ public sealed class HomeAction : Grid
         glyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
         tile.Child = glyph;
 
-        var title = new TextBlock
+        var title = _title = new TextBlock
         {
             Text = Title,
             FontSize = 13,
@@ -60,7 +84,7 @@ public sealed class HomeAction : Grid
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
-        var note = new TextBlock
+        var note = _note = new TextBlock
         {
             Text = Note,
             FontSize = 11,

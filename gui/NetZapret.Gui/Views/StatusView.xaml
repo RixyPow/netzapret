@@ -170,7 +170,7 @@
             <Rectangle x:Name="ArtShade" />
         </Grid>
 
-        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,16,32,10">
+        <ScrollViewer Grid.Column="0" Style="{StaticResource PageScroll}" Padding="32,12,32,10">
             <!--
                 Сетка, а не стопка (владелец 04.10: «на весь экран это очень
                 странно выглядит»). Не ниже окна: нижняя строка состояния
@@ -336,7 +336,7 @@
                     знак и свечение красятся вместе, в ShowDot, и разойтись
                     им нечем.
                 -->
-                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0">
+                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
                     <Grid>
                         <!--
                             Волна на фоне карточки (владелец 19.10: «статичную зелёную
@@ -382,7 +382,13 @@
                             </Path>
                         </Canvas>
 
-                        <Grid Margin="22,18,22,18">
+                        <!--
+                            Поля 11, а не 18: высоту карточки задаёт правая колонка, и отступ
+                            счётчиков от кнопки (14 вместо 10) с их подложкой (+10) взяты
+                            из полей — владелец 19.10: «отодвинь чуток, но не меняй высоту
+                            плитки». Карточка осталась 128 точек.
+                        -->
+                        <Grid Margin="22,11,22,11">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -466,8 +472,12 @@
                                     Отдано и получено — движком туннеля с его запуска;
                                     процессор — в долях одного ядра: winws2 однопоточный
                                     (EngineLoad). Колонки равные: числа растут, а блок нет.
+                                    На подложке (владелец 19.10): поверх волны подписи
+                                    без неё терялись.
                                 -->
-                                <Grid x:Name="Meters" Margin="0,10,0,0">
+                                <Border Margin="0,14,0,0" Padding="0,4" CornerRadius="10" BorderThickness="1"
+                                        Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
+                                <Grid x:Name="Meters">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
@@ -494,13 +504,14 @@
                                         <TextBlock x:Name="RamValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
                                     </StackPanel>
                                 </Grid>
+                                </Border>
                             </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>
 
                 <!-- Пресет и параметры подключения — рядом, как в макете. -->
-                <Grid Grid.Row="6" Margin="0,10,0,0">
+                <Grid Grid.Row="6" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -641,7 +652,7 @@
                     смене режима. Здесь сегменты наверху, а под ними одна строка —
                     пояснение выбранного режима и его движки, всегда одной высоты.
                 -->
-                <Border Grid.Row="10" Style="{StaticResource Card}" Margin="0,10,0,0" Padding="14,12,14,12">
+                <Border Grid.Row="10" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="14,12,14,12">
                     <StackPanel>
                         <!-- Подпись — как «Текущий пресет» у соседних карточек и с тем же отступом слева. -->
                         <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,8" />
@@ -736,7 +747,7 @@
                            Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
                 <!-- Автозапуск и обновление — рядом, как в макете. -->
-                <Grid Grid.Row="13" Margin="0,10,0,0">
+                <Grid Grid.Row="13" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="14" />
@@ -774,10 +785,11 @@
                                 <!--
                                     Слова о задаче — только когда с ней не всё
                                     ясно: проверяется, не читается, устарела.
-                                    «Заведена» и так говорит выключатель.
+                                    «Заведена» и так говорит выключатель. Встают
+                                    на место строки выше (AutostartNote).
                                 -->
                                 <TextBlock x:Name="AutostartValue" Style="{StaticResource Caption}"
-                                           Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                                           Margin="0,5,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
                             </StackPanel>
 
                             <!--
@@ -801,11 +813,7 @@
                     каждая — пополам. Равные четверти от UniformGrid середину
                     сдвигали, и край кнопки не сходился с краем карточки (04.10).
                 -->
-                <Grid Grid.Row="15" x:Name="Actions" Margin="0,10,0,0" SizeChanged="OnActionsSize">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+                <Grid Grid.Row="15" x:Name="Actions" Margin="0,8,0,0" SizeChanged="OnActionsSize">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="8" />
@@ -844,7 +852,7 @@
                     обновления подписок программа не хранит. Время файла конфига —
                     то, что известно наверняка, им и названо.
                 -->
-                <Grid Grid.Row="17" Margin="4,10,0,0">
+                <Grid Grid.Row="17" x:Name="Footer" Margin="4,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />

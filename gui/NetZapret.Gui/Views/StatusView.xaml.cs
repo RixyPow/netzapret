@@ -239,30 +239,33 @@ public partial class StatusView : UserControl
     }
 
     /// <summary>
-    /// Плитки быстрых действий — в ряд, а на узком окне по две, по тем же половинам,
-    /// что карточки выше.
+    /// Плитки быстрых действий — всегда в ряд; на узком окне без подписи,
+    /// с заголовком в две строки. Там же прячется строка внизу.
     /// </summary>
     /// <remarks>
     /// С подписью и значком (макет 19.10) плитке нужно около 205 точек: на окне
     /// в 1000 точек в ряд выходило «Проверить бл…» и «Открыть журн…» (снимок
-    /// из теста). Решается по ширине самой сетки, а не окна: её сужает и масштаб.
+    /// из теста). До 19.10 плитки на узком окне вставали по две, и «Главная»
+    /// в не развёрнутом окне владельца (около 1067×712) уходила под прокрутку:
+    /// снимок из теста — страница 755 точек при видимых 649. Строка внизу
+    /// повторяет состояние, режим и пресет, видные выше, — на узком окне
+    /// она не нужнее, чем место под ней. Решается по ширине самой сетки,
+    /// а не окна: её сужает и масштаб.
     /// </remarks>
     private void OnActionsSize(object sender, SizeChangedEventArgs e)
     {
-        bool two = e.NewSize.Width < NarrowActions;
+        bool narrow = e.NewSize.Width < NarrowActions;
 
-        Button[] tiles = [ActionCheck, ActionLog, ActionDoctor, ActionConfig];
-
-        for (int i = 0; i < tiles.Length; i++)
+        foreach (var tile in new[] { ActionCheck, ActionLog, ActionDoctor, ActionConfig })
         {
-            Grid.SetRow(tiles[i], two ? i / 2 : 0);
-            Grid.SetColumn(tiles[i], two ? (i % 2) * 4 : i * 2);
-            Grid.SetColumnSpan(tiles[i], two ? 3 : 1);
-            tiles[i].Margin = new Thickness(0, two && i >= 2 ? 8 : 0, 0, 0);
+            if (tile.Content is HomeAction action)
+                action.Compact = narrow;
         }
+
+        Footer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    /// <summary>Уже этой ширины сетки плитки встают по две.</summary>
+    /// <summary>Уже этой ширины сетки плитки теряют подпись.</summary>
     private const double NarrowActions = 850;
 
     private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
@@ -1634,8 +1637,7 @@ public partial class StatusView : UserControl
         }
         else
         {
-            AutostartValue.Text = "Задача планировщика: проверяю…";
-            AutostartValue.Visibility = Visibility.Visible;
+            AutostartNote("Задача планировщика: проверяю…");
             AutostartSwitch.IsEnabled = false;
         }
 
@@ -1652,25 +1654,39 @@ public partial class StatusView : UserControl
         }
         catch (Exception ex)
         {
-            AutostartValue.Text = "Задача планировщика не читается.";
-            AutostartValue.Visibility = Visibility.Visible;
+            AutostartNote("Задача планировщика не читается.");
             AutostartSwitch.IsEnabled = false;
             ShowProblem("Планировщик не отвечает: " + ex.GetBaseException().Message);
         }
+    }
+
+    /// <summary>
+    /// Слова о задаче — на месте строки «При входе поднимется…», а не под ней.
+    /// </summary>
+    /// <remarks>
+    /// Пока задача проверяется, не читается или устарела, обещание режима
+    /// неверно или не проверено: устаревшая поднимает прежнюю консоль, а не
+    /// режим. А две строки по две в узком окне растягивали ряд автозапуска,
+    /// и «Главная» уходила под прокрутку (снимок из теста 19.10, окно 1067×712).
+    /// </remarks>
+    private void AutostartNote(string? text)
+    {
+        AutostartValue.Text = text ?? string.Empty;
+        AutostartValue.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+        AutostartRaises.Visibility = text is null ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ApplyAutostart((bool Installed, bool Stale) state)
     {
         bool installed = state.Installed;
 
-        AutostartValue.Visibility = Visibility.Collapsed;
+        AutostartNote(null);
         AutostartSwitch.IsChecked = installed;
         AutostartSwitch.IsEnabled = true;
 
         if (state.Stale)
         {
-            AutostartValue.Text = "Задача устарела — выключите и включите снова.";
-            AutostartValue.Visibility = Visibility.Visible;
+            AutostartNote("Задача устарела — выключите и включите снова.");
 
             ShowProblem(
                 "Задача автозапуска осталась от прежней версии и запускает не то, "
