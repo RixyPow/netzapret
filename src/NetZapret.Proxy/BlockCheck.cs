@@ -1606,6 +1606,13 @@ public static class BlockCheck
         using var live = client;
         using var ssl = new SslStream(live.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
 
+        // Дальше разговор идёт с одним адресом — тем, что принял соединение,
+        // и отказ называется им. Прежде называлось первое из всех адресов
+        // имени: 19.10 у ai.google.dev, grok.com и notion.so отчёт писал
+        // «нет ответа за 4 с, 157.22.177.90:443», а тот не принял и TCP —
+        // молчало рукопожатие на 132.243.112.221.
+        IReadOnlyList<IPAddress> talked = answered is null ? real : [answered];
+
         var handshake = Stopwatch.StartNew();
 
         try
@@ -1632,7 +1639,7 @@ public static class BlockCheck
             {
                 Answered = answered,
                 Tcp = tcp,
-                Tls = Refusal(ex, handshake.Elapsed, real),
+                Tls = Refusal(ex, handshake.Elapsed, talked),
                 Data = Failed(null),
                 Spoof = DnsSpoof.Judge(host, real, certificate: null),
             };
@@ -1655,7 +1662,7 @@ public static class BlockCheck
             Tls = new ProbeOutcome { Ok = true, Elapsed = handshake.Elapsed },
             Version = Name(ssl.SslProtocol),
             Spoof = DnsSpoof.Judge(host, real, shown),
-            Data = await ReadBodyAsync(ssl, host, real, cancellationToken),
+            Data = await ReadBodyAsync(ssl, host, talked, cancellationToken),
         };
     }
 
