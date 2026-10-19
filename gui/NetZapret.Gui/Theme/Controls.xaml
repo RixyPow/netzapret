@@ -496,9 +496,12 @@
     </Style>
 
     <!--
-        Пункт бокового меню. Выбранный помечается полосой слева, а не заливкой:
-        заливка на тёмном спорит с карточками справа и читается как ещё одна
-        поверхность, а не как выбор.
+        Пункт бокового меню. Выбранный — полоса слева и заливка цветом темы
+        со скруглением (владелец 19.10: «сделай заливку с скруглёнными углами
+        для выбранной вкладки»). Прежде заливкой был Surface, и на снимке
+        владельца её не было видно вовсе: он почти совпадает с фоном меню.
+        Цвет темы под прозрачностью виден и на однотонном фоне, и на картинке,
+        и цветом не спорит с карточками справа — у них Surface.
     -->
     <Style x:Key="RailItem" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand" />
@@ -511,6 +514,8 @@
                                 Width="3" HorizontalAlignment="Left"
                                 Margin="0,6" CornerRadius="2"
                                 Background="Transparent" />
+                        <Border x:Name="Fill" Background="{DynamicResource Accent}" CornerRadius="10"
+                                Margin="8,0,10,0" Opacity="0" />
                         <Border x:Name="Shape" Background="Transparent" CornerRadius="10" Margin="8,0,10,0">
                             <StackPanel Orientation="Horizontal" Margin="14,10">
                                 <!--
@@ -551,7 +556,8 @@
                             <Setter TargetName="Label" Property="Foreground" Value="{DynamicResource Text}" />
                             <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource Accent}" />
                             <Setter TargetName="Label" Property="FontWeight" Value="SemiBold" />
-                            <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
+                            <Setter TargetName="Shape" Property="Background" Value="Transparent" />
+                            <Setter TargetName="Fill" Property="Opacity" Value="0.16" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
