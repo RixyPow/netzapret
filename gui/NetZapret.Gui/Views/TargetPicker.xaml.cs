@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
 
 namespace NetZapret.Gui.Views;
@@ -62,7 +63,12 @@ public partial class TargetPicker : Window
 
     private void OnAccept(object sender, RoutedEventArgs e)
     {
-        var own = Own.Text.Trim();
+        // Имя, а не строка как есть: 19.10 владелец вставил ссылку
+        // «https://www.star-history.com/», проба искала адрес у неё целиком
+        // и получила «нет адреса у имени» — а итог при этом «всё открыто».
+        // Разбор тот же, что у поля «Маршрутов»; не похожее на имя (адрес)
+        // уходит как было.
+        var own = DomainInput.Normalize(Own.Text) ?? Own.Text.Trim();
 
         Chosen = Services.SelectedItem is string service
             ? new CheckTarget(service, null)

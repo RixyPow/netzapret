@@ -259,6 +259,14 @@ public sealed record ProbeOutcome
     public int? Received { get; init; }
 
     /// <summary>
+    /// Куда сайт переадресовал — другое имя той же зоны; <c>null</c> — никуда.
+    /// </summary>
+    /// <remarks>
+    /// Браузер туда и идёт, и открывается или нет уже там (<see cref="BlockCheck.SameSiteRedirect"/>).
+    /// </remarks>
+    public string? Moved { get; init; }
+
+    /// <summary>
     /// Адреса имени, которые молчали, пока другой ответил; у прочих стадий пусто.
     /// </summary>
     public IReadOnlyList<string> Silent { get; init; } = [];
@@ -788,11 +796,13 @@ public static class BlockCheck
     public static BlockKind FakeIpSource(IReadOnlyList<NetZapret.Core.Diagnostics.OtherTunnel> foreignTunnels) =>
         foreignTunnels.Count > 0 ? BlockKind.ForeignFakeIp : BlockKind.RouterFakeIp;
 
+    /// <param name="followed">Это уже имя из переадресации — дальше не идти.</param>
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
         CancellationToken cancellationToken,
-        bool throughTunnel)
+        bool throughTunnel,
+        bool followed = false)
     {
         IPAddress[] addresses;
 
@@ -1021,6 +1031,24 @@ public static class BlockCheck
                     ExpectedTunnel = throughTunnel,
                 };
             }
+        }
+
+        // Переадресация на другое имя той же зоны — ещё не ответ сайта.
+        // 19.10 star-history.com отвечал 301 на www за 167 Б и звался
+        // «доступен», а www.star-history.com замерзал на 3 261 Б, 4 из 4, —
+        // владелец открыл его только через VPN. Браузер идёт по Location,
+        // туда же идёт и проба: один шаг, вердикт — того имени, строка — этого.
+        if (!followed && kind == BlockKind.None && data.Moved is { } next)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var there = await ProbeAsync(next, service, cancellationToken, throughTunnel, followed: true);
+
+            return there with
+            {
+                Host = host,
+                Data = there.Data with { Detail = $"переадресует на {next}: {there.Data.Detail ?? there.Data.Describe()}" },
+            };
         }
 
         return new TargetReport
@@ -1857,6 +1885,7 @@ public static class BlockCheck
             bool challenged = false;
             bool regionRefusal = false;
             bool chunked = false;
+            string? moved = null;
 
             // Последние байты потока — узнать конец ответа кусками (LastChunk).
             var tail = Array.Empty<byte>();
@@ -1923,6 +1952,9 @@ public static class BlockCheck
 
                     chunked = HeaderValue(buffer, read, "Transfer-Encoding")?
                         .Contains("chunked", StringComparison.OrdinalIgnoreCase) == true;
+
+                    if (status is >= 300 and < 400 && !regionRefusal)
+                        moved = SameSiteRedirect(host, HeaderValue(buffer, read, "Location"));
                 }
 
                 total += read;
@@ -1984,6 +2016,7 @@ public static class BlockCheck
                         ? "Cloudflare проверяет на робота — связь исправна, браузер проверку пройдёт"
                         : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
                 Received = total,
+                Moved = moved,
             };
         }
         catch (Exception ex)
@@ -2079,6 +2112,34 @@ public static class BlockCheck
     /// </remarks>
     internal static bool IsBotChallenge(byte[] buffer, int length) =>
         string.Equals(HeaderValue(buffer, length, "cf-mitigated"), "challenge", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Имя, на которое переадресует ответ, если это другое имя той же зоны.
+    /// </summary>
+    /// <remarks>
+    /// Только https и только своя зона, как в окне выбора рецепта: апекс
+    /// на www и обратно — самое частое, а уход на чужую зону — уже другой
+    /// сайт со своим вердиктом. Тот же хост с другим путём — не переход:
+    /// соединение, фильтр и адрес у него те же.
+    /// </remarks>
+    public static string? SameSiteRedirect(string host, string? location)
+    {
+        if (!Uri.TryCreate(location?.Trim(), UriKind.Absolute, out var target)
+            || target.Scheme != Uri.UriSchemeHttps
+            || !target.IsDefaultPort
+            || target.Host.Equals(host, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var a = target.Host.TrimEnd('.');
+        var b = host.TrimEnd('.');
+
+        return a.EndsWith("." + b, StringComparison.OrdinalIgnoreCase)
+            || b.EndsWith("." + a, StringComparison.OrdinalIgnoreCase)
+            ? a.ToLowerInvariant()
+            : null;
+    }
 
     internal static string? HeaderValue(byte[] buffer, int length, string name)
     {
