@@ -5,8 +5,13 @@
 
 Пресеты и их формат — из [Zapret GUI](https://wiki.zapret.moe/), автор —
 loop-uh, лицензия MIT. Часть лежит здесь без изменений, часть изменена,
-Universal V8–V11 и V11 Lite собраны уже в этом проекте из тех же секций. Разбор —
+Universal V8–V12, V11 Lite и V12 Lite собраны уже в этом проекте из тех же секций. Разбор —
 в [docs/THIRD-PARTY.md](../docs/THIRD-PARTY.md).
+
+Universal V12 и V12 Lite (с 19.10) — V11 и V11 Lite с секцией «Hetzner TCP»
+над IP fallback: сетям Hetzner — наложение приветствия 4pda.to, рецепт
+Flowseal (у него — для list-general и ipset-all). Секция и список
+`ipset-hetzner.txt` — из пресета Zapret GUI «general 1.10.3».
 
 Старше V8 «Universal» здесь нет: 08.10 по слову владельца убраны V5, V5
 (game filter), V5 my, V6, V6 voicefix, V7 и V8 diag. Обновление новые файлы
