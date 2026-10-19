@@ -239,6 +239,18 @@ public static class RecipeCatalog
         },
         new CatalogRecipe
         {
+            Id = "seqovl-4pda",
+            Title = "Наложение приветствием 4pda",
+            What = "Перед настоящим приветствием кладёт чужое, с именем 4pda.to, "
+                + "на место, которое сервер выбросит, а фильтр прочтёт.",
+            Steps = ["multisplit:pos=1:seqovl=568:seqovl_pattern=tls_4pda"],
+            Note = "Рецепт Flowseal для его списка general и сетей Hetzner. "
+                + "Против заморозки сайтов на иностранном хостинге, когда "
+                + "пускают только «белые» имена: 19.10 на адресе 7tv (Hetzner) "
+                + "с именем 4pda.to ответ пришёл целиком, со своим — замёрз.",
+        },
+        new CatalogRecipe
+        {
             Id = "syndata",
             Title = "Данные в первом пакете",
             What = "Кладёт поддельное приветствие прямо в пакет установки "
