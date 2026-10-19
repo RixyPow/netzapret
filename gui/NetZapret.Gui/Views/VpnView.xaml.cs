@@ -1247,6 +1247,18 @@ public partial class VpnView : UserControl
 
         for (int i = 0; i < items.Count; i++)
         {
+            // Элемент окна (плашки пулов и подписок, подпись) в списке может
+            // стоять лишь в одном месте: два места — одно дитя у двух
+            // родителей, и список падает (19.10: свернул папку пула — плашка
+            // подписок встала выше, ещё не уйдя снизу). Сперва вынимаем его
+            // со старого места — оно всегда дальше: всё до i уже совпало.
+            if (items[i] is UIElement element
+                && (i >= _items.Count || !ReferenceEquals(_items[i], element))
+                && _items.IndexOf(element) is var old and >= 0)
+            {
+                _items.RemoveAt(old);
+            }
+
             if (i >= _items.Count)
                 _items.Add(items[i]);
             else if (!ReferenceEquals(_items[i], items[i]))
