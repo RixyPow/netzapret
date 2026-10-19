@@ -149,12 +149,18 @@
                                        Text="{TemplateBinding local:ButtonGlyph.Lead}"
                                        Foreground="{TemplateBinding Foreground}" />
 
+                            <!--
+                                Поворот при раскладке, а не при отрисовке: фигура
+                                5×8, повёрнутая отрисовкой, рисуется 8×5 в месте
+                                5×8 и вылезает за него на полторы точки с боков —
+                                у владельца 20.10 (125 %) стрелка выходила обрезанной.
+                            -->
                             <Path x:Name="MenuArrow" Grid.Column="2" Style="{StaticResource Chevron}"
-                                  Fill="{TemplateBinding Foreground}" Opacity="0.75" Margin="10,1,0,0"
+                                  Fill="{TemplateBinding Foreground}" Opacity="0.75" Margin="10,1,2,0"
                                   Visibility="Collapsed">
-                                <Path.RenderTransform>
+                                <Path.LayoutTransform>
                                     <RotateTransform Angle="90" />
-                                </Path.RenderTransform>
+                                </Path.LayoutTransform>
                             </Path>
 
                         <ContentPresenter Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
