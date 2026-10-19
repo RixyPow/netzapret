@@ -1,0 +1,30 @@
+{
+  "name": "Слойка 2",
+  "colors": {
+    "backdrop": "#0E1316",
+    "surface": "#B2101820",
+    "raised": "#1B262D",
+    "border": "#2C4744",
+    "text": "#E4F0EE",
+    "muted": "#A7BFBB",
+    "faint": "#7B9491",
+    "accent": "#6ED4AE",
+    "accent-dim": "#1F4C43",
+    "danger": "#F46487",
+    "warn": "#E3BC62",
+    "accent-fill": "#B42E5C",
+    "on-accent": "#FFFFFF",
+    "warn-fill": "#E3BC62"
+  },
+  "background": {
+    "image": "background.jpg",
+    "fit": "cover",
+    "dim": 0,
+    "blur": 24,
+    "home": {
+      "x": 0.676,
+      "y": 0.536,
+      "size": 1.29
+    }
+  }
+}

@@ -43,7 +43,7 @@ public static class ThemeLoader
     /// только три, по слову владельца: «Слойка 1» (30.09), Blissfield (01.10)
     /// и «Рыбка» с живым фоном (08.10).
     /// </remarks>
-    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1", "blissfield", "fish"];
+    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1", "sloyka2", "blissfield", "fish"];
 
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;
