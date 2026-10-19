@@ -14,10 +14,10 @@
     <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
         <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
 
-        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+        <TextBlock x:Name="Note" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                    Text="Папка собирает маршруты вместе. Куда идёт каждый маршрут, она не меняет. Пустая папка исчезнет сама." />
 
-        <TextBlock Text="Название папки" FontWeight="SemiBold" Margin="0,18,0,6" />
+        <TextBlock x:Name="NameLabel" Text="Название папки" FontWeight="SemiBold" Margin="0,18,0,6" />
 
         <TextBox x:Name="NameBox" KeyDown="OnKey" gui:Hint.Text="например, Игры" />
 

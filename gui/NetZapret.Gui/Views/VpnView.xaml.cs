@@ -88,6 +88,14 @@ public sealed record ServerRow(
     public Visibility ChosenShown => CanChoose ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility ChooseShown => CanChoose ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Строка в папке пула (<see cref="ServerPool.Id"/>); <c>null</c> — в папке подписки.
+    /// </summary>
+    /// <remarks>
+    /// В пуле «Выбрать» закрепляет сервер в этом пуле, а не в пуле по умолчанию.
+    /// </remarks>
+    public string? PoolId { get; init; }
 }
 
 /// <summary>Плитка быстрой смены сервера (макет владельца 01.10); тег <c>null</c> — «Авто».</summary>
@@ -1203,7 +1211,18 @@ public partial class VpnView : UserControl
     /// </remarks>
     private void ShowPage()
     {
-        var items = new List<object> { TopBlock };
+        var items = new List<object> { TopBlock, PoolsBlock };
+
+        foreach (var pool in _poolRows)
+        {
+            pool.Fade = _paused ? 0.55 : 1;
+            items.Add(pool);
+
+            if (pool.Open)
+                items.AddRange(pool.Servers);
+        }
+
+        items.Add(SubsBlock);
 
         foreach (var row in _rows)
         {
@@ -1234,6 +1253,8 @@ public partial class VpnView : UserControl
                 _items[i] = items[i];
             else if (items[i] is SubRow folder)
                 folder.Refresh();
+            else if (items[i] is PoolRow pool)
+                pool.Refresh();
         }
 
         while (_items.Count > items.Count)
@@ -1283,10 +1304,14 @@ public partial class VpnView : UserControl
 
     private void Redraw()
     {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        // Пулы — из тех же строк подписок, уже раскрашенных.
+        ShowPools(settings);
         ShowPage();
 
         // Лента и сводка строятся из тех же строк — вместе с ними.
-        ShowQuick(AppSettings.Load(AppSettings.DefaultPath));
+        ShowQuick(settings);
         ShowSummary();
 
         // Надпись — по тому, что раскрыто, а не по прошлому нажатию: вкладка
@@ -2376,6 +2401,8 @@ public partial class VpnView : UserControl
             }
         }));
 
+        AddPoolItems(menu, anchor.DataContext as ServerRow ?? server);
+
         if (server.RemoveShown == Visibility.Visible)
         {
             menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
@@ -2724,42 +2751,59 @@ public partial class VpnView : UserControl
             Choose(row);
     }
 
+    /// <summary>
+    /// Тег сервера у движка; подписку вне работы при этом ставит в работу.
+    /// </summary>
+    /// <remarks>
+    /// Сервер из подписки вне работы — ставим её в работу, иначе конфиг
+    /// собрался бы без него. Метки пула от этого могут поменяться
+    /// (совпадёт имя с сервером соседней), так что тег берём заново —
+    /// по месту сервера в его подписке. Нужно и выбору, и пулу серверов.
+    /// </remarks>
+    private string IntoWork(ServerRow row, AppSettings settings, out bool switched)
+    {
+        // Выходы WARP подписок не касаются: они и так в пуле.
+        var owner = row.Owner == WarpOwner
+            ? null
+            : _rows.FirstOrDefault(r => r.Entry.Name == row.Owner);
+
+        var tag = row.Tag;
+        switched = owner is not null && !owner.Active;
+
+        if (switched)
+        {
+            int index = owner!.Pooled.ToList().FindIndex(s => s.Tag == row.Tag);
+
+            if (owner.IsKeys)
+                SubscriptionBook.SaveKeys(_book.Keys, true);
+            else
+                SubscriptionBook.SetWorking(owner.Entry.Url, true);
+
+            _book = SubscriptionBook.Load();
+            owner.Entry.InPool = true;
+            owner.Active = true;
+
+            ApplyPool(settings);
+
+            if (index >= 0)
+                tag = owner.Pooled[index].Tag;
+        }
+
+        return tag;
+    }
+
     private void Choose(ServerRow row)
     {
+        if (row.PoolId is { } pool)
+        {
+            PinInPool(pool, row);
+            return;
+        }
+
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            // Выходы WARP подписок не касаются: они и так в пуле.
-            var owner = row.Owner == WarpOwner
-                ? null
-                : _rows.FirstOrDefault(r => r.Entry.Name == row.Owner);
-
-            var tag = row.Tag;
-            bool switched = owner is not null && !owner.Active;
-
-            // Сервер из подписки вне работы — ставим её в работу, иначе конфиг
-            // собрался бы без него. Метки пула от этого могут поменяться
-            // (совпадёт имя с сервером соседней), так что тег выбранного
-            // берём заново — по месту сервера в его подписке.
-            if (switched)
-            {
-                int index = owner!.Pooled.ToList().FindIndex(s => s.Tag == row.Tag);
-
-                if (owner.IsKeys)
-                    SubscriptionBook.SaveKeys(_book.Keys, true);
-                else
-                    SubscriptionBook.SetWorking(owner.Entry.Url, true);
-
-                _book = SubscriptionBook.Load();
-                owner.Entry.InPool = true;
-                owner.Active = true;
-
-                ApplyPool(settings);
-
-                if (index >= 0)
-                    tag = owner.Pooled[index].Tag;
-            }
+            var tag = IntoWork(row, settings, out bool switched);
 
             (AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = tag })
                 .Save(AppSettings.DefaultPath);

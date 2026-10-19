@@ -241,8 +241,14 @@ public sealed record PartRow : INotifyPropertyChanged
         0 => "напрямую",
         1 => "десинк",
         Off => "выключено",
-        _ => "через VPN",
+        _ => PoolName is { } pool ? $"VPN · {pool}" : "через VPN",
     };
+
+    /// <summary>Пул серверов, в который ведёт маршрут «через VPN»; <c>null</c> — пул по умолчанию.</summary>
+    public string? PoolId { get; set; }
+
+    /// <summary>Имя пула — на кнопке пути и в подписи.</summary>
+    public string? PoolName { get; set; }
 
     /// <summary>
     /// Место пустой папки в порядке, а не маршрут: у пустой, заведённой
@@ -665,6 +671,8 @@ public partial class RoutesView : UserControl
             var services = Arranged(ordered, settings);
 
             MarkPins(services, data.Pins, data.PinZones, zapretRoot);
+            MarkPools(services, userRules, settings.Pools);
+            _pools = settings.Pools;
 
             // Раскрытые папки переживают перерисовку. Прежде любое действие
             // внутри папки — пин, свой маршрут, обновление списка — собирало
@@ -1106,6 +1114,39 @@ public partial class RoutesView : UserControl
     /// </remarks>
     /// <param name="pins">Прибитые имена из hosts — прочитаны в фоне.</param>
     /// <param name="known">Зоны строк, прочитанные в фоне; чего нет — дочитывается здесь.</param>
+    /// <summary>Пулы серверов, заведённые на вкладке VPN, — для окна пути.</summary>
+    private IReadOnlyList<ServerPool> _pools = [];
+
+    /// <summary>
+    /// Маршрут «через VPN» в свой пул — пул назван на кнопке пути и в подписи
+    /// (идеи №6, 19.10). Без этого «через VPN» в пул «Россия» и в пул
+    /// по умолчанию выглядели бы одинаково.
+    /// </summary>
+    private static void MarkPools(IReadOnlyList<ServiceRow> services, UserRulesFile rules, IReadOnlyList<ServerPool> pools)
+    {
+        if (pools.Count == 0)
+            return;
+
+        foreach (var part in services.SelectMany(s => s.Parts).Where(p => p.Applied == 2))
+        {
+            if (RouteKeys.Parse(part.Key) is not var (kind, value))
+                continue;
+
+            var match = RouteKeys.MatchOf(kind, value);
+            var entry = rules.Entries.FirstOrDefault(e => e.Match == match && e.Matches(value));
+
+            if (entry is not { Off: false, Mode: RoutingMode.Proxy }
+                || ServerPools.Find(pools, ServerPools.IdOf(entry.Server)) is not { } pool)
+            {
+                continue;
+            }
+
+            part.PoolId = pool.Id;
+            part.PoolName = pool.Name;
+            part.Mode += $" · пул «{pool.Name}»";
+        }
+    }
+
     private static void MarkPins(
         IReadOnlyList<ServiceRow> services,
         IReadOnlyList<string> pins,
@@ -2737,7 +2778,7 @@ public partial class RoutesView : UserControl
     /// на выбор в списке — не та цена, на которую человек соглашался.
     /// </remarks>
     /// <summary>
-    /// Кнопка пути в строке: меню из четырёх путей и, у десинка, «Рецепт…».
+    /// Кнопка пути в строке: окно пути (<see cref="PathWindow"/>) — с 19.10 вместо меню.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2747,48 +2788,87 @@ public partial class RoutesView : UserControl
     /// до виртуализации.
     /// </para>
     /// <para>
-    /// «Рецепт…» — отдельным пунктом. Прежде, чтобы сменить рецепт, выбирали
-    /// «десинк» при уже выбранном «десинке» и ловили закрытие списка: сам
-    /// список при выборе того же значения события не поднимает.
+    /// С 19.10 — окном (владелец, идеи №6): меню из четырёх путей не вмещало
+    /// пулов серверов. «Рецепт…» — кнопкой у десинка: прежде, чтобы сменить
+    /// рецепт, выбирали «десинк» при уже выбранном «десинке».
     /// </para>
     /// </remarks>
     private void OnRouteMenu(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: PartRow row } anchor || !row.CanRoute)
+        if (sender is not Button { DataContext: PartRow row } || !row.CanRoute)
             return;
 
-        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+        // Окно пути (владелец 19.10, идеи №6) — следующим ходом, как и окно
+        // рецепта: из обработчика нажатия модальное окно открывать не стоит.
+        Dispatcher.BeginInvoke(() => AskPath(row), DispatcherPriority.Background);
+    }
 
-        // «По умолчанию» — у каждого маршрута каталога (владелец 13.10): снимает
-        // своё правило, и маршрут идёт, как задано базовыми правилами. Что это
-        // будет, сказано сразу. Без своего правила маршрут уже по умолчанию —
-        // пункт отмечен и ничего не делает; у своих маршрутов умолчания нет.
-        if (row.DefaultLabel is { } fallback)
-        {
-            menu.Items.Add(MenuEntry(row.Explicit ? string.Empty : "", $"по умолчанию — {fallback}", () =>
+    /// <summary>
+    /// Окно пути: по умолчанию, напрямую, десинк с рецептом, через VPN с пулом, выключено.
+    /// </summary>
+    private void AskPath(PartRow row)
+    {
+        var parsed = RouteKeys.Parse(row.Key);
+        bool canRecipe = row.Probe is { Length: > 0 } && parsed is (var kind, _) && RouteKeys.TakesRecipe(kind);
+
+        var current = !row.Explicit && row.DefaultLabel is not null
+            ? PathPick.Default
+            : row.Applied switch
             {
+                0 => PathPick.Direct,
+                1 => PathPick.Desync,
+                PartRow.Off => PathPick.Off,
+                _ => PathPick.Proxy,
+            };
+
+        var desyncNote = row.Applied == 1
+            ? row.Mode
+            : canRecipe
+                ? "Чинит пресет; свой рецепт — кнопкой «Рецепт…», когда десинк выбран."
+                : "Чинят секции пресета по адресам — своего рецепта у адресов нет.";
+
+        var window = new PathWindow(row.Title, current, row.PoolId, row.DefaultLabel, canRecipe, desyncNote, _pools)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        if (window.ShowDialog() != true || parsed is not var (routeKind, value))
+            return;
+
+        var match = RouteKeys.MatchOf(routeKind, value);
+
+        switch (window.Picked)
+        {
+            case PathPick.Default:
                 if (row.Explicit)
                     ResetRoute(row);
-            }));
-            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
-        }
+                break;
 
-        foreach (var (choice, text) in new[] { (0, "напрямую"), (1, "десинк"), (2, "через VPN"), (PartRow.Off, "выключено") })
-        {
-            // Отметка — значком: наше меню IsChecked не рисует. У маршрута по
-            // умолчанию отмечено «по умолчанию», а не путь, который оно дало.
-            menu.Items.Add(MenuEntry(row.Applied == choice && (row.Explicit || row.DefaultLabel is null) ? "" : string.Empty, text, () => Choose(row, choice)));
-        }
+            case PathPick.Direct:
+                Choose(row, 0);
+                break;
 
-        if (row.Applied == 1 && row.Probe is { Length: > 0 } example
-            && RouteKeys.Parse(row.Key) is (var kind, var value) && RouteKeys.TakesRecipe(kind))
-        {
-            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
-            menu.Items.Add(MenuEntry("", "Рецепт…", () =>
-                AskLater(row.Key, value, example, RouteKeys.MatchOf(kind, value), RoutingMode.Desync)));
-        }
+            case PathPick.Off:
+                Choose(row, PartRow.Off);
+                break;
 
-        menu.IsOpen = true;
+            case PathPick.Desync when window.RecipeWanted && row.Probe is { Length: > 0 } example:
+                AskLater(row.Key, value, example, match, RoutingMode.Desync);
+                break;
+
+            case PathPick.Desync:
+                Choose(row, 1);
+                break;
+
+            case PathPick.Proxy:
+                // Тот же путь в тот же пул — не выбор: правило не переписываем.
+                if (row.Explicit && row.Applied == 2 && row.PoolId == window.Pool)
+                    break;
+
+                Write(row.Key, value, match, RoutingMode.Proxy, recipe: null,
+                    server: window.Pool is { } pool ? ServerPools.RuleServer(pool) : null);
+                break;
+        }
     }
 
     /// <summary>
@@ -2917,7 +2997,7 @@ public partial class RoutesView : UserControl
         }), DispatcherPriority.Background);
     }
 
-    private void Write(string key, string list, MatchKind match, RoutingMode mode, string? recipe)
+    private void Write(string key, string list, MatchKind match, RoutingMode mode, string? recipe, string? server = null)
     {
         var parts = key.Split('|', 2);
 
@@ -2929,7 +3009,7 @@ public partial class RoutesView : UserControl
             var within = ServiceCatalog.All.SelectMany(s => s.Parts)
                 .FirstOrDefault(p => string.Equals(p.List, parts[1], StringComparison.OrdinalIgnoreCase))?.Within;
 
-            file.Set(match, parts[1], mode, recipe, before: within);
+            file.Set(match, parts[1], mode, recipe, before: within, server: server);
             file.Save();
 
             // Перечитываем сразу: подпись слева и сводка папки считаются при
@@ -2938,7 +3018,11 @@ public partial class RoutesView : UserControl
             // папки перерисовку переживают, так что список остаётся на месте.
             Reload();
 
-            Status.Text = string.IsNullOrEmpty(recipe)
+            var pool = ServerPools.Find(_pools, ServerPools.IdOf(server));
+
+            Status.Text = pool is not null
+                ? $"Записано: {parts[1]} → через VPN, пул «{pool.Name}». Применится при следующем запуске движков."
+                : string.IsNullOrEmpty(recipe)
                 ? $"Записано: {parts[1]} → {Describe(mode)}. Применится при следующем запуске движков."
                 : $"Записано: {parts[1]} → десинк рецептом «{recipe}». "
                   + "Применится при следующем запуске движков.";

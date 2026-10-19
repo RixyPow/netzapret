@@ -115,6 +115,15 @@ public partial class TunnelSettingsWindow : Window
                 ? $"Пока «{settings.PreferredServer}» молчит, трафик пойдёт через другой сервер."
                 : $"Пока «{settings.PreferredServer}» молчит, туннель ждёт его.";
 
+        Word(DeadPoolWord, settings.DeadPoolToDefault);
+        DeadPool.IsChecked = settings.DeadPoolToDefault;
+
+        DeadPoolLine.Text = settings.Pools.Count == 0
+            ? "Своих пулов пока нет — все серверы в пуле по умолчанию."
+            : settings.DeadPoolToDefault
+                ? "Маршруты молчащего пула пойдут через любые серверы."
+                : "Маршруты молчащего пула ждут его и не открываются.";
+
         Word(BypassWord, settings.BypassWhenTunnelDead);
         Bypass.IsChecked = settings.BypassWhenTunnelDead;
 
@@ -281,6 +290,12 @@ public partial class TunnelSettingsWindow : Window
             Replace.IsChecked == true
                 ? "Выбранному серверу будет искаться замена, пока он молчит."
                 : "Выбранный сервер не подменяется: молчит — туннель ждёт его.");
+
+    private void OnDeadPool(object sender, RoutedEventArgs e) =>
+        Save(s => s with { DeadPoolToDefault = DeadPool.IsChecked == true },
+            DeadPool.IsChecked == true
+                ? "Молчащий пул уведёт свои маршруты в пул по умолчанию."
+                : "Молчащий пул ждёт: его маршруты не открываются, пока он молчит.");
 
     private void OnVerify(object sender, RoutedEventArgs e)
     {

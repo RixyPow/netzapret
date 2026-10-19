@@ -52,6 +52,7 @@ public sealed class UserRulesFile
                     Value = r.Value,
                     Mode = r.Mode,
                     Recipe = r.Recipe,
+                    Server = r.Mode == RoutingMode.Proxy ? r.Server : null,
                     Enabled = r.Enabled,
                     Off = r.Off,
                 })
@@ -111,7 +112,12 @@ public sealed class UserRulesFile
     /// (<c>ServicePart.Within</c>), иначе встала бы после него и не сработала
     /// никогда: движок берёт первое совпавшее правило.
     /// </param>
-    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null) =>
+    /// <param name="server">
+    /// Куда в VPN при <see cref="RoutingMode.Proxy"/>: пул (<see cref="ServerPools.RuleServer"/>);
+    /// <c>null</c> — пул по умолчанию.
+    /// </param>
+    public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null,
+        string? server = null) =>
         Put(new UserRuleEntry
         {
             Match = match,
@@ -120,8 +126,9 @@ public sealed class UserRulesFile
 
             // Рецепт хранится только у десинка: у прочих режимов ему нечего
             // означать, а оставленный при смене режима он всплыл бы потом
-            // необъяснимой строкой в файле.
+            // необъяснимой строкой в файле. Пул — так же, только у VPN.
             Recipe = mode == RoutingMode.Desync ? recipe : null,
+            Server = mode == RoutingMode.Proxy && !string.IsNullOrWhiteSpace(server) ? server.Trim() : null,
             Enabled = true,
         }, before);
 
@@ -270,6 +277,9 @@ public sealed class UserRulesFile
                 builder.AppendLine($"    value: {Quote(entry.Value)}");
                 builder.AppendLine($"    mode: {(entry.Off ? "off" : Describe(entry.Mode))}");
 
+                if (!entry.Off && entry.Mode == RoutingMode.Proxy && !string.IsNullOrWhiteSpace(entry.Server))
+                    builder.AppendLine($"    server: {Quote(entry.Server)}");
+
                 if (!string.IsNullOrWhiteSpace(entry.Recipe))
                     builder.AppendLine($"    recipe: {Quote(entry.Recipe)}");
 
@@ -319,6 +329,17 @@ public sealed record UserRuleEntry
 
     /// <summary>Чем чинить имя; <c>null</c> — решает пресет.</summary>
     public string? Recipe { get; init; }
+
+    /// <summary>
+    /// Куда в VPN: пул (<see cref="ServerPools.RuleServer"/>) или тег сервера;
+    /// <c>null</c> — пул по умолчанию.
+    /// </summary>
+    /// <remarks>
+    /// Поле правила было и прежде (<see cref="RoutingRule.Server"/>), но файл
+    /// своих маршрутов его не хранил: до пулов выбрать сервер маршруту было
+    /// негде, и при первой же записи файла оно пропало бы.
+    /// </remarks>
+    public string? Server { get; init; }
 
     public bool Enabled { get; init; } = true;
 

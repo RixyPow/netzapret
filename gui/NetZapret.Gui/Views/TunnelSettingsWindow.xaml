@@ -150,6 +150,35 @@
 
                     <Border Style="{StaticResource RowLine}" />
 
+                    <!-- Пулы серверов (владелец 19.10, идеи №6): молчащий пул — уводить или ждать. -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Молчащий пул — в пул по умолчанию" VerticalAlignment="Center" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Ни один сервер пула не ответил — его маршруты уходят в пул по умолчанию, то есть на любые серверы, и возвращаются, как только пул ответит.&#x0a;&#x0a;Выключено — пул ждёт: его маршруты не открываются, пока молчит. Так стоит делать, когда пул заведён ради страны и другой выход хуже, чем никакого.&#x0a;&#x0a;Пулы заводятся на вкладке VPN." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="DeadPoolLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="DeadPoolWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="DeadPool" Style="{StaticResource Switch}"
+                                      Click="OnDeadPool" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
                     <Grid Margin="16,13">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />

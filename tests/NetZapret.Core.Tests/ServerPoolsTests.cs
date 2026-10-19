@@ -223,6 +223,33 @@ public sealed class ServerPoolsTests
     }
 
     [Fact]
+    public void The_own_routes_file_keeps_the_pool()
+    {
+        // До пулов файл поля сервера не хранил: пул пропал бы при первой записи.
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-pool-rules-{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            var file = UserRulesFile.Load(path);
+            file.Set(MatchKind.Domain, "*.gosuslugi.ru", RoutingMode.Proxy, server: "pool:ru000001");
+            file.Set(MatchKind.Domain, "*.example.com", RoutingMode.Desync, server: "pool:ru000001");
+            file.Save();
+
+            var read = UserRulesFile.Load(path);
+
+            Assert.Equal("pool:ru000001", read.Entries.Single(e => e.Value == "*.gosuslugi.ru").Server);
+            Assert.Null(read.Entries.Single(e => e.Value == "*.example.com").Server);
+
+            var engine = RuleSetLoader.Load(File.ReadAllText(path));
+            Assert.Equal("pool:ru000001", engine.RuleSet.Rules.Single(r => r.Value == "*.gosuslugi.ru").Server);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Pools_survive_the_settings_file()
     {
         var path = Path.Combine(Path.GetTempPath(), $"netzapret-pools-{Guid.NewGuid():N}.json");

@@ -14,6 +14,8 @@ public partial class FolderNameWindow : Window
 
     private readonly IReadOnlyCollection<string> _reserved;
 
+    private readonly bool _pool;
+
     /// <param name="head">Заголовок окна.</param>
     /// <param name="reserved">
     /// Занятые имена. Программы — всегда: их папки только «Домены» и «Адреса»,
@@ -21,14 +23,25 @@ public partial class FolderNameWindow : Window
     /// </param>
     /// <param name="initial">Что стоит в поле сразу — у переименования прежнее имя.</param>
     /// <param name="action">Подпись кнопки.</param>
-    public FolderNameWindow(string head, IReadOnlyCollection<string> reserved, string? initial = null, string action = "Создать")
+    /// <param name="pool">Имя пула серверов, а не папки маршрутов: у пула свои пояснения.</param>
+    public FolderNameWindow(string head, IReadOnlyCollection<string> reserved, string? initial = null, string action = "Создать",
+        bool pool = false)
     {
         InitializeComponent();
         _reserved = reserved;
+        _pool = pool;
 
         Head.Text = head;
         NameBox.Text = initial ?? string.Empty;
         Confirm.Content = action;
+
+        if (pool)
+        {
+            Title = "Пул серверов";
+            Note.Text = "Пул — папка серверов из любых подписок. Маршрут «через VPN», направленный в пул, идёт только через его серверы.";
+            NameLabel.Text = "Название пула";
+            NameBox.SetValue(Hint.TextProperty, "например, Россия");
+        }
 
         Loaded += (_, _) =>
         {
@@ -52,7 +65,9 @@ public partial class FolderNameWindow : Window
 
         if (_reserved.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
-            Problem.Text = $"«{name}» уже занято: такая папка или программа уже есть.";
+            Problem.Text = _pool
+                ? $"«{name}» уже занято: такой пул уже есть."
+                : $"«{name}» уже занято: такая папка или программа уже есть.";
             Problem.Visibility = Visibility.Visible;
             return;
         }
