@@ -177,6 +177,7 @@ public abstract class SupervisedService
         // выбора свежий движок берёт из своего кэша, а не из конфига, —
         // её на место ставит OnReadyAsync.
         ForgetRunState();
+        _fatal = null;
 
         try
         {
@@ -201,8 +202,11 @@ public abstract class SupervisedService
         // Вывод обязан вычитываться. Перенаправленный и никем не читаемый
         // конвейер заполняется и намертво блокирует дочерний процесс на записи
         // в stdout — служба при этом выглядит живой и проходит проверку порта.
-        StartOutputPump(Process.StandardOutput);
-        StartOutputPump(Process.StandardError);
+        var pumps = new[]
+        {
+            StartOutputPump(Process.StandardOutput),
+            StartOutputPump(Process.StandardError),
+        };
 
         StartedAt = DateTimeOffset.Now;
 
@@ -212,7 +216,18 @@ public abstract class SupervisedService
         {
             if (!IsProcessAlive)
             {
-                LastError = $"процесс завершился с кодом {Process.ExitCode}";
+                // Последнюю строку процесс пишет перед самым выходом, а насос
+                // читает её своим чередом — без ожидания причина терялась бы
+                // ровно тогда, когда она есть.
+                try
+                {
+                    await Task.WhenAll(pumps).WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+                }
+                catch (TimeoutException)
+                {
+                }
+
+                LastError = ExitReason(Process.ExitCode, _fatal);
                 return false;
             }
 
@@ -265,14 +280,16 @@ public abstract class SupervisedService
     /// <summary>Служба снова здорова: прежняя причина больше не действует.</summary>
     internal void Recovered() => LastError = null;
 
-    private void StartOutputPump(StreamReader reader)
-    {
-        _ = Task.Run(async () =>
+    private Task StartOutputPump(StreamReader reader) =>
+        Task.Run(async () =>
         {
             try
             {
                 while (await reader.ReadLineAsync() is { } line)
                 {
+                    if (line.Contains("FATAL", StringComparison.Ordinal))
+                        _fatal = line;
+
                     Observe(line);
                     RecordOutput(line);
                 }
@@ -282,6 +299,42 @@ public abstract class SupervisedService
                 // Поток закрывается вместе с процессом — это штатное завершение насоса.
             }
         });
+
+    /// <summary>Последняя строка FATAL от движка в этом запуске; пишет насос, читает старт.</summary>
+    private volatile string? _fatal;
+
+    /// <summary>
+    /// Почему процесс вышел на старте — словами движка, а не одним кодом.
+    /// </summary>
+    /// <remarks>
+    /// Код 1 у sing-box значит лишь «не поднялся»: конфиг, занятый порт,
+    /// оставшийся адаптер TUN — всё выходит одним кодом, а причина — строкой
+    /// FATAL в его выводе. До 19.10 окно показывало только код, и человек
+    /// из обсуждения №29 спрашивал, «чем может быть вызвана данная проблема»,
+    /// со снимком, на котором причины не было. У владельца так же 13–17.10:
+    /// пятнадцать раз «код 1», и журнал, где строку уже вытеснили.
+    /// Строка проходит ту же чистку, что отчёт: снимок окна выкладывают
+    /// в обсуждения, а движок называет в ошибках поля конфига.
+    /// </remarks>
+    public static string ExitReason(int code, string? fatal)
+    {
+        var reason = $"процесс завершился с кодом {code}";
+
+        if (fatal is null)
+            return reason;
+
+        var said = SupportReport.Redact(fatal, []).Trim();
+
+        // «FATAL[0000] » — уровень и секунды от запуска; смысла в них нет.
+        said = System.Text.RegularExpressions.Regex.Replace(said, @"^.*?FATAL\s*(\[\d+\])?\s*", string.Empty);
+
+        if (said.Length == 0)
+            return reason;
+
+        if (said.Length > 300)
+            said = said[..300] + "…";
+
+        return $"{reason}: {said}";
     }
 
     /// <summary>
