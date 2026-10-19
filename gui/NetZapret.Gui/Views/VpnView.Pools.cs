@@ -474,6 +474,7 @@ public partial class VpnView
         // наследуется всеми строками.
         Page.AllowDrop = true;
         Page.PreviewDragOver += OnPageDragOver;
+        _edgeScrolledAt = 0;
 
         try
         {
@@ -554,19 +555,50 @@ public partial class VpnView
         if (_pageScroll is null)
             return;
 
-        // Чем ближе к краю, тем быстрее: подписки раскрываются на сотни строк,
-        // и тащить сервер наверх к пулам по 14 точек было бы долго.
         const double edge = 90;
         double y = e.GetPosition(_pageScroll).Y;
         double bottom = _pageScroll.ActualHeight - y;
 
-        if (y < edge)
-            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset - Step(y));
-        else if (bottom < edge)
-            _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset + Step(bottom));
+        // Насколько глубоко курсор в поле у края: 0 — на его границе, 1 — у самого края.
+        double depth = y < edge ? -(1 - Math.Max(y, 0) / edge)
+            : bottom < edge ? 1 - Math.Max(bottom, 0) / edge
+            : 0;
 
-        static double Step(double from) => 10 + 50 * (1 - Math.Clamp(from, 0, edge) / edge);
+        long now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        if (depth == 0)
+        {
+            _edgeScrolledAt = 0;
+            return;
+        }
+
+        // По времени, а не по событию. Событие перетаскивания приходит и на
+        // каждое движение мыши, и само по таймеру, и прежние 10–60 точек
+        // за событие давали скорость, которую не поймать (владелец 19.10:
+        // «прокрутка слишком быстрая, когда сервер тянем»). Теперь — точки
+        // в секунду: у границы поля медленно, у самого края быстро (квадрат
+        // глубины, чтобы начало было плавным). Первое событие в поле только
+        // засекает время — без скачка; долгая пауза между событиями
+        // засчитывается не больше чем 50 мс.
+        double seconds = _edgeScrolledAt == 0
+            ? 0
+            : Math.Min(System.Diagnostics.Stopwatch.GetElapsedTime(_edgeScrolledAt, now).TotalSeconds, 0.05);
+
+        _edgeScrolledAt = now;
+
+        double speed = EdgeSlowest + (EdgeFastest - EdgeSlowest) * depth * depth;
+
+        _pageScroll.ScrollToVerticalOffset(_pageScroll.VerticalOffset + Math.Sign(depth) * speed * seconds);
     }
+
+    /// <summary>Когда прокрутка у края двигала список в последний раз; 0 — курсор не у края.</summary>
+    private long _edgeScrolledAt;
+
+    /// <summary>Скорость у границы поля, точек в секунду.</summary>
+    private const double EdgeSlowest = 120;
+
+    /// <summary>Скорость у самого края, точек в секунду.</summary>
+    private const double EdgeFastest = 1000;
 
     private static T? Below<T>(DependencyObject root) where T : DependencyObject
     {
