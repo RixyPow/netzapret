@@ -29,11 +29,11 @@ public sealed class HomeAction : Grid
 
         var tile = new Border
         {
-            Width = 34,
-            Height = 34,
+            Width = 32,
+            Height = 32,
             CornerRadius = new CornerRadius(10),
             BorderThickness = new Thickness(1),
-            Margin = new Thickness(0, 0, 10, 0),
+            Margin = new Thickness(0, 0, 9, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -55,7 +55,7 @@ public sealed class HomeAction : Grid
         var title = new TextBlock
         {
             Text = Title,
-            FontSize = 13.5,
+            FontSize = 13,
             FontWeight = FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -63,7 +63,7 @@ public sealed class HomeAction : Grid
         var note = new TextBlock
         {
             Text = Note,
-            FontSize = 11.5,
+            FontSize = 11,
             Margin = new Thickness(0, 2, 0, 0),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };

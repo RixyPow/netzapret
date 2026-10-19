@@ -38,11 +38,14 @@
     <!--
         Карточка. Скруглённая поверхность с рамкой на тон светлее фона:
         на тёмном именно рамка задаёт границу, тень почти не видна.
+        Рамка 2, а не 1,5 (владелец 19.10: «ширину границ всех плиток чуть
+        больше, а то где-то ещё выглядит рвано»): при 125 % Windows 1,5 —
+        это 1,875 пикселя, и скругления углов выходили ступенькой.
     -->
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
-        <Setter Property="BorderThickness" Value="1.5" />
+        <Setter Property="BorderThickness" Value="2" />
         <Setter Property="CornerRadius" Value="14" />
         <Setter Property="Padding" Value="18,16" />
         <!-- Стекло под карточкой, если у темы фон и размытие включено (Glass.cs). -->
