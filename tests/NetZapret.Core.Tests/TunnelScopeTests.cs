@@ -27,7 +27,7 @@ public class TunnelScopeTests
         var engine = RuleSetLoader.Load(yaml);
         var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], options).Json;
 
-        return JsonDocument.Parse(json).RootElement.Clone();
+        return JsonDocument.Parse(WithoutCanary.Strip(json)).RootElement.Clone();
     }
 
     private const string Rules = """

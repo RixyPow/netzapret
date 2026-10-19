@@ -58,7 +58,7 @@ public sealed class RouterDnsTests
     private static JsonNode Compile(string yaml, SingBoxOptions? options = null, bool server = true)
     {
         var loaded = RuleSetLoader.Load(yaml);
-        return JsonNode.Parse(new SingBoxConfigCompiler().Compile(loaded.RuleSet, server ? [Server()] : [], options ?? Options()).Json)!;
+        return JsonNode.Parse(WithoutCanary.Strip(new SingBoxConfigCompiler().Compile(loaded.RuleSet, server ? [Server()] : [], options ?? Options()).Json))!;
     }
     private const string Rules = """
         mode: selective

@@ -8,12 +8,12 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 public sealed class RouterDnsRevisionTests
 {
-    private static JsonNode Compile(params RoutingRule[] rules) => JsonNode.Parse(new SingBoxConfigCompiler().Compile(
+    private static JsonNode Compile(params RoutingRule[] rules) => JsonNode.Parse(WithoutCanary.Strip(new SingBoxConfigCompiler().Compile(
         new RuleSet { Rules = rules, DefaultMode = RoutingMode.Direct, Operating = OperatingMode.Selective },
         [new ProxyServer { Protocol = ProxyProtocol.Hysteria2, Tag = "test", Host = "proxy.example", Port = 443,
             Credential = "TEST", Transport = "udp", Security = "tls" }],
         new SingBoxOptions { Scope = TunnelScope.ProxyOnly, RouterDns = true, DnsServerType = "udp",
-            DnsServer = "192.168.1.1", RouterDnsInterface = "Ethernet" }).Json)!;
+            DnsServer = "192.168.1.1", RouterDnsInterface = "Ethernet" }).Json))!;
     private static RoutingRule Domain(string name, RoutingMode mode) => new() { Match = MatchKind.Domain, Value = name, Mode = mode };
     [Fact] public void LargeUnrelatedRegistryDoesNotEnterDnsRules()
     {

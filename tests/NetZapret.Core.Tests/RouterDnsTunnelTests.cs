@@ -19,12 +19,12 @@ public sealed class RouterDnsTunnelTests
 
     private static RoutingRule Ru() => new() { Match = MatchKind.Domain, Value = "*.ru", Mode = RoutingMode.Direct };
 
-    private static JsonNode Compile(OperatingMode mode, params RoutingRule[] rules) => JsonNode.Parse(
+    private static JsonNode Compile(OperatingMode mode, params RoutingRule[] rules) => JsonNode.Parse(WithoutCanary.Strip(
         new SingBoxConfigCompiler().Compile(new RuleSet { Operating = mode, DefaultMode = RoutingMode.Direct, Rules = rules },
         [new ProxyServer { Protocol = ProxyProtocol.Hysteria2, Tag = "test", Host = "proxy.example", Port = 443,
             Credential = "TEST", Transport = "udp", Security = "tls" }],
         new SingBoxOptions { Scope = TunnelScope.Everything, RouterDns = true, DnsServerType = "udp",
-            DnsServer = "192.168.1.1", RouterDnsInterface = "Ethernet" }).Json)!;
+            DnsServer = "192.168.1.1", RouterDnsInterface = "Ethernet" }).Json))!;
 
     [Theory]
     [InlineData(RoutingMode.Proxy)]

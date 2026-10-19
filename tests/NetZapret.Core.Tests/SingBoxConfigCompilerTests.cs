@@ -198,7 +198,7 @@ public class SingBoxConfigCompilerTests
         var engine = RuleSetLoader.Load(yaml);
         var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], options);
 
-        return JsonDocument.Parse(result.Json).RootElement.Clone();
+        return JsonDocument.Parse(WithoutCanary.Strip(result.Json)).RootElement.Clone();
     }
 
     private static JsonElement DnsServer(JsonElement root, string tag) =>

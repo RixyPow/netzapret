@@ -572,6 +572,9 @@ public sealed class SingBoxConfigCompiler
 
     private const string OverrideTag = "pinned";
 
+    /// <summary>Имя-сигнал Mozilla: NXDOMAIN на него выключает DoH Firefox по умолчанию.</summary>
+    internal const string FirefoxCanary = "use-application-dns.net";
+
     /// <param name="resolvedAddress">
     /// Адрес сервера, выясненный заранее и в обход системного резолвера.
     /// <c>null</c> — оставить имя, пусть разрешает сам sing-box.
@@ -921,7 +924,22 @@ public sealed class SingBoxConfigCompiler
         // Fakeip выдаёт каждому домену собственный адрес, поэтому соответствие
         // «адрес → домен» точное 1:1, и доменные правила работают без догадок
         // по реальным адресам CDN.
-        var rules = new JsonArray();
+        var rules = new JsonArray
+        {
+            // Сигнал Firefox: «в этой сети свой DoH не включать». Firefox,
+            // которому DoH не включали руками, спрашивает это имя у системного
+            // резолвера и при NXDOMAIN ходит в DNS Windows — то есть к нам.
+            // Иначе он разрешал имена сам, по DoH мимо движка: имена «через VPN»
+            // получали настоящие адреса вместо fakeip и в «Гибриде» шли мимо
+            // туннеля (замер 04.10). Включённый руками DoH сигнал не слушает —
+            // про него говорит «Диагностика» (BrowserDoh).
+            new JsonObject
+            {
+                ["domain"] = new JsonArray { FirefoxCanary },
+                ["action"] = "predefined",
+                ["rcode"] = "NXDOMAIN",
+            },
+        };
 
         if (options.AddressOverrides.Count > 0)
         {
