@@ -167,6 +167,12 @@ public static class SubscriptionPool
             if (info.Servers.Count > 0 && client.LastBody is { } body)
                 SaveReserve(folder, url, body, info);
 
+            // Расход — для полоски и прогноза на вкладке VPN (SubscriptionUsage, 19.10).
+            // Только при своей папке запаса: чужая — это проверка, и писать
+            // её подписки в историю рабочей установки незачем.
+            if (reserveDirectory is null)
+                SubscriptionUsage.Record(url, info, DateTimeOffset.Now);
+
             if (info.Servers.Count > 0 || info.Errors.Count == 0)
                 return new SubscriptionRead(info, DateTimeOffset.Now, SubscriptionReadSource.Panel, null);
 

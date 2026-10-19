@@ -172,6 +172,36 @@ public sealed class SubRow : System.ComponentModel.INotifyPropertyChanged
 
     public Visibility WarningShown => Warning is null ? Visibility.Collapsed : Visibility.Visible;
 
+    /// <summary>
+    /// Полоска расхода, как в Happ (владелец 19.10), и восклицательный знак
+    /// при слишком быстром темпе (<see cref="SubscriptionUsage"/>); <c>null</c> —
+    /// подписка не прочитана или это папка ключей: у них квоты нет.
+    /// </summary>
+    public UsageForecast? Usage { get; set; }
+
+    public Visibility UsageShown => Usage is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public string UsageLabel => Usage?.Label ?? string.Empty;
+
+    public string UsageExpires => Usage?.Expires ?? string.Empty;
+
+    /// <summary>Израсходованная часть полоски; без лимита — пустая, как у Happ.</summary>
+    public GridLength UsedStar => new(Usage?.Fraction ?? 0, GridUnitType.Star);
+
+    public GridLength LeftStar => new(1 - (Usage?.Fraction ?? 0), GridUnitType.Star);
+
+    public Brush UsageFill => (Brush)Application.Current.FindResource(Usage?.Warning is null ? "AccentFill" : "WarnFill");
+
+    public string? PaceWarning => Usage?.Warning;
+
+    public Visibility PaceShown => Usage?.Warning is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public string UsageTip => Usage is not { } usage
+        ? string.Empty
+        : $"Израсходовано: {usage.Label}"
+            + (usage.PerDay is { } perDay ? $"\nЗа последнюю неделю — {SubscriptionUsage.Size(perDay)} в сутки" : "\nТемп появится, когда накопится история хотя бы за полсуток")
+            + (usage.Warning is { } warning ? "\n\n" + warning : string.Empty);
+
     public string SupportTip => SupportUrl is { } url && url.Contains("t.me/", StringComparison.OrdinalIgnoreCase)
         ? "Поддержка поставщика в Telegram"
         : "Поддержка поставщика";
@@ -876,13 +906,10 @@ public partial class VpnView : UserControl
             if (skipped > 0)
                 parts.Add($"ещё {skipped} sing-box не поддерживает");
 
-            parts.Add(info.RemainingBytes is { } left
-                ? Size(left)
-                : info.TotalBytes > 0 ? "квота кончилась" : "без ограничения");
-
-            parts.Add(info.ExpiresAt is { } until
-                ? until > DateTimeOffset.Now ? $"{(until - DateTimeOffset.Now).Days} дн" : "срок истёк"
-                : "без срока");
+            // Квота и срок — полоской под именем (19.10, как в Happ), а не словами
+            // в этой строке. Темп — по истории расхода, которую пишет каждое
+            // чтение панели, и окном, и надзором.
+            row.Usage = SubscriptionUsage.Forecast(info, SubscriptionUsage.Samples(row.Entry.Url), DateTimeOffset.Now);
 
             // Ключи (KeyRing) заголовков не шлют: у них этих полей нет и не будет.
             row.SupportUrl = info.SupportUrl;
@@ -936,6 +963,7 @@ public partial class VpnView : UserControl
             row.Pooled = [];
             row.AsGiven = [];
             row.Servers = [];
+            row.Usage = null;
 
             // Срок HttpClient приходит той же отменой, что и наша, и прежде
             // читался как «The operation was canceled» — неотличимо от

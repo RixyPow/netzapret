@@ -79,6 +79,42 @@
                                     </Border>
                                 </Grid>
 
+                                <!--
+                                    Расход полоской, как в Happ (владелец 19.10): израсходовано
+                                    из лимита, срок, «!» при слишком быстром темпе. Без лимита
+                                    полоска пустая и пишет «/ ∞».
+                                -->
+                                <Grid Margin="0,7,0,0" Visibility="{Binding UsageShown}" ToolTip="{Binding UsageTip}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Grid Height="20">
+                                        <Border CornerRadius="10" BorderThickness="1"
+                                                BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}" />
+
+                                        <Grid Margin="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="{Binding UsedStar}" />
+                                                <ColumnDefinition Width="{Binding LeftStar}" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border CornerRadius="9" Background="{Binding UsageFill}" Opacity="0.45" />
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding UsageLabel}" FontSize="12"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Grid>
+
+                                    <TextBlock Grid.Column="1" Text="{Binding UsageExpires}" FontSize="12"
+                                               Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="14,0,0,0" />
+
+                                    <TextBlock Grid.Column="2" Text="&#xE7BA;" FontFamily="{DynamicResource IconFont}" FontSize="15"
+                                               Foreground="{DynamicResource Warn}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                               Visibility="{Binding PaceShown}" />
+                                </Grid>
+
                                 <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
 
