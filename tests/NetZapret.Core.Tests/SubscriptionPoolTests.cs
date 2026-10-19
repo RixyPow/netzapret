@@ -256,6 +256,80 @@ public sealed class SubscriptionPoolTests
         }
     }
 
+    /// <summary>
+    /// Запуск из запаса моложе суток не ждёт панели (TRUST 16.10: 502 через 10 с).
+    /// </summary>
+    [Fact]
+    public async Task Start_takes_a_day_old_reserve_without_waiting_for_the_panel()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        // Панель, которая принимает соединение и молчит: без отсрочки пул
+        // ждал бы её весь срок клиента.
+        using var silent = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        silent.Start();
+        var url = $"http://127.0.0.1:{((System.Net.IPEndPoint)silent.LocalEndpoint).Port}/sub";
+
+        try
+        {
+            SubscriptionPool.SaveReserve(folder, url, "trojan://secret@a.example:443#Германия\n",
+                new SubscriptionInfo { Servers = [], TotalBytes = 100 });
+            Age(folder, TimeSpan.FromHours(5));
+
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            var result = await SubscriptionPool.BuildAsync(
+                [new PoolSource("Молчит", url)], CancellationToken.None, folder, deferPanels: true);
+
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2));
+
+            var part = Assert.Single(result.Parts);
+            Assert.True(part.Deferred);
+            Assert.False(part.FromReserve);
+            Assert.Equal("Германия", Assert.Single(result.Servers).Tag);
+            Assert.Equal(100, part.Info!.TotalBytes);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>Запас старше суток (после выходных) — панель ждут, как прежде.</summary>
+    [Fact]
+    public async Task An_old_reserve_still_waits_for_the_panel()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var dead = new PoolSource("Лежит", "http://127.0.0.1:1/sub");
+            SubscriptionPool.SaveReserve(folder, dead.Url, "trojan://secret@a.example:443#Германия\n");
+            Age(folder, TimeSpan.FromDays(2));
+
+            var part = Assert.Single((await SubscriptionPool.BuildAsync([dead], CancellationToken.None, folder, deferPanels: true)).Parts);
+
+            Assert.False(part.Deferred);
+            Assert.True(part.FromReserve);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Servers_are_the_same_regardless_of_order_and_differ_by_key()
+    {
+        var a = Server("A", "a.example");
+        var b = Server("B", "b.example");
+
+        Assert.True(SubscriptionPool.SameServers([a, b], [b, a]));
+        Assert.False(SubscriptionPool.SameServers([a, b], [a, b with { Credential = "other" }]));
+        Assert.False(SubscriptionPool.SameServers([a, b], [a]));
+    }
+
     /// <summary>Состаривает запас: свежий пул к панели не ходит.</summary>
     private static void Age(string folder, TimeSpan age)
     {
