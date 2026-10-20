@@ -370,12 +370,11 @@
                                 </LinearGradientBrush>
                             </Canvas.OpacityMask>
 
-                            <!-- Линии стоят — картинкой; движутся только огоньки. -->
-                            <Canvas x:Name="RouteLines">
-                                <Canvas.CacheMode>
-                                    <BitmapCache EnableClearType="False" />
-                                </Canvas.CacheMode>
-                            </Canvas>
+                            <!--
+                                Без BitmapCache: с 20.10 линии гнутся каждый кадр, и картинку
+                                пришлось бы перерисовывать столько же раз — лишний проход.
+                            -->
+                            <Canvas x:Name="RouteLines" />
                             <Canvas x:Name="RouteComets" />
                         </Canvas>
 

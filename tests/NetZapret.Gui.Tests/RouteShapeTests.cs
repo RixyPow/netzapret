@@ -16,17 +16,38 @@ public sealed class RouteShapeTests
         geometry.GetFlattenedPathGeometry(0.25, ToleranceType.Absolute).Figures
             .SelectMany(f => f.Segments.OfType<PolyLineSegment>().SelectMany(s => s.Points).Prepend(f.StartPoint));
 
-    [Fact]
-    public void OutsideTheGapTheCrossingLinesKeepToTheStrips()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3.7)]
+    [InlineData(9.1)]
+    [InlineData(41.5)]
+    public void OutsideTheGapTheCrossingLinesKeepToTheStrips(double time)
     {
-        var layout = RouteShape.Build(Width, Height, GapLeft, GapRight, Strip);
-        double bend = (GapRight - GapLeft) * 0.15;
+        // Линии гнутся с тактом, но изгибы не уходят из просвета дальше 0,15 + Sway его ширины.
+        var layout = RouteShape.Build(Width, Height, GapLeft, GapRight, Strip, time);
+        double bend = (GapRight - GapLeft) * (0.15 + RouteShape.Sway);
 
         // Первые четыре — крест и параболы; ствол с ветками живёт посередине и виден только в просвете.
         foreach (var line in layout.Lines.Take(4))
         {
             foreach (var point in Points(line.Geometry).Where(p => p.X < GapLeft - bend - 1 || p.X > GapRight + bend + 1))
                 Assert.True(point.Y < Strip || point.Y > Height - Strip, $"({point.X:F0}; {point.Y:F1}) под плашкой");
+        }
+    }
+
+    [Fact]
+    public void LinesMoveWithTimeButOnlyALittle()
+    {
+        var still = RouteShape.Build(Width, Height, GapLeft, GapRight, Strip, 0);
+        var later = RouteShape.Build(Width, Height, GapLeft, GapRight, Strip, 5);
+
+        for (int i = 0; i < still.Lines.Count; i++)
+        {
+            var (a, b) = (Points(still.Lines[i].Geometry).ToList(), Points(later.Lines[i].Geometry).ToList());
+            double moved = a.Max(p => b.Min(q => (p - q).Length));
+
+            // Сдвинулась каждая, но не больше чем на четверть высоты карточки.
+            Assert.InRange(moved, 0.5, Height / 4);
         }
     }
 

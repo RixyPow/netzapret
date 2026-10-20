@@ -33,14 +33,33 @@ public static class RouteShape
     public const double Overhang = 40;
 
     /// <summary>
-    /// Раскладка для слоя <paramref name="width"/>×<paramref name="height"/>
-    /// с просветом от <paramref name="gapLeft"/> до <paramref name="gapRight"/>.
+    /// Насколько далеко (долей просвета) от своего места уходят перегибы при
+    /// движении. Края изгибов лежат в пределах <c>0,15 + Sway</c> просвета от его
+    /// краёв — дальше линии идут полосками ровно.
     /// </summary>
+    public const double Sway = 0.08;
+
+    /// <summary>
+    /// Раскладка для слоя <paramref name="width"/>×<paramref name="height"/>
+    /// с просветом от <paramref name="gapLeft"/> до <paramref name="gapRight"/>
+    /// в мгновение <paramref name="time"/> (секунды).
+    /// </summary>
+    /// <remarks>
+    /// Линии «дышат» (владелец 20.10: «сделай так, чтобы эти траектории тоже
+    /// двигались немного»): перегибы креста ходят вдоль просвета, вершины
+    /// парабол — вдоль и вглубь, развилка и концы веток — понемногу. Каждое —
+    /// своей синусоидой с периодом 11–19 с и своим сдвигом фазы, чтобы линии
+    /// не качались хором. Дорожки в полосках вдоль плашек стоят: сдвинься они —
+    /// линия заехала бы под плашку и пропала.
+    /// </remarks>
     /// <param name="strip">Высота полоски над и под плашками — в ней лежат «дорожки».</param>
-    public static Layout Build(double width, double height, double gapLeft, double gapRight, double strip)
+    public static Layout Build(double width, double height, double gapLeft, double gapRight, double strip, double time = 0)
     {
         double gap = Math.Max(gapRight - gapLeft, 1);
         double X(double u) => gapLeft + u * gap;
+
+        // Синусоида с периодом в секундах и сдвигом фазы.
+        double S(double period, double phase) => Math.Sin(2 * Math.PI * time / period + phase);
 
         // Две дорожки в полоске сверху и две снизу: ближняя к краю и ближняя к плашке.
         double top1 = strip * 0.35, top2 = strip * 0.72;
@@ -51,19 +70,38 @@ public static class RouteShape
 
         Point P(double x, double y) => new(x, y);
 
-        // Крест: верхняя уходит вниз, нижняя вверх, перегибы встречаются посреди просвета.
-        var down = new[] { P(left, top1), P(X(-0.15), top1), P(X(1.15), bottom2), P(right, bottom2) };
-        var up = new[] { P(left, bottom1), P(X(-0.15), bottom1), P(X(1.15), top2), P(right, top2) };
+        // Крест: верхняя уходит вниз, нижняя вверх, перегибы встречаются посреди
+        // просвета — и место встречи гуляет, потому что концы изгибов ходят врозь.
+        var down = new[]
+        {
+            P(left, top1), P(X(-0.15 + Sway * S(13, 0)), top1),
+            P(X(1.15 + Sway * S(17, 1.3)), bottom2), P(right, bottom2),
+        };
+        var up = new[]
+        {
+            P(left, bottom1), P(X(-0.15 + Sway * S(15, 2.1)), bottom1),
+            P(X(1.15 + Sway * S(11, 0.4)), top2), P(right, top2),
+        };
 
         // Параболы: сверху ныряет до середины и возвращается, снизу — навстречу ей, пунктиром.
-        var dip = new[] { P(left, top2), P(X(-0.1), top2), P(X(0.32), height * 0.44), P(X(0.78), top1), P(right, top1) };
-        var rise = new[] { P(left, bottom2), P(X(0.22), bottom2), P(X(0.68), height * 0.56), P(X(1.1), bottom1), P(right, bottom1) };
+        var dip = new[]
+        {
+            P(left, top2), P(X(-0.1 + Sway * S(19, 0.7)), top2),
+            P(X(0.32 + 0.1 * S(14, 2.5)), height * (0.44 + 0.08 * S(12, 0.9))),
+            P(X(0.78 + 0.06 * S(16, 1.7)), top1), P(right, top1),
+        };
+        var rise = new[]
+        {
+            P(left, bottom2), P(X(0.22 + 0.06 * S(18, 3.0)), bottom2),
+            P(X(0.68 + 0.1 * S(13, 4.2)), height * (0.56 - 0.08 * S(15, 2.8))),
+            P(X(1.1 + Sway * S(12, 5.1)), bottom1), P(right, bottom1),
+        };
 
         // Развилка: ствол по середине выходит из-под плашки и делится надвое под кнопку.
-        var fork = P(X(0.24), middle);
+        var fork = P(X(0.24 + 0.06 * S(17, 3.6)), middle + height * 0.05 * S(11, 1.1));
         var trunk = new[] { P(left, middle), fork };
-        var upper = new[] { fork, P(X(1.15), height * 0.3), P(right, height * 0.3) };
-        var lower = new[] { fork, P(X(1.15), height * 0.7), P(right, height * 0.7) };
+        var upper = new[] { fork, P(X(1.15), height * (0.3 + 0.06 * S(14, 0.2))), P(right, height * 0.3) };
+        var lower = new[] { fork, P(X(1.15), height * (0.7 + 0.06 * S(19, 4.4))), P(right, height * 0.7) };
 
         var lines = new List<Line>
         {

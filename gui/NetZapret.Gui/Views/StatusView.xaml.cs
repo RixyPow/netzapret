@@ -888,23 +888,31 @@ public partial class StatusView : UserControl
     /// <summary>Ключ цвета, который просили последним, — им красится заново разложенное.</summary>
     private string _routeKey = "Faint";
 
-    /// <summary>Бегут ли сейчас огоньки.</summary>
+    /// <summary>Идёт ли сейчас движение линий и огоньков.</summary>
     private bool _routesMoving;
 
-    /// <summary>Левый край просвета, под который разложены линии.</summary>
-    private double _routeGapLeft = double.NaN;
+    /// <summary>Мгновение такта, в котором линии нарисованы сейчас; с него же такт продолжается.</summary>
+    private double _routeTime;
+
+    /// <summary>Мгновение такта, с которого огоньки начали путь: от него отсчитываются их выходы.</summary>
+    private double _cometsFrom;
+
+    /// <summary>Слой и просвет, под которые разложены линии: такт берёт их отсюда, а не из раскладки.</summary>
+    private (double Width, double Height, double GapLeft, double GapRight, double Strip) _routeFrame;
 
     private readonly List<(System.Windows.Shapes.Path Path, double Strength)> _routeLines = [];
     private readonly List<System.Windows.Shapes.Ellipse> _routeForks = [];
     private readonly List<RouteComet> _comets = [];
 
-    /// <summary>Огонёк: хвост, ореол и голова, которые едут по своему пути вместе.</summary>
+    /// <summary>Огонёк: хвост, ореол и голова, которые едут вместе; круг пути — <see cref="Lap"/> секунд.</summary>
     private sealed record RouteComet(
         Canvas Body,
-        PathGeometry Track,
         System.Windows.Shapes.Path Tail,
         System.Windows.Shapes.Path Halo,
-        System.Windows.Shapes.Path Head);
+        System.Windows.Shapes.Path Head)
+    {
+        public double Lap { get; set; } = 1;
+    }
 
     /// <summary>Длина хвоста огонька.</summary>
     private const double CometTail = 30;
@@ -919,7 +927,7 @@ public partial class StatusView : UserControl
     private static readonly (double Pace, double Delay)[] CometRuns =
         [(1.0, 0), (0.9, 2.6), (1.15, 5.1), (0.95, 1.3), (1.1, 3.9), (1.05, 7.2)];
 
-    /// <summary>Огонёк до своего выхода и после снятия анимации — за краем, а не в углу слоя.</summary>
+    /// <summary>Огонёк до своего выхода и пока движение стоит — за краем, а не в углу слоя.</summary>
     private static readonly Matrix Offstage = new(1, 0, 0, 1, -1000, -1000);
 
     private static readonly Geometry CometTailShape = Frozen(new RectangleGeometry(new Rect(-CometTail, -0.75, CometTail, 1.5), 0.75, 0.75));
@@ -933,24 +941,36 @@ public partial class StatusView : UserControl
     }
 
     /// <summary>
-    /// Слой или плашка поменяли размер — линии раскладываются заново. Колонка
-    /// с кнопкой постоянной ширины и сдвигается только с размером слоя.
+    /// Такт линий: секунды, которые идут анимацией, пока линии движутся.
     /// </summary>
     /// <remarks>
-    /// Плашка меняет ширину со словами: «Работает» и «Запускается… — 12 с»
-    /// разной длины, а счётчик секунд при запуске тикает каждую секунду.
-    /// Заново — только когда край просвета сдвинулся заметно: иначе огоньки
-    /// начинали бы путь сначала раз в секунду.
+    /// Линии изгибаются, а огоньки обязаны ехать по ним же — поэтому у них один
+    /// такт, и на каждом его шаге пересчитывается всё сразу (DrawRoutes).
+    /// Анимацией, а не таймером: её шаги идут в лад с отрисовкой и ровно
+    /// 30 раз в секунду (FrameRate), а таймер Windows шагает по 15,6 мс
+    /// и давал бы рывки. CompositionTarget.Rendering не годится тоже: подписка
+    /// на него заставляет окно рисовать каждый кадр, даже когда менять нечего.
     /// </remarks>
-    private void OnRouteSize(object sender, SizeChangedEventArgs e)
+    private static readonly DependencyProperty RouteClockProperty = DependencyProperty.Register(
+        nameof(RouteClockProperty), typeof(double), typeof(StatusView),
+        new PropertyMetadata(0.0, (d, e) => ((StatusView)d).OnRouteClock((double)e.NewValue)));
+
+    private void OnRouteClock(double time)
     {
-        if (sender == StatePlate && Math.Abs(GapLeft() - _routeGapLeft) < 24)
+        // Снятая анимация возвращает такт к нулю — линии остаются, где стояли.
+        if (!_routesMoving)
             return;
 
-        BuildRoutes();
+        _routeTime = time;
+        DrawRoutes();
     }
 
-    private double GapLeft() => StatePlate.TranslatePoint(new Point(StatePlate.ActualWidth, 0), RouteLayer).X;
+    /// <summary>Слой поменял размер — линии раскладываются заново.</summary>
+    /// <remarks>
+    /// Плашка «Работает» постоянной ширины, колонка с кнопкой тоже: просвет
+    /// меняется только с размером самого слоя.
+    /// </remarks>
+    private void OnRouteSize(object sender, SizeChangedEventArgs e) => BuildRoutes();
 
     private void BuildRoutes()
     {
@@ -959,12 +979,15 @@ public partial class StatusView : UserControl
         if (w <= 0 || h <= 0 || StatePlate.ActualWidth <= 0 || ActionColumn.ActualWidth <= 0)
             return;
 
-        var column = ActionColumn.TranslatePoint(new Point(0, 0), RouteLayer);
-        _routeGapLeft = GapLeft();
-
-        var layout = RouteShape.Build(w, h, _routeGapLeft, column.X, strip: column.Y);
-
+        // Такт — стоп, пока старое разбирается; пустить ли снова, решит ShowRoutes ниже.
         MoveRoutes(false);
+
+        var plate = StatePlate.TranslatePoint(new Point(StatePlate.ActualWidth, 0), RouteLayer);
+        var column = ActionColumn.TranslatePoint(new Point(0, 0), RouteLayer);
+        _routeFrame = (w, h, plate.X, column.X, column.Y);
+
+        var layout = Layout(_routeTime);
+
         RouteLines.Children.Clear();
         RouteComets.Children.Clear();
         _routeLines.Clear();
@@ -973,7 +996,7 @@ public partial class StatusView : UserControl
 
         foreach (var line in layout.Lines)
         {
-            var path = new System.Windows.Shapes.Path { Data = line.Geometry, StrokeThickness = 1.2 };
+            var path = new System.Windows.Shapes.Path { StrokeThickness = 1.2 };
 
             if (line.Dashed)
                 path.StrokeDashArray = [3, 3];
@@ -982,24 +1005,28 @@ public partial class StatusView : UserControl
             RouteLines.Children.Add(path);
         }
 
-        foreach (var fork in layout.Forks)
+        foreach (var _ in layout.Forks)
         {
             var dot = new System.Windows.Shapes.Ellipse { Width = 5, Height = 5 };
-            Canvas.SetLeft(dot, fork.X - 2.5);
-            Canvas.SetTop(dot, fork.Y - 2.5);
 
             _routeForks.Add(dot);
             RouteLines.Children.Add(dot);
         }
 
-        foreach (var track in layout.Tracks)
+        for (int i = 0; i < layout.Tracks.Count; i++)
         {
+            var (pace, _) = CometRuns[i % CometRuns.Length];
+
+            // Круг огонька считается по длине пути при раскладке: дальше линии
+            // гуляют на считанные проценты, и скорость с ними — тоже.
             var comet = new RouteComet(
                 new Canvas { RenderTransform = new MatrixTransform(Offstage) },
-                track,
                 new System.Windows.Shapes.Path { Data = CometTailShape },
                 new System.Windows.Shapes.Path { Data = CometHaloShape },
-                new System.Windows.Shapes.Path { Data = CometHeadShape });
+                new System.Windows.Shapes.Path { Data = CometHeadShape })
+            {
+                Lap = RouteShape.Length(layout.Tracks[i]) / (CometSpeed * pace),
+            };
 
             comet.Body.Children.Add(comet.Tail);
             comet.Body.Children.Add(comet.Halo);
@@ -1009,18 +1036,65 @@ public partial class StatusView : UserControl
             RouteComets.Children.Add(comet.Body);
         }
 
-        // Новые линии ещё не крашены, и огоньки снова в путь, если шли.
+        DrawRoutes(layout);
+
+        // Новые линии ещё не крашены, и такт снова в путь, если движки работают.
         _routeColour = null;
         ShowRoutes(_routeKey);
     }
 
+    private RouteShape.Layout Layout(double time)
+    {
+        var (w, h, gapLeft, gapRight, strip) = _routeFrame;
+        return RouteShape.Build(w, h, gapLeft, gapRight, strip, time);
+    }
+
+    /// <summary>Рисует линии, развилки и огоньки в мгновение такта <see cref="_routeTime"/>.</summary>
+    private void DrawRoutes(RouteShape.Layout? layout = null)
+    {
+        if (_routeLines.Count == 0)
+            return;
+
+        layout ??= Layout(_routeTime);
+
+        for (int i = 0; i < _routeLines.Count && i < layout.Lines.Count; i++)
+            _routeLines[i].Path.Data = layout.Lines[i].Geometry;
+
+        for (int i = 0; i < _routeForks.Count && i < layout.Forks.Count; i++)
+        {
+            Canvas.SetLeft(_routeForks[i], layout.Forks[i].X - 2.5);
+            Canvas.SetTop(_routeForks[i], layout.Forks[i].Y - 2.5);
+        }
+
+        for (int i = 0; i < _comets.Count && i < layout.Tracks.Count; i++)
+        {
+            var comet = _comets[i];
+            var transform = (MatrixTransform)comet.Body.RenderTransform;
+            double run = _routeTime - _cometsFrom - CometRuns[i % CometRuns.Length].Delay;
+
+            if (!_routesMoving || run < 0)
+            {
+                transform.Matrix = Offstage;
+                continue;
+            }
+
+            double lap = run / comet.Lap;
+            layout.Tracks[i].GetPointAtFractionLength(lap - Math.Floor(lap), out var point, out var tangent);
+
+            var place = Matrix.Identity;
+            place.Rotate(Math.Atan2(tangent.Y, tangent.X) * 180 / Math.PI);
+            place.Translate(point.X, point.Y);
+            transform.Matrix = place;
+        }
+    }
+
     /// <summary>
-    /// Красит линии цветом состояния и пускает огоньки, пока движки работают.
+    /// Красит линии цветом состояния и пускает движение, пока движки работают.
     /// </summary>
     /// <remarks>
     /// Тот же цвет, что у кольца: серая «стоит», жёлтая «поднимается», зелёная
-    /// «работает», красная «беда». Огоньки стоят, пока стоят движки: движение
-    /// без работы читалось бы как работа.
+    /// «работает», красная «беда». Линии и огоньки стоят, пока стоят движки:
+    /// движение без работы читалось бы как работа.
     /// </remarks>
     private void ShowRoutes(string colourKey)
     {
@@ -1073,53 +1147,49 @@ public partial class StatusView : UserControl
     }
 
     /// <summary>
-    /// Пускает или снимает огоньки.
+    /// Пускает или снимает такт линий и огоньков.
     /// </summary>
     /// <remarks>
-    /// Линии стоят и закешированы картинкой (BitmapCache в разметке); кадр —
-    /// только перенос и поворот огоньков по готовым путям (FrameRate).
-    /// Путь уходит за правый край дальше, чем виден (RouteShape.RunOut): там
-    /// огонёк «отдыхает», и на карточке их одновременно три-четыре, а не все
-    /// шесть. Останавливается при уходе с «Главной» (Unloaded): анимация на
-    /// скрытом виде будила бы композитор впустую — так уже было с «Замером
-    /// скорости».
+    /// Такт продолжается с того мгновения, где линии стоят, — пуск их не
+    /// дёргает; огоньки при каждом пуске выходят заново, по своим задержкам.
+    /// Путь огонька уходит за правый край дальше, чем виден
+    /// (RouteShape.RunOut): там он «отдыхает», и на карточке их одновременно
+    /// три-четыре, а не все шесть. Останавливается при уходе с «Главной»
+    /// (Unloaded): анимация на скрытом виде будила бы окно впустую — так уже
+    /// было с «Замером скорости».
     /// </remarks>
     private void MoveRoutes(bool on)
     {
-        if (on == _routesMoving || (on && _comets.Count == 0))
+        if (on == _routesMoving || (on && _routeLines.Count == 0))
             return;
 
         _routesMoving = on;
 
-        for (int i = 0; i < _comets.Count; i++)
+        if (!on)
         {
-            var comet = _comets[i];
-            var transform = (MatrixTransform)comet.Body.RenderTransform;
-
-            if (!on)
-            {
-                transform.BeginAnimation(MatrixTransform.MatrixProperty, null);
-                continue;
-            }
-
-            var (pace, delay) = CometRuns[i % CometRuns.Length];
-
-            var run = new MatrixAnimationUsingPath
-            {
-                PathGeometry = comet.Track,
-                DoesRotateWithTangent = true,
-                Duration = TimeSpan.FromSeconds(RouteShape.Length(comet.Track) / (CometSpeed * pace)),
-                BeginTime = TimeSpan.FromSeconds(delay),
-                RepeatBehavior = RepeatBehavior.Forever,
-            };
-
-            Timeline.SetDesiredFrameRate(run, FrameRate);
-            transform.BeginAnimation(MatrixTransform.MatrixProperty, run);
+            BeginAnimation(RouteClockProperty, null);
+            DrawRoutes();
+            return;
         }
+
+        _cometsFrom = _routeTime;
+
+        // Час такта за час времени, и повторы копятся (IsCumulative): такт идёт
+        // дальше, а не прыгает назад, — иначе раз в час линии дёргались бы,
+        // их периоды (11–19 с) в час целиком не укладываются.
+        const double hour = 3600;
+        var clock = new DoubleAnimation(_routeTime, _routeTime + hour, TimeSpan.FromSeconds(hour))
+        {
+            RepeatBehavior = RepeatBehavior.Forever,
+            IsCumulative = true,
+        };
+
+        Timeline.SetDesiredFrameRate(clock, FrameRate);
+        BeginAnimation(RouteClockProperty, clock);
     }
 
     /// <summary>
-    /// Кадров в секунду у движения на карточке состояния — огоньков и шестиугольников.
+    /// Кадров в секунду у движения на карточке состояния — линий, огоньков и шестиугольников.
     /// </summary>
     /// <remarks>
     /// 30, как было у волны 19.10 (замер тогда: прибавка около 3 % ядра,
