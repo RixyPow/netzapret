@@ -325,6 +325,7 @@ public partial class StatusView : UserControl
     public StatusView()
     {
         InitializeComponent();
+        BuildPulse();
 
         // Опрос по времени, а не подписка на события: супервизор — отдельный
         // процесс и пишет своё состояние в файл. Две секунды достаточно,
@@ -368,6 +369,7 @@ public partial class StatusView : UserControl
             // впустую. Само состояние запуска при этом сохраняется.
             StopAnimations();
             MoveWave(false);
+            MovePulse(false);
         };
     }
 
@@ -683,6 +685,7 @@ public partial class StatusView : UserControl
         {
             ShowDot("Faint");
             ShowWave("Faint");
+            ShowPulse("Faint", moving: false);
 
             StateLine.Text = "Остановлено";
 
@@ -714,6 +717,7 @@ public partial class StatusView : UserControl
 
         ShowDot(colour);
         ShowWave(colour);
+        ShowPulse(colour, moving: true);
 
         StateLine.Text = healthy
             ? "Работает"
@@ -762,6 +766,7 @@ public partial class StatusView : UserControl
 
         ShowDot("Warn");
         ShowWave("Warn");
+        ShowPulse("Warn", moving: false);
 
         StateLine.Text = "Запускается…";
 
@@ -998,6 +1003,188 @@ public partial class StatusView : UserControl
     /// При 60 кадрах прибавка в шуме не отличалась — замер тот грубее.
     /// </remarks>
     private const int WaveFrameRate = 30;
+
+    // --- Шестиугольные волны вокруг кольца (владелец 20.10) ----------------------
+
+    /// <summary>Сторона поля под волны; кольцо (68) — посередине.</summary>
+    private const double PulseBox = 100;
+
+    /// <summary>Радиус узлов: сразу за кольцом (его край — 34) с зазором под свечение.</summary>
+    private const double PulseRadius = 37;
+
+    /// <summary>Во сколько раз волна вырастает за жизнь: от узлов до 47 — на 3 точки не доходя края поля (47 / 37).</summary>
+    private const double PulseReach = 1.27;
+
+    /// <summary>На сколько градусов волна поворачивается за жизнь — полшага фигуры.</summary>
+    private const double PulseTwist = 30;
+
+    /// <summary>Жизнь одной волны; волн три, и выходят они через треть жизни друг за другом.</summary>
+    private static readonly TimeSpan PulseLife = TimeSpan.FromSeconds(3.6);
+
+    private System.Windows.Shapes.Path? _pulseNodes;
+    private readonly List<System.Windows.Shapes.Path> _ripples = [];
+
+    /// <summary>Цвет волн сейчас и идут ли они — повтор на тике опроса ничего не делает.</summary>
+    private string? _pulseColour;
+    private bool _pulseMoving;
+
+    /// <summary>
+    /// Шесть узлов вокруг кольца и три волны-шестиугольника над ними.
+    /// </summary>
+    /// <remarks>
+    /// Шестиугольник, а не круг, расходящийся кругами, и не дуга по кольцу:
+    /// дуга, бегущая по кругу, — это «загрузка», а «Работает» значит «готово».
+    /// Волна рождается в узлах у самого кольца — её середины сторон ещё
+    /// под ним, — растёт почти до края плашки, поворачиваясь на полшага, и гаснет;
+    /// три волны вразбег дают закрученный узор. Узлы стоят и без анимации:
+    /// без них поле вокруг кольца было бы пустым, с ними — значок.
+    /// </remarks>
+    private void BuildPulse()
+    {
+        var centre = new Point(PulseBox / 2, PulseBox / 2);
+        var hexagon = PulseShape.Hexagon(centre, PulseRadius);
+
+        for (int i = 0; i < 3; i++)
+        {
+            var ripple = new System.Windows.Shapes.Path
+            {
+                Data = hexagon,
+                StrokeThickness = 1.2,
+                StrokeLineJoin = PenLineJoin.Round,
+                Opacity = 0,
+                RenderTransform = new TransformGroup
+                {
+                    Children =
+                    {
+                        new ScaleTransform(1, 1, centre.X, centre.Y),
+                        new RotateTransform(0, centre.X, centre.Y),
+                    },
+                },
+            };
+
+            _ripples.Add(ripple);
+            PulseLayer.Children.Add(ripple);
+        }
+
+        // Узлы — поверх волн: волна выходит из них, а не накрывает их.
+        _pulseNodes = new System.Windows.Shapes.Path { Data = PulseShape.Nodes(centre, PulseRadius, 2.2) };
+        PulseLayer.Children.Add(_pulseNodes);
+
+        // Серыми до первого опроса — как кольцо в разметке.
+        ShowPulse("Faint", moving: false);
+    }
+
+    /// <summary>
+    /// Красит узлы и волны цветом состояния и пускает волны, пока движки работают.
+    /// </summary>
+    /// <remarks>
+    /// Цвет — тот же ключ, что у кольца и волны на фоне (ShowDot, ShowWave).
+    /// Пока движки поднимаются, волн нет: тогда мигает само кольцо
+    /// (StartAnimations), и два движения разом спорили бы, что из них значит
+    /// «запускается».
+    /// </remarks>
+    private void ShowPulse(string colourKey, bool moving)
+    {
+        if (_pulseNodes is null)
+            return;
+
+        if (colourKey != _pulseColour)
+        {
+            _pulseColour = colourKey;
+
+            var brush = FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush;
+            var colour = brush?.Color ?? Colors.Gray;
+            bool idle = colourKey == "Faint";
+
+            _pulseNodes.Fill = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.45 : 0.85)));
+
+            var wave = Frozen(new SolidColorBrush(colour));
+
+            foreach (var ripple in _ripples)
+            {
+                ripple.Stroke = wave;
+            }
+        }
+
+        MovePulse(moving && IsLoaded && Motion.Enabled);
+    }
+
+    /// <summary>Пускает или снимает волны.</summary>
+    /// <remarks>
+    /// Двигаются только перенос, поворот и прозрачность готовой фигуры — геометрия
+    /// не перестраивается. Кадров столько же, сколько у волны на фоне
+    /// (WaveFrameRate): она и так перерисовывает карточку 30 раз в секунду,
+    /// и лишних кадров волны не добавляют. Снятая анимация возвращает
+    /// прозрачность к 0 из разметки — волны исчезают, а не замирают на полпути.
+    /// </remarks>
+    private void MovePulse(bool on)
+    {
+        if (on == _pulseMoving)
+            return;
+
+        _pulseMoving = on;
+
+        for (int i = 0; i < _ripples.Count; i++)
+        {
+            var ripple = _ripples[i];
+            var transforms = ((TransformGroup)ripple.RenderTransform).Children;
+            var scale = (ScaleTransform)transforms[0];
+            var turn = (RotateTransform)transforms[1];
+
+            if (!on)
+            {
+                ripple.BeginAnimation(OpacityProperty, null);
+                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                turn.BeginAnimation(RotateTransform.AngleProperty, null);
+                continue;
+            }
+
+            // Вразбег: вторая выходит через треть жизни, третья — через две.
+            // Задержка только первая — повторы идут вплотную.
+            var begin = TimeSpan.FromTicks(PulseLife.Ticks * i / _ripples.Count);
+
+            var grow = Repeat(new DoubleAnimation(1, PulseReach, PulseLife) { EasingFunction = PulseEase }, begin);
+            var twist = Repeat(new DoubleAnimation(0, PulseTwist, PulseLife) { EasingFunction = PulseEase }, begin);
+
+            // Проявляется быстро, пока выходит из-под кольца, и гаснет, не дойдя
+            // до края: к 80 % жизни её уже нет — иначе большие волны толпились
+            // у краёв плашки и налезали на слова (первый снимок кадрами 20.10).
+            var fade = Repeat(new DoubleAnimationUsingKeyFrames
+            {
+                Duration = PulseLife,
+                KeyFrames =
+                {
+                    new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)),
+                    new LinearDoubleKeyFrame(0.75, KeyTime.FromPercent(0.08)),
+                    new LinearDoubleKeyFrame(0.3, KeyTime.FromPercent(0.5)),
+                    new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0.8)),
+                },
+            }, begin);
+
+            ripple.BeginAnimation(OpacityProperty, fade);
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
+            turn.BeginAnimation(RotateTransform.AngleProperty, twist);
+        }
+
+        static AnimationTimeline Repeat(AnimationTimeline animation, TimeSpan begin)
+        {
+            animation.BeginTime = begin;
+            animation.RepeatBehavior = RepeatBehavior.Forever;
+            Timeline.SetDesiredFrameRate(animation, WaveFrameRate);
+            return animation;
+        }
+    }
+
+    /// <summary>Волна быстрее отходит от кольца и замедляется к краю.</summary>
+    private static readonly IEasingFunction PulseEase = Freeze(new SineEase { EasingMode = EasingMode.EaseOut });
+
+    private static IEasingFunction Freeze(EasingFunctionBase ease)
+    {
+        ease.Freeze();
+        return ease;
+    }
 
     /// <summary>
     /// Красит кольцо состояния, его знак и свечение и точку в строке внизу — одним цветом.

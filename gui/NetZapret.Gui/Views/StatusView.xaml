@@ -414,7 +414,7 @@
                                 а не во всю колонку.
                             -->
                             <Border Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                    Padding="10,10,18,10" CornerRadius="12" BorderThickness="1"
+                                    Padding="0,0,18,0" CornerRadius="12" BorderThickness="1"
                                     Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -422,16 +422,28 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
-                                    <Grid x:Name="RingBox" Grid.Column="0" Width="68" Height="68"
-                                          VerticalAlignment="Center" Margin="0,0,16,0">
-                                        <Ellipse x:Name="Ring" StrokeThickness="4" Stroke="{DynamicResource Faint}">
-                                            <Ellipse.Effect>
-                                                <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
-                                                                  Opacity="0.7" Color="Transparent" />
-                                            </Ellipse.Effect>
-                                        </Ellipse>
-                                        <TextBlock x:Name="RingGlyph" Style="{StaticResource LineGlyph}" Text="&#xE7E8;"
-                                                   FontSize="28" HorizontalAlignment="Center" Foreground="{DynamicResource Faint}" />
+                                    <!--
+                                        Кольцо посреди поля 100×100 под волны (владелец 20.10:
+                                        «крутую красивую анимацию геометрическую на плитке
+                                        работает»). Поле вместо прежних полей плашки (10) и
+                                        отступа до слов (16): плашка выросла на 12 и стала
+                                        вровень с кнопкой и счётчиками справа — высоту
+                                        карточки по-прежнему задают они. Волны рисуются
+                                        в коде (BuildPulse).
+                                    -->
+                                    <Grid Grid.Column="0" Width="100" Height="100" VerticalAlignment="Center">
+                                        <Canvas x:Name="PulseLayer" IsHitTestVisible="False" />
+
+                                        <Grid x:Name="RingBox" Width="68" Height="68">
+                                            <Ellipse x:Name="Ring" StrokeThickness="4" Stroke="{DynamicResource Faint}">
+                                                <Ellipse.Effect>
+                                                    <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
+                                                                      Opacity="0.7" Color="Transparent" />
+                                                </Ellipse.Effect>
+                                            </Ellipse>
+                                            <TextBlock x:Name="RingGlyph" Style="{StaticResource LineGlyph}" Text="&#xE7E8;"
+                                                       FontSize="28" HorizontalAlignment="Center" Foreground="{DynamicResource Faint}" />
+                                        </Grid>
                                     </Grid>
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
