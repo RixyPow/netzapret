@@ -122,6 +122,18 @@
             </Setter>
             <Setter Property="Template" Value="{StaticResource SplitShape}" />
         </Style>
+
+        <!--
+            Карточки рядов «Главной» — с полями 13 по вертикали, а не 16, как
+            у Card. Владелец 20.10, снимок не развёрнутого окна (1067×712):
+            «Главную опять надо мотать». С Manrope строки выше, чем у прежнего
+            шрифта, и страница выросла на 22 точки — 666 при видимых 652.
+            Таких карточек четыре, в два ряда: пресет и параметры, автозапуск
+            и обновление (у него те же поля — в UpdatePanel.xaml).
+        -->
+        <Style x:Key="HomeCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Padding" Value="18,13" />
+        </Style>
     </UserControl.Resources>
 
     <!--
@@ -535,7 +547,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource Card}">
+                    <Border Grid.Column="0" Style="{StaticResource HomeCard}">
                         <StackPanel>
                             <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
@@ -585,7 +597,7 @@
                     </Border>
 
                     <!-- Настройка. Только показ: правка — в своих разделах. -->
-                    <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <Border Grid.Column="2" Style="{StaticResource HomeCard}">
                         <StackPanel>
                             <TextBlock Text="Параметры подключения" Style="{StaticResource Caption}" FontSize="12.5" />
 
@@ -601,11 +613,11 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Style="{StaticResource LineGlyph}" Text="&#xE8CE;" Margin="0,0,0,9" />
+                                <TextBlock Grid.Row="0" Style="{StaticResource LineGlyph}" Text="&#xE8CE;" Margin="0,0,0,7" />
                                 <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource Caption}" Text="Сервер"
-                                           Margin="0,0,14,9" VerticalAlignment="Center" />
+                                           Margin="0,0,14,7" VerticalAlignment="Center" />
                                 <!-- Флаг выхода — картинкой, как на вкладке VPN (FlagImages): Windows флагов не рисует. -->
-                                <Grid Grid.Row="0" Grid.Column="2" Margin="0,0,0,9">
+                                <Grid Grid.Row="0" Grid.Column="2" Margin="0,0,0,7">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -618,10 +630,10 @@
                                                TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                                 </Grid>
 
-                                <TextBlock Grid.Row="1" Style="{StaticResource LineGlyph}" Text="&#xE774;" Margin="0,0,0,9" />
+                                <TextBlock Grid.Row="1" Style="{StaticResource LineGlyph}" Text="&#xE774;" Margin="0,0,0,7" />
                                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Caption}" Text="DNS"
-                                           Margin="0,0,14,9" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="DnsValue" Text="—" Margin="0,0,0,9"
+                                           Margin="0,0,14,7" VerticalAlignment="Center" />
+                                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="DnsValue" Text="—" Margin="0,0,0,7"
                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                 <TextBlock Grid.Row="2" Style="{StaticResource LineGlyph}" Text="&#xE7C3;" />
@@ -634,11 +646,15 @@
                     </Border>
                 </Grid>
 
-                <!-- Предупреждения: защитник в стеке, стёртый hosts. Пусто — не показываем. -->
-                <ItemsControl Grid.Row="7" x:Name="Warnings" Margin="0,10,0,0">
+                <!--
+                    Предупреждения: защитник в стеке, стёртый hosts. Отступ — у самих
+                    карточек, а не у списка: у пустого списка его отступ оставался
+                    и съедал 10 точек высоты (снимок 20.10, «Главную» снова мотали).
+                -->
+                <ItemsControl Grid.Row="7" x:Name="Warnings">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,8"
+                            <Border Style="{StaticResource Card}" Margin="0,8,0,0"
                                     BorderBrush="{DynamicResource Warn}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
@@ -672,7 +688,7 @@
                 <Border Grid.Row="10" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="14,12,14,12">
                     <StackPanel>
                         <!-- Подпись — как «Текущий пресет» у соседних карточек и с тем же отступом слева. -->
-                        <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,8" />
+                        <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,6" />
 
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -771,7 +787,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource Card}">
+                    <Border Grid.Column="0" Style="{StaticResource HomeCard}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

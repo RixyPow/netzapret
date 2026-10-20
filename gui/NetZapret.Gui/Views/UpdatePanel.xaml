@@ -11,7 +11,8 @@
         что обновление останавливает движки, — в подсказке у заголовка:
         оно нужно в момент решения, а не при каждом взгляде на окно.
     -->
-    <Border Style="{StaticResource Card}">
+    <!-- Поля 13 по вертикали — как у соседней карточки автозапуска (HomeCard в StatusView.xaml). -->
+    <Border Style="{StaticResource Card}" Padding="18,13">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
