@@ -81,6 +81,15 @@ public partial class ThemeEditorWindow : Window
     private bool _placed;
     private bool _dragging;
 
+    /// <summary>
+    /// Выбор темы для «Главной» (<see cref="Theme.HomeFullWidth"/>); <c>null</c> — как
+    /// решит картинка. Совпавший с решением картинки выбор не пишется: снимешь
+    /// картинку — тема без неё и так на всю ширину.
+    /// </summary>
+    private bool? _homeWide;
+
+    private bool HomeWide => _homeWide ?? _image is null;
+
     /// <summary>Картинка для миниатюры «Главной»; у видео — его кадр.</summary>
     private BitmapSource? _poster;
 
@@ -104,6 +113,7 @@ public partial class ThemeEditorWindow : Window
         InitializeComponent();
 
         _from = from;
+        _homeWide = from.HomeFullWidth;
         _editing = editing;
         _original = Themes.Current;
         _editingWasFine = editing is not null && ThemeLoader.Load(editing).Ok;
@@ -193,7 +203,7 @@ public partial class ThemeEditorWindow : Window
                 HomeY = _placed ? _homeY : null,
                 HomeSize = _placed ? _homeSize : null,
             },
-        HomeFullWidth = _from.HomeFullWidth,
+        HomeFullWidth = _homeWide,
     };
 
     /// <summary>
@@ -240,6 +250,27 @@ public partial class ThemeEditorWindow : Window
 
         _poster = _image is null ? null : Poster(_image);
         ShowMini();
+        ShowHomeWide();
+    }
+
+    private void OnHomeWide(object sender, RoutedEventArgs e)
+    {
+        bool wide = !HomeWide;
+        _homeWide = wide == (_image is null) ? null : wide;
+
+        ShowHomeWide();
+        Changed();
+    }
+
+    /// <summary>Выключатель «на всю ширину» и миниатюра: во всю ширину укладка не нужна — миниатюра бледнеет.</summary>
+    private void ShowHomeWide()
+    {
+        bool wide = HomeWide;
+
+        HomeWideSwitch.IsChecked = wide;
+        HomeMini.Opacity = wide ? 0.45 : 1;
+        HomeMini.IsHitTestVisible = !wide;
+        SizeSlider.IsEnabled = !wide;
     }
 
     /// <summary>Картинка для миниатюры: сама картинка в малом размере, у видео — его кадр.</summary>
@@ -614,7 +645,7 @@ public partial class ThemeEditorWindow : Window
             HomeX = _placed ? _homeX : null,
             HomeY = _placed ? _homeY : null,
             HomeSize = _placed ? _homeSize : null,
-            HomeFullWidth = _from.HomeFullWidth,
+            HomeFullWidth = _homeWide,
         };
 
         try

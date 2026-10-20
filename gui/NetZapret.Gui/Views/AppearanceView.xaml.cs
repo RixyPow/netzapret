@@ -57,7 +57,7 @@ public partial class AppearanceView : UserControl
         ShowFonts(settings);
         ShowTray(settings);
         ShowAnimations(settings);
-        HomeWidthSwitch.IsChecked = settings.HomeFullWidth;
+        HomeWidthSwitch.IsChecked = settings.HomeWide(Themes.Current, Themes.WideHome);
     }
 
     private void ShowAnimations(AppSettings settings)
@@ -75,16 +75,20 @@ public partial class AppearanceView : UserControl
     {
         try
         {
+            // Для темы, что стоит сейчас (владелец 20.10: «добавь настройку для
+            // каждой темы на весь экран главная или с тайлом»); совпал выбор
+            // с задуманным темой — запись снимается, и тема решает сама.
             var settings = AppSettings.Load(AppSettings.DefaultPath);
-            var next = settings with { HomeFullWidth = !settings.HomeFullWidth };
+            bool wide = !settings.HomeWide(Themes.Current, Themes.WideHome);
+            var next = settings.WithHomeWide(Themes.Current, wide, Themes.WideHome);
 
             next.Save(AppSettings.DefaultPath);
-            HomeWidthSwitch.IsChecked = next.HomeFullWidth;
+            HomeWidthSwitch.IsChecked = wide;
 
             // «Главная» читает это при каждом показе: перезапускать ничего не надо.
-            Status.Text = next.HomeFullWidth
-                ? "«Главная» — на всю ширину окна."
-                : "«Главная» — как прежде: карточки слева, справа место под картинку темы.";
+            Status.Text = wide
+                ? "«Главная» с этой темой — на всю ширину окна."
+                : "«Главная» с этой темой — карточки слева, картинка темы в карточке справа.";
         }
         catch (Exception ex)
         {

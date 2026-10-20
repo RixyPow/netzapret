@@ -683,14 +683,69 @@ public sealed record AppSettings
     /// </remarks>
     public bool Animations { get; init; } = true;
 
-    /// <summary>«Главная» на всю ширину окна, без колонки под арт темы.</summary>
+    /// <summary>До 20.10: «Главная» на всю ширину при любой теме; читается только разовым переводом.</summary>
     /// <remarks>
-    /// Владелец 01.10: «для тех, кто сидит с базовыми темами». Содержимое
-    /// «Главной» не шире 940 точек, а справа колонка под картинку темы;
-    /// у тем без картинки она стоит пустой. Выключено по умолчанию — вид
-    /// по макету 30.09 остаётся прежним.
+    /// Владелец 01.10: «для тех, кто сидит с базовыми темами». С 20.10 выбор —
+    /// у каждой темы свой (<see cref="HomeWideThemes"/>, «пусть все темы без
+    /// фона растягивают главную по умолчанию… добавь настройку для каждой
+    /// темы»), а этот выключатель переводится один раз (<see cref="HomeWideOnce"/>).
     /// </remarks>
     public bool HomeFullWidth { get; init; }
+
+    /// <summary>
+    /// «Главная» на всю ширину или с картинкой в карточке — выбор человека
+    /// для каждой темы: ключ — папка темы. Темы, которых здесь нет, берут
+    /// выбор самой темы (<see cref="Themes.Theme.HomeWide"/>).
+    /// </summary>
+    /// <remarks>
+    /// В настройках, а не в теме: встроенные темы редактор не перезаписывает
+    /// (правка ложится копией), и выбор для них иначе не сохранить.
+    /// </remarks>
+    public IReadOnlyDictionary<string, bool>? HomeWideThemes { get; init; }
+
+    /// <summary>Во всю ли ширину «Главная» с темой <paramref name="themeId"/>, если сама тема просит <paramref name="themeWide"/>.</summary>
+    public bool HomeWide(string themeId, bool themeWide) =>
+        HomeWideThemes is not null && HomeWideThemes.TryGetValue(themeId, out var wide) ? wide : themeWide;
+
+    /// <summary>
+    /// Запоминает выбор для темы <paramref name="themeId"/>; совпал с выбором
+    /// самой темы — запись снимается, и тема дальше решает сама.
+    /// </summary>
+    public AppSettings WithHomeWide(string themeId, bool wide, bool themeWide)
+    {
+        var map = new Dictionary<string, bool>(HomeWideThemes ?? new Dictionary<string, bool>(), StringComparer.OrdinalIgnoreCase);
+
+        if (wide == themeWide)
+            map.Remove(themeId);
+        else
+            map[themeId] = wide;
+
+        return this with { HomeWideThemes = map.Count == 0 ? null : map };
+    }
+
+    /// <summary>
+    /// Разовый перевод общего выключателя «Главная на всю ширину» (до 20.10)
+    /// в выбор для темы, стоявшей при нём.
+    /// </summary>
+    /// <remarks>
+    /// Включали его ради тем без картинки — им с 20.10 вся ширина и так по
+    /// умолчанию. Тема с картинкой, стоявшая при включённом, сохраняет всю
+    /// ширину; прочие темы с картинкой встают с карточкой, как задуманы.
+    /// Отметки не нужно: перевод снимает сам выключатель.
+    /// </remarks>
+    private static AppSettings HomeWideOnce(AppSettings read)
+    {
+        if (!read.HomeFullWidth)
+            return read;
+
+        var map = new Dictionary<string, bool>(read.HomeWideThemes ?? new Dictionary<string, bool>(), StringComparer.OrdinalIgnoreCase);
+        map.TryAdd(string.IsNullOrWhiteSpace(read.Theme) ? DefaultThemeId : read.Theme, true);
+
+        return read with { HomeFullWidth = false, HomeWideThemes = map };
+    }
+
+    /// <summary>Тема по умолчанию — та же, что <c>Themes.DefaultId</c> окна.</summary>
+    private const string DefaultThemeId = "dark";
 
     public static string DefaultPath => Path.Combine("config", "netzapret.json");
 
@@ -953,11 +1008,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            }))));
+            })))));
         }
         catch (Exception)
         {

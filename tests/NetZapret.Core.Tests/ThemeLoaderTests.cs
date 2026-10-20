@@ -196,6 +196,18 @@ public sealed class ThemeLoaderTests : IDisposable
     }
 
     /// <summary>
+    /// Не сказала тема про «Главную» — решает картинка (20.10): без неё на всю
+    /// ширину, с ней — в карточке. Сказанное явно сильнее.
+    /// </summary>
+    [Fact]
+    public void WithoutAPictureHomeIsWideUnlessTheThemeSaysOtherwise()
+    {
+        Assert.True(Write("plain", """{ "base": "dark" }""").Theme!.HomeWide);
+        Assert.False(Write("narrow", """{ "base": "dark", "homeFullWidth": false }""").Theme!.HomeWide);
+        Assert.False(Write("art", """{ "base": "dark", "background": { "image": "a.jpg" } }""", ("a.jpg", 16)).Theme!.HomeWide);
+    }
+
+    /// <summary>
     /// Фоном может быть видео mp4 (07.10, «именно как фон эта гифка должна
     /// быть»), а GIF — нет: фоном он съел бы сотни мегабайт памяти.
     /// </summary>
@@ -208,11 +220,12 @@ public sealed class ThemeLoaderTests : IDisposable
 
         Assert.True(video.Ok, string.Join("; ", video.Problems));
         Assert.True(video.Theme!.Background!.IsVideo);
-        Assert.False(video.Theme.HomeFullWidth);
+        Assert.Null(video.Theme.HomeFullWidth);
 
         // Тема может попросить «Главную» на всю ширину (08.10, «Рыбка»).
-        var wide = Write("wide", """{ "base": "dark", "homeFullWidth": true }""");
+        var wide = Write("wide", """{ "base": "dark", "homeFullWidth": true, "background": { "image": "fish.mp4" } }""", ("fish.mp4", 16));
         Assert.True(wide.Theme!.HomeFullWidth);
+        Assert.True(wide.Theme.HomeWide);
         Assert.EndsWith("fish.mp4", video.Theme.Background.Image);
 
         var gif = Write("gif", """

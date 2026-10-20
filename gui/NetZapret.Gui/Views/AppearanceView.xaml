@@ -262,9 +262,9 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="На всю ширину окна" FontWeight="SemiBold" />
+                                    <TextBlock Text="На всю ширину окна — для этой темы" FontWeight="SemiBold" />
                                     <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                               Text="Карточки «Главной» растягиваются до правого края. Колонки под картинку темы нет — у тем с картинкой она ляжет под карточки, как на прочих вкладках." />
+                                               Text="Карточки «Главной» растягиваются до правого края, картинка темы ложится под них, как на прочих вкладках. Выключено — картинка в карточке справа. У каждой темы выбор свой; темы без картинки по умолчанию на всю ширину." />
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="HomeWidthSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />

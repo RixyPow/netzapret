@@ -99,6 +99,49 @@ public sealed class AppSettingsTests : IDisposable
         Assert.True(read.WarpIsPath);
     }
 
+    /// <summary>
+    /// «Главная» на всю ширину — у каждой темы своё (20.10): выбор человека
+    /// поверх выбора темы, совпавший с выбором темы не хранится.
+    /// </summary>
+    [Fact]
+    public void HomeWidthIsChosenPerTheme()
+    {
+        var settings = new AppSettings();
+
+        Assert.True(settings.HomeWide("dark", themeWide: true));
+        Assert.False(settings.HomeWide("sloyka2", themeWide: false));
+
+        var chosen = settings.WithHomeWide("sloyka2", wide: true, themeWide: false);
+        Assert.True(chosen.HomeWide("sloyka2", themeWide: false));
+        Assert.True(chosen.HomeWide("dark", themeWide: true));
+        Assert.False(chosen.HomeWide("blissfield", themeWide: false));
+
+        chosen.Save(_path);
+        Assert.True(AppSettings.Load(_path).HomeWide("sloyka2", themeWide: false));
+
+        // Вернул как задумано темой — запись снята, тема снова решает сама.
+        var back = chosen.WithHomeWide("sloyka2", wide: false, themeWide: false);
+        Assert.Null(back.HomeWideThemes);
+    }
+
+    /// <summary>
+    /// Общий выключатель до 20.10 переходит в выбор для темы, стоявшей при нём;
+    /// прочие темы решают сами.
+    /// </summary>
+    [Theory]
+    [InlineData("""{ "HomeFullWidth": true, "Theme": "sloyka2" }""", "sloyka2")]
+    [InlineData("""{ "HomeFullWidth": true }""", "dark")]
+    public void TheOldWideSwitchGoesToTheThemeItWasOn(string json, string theme)
+    {
+        File.WriteAllText(_path, json);
+
+        var read = AppSettings.Load(_path);
+
+        Assert.False(read.HomeFullWidth);
+        Assert.True(read.HomeWide(theme, themeWide: false));
+        Assert.False(read.HomeWide("blissfield", themeWide: false));
+    }
+
     /// <summary>Game filter выключается у всех один раз (01.10), а включённый после — остаётся.</summary>
     [Theory]
     [InlineData("""{ "GameFilter": true }""", false)]

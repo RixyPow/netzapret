@@ -78,7 +78,8 @@ public sealed class ThemeWriterTests : IDisposable
         Assert.Equal(0.5, theme.Background.HomeY);
         Assert.Equal(0.8, theme.Background.HomeSize);
         Assert.EndsWith("background.jpg", theme.Background.Image);
-        Assert.False(theme.HomeFullWidth);
+        Assert.Null(theme.HomeFullWidth);
+        Assert.False(theme.HomeWide);
     }
 
     /// <summary>

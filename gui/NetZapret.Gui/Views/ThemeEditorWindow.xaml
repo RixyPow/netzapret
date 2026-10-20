@@ -146,6 +146,25 @@
                             <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
                                        Text="Тяните картинку по миниатюре «Главной», колесом или ползунком — размер. На «Главной» она видна в карточке справа; что в ней картинка не закрывает, зальётся градиентом из фона окна в её цвет." />
 
+                            <!--
+                                Выбор темы (владелец 20.10: «добавь настройку для каждой темы
+                                на весь экран главная или с тайлом»). Человек может сменить его
+                                для себя в «Оформлении» — тема не перезаписывается.
+                            -->
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,16,0">
+                                    <TextBlock Text="«Главная» на всю ширину" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                               Text="Карточки до правого края, картинка под ними, как на прочих вкладках, — укладка на миниатюре тогда не нужна. Выключено — картинка в карточке справа. В «Оформлении» это можно сменить для себя." />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1" x:Name="HomeWideSwitch" Style="{StaticResource Switch}"
+                                              Click="OnHomeWide" VerticalAlignment="Center" />
+                            </Grid>
+
                             <Border x:Name="HomeMini" Width="480" Height="307" Margin="0,10,0,0"
                                     HorizontalAlignment="Left" CornerRadius="10" ClipToBounds="True"
                                     BorderBrush="{DynamicResource Border}" BorderThickness="1.5"

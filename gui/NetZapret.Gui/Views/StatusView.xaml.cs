@@ -2173,7 +2173,7 @@ public partial class StatusView : UserControl
 
 
     /// <summary>
-    /// «На всю ширину» (Оформление, 01.10): без предела у содержимого и без колонки под арт.
+    /// «На всю ширину» (Оформление, 01.10; с 20.10 — у каждой темы своё): без предела у содержимого и без карточки с картинкой.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2190,9 +2190,10 @@ public partial class StatusView : UserControl
     /// </remarks>
     private void ShowWidth(AppSettings settings)
     {
-        // Тема тоже может попросить всю ширину — «Рыбка» (08.10): её видео
-        // в узкой колонке справа — размытое пятно (Theme.HomeFullWidth).
-        if (settings.HomeFullWidth || Themes.WideHome)
+        // У каждой темы своё (владелец 20.10): выбор человека в «Оформлении»,
+        // иначе выбор самой темы — темы без картинки и «Рыбка» (ролик 132×74
+        // в карточке — размытое пятно) на всю ширину, прочие с карточкой.
+        if (settings.HomeWide(Themes.Current, Themes.WideHome))
         {
             ContentColumn.MaxWidth = double.PositiveInfinity;
             ArtColumn.Width = new GridLength(0);

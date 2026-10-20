@@ -38,7 +38,10 @@ public static class Themes
     /// <summary>Применённая сейчас тема.</summary>
     public static string Current { get; private set; } = DefaultId;
 
-    /// <summary>Применённая тема просит «Главную» на всю ширину (<see cref="Theme.HomeFullWidth"/>).</summary>
+    /// <summary>
+    /// Применённая тема сама просит «Главную» на всю ширину (<see cref="Theme.HomeWide"/>);
+    /// выбор человека для темы — в <see cref="AppSettings.HomeWide"/>.
+    /// </summary>
     public static bool WideHome { get; private set; }
 
     /// <summary>
@@ -61,6 +64,7 @@ public static class Themes
         Glass.Set(null, System.Windows.Media.Stretch.UniformToFill);
         BackdropVideo.Take(builtIn);
         Current = DefaultId;
+        WideHome = true;
     }
 
     public static ThemeApplied Apply(string? id, AppSettings? settings = null)
@@ -93,7 +97,7 @@ public static class Themes
                     Glass.Set(dictionary["GlassImage"] as ImageSource, System.Windows.Media.Stretch.UniformToFill);
                     BackdropVideo.Take(dictionary);
                     Current = wanted;
-                    WideHome = theme.HomeFullWidth;
+                    WideHome = theme.HomeWide;
                     return new ThemeApplied(wanted, true, []);
                 }
 
@@ -123,7 +127,7 @@ public static class Themes
         Glass.Set(null, System.Windows.Media.Stretch.UniformToFill);
         BackdropVideo.Take(builtIn);
         Current = fallback == LightPath ? "light" : DefaultId;
-        WideHome = false;
+        WideHome = true; // встроенная — без картинки
 
         return new ThemeApplied(wanted, false, problems);
     }

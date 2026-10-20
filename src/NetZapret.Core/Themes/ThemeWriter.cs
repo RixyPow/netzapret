@@ -39,13 +39,15 @@ public sealed record ThemeDraft
     public double? HomeSize { get; init; }
 
     /// <summary>
-    /// «Главная» на всю ширину с этой темой (<see cref="Theme.HomeFullWidth"/>).
+    /// «Главная» с этой темой на всю ширину или с картинкой в карточке
+    /// (<see cref="Theme.HomeFullWidth"/>); <c>null</c> — как решит картинка
+    /// (<see cref="Theme.HomeWide"/>).
     /// </summary>
     /// <remarks>
-    /// Редактору его не выбрать, но копия темы его сохраняет: правка
-    /// «Рыбки» (выпускаемой с 08.10) иначе вернула бы колонку под арт.
+    /// С 20.10 выбирается в редакторе. Копия темы его сохраняет: правка
+    /// «Рыбки» (выпускаемой с 08.10) иначе поставила бы её ролик в карточку.
     /// </remarks>
-    public bool HomeFullWidth { get; init; }
+    public bool? HomeFullWidth { get; init; }
 }
 
 /// <summary>
@@ -90,8 +92,8 @@ public static class ThemeWriter
         if (!string.IsNullOrWhiteSpace(draft.Author))
             json["author"] = draft.Author.Trim();
 
-        if (draft.HomeFullWidth)
-            json["homeFullWidth"] = true;
+        if (draft.HomeFullWidth is { } wide)
+            json["homeFullWidth"] = wide;
 
         var colors = new JsonObject();
 
