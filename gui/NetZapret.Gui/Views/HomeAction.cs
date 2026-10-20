@@ -1,5 +1,9 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace NetZapret.Gui.Views;
 
@@ -22,6 +26,13 @@ public sealed class HomeAction : Grid
 
     private TextBlock? _title;
     private TextBlock? _note;
+    private StackPanel? _words;
+
+    /// <summary>Размер заголовка, когда он влезает.</summary>
+    private const double TitleSize = 13;
+
+    /// <summary>Мельче не ужимается — дальше многоточие.</summary>
+    private const double SmallestTitle = 11;
 
     /// <summary>
     /// Сжатый вид: заголовок в две строки, без подписи.
@@ -41,7 +52,55 @@ public sealed class HomeAction : Grid
             _title.TextWrapping = value ? TextWrapping.Wrap : TextWrapping.NoWrap;
             _title.MaxHeight = value ? 36 : double.PositiveInfinity;
             _note.Visibility = value ? Visibility.Collapsed : Visibility.Visible;
+            Fit();
         }
+    }
+
+    /// <summary>
+    /// Заголовок в одну строку ужимается до <see cref="SmallestTitle"/>, а не
+    /// обрезается.
+    /// </summary>
+    /// <remarks>
+    /// С шрифтом шире Bahnschrift (Manrope, 20.10, снимок 1536×794)
+    /// «Проверить блокировки» и «Открыть конфиг» выходили с многоточием.
+    /// Перенос на вторую строку прибавил бы плитке высоты, а «Главная»
+    /// держится без прокрутки (см. <see cref="Compact"/>), — поэтому мельче,
+    /// а не выше. Подпись под заголовком по-прежнему обрезается: она вторична.
+    /// </remarks>
+    private void Fit()
+    {
+        if (_title is null || _words is null)
+            return;
+
+        double room = _words.ActualWidth;
+
+        if (_title.TextWrapping == TextWrapping.Wrap || room <= 0 || Title.Length == 0)
+        {
+            _title.FontSize = TitleSize;
+            return;
+        }
+
+        // В том же режиме, что рисует окно, и с запасом в пару точек: 20.10
+        // расчёт давал 147,8 из 148 — «влезает», а на экране было многоточие.
+        var typeface = new Typeface(_title.FontFamily, _title.FontStyle, _title.FontWeight, _title.FontStretch);
+        var text = new FormattedText(Title, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface,
+            TitleSize, Brushes.Black, null, TextOptions.GetTextFormattingMode(_title),
+            VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
+        double need = text.WidthIncludingTrailingWhitespace + 2;
+        double size = need <= room ? TitleSize : Math.Max(SmallestTitle, Math.Floor(TitleSize * room / need * 2) / 2);
+
+        if (_title.FontSize != size)
+            _title.FontSize = size;
+    }
+
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        // Шрифт выбирают в «Оформлении» на ходу, а ширина плитки от этого не меняется.
+        if (e.Property == TextElement.FontFamilyProperty && _title is not null)
+            Dispatcher.BeginInvoke(Fit, DispatcherPriority.Loaded);
     }
 
     protected override void OnInitialized(EventArgs e)
@@ -79,7 +138,7 @@ public sealed class HomeAction : Grid
         var title = _title = new TextBlock
         {
             Text = Title,
-            FontSize = 13,
+            FontSize = TitleSize,
             FontWeight = FontWeights.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -94,7 +153,8 @@ public sealed class HomeAction : Grid
 
         note.SetResourceReference(TextBlock.ForegroundProperty, "Muted");
 
-        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        var words = _words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        words.SizeChanged += (_, _) => Fit();
         words.Children.Add(title);
         words.Children.Add(note);
         SetColumn(words, 1);
