@@ -199,6 +199,101 @@ public sealed class ServerPoolsTests
         Assert.Null(after[0].Preferred);
     }
 
+    /// <summary>
+    /// Тумблер автоподбора (владелец 20.10): включили — закрепление снято,
+    /// но сервер помнится; выключили — он вернулся.
+    /// </summary>
+    [Fact]
+    public void The_auto_switch_remembers_the_pinned_server()
+    {
+        IReadOnlyList<ServerPool> pools = [Russia with { Preferred = "RU2" }];
+
+        var auto = ServerPools.SetAuto(pools, "ru000001", auto: true);
+        Assert.Null(auto[0].Preferred);
+        Assert.Equal("RU2", auto[0].Held);
+
+        var back = ServerPools.SetAuto(auto, "ru000001", auto: false, fallback: "RU");
+        Assert.Equal("RU2", back[0].Preferred);
+        Assert.Null(back[0].Held);
+    }
+
+    [Fact]
+    public void Switching_auto_off_with_nothing_remembered_pins_the_fallback()
+    {
+        var after = ServerPools.SetAuto([Russia], "ru000001", auto: false, fallback: "RU");
+
+        Assert.Equal("RU", after[0].Preferred);
+    }
+
+    /// <summary>Пул без выхода хуже пула с автоподбором — закреплять некого, тумблер не срабатывает.</summary>
+    [Fact]
+    public void Switching_auto_off_without_a_server_keeps_auto()
+    {
+        Assert.Null(ServerPools.SetAuto([Russia], "ru000001", auto: false)[0].Preferred);
+        Assert.Null(ServerPools.SetAuto([Russia], "ru000001", auto: false, fallback: "DE")[0].Preferred);
+    }
+
+    [Fact]
+    public void A_remembered_server_taken_out_of_the_pool_is_not_brought_back()
+    {
+        IReadOnlyList<ServerPool> pools = [Russia with { Held = "RU2" }];
+
+        var taken = ServerPools.Take(pools, "ru000001", "RU2");
+        Assert.Null(taken[0].Held);
+
+        var off = ServerPools.SetAuto(taken, "ru000001", auto: false, fallback: "RU");
+        Assert.Equal("RU", off[0].Preferred);
+    }
+
+    [Fact]
+    public void Choosing_in_a_pool_turns_auto_off_and_forgets_the_old_pick()
+    {
+        var after = ServerPools.Pin([Russia with { Held = "RU2" }], "ru000001", "RU");
+
+        Assert.Equal("RU", after[0].Preferred);
+        Assert.Null(after[0].Held);
+    }
+
+    /// <summary>Пулы, записанные до тумблера, читаются как были: закреплённый остаётся закреплённым.</summary>
+    [Fact]
+    public void Pools_written_before_the_switch_keep_their_pin()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-pools-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, """
+                { "Pools": [ { "Id": "ru000001", "Name": "Россия", "Servers": ["RU", "RU2"], "Preferred": "RU" } ] }
+                """);
+
+            var pool = AppSettings.Load(path).Pools.Single();
+
+            Assert.Equal("RU", pool.Preferred);
+            Assert.Null(pool.Held);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_remembered_server_survives_the_settings_file()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-pools-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            (new AppSettings { Pools = [Russia with { Held = "RU2" }] }).Save(path);
+
+            Assert.Equal("RU2", AppSettings.Load(path).Pools.Single().Held);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void A_server_goes_into_a_pool_once()
     {

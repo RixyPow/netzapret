@@ -30,6 +30,12 @@ public sealed class PoolRow : System.ComponentModel.INotifyPropertyChanged
     /// <summary>«3 сервера».</summary>
     public string Count { get; set; } = string.Empty;
 
+    /// <summary>Тумблер автоподбора: включён, пока в пуле никто не закреплён.</summary>
+    public bool Auto => Pool.Preferred is null;
+
+    /// <summary>В пустом пуле закреплять некого — тумблер неактивен.</summary>
+    public bool CanSwitch { get; set; }
+
     public string Detail { get; set; } = string.Empty;
 
     /// <summary>Над папкой держат сервер — она подсвечена.</summary>
@@ -115,6 +121,7 @@ public partial class VpnView
 
             row.Servers = [.. present.Select(tag => InPool(known[tag], pool))];
             row.Count = Servers(pool.Servers.Count);
+            row.CanSwitch = present.Count > 0;
 
             int routed = routes.TryGetValue(pool.Id, out var n) ? n : 0;
 
@@ -142,7 +149,9 @@ public partial class VpnView
             ? "Пока все серверы в одном пуле — по умолчанию, и туда идут все маршруты «через VPN». "
                 + "Свой пул — папка серверов для части маршрутов: «Россия» для госуслуг, «Скоростной» для загрузок."
             : "Сервер кладут в пул, перетащив его строку на папку пула, или через «⋯» строки; "
-                + "«Выбрать» в папке пула закрепляет его в этом пуле. Пул по умолчанию — все серверы. "
+                + "«Выбрать» в папке пула закрепляет его в этом пуле и выключает автоподбор пула; "
+                + "тумблер «автоподбор» возвращает его, а выключенный — закрепляет прежний сервер или быстрейший. "
+                + "Пул по умолчанию — все серверы. "
                 + (settings.DeadPoolToDefault
                     ? "Пул, где никто не отвечает, уводит свои маршруты в пул по умолчанию."
                     : "Пул, где никто не отвечает, ждёт — его маршруты не открываются, пока он молчит.");
@@ -252,16 +261,8 @@ public partial class VpnView
         var pool = row.Pool;
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = PlacementMode.Bottom };
 
+        // Автоподбор — тумблером в шапке папки (20.10), не пунктом меню.
         menu.Items.Add(Item("", "Переименовать…", () => RenamePool(pool)));
-
-        if (pool.Preferred is not null)
-        {
-            menu.Items.Add(Item("", "Автоподбор в пуле", () => SavePools(
-                pools => [.. pools.Select(p => p.Id == pool.Id ? p with { Preferred = null } : p)],
-                $"В пуле «{pool.Name}» снова автоподбор.",
-                pool.Id)));
-        }
-
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(Item("", "Удалить пул…", () => RemovePool(pool)));
 
@@ -351,7 +352,7 @@ public partial class VpnView
             if (own.Preferred == row.Tag)
             {
                 menu.Items.Add(Item("", "Автоподбор в пуле", () => SavePools(
-                    all => [.. all.Select(p => p.Id == own.Id ? p with { Preferred = null } : p)],
+                    all => ServerPools.SetAuto(all, own.Id, auto: true),
                     $"В пуле «{own.Name}» снова автоподбор.",
                     own.Id)));
             }
@@ -411,9 +412,50 @@ public partial class VpnView
             return;
 
         SavePools(
-            pools => [.. pools.Select(p => p.Id == poolId ? p with { Preferred = row.Tag } : p)],
+            pools => ServerPools.Pin(pools, poolId, row.Tag),
             $"В пуле «{pool.Name}» закреплён «{row.Name}».",
             poolId);
+    }
+
+    /// <summary>
+    /// Тумблер автоподбора в шапке папки пула (владелец 20.10).
+    /// </summary>
+    /// <remarks>
+    /// Выключение возвращает сервер, закреплённый до включения; не было
+    /// такого — закрепляет быстрейший живой из пула по замерам вкладки
+    /// (тот же порядок, что «по задержке» в списке).
+    /// </remarks>
+    private void OnPoolAuto(object sender, RoutedEventArgs e)
+    {
+        // Тумблер внутри кнопки-папки: без этого нажатие захлопнет папку.
+        e.Handled = true;
+
+        if (sender is not FrameworkElement { DataContext: PoolRow row })
+            return;
+
+        var pool = row.Pool;
+        bool auto = pool.Preferred is not null;
+
+        var best = row.Servers.OrderBy(Rank).ThenBy(Ms).FirstOrDefault();
+        var after = ServerPools.Find(ServerPools.SetAuto([pool], pool.Id, auto, best?.Tag), pool.Id);
+
+        if (!auto && after?.Preferred is not { } pinned)
+        {
+            Status.Text = $"В пуле «{pool.Name}» нет серверов из подписок в работе — закреплять некого.";
+            row.Refresh();
+            return;
+        }
+
+        var name = after?.Preferred is { } tag
+            ? row.Servers.FirstOrDefault(s => s.Tag == tag)?.Name ?? tag
+            : null;
+
+        SavePools(
+            pools => ServerPools.SetAuto(pools, pool.Id, auto, best?.Tag),
+            auto
+                ? $"В пуле «{pool.Name}» автоподбор."
+                : $"В пуле «{pool.Name}» автоподбор выключен, закреплён «{name}».",
+            pool.Id);
     }
 
     // Перетаскивание сервера на папку пула.

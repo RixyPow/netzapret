@@ -222,9 +222,22 @@
                                            Margin="0,5,0,0" TextWrapping="Wrap" />
                             </StackPanel>
 
-                            <Button Grid.Column="2" Style="{StaticResource IconGhost}" Content="&#xE712;" VerticalAlignment="Center"
-                                    ToolTip="Ещё: переименовать, автоподбор в пуле, удалить"
-                                    Click="OnPoolMore" />
+                            <!--
+                                Автоподбор тумблером (владелец 20.10: «сделай автовыбор
+                                тумблером для каждого пула»), как «в работе» у подписки.
+                            -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="автоподбор" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                           Margin="0,0,8,0" />
+                                <ToggleButton Style="{StaticResource Switch}" Margin="0,0,14,0" VerticalAlignment="Center"
+                                              IsChecked="{Binding Auto, Mode=OneWay}" IsEnabled="{Binding CanSwitch}"
+                                              ToolTip="Автоподбор внутри пула: берёт быстрейший живой сервер. Выключите — пул держится одного сервера: выбранного прежде или быстрейшего сейчас"
+                                              ToolTipService.ShowOnDisabled="True"
+                                              Click="OnPoolAuto" />
+                                <Button Style="{StaticResource IconGhost}" Content="&#xE712;" VerticalAlignment="Center"
+                                        ToolTip="Ещё: переименовать, удалить"
+                                        Click="OnPoolMore" />
+                            </StackPanel>
                         </Grid>
                     </Button>
                 </DataTemplate>

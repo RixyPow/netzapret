@@ -8,11 +8,21 @@ namespace NetZapret.Core;
 /// <param name="Name">Имя на экране: «Россия», «Скоростной».</param>
 /// <param name="Servers">Теги серверов пула; сервер может лежать в нескольких пулах.</param>
 /// <param name="Preferred">Закреплённый в пуле сервер; <c>null</c> — автоподбор внутри пула.</param>
+/// <param name="Held">
+/// Закреплённый до включения автоподбора: вернётся, когда автоподбор
+/// выключат (<see cref="ServerPools.SetAuto"/>). Движок его не читает.
+/// </param>
+/// <remarks>
+/// Автоподбор — отсутствие закрепления, а не своё поле: так пулы,
+/// записанные до тумблера (19.10), читаются как были, и движку с надзором
+/// по-прежнему хватает одного <see cref="Preferred"/>.
+/// </remarks>
 public sealed record ServerPool(
     string Id,
     string Name,
     IReadOnlyList<string> Servers,
-    string? Preferred = null);
+    string? Preferred = null,
+    string? Held = null);
 
 /// <summary>
 /// Пулы серверов: разные выходы разным маршрутам.
@@ -94,8 +104,43 @@ public static class ServerPools
             {
                 Servers = [.. p.Servers.Where(s => s != server)],
                 Preferred = p.Preferred == server ? null : p.Preferred,
+                Held = p.Held == server ? null : p.Held,
             }
             : p)];
+
+    /// <summary>Закрепляет сервер в пуле — «Выбрать» в папке пула; автоподбор выключается.</summary>
+    public static IReadOnlyList<ServerPool> Pin(IReadOnlyList<ServerPool> pools, string id, string server) =>
+        [.. pools.Select(p => p.Id == id ? p with { Preferred = server, Held = null } : p)];
+
+    /// <summary>
+    /// Тумблер автоподбора пула (владелец 20.10: «сделай автовыбор тумблером
+    /// для каждого пула»).
+    /// </summary>
+    /// <remarks>
+    /// Включение снимает закрепление, но помнит сервер. Выключение возвращает
+    /// его, если он ещё в пуле, иначе закрепляет <paramref name="fallback"/> —
+    /// окно даёт быстрейший живой по замерам. Закреплять некого — пул остаётся
+    /// на автоподборе: пул без выхода хуже пула с автоподбором.
+    /// </remarks>
+    public static IReadOnlyList<ServerPool> SetAuto(
+        IReadOnlyList<ServerPool> pools, string id, bool auto, string? fallback = null) =>
+        [.. pools.Select(p =>
+        {
+            if (p.Id != id)
+                return p;
+
+            if (auto)
+                return p.Preferred is null ? p : p with { Preferred = null, Held = p.Preferred };
+
+            if (p.Preferred is not null)
+                return p;
+
+            var back = p.Held is { } held && p.Servers.Contains(held, StringComparer.Ordinal) ? held
+                : fallback is not null && p.Servers.Contains(fallback, StringComparer.Ordinal) ? fallback
+                : null;
+
+            return back is null ? p : p with { Preferred = back, Held = null };
+        })];
 
     /// <summary>
     /// Мёртвые по замерам серверы, которые всё же идут в конфиг ради пулов:
