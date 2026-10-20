@@ -395,11 +395,19 @@
                             <!--
                                 Кольцо и строка состояния — на одной подложке, как счётчики
                                 (владелец 19.10: «тут тоже подложка нужна», «я про кружочек
-                                тоже»): фон карточки идёт прямо под ними. По ширине текста,
-                                а не во всю колонку.
+                                тоже»): фон карточки идёт прямо под ними.
+
+                                Постоянного размера, 340×102 (владелец 20.10: «чтобы подложка
+                                работает всегда была одного размера, текст можно поделить на
+                                несколько строчек»): прежде она шла по ширине текста и дышала
+                                от «Работает» к «Запускается… — 12 с». Колонка слов — 220:
+                                замер Manrope 20.10, самое высокое сочетание — «Работает
+                                с оговорками» в две строки и подсказка в две, 99 из 100; при
+                                200 «Движок не работает» уходит в две строки, и с подсказкой
+                                в три выходит 118.
                             -->
                             <Border x:Name="StatePlate" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                    SizeChanged="OnRouteSize"
+                                    Width="340" Height="102" SizeChanged="OnRouteSize"
                                     Padding="0,0,18,0" CornerRadius="12" BorderThickness="1"
                                     Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid>
@@ -433,10 +441,13 @@
                                     </Grid>
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <!-- Не больше двух строк и трёх строк подсказки: плашка постоянной высоты. -->
                                         <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
-                                                   FontFamily="{DynamicResource DisplayFont}" />
+                                                   FontFamily="{DynamicResource DisplayFont}" TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis" MaxHeight="58" />
                                         <TextBlock x:Name="StateHint" Foreground="{DynamicResource Muted}" FontSize="13.5"
-                                                   Margin="0,5,0,0" TextWrapping="Wrap" Text="" />
+                                                   Margin="0,5,0,0" TextWrapping="Wrap" Text=""
+                                                   TextTrimming="CharacterEllipsis" MaxHeight="56" />
                                     </StackPanel>
                                 </Grid>
                             </Border>
