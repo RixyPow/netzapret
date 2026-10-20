@@ -351,47 +351,32 @@
                 <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
                     <Grid>
                         <!--
-                            Волна на фоне карточки (владелец 19.10: «статичную зелёную
-                            полоску можно переделать в красивую анимированную кривую
-                            на заднем фоне»). Цвет — состояния, как у кольца (ShowWave);
-                            движется, только пока движки работают и анимации включены,
-                            и только пока раздел на экране (StartWave). Края гаснут
-                            маской: углы карточки скруглены, а слой — прямоугольник.
+                            Линии на фоне карточки (владелец 20.10: «параболы, перегибы,
+                            разделения линий, пересечения») — вместо волны 19.10. Плашки
+                            непрозрачные, и линии лежат там, где фон виден: в полосках
+                            над и под плашками и в просвете между ними (RouteShape).
+                            По линиям бегут огоньки, пока движки работают и анимации
+                            включены, и только пока раздел на экране (MoveRoutes). Цвет —
+                            состояния, как у кольца (ShowRoutes). Края гаснут маской:
+                            углы карточки скруглены, а слой — прямоугольник.
                         -->
-                        <Canvas x:Name="WaveLayer" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnWaveSize">
+                        <Canvas x:Name="RouteLayer" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnRouteSize">
                             <Canvas.OpacityMask>
                                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                                     <GradientStop Offset="0" Color="#00000000" />
-                                    <GradientStop Offset="0.2" Color="#FF000000" />
-                                    <GradientStop Offset="0.85" Color="#FF000000" />
+                                    <GradientStop Offset="0.06" Color="#FF000000" />
+                                    <GradientStop Offset="0.94" Color="#FF000000" />
                                     <GradientStop Offset="1" Color="#00000000" />
                                 </LinearGradientBrush>
                             </Canvas.OpacityMask>
 
-                            <Path x:Name="WaveFill">
-                                <Path.CacheMode>
+                            <!-- Линии стоят — картинкой; движутся только огоньки. -->
+                            <Canvas x:Name="RouteLines">
+                                <Canvas.CacheMode>
                                     <BitmapCache EnableClearType="False" />
-                                </Path.CacheMode>
-                                <Path.RenderTransform>
-                                    <TranslateTransform x:Name="WaveFillShift" />
-                                </Path.RenderTransform>
-                            </Path>
-                            <Path x:Name="WaveEcho" StrokeThickness="1.2">
-                                <Path.CacheMode>
-                                    <BitmapCache EnableClearType="False" />
-                                </Path.CacheMode>
-                                <Path.RenderTransform>
-                                    <TranslateTransform x:Name="WaveEchoShift" />
-                                </Path.RenderTransform>
-                            </Path>
-                            <Path x:Name="WaveLine" StrokeThickness="2">
-                                <Path.CacheMode>
-                                    <BitmapCache EnableClearType="False" />
-                                </Path.CacheMode>
-                                <Path.RenderTransform>
-                                    <TranslateTransform x:Name="WaveLineShift" />
-                                </Path.RenderTransform>
-                            </Path>
+                                </Canvas.CacheMode>
+                            </Canvas>
+                            <Canvas x:Name="RouteComets" />
                         </Canvas>
 
                         <!--
@@ -410,10 +395,11 @@
                             <!--
                                 Кольцо и строка состояния — на одной подложке, как счётчики
                                 (владелец 19.10: «тут тоже подложка нужна», «я про кружочек
-                                тоже»): волна идёт прямо под ними. По ширине текста,
+                                тоже»): фон карточки идёт прямо под ними. По ширине текста,
                                 а не во всю колонку.
                             -->
-                            <Border Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
+                            <Border x:Name="StatePlate" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                    SizeChanged="OnRouteSize"
                                     Padding="0,0,18,0" CornerRadius="12" BorderThickness="1"
                                     Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid>
@@ -460,7 +446,7 @@
                                 счётчики растут с трафиком, и без неё блок дышал бы
                                 от «390.4 КБ» к «1.2 ГБ».
                             -->
-                            <StackPanel Grid.Column="2" Width="300" VerticalAlignment="Center" Margin="16,0,0,0">
+                            <StackPanel x:Name="ActionColumn" Grid.Column="2" Width="300" VerticalAlignment="Center" Margin="16,0,0,0">
                                 <!--
                                     Одна плашка с чертой (владелец 19.10: «склей две кнопки»):
                                     слева «Запустить» или «Остановить» — главное действие

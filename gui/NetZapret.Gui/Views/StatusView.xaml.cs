@@ -368,7 +368,7 @@ public partial class StatusView : UserControl
             // Анимация на скрытом виде продолжала бы будить композитор
             // впустую. Само состояние запуска при этом сохраняется.
             StopAnimations();
-            MoveWave(false);
+            MoveRoutes(false);
             MovePulse(false);
         };
     }
@@ -684,7 +684,7 @@ public partial class StatusView : UserControl
         if (!running)
         {
             ShowDot("Faint");
-            ShowWave("Faint");
+            ShowRoutes("Faint");
             ShowPulse("Faint", moving: false);
 
             StateLine.Text = "Остановлено";
@@ -716,7 +716,7 @@ public partial class StatusView : UserControl
         var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
 
         ShowDot(colour);
-        ShowWave(colour);
+        ShowRoutes(colour);
         ShowPulse(colour, moving: true);
 
         StateLine.Text = healthy
@@ -765,7 +765,7 @@ public partial class StatusView : UserControl
         StopButton.IsEnabled = true;
 
         ShowDot("Warn");
-        ShowWave("Warn");
+        ShowRoutes("Warn");
         ShowPulse("Warn", moving: false);
 
         StateLine.Text = "Запускается…";
@@ -854,10 +854,10 @@ public partial class StatusView : UserControl
 
     private void StartAnimations()
     {
-        // Анимации выключены — запуск видно цветом кольца и волны, без мигания.
+        // Анимации выключены — запуск видно цветом кольца и линий, без мигания.
         if (!Motion.Enabled)
         {
-            ShowWave("Warn");
+            ShowRoutes("Warn");
             return;
         }
 
@@ -880,67 +880,191 @@ public partial class StatusView : UserControl
         RingBox.Opacity = 1;
     }
 
-    // --- Волна на фоне карточки состояния (владелец 19.10) ---------------------
+    // --- Линии на фоне карточки состояния (владелец 20.10) ----------------------
 
-    /// <summary>Цвет, которым волна нарисована сейчас; при повторе на тике ничего не делаем.</summary>
-    private string? _waveColour;
+    /// <summary>Ключ цвета, которым линии нарисованы сейчас; при повторе на тике ничего не делаем.</summary>
+    private string? _routeColour;
 
-    /// <summary>Идёт ли сейчас движение волны.</summary>
-    private bool _waveMoving;
+    /// <summary>Ключ цвета, который просили последним, — им красится заново разложенное.</summary>
+    private string _routeKey = "Faint";
 
-    private void OnWaveSize(object sender, SizeChangedEventArgs e)
+    /// <summary>Бегут ли сейчас огоньки.</summary>
+    private bool _routesMoving;
+
+    /// <summary>Левый край просвета, под который разложены линии.</summary>
+    private double _routeGapLeft = double.NaN;
+
+    private readonly List<(System.Windows.Shapes.Path Path, double Strength)> _routeLines = [];
+    private readonly List<System.Windows.Shapes.Ellipse> _routeForks = [];
+    private readonly List<RouteComet> _comets = [];
+
+    /// <summary>Огонёк: хвост, ореол и голова, которые едут по своему пути вместе.</summary>
+    private sealed record RouteComet(
+        Canvas Body,
+        PathGeometry Track,
+        System.Windows.Shapes.Path Tail,
+        System.Windows.Shapes.Path Halo,
+        System.Windows.Shapes.Path Head);
+
+    /// <summary>Длина хвоста огонька.</summary>
+    private const double CometTail = 30;
+
+    /// <summary>Скорость огоньков, точек в секунду: спокойно, без мельтешения.</summary>
+    private const double CometSpeed = 110;
+
+    /// <summary>
+    /// Темп и выход огоньков по путям: разные, чтобы они не ходили строем.
+    /// Порядок — как пути в RouteShape: крест сверху и снизу, параболы, развилка.
+    /// </summary>
+    private static readonly (double Pace, double Delay)[] CometRuns =
+        [(1.0, 0), (0.9, 2.6), (1.15, 5.1), (0.95, 1.3), (1.1, 3.9), (1.05, 7.2)];
+
+    /// <summary>Огонёк до своего выхода и после снятия анимации — за краем, а не в углу слоя.</summary>
+    private static readonly Matrix Offstage = new(1, 0, 0, 1, -1000, -1000);
+
+    private static readonly Geometry CometTailShape = Frozen(new RectangleGeometry(new Rect(-CometTail, -0.75, CometTail, 1.5), 0.75, 0.75));
+    private static readonly Geometry CometHaloShape = Frozen(new EllipseGeometry(new Point(0, 0), 6, 6));
+    private static readonly Geometry CometHeadShape = Frozen(new EllipseGeometry(new Point(0, 0), 1.8, 1.8));
+
+    private static Geometry Frozen(Geometry geometry)
     {
-        BuildWave();
-
-        // Сдвиг на цикл равен ширине: новая ширина — новый цикл.
-        if (_waveMoving)
-        {
-            MoveWave(false);
-            MoveWave(true);
-        }
-    }
-
-    private void BuildWave()
-    {
-        double w = WaveLayer.ActualWidth, h = WaveLayer.ActualHeight;
-
-        if (w <= 0 || h <= 0)
-            return;
-
-        WaveFill.Data = WaveShape.Curve(w, h, 0.68, 0.13, 0.04, 0, closed: true);
-        WaveLine.Data = WaveShape.Curve(w, h, 0.68, 0.13, 0.04, 0, closed: false);
-        WaveEcho.Data = WaveShape.Curve(w, h, 0.76, 0.07, 0.05, 1.9, closed: false);
+        geometry.Freeze();
+        return geometry;
     }
 
     /// <summary>
-    /// Красит волну цветом состояния и пускает её, пока движки работают.
+    /// Слой или плашка поменяли размер — линии раскладываются заново. Колонка
+    /// с кнопкой постоянной ширины и сдвигается только с размером слоя.
+    /// </summary>
+    /// <remarks>
+    /// Плашка меняет ширину со словами: «Работает» и «Запускается… — 12 с»
+    /// разной длины, а счётчик секунд при запуске тикает каждую секунду.
+    /// Заново — только когда край просвета сдвинулся заметно: иначе огоньки
+    /// начинали бы путь сначала раз в секунду.
+    /// </remarks>
+    private void OnRouteSize(object sender, SizeChangedEventArgs e)
+    {
+        if (sender == StatePlate && Math.Abs(GapLeft() - _routeGapLeft) < 24)
+            return;
+
+        BuildRoutes();
+    }
+
+    private double GapLeft() => StatePlate.TranslatePoint(new Point(StatePlate.ActualWidth, 0), RouteLayer).X;
+
+    private void BuildRoutes()
+    {
+        double w = RouteLayer.ActualWidth, h = RouteLayer.ActualHeight;
+
+        if (w <= 0 || h <= 0 || StatePlate.ActualWidth <= 0 || ActionColumn.ActualWidth <= 0)
+            return;
+
+        var column = ActionColumn.TranslatePoint(new Point(0, 0), RouteLayer);
+        _routeGapLeft = GapLeft();
+
+        var layout = RouteShape.Build(w, h, _routeGapLeft, column.X, strip: column.Y);
+
+        MoveRoutes(false);
+        RouteLines.Children.Clear();
+        RouteComets.Children.Clear();
+        _routeLines.Clear();
+        _routeForks.Clear();
+        _comets.Clear();
+
+        foreach (var line in layout.Lines)
+        {
+            var path = new System.Windows.Shapes.Path { Data = line.Geometry, StrokeThickness = 1.2 };
+
+            if (line.Dashed)
+                path.StrokeDashArray = [3, 3];
+
+            _routeLines.Add((path, line.Strength));
+            RouteLines.Children.Add(path);
+        }
+
+        foreach (var fork in layout.Forks)
+        {
+            var dot = new System.Windows.Shapes.Ellipse { Width = 5, Height = 5 };
+            Canvas.SetLeft(dot, fork.X - 2.5);
+            Canvas.SetTop(dot, fork.Y - 2.5);
+
+            _routeForks.Add(dot);
+            RouteLines.Children.Add(dot);
+        }
+
+        foreach (var track in layout.Tracks)
+        {
+            var comet = new RouteComet(
+                new Canvas { RenderTransform = new MatrixTransform(Offstage) },
+                track,
+                new System.Windows.Shapes.Path { Data = CometTailShape },
+                new System.Windows.Shapes.Path { Data = CometHaloShape },
+                new System.Windows.Shapes.Path { Data = CometHeadShape });
+
+            comet.Body.Children.Add(comet.Tail);
+            comet.Body.Children.Add(comet.Halo);
+            comet.Body.Children.Add(comet.Head);
+
+            _comets.Add(comet);
+            RouteComets.Children.Add(comet.Body);
+        }
+
+        // Новые линии ещё не крашены, и огоньки снова в путь, если шли.
+        _routeColour = null;
+        ShowRoutes(_routeKey);
+    }
+
+    /// <summary>
+    /// Красит линии цветом состояния и пускает огоньки, пока движки работают.
     /// </summary>
     /// <remarks>
     /// Тот же цвет, что у кольца: серая «стоит», жёлтая «поднимается», зелёная
-    /// «работает», красная «беда» — прежде это несла полоса под строкой.
-    /// Стоит на месте, пока движки стоят: движение без работы читалось бы
-    /// как работа.
+    /// «работает», красная «беда». Огоньки стоят, пока стоят движки: движение
+    /// без работы читалось бы как работа.
     /// </remarks>
-    private void ShowWave(string colourKey)
+    private void ShowRoutes(string colourKey)
     {
-        if (colourKey != _waveColour)
-        {
-            _waveColour = colourKey;
+        _routeKey = colourKey;
 
-            // Точки и полосы берут насыщенный жёлтый: текстовый на светлой теме
-            // у тонкой линии выглядит выцветшей серостью, а не предупреждением.
-            var brush = FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush;
-            var colour = brush?.Color ?? Colors.Gray;
+        if (colourKey != _routeColour)
+        {
+            _routeColour = colourKey;
+
+            var colour = StateColour(colourKey);
             bool idle = colourKey == "Faint";
 
-            WaveLine.Stroke = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.25 : 0.6)));
-            WaveEcho.Stroke = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.12 : 0.28)));
-            WaveFill.Fill = Frozen(new LinearGradientBrush(
-                WaveShape.Fade(colour, idle ? 0.06 : 0.16), WaveShape.Fade(colour, 0), new Point(0, 0), new Point(0, 1)));
+            foreach (var (path, strength) in _routeLines)
+                path.Stroke = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? strength * 0.6 : strength)));
+
+            var fork = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? 0.35 : 0.8)));
+
+            foreach (var dot in _routeForks)
+                dot.Fill = fork;
+
+            var tail = Frozen(new LinearGradientBrush(RouteShape.Fade(colour, 0), RouteShape.Fade(colour, 0.85), new Point(-CometTail, 0), new Point(0, 0))
+            {
+                MappingMode = BrushMappingMode.Absolute,
+            });
+            var halo = Frozen(new RadialGradientBrush(RouteShape.Fade(colour, 0.45), RouteShape.Fade(colour, 0)));
+            var head = Frozen(new SolidColorBrush(colour));
+
+            foreach (var comet in _comets)
+            {
+                comet.Tail.Fill = tail;
+                comet.Halo.Fill = halo;
+                comet.Head.Fill = head;
+            }
         }
 
-        MoveWave(colourKey != "Faint" && IsLoaded && Motion.Enabled);
+        MoveRoutes(colourKey != "Faint" && IsLoaded && Motion.Enabled);
     }
+
+    /// <summary>
+    /// Цвет состояния по ключу. Жёлтый — насыщенный (WarnFill): текстовый на
+    /// светлой теме у тонкой линии выглядит выцветшей серостью, а не предупреждением.
+    /// </summary>
+    private Color StateColour(string colourKey) =>
+        (FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush)?.Color ?? Colors.Gray;
 
     private static Brush Frozen(Brush brush)
     {
@@ -949,60 +1073,60 @@ public partial class StatusView : UserControl
     }
 
     /// <summary>
-    /// Пускает или останавливает волну.
+    /// Пускает или снимает огоньки.
     /// </summary>
     /// <remarks>
-    /// Двигается слой целиком сдвигом, а не перерисовкой кривой: кривая
-    /// длиной в две ширины, и сдвиг на ширину возвращает её в начало, так что
-    /// круг бесшовный. Кривые закешированы картинкой (BitmapCache в разметке),
-    /// и кадр — только перенос готового, 30 раз в секунду (WaveFrameRate).
-    /// Останавливается при уходе с «Главной» (Unloaded): анимация на скрытом
-    /// виде будила бы композитор впустую — так уже было с «Замером скорости».
+    /// Линии стоят и закешированы картинкой (BitmapCache в разметке); кадр —
+    /// только перенос и поворот огоньков по готовым путям (FrameRate).
+    /// Путь уходит за правый край дальше, чем виден (RouteShape.RunOut): там
+    /// огонёк «отдыхает», и на карточке их одновременно три-четыре, а не все
+    /// шесть. Останавливается при уходе с «Главной» (Unloaded): анимация на
+    /// скрытом виде будила бы композитор впустую — так уже было с «Замером
+    /// скорости».
     /// </remarks>
-    private void MoveWave(bool on)
+    private void MoveRoutes(bool on)
     {
-        if (on == _waveMoving)
+        if (on == _routesMoving || (on && _comets.Count == 0))
             return;
 
-        double w = WaveLayer.ActualWidth;
+        _routesMoving = on;
 
-        if (on && w <= 0)
-            return;
-
-        _waveMoving = on;
-
-        Shift(WaveLineShift, on, w, 16);
-        Shift(WaveFillShift, on, w, 16);
-        Shift(WaveEchoShift, on, w, 27);
-
-        static void Shift(TranslateTransform shift, bool on, double w, double seconds)
+        for (int i = 0; i < _comets.Count; i++)
         {
+            var comet = _comets[i];
+            var transform = (MatrixTransform)comet.Body.RenderTransform;
+
             if (!on)
             {
-                shift.BeginAnimation(TranslateTransform.XProperty, null);
-                return;
+                transform.BeginAnimation(MatrixTransform.MatrixProperty, null);
+                continue;
             }
 
-            var move = new DoubleAnimation(0, -w, new Duration(TimeSpan.FromSeconds(seconds)))
+            var (pace, delay) = CometRuns[i % CometRuns.Length];
+
+            var run = new MatrixAnimationUsingPath
             {
+                PathGeometry = comet.Track,
+                DoesRotateWithTangent = true,
+                Duration = TimeSpan.FromSeconds(RouteShape.Length(comet.Track) / (CometSpeed * pace)),
+                BeginTime = TimeSpan.FromSeconds(delay),
                 RepeatBehavior = RepeatBehavior.Forever,
             };
 
-            Timeline.SetDesiredFrameRate(move, WaveFrameRate);
-            shift.BeginAnimation(TranslateTransform.XProperty, move);
+            Timeline.SetDesiredFrameRate(run, FrameRate);
+            transform.BeginAnimation(MatrixTransform.MatrixProperty, run);
         }
     }
 
     /// <summary>
-    /// Кадров в секунду у волны: она медленная (цикл 16 с), и 60 ей незачем.
+    /// Кадров в секунду у движения на карточке состояния — огоньков и шестиугольников.
     /// </summary>
     /// <remarks>
-    /// Замер 19.10, тест окна на настройках владельца, четыре пары по 5 с
-    /// попеременно: процесс с волной — 688 мс процессора в среднем, без неё —
-    /// 528, то есть около 3 % одного ядра (разброс пар от −125 до +469 мс).
-    /// При 60 кадрах прибавка в шуме не отличалась — замер тот грубее.
+    /// 30, как было у волны 19.10 (замер тогда: прибавка около 3 % ядра,
+    /// при 60 кадрах в шуме не отличалась). Огоньки медленные, около
+    /// 4 точек за кадр, и хвост прячет шаг.
     /// </remarks>
-    private const int WaveFrameRate = 30;
+    private const int FrameRate = 30;
 
     // --- Шестиугольные волны вокруг кольца (владелец 20.10) ----------------------
 
@@ -1078,7 +1202,7 @@ public partial class StatusView : UserControl
     /// Красит узлы и волны цветом состояния и пускает волны, пока движки работают.
     /// </summary>
     /// <remarks>
-    /// Цвет — тот же ключ, что у кольца и волны на фоне (ShowDot, ShowWave).
+    /// Цвет — тот же ключ, что у кольца и линий на фоне (ShowDot, ShowRoutes).
     /// Пока движки поднимаются, волн нет: тогда мигает само кольцо
     /// (StartAnimations), и два движения разом спорили бы, что из них значит
     /// «запускается».
@@ -1092,11 +1216,10 @@ public partial class StatusView : UserControl
         {
             _pulseColour = colourKey;
 
-            var brush = FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush;
-            var colour = brush?.Color ?? Colors.Gray;
+            var colour = StateColour(colourKey);
             bool idle = colourKey == "Faint";
 
-            _pulseNodes.Fill = Frozen(new SolidColorBrush(WaveShape.Fade(colour, idle ? 0.45 : 0.85)));
+            _pulseNodes.Fill = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? 0.45 : 0.85)));
 
             var wave = Frozen(new SolidColorBrush(colour));
 
@@ -1112,9 +1235,9 @@ public partial class StatusView : UserControl
     /// <summary>Пускает или снимает волны.</summary>
     /// <remarks>
     /// Двигаются только перенос, поворот и прозрачность готовой фигуры — геометрия
-    /// не перестраивается. Кадров столько же, сколько у волны на фоне
-    /// (WaveFrameRate): она и так перерисовывает карточку 30 раз в секунду,
-    /// и лишних кадров волны не добавляют. Снятая анимация возвращает
+    /// не перестраивается. Кадров столько же, сколько у огоньков на фоне
+    /// (FrameRate): карточка и так перерисовывается 30 раз в секунду, и лишних
+    /// кадров волны не добавляют. Снятая анимация возвращает
     /// прозрачность к 0 из разметки — волны исчезают, а не замирают на полпути.
     /// </remarks>
     private void MovePulse(bool on)
@@ -1172,7 +1295,7 @@ public partial class StatusView : UserControl
         {
             animation.BeginTime = begin;
             animation.RepeatBehavior = RepeatBehavior.Forever;
-            Timeline.SetDesiredFrameRate(animation, WaveFrameRate);
+            Timeline.SetDesiredFrameRate(animation, FrameRate);
             return animation;
         }
     }
@@ -1191,9 +1314,9 @@ public partial class StatusView : UserControl
     /// </summary>
     /// <remarks>
     /// Серое «стоит» — без свечения: светящееся серое кольцо выглядит
-    /// включённой лампочкой, а обход в это время не идёт. Волна берёт тот же
-    /// ключ цвета (ShowWave): разойдясь, они дали бы зелёное кольцо над
-    /// красной волной — и человеку пришлось бы решать, чему верить.
+    /// включённой лампочкой, а обход в это время не идёт. Линии фона берут тот же
+    /// ключ цвета (ShowRoutes): разойдясь, они дали бы зелёное кольцо над
+    /// красными линиями — и человеку пришлось бы решать, чему верить.
     /// </remarks>
     private void ShowDot(string colourKey)
     {
