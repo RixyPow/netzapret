@@ -93,6 +93,41 @@ public sealed class TgWsProxyTests
     }
 
     /// <summary>
+    /// «Всегда» (с 0.15.2): прокси держит окно, своим файлом состояния, и надзор
+    /// движков его не знает. До 20.10 «Диагностика» при живом прокси звала
+    /// перезапускать движки.
+    /// </summary>
+    [Fact]
+    public void DoctorSeesTheProxyTheWindowHolds()
+    {
+        var settings = new AppSettings { TelegramProxy = true, TelegramProxyAlways = true, TelegramProxySecret = TgWsProxy.NewSecret() };
+        var here = typeof(TgWsProxyTests).Assembly.Location;
+        var proxy = new ServiceState { Name = TgWsProxyService.ServiceName, Health = ServiceHealth.Healthy };
+
+        // Движки работают без прокси (так и задумано), прокси у окна — живой и здоровый.
+        var engines = new SupervisorState { SupervisorProcessId = Environment.ProcessId, StartedAt = DateTimeOffset.Now, Services = [] };
+        var window = new SupervisorState { SupervisorProcessId = Environment.ProcessId, StartedAt = DateTimeOffset.Now, Services = [proxy] };
+
+        var held = Assert.Single(Doctor.TelegramProxy(settings, executable: here, state: engines, kept: window));
+        Assert.Equal(DoctorLevel.Ok, held.Level);
+        Assert.Contains("Работает", held.Text);
+
+        // Окно закрыто — прокси поднимется вместе с ним, а не с движками.
+        var gone = window with { SupervisorProcessId = -1 };
+        var later = Assert.Single(Doctor.TelegramProxy(settings, executable: here, state: engines, kept: gone));
+        Assert.Equal(DoctorLevel.Ok, later.Level);
+        Assert.Contains("окном", later.Text);
+
+        // Надзор, поднятый до включения «всегда», держит свой — тоже в счёт.
+        var byEngines = engines with { Services = [proxy] };
+        Assert.Equal(DoctorLevel.Ok, Assert.Single(Doctor.TelegramProxy(settings, executable: here, state: byEngines, kept: gone)).Level);
+
+        // Без «всегда» прежняя проверка: движки без прокси — оговорка.
+        var withEngines = settings with { TelegramProxyAlways = false };
+        Assert.Equal(DoctorLevel.Warn, Assert.Single(Doctor.TelegramProxy(withEngines, executable: here, state: engines, kept: window)).Level);
+    }
+
+    /// <summary>
     /// Секрет — при первом включении и навсегда: Telegram помнит прокси с ним.
     /// Так включают и вкладка «TG Proxy», и мастер (07.10).
     /// </summary>

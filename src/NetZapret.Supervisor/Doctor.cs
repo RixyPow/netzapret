@@ -168,7 +168,10 @@ public static class Doctor
 
     /// <summary>Прокси для Telegram Desktop — есть ли он, есть ли секрет, поднят ли.</summary>
     /// <param name="executable">Путь к прокси; <c>null</c> — рядом с программой. Для тестов.</param>
-    public static IReadOnlyList<DoctorCheck> TelegramProxy(AppSettings settings, string? executable = null, SupervisorState? state = null)
+    /// <param name="state">Состояние надзора движков; <c>null</c> — прочитать. Для тестов.</param>
+    /// <param name="kept">Состояние прокси, которого держит окно (<see cref="TgWsProxyKeeper"/>); <c>null</c> — прочитать. Для тестов.</param>
+    public static IReadOnlyList<DoctorCheck> TelegramProxy(
+        AppSettings settings, string? executable = null, SupervisorState? state = null, SupervisorState? kept = null)
     {
         var lines = new List<DoctorCheck>();
         var path = executable ?? TgWsProxy.Executable();
@@ -187,6 +190,29 @@ public static class Doctor
 
         state ??= SupervisorState.Load(SupervisorState.DefaultPath);
 
+        // «Всегда» (с 0.15.2): прокси держит само окно, своим файлом состояния,
+        // а надзор движков его не поднимает. До 20.10 проверка смотрела только
+        // в надзор и при работающем прокси писала «движки запущены без него —
+        // перезапустите их» (у владельца: прокси слушал 127.0.0.1:1443, а
+        // «Диагностика» и nz doctor звали перезапускать). Надзор, запущенный
+        // до включения настройки, держит свой — он тоже в счёт.
+        if (settings.TelegramProxyAlways)
+        {
+            kept ??= SupervisorState.Load(TgWsProxyKeeper.StatePath);
+
+            var held = Held(kept) ?? Held(state);
+
+            if (held is null)
+            {
+                lines.Add(Ok($"Включён на 127.0.0.1:{settings.TelegramProxyPort}, без движков: "
+                    + "поднимается вместе с окном программы."));
+                return lines;
+            }
+
+            lines.Add(Running(held, settings));
+            return lines;
+        }
+
         if (state is null || !state.IsSupervisorAlive())
         {
             lines.Add(Ok($"Включён на 127.0.0.1:{settings.TelegramProxyPort}; поднимется вместе с движками."));
@@ -195,16 +221,25 @@ public static class Doctor
 
         var service = state.Services.FirstOrDefault(s => s.Name == TgWsProxyService.ServiceName);
 
-        lines.Add(service switch
-        {
-            null => Warn("Прокси включён, но движки запущены без него — перезапустите их."),
-            { Health: ServiceHealth.Healthy } => Ok($"Работает на 127.0.0.1:{settings.TelegramProxyPort}."),
-            _ => Warn($"127.0.0.1:{settings.TelegramProxyPort}: {EngineHealth.Status(service)}. "
-                + "Частая причина — порт занят другим tg-ws-proxy; журнал — runtime\\tg-ws-proxy.log."),
-        });
+        lines.Add(service is null
+            ? Warn("Прокси включён, но движки запущены без него — перезапустите их.")
+            : Running(service, settings));
 
         return lines;
     }
+
+    /// <summary>Служба прокси у живого держателя; <c>null</c> — держателя нет или прокси у него нет.</summary>
+    private static ServiceState? Held(SupervisorState? holder) =>
+        holder is not null && holder.IsSupervisorAlive()
+            ? holder.Services.FirstOrDefault(s => s.Name == TgWsProxyService.ServiceName)
+            : null;
+
+    private static DoctorCheck Running(ServiceState service, AppSettings settings) => service.Health switch
+    {
+        ServiceHealth.Healthy => Ok($"Работает на 127.0.0.1:{settings.TelegramProxyPort}."),
+        _ => Warn($"127.0.0.1:{settings.TelegramProxyPort}: {EngineHealth.Status(service)}. "
+            + "Частая причина — порт занят другим tg-ws-proxy; журнал — runtime\tg-ws-proxy.log."),
+    };
 
     private static IReadOnlyList<DoctorCheck> Engines()
     {
