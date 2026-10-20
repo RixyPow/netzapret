@@ -29,6 +29,27 @@ public sealed class SubscriptionUsageTests
         Assert.Null(forecast.Warning);
     }
 
+    /// <summary>
+    /// Панель, которая пишет «безлимит» огромным числом вместо нуля (20.10,
+    /// чат: «не прочиталась: TimeSpan overflowed because the duration is too
+    /// long»): остаток, делённый на суточный темп, — миллиарды дней, и
+    /// TimeSpan.FromDays бросал. Прогноз шёл внутри чтения подписки, и
+    /// подписка целиком считалась непрочитанной.
+    /// </summary>
+    [Theory]
+    [InlineData(long.MaxValue)]
+    [InlineData(1_000_000_000_000_000_000)]
+    [InlineData(1L << 50)]
+    public void A_huge_quota_with_some_pace_does_not_throw_or_warn(long total)
+    {
+        UsageSample[] history = [new(Now.AddDays(-2), 1 * Gb, total), new(Now, 3 * Gb, total)];
+
+        var forecast = SubscriptionUsage.Forecast(Info(3 * Gb, total, Now.AddDays(30)), history, Now);
+
+        Assert.Equal(1 * Gb, forecast.PerDay);
+        Assert.Null(forecast.Warning);
+    }
+
     [Fact]
     public void Pace_comes_from_the_last_week_and_needs_half_a_day()
     {

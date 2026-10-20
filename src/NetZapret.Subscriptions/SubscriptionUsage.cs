@@ -169,12 +169,18 @@ public static class SubscriptionUsage
         {
             warning = "Трафик подписки кончился: всё, что идёт через VPN, стоит, пока поставщик не продлит.";
         }
-        else if (limited && perDay is { } pace && pace > 0 && info.RemainingBytes is { } left)
+        else if (limited && perDay is { } pace && pace > 0 && info.RemainingBytes is { } left
+            // Сперва числом, и длительность — только в пределах горизонта. Панель,
+            // пишущая «безлимит» огромным числом вместо нуля, давала остаток на
+            // миллиарды дней, TimeSpan.FromDays бросал переполнение, а прогноз
+            // идёт внутри чтения — подписка не читалась вовсе (чат, 20.10:
+            // «TimeSpan overflowed because the duration is too long»).
+            && left / (double)pace <= Horizon.TotalDays)
         {
             var runsOut = TimeSpan.FromDays(left / (double)pace);
             bool beforeExpiry = info.ExpiresAt is not { } end || now + runsOut < end;
 
-            if (beforeExpiry && runsOut <= Horizon)
+            if (beforeExpiry)
             {
                 warning = $"При нынешнем темпе — {Size(pace)} в сутки — трафик кончится примерно через "
                     + $"{Days(runsOut)}"
