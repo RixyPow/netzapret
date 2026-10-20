@@ -61,23 +61,55 @@ public sealed class BundledFontsTests
     {
         Sta.Run(() =>
         {
-            // Тема из папки проекта, а не из установки: из тестов той нет.
-            var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
-            while (directory is not null && !System.IO.File.Exists(System.IO.Path.Combine(directory.FullName, "NetZapret.sln")))
-                directory = directory.Parent;
-
-            Assert.NotNull(directory);
-            var theme = ThemeLoader.Load("dark", System.IO.Path.Combine(directory!.FullName, "themes")).Theme;
-            Assert.NotNull(theme);
-
-            var built = NetZapret.Gui.Themes.Build(theme!, [], new Appearance(false, false, 0, "Manrope"));
+            var built = NetZapret.Gui.Themes.Build(Dark(), [], new Appearance(false, false, 0, "Manrope"));
 
             foreach (var key in new[] { "UiFont", "MonoFont", "DisplayFont" })
-            {
-                var font = (FontFamily)built[key];
-                Assert.Contains("#Manrope", font.Source);
-                Assert.NotNull(font.BaseUri);
-            }
+                Assert.Equal("Manrope", Face((FontFamily)built[key]));
         });
+    }
+
+    /// <summary>
+    /// Тема пишет шрифт именем, как системный: до 20.10 «Manrope» в теме
+    /// молча становился Segoe UI.
+    /// </summary>
+    [Fact]
+    public void AThemeNamingManropeGetsTheBundledOne()
+    {
+        Sta.Run(() =>
+        {
+            var dark = Dark();
+            var theme = dark with { Fonts = dark.Fonts with { Ui = "Manrope, Segoe UI", Display = "manrope" } };
+
+            var built = NetZapret.Gui.Themes.Build(theme, []);
+
+            Assert.Equal("Manrope", Face((FontFamily)built["UiFont"]));
+            Assert.Equal("Manrope", Face((FontFamily)built["DisplayFont"]));
+            Assert.NotEqual("Manrope", Face((FontFamily)built["MonoFont"]));
+        });
+    }
+
+    [Fact]
+    public void AllSystemListIsLeftToWindows() =>
+        Assert.Null(BundledFonts.Family("Cascadia Mono, Consolas"));
+
+    /// <summary>Каким семейством WPF на деле нарисует обычный текст.</summary>
+    private static string Face(FontFamily family)
+    {
+        var typeface = new Typeface(family, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        Assert.True(typeface.TryGetGlyphTypeface(out var glyphs), family.Source);
+        return glyphs.FamilyNames[CultureInfo.GetCultureInfo("en-US")];
+    }
+
+    /// <summary>Тёмная тема из папки проекта, а не из установки: из тестов той нет.</summary>
+    private static Theme Dark()
+    {
+        var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !System.IO.File.Exists(System.IO.Path.Combine(directory.FullName, "NetZapret.sln")))
+            directory = directory.Parent;
+
+        Assert.NotNull(directory);
+        var theme = ThemeLoader.Load("dark", System.IO.Path.Combine(directory!.FullName, "themes")).Theme;
+        Assert.NotNull(theme);
+        return theme!;
     }
 }

@@ -41,12 +41,37 @@ public static class BundledFonts
     public static IReadOnlyList<string> Names { get; } = Known.Select(k => k.Name).ToArray();
 
     /// <summary>Встроенное семейство по имени или <c>null</c>, если такого не возим.</summary>
-    public static FontFamily? Find(string? name)
+    public static FontFamily? Find(string? name) =>
+        Location(name) is { } location ? new FontFamily(new Uri(Base), location + ", Segoe UI") : null;
+
+    /// <summary>
+    /// Семейство по списку шрифтов темы («Manrope, Segoe UI»), если в нём есть
+    /// встроенный; <c>null</c> — список весь системный.
+    /// </summary>
+    /// <remarks>
+    /// Тема пишет шрифт именем, как системный, и до 20.10 «Manrope» в теме
+    /// молча давал Segoe UI: в Windows его нет. Адрес ресурса — только базой
+    /// семейства, а не в строке имён: в «pack://application:,,,/…» запятые,
+    /// а строку имён WPF режет по запятым (20.10 так тест и упал — Segoe UI).
+    /// Системные имена рядом с базой ищутся как обычно.
+    /// </remarks>
+    public static FontFamily? Family(string names)
+    {
+        var parts = names.Split(',').Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+
+        if (!parts.Any(n => Location(n) is not null))
+            return null;
+
+        return new FontFamily(new Uri(Base), string.Join(", ", parts.Select(n => Location(n) ?? n)));
+    }
+
+    /// <summary>Ссылка от <see cref="Base"/>: «./manrope/#Manrope»; <c>null</c> — шрифт не наш.</summary>
+    private static string? Location(string? name)
     {
         foreach (var (known, folder) in Known)
         {
             if (string.Equals(known, name?.Trim(), StringComparison.OrdinalIgnoreCase))
-                return new FontFamily(new Uri(Base + folder + "/"), $"./#{known}, Segoe UI");
+                return $"./{folder}/#{known}";
         }
 
         return null;

@@ -465,8 +465,11 @@ public static class Themes
     /// </remarks>
     private static FontFamily Font(Theme theme, string names)
     {
+        // Встроенный шрифт (Manrope) — из ресурсов программы: в Windows его нет.
+        // У темы со своими файлами база семейства — её папка, и встроенный
+        // там не находится (BundledFonts.Family); таких тем на 20.10 нет.
         if (theme.Fonts.Files.Count == 0)
-            return new FontFamily(names);
+            return BundledFonts.Family(names) ?? new FontFamily(names);
 
         var folder = new Uri(theme.Folder.TrimEnd('\\') + "\\");
 
