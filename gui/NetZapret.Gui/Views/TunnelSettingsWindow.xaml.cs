@@ -118,6 +118,9 @@ public partial class TunnelSettingsWindow : Window
         Word(DeadPoolWord, settings.DeadPoolToDefault);
         DeadPool.IsChecked = settings.DeadPoolToDefault;
 
+        Word(FakeIpMemoryWord, settings.FakeIpMemory);
+        FakeIpMemory.IsChecked = settings.FakeIpMemory;
+
         DeadPoolLine.Text = settings.Pools.Count == 0
             ? "Своих пулов пока нет — все серверы в пуле по умолчанию."
             : settings.DeadPoolToDefault
@@ -290,6 +293,12 @@ public partial class TunnelSettingsWindow : Window
             Replace.IsChecked == true
                 ? "Выбранному серверу будет искаться замена, пока он молчит."
                 : "Выбранный сервер не подменяется: молчит — туннель ждёт его.");
+
+    private void OnFakeIpMemory(object sender, RoutedEventArgs e) =>
+        Save(s => s with { FakeIpMemory = FakeIpMemory.IsChecked == true },
+            FakeIpMemory.IsChecked == true
+                ? "Подставные адреса имён через VPN переживут перезапуск движков."
+                : "После перезапуска движков подставные адреса раздаются заново, как было до 20.10.");
 
     private void OnDeadPool(object sender, RoutedEventArgs e) =>
         Save(s => s with { DeadPoolToDefault = DeadPool.IsChecked == true },

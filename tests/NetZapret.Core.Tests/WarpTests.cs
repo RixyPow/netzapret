@@ -99,6 +99,41 @@ public class WarpTests
     }
 
     /// <summary>
+    /// Память подставных адресов включает кэш и без MASQUE — с полем
+    /// <c>store_fakeip</c>, но без <c>store_masque_config</c>: учётной записи
+    /// Cloudflare у подписки нет, и хранить там нечего.
+    /// </summary>
+    /// <remarks>
+    /// Замер 20.10: после перезапуска движка github.com получал другой
+    /// подставной адрес (198.18.0.7 → 198.18.0.5), а соединение на старый —
+    /// отказ. Поле <c>store_fakeip</c> движок 1.14.3 принимает (проверка
+    /// <c>sing-box check</c> в этом же тесте); <c>store_selected</c> он не
+    /// знает — выбор в селекторе хранится всегда.
+    /// </remarks>
+    [Fact]
+    public void FakeIpMemoryTurnsOnTheEngineCache()
+    {
+        var options = new SingBoxOptions { StoreFakeIp = true };
+
+        var root = Compile(options, Ordinary());
+        var cache = root.GetProperty("experimental").GetProperty("cache_file");
+
+        Assert.True(cache.GetProperty("enabled").GetBoolean());
+        Assert.True(cache.GetProperty("store_fakeip").GetBoolean());
+        Assert.False(cache.TryGetProperty("store_masque_config", out _));
+        Assert.True(Path.IsPathFullyQualified(cache.GetProperty("path").GetString()!));
+
+        var (ok, said) = SingBoxCheck.Run(root.GetRawText());
+        Assert.True(ok, said);
+
+        // С MASQUE — оба поля: учётная запись и таблица адресов живут в одном файле.
+        var both = Compile(options, Warp.MasqueServer()).GetProperty("experimental").GetProperty("cache_file");
+
+        Assert.True(both.GetProperty("store_fakeip").GetBoolean());
+        Assert.True(both.GetProperty("store_masque_config").GetBoolean());
+    }
+
+    /// <summary>
     /// WARP — запасной выход: в селекторе он есть всегда, а в автоподборе —
     /// только когда живых серверов подписки нет.
     /// </summary>

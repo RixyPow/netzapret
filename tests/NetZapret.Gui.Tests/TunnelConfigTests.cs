@@ -267,6 +267,30 @@ public sealed class TunnelConfigTests : IDisposable
             $"путь к кэшу «{path}» не полный — движок разрешит его от своего каталога");
     }
 
+    /// <summary>
+    /// Память подставных адресов — настройка: по умолчанию включена и даёт
+    /// кэш с <c>store_fakeip</c>, выключенная — кэша без MASQUE не оставляет.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 20.10: «сделай, только чтобы это можно было выключить
+    /// в настройках VPN, потом сравним работу». Сравнивать есть что, только
+    /// если выключатель и правда убирает поле из конфига.
+    /// </remarks>
+    [Fact]
+    public async Task The_fake_ip_memory_follows_the_setting()
+    {
+        var on = await BuildAsync();
+        var cache = on.GetProperty("experimental").GetProperty("cache_file");
+
+        Assert.True(cache.GetProperty("enabled").GetBoolean());
+        Assert.True(cache.GetProperty("store_fakeip").GetBoolean());
+        Assert.False(cache.TryGetProperty("store_masque_config", out _));
+
+        var off = await BuildAsync(s => s with { FakeIpMemory = false });
+
+        Assert.False(off.GetProperty("experimental").TryGetProperty("cache_file", out _));
+    }
+
     /// <summary>Без подписки конфиг не собирается, и об этом говорят словами.</summary>
     /// <remarks>
     /// Молчаливый отказ здесь означал бы запуск движков со вчерашним конфигом:

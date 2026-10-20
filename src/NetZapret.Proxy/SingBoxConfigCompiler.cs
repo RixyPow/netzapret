@@ -74,8 +74,9 @@ public sealed class SingBoxOptions
     /// <remarks>
     /// <para>
     /// Рядом с прочим рантаймом, а не в корне рабочего каталога, куда движок
-    /// положил бы <c>cache.db</c> по умолчанию. Файл появляется только у тех,
-    /// у кого включён MASQUE, — остальным он не нужен и не заводится.
+    /// положил бы <c>cache.db</c> по умолчанию. Файл появляется у тех,
+    /// у кого включён MASQUE или память подставных адресов
+    /// (<see cref="StoreFakeIp"/>), — остальным он не нужен и не заводится.
     /// </para>
     /// <para>
     /// В конфиг уходит полным путём, и это не придирка к аккуратности.
@@ -87,6 +88,18 @@ public sealed class SingBoxOptions
     /// </para>
     /// </remarks>
     public string CachePath { get; init; } = Path.Combine("runtime", "engine-cache.db");
+
+    /// <summary>
+    /// Хранить таблицу подставных адресов (fakeip → имя) в файле кэша,
+    /// чтобы после перезапуска имена получали те же адреса.
+    /// </summary>
+    /// <remarks>
+    /// Выключено по умолчанию: это настройка человека
+    /// (<c>AppSettings.FakeIpMemory</c>), а не свойство конфига, и сборки
+    /// для проверок и тестов файл кэша заводить не должны. Поле sing-box —
+    /// <c>store_fakeip</c>; принято движком 1.14.3 (проверка 20.10).
+    /// </remarks>
+    public bool StoreFakeIp { get; init; }
 
     /// <summary>
     /// Апстрим DNS. Указывается адресом, а не именем: имя потребовало бы
@@ -496,13 +509,17 @@ public sealed class SingBoxConfigCompiler
         if (endpoints.Count > 0)
             root["endpoints"] = endpoints;
 
-        // Кэш движка нужен ровно одному выходу — MASQUE: движок заводит себе
-        // учётную запись Cloudflare сам и хранит её там. Без кэша он
-        // регистрировался бы заново при каждом запуске, плодя записи и теряя
-        // единственное, ради чего всё затевалось: работать, когда подписки
-        // уже нет. Включается вместе с ним, а не всем подряд — файл
-        // переживает удаление программы и хранит ещё и выбор в селекторе.
-        if (usable.Any(s => s.IsSelfRegistering))
+        // Кэш движка нужен двоим. MASQUE: движок заводит себе учётную запись
+        // Cloudflare сам и хранит её там; без кэша он регистрировался бы
+        // заново при каждом запуске, плодя записи и теряя единственное, ради
+        // чего всё затевалось, — работать, когда подписки уже нет. И память
+        // подставных адресов (с 20.10, по выключателю): без неё после
+        // перезапуска имена «через VPN» получают другие fakeip, а браузер
+        // со старыми в кэше упирается в отказ. Иначе файл не заводится:
+        // он переживает удаление программы и хранит ещё и выбор в селекторе.
+        bool masque = usable.Any(s => s.IsSelfRegistering);
+
+        if (masque || options.StoreFakeIp)
         {
             var cache = Path.GetFullPath(options.CachePath);
 
@@ -513,12 +530,19 @@ public sealed class SingBoxConfigCompiler
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
-            ((JsonObject)root["experimental"]!)["cache_file"] = new JsonObject
+            var cacheFile = new JsonObject
             {
                 ["enabled"] = true,
                 ["path"] = cache,
-                ["store_masque_config"] = true,
             };
+
+            if (masque)
+                cacheFile["store_masque_config"] = true;
+
+            if (options.StoreFakeIp)
+                cacheFile["store_fakeip"] = true;
+
+            ((JsonObject)root["experimental"]!)["cache_file"] = cacheFile;
         }
 
         return new CompilationResult

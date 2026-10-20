@@ -229,6 +229,7 @@
             <TextBlock Text="СОЕДИНЕНИЕ С СЕРВЕРОМ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
             <Border Style="{StaticResource SettingsGroup}">
+                <StackPanel>
                 <Grid Margin="16,13">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -253,6 +254,43 @@
                         <ComboBoxItem Content="пакетами TCP" Tag="Packets" />
                     </ComboBox>
                 </Grid>
+
+                <Border Style="{StaticResource RowLine}" />
+
+                <!--
+                    Память подставных адресов (20.10). Имена «через VPN» получают
+                    от движка подставные адреса 198.18.x с TTL 600 с, а при
+                    перезапуске движок раздаёт их заново: github.com был
+                    198.18.0.7, стал 198.18.0.5, на старый — отказ. Кэш Windows
+                    надзор сбрасывает, а у браузера кэш свой. Выключатель —
+                    по слову владельца: «потом сравним работу».
+                -->
+                <Grid Margin="16,13">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Помнить подставные адреса" VerticalAlignment="Center" />
+
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Именам «через VPN» движок отдаёт не настоящий адрес, а подставной из 198.18.x, и помнит, какому имени какой достался. При перезапуске движков эта память стиралась, адреса раздавались заново, а браузер ещё с минуту ходил по старым — и часть сайтов через VPN не открывалась.&#x0a;&#x0a;С этой настройкой таблица адресов хранится в файле кэша движка (runtime\engine-cache.db) и после перезапуска имена получают те же адреса.&#x0a;&#x0a;Выключите, если после перезапуска движков сайты через VPN стали вести себя хуже, чем прежде. Применяется при следующем запуске движков." />
+                        </StackPanel>
+
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="После перезапуска движков имена через VPN получают те же адреса, что и до него." />
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" x:Name="FakeIpMemoryWord" Style="{StaticResource Caption}"
+                               VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                    <ToggleButton Grid.Column="2" x:Name="FakeIpMemory" Style="{StaticResource Switch}"
+                                  Click="OnFakeIpMemory" VerticalAlignment="Center" />
+                </Grid>
+                </StackPanel>
             </Border>
 
             <TextBlock Text="ПРОВЕРКА СЕРВЕРОВ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
