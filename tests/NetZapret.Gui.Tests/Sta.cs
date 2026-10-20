@@ -74,9 +74,25 @@ internal static class Sta
     /// Поднимает приложение со словарями тем, если его ещё нет.
     /// </summary>
     /// <remarks>
-    /// <c>Application</c> в процессе один и переживает поток, который его
-    /// создал. Второй вызов конструктора кидает, поэтому проверяем — и под
-    /// замком: тесты идут по очереди внутри класса, но классов несколько.
+    /// <para>
+    /// <c>Application</c> в процессе один, второй вызов конструктора кидает,
+    /// поэтому проверяем — и под замком: тесты идут по очереди внутри класса,
+    /// но классов несколько.
+    /// </para>
+    /// <para>
+    /// Живёт на своём фоновом потоке, а не на потоке первого теста. WPF
+    /// считает приложение завершающимся, как только погашен диспетчер его
+    /// потока (Application.IsShuttingDown смотрит на HasShutdownStarted),
+    /// и тогда Window.Show() молча ничего не делает. Прежде приложение
+    /// создавал первый тест, а его поток Run гасит на выходе (см. выше) —
+    /// и окна всех следующих тестов не показывались. Тестам, которым хватает
+    /// разметки, это не мешало; HomeFitTests раскладывает показанное окно
+    /// и в CI падал на пустом разделе всякий раз, когда шёл не первым
+    /// (20.10: четыре сборки из восьми; в чистой копии — два-три полных
+    /// прогона окна из пяти, в момент падения IsShuttingDown = true, окно
+    /// невидимо и 0×0). На этом потоке окон нет, его диспетчер не гасится,
+    /// а фоновый поток не держит процесс тестов на выходе.
+    /// </para>
     /// </remarks>
     private static void Prepare()
     {
@@ -85,17 +101,50 @@ internal static class Sta
             if (Application.Current is not null)
                 return;
 
-            var app = new Application();
+            Exception? failure = null;
+            using var ready = new ManualResetEventSlim();
 
-            foreach (var theme in new[] { "Palette", "Controls" })
+            var thread = new Thread(() =>
             {
-                app.Resources.MergedDictionaries.Add(new ResourceDictionary
+                try
                 {
-                    Source = new Uri(
-                        $"pack://application:,,,/NetZapret;component/Theme/{theme}.xaml",
-                        UriKind.Absolute),
-                });
-            }
+                    var app = new Application();
+
+                    foreach (var theme in new[] { "Palette", "Controls" })
+                    {
+                        app.Resources.MergedDictionaries.Add(new ResourceDictionary
+                        {
+                            Source = new Uri(
+                                $"pack://application:,,,/NetZapret;component/Theme/{theme}.xaml",
+                                UriKind.Absolute),
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+                finally
+                {
+                    ready.Set();
+                }
+
+                if (failure is null)
+                    System.Windows.Threading.Dispatcher.Run();
+            })
+            {
+                IsBackground = true,
+                Name = "WPF Application для тестов",
+            };
+
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+
+            if (!ready.Wait(TimeSpan.FromMinutes(1)))
+                throw new TimeoutException("приложение WPF не поднялось за минуту");
+
+            if (failure is not null)
+                throw new InvalidOperationException("приложение WPF не поднялось: " + failure.Message, failure);
         }
     }
 }
