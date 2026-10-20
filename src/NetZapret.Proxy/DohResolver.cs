@@ -98,6 +98,66 @@ public static class DohResolver
     }
 
     /// <summary>
+    /// Текст записи HTTPS имени (тип 65) — первой из ответа; <c>null</c> — её нет
+    /// или резолверы не ответили.
+    /// </summary>
+    /// <remarks>
+    /// Нужна ради ECH (<see cref="EchRecord"/>). Спрашиваются те же резолверы
+    /// по очереди; записи HTTPS подменять некому, и первый ответ — ответ.
+    /// </remarks>
+    internal static async Task<string?> HttpsRecordAsync(
+        string host,
+        HttpClient http,
+        CancellationToken cancellationToken)
+    {
+        if (IPAddress.TryParse(host, out _))
+            return null;
+
+        foreach (var endpoint in Endpoints)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    $"{endpoint}?name={Uri.EscapeDataString(host)}&type=HTTPS");
+
+                request.Headers.Accept.Add(new("application/dns-json"));
+
+                using var response = await http.SendAsync(request, cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                    continue;
+
+                using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+
+                // Код 0 без записи — ответ «записи нет», дальше спрашивать незачем.
+                if (!document.RootElement.TryGetProperty("Status", out var status) || status.GetInt32() != 0)
+                    continue;
+
+                if (!document.RootElement.TryGetProperty("Answer", out var answers))
+                    return null;
+
+                foreach (var answer in answers.EnumerateArray())
+                {
+                    if (answer.TryGetProperty("type", out var type) && type.GetInt32() == 65
+                        && answer.TryGetProperty("data", out var data))
+                    {
+                        return data.GetString();
+                    }
+                }
+
+                return null;
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Один резолвер не отвечает — спрашиваем следующего.
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Все адреса имени, какие удалось собрать у разных резолверов.
     /// </summary>
     /// <remarks>

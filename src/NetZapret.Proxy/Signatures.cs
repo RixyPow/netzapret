@@ -141,8 +141,23 @@ public static class Signatures
             + "не принимали соединение, третий отвечал.",
     };
 
+    public static Signature EchHidden { get; } = new()
+    {
+        Id = "ech-hidden",
+        Title = "В браузере с ECH откроется",
+        Meaning = "Имя закрыто по рукопожатию с настоящим именем, а приветствие с общим именем ECH из его "
+            + "записи HTTPS тот же адрес принимает. Браузер с включённым защищённым DNS шлёт именно "
+            + "общее имя, настоящее — зашифрованным, и провайдер его не видит. Проба ECH не шлёт, "
+            + "поэтому её вердикт — о браузере без ECH.",
+        Remedy = "рецепт десинка этому имени нужен и на общее имя ECH (обычно cloudflare-ech.com): "
+            + "его-то провайдер и видит. Без десинка — включить в браузере защищённый DNS (DoH): "
+            + "с ним браузер получает запись HTTPS и шлёт ECH.",
+        Origin = "ntc.party, zapret-Checker (№88–98, 08.2026): lostfilm.tv открылся, когда cloudflare-ech.com "
+            + "добавили в список стратегии; проверка рецепта — curl --ech hard (TesterTi, №102).",
+    };
+
     /// <summary>Все почерки — в том порядке, в каком их показывают.</summary>
-    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, SharedNode, PartlySilent];
+    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, SharedNode, PartlySilent, EchHidden];
 
     /// <summary>
     /// Почерки в результатах одного прогона.
@@ -183,8 +198,26 @@ public static class Signatures
         found.AddRange(Freezes(direct));
         found.AddRange(SharedNodes(direct, taken));
         found.AddRange(PartlySilentNames(direct));
+        found.AddRange(EchHiddenNames(direct));
 
         return found;
+    }
+
+    private static IEnumerable<SignatureFinding> EchHiddenNames(List<TargetReport> reports)
+    {
+        var hidden = reports.Where(r => r.EchName is not null && r.EchHelloAccepted).ToList();
+
+        if (hidden.Count == 0)
+            yield break;
+
+        yield return new SignatureFinding
+        {
+            Signature = EchHidden,
+            Headline = EchHidden.Title,
+            Hosts = hidden.Select(r => r.Host).ToList(),
+            Lines = hidden.Select(r => $"{r.Host} — {Verdict(r)}, с именем {r.EchName} приветствие принято").ToList(),
+            Calm = true,
+        };
     }
 
     private static IEnumerable<SignatureFinding> DeadPins(

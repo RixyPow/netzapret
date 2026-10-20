@@ -177,6 +177,28 @@ public sealed class SignaturesTests
     }
 
     /// <summary>
+    /// <summary>
+    /// Закрытое по имени, но принятое с общим именем ECH — сведения, не поломка:
+    /// в браузере с ECH откроется. Без принятого приветствия — не почерк.
+    /// </summary>
+    [Fact]
+    public void AnEchHiddenNameIsCalmAndNeedsTheAcceptedHello()
+    {
+        var found = Signatures.Find(
+        [
+            Report("lostfilm.tv", BlockKind.TlsDpi, answered: "188.114.96.1") with { EchName = "cloudflare-ech.com", EchHelloAccepted = true },
+            Report("rutracker.org", BlockKind.TlsDpi, answered: "104.21.32.39") with { EchName = "cloudflare-ech.com" },
+            Report("example.com", BlockKind.TlsDpi, answered: "8.6.112.0"),
+        ]);
+
+        var ech = Assert.Single(found, f => f.Signature == Signatures.EchHidden);
+
+        Assert.True(ech.Calm);
+        Assert.Equal(["lostfilm.tv"], ech.Hosts);
+        Assert.Contains("cloudflare-ech.com", ech.Lines[0]);
+    }
+
+    /// <summary>
     /// Почерк без случая, по которому он узнан, — догадка: каждый в каталоге
     /// обязан нести смысл, совет и происхождение.
     /// </summary>

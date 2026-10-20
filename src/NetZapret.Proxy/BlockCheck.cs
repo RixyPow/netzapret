@@ -390,6 +390,21 @@ public sealed record TargetReport
     public bool TunnelMissed => ExpectedTunnel && !Tunnelled;
 
     /// <summary>
+    /// Общее имя ECH из записи HTTPS; <c>null</c> — ECH у имени нет или не спрашивали.
+    /// </summary>
+    /// <remarks>
+    /// Спрашивается только у закрытых по TLS и у замёрзших мимо туннеля
+    /// (<see cref="EchRecord"/>): у открытых и так всё ясно.
+    /// </remarks>
+    public string? EchName { get; init; }
+
+    /// <summary>
+    /// Приветствие с общим именем ECH тот же адрес принял: в браузере с ECH
+    /// имя откроется, хотя проба с настоящим именем закрыта.
+    /// </summary>
+    public bool EchHelloAccepted { get; init; }
+
+    /// <summary>
     /// Ячейка рукопожатия: версия при успехе, причина отказа при неудаче.
     /// </summary>
     /// <remarks>
@@ -1066,6 +1081,20 @@ public static class BlockCheck
             };
         }
 
+        // Закрыто по имени — а каким именем пойдёт браузер? С ECH открытым
+        // стоит общее имя из записи HTTPS, и если приветствие с ним тот же
+        // адрес принимает, в браузере с ECH сайт откроется (Signatures.EchHidden).
+        string? echName = null;
+        bool echAccepted = false;
+
+        if (!viaTunnel && kind is BlockKind.TlsDpi or BlockKind.Stall && answered is not null)
+        {
+            echName = await EchRecord.PublicNameAsync(host, Timeout, cancellationToken);
+
+            if (echName is not null)
+                echAccepted = (await BrowserHello.AskAsync(answered, echName, Timeout, cancellationToken)).Answer == HelloAnswer.Accepted;
+        }
+
         return new TargetReport
         {
             Host = host,
@@ -1076,6 +1105,8 @@ public static class BlockCheck
             Http = http,
             Data = data,
             Kind = kind,
+            EchName = echName,
+            EchHelloAccepted = echAccepted,
 
             // Через туннель вердикт о подмене не выносится, и это важно.
             // Проксируемому имени движок выдаёт fakeip из 198.18.0.0/15,
