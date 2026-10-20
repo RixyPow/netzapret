@@ -93,6 +93,17 @@
   </ItemGroup>
 
   <!--
+    Встроенный шрифт Manrope (20.10): ресурсом внутри сборки, а не файлами
+    рядом — шрифт из ресурса находится и в едином файле, и из тестов.
+    Шесть статических начертаний, ~860 КБ; лицензия OFL едет в архив
+    как LICENSE-Manrope.txt (pack.cmd). Почему не вариативный файл —
+    в Theme\BundledFonts.cs.
+  -->
+  <ItemGroup>
+    <Resource Include="Assets\fonts\manrope\*.ttf" />
+  </ItemGroup>
+
+  <!--
     Неявные using от WinForms сняты. Иначе UserControl и Brush становятся
     двусмысленными между System.Windows.Forms/System.Drawing и WPF — сразу
     по всему коду, во всех разделах, а WinForms здесь нужен ровно ради

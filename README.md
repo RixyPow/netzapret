@@ -47,6 +47,7 @@ VPN берёт то, что закрыто по стране, — а NetZapret �
 | WinDivert | перехват пакетов для winws2 | LGPL v3 / GPL v3 | [basil00/WinDivert](https://github.com/basil00/WinDivert) |
 | Wintun | сетевой адаптер туннеля | проприетарная, WireGuard LLC | [wintun.net](https://www.wintun.net/) |
 | ZXing.Net | чтение QR-кодов с ключами | Apache 2.0 | [micjahn/ZXing.Net](https://github.com/micjahn/ZXing.Net) |
+| Manrope, автор — Михаил Шаранда | шрифт в списке «Оформления» | SIL OFL 1.1 | [googlefonts/manrope](https://github.com/googlefonts/manrope) |
 
 То же самое показывает окно: «Ещё» → «О программе».
 
@@ -925,6 +926,10 @@ Game filter — выключатель для игр на вкладке «Де�
 QR-коды с ключами читает [ZXing.Net](https://github.com/micjahn/ZXing.Net)
 (Apache 2.0) — библиотека встроена в программу, её лицензия лежит в архиве
 рядом с ней.
+
+Шрифт [Manrope](https://github.com/googlefonts/manrope) **Михаила Шаранды**
+(SIL OFL 1.1) встроен в окно — его можно выбрать в «Оформлении», даже если
+в Windows его нет; лицензия — `LICENSE-Manrope.txt` в архиве.
 
 ## Дальше
 

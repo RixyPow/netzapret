@@ -17,6 +17,7 @@ NetZapret не работает сам по себе: он управляет д
 | tg-ws-proxy-rs (прокси вкладки «TG Proxy», с 07.10) — порт tg-ws-proxy Flowseal | MIT, © 2026 valnesfjord; MIT, © 2026 Flowseal | `engines/tg-ws-proxy/LICENSE`, `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt` |
 | WinDivert | LGPL v3 либо GPL v3 | см. reqrypt.org |
 | ZXing.Net (чтение QR-кодов с ключами, с 01.10) | Apache-2.0, Michael Jahn | `LICENSE-ZXing.Net.txt` |
+| Шрифт Manrope (встроен в `NetZapret.exe`, с 20.10) | SIL OFL 1.1, © 2018 The Manrope Project Authors; автор — Михаил Шаранда | `LICENSE-Manrope.txt` |
 
 ## Как это соотносится с лицензией самого NetZapret
 
@@ -278,6 +279,22 @@ Flowseal** — обе строки стоят в его
 **MIT License, Copyright (c) 2026 valnesfjord** и **MIT License, Copyright (c)
 2026 Flowseal** — строки из их файлов LICENSE, приводятся как есть. Тексты
 целиком — `engines/tg-ws-proxy/LICENSE` и `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt`.
+
+## Manrope
+
+Шрифт **Manrope** (с 20.10) — в списке шрифтов «Оформления», для тех, у кого
+его нет в Windows. Автор — **Михаил Шаранда**, исходники —
+[github.com/googlefonts/manrope](https://github.com/googlefonts/manrope);
+оттуда же шесть статических начертаний (`fonts/ttf`, Light–ExtraBold), без
+правок. Едут ресурсом внутри `NetZapret.exe`, отдельными файлами в архиве
+их нет.
+
+**SIL Open Font License 1.1, Copyright 2018 The Manrope Project Authors** —
+строка из их файла OFL.txt, приводится как есть; зарезервированного имени
+шрифта у него нет. OFL разрешает встраивать шрифт в программу и
+распространять вместе с ней, если рядом лежат уведомление и текст лицензии —
+`LICENSE-Manrope.txt` в корне архива. Продавать сам шрифт отдельно она
+не разрешает; мы и не продаём.
 
 ## Сам NetZapret
 

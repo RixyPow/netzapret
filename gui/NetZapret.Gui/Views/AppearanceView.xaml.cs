@@ -197,12 +197,21 @@ public partial class AppearanceView : UserControl
         public override string ToString() => Name;
     }
 
-    /// <summary>Установленные шрифты — один раз на запуск: перечень не меняется, а читается долго.</summary>
+    /// <summary>
+    /// Установленные шрифты и встроенные (<see cref="BundledFonts"/>) — один раз
+    /// на запуск: перечень не меняется, а читается долго.
+    /// </summary>
+    /// <remarks>
+    /// Встроенный стоит вместо установленного с тем же именем: тогда выбор
+    /// «Manrope» значит одно и то же у всех, а не версию, что лежит у кого-то
+    /// в Windows.
+    /// </remarks>
     private static readonly Lazy<IReadOnlyList<FontItem>> SystemFonts = new(() =>
         Fonts.SystemFontFamilies
-            .Where(f => !string.IsNullOrWhiteSpace(f.Source))
+            .Where(f => !string.IsNullOrWhiteSpace(f.Source) && BundledFonts.Find(f.Source) is null)
             .GroupBy(f => f.Source, StringComparer.OrdinalIgnoreCase)
             .Select(g => new FontItem(g.Key, g.First()))
+            .Concat(BundledFonts.Names.Select(n => new FontItem(n, BundledFonts.Find(n)!)))
             .OrderBy(f => f.Name, StringComparer.CurrentCultureIgnoreCase)
             .ToList());
 

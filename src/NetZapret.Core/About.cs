@@ -96,5 +96,12 @@ public static class About
             "Сетевой адаптер туннеля",
             "Проприетарная, WireGuard LLC",
             "https://www.wintun.net/"),
+
+        // С 20.10 шрифт едет ресурсом в окне (BundledFonts) — в списке
+        // «Оформления» он есть и у тех, у кого его нет в Windows.
+        new("Manrope",
+            "Шрифт в списке «Оформления» — автор Михаил Шаранда",
+            "SIL OFL 1.1",
+            "https://github.com/googlefonts/manrope"),
     ];
 }

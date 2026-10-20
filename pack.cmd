@@ -281,6 +281,10 @@ copy /y "%ROOT%docs\licenses\flowseal-MIT.txt" "%ENGINES%\zapret\LICENSE-Flowsea
 rem ZXing.Net reads QR codes with keys (01.10). Apache-2.0: the licence text
 rem must travel with the copy; the library sits beside NetZapret.exe.
 copy /y "%ROOT%docs\licenses\zxing-net-Apache-2.0.txt" "%STAGE%\LICENSE-ZXing.Net.txt" >nul 2>&1
+rem Manrope is built into NetZapret.exe as a resource (20.10). SIL OFL 1.1:
+rem the font may be bundled with software as long as the licence text and
+rem copyright notice travel with it.
+copy /y "%ROOT%docs\licenses\manrope-OFL.txt" "%STAGE%\LICENSE-Manrope.txt" >nul 2>&1
 
 rem Last line of defence before the archive exists. dist\ is wiped at the start,
 rem so these files should never be here - but testing happens in the unpacked

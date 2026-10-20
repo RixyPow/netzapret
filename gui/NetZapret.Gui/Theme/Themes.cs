@@ -188,7 +188,9 @@ public static class Themes
         // заголовки и данные. «Как в теме» — шрифты темы, как задумано.
         if (look.Font is { } font)
         {
-            var family = new FontFamily(font);
+            // Встроенный (Manrope) — из ресурсов программы: в Windows его нет,
+            // и new FontFamily по имени молча дал бы шрифт по умолчанию.
+            var family = BundledFonts.Find(font) ?? new FontFamily(font);
             dictionary["UiFont"] = family;
             dictionary["MonoFont"] = family;
             dictionary["DisplayFont"] = family;
