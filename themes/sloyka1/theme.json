@@ -21,6 +21,11 @@
     "image": "background.jpg",
     "fit": "cover",
     "dim": 0.6,
-    "blur": 0
+    "blur": 0,
+    "home": {
+      "x": 0.913,
+      "y": 0.492,
+      "size": 1
+    }
   }
 }
