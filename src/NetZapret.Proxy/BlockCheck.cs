@@ -271,6 +271,16 @@ public sealed record ProbeOutcome
     /// </summary>
     public IReadOnlyList<string> Silent { get; init; } = [];
 
+    /// <summary>
+    /// Скрипты и стили той же зоны, которые стоит докачать: страница
+    /// пришла целиком, но слишком мала, чтобы показать заморозку.
+    /// </summary>
+    /// <remarks>
+    /// Пусто у большой страницы, у отказа и у стадий без передачи.
+    /// Что с ними делать, решает проба (<see cref="PageAssets"/>).
+    /// </remarks>
+    public IReadOnlyList<string> Assets { get; init; } = [];
+
     public string Describe() => Ok
         ? "ок"
         : Reset ? "RST"
@@ -913,6 +923,11 @@ public static class BlockCheck
         // по нему подряд, как у браузера.
         var walk = await WalkAsync(host, real, cancellationToken);
         var (answered, tcp, tls, data) = (walk.Answered, walk.Tcp, walk.Tls, walk.Data);
+
+        // Страница прошла, но была мала для заморозки — за ней докачивается
+        // её скрипт или стиль, как сделал бы браузер (PageAssets).
+        if (data.Assets.Count > 0)
+            data = await WeighAssetsAsync(host, answered, real, data, cancellationToken);
 
         // Восьмидесятый порт спрашивается только тогда, когда не встал 443,
         // и лишь затем, чтобы отличить закрытый маршрут от вмешательства
@@ -1698,9 +1713,9 @@ public static class BlockCheck
     /// тот же адрес, та же минута, и разница ровно в составе приветствия.
     /// </para>
     /// <para>
-    /// Это единственное место, где проба открывает второе соединение, и
-    /// открывается оно только там, где первое уже провалилось. У исправного
-    /// имени соединение по-прежнему одно.
+    /// Второе соединение здесь открывается только там, где первое уже
+    /// провалилось. У исправного имени соединение одно — не считая
+    /// подресурса маленькой страницы (<see cref="WeighAssetsAsync"/>).
     /// </para>
     /// </remarks>
     /// <param name="ours">Чем кончилось рукопожатие системным приветствием.</param>
@@ -1845,14 +1860,20 @@ public static class BlockCheck
     /// у страниц он разный, и всякое число было бы взято с потолка.
     /// </para>
     /// </remarks>
+    /// <param name="path">
+    /// Что просить: «/» у страницы, путь скрипта или стиля у подресурса.
+    /// Подресурсы ищутся только у страницы — у подресурса их нет.
+    /// </param>
     private static async Task<ProbeOutcome> ReadBodyAsync(
         SslStream ssl,
         string host,
         IReadOnlyList<IPAddress>? dialled,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string path = "/")
     {
         var stopwatch = Stopwatch.StartNew();
         int total = 0;
+        bool page = path == "/";
 
         try
         {
@@ -1879,9 +1900,9 @@ public static class BlockCheck
             // тело, и сравнение «дошло ли обещанное» остаётся верным: обе
             // стороны сравнения в одних и тех же байтах.
             var request = System.Text.Encoding.ASCII.GetBytes(
-                $"GET / HTTP/1.1\r\nHost: {host}\r\n" +
+                $"GET {path} HTTP/1.1\r\nHost: {host}\r\n" +
                 "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)\r\n" +
-                "Accept: text/html\r\nAccept-Encoding: gzip, deflate, br\r\n" +
+                $"Accept: {(page ? "text/html" : "*/*")}\r\nAccept-Encoding: gzip, deflate, br\r\n" +
                 "Connection: close\r\n\r\n");
 
             await ssl.WriteAsync(request, cancellationToken);
@@ -1893,9 +1914,15 @@ public static class BlockCheck
             bool regionRefusal = false;
             bool chunked = false;
             string? moved = null;
+            string? contentEncoding = null;
 
             // Последние байты потока — узнать конец ответа кусками (LastChunk).
             var tail = Array.Empty<byte>();
+
+            // Тело страницы целиком — ради ссылок на скрипты и стили, если
+            // страница окажется слишком мала для заморозки (PageAssets).
+            // Хранится, лишь пока она мала: большой и так достаточно.
+            var kept = page ? new MemoryStream() : null;
 
             // Длина заголовков считается отдельно: Content-Length обещает
             // только тело, а total растёт с первого байта ответа. Без поправки
@@ -1959,6 +1986,7 @@ public static class BlockCheck
 
                     chunked = HeaderValue(buffer, read, "Transfer-Encoding")?
                         .Contains("chunked", StringComparison.OrdinalIgnoreCase) == true;
+                    contentEncoding = HeaderValue(buffer, read, "Content-Encoding");
 
                     if (status is >= 300 and < 400 && !regionRefusal)
                         moved = SameSiteRedirect(host, HeaderValue(buffer, read, "Location"));
@@ -1966,6 +1994,14 @@ public static class BlockCheck
 
                 total += read;
                 tail = Tail(tail, buffer, read, LastChunk.Length);
+
+                if (kept is not null)
+                {
+                    if (total <= Signatures.FreezeTo)
+                        kept.Write(buffer, 0, read);
+                    else
+                        kept = null;
+                }
 
                 // Тело пришло целиком — дальше ждать нечего.
                 //
@@ -2012,6 +2048,17 @@ public static class BlockCheck
             // «отказывает по стране», пока ChatGPT в браузере работал.
             bool refused = status is 403 or 451 && !challenged || regionRefusal;
 
+            // Маленькая страница, пришедшая целиком, заморозки показать
+            // не могла — в разметке ищутся скрипты и стили той же зоны,
+            // и проба докачает их отдельно (WeighAssetsAsync).
+            IReadOnlyList<string> assets = [];
+
+            if (kept is not null && header > 0 && NeedsAsset(status, refused, challenged, moved, total)
+                && PageAssets.Decode(kept.ToArray()[header..], chunked, contentEncoding) is { } html)
+            {
+                assets = PageAssets.SameSite(host, html);
+            }
+
             return new ProbeOutcome
             {
                 Ok = true,
@@ -2024,6 +2071,7 @@ public static class BlockCheck
                         : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
                 Received = total,
                 Moved = moved,
+                Assets = assets,
             };
         }
         catch (Exception ex)
@@ -2040,6 +2088,143 @@ public static class BlockCheck
                 Received = total,
             };
         }
+    }
+
+    /// <summary>
+    /// Стоит ли за этой страницей докачивать подресурс.
+    /// </summary>
+    /// <remarks>
+    /// Только у обычного ответа: отказ, проверка на робота и переадресация
+    /// уже сказали своё, а страница от <see cref="Signatures.FreezeTo"/>
+    /// и больше заморозку показала бы сама. Порог по полученному целиком,
+    /// с заголовками: ТСПУ считает байты соединения, а не тела.
+    /// </remarks>
+    internal static bool NeedsAsset(int? status, bool refused, bool challenged, string? moved, int total) =>
+        status is 200 && !refused && !challenged && moved is null && total < Signatures.FreezeTo;
+
+    /// <summary>
+    /// Докачивает подресурсы маленькой страницы и возвращает исход передачи
+    /// с их учётом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Замерший подресурс — это исход страницы: браузер без него её не
+    /// покажет. Так 7tv.io со 148 Б главной и замерзающим API получает
+    /// «обрыв после рукопожатия», а не «доступен» (замер 19.10).
+    /// </para>
+    /// <para>
+    /// Подресурс, который не поднялся вовсе — не встал TCP, не прошло
+    /// рукопожатие, — исход не меняет: страница по тому же адресу только
+    /// что прошла, и один неудавшийся повтор говорит о тесноте проверки,
+    /// а не о сайте. Пришедший целиком и большой закрывает вопрос; маленький
+    /// уступает место следующему, но не больше <see cref="PageAssets.Tries"/>.
+    /// </para>
+    /// </remarks>
+    private static async Task<ProbeOutcome> WeighAssetsAsync(
+        string host,
+        IPAddress? answered,
+        IReadOnlyList<IPAddress> real,
+        ProbeOutcome data,
+        CancellationToken cancellationToken)
+    {
+        int silent = 0;
+
+        foreach (var path in data.Assets.Take(PageAssets.Tries))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var asset = await FetchAssetAsync(host, answered, real, path, cancellationToken);
+
+            // Тишина с нулевого байта у подресурса — не то же, что у страницы.
+            // Страница с нулём байт зовётся «не состоялось»: соединение могло
+            // быть отшито за очередь (whatsapp.net, 16.09). Но здесь страница
+            // по тому же адресу только что прошла, и подресурс молчит после
+            // удавшегося рукопожатия — так замерзал API 7tv на 0–3,6 КБ (19.10).
+            // Один такой случай ещё прощается следующему подресурсу, два
+            // подряд — обрыв.
+            bool frozenAtStart = !asset.Ok && !asset.Started && asset.Received == 0;
+
+            if (frozenAtStart)
+                silent++;
+
+            if (!asset.Ok && (asset.Started || silent >= 2))
+            {
+                return asset with
+                {
+                    Started = true,
+                    Detail = $"страница {data.Received} Б прошла, {Shorten(path)}: {asset.Detail}",
+                    Assets = [],
+                };
+            }
+
+            if (asset.Ok && !asset.Refused && asset.Received >= Signatures.FreezeTo)
+            {
+                return data with
+                {
+                    Detail = $"{data.Detail}; {Shorten(path)} {asset.Received} Б",
+                    Assets = [],
+                };
+            }
+        }
+
+        return data with { Assets = [] };
+    }
+
+    /// <summary>Путь подресурса для строки отчёта: без запроса и не длиннее полусотни знаков.</summary>
+    private static string Shorten(string path)
+    {
+        var bare = path.Split('?')[0];
+
+        return bare.Length <= 50 ? bare : "…" + bare[^49..];
+    }
+
+    /// <summary>
+    /// Один подресурс отдельным соединением к тому же адресу.
+    /// </summary>
+    /// <remarks>
+    /// К тому, что ответил за страницу: заморозка — свойство пути до адреса,
+    /// и замер на соседнем адресе мерил бы другой путь.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Security",
+        "CA5359:Do not disable certificate validation",
+        Justification = "Измеряется доходимость, а не доверие — как у страницы в WalkAsync.")]
+    private static async Task<ProbeOutcome> FetchAssetAsync(
+        string host,
+        IPAddress? answered,
+        IReadOnlyList<IPAddress> real,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<IPAddress> talked = answered is null ? real : [answered];
+        var (_, client, tcp) = await ConnectAnyAsync(host, 443, AddressFamily.InterNetwork, talked, cancellationToken);
+
+        if (client is null)
+            return tcp;
+
+        using var live = client;
+        using var ssl = new SslStream(live.GetStream(), leaveInnerStreamOpen: false, (_, _, _, _) => true);
+
+        try
+        {
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(Timeout);
+
+            await ssl.AuthenticateAsClientAsync(
+                new SslClientAuthenticationOptions
+                {
+                    TargetHost = host,
+                    EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                    ApplicationProtocols = [SslApplicationProtocol.Http11],
+                },
+                limit.Token);
+        }
+        catch (Exception ex)
+        {
+            return Refusal(ex, TimeSpan.Zero, talked);
+        }
+
+        return await ReadBodyAsync(ssl, host, talked, cancellationToken, path);
     }
 
     /// <summary>
