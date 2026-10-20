@@ -294,6 +294,45 @@ public sealed class ServerPoolsTests
         }
     }
 
+    /// <summary>
+    /// «Раз в час» в «Проверке серверов» ронял движок при запуске: интервал
+    /// группы автоподбора больше idle_timeout по умолчанию (30 мин), и
+    /// sing-box отказывается, хотя `check` пропускает (обсуждение №29).
+    /// </summary>
+    [Fact]
+    public void A_long_check_interval_raises_idle_timeout_in_every_latency_group()
+    {
+        var (root, _) = Compile(Rules("pool:ru000001"), new SingBoxOptions { Pools = [Russia], LatencyTestInterval = "60m" });
+
+        foreach (var tag in new[] { "auto-latency", ServerPools.LatencyTag("ru000001") })
+        {
+            var group = Outbound(root, tag);
+            Assert.NotNull(group);
+            Assert.Equal("60m", group.Value.GetProperty("idle_timeout").GetString());
+        }
+    }
+
+    [Fact]
+    public void A_usual_check_interval_keeps_the_default_idle_timeout()
+    {
+        var (root, _) = Compile(Rules("pool:ru000001"), new SingBoxOptions { Pools = [Russia] });
+
+        foreach (var tag in new[] { "auto-latency", ServerPools.LatencyTag("ru000001") })
+            Assert.False(Outbound(root, tag)!.Value.TryGetProperty("idle_timeout", out _));
+    }
+
+    [Theory]
+    [InlineData("1m", null)]
+    [InlineData("30m", null)]
+    [InlineData("31m", "31m")]
+    [InlineData("60m", "60m")]
+    [InlineData("2h", "2h")]
+    [InlineData("1800s", null)]
+    [InlineData("1h30m", "1h30m")]
+    [InlineData("раз в час", null)]
+    public void Idle_timeout_only_above_the_default(string interval, string? expected) =>
+        Assert.Equal(expected, SingBoxConfigCompiler.IdleTimeoutFor(interval));
+
     [Fact]
     public void A_server_goes_into_a_pool_once()
     {

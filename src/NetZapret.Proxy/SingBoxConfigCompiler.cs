@@ -1374,15 +1374,7 @@ public sealed class SingBoxConfigCompiler
         // Статический список этого не умеет: раньше по умолчанию брался
         // первый сервер подписки, и если он мёртв — а у провайдера
         // это обычное дело, — прокси не работал вовсе.
-        outbounds.Add(new JsonObject
-        {
-            ["type"] = "urltest",
-            ["tag"] = LatencyTag,
-            ["outbounds"] = members,
-            ["url"] = options.LatencyTestUrl,
-            ["interval"] = options.LatencyTestInterval,
-            ["tolerance"] = options.LatencyTolerance,
-        });
+        outbounds.Add(LatencyGroup(LatencyTag, members, options));
 
         // Поверх — селектор: только он позволяет закрепить конкретный сервер
         // вручную через Clash API. По умолчанию указывает на автоподбор.
@@ -2021,15 +2013,7 @@ public sealed class SingBoxConfigCompiler
         foreach (var server in picked)
             latency.Add(tags[server]);
 
-        outbounds.Add(new JsonObject
-        {
-            ["type"] = "urltest",
-            ["tag"] = ServerPools.LatencyTag(pool.Id),
-            ["outbounds"] = latency,
-            ["url"] = options.LatencyTestUrl,
-            ["interval"] = options.LatencyTestInterval,
-            ["tolerance"] = options.LatencyTolerance,
-        });
+        outbounds.Add(LatencyGroup(ServerPools.LatencyTag(pool.Id), latency, options));
 
         var selector = new JsonArray { ServerPools.LatencyTag(pool.Id) };
         foreach (var server in members)
@@ -2051,6 +2035,68 @@ public sealed class SingBoxConfigCompiler
             ["default"] = pinned ?? ServerPools.LatencyTag(pool.Id),
         });
     }
+
+    /// <summary>Группа автоподбора — общая (<see cref="LatencyTag"/>) и у каждого пула.</summary>
+    private static JsonObject LatencyGroup(string tag, JsonArray members, SingBoxOptions options)
+    {
+        var group = new JsonObject
+        {
+            ["type"] = "urltest",
+            ["tag"] = tag,
+            ["outbounds"] = members,
+            ["url"] = options.LatencyTestUrl,
+            ["interval"] = options.LatencyTestInterval,
+            ["tolerance"] = options.LatencyTolerance,
+        };
+
+        if (IdleTimeoutFor(options.LatencyTestInterval) is { } idle)
+            group["idle_timeout"] = idle;
+
+        return group;
+    }
+
+    /// <summary>
+    /// <c>idle_timeout</c> группы автоподбора, когда интервал замера длиннее
+    /// его значения по умолчанию; <c>null</c> — не писать, хватает умолчания.
+    /// </summary>
+    /// <remarks>
+    /// sing-box требует, чтобы интервал не превышал <c>idle_timeout</c>
+    /// (по умолчанию 30 минут), и проверяет это только при запуске службы:
+    /// <c>sing-box check</c> такой конфиг пропускает. Пункт «раз в час» в
+    /// «Проверке серверов» поэтому ронял движок на каждом запуске — «interval
+    /// must be less or equal than idle_timeout», код 1 (обсуждение №29, 18.10).
+    /// Замер 20.10 на 1.14.3-extended-2.7.3: 30m поднимается, 31m и 60m —
+    /// FATAL, 60m с idle_timeout 60m поднимается. Ставится равным интервалу:
+    /// группа, простаивающая дольше одного замера, засыпает, как и задумано.
+    /// </remarks>
+    internal static string? IdleTimeoutFor(string interval)
+    {
+        // Длительность Go: «5m», «1h30m», «90s». Не разобрали — не пишем.
+        var text = interval.Trim();
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(text, @"^(\d+(h|m|s))+$"))
+            return null;
+
+        var span = TimeSpan.Zero;
+
+        foreach (System.Text.RegularExpressions.Match part in System.Text.RegularExpressions.Regex.Matches(text, @"(\d+)(h|m|s)"))
+        {
+            if (!int.TryParse(part.Groups[1].Value, out var count))
+                return null;
+
+            span += part.Groups[2].Value switch
+            {
+                "h" => TimeSpan.FromHours(count),
+                "m" => TimeSpan.FromMinutes(count),
+                _ => TimeSpan.FromSeconds(count),
+            };
+        }
+
+        return span > DefaultIdleTimeout ? text : null;
+    }
+
+    /// <summary><c>idle_timeout</c> групп автоподбора у sing-box по умолчанию.</summary>
+    private static readonly TimeSpan DefaultIdleTimeout = TimeSpan.FromMinutes(30);
 
     /// <summary>Группа выбора пула, если она есть в конфиге; <c>null</c> — пула нет или он пуст.</summary>
     private static string? PoolOutbound(
