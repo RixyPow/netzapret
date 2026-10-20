@@ -152,17 +152,46 @@ public sealed class SingBoxOptions
 
     /// <summary>
     /// «Авто»: резолвер ходит через переключатель пути DNS (<c>dns-path</c>) —
-    /// напрямую при запуске, через туннель, когда надзор увидит, что тот жив.
+    /// напрямую при запуске, через туннель, когда надзор увидит, что прямой
+    /// путь лежит, а туннель жив.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Переключает надзор через Clash API (SingBoxService), а не пересборкой:
     /// пересборка значила бы перезапуск движка. Имена серверов подписки и
     /// панелей разрешаются через <c>bootstrap</c>, как при «через туннель».
+    /// </para>
+    /// <para>
+    /// Между «напрямую» и «туннель» — ступень «тот же резолвер по TCP, порт 53»
+    /// (20.10): сервер <see cref="DnsTcpTag"/> и правило DNS по режиму
+    /// <see cref="DnsTcpMode"/>, который надзор ставит через Clash API
+    /// (<c>PATCH /configs</c>). Замер 20.10 у владельца: UDP к 8.8.4.4 и 1.1.1.1
+    /// заворачивается на НСДИ (whoami — 193.232.93.x, закрытые имена — отказ),
+    /// TCP к тем же адресам отвечает честно за 10–60 мс; на ntc.party то же
+    /// у Дом.ру (DoH-ветка, №188–193). Режим движок проверяет на каждый запрос,
+    /// в отличие от <c>fallback</c> форка, который платит за молчащий DoH 5 с
+    /// на каждое имя (опыт 20.10). Только при DoH с адресом: по TCP идёт тот же
+    /// адрес, а DNS роутера и UDP этой ступени не нужны.
+    /// </para>
     /// </remarks>
     public bool DnsViaAuto { get; init; }
 
     /// <summary>Тег переключателя пути DNS при «авто».</summary>
     public const string DnsPathTag = "dns-path";
+
+    /// <summary>Тег резолвера по TCP при «авто» — тот же адрес, порт 53.</summary>
+    public const string DnsTcpTag = "remote-tcp";
+
+    /// <summary>Режим Clash API, в котором имена спрашиваются по TCP (<see cref="DnsTcpTag"/>).</summary>
+    public const string DnsTcpMode = "dns-tcp";
+
+    /// <summary>Режим Clash API по умолчанию: правило TCP не действует.</summary>
+    public const string DnsRuleMode = "Rule";
+
+    /// <summary>Есть ли в этом конфиге ступень TCP (<see cref="DnsTcpTag"/>).</summary>
+    internal bool DnsTcpStep =>
+        !RouterDns && DnsViaAuto && !DnsThroughTunnel && DnsServerType == "https"
+        && System.Net.IPAddress.TryParse(DnsServer, out _);
 
     /// <summary>
     /// Имена панелей подписок: при <see cref="DnsThroughTunnel"/> они
@@ -871,6 +900,19 @@ public sealed class SingBoxConfigCompiler
             },
         };
 
+        // Ступень «по TCP» для «авто»: тот же адрес, порт 53, без detour —
+        // прямым путём. Включается правилом по режиму в конце списка
+        // (см. SingBoxOptions.DnsViaAuto).
+        if (options.DnsTcpStep)
+        {
+            servers.Add(new JsonObject
+            {
+                ["tag"] = SingBoxOptions.DnsTcpTag,
+                ["type"] = "tcp",
+                ["server"] = options.DnsServer,
+            });
+        }
+
         if (bootstrap)
         {
             // Имена самих серверов подписки разрешаются в обход туннеля,
@@ -1001,6 +1043,21 @@ public sealed class SingBoxConfigCompiler
             {
                 ["domain"] = panels,
                 ["server"] = BootstrapTag,
+            });
+        }
+
+        // Последним, перед final: всё, что иначе ушло бы в remote, в режиме
+        // dns-tcp идёт по TCP. Правила выше — fakeip, подставные адреса,
+        // панели — остаются как есть. Правила очереди маршрутов, которые
+        // называют remote явно (имя выше пересекающегося VPN), в этом режиме
+        // по-прежнему спрашивают DoH: таких имён единицы, и ради них
+        // усложнять очередь не стоит.
+        if (options.DnsTcpStep)
+        {
+            rules.Add(new JsonObject
+            {
+                ["clash_mode"] = SingBoxOptions.DnsTcpMode,
+                ["server"] = SingBoxOptions.DnsTcpTag,
             });
         }
 

@@ -481,13 +481,33 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Удачных проверок прямого пути подряд — для возврата из туннеля.</summary>
     private int _directDnsAnswers;
 
+    /// <summary>Отвечает ли тот же резолвер по TCP, пока DoH напрямую лежит (<see cref="MeasureDirectDnsAsync"/>).</summary>
+    private bool _directTcpOk;
+
+    /// <summary>Стоит ли режим «по TCP» в движке; <c>null</c> — не ставили, в конфиге режим по умолчанию.</summary>
+    private bool? _dnsViaTcp;
+
+    /// <summary>Нужна ли ступень TCP в туннель вместо: DoH лежит, а TCP отвечает.</summary>
+    private bool DnsWantsTcp => !_directDnsOk && _directTcpOk;
+
+    /// <summary>Прямого пути к резолверу нет ни по DoH, ни по TCP — остаётся туннель.</summary>
+    private bool DnsWantsTunnel => !_directDnsOk && !_directTcpOk;
+
     /// <summary>
-    /// Проверяет, отвечает ли резолвер движка напрямую, мимо туннеля.
+    /// Проверяет, отвечает ли резолвер движка напрямую, мимо туннеля, и, если
+    /// нет, отвечает ли он по TCP.
     /// </summary>
     /// <remarks>
-    /// Уход в туннель — с первого отказа: пока прямой путь лежит, у всей машины
-    /// нет имён мимо VPN. Возврат — после двух ответов подряд: один ответ
-    /// посреди мигающей блокировки увёл бы DNS обратно под неё.
+    /// <para>
+    /// Уход с прямого DoH — с первого отказа: пока прямой путь лежит, у всей
+    /// машины нет имён мимо VPN. Возврат — после двух ответов подряд: один
+    /// ответ посреди мигающей блокировки увёл бы DNS обратно под неё. Пока
+    /// возврат не подтверждён, ступень остаётся прежней: TCP или туннель.
+    /// </para>
+    /// <para>
+    /// TCP меряется на каждой проверке, пока DoH лежит: умрёт и он — следующая
+    /// ступень туннель (20.10, см. SingBoxOptions.DnsViaAuto).
+    /// </para>
     /// </remarks>
     private async Task MeasureDirectDnsAsync(CancellationToken cancellationToken)
     {
@@ -499,15 +519,20 @@ public sealed class SingBoxService : SupervisedService
         {
             _directDnsAnswers = 0;
             _directDnsOk = false;
+            _directTcpOk = _directDns is not null && await _directDns.AnswersByTcpAsync(cancellationToken);
             return;
         }
 
         if (!_directDnsOk && ++_directDnsAnswers >= 2)
+        {
             _directDnsOk = true;
+            _directTcpOk = false;
+        }
     }
 
     /// <summary>
-    /// Ставит путь DNS: через туннель — когда прямой путь к резолверу не отвечает,
+    /// Ставит путь DNS: по TCP — когда DoH напрямую не отвечает, а TCP к тому же
+    /// резолверу отвечает; через туннель — когда не отвечает ни то, ни другое,
     /// а туннель пропускает трафик; иначе напрямую.
     /// </summary>
     /// <remarks>
@@ -520,35 +545,58 @@ public sealed class SingBoxService : SupervisedService
     /// 30.09 при «через туннель» заминка выхода клала DNS всей машины.
     /// </para>
     /// <para>
-    /// При запуске переключатель стоит «напрямую» (так собран конфиг). Неудача
-    /// переключения не беда: попробуем на следующем опросе, состояние
-    /// не запоминается.
+    /// Ступень TCP с 20.10: путь остаётся прямым, адреса — настоящие, а не
+    /// у выхода туннеля. Ставится режимом Clash API
+    /// (<see cref="ClashApi.SetModeAsync"/>), путь — переключателем; оба
+    /// независимы, и в туннель DoH уходит в режиме по умолчанию.
+    /// </para>
+    /// <para>
+    /// При запуске переключатель стоит «напрямую», режим — по умолчанию
+    /// (так собран конфиг). Неудача переключения не беда: попробуем
+    /// на следующем опросе, состояние не запоминается.
     /// </para>
     /// </remarks>
-    private async Task ApplyDnsPathAsync(bool viaTunnel, CancellationToken cancellationToken)
+    private async Task ApplyDnsPathAsync(bool viaTunnel, bool viaTcp, CancellationToken cancellationToken)
     {
-        // Ещё не ставили и в туннель не надо — переключатель и так «напрямую».
+        // Ещё не ставили и менять не надо — переключатель и так «напрямую»,
+        // режим — по умолчанию.
         if (_dnsViaTunnel is null && !viaTunnel)
-        {
             _dnsViaTunnel = false;
-            return;
-        }
 
-        if (_dnsViaTunnel == viaTunnel)
+        if (_dnsViaTcp is null && !viaTcp)
+            _dnsViaTcp = false;
+
+        bool pathChanges = _dnsViaTunnel != viaTunnel;
+        bool modeChanges = _dnsViaTcp != viaTcp;
+
+        if (!pathChanges && !modeChanges)
             return;
 
         using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-        if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, viaTunnel ? SelectorGroup : "direct", cancellationToken))
-            return;
+        if (pathChanges)
+        {
+            if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, viaTunnel ? SelectorGroup : "direct", cancellationToken))
+                return;
 
-        _dnsViaTunnel = viaTunnel;
+            _dnsViaTunnel = viaTunnel;
+        }
 
-        Note(viaTunnel
-            ? "DNS (авто): резолвер напрямую не отвечает — имена спрашиваются через туннель."
-            : _directDnsOk
-                ? "DNS (авто): резолвер снова отвечает напрямую — имена спрашиваются напрямую."
-                : "DNS (авто): туннель не пропускает трафик — имена спрашиваются напрямую, хотя и там резолвер не отвечал.");
+        if (modeChanges)
+        {
+            if (!await api.SetModeAsync(viaTcp ? SingBoxOptions.DnsTcpMode : SingBoxOptions.DnsRuleMode, cancellationToken))
+                return;
+
+            _dnsViaTcp = viaTcp;
+        }
+
+        Note(viaTcp
+            ? "DNS (авто): DoH напрямую не отвечает — имена спрашиваются у того же резолвера по TCP."
+            : viaTunnel
+                ? "DNS (авто): резолвер напрямую не отвечает ни по DoH, ни по TCP — имена спрашиваются через туннель."
+                : _directDnsOk
+                    ? "DNS (авто): резолвер снова отвечает напрямую — имена спрашиваются напрямую."
+                    : "DNS (авто): туннель не пропускает трафик — имена спрашиваются напрямую, хотя и там резолвер не отвечал.");
     }
 
     /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
@@ -908,13 +956,14 @@ public sealed class SingBoxService : SupervisedService
                 {
                     await MeasureDirectDnsAsync(cancellationToken);
 
-                    // Туннель спрашиваем, только когда прямой путь отказал:
-                    // его проверка — запрос через сервер подписки.
-                    if (!_directDnsOk)
+                    // Туннель спрашиваем, только когда прямой путь отказал
+                    // и по DoH, и по TCP: его проверка — запрос через сервер
+                    // подписки.
+                    if (DnsWantsTunnel)
                         _dnsLastOk = await CheckTrafficAsync(SingBoxOptions.DefaultHealthPort, cancellationToken);
                 }
 
-                await ApplyDnsPathAsync(!_directDnsOk && _dnsLastOk, cancellationToken);
+                await ApplyDnsPathAsync(DnsWantsTunnel && _dnsLastOk, DnsWantsTcp, cancellationToken);
             }
 
             return ServiceCheck.Healthy;
@@ -952,7 +1001,7 @@ public sealed class SingBoxService : SupervisedService
         if (_checkCounter++ % _trafficCheckEvery != 0)
         {
             if (_dnsViaAuto)
-                await ApplyDnsPathAsync(!_directDnsOk && _lastTrafficOk && !_bypass.Engaged, cancellationToken);
+                await ApplyDnsPathAsync(DnsWantsTunnel && _lastTrafficOk && !_bypass.Engaged, DnsWantsTcp, cancellationToken);
 
             return _lastTrafficOk ? ServiceCheck.Healthy : ServiceCheck.UpstreamDown;
         }
@@ -970,7 +1019,7 @@ public sealed class SingBoxService : SupervisedService
         if (_dnsViaAuto)
         {
             await MeasureDirectDnsAsync(cancellationToken);
-            await ApplyDnsPathAsync(!_directDnsOk && _lastTrafficOk && !_bypass.Engaged, cancellationToken);
+            await ApplyDnsPathAsync(DnsWantsTunnel && _lastTrafficOk && !_bypass.Engaged, DnsWantsTcp, cancellationToken);
         }
 
         if (_lastTrafficOk)

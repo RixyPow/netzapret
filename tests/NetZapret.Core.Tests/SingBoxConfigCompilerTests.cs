@@ -358,6 +358,63 @@ public class SingBoxConfigCompilerTests
             root.GetProperty("route").GetProperty("default_domain_resolver").GetProperty("server").GetString());
     }
 
+    /// <summary>
+    /// Ступень «по TCP» у «авто» (20.10): тот же адрес резолвера, порт 53, без
+    /// detour, и правило DNS по режиму последним — раньше него fakeip и панели.
+    /// </summary>
+    /// <remarks>
+    /// Замер 20.10 у владельца: UDP к 8.8.4.4 заворачивается на НСДИ, TCP
+    /// отвечает честно. Режим движок проверяет на каждый запрос; переключает
+    /// его надзор через Clash API, когда прямой DoH лежит.
+    /// </remarks>
+    [Fact]
+    public void AutoDnsCarriesATcpStepSwitchedByClashMode()
+    {
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsServer = "8.8.4.4",
+            DnsViaAuto = true,
+            PanelHosts = ["panel.example.net"],
+        });
+
+        var tcp = DnsServer(root, SingBoxOptions.DnsTcpTag);
+
+        Assert.Equal("tcp", tcp.GetProperty("type").GetString());
+        Assert.Equal("8.8.4.4", tcp.GetProperty("server").GetString());
+        Assert.False(tcp.TryGetProperty("detour", out _));
+
+        var rules = root.GetProperty("dns").GetProperty("rules").EnumerateArray().ToList();
+        var last = rules[^1];
+
+        Assert.Equal(SingBoxOptions.DnsTcpMode, last.GetProperty("clash_mode").GetString());
+        Assert.Equal(SingBoxOptions.DnsTcpTag, last.GetProperty("server").GetString());
+        Assert.Contains(rules[..^1], r => r.TryGetProperty("server", out var s) && s.GetString() == "bootstrap");
+        Assert.Equal("remote", root.GetProperty("dns").GetProperty("final").GetString());
+    }
+
+    /// <summary>Ступень TCP — только при DoH с адресом: DNS роутера и UDP идут и так открытым DNS.</summary>
+    [Theory]
+    [InlineData("udp", "8.8.4.4")]
+    [InlineData("https", "dns.example.net")]
+    public void TheTcpStepNeedsDohWithAnAddress(string type, string server)
+    {
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsServer = server,
+            DnsServerType = type,
+            DnsViaAuto = true,
+        });
+
+        Assert.DoesNotContain(root.GetProperty("dns").GetProperty("servers").EnumerateArray(),
+            s => s.GetProperty("tag").GetString() == SingBoxOptions.DnsTcpTag);
+        Assert.DoesNotContain(root.GetProperty("dns").GetProperty("rules").EnumerateArray(),
+            r => r.TryGetProperty("clash_mode", out _));
+    }
+
     /// <summary>«Напрямую» — без переключателя: резолвер мимо туннеля, как прежде.</summary>
     [Fact]
     public void DirectDnsHasNoSwitch()
@@ -371,6 +428,8 @@ public class SingBoxConfigCompilerTests
         Assert.False(DnsServer(root, "remote").TryGetProperty("detour", out _));
         Assert.DoesNotContain(root.GetProperty("outbounds").EnumerateArray(),
             o => o.GetProperty("tag").GetString() == SingBoxOptions.DnsPathTag);
+        Assert.DoesNotContain(root.GetProperty("dns").GetProperty("servers").EnumerateArray(),
+            s => s.GetProperty("tag").GetString() == SingBoxOptions.DnsTcpTag);
     }
 
     [Fact]

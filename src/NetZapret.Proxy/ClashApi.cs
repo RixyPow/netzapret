@@ -244,6 +244,36 @@ public sealed class ClashApi : IDisposable
     }
 
     /// <summary>
+    /// Ставит режим Clash (<c>PATCH /configs</c>); <c>true</c> — движок принял.
+    /// </summary>
+    /// <remarks>
+    /// Режим у нас — рычаг для правил DNS (<see cref="SingBoxOptions.DnsTcpMode"/>):
+    /// маршруты его не смотрят, и смена режима трогает только их. Имя режима —
+    /// любое из названных в правилах: движок собирает список сам
+    /// (<c>mode-list</c>), опыт 20.10 — <c>204</c>, в журнале
+    /// «clash-mode: updated mode». Перезапуск движка возвращает режим по
+    /// умолчанию, как и переключатель пути.
+    /// </remarks>
+    public async Task<bool> SetModeAsync(string mode, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var body = new ByteArrayContent(Encoding.UTF8.GetBytes(
+                new JsonObject { ["mode"] = mode }.ToJsonString()));
+
+            body.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            using var response = await SendAsync(HttpMethod.Patch, $"{Root}/configs", body, cancellationToken);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Последний удачный замер каждого выхода, как его помнит движок;
     /// <c>null</c> — движок не ответил.
     /// </summary>

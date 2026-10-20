@@ -21,6 +21,12 @@ namespace NetZapret.Proxy;
 /// </remarks>
 public sealed record DnsUpstream(string Type, string Server, string? Name, string? Path)
 {
+    /// <summary>
+    /// В конфиге есть ступень «по TCP» (<see cref="SingBoxOptions.DnsTcpTag"/>):
+    /// при отказе прямого DoH надзор сперва пробует её, и лишь потом туннель.
+    /// </summary>
+    public bool TcpFallback { get; init; }
+
     /// <summary>Резолвер <c>remote</c> из конфига; <c>null</c> — конфига нет или резолвера в нём нет.</summary>
     public static DnsUpstream? FromConfig(string configPath)
     {
@@ -34,17 +40,23 @@ public sealed record DnsUpstream(string Type, string Server, string? Name, strin
                 return null;
             }
 
+            DnsUpstream? remote = null;
+            bool tcp = false;
+
             foreach (var server in servers.EnumerateArray())
             {
+                if (Text(server, "tag") == SingBoxOptions.DnsTcpTag)
+                    tcp = true;
+
                 if (Text(server, "tag") != "remote" || Text(server, "server") is not { Length: > 0 } address)
                     continue;
 
                 string? name = server.TryGetProperty("tls", out var tls) ? Text(tls, "server_name") : null;
 
-                return new DnsUpstream(Text(server, "type") ?? "udp", address, name, Text(server, "path"));
+                remote = new DnsUpstream(Text(server, "type") ?? "udp", address, name, Text(server, "path"));
             }
 
-            return null;
+            return remote is null ? null : remote with { TcpFallback = tcp };
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -76,6 +88,26 @@ public sealed record DnsUpstream(string Type, string Server, string? Name, strin
             default:
                 return true;
         }
+    }
+
+    /// <summary>
+    /// Отвечает ли тот же резолвер по TCP, порт 53, честно — закрытое имя
+    /// с адресами, а не отказом.
+    /// </summary>
+    /// <remarks>
+    /// Имя закрытое нарочно (<see cref="DnsSurvey.SpoofProbes"/>): заворот
+    /// на НСДИ отдаёт на него NXDOMAIN, и такой «ответ» ступени не годится —
+    /// ради закрытых имён она и нужна. Замер 20.10 у владельца: TCP к 8.8.4.4
+    /// и 1.1.1.1 — rutracker.org с адресами за 11–59 мс, UDP — отказ.
+    /// </remarks>
+    public async Task<bool> AnswersByTcpAsync(CancellationToken cancellationToken)
+    {
+        if (!TcpFallback)
+            return false;
+
+        var answer = await DnsSurvey.TcpAsync(Server, DnsSurvey.SpoofProbes[0], DnsWire.TypeA, DnsSurvey.PhysicalInterface(), cancellationToken);
+
+        return answer is { Code: 0, Addresses.Count: > 0 };
     }
 
     private static string? Text(JsonElement element, string property) =>

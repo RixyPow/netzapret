@@ -307,7 +307,7 @@
                         <ComboBox Grid.Column="1" x:Name="DnsPick" Width="260" VerticalAlignment="Center"
                                   SelectionChanged="OnDnsPicked"
                                   ToolTip="Через что программа узнаёт адреса сайтов. Сменить можно на вкладке DNS.">
-                            <ComboBoxItem Content="авто: через туннель, пока он жив" Tag="Auto" />
+                            <ComboBoxItem Content="авто: напрямую, при отказе DoH — по TCP, затем туннель" Tag="Auto" />
                             <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
                             <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
                         </ComboBox>

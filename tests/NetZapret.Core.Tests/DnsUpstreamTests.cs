@@ -40,12 +40,23 @@ public sealed class DnsUpstreamTests
 
             var upstream = DnsUpstream.FromConfig(path);
 
-            Assert.Equal(new DnsUpstream("https", "83.220.169.155", "dns.comss.one", null), upstream);
+            // Ступень TCP в конфиге есть: DoH с адресом и «авто» (20.10).
+            Assert.Equal(new DnsUpstream("https", "83.220.169.155", "dns.comss.one", null) { TcpFallback = true }, upstream);
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>Без ступени в конфиге TCP не пробуется вовсе — и сети не касается.</summary>
+    [Fact]
+    public async Task WithoutATcpStepTcpIsNotTried()
+    {
+        var upstream = new DnsUpstream("https", "192.0.2.1", "dns.example.net", null);
+
+        Assert.False(upstream.TcpFallback);
+        Assert.False(await upstream.AnswersByTcpAsync(CancellationToken.None));
     }
 
     [Fact]
