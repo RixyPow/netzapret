@@ -144,7 +144,7 @@
 
                             <TextBlock Text="Картинка на «Главной»" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                       Text="Тяните картинку по миниатюре «Главной», колесом или ползунком — размер. Что картинка не закрывает, зальётся градиентом из фона окна в её цвет." />
+                                       Text="Тяните картинку по миниатюре «Главной», колесом или ползунком — размер. На «Главной» она видна в карточке справа; что в ней картинка не закрывает, зальётся градиентом из фона окна в её цвет." />
 
                             <Border x:Name="HomeMini" Width="480" Height="307" Margin="0,10,0,0"
                                     HorizontalAlignment="Left" CornerRadius="10" ClipToBounds="True"
@@ -153,9 +153,17 @@
                                     MouseLeftButtonDown="OnMiniDown" MouseMove="OnMiniMove"
                                     MouseLeftButtonUp="OnMiniUp" MouseWheel="OnMiniWheel">
                                 <Grid>
-                                    <Rectangle x:Name="MiniGround" />
-                                    <Rectangle x:Name="MiniArt" />
-                                    <Rectangle x:Name="MiniShade" />
+                                    <!--
+                                        На «Главной» картинка видна только в карточке справа
+                                        (20.10). Вне её она здесь бледной тенью — чтобы было
+                                        видно, где она лежит и куда её тянуть.
+                                    -->
+                                    <Rectangle x:Name="MiniGhost" Opacity="0.22" />
+                                    <Grid x:Name="MiniArtLayer">
+                                        <Rectangle x:Name="MiniGround" />
+                                        <Rectangle x:Name="MiniArt" />
+                                        <Rectangle x:Name="MiniShade" />
+                                    </Grid>
                                     <Canvas x:Name="MiniCards" IsHitTestVisible="False" />
                                 </Grid>
                             </Border>

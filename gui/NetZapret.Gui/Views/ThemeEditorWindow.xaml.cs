@@ -278,21 +278,33 @@ public partial class ThemeEditorWindow : Window
         (0.03, 0.76, 0.345, 0.15), (0.385, 0.76, 0.345, 0.15),
     ];
 
+    /// <summary>
+    /// Карточка с картинкой справа — доли страницы, как у окна владельца: от
+    /// карточек на 14, до края 32, сверху 12, снизу 10 (StatusView, ArtTile).
+    /// </summary>
+    private static readonly (double X, double Y, double W, double H) MiniTileAt =
+        (1 - MiniColumn - 18.0 / 1240, 12.0 / 794, MiniColumn - (32.0 - 18.0) / 1240, 1 - 22.0 / 794);
+
+    private Rect MiniTile() => new(
+        MiniTileAt.X * HomeMini.Width, MiniTileAt.Y * HomeMini.Height,
+        MiniTileAt.W * HomeMini.Width, MiniTileAt.H * HomeMini.Height);
+
     private double MiniAspect => _poster is { PixelWidth: > 0, PixelHeight: > 0 } p ? (double)p.PixelWidth / p.PixelHeight : 1;
 
     /// <summary>Место картинки на миниатюре — тем же расчётом, что у «Главной».</summary>
     private Rect MiniPlace()
     {
         double width = HomeMini.Width, height = HomeMini.Height;
+        var tile = MiniTile();
 
         var (left, top, w, h) = _placed
             ? SideArtLayout.Place(width, height, MiniAspect, _homeX, _homeY, _homeSize)
-            : SideArtLayout.Fit(width, height, width * (1 - MiniColumn / 2), MiniAspect);
+            : SideArtLayout.Fit(width, height, tile.Left + tile.Width / 2, MiniAspect);
 
         return new Rect(left, top, w, h);
     }
 
-    /// <summary>Миниатюра «Главной»: градиент, картинка, затемнение под карточками и сами карточки.</summary>
+    /// <summary>Миниатюра «Главной»: картинка в карточке справа (вне её — тенью), карточки и рамка.</summary>
     private void ShowMini()
     {
         var place = MiniPlace();
@@ -306,12 +318,16 @@ public partial class ThemeEditorWindow : Window
 
         if (_poster is null)
         {
-            MiniArt.Fill = MiniGround.Fill = MiniShade.Fill = null;
+            MiniArt.Fill = MiniGround.Fill = MiniShade.Fill = MiniGhost.Fill = null;
             MiniCards.Children.Clear();
             return;
         }
 
         var backdrop = _colors[ThemeSlots.Backdrop];
+        var tile = MiniTile();
+
+        // Как на «Главной»: картинка лежит по странице, видна в карточке справа.
+        MiniArtLayer.Clip = new RectangleGeometry(tile, 5, 5);
 
         MiniGround.Fill = _placed ? HomePlacement.Ground(_poster, backdrop) : null;
         MiniArt.Fill = new ImageBrush(_poster)
@@ -321,19 +337,11 @@ public partial class ThemeEditorWindow : Window
             Viewport = place,
         };
         MiniArt.OpacityMask = _placed ? HomePlacement.Feather(place) : null;
+        MiniGhost.Fill = MiniArt.Fill;
+        MiniGhost.OpacityMask = MiniArt.OpacityMask;
 
-        // Затемнение, как у «Главной»: плотное под карточками, лёгкое в колонке.
-        double dim = Dims[Math.Max(0, DimChoice.SelectedIndex)];
-        MiniShade.Fill = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(1, 0),
-            GradientStops =
-            {
-                new GradientStop(System.Windows.Media.Color.FromArgb((byte)(dim * 255), backdrop.R, backdrop.G, backdrop.B), 1 - MiniColumn - 0.1),
-                new GradientStop(System.Windows.Media.Color.FromArgb(30, backdrop.R, backdrop.G, backdrop.B), 1 - MiniColumn * 0.3),
-            },
-        };
+        // Затемнение, как у «Главной» над персонажем: лёгкое и ровное (ArtDim, 0,12).
+        MiniShade.Fill = new SolidColorBrush(System.Windows.Media.Color.FromArgb(30, backdrop.R, backdrop.G, backdrop.B));
 
         var surface = Draft()[ThemeSlots.Surface];
         var line = _colors[ThemeSlots.Border];
@@ -359,6 +367,20 @@ public partial class ThemeEditorWindow : Window
             Canvas.SetTop(shape, y * HomeMini.Height);
             MiniCards.Children.Add(shape);
         }
+
+        var frame = new System.Windows.Shapes.Rectangle
+        {
+            Width = tile.Width,
+            Height = tile.Height,
+            RadiusX = 5,
+            RadiusY = 5,
+            Stroke = edge,
+            StrokeThickness = 1,
+        };
+
+        Canvas.SetLeft(frame, tile.Left);
+        Canvas.SetTop(frame, tile.Top);
+        MiniCards.Children.Add(frame);
     }
 
     private Point _dragFrom;

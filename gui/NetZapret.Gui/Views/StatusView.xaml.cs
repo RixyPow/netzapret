@@ -87,38 +87,36 @@ public partial class StatusView : UserControl
 
     private void OnArtSize(object sender, SizeChangedEventArgs e) => PlaceArt();
 
-    /// <summary>Уже этой колонки персонажа в ней не ставим — картинка ляжет по центру страницы.</summary>
-    private const double ArtColumnMin = 220;
+    /// <summary>Уже этой карточку с картинкой не показываем: в ней была бы полоска, а не персонаж.</summary>
+    private const double ArtTileMin = 200;
 
-    /// <summary>Затемнение над персонажем: текста там нет, читаемость беречь незачем.</summary>
+    /// <summary>Затемнение над персонажем: текста на нём нет, читаемость беречь незачем.</summary>
     private const double ArtDim = 0.12;
 
     /// <summary>
-    /// Кладёт картинку темы так, чтобы её середина стояла посередине правой
-    /// колонки, и затемняет её под карточками так же, как тема.
+    /// Кладёт картинку темы по странице и показывает её сквозь карточку справа.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// По высоте страницы, с сохранением пропорций: персонаж в картинках
-    /// стоит по центру, и при вписывании по высоте он целиком в колонке.
-    /// Слева картинка может не доставать до края — там сплошная подложка.
-    /// Край картинки растворяется в ней (маска прозрачности), и растворение
-    /// кончается до колонки с артом. Прежде я рассчитывал, что края у артов
-    /// тёмные и шва под затемнением не видно: у «Слойки» так, а у «Trident»
-    /// светлая картина обрывалась вертикальной чертой посреди карточек
-    /// (владелец, 30.09: «темы обрываются»).
+    /// С 20.10 картинка — в карточке (владелец: «может для главной всё-таки
+    /// место под картинку сделать тайлом?» — «делай»). Уложена она по-прежнему
+    /// по всей странице: руками из редактора тем — долями страницы
+    /// (<see cref="SideArtLayout.Place"/>), иначе — по высоте страницы
+    /// серединой посередине карточки (<see cref="SideArtLayout.Fit"/>). Видна
+    /// только в рамке: слой обрезан по ней. Так уложенное в темах до карточки
+    /// не съезжает — персонаж стоит там же, где стоял в колонке справа.
     /// </para>
     /// <para>
-    /// Под карточками — затемнение темы (BackdropDim): с ним тема прошла
-    /// проверку читаемости, и текст на полупрозрачных карточках читается
-    /// так же, как на прочих вкладках. Переход к лёгкому затемнению —
-    /// у правого края содержимого, по ширине одной карточки.
+    /// Под карточками картинки больше нет. До 20.10 там лежал её край под
+    /// затемнением темы, сходившим к колонке почти на нет, а края картинки
+    /// растворялись в подложку: у «Trident» светлая картина обрывалась
+    /// вертикальной чертой посреди карточек (владелец, 30.09). У рамки края
+    /// свои, скруглённые, — растворять нечего.
     /// </para>
     /// <para>
-    /// Колонка уже 220 (окно по умолчанию, 1080): персонажу места нет,
-    /// картинка ложится по центру страницы под сплошным затемнением темы —
-    /// как на прочих вкладках. Прежде в такой колонке торчала полоска арта
-    /// в несколько точек и читалась ошибкой отрисовки (снимок 30.09).
+    /// Узкое окно (рамка уже 200) — карточки нет вовсе, как прежде не было
+    /// колонки: полоска арта в несколько точек читалась ошибкой отрисовки
+    /// (снимок 30.09). Нет картинки у темы — нет и пустой рамки.
     /// </para>
     /// </remarks>
     private void PlaceArt()
@@ -134,28 +132,38 @@ public partial class StatusView : UserControl
                 ? (video.Size, () => video.Brush())
                 : null;
 
-        if (art is not { } content || width <= 0 || height <= 0 || content.Size.Height <= 0 || content.Size.Width <= 0)
+        var tile = ArtTile.ActualWidth >= ArtTileMin && ArtTile.ActualHeight > 0
+            ? new Rect(ArtTile.TranslatePoint(new Point(0, 0), ArtLayer), ArtTile.RenderSize)
+            : Rect.Empty;
+
+        if (art is not { } content || width <= 0 || height <= 0 || tile.IsEmpty
+            || content.Size.Height <= 0 || content.Size.Width <= 0)
         {
             Art.Fill = null;
             ArtGround.Fill = null;
             ArtShade.Fill = null;
+            ArtTile.Visibility = Visibility.Hidden;
             return;
         }
 
+        ArtTile.Visibility = Visibility.Visible;
+
+        // Обрезка — по внутреннему краю рамки (2 точки): картинка уходит
+        // под рамку на точку, и между ними не просвечивает фон.
+        var inner = tile;
+        inner.Inflate(-1, -1);
+        ArtLayer.Clip = new RectangleGeometry(inner, 13, 13);
+
         double aspect = content.Size.Width / content.Size.Height;
 
-        double column = ArtColumn.ActualWidth;
-        bool side = column >= ArtColumnMin;
-        double centre = side ? width - column / 2 : width / 2;
-
         // Уложенная руками на миниатюре в редакторе тем (владелец 15.10) —
-        // где положили, а под ней градиент; иначе как прежде: по высоте
-        // страницы, середина — посередине колонки.
+        // где положили, а под ней градиент; иначе по высоте страницы,
+        // серединой посередине карточки.
         var placement = TryFindResource(HomePlacement.Key) as HomePlacement;
 
         var (left, top, w, h) = placement is { } placed
             ? SideArtLayout.Place(width, height, aspect, placed.X, placed.Y, placed.Size)
-            : SideArtLayout.Fit(width, height, centre, aspect);
+            : SideArtLayout.Fit(width, height, tile.Left + tile.Width / 2, aspect);
 
         var fill = content.Make();
         fill.Stretch = Stretch.Fill;
@@ -164,78 +172,11 @@ public partial class StatusView : UserControl
         fill.Viewport = new Rect(left, top, w, h);
         Art.Fill = fill;
 
-        if (placement is not null)
-        {
-            ArtGround.Fill = TryFindResource(HomePlacement.GroundKey) as Brush;
-            Art.OpacityMask = HomePlacement.Feather(new Rect(left, top, w, h));
-            Shade(width, column, side);
-            return;
-        }
+        ArtGround.Fill = placement is null ? null : TryFindResource(HomePlacement.GroundKey) as Brush;
+        Art.OpacityMask = placement is null ? null : HomePlacement.Feather(new Rect(left, top, w, h));
 
-        ArtGround.Fill = null;
-
-        // Левый край картинки — в подложку, без черты. Растворение кончается
-        // до колонки с артом (не позже 80 % пути от края картинки до неё),
-        // чтобы персонаж стоял целиком; без колонки — на четверти картинки.
-        // Картинка, начинающаяся левее страницы, края не показывает — маска
-        // не нужна.
-        double fade = side ? Math.Max(120, (width - column - left) * 0.8) : w * 0.25;
-
-        Art.OpacityMask = left <= 0
-            ? null
-            : new LinearGradientBrush
-            {
-                MappingMode = BrushMappingMode.Absolute,
-                StartPoint = new Point(left, 0),
-                EndPoint = new Point(left + fade, 0),
-                GradientStops =
-                {
-                    new GradientStop(Colors.Transparent, 0),
-                    new GradientStop(Colors.Black, 1),
-                },
-            };
-
-        Shade(width, column, side);
-    }
-
-    /// <summary>Затемнение поверх арта: плотное под карточками, лёгкое в колонке.</summary>
-    private void Shade(double width, double column, bool side)
-    {
         var backdrop = TryFindResource("BackdropColor") is Color c ? c : Colors.Black;
-        double dim = TryFindResource("BackdropDim") is double d ? d : 1.0;
-
-        var under = Color.FromArgb((byte)Math.Round(dim * 255), backdrop.R, backdrop.G, backdrop.B);
-
-        if (!side)
-        {
-            ArtShade.Fill = new SolidColorBrush(under);
-            return;
-        }
-
-        double edge = width - column;
-        var over = Color.FromArgb((byte)Math.Round(ArtDim * 255), backdrop.R, backdrop.G, backdrop.B);
-
-        // Переход начинается под карточками и тянется на большую часть
-        // колонки. Прежде он шёл 300 точек от края карточек: затемнение
-        // менялось прямо по волосам персонажа, у края колонки стоит ещё
-        // и полоса прокрутки страницы, и картинка читалась обрубленной
-        // по вертикальной черте (владелец, 30.09). Середина — не прямая:
-        // промежуточная точка держит затемнение дольше у карточек и
-        // быстрее отпускает у персонажа.
-        var middle = Color.FromArgb((byte)Math.Round((dim * 0.45 + ArtDim * 0.55) * 255), backdrop.R, backdrop.G, backdrop.B);
-
-        ArtShade.Fill = new LinearGradientBrush
-        {
-            MappingMode = BrushMappingMode.Absolute,
-            StartPoint = new Point(edge - 160, 0),
-            EndPoint = new Point(edge + column * 0.7, 0),
-            GradientStops =
-            {
-                new GradientStop(under, 0),
-                new GradientStop(middle, 0.4),
-                new GradientStop(over, 1),
-            },
-        };
+        ArtShade.Fill = new SolidColorBrush(Color.FromArgb((byte)Math.Round(ArtDim * 255), backdrop.R, backdrop.G, backdrop.B));
     }
 
     /// <summary>
@@ -2256,6 +2197,7 @@ public partial class StatusView : UserControl
             ContentColumn.MaxWidth = double.PositiveInfinity;
             ArtColumn.Width = new GridLength(0);
             ArtLayer.Visibility = Visibility.Collapsed;
+            ArtTile.Visibility = Visibility.Collapsed;
             SetResourceReference(BackgroundProperty, "Chrome");
         }
         else
@@ -2263,6 +2205,11 @@ public partial class StatusView : UserControl
             ContentColumn.MaxWidth = 940;
             ArtColumn.Width = new GridLength(1, GridUnitType.Star);
             ArtLayer.Visibility = Visibility.Visible;
+
+            // Спрятанная во всю ширину рамка снова раскладывается, но не видна,
+            // пока PlaceArt не решит, есть ли ей место и картинка.
+            if (ArtTile.Visibility == Visibility.Collapsed)
+                ArtTile.Visibility = Visibility.Hidden;
             SetResourceReference(BackgroundProperty, "Backdrop");
 
             // Слой мог прятаться — разложить заново, когда станет известен размер.
