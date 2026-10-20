@@ -97,6 +97,13 @@ public static class About
             "Проприетарная, WireGuard LLC",
             "https://www.wintun.net/"),
 
+        // Встроена в программу с 01.10 (KeyImport); до 20.10 карточка о ней
+        // молчала, хотя README обещал здесь тот же список, что у себя.
+        new("ZXing.Net",
+            "Чтение QR-кодов с ключами",
+            "Apache 2.0",
+            "https://github.com/micjahn/ZXing.Net"),
+
         // С 20.10 шрифт едет ресурсом в окне (BundledFonts) — в списке
         // «Оформления» он есть и у тех, у кого его нет в Windows.
         new("Manrope",
