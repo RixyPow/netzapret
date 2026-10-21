@@ -42,7 +42,7 @@ public static class Themes
     /// Применённая тема сама просит «Главную» на всю ширину (<see cref="Theme.HomeWide"/>);
     /// выбор человека для темы — в <see cref="AppSettings.HomeWide"/>.
     /// </summary>
-    public static bool WideHome { get; private set; }
+    public static bool WideHome { get; internal set; }
 
     /// <summary>
     /// Применяет тему по имени папки; при отказе — встроенную из XAML.
