@@ -371,13 +371,14 @@ public sealed record AppSettings
 
     /// <summary>Прокси Telegram ходит к DC2 и DC4 напрямую (<see cref="TgWsProxy.DirectMain"/>).</summary>
     /// <remarks>
-    /// Включено по умолчанию: без прямых адресов весь Telegram шёл через домены
-    /// Cloudflare общего списка, и 21.10 они почти все отвечали 503 (см.
-    /// <see cref="TgWsProxy.Arguments"/>). Выключают, если у провайдера закрыт сам
-    /// 149.154.167.220: тогда первое соединение ждёт таймаут, а не уходит сразу
-    /// в Cloudflare.
+    /// Без прямых адресов весь Telegram идёт через домены Cloudflare общего
+    /// списка, и 21.10 они почти все отвечали 503 (см. <see cref="TgWsProxy.Arguments"/>);
+    /// с ними — 149.154.167.220 у владельца отвечал за 101–112 мс. Но выключено
+    /// по умолчанию (владелец 21.10, в тот же день: «эту настройку по умолчанию
+    /// выкл»): у кого закрыт сам 149.154.167.220, первое соединение ждало бы
+    /// таймаут, а не уходило сразу в Cloudflare. Включают на вкладке «TG Proxy».
     /// </remarks>
-    public bool TelegramProxyDirect { get; init; } = true;
+    public bool TelegramProxyDirect { get; init; }
 
     /// <summary>Прокси Telegram ходит к DC1, DC3 и DC5 напрямую (<see cref="TgWsProxy.DirectOther"/>).</summary>
     /// <remarks>Выключено по умолчанию: адреса отвечают по TLS, а настоящие соединения через них не проверены (21.10).</remarks>

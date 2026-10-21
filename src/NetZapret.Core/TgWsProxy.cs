@@ -105,7 +105,8 @@ public static class TgWsProxy
     /// у владельца из них жили два, и те через раз: за 3,5 ч 321 соединение,
     /// 292 ответа 503 и 20 таймаутов на пути, 80 сеансов Telegram закрыл сам без
     /// единого байта — «работает нестабильно». Поэтому прямые адреса задаются
-    /// явно (<see cref="TgWsProxyRoutes"/>), а Cloudflare остаётся запасным путём.
+    /// явно (<see cref="TgWsProxyRoutes"/>), а Cloudflare остаётся запасным путём, —
+    /// выключателями на вкладке «TG Proxy», по умолчанию выключенными (владелец 21.10).
     /// </para>
     /// </remarks>
     public static IReadOnlyList<string> Arguments(int port, TgWsProxyRoutes? routes = null)
@@ -178,7 +179,7 @@ public static class TgWsProxy
 /// <param name="DirectOther">Прямой путь к DC1, DC3 и DC5 (<see cref="TgWsProxy.DirectOther"/>).</param>
 /// <param name="CfConnectTimeout">Сколько ждать один домен Cloudflare, секунды.</param>
 public sealed record TgWsProxyRoutes(
-    bool DirectMain = true,
+    bool DirectMain = false,
     bool DirectOther = false,
     int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout)
 {

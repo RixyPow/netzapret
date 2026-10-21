@@ -52,15 +52,15 @@ public sealed class TgWsProxyTests
         [.. arguments.Select((a, i) => (a, i)).Where(p => p.a == key).Select(p => arguments[p.i + 1])];
 
     /// <summary>
-    /// --default-domains снимает у прокси прямые адреса по умолчанию — их задаём
-    /// явно, иначе весь Telegram идёт через домены Cloudflare (21.10: почти все 503).
+    /// --default-domains снимает у прокси прямые адреса по умолчанию; задаём их
+    /// явно только выключателем — по умолчанию он выключен (владелец 21.10).
     /// </summary>
     [Fact]
-    public void DirectPathToDc2AndDc4IsOnByDefault()
+    public void DirectPathToDc2AndDc4IsOffByDefault()
     {
         var arguments = TgWsProxy.Arguments(1443);
 
-        Assert.Equal(["2:149.154.167.220", "4:149.154.167.220"], Values(arguments, "--dc-ip"));
+        Assert.Empty(Values(arguments, "--dc-ip"));
         Assert.Contains("--default-domains", arguments);
         Assert.DoesNotContain("--cf-connect-timeout", arguments);
 
@@ -71,11 +71,11 @@ public sealed class TgWsProxyTests
     [Fact]
     public void RoutesFromTheTabBecomeKeys()
     {
-        var onlyCloudflare = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectMain: false));
-        Assert.Empty(Values(onlyCloudflare, "--dc-ip"));
-        Assert.Contains("--default-domains", onlyCloudflare);
+        var main = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectMain: true));
+        Assert.Equal(["2:149.154.167.220", "4:149.154.167.220"], Values(main, "--dc-ip"));
+        Assert.Contains("--default-domains", main);
 
-        var all = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectOther: true));
+        var all = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectMain: true, DirectOther: true));
         Assert.Equal(
             ["2:149.154.167.220", "4:149.154.167.220", "1:149.154.174.100", "3:149.154.174.100", "5:149.154.170.100"],
             Values(all, "--dc-ip"));
@@ -97,14 +97,14 @@ public sealed class TgWsProxyTests
         {
             File.WriteAllText(path, """{ "TelegramProxy": true }""");
             var old = AppSettings.Load(path);
-            Assert.True(old.TelegramProxyDirect);
+            Assert.False(old.TelegramProxyDirect);
             Assert.False(old.TelegramProxyDirectOther);
             Assert.Equal(TgWsProxy.DefaultCfConnectTimeout, old.TelegramProxyCfTimeout);
 
-            (old with { TelegramProxyDirect = false, TelegramProxyDirectOther = true, TelegramProxyCfTimeout = 3 }).Save(path);
+            (old with { TelegramProxyDirect = true, TelegramProxyDirectOther = true, TelegramProxyCfTimeout = 3 }).Save(path);
             var read = AppSettings.Load(path);
 
-            Assert.Equal(new TgWsProxyRoutes(false, true, 3), TgWsProxyRoutes.From(read));
+            Assert.Equal(new TgWsProxyRoutes(true, true, 3), TgWsProxyRoutes.From(read));
         }
         finally
         {
