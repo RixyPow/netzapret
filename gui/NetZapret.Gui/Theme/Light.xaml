@@ -77,7 +77,7 @@
     <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
     <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
-    <!-- Значок (Emblem): у светлой своих цветов нет — её «Работает», фон окна и текст (Theme.Logo). -->
+    <!-- Значок (Emblem): своих цветов у светлой нет — главная кнопка, фон окна и текст (Theme.Logo). -->
     <Color x:Key="LogoTopColor">#FF1A7F37</Color>
     <Color x:Key="LogoBandColor">#FFF6F8FA</Color>
     <Color x:Key="LogoBottomColor">#FF1F2328</Color>

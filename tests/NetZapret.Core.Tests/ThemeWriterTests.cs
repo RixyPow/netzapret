@@ -96,7 +96,7 @@ public sealed class ThemeWriterTests : IDisposable
 
         Assert.Equal("#123456", theme.Logo(ThemeSlots.LogoBand).ToString());
         Assert.False(theme.Colors.ContainsKey(ThemeSlots.LogoTop));
-        Assert.Equal(theme[ThemeSlots.Accent].ToString(), theme.Logo(ThemeSlots.LogoTop).ToString());
+        Assert.Equal(theme[ThemeSlots.AccentFill].ToString(), theme.Logo(ThemeSlots.LogoTop).ToString());
     }
 
     /// <summary>

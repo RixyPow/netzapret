@@ -65,9 +65,22 @@ public static class Emblem
 
     /// <summary>Цвета эмблемы текущей темы окна (ресурсы приложения).</summary>
     public static (Color Top, Color Band, Color Bottom) Current() =>
-        (Pick("LogoTopColor", Color.FromRgb(0x85, 0xB2, 0x67)),
-         Pick("LogoBandColor", Colors.Black),
-         Pick("LogoBottomColor", Colors.White));
+        (Pick("LogoTopColor", Default.Top),
+         Pick("LogoBandColor", Default.Band),
+         Pick("LogoBottomColor", Default.Bottom));
+
+    /// <summary>
+    /// Цвета значка тёмной темы — той, что стоит по умолчанию: кнопка «Запустить»,
+    /// фон окна и текст. Ими собран app.ico.
+    /// </summary>
+    /// <remarks>
+    /// Значок exe — тот же, что у окна при теме по умолчанию: закреплённая на панели
+    /// задач кнопка не меняет вид, когда программа запускается. До 21.10 вечера
+    /// app.ico был в цветах svg владельца (#85B267, чёрный, белый) — их сменил
+    /// верх «цвета главной кнопки» («самое лаконичное»).
+    /// </remarks>
+    public static (Color Top, Color Band, Color Bottom) Default { get; } =
+        (Color.FromRgb(0x2E, 0xA0, 0x43), Color.FromRgb(0x0D, 0x11, 0x17), Color.FromRgb(0xE6, 0xED, 0xF3));
 
     /// <summary>Эмблема картинкой <paramref name="size"/>×<paramref name="size"/>, с прозрачными углами.</summary>
     public static BitmapSource Render(int size, Color top, Color band, Color bottom)

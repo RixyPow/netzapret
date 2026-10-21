@@ -56,7 +56,7 @@ public sealed class ThemeLoaderTests : IDisposable
 
             Assert.True(load.Ok, $"{id}: {string.Join("; ", load.Problems)}");
 
-            // Все 14 — и сверх них разве что цвета значка (21.10, у тёмной — эмблема владельца).
+            // Все 14 — и сверх них разве что цвета значка (21.10): тема вправе задать свои.
             Assert.All(ThemeSlots.All, slot => Assert.True(load.Theme!.Colors.ContainsKey(slot), $"{id}: нет {slot}"));
             Assert.All(load.Theme!.Colors.Keys, key => Assert.True(ThemeSlots.All.Contains(key) || ThemeSlots.Logo.Contains(key), $"{id}: {key}"));
         }
@@ -200,20 +200,21 @@ public sealed class ThemeLoaderTests : IDisposable
     }
 
     /// <summary>
-    /// Три цвета значка (21.10) необязательны: не заданные — «Работает», фон окна
-    /// и текст самой темы, а не основы.
+    /// Три цвета значка (21.10) необязательны: не заданные — главная кнопка, фон
+    /// окна и текст самой темы, а не основы.
     /// </summary>
     [Fact]
     public void LogoColorsAreOptionalAndFollowTheTheme()
     {
-        var own = Write("own", """{ "base": "dark", "colors": { "accent": "#112233", "logo-band": "#445566" } }""").Theme!;
+        var own = Write("own", """{ "base": "dark", "colors": { "accent-fill": "#112233", "logo-band": "#445566" } }""").Theme!;
 
+        // Верх — цвет главной кнопки (владелец 21.10: «самое лаконичное»).
         Assert.Equal("#112233", own.Logo(ThemeSlots.LogoTop).ToString());
         Assert.Equal("#445566", own.Logo(ThemeSlots.LogoBand).ToString());
         Assert.Equal(own[ThemeSlots.Text].ToString(), own.Logo(ThemeSlots.LogoBottom).ToString());
 
-        // Основа отдаёт только свои 14 цветов: значок тёмной темы — её эмблема,
-        // а тема на её основе с другим акцентом берёт свой.
+        // Основа отдаёт только свои 14 цветов: заданный ей значок теме на её
+        // основе не передаётся — та берёт свои.
         Assert.False(own.Colors.ContainsKey(ThemeSlots.LogoTop));
 
         Assert.Contains(Write("typo", """{ "base": "dark", "colors": { "logo-middle": "#000000" } }""").Problems,

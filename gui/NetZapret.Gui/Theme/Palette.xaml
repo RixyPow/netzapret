@@ -56,10 +56,10 @@
     <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
     <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
-    <!-- Значок (Emblem): верх, кривая и низ — цвета эмблемы владельца (21.10), как в themes\dark. -->
-    <Color x:Key="LogoTopColor">#FF85B267</Color>
-    <Color x:Key="LogoBandColor">#FF000000</Color>
-    <Color x:Key="LogoBottomColor">#FFFFFFFF</Color>
+    <!-- Значок (Emblem): своих цветов у тёмной нет — главная кнопка, фон окна и текст (Theme.Logo). -->
+    <Color x:Key="LogoTopColor">#FF2EA043</Color>
+    <Color x:Key="LogoBandColor">#FF0D1117</Color>
+    <Color x:Key="LogoBottomColor">#FFE6EDF3</Color>
 
     <SolidColorBrush x:Key="LogoTop" Color="{StaticResource LogoTopColor}" />
     <SolidColorBrush x:Key="LogoBand" Color="{StaticResource LogoBandColor}" />

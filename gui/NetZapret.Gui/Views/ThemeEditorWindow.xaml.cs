@@ -63,12 +63,12 @@ public partial class ThemeEditorWindow : Window
 
     /// <summary>
     /// Цвета значка (владелец 21.10: «3 цвета для иконки») — необязательные:
-    /// пока не выбраны, значок следует за «Работает», фоном окна и текстом
+    /// пока не выбраны, значок следует за главной кнопкой, фоном окна и текстом
     /// (<see cref="Theme.Logo"/>) и в тему не пишется.
     /// </summary>
     private static readonly (string Slot, string Label, string Note)[] LogoSlots =
     [
-        (ThemeSlots.LogoTop, "Значок: верх", "над кривой; не выбран — как «Работает»"),
+        (ThemeSlots.LogoTop, "Значок: верх", "над кривой; не выбран — как главная кнопка"),
         (ThemeSlots.LogoBand, "Значок: кривая", "не выбрана — как фон окна, прорезью"),
         (ThemeSlots.LogoBottom, "Значок: низ", "под кривой; не выбран — как текст"),
     ];

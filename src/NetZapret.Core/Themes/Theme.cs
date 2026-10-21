@@ -62,20 +62,22 @@ public sealed record Theme
 
     /// <summary>
     /// Цвет значка: заданный темой (<see cref="ThemeSlots.Logo"/>) или её же —
-    /// верх «Работает» (акцент), кривая — фон окна, низ — текст.
+    /// верх цвета главной кнопки, кривая — фон окна, низ — текст.
     /// </summary>
     /// <remarks>
-    /// Так значок любой темы, и не знающей про него, — в её цветах: кривая
-    /// фоном окна читается прорезью в плитке, как серая на листе вариантов
-    /// владельца 21.10, а акцент и текст на фоне окна заведомо видны —
-    /// их сверяет проверка читаемости.
+    /// Так значок любой темы, и не знающей про него, — в её цветах. Верх —
+    /// заливкой кнопки «Запустить» (владелец 21.10: «самое лаконичное, это
+    /// когда цвет верхней части такой же, как и у главной кнопки»; до того
+    /// утром — «Работает»). Кривая фоном окна читается прорезью в плитке,
+    /// как серая на листе вариантов владельца, а текст на фоне окна заведомо
+    /// виден — его сверяет проверка читаемости.
     /// </remarks>
     public ThemeColor Logo(string slot) =>
         Colors.TryGetValue(slot, out var set)
             ? set
             : slot switch
             {
-                ThemeSlots.LogoTop => Colors[ThemeSlots.Accent],
+                ThemeSlots.LogoTop => Colors[ThemeSlots.AccentFill],
                 ThemeSlots.LogoBand => Colors[ThemeSlots.Backdrop],
                 ThemeSlots.LogoBottom => Colors[ThemeSlots.Text],
                 _ => throw new ArgumentOutOfRangeException(nameof(slot), slot, "не цвет значка"),
