@@ -218,6 +218,7 @@ public partial class App : Application
 
         // Новые адреса голоса Discord — в список голоса, пока он «через VPN».
         DiscordVoiceWatch.Start(Dispatcher);
+        RobloxServerWatch.Start();
 
         // «Маршруты» читаются заранее: первый заход иначе стоял пустым секунды (13.10).
         Views.RoutesView.Prepare();

@@ -84,6 +84,39 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock Text="ROBLOX" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
+
+                <Border Style="{StaticResource SettingsGroup}">
+                    <StackPanel>
+                        <!-- Владелец 21.10: «по аналогии с дискордом … автопополнение адресов серверов роблокс». -->
+                        <Grid Margin="16,13">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Дописывать адреса серверов Roblox" VerticalAlignment="Center" />
+
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Матч Roblox идёт на голый адрес сервера и в туннель попадает только адресом из списка части «Игровые серверы (адреса)». Там сети самой Roblox, а часть плейсов стоит на Amazon — мимо туннеля их выкидывает с ошибкой 277 или 279. Пока часть стоит «через VPN», адреса серверов берутся из журнала Roblox и дописываются в список сетью /20. Заработают после перезапуска движков." />
+                                </StackPanel>
+
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                           Text="Новые адреса игровых серверов — из журнала Roblox в список, пока его серверы «через VPN»." />
+                            </StackPanel>
+
+                            <TextBlock Grid.Column="1" x:Name="LearnRobloxWord" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                            <ToggleButton Grid.Column="2" x:Name="LearnRoblox" Style="{StaticResource Switch}"
+                                          Click="OnLearnRoblox" VerticalAlignment="Center" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <!--
                     Владелец 06.10: «создадим раздел в настройках маршрутов с этими
                     решениями» — раздел «Напрямую» каталога hosts Zapret GUI.

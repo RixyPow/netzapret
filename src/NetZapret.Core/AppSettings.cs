@@ -302,6 +302,17 @@ public sealed record AppSettings
     /// </remarks>
     public bool LearnDiscordVoice { get; init; } = true;
 
+    /// <summary>
+    /// Дописывать адреса игровых серверов Roblox из его журнала в список части
+    /// «Игровые серверы (адреса)» (<see cref="Services.RobloxServerLearn"/>).
+    /// </summary>
+    /// <remarks>
+    /// Владелец 21.10: «по аналогии с дискордом сделаем автопополнение адресов
+    /// серверов роблокс». Включено по умолчанию, как у Discord: действует, только
+    /// пока часть стоит «через VPN», и выключают те, кто держит список руками.
+    /// </remarks>
+    public bool LearnRobloxServers { get; init; } = true;
+
     /// <summary>Программы в «Маршрутах» — папки из двух списков (<see cref="Rules.ProgramRoutes"/>, 13.10).</summary>
     public IReadOnlyList<Rules.ProgramRoute> ProgramRoutes { get; init; } = [];
 

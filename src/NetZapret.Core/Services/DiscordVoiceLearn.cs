@@ -172,20 +172,7 @@ public static class DiscordVoiceLearn
         var lines = File.Exists(path) ? File.ReadAllLines(path) : [];
         var missing = Missing(Addresses(log), lines);
 
-        if (missing.Count == 0)
-            return [];
-
-        var text = new StringBuilder();
-
-        if (lines.Length > 0 && File.ReadAllText(path) is { Length: > 0 } existing && !existing.EndsWith('\n'))
-            text.AppendLine();
-
-        text.AppendLine($"# из журнала Discord, {(when ?? DateTime.Now):dd.MM.yyyy}");
-
-        foreach (var network in missing)
-            text.AppendLine(network);
-
-        File.AppendAllText(path, text.ToString());
+        LearnedNetworks.Append(path, missing, "из журнала Discord", when);
 
         return missing;
     }

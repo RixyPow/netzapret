@@ -143,6 +143,18 @@ public partial class RoutesSettingsWindow : Window
 
         Learn.IsChecked = settings.LearnDiscordVoice;
         LearnWord.Text = settings.LearnDiscordVoice ? "вкл." : "выкл.";
+
+        LearnRoblox.IsChecked = settings.LearnRobloxServers;
+        LearnRobloxWord.Text = settings.LearnRobloxServers ? "вкл." : "выкл.";
+    }
+
+    private void OnLearnRoblox(object sender, RoutedEventArgs e)
+    {
+        bool on = LearnRoblox.IsChecked == true;
+
+        Save(s => s with { LearnRobloxServers = on },
+            on ? "Адреса серверов Roblox дописываются, пока его серверы «через VPN»."
+               : "Список серверов Roblox больше не пополняется сам.");
     }
 
     private void OnRestart(object sender, RoutedEventArgs e)
