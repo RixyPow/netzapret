@@ -224,4 +224,63 @@ public sealed class ShippedRulesTests
             File.Delete(user);
         }
     }
+
+    /// <summary>
+    /// Нейросети, закрытые по стране, — через VPN по умолчанию; не закрытые
+    /// остаются на десинке (владелец 21.10, обсуждение №31; замер API того же дня).
+    /// </summary>
+    [Fact]
+    public void Country_locked_ai_goes_through_the_tunnel_by_default()
+    {
+        var config = Config();
+        if (config is null)
+            return;
+
+        static Connections.ConnectionEvent To(string host) => new()
+        {
+            Timestamp = DateTimeOffset.UnixEpoch,
+            Protocol = Connections.ProtocolKind.Tcp,
+            RemoteAddress = System.Net.IPAddress.Parse("203.0.113.7"),
+            RemotePort = 443,
+            Hostname = host,
+        };
+
+        var engine = RuleSetLoader.LoadFromFile(Path.Combine(config, "rules.yaml"));
+        NetZapret.Zapret.RuleSetExpander.Expand(engine.RuleSet, Path.GetDirectoryName(config));
+
+        foreach (var host in new[]
+        {
+            "chatgpt.com", "ab.chatgpt.com", "api.openai.com", "cdn.oaistatic.com", "files.oaiusercontent.com", "sora.com",
+            "claude.ai", "api.anthropic.com", "www.claudeusercontent.com",
+            "gemini.google.com", "aistudio.google.com", "generativelanguage.googleapis.com",
+            "grok.com", "api.x.ai",
+        })
+            Assert.True(engine.Evaluate(To(host)).Mode == RoutingMode.Proxy, host);
+
+        foreach (var host in new[] { "chat.mistral.ai", "www.perplexity.ai", "chat.deepseek.com", "huggingface.co", "www.google.com" })
+            Assert.True(engine.Evaluate(To(host)).Mode == RoutingMode.Desync, host);
+
+        // Путь, выбранный человеком, сильнее заводского.
+        var user = Path.Combine(Path.GetTempPath(), $"rules-user-{Guid.NewGuid():N}.yaml");
+
+        try
+        {
+            File.WriteAllText(user, """
+                rules:
+                  - match: hostlist
+                    value: "config/lists/claude.txt"
+                    mode: desync
+                """);
+
+            var layered = RuleSetLoader.LoadLayered(Path.Combine(config, "rules.yaml"), user);
+            NetZapret.Zapret.RuleSetExpander.Expand(layered.RuleSet, Path.GetDirectoryName(config));
+
+            Assert.Equal(RoutingMode.Desync, layered.Evaluate(To("claude.ai")).Mode);
+            Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("grok.com")).Mode);
+        }
+        finally
+        {
+            File.Delete(user);
+        }
+    }
 }
