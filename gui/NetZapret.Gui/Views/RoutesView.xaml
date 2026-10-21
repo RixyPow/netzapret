@@ -65,6 +65,55 @@
             </Style.Triggers>
         </Style>
 
+        <!--
+            Кнопка строки маршрута: вид Ghost без того, что строкам не нужно, —
+            без выбора шаблона подписи, значка слева и стрелки меню (ButtonGlyph).
+            Подписи у кнопок строк — свои элементы, а не строка.
+
+            Ради скорости «Маршрутов» (21.10, владелец: «делай»): карточки не
+            виртуализированы, и каждая раскладывается целиком. Замер на настройках
+            владельца: Ghost с подписью-строкой (прежний «⋯», IconGhost) — 2,3 мс
+            на кнопку при первой раскладке, лёгкий шаблон — 0,3; строка из четырёх
+            кнопок 3,7 → 1,0 мс, карточка 22 → 17–19 мс, «Раскрыть всё» 0,73–0,79 →
+            0,54–0,58 с. Снимки до и после — ни одной разной точки в тёмной теме
+            и в «Слойке 2».
+
+            Вид — копия Ghost (Theme/Controls.xaml): цвета, рамка, скругление,
+            наведение и нажатие. Меняется Ghost — менять и здесь, сам он сюда
+            не дойдёт.
+        -->
+        <Style x:Key="RowGhost" TargetType="Button">
+            <Setter Property="FontFamily" Value="{DynamicResource UiFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="Background" Value="{DynamicResource Raised}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Shape" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1.5"
+                                CornerRadius="10" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- «+ Добавить маршрут в эту папку»: пунктирная рамка, как в макете. -->
         <Style x:Key="DashedAdd" TargetType="Button">
             <Setter Property="Cursor" Value="Hand" />
@@ -464,7 +513,7 @@
                                                             Выбор пути — кнопкой с меню, а не списком
                                                             выбора: карточки не виртуализированы (OnRouteMenu).
                                                         -->
-                                                        <Button Style="{StaticResource Ghost}" Padding="12,6" MinWidth="122"
+                                                        <Button Style="{StaticResource RowGhost}" Padding="12,6" MinWidth="122"
                                                                 Click="OnRouteMenu" IsEnabled="{Binding CanRoute}"
                                                                 HorizontalContentAlignment="Stretch">
                                                             <Grid>
@@ -484,7 +533,7 @@
                                                             во второй строке). Скрытая, а не убранная: иначе
                                                             у строк без списка пин уезжал бы влево.
                                                         -->
-                                                        <Button Style="{StaticResource Ghost}"
+                                                        <Button Style="{StaticResource RowGhost}"
                                                                 Padding="8,7" Margin="6,0,0,0"
                                                                 Click="OnOpenList"
                                                                 Visibility="{Binding ListShown}"
@@ -500,7 +549,7 @@
                                                             конкретным именам. Что случится — в подсказке:
                                                             «снять» от «поставить» по картинке не отличить.
                                                         -->
-                                                        <Button Style="{StaticResource Ghost}"
+                                                        <Button Style="{StaticResource RowGhost}"
                                                                 Padding="8,7" Margin="6,0,0,0"
                                                                 Tag="{Binding Key}" Click="OnPin"
                                                                 IsEnabled="{Binding CanPin}"
@@ -511,10 +560,12 @@
                                                         </Button>
 
                                                         <!-- Папки и «убрать» у своего — в «⋯» (OnRouteMore). -->
-                                                        <Button Style="{StaticResource IconGhost}" Content="&#xE712;" Margin="6,0,0,0"
+                                                        <Button Style="{StaticResource RowGhost}" Padding="9,8" MinWidth="36" Margin="6,0,0,0"
                                                                 Tag="{Binding Key}" Click="OnRouteMore"
                                                                 Visibility="{Binding MoreShown}"
-                                                                ToolTip="В новую папку, вынуть из папки, вернуть на место; у своего — убрать" />
+                                                                ToolTip="В новую папку, вынуть из папки, вернуть на место; у своего — убрать">
+                                                            <TextBlock FontFamily="{StaticResource IconFont}" FontSize="15" Text="&#xE712;" />
+                                                        </Button>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
