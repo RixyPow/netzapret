@@ -130,8 +130,7 @@ public static class RobloxServerLearn
     /// незачем: это не та дорога, которую человек выбрал.
     /// </remarks>
     public static bool RoutedToVpn(IEnumerable<UserRuleEntry> rules) =>
-        rules.FirstOrDefault(e => e.Enabled && e.Match == MatchKind.IpSet && e.Matches(ListPath))?.Mode
-            == RoutingMode.Proxy;
+        GameServerLearn.RoutedToVpn(rules, ListPath);
 }
 
 /// <summary>Дописка выученных сетей в наш список — общая для сторожей журналов.</summary>

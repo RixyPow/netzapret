@@ -432,7 +432,8 @@ public partial class WatchView : UserControl
         ConnectionWatch.Start(
             AppSettings.Load(AppSettings.DefaultPath),
             ConnectionWatch.DefaultJournal,
-            new ProgramRouteLearner(AppSettings.DefaultPath));
+            new ProgramRouteLearner(AppSettings.DefaultPath,
+                games: () => AutoFillWatch.LearnedGames(AppSettings.Load(AppSettings.DefaultPath))));
 
     private static void Failed(Exception ex)
     {

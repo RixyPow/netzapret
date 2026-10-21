@@ -313,6 +313,16 @@ public sealed record AppSettings
     /// </remarks>
     public bool LearnRobloxServers { get; init; } = true;
 
+    /// <summary>
+    /// Дописывать сети серверов ARC Raiders из соединений игры в список части
+    /// «Игровые серверы (адреса)» (<see cref="Services.GameServerLearn"/>).
+    /// </summary>
+    /// <remarks>
+    /// Владелец 21.10, после обсуждения №32. Включено по умолчанию, как у Roblox:
+    /// действует, только пока часть стоит «через VPN» и игра запущена.
+    /// </remarks>
+    public bool LearnArcRaidersServers { get; init; } = true;
+
     /// <summary>Программы в «Маршрутах» — папки из двух списков (<see cref="Rules.ProgramRoutes"/>, 13.10).</summary>
     public IReadOnlyList<Rules.ProgramRoute> ProgramRoutes { get; init; } = [];
 

@@ -45,14 +45,15 @@ internal static class ProgramRouteNotice
     /// <remarks>
     /// <see cref="RulesShare.Read"/>, а не <see cref="UserRulesFile.Load"/>:
     /// тот испорченный файл отодвигает в сторону, а фоновому трогать файл
-    /// человека нельзя.
+    /// человека нельзя. Списки программ — по именам (HostList), список
+    /// адресов игры из каталога — по адресам (IpSet, 21.10).
     /// </remarks>
     private static bool Enabled(string listPath)
     {
         try
         {
             return RulesShare.Read(UserRulesFile.DefaultPath)
-                .Any(e => e.Enabled && !e.Off && e.Match == MatchKind.HostList && e.Matches(listPath));
+                .Any(e => e.Enabled && !e.Off && e.Match is (MatchKind.HostList or MatchKind.IpSet) && e.Matches(listPath));
         }
         catch (Exception)
         {

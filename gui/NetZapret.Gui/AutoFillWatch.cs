@@ -1,7 +1,10 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
+using NetZapret.Core.Rules;
+using NetZapret.Core.Services;
 
 namespace NetZapret.Gui;
 
@@ -45,9 +48,13 @@ internal static class AutoFillWatch
         {
             try
             {
-                var wanted = AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+                // И игры каталога, чьи серверы дописываются сейчас (21.10, ARC Raiders).
+                var wanted = settings.ProgramRoutes
                     .Where(p => p.AutoFill)
                     .Select(p => p.Program)
+                    .Concat(LearnedGames(settings).Select(g => g.Program))
                     .ToList();
 
                 var change = Presence.Update(Running(), wanted, DateTimeOffset.Now);
@@ -65,6 +72,18 @@ internal static class AutoFillWatch
             await Task.Delay(Every).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Игры каталога, чьи серверы дописываются сейчас (<see cref="GameServerLearn.Active"/>).
+    /// </summary>
+    /// <remarks>
+    /// <see cref="RulesShare.Read"/>: испорченный файл правил фоновому трогать нельзя.
+    /// Правила читаются, только если выключатель хоть одной игры включён.
+    /// </remarks>
+    internal static IReadOnlyList<LearnedGame> LearnedGames(AppSettings settings) =>
+        GameServerLearn.All.Any(g => g.On(settings)) && File.Exists(UserRulesFile.DefaultPath)
+            ? GameServerLearn.Active(settings, RulesShare.Read(UserRulesFile.DefaultPath))
+            : [];
 
     private static List<string> Running()
     {

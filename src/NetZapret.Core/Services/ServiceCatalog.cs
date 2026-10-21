@@ -761,6 +761,53 @@ public static class ServiceCatalog
             ],
         },
 
+        // ARC Raiders — своей папкой (владелец 21.10: «расширим папку arc raiders,
+        // там сделаем маршруты»), после обсуждения №32: с обновления игры 20.10
+        // в Сибири и Якутии 200 мс и на Европе, и на Азии, а помогают
+        // «оптимизаторы» — то есть другой путь до серверов, а не десинк. Путь
+        // меняет только VPN, и матч — UDP на голые адреса в Google Cloud — в
+        // туннель попадает лишь адресом из списка; список пополняется сам
+        // (GameServerLearn). Все части выключены, пока человек не выберет путь:
+        // игры нет ни у кого из нас, через туннель её не проверял никто.
+        new ServiceDefinition
+        {
+            Name = "ARC Raiders",
+            Parts =
+            [
+                new ServicePart
+                {
+                    Name = "Сервисы Embark",
+                    List = "config/lists/arc-raiders.txt",
+                    Probe = "api-gateway.europe.es-pio.net",
+                    Note = "вход, подбор матча и сайт игры; из России работают и так",
+                    DefaultOff = true,
+                },
+
+                // Голос — Epic Online Services, внутри зоны Epic. Выключен до выбора
+                // (владелец 07.10): из России, по сообщениям, голос идёт только через
+                // VPN. Зона сама адреса не имеет — рецепты пробуются на сигнальном
+                // сервере. До 21.10 стоял на полке «Игры» как «ARC Raiders — голос»;
+                // выбранный путь переезжает с ним — правило пишется по файлу списка.
+                new ServicePart
+                {
+                    Name = "Голос",
+                    List = "config/lists/arc-raiders-voice.txt",
+                    Within = "config/lists/epicgames-fortnite.txt",
+                    Probe = "signaling-service-prod.euc1.live.rtcp.on.epicgames.com",
+                    Note = "голосовой чат через Epic Online Services; из России, по сообщениям, работает только через VPN",
+                    DefaultOff = true,
+                },
+                new ServicePart
+                {
+                    Name = "Игровые серверы (адреса)",
+                    List = GameServerLearn.ArcRaidersList,
+                    ByAddress = true,
+                    Note = "сам матч: UDP на серверы в Google Cloud; «через VPN» — и адреса дописываются сами, пока игра запущена",
+                    DefaultOff = true,
+                },
+            ],
+        },
+
         new ServiceDefinition
         {
             Name = "Игры",
@@ -768,20 +815,6 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "Epic Games и Fortnite", List = "config/lists/epicgames-fortnite.txt" },
-
-                // Голос ARC Raiders — Epic Online Services, внутри зоны Epic.
-                // Выключена до выбора (владелец 07.10): из России, по сообщениям,
-                // голос идёт только через VPN, а игры для проверки нет. Зона сама
-                // адреса не имеет — рецепты пробуются на сигнальном сервере.
-                new ServicePart
-                {
-                    Name = "ARC Raiders — голос",
-                    List = "config/lists/arc-raiders-voice.txt",
-                    Within = "config/lists/epicgames-fortnite.txt",
-                    Probe = "signaling-service-prod.euc1.live.rtcp.on.epicgames.com",
-                    Note = "голосовой чат через Epic Online Services; из России, по сообщениям, работает только через VPN",
-                    DefaultOff = true,
-                },
                 new ServicePart { Name = "Ubisoft", List = "config/lists/ubisoft.txt" },
 
                 // Wardogs — имена от владельца 12.10. У пользователя на V10

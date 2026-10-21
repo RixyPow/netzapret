@@ -1,0 +1,13 @@
+# ARC Raiders: сервисы Embark — вход, подбор матча, сайт игры.
+#
+# es-pio.net — бэкенд игры (api-gateway и client2pubsub по регионам, имена
+# из списка a1k3r, github.com/a1k3r/zapret-discord-youtube-main-fixtoarcandapex),
+# embark.games — учётная запись и поддержка (id.embark.games), arcraiders.com —
+# сайт. Разрешаются 21.10, кроме самого es-pio.net — у зоны адреса нет,
+# только у имён внутри. Всё, кроме embark.games, — в Google Cloud (34.x).
+#
+# Сам матч — UDP на голые адреса серверов, по имени его не узнать: он в части
+# «Игровые серверы (адреса)», arc-raiders-network.txt.
+es-pio.net
+embark.games
+arcraiders.com

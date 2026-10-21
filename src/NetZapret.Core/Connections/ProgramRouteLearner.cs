@@ -1,12 +1,16 @@
 using System.Net;
 using System.Net.Sockets;
 using NetZapret.Core.Rules;
+using NetZapret.Core.Services;
 
 namespace NetZapret.Core.Connections;
 
 /// <summary>Что дописано в список программы.</summary>
 /// <param name="Program">Программа.</param>
-/// <param name="ListPath">Список: домены или адреса (<see cref="ProgramRoutes"/>).</param>
+/// <param name="ListPath">
+/// Список: домены или адреса (<see cref="ProgramRoutes"/>) — или адреса игры
+/// из каталога (<see cref="GameServerLearn"/>).
+/// </param>
 /// <param name="Value">Дописанное: имя или сеть.</param>
 public sealed record ProgramLearned(string Program, string ListPath, string Value)
 {
@@ -36,6 +40,11 @@ public sealed record ProgramLearned(string Program, string ListPath, string Valu
 /// (198.18.0.0/15 — по ним не узнать, куда шли). Наблюдение видит только
 /// соединения, пока оно идёт: автопополнение без него ничего не дописывает.
 /// </para>
+/// <para>
+/// С 21.10 так же — серверы игр из каталога (<see cref="GameServerLearn"/>):
+/// только адреса без имени, в список части игры. Маршрут программы с тем же
+/// именем файла важнее — он выбор человека.
+/// </para>
 /// </remarks>
 public sealed class ProgramRouteLearner
 {
@@ -53,21 +62,37 @@ public sealed class ProgramRouteLearner
     private readonly string _settingsPath;
     private readonly string? _root;
     private readonly Func<DateTime> _clock;
+    private readonly Func<IReadOnlyList<LearnedGame>>? _games;
     private readonly object _gate = new();
 
     private Dictionary<string, Known> _known = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _readAt = DateTime.MinValue;
 
-    public ProgramRouteLearner(string? settingsPath = null, string? root = null, Func<DateTime>? clock = null)
+    /// <param name="games">
+    /// Игры, чьи серверы дописывать сейчас (<see cref="GameServerLearn.Active"/>);
+    /// спрашивается при каждом перечитывании. Нет — только маршруты программ.
+    /// </param>
+    public ProgramRouteLearner(
+        string? settingsPath = null,
+        string? root = null,
+        Func<DateTime>? clock = null,
+        Func<IReadOnlyList<LearnedGame>>? games = null)
     {
         _settingsPath = settingsPath ?? AppSettings.DefaultPath;
         _root = root;
         _clock = clock ?? (() => DateTime.UtcNow);
+        _games = games;
     }
 
     private sealed class Known
     {
         public required string Program { get; init; }
+
+        /// <summary>Куда имена; <c>null</c> — имена мимо (игра из каталога).</summary>
+        public required string? DomainsList { get; init; }
+
+        public required string AddressesList { get; init; }
+
         public List<string> Domains { get; } = [];
         public List<IpCidrRange> Networks { get; } = [];
     }
@@ -100,10 +125,9 @@ public sealed class ProgramRouteLearner
 
             if (Host(connection.Hostname) is { } host)
             {
-                if (known.Domains.Any(d => Covers(d, host)))
+                if (known.DomainsList is not { } domains || known.Domains.Any(d => Covers(d, host)))
                     return null;
 
-                var domains = ProgramRoutes.DomainsPath(known.Program);
                 ProgramRoutes.Append(domains, host, _root);
                 known.Domains.Add(host);
 
@@ -114,11 +138,10 @@ public sealed class ProgramRouteLearner
                 return null;
 
             var network = Network(remote);
-            var addresses = ProgramRoutes.AddressesPath(known.Program);
-            ProgramRoutes.Append(addresses, network, _root);
+            ProgramRoutes.Append(known.AddressesList, network, _root);
             known.Networks.Add(IpCidrRange.Parse(network));
 
-            return new ProgramLearned(known.Program, addresses, network);
+            return new ProgramLearned(known.Program, known.AddressesList, network);
         }
     }
 
@@ -152,28 +175,62 @@ public sealed class ProgramRouteLearner
 
         foreach (var route in AppSettings.Load(_settingsPath).ProgramRoutes.Where(p => p.AutoFill))
         {
-            var entry = new Known { Program = route.Program };
-            entry.Domains.AddRange(ProgramRoutes.Entries(ProgramRoutes.DomainsPath(route.Program), _root)
+            var entry = new Known
+            {
+                Program = route.Program,
+                DomainsList = ProgramRoutes.DomainsPath(route.Program),
+                AddressesList = ProgramRoutes.AddressesPath(route.Program),
+            };
+
+            entry.Domains.AddRange(ProgramRoutes.Entries(entry.DomainsList, _root)
                 .Where(d => AddressInput.Normalize(d) is null));
 
-            foreach (var line in ProgramRoutes.Entries(ProgramRoutes.AddressesPath(route.Program), _root))
-            {
-                if (AddressInput.Normalize(line) is not { } address)
-                    continue;
-
-                try
-                {
-                    entry.Networks.Add(IpCidrRange.Parse(address));
-                }
-                catch (RuleConfigurationException)
-                {
-                    // Строка, которую движок не поймёт, — не наша забота здесь.
-                }
-            }
-
+            ReadNetworks(entry);
             known[route.Program] = entry;
         }
 
+        foreach (var game in Games())
+        {
+            if (known.ContainsKey(game.Program))
+                continue;
+
+            var entry = new Known { Program = game.Program, DomainsList = null, AddressesList = game.List };
+
+            ReadNetworks(entry);
+            known[game.Program] = entry;
+        }
+
         _known = known;
+    }
+
+    /// <summary>Игры к пополнению; не прочитались правила — никаких, до следующего раза.</summary>
+    private IReadOnlyList<LearnedGame> Games()
+    {
+        try
+        {
+            return _games?.Invoke() ?? [];
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+
+    private void ReadNetworks(Known entry)
+    {
+        foreach (var line in ProgramRoutes.Entries(entry.AddressesList, _root))
+        {
+            if (AddressInput.Normalize(line) is not { } address)
+                continue;
+
+            try
+            {
+                entry.Networks.Add(IpCidrRange.Parse(address));
+            }
+            catch (RuleConfigurationException)
+            {
+                // Строка, которую движок не поймёт, — не наша забота здесь.
+            }
+        }
     }
 }
