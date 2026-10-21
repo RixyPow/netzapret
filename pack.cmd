@@ -282,10 +282,16 @@ rem
 rem And a third: lists\ipset-all.txt is Flowseal's list from
 rem zapret-discord-youtube, entry for entry, and our game filter is his
 rem ALT11 sections carried over to Zapret 2. MIT as well.
+rem
+rem And WinDivert: exe\WinDivert.dll and its driver Monkey64.sys, LGPLv3 or
+rem GPLv2 at our choice, and both want the licence text with the copy. Until
+rem 22.10 the archive only pointed at reqrypt.org; the text is upstream's
+rem LICENSE file (basil00/WinDivert), which carries LGPLv3, GPLv3 and GPLv2.
 copy /y "%ROOT%docs\THIRD-PARTY.md" "%STAGE%\" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapret-MIT.txt" "%ENGINES%\zapret\LICENSE.txt" >nul 2>&1
 copy /y "%ROOT%docs\licenses\zapretgui-MIT.txt" "%ENGINES%\zapret\LICENSE-ZapretGUI.txt" >nul 2>&1
 copy /y "%ROOT%docs\licenses\flowseal-MIT.txt" "%ENGINES%\zapret\LICENSE-Flowseal.txt" >nul 2>&1
+copy /y "%ROOT%docs\licenses\windivert-LICENSE.txt" "%ENGINES%\zapret\LICENSE-WinDivert.txt" >nul 2>&1
 rem ZXing.Net reads QR codes with keys (01.10). Apache-2.0: the licence text
 rem must travel with the copy; the library sits beside NetZapret.exe.
 copy /y "%ROOT%docs\licenses\zxing-net-Apache-2.0.txt" "%STAGE%\LICENSE-ZXing.Net.txt" >nul 2>&1
