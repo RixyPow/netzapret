@@ -178,10 +178,10 @@ public static class Themes
         var look = appearance ?? Appearance.Default;
         var dictionary = new ResourceDictionary();
 
-        foreach (var slot in ThemeSlots.All)
+        foreach (var slot in ThemeSlots.All.Concat(ThemeSlots.Logo))
         {
             var key = ThemeSlots.ResourceKey(slot);
-            var color = ToColor(theme[slot]);
+            var color = ToColor(ThemeSlots.Logo.Contains(slot) ? theme.Logo(slot) : theme[slot]);
 
             dictionary[key + "Color"] = color;
             dictionary[key] = Frozen(new SolidColorBrush(color));
@@ -557,6 +557,15 @@ public static class Themes
     }
 
     /// <summary>Подменяет словарь палитры — узнаётся по ключу, а не по месту.</summary>
+    /// <summary>
+    /// Словарь темы сменился — применённой, встроенной или показанной редактором.
+    /// </summary>
+    /// <remarks>
+    /// Для того, что ресурсами не перекрашивается: значок окна и трея —
+    /// картинки, собранные из цветов эмблемы темы (<see cref="Emblem"/>).
+    /// </remarks>
+    public static event Action? Changed;
+
     private static void Swap(ResourceDictionary dictionary)
     {
         var application = Application.Current;
@@ -565,6 +574,7 @@ public static class Themes
             return;
 
         var merged = application.Resources.MergedDictionaries;
+        bool replaced = false;
 
         // По ключу, а не по индексу: словари могут переставить, и подмена
         // по месту однажды заменила бы стили.
@@ -573,11 +583,15 @@ public static class Themes
             if (merged[i].Contains("BackdropColor"))
             {
                 merged[i] = dictionary;
-                return;
+                replaced = true;
+                break;
             }
         }
 
-        merged.Insert(0, dictionary);
+        if (!replaced)
+            merged.Insert(0, dictionary);
+
+        Changed?.Invoke();
     }
 
     private static Color ToColor(ThemeColor color) => Color.FromArgb(color.A, color.R, color.G, color.B);

@@ -132,8 +132,8 @@ public static class ThemeLoader
         {
             foreach (var property in colorsJson.EnumerateObject())
             {
-                if (!ThemeSlots.All.Contains(property.Name))
-                    problems.Add($"незнакомый цвет «{property.Name}»; слоты: {string.Join(", ", ThemeSlots.All)}");
+                if (!ThemeSlots.All.Contains(property.Name) && !ThemeSlots.Logo.Contains(property.Name))
+                    problems.Add($"незнакомый цвет «{property.Name}»; слоты: {string.Join(", ", ThemeSlots.All.Concat(ThemeSlots.Logo))}");
                 else if (!ThemeColor.TryParse(property.Value.GetString(), out var color))
                     problems.Add($"цвет «{property.Name}» = «{property.Value}» — нужно #RRGGBB или #AARRGGBB");
                 else

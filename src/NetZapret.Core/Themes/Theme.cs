@@ -59,6 +59,27 @@ public sealed record Theme
     public bool HomeWide => HomeFullWidth ?? Background is null;
 
     public ThemeColor this[string slot] => Colors[slot];
+
+    /// <summary>
+    /// Цвет значка: заданный темой (<see cref="ThemeSlots.Logo"/>) или её же —
+    /// верх «Работает» (акцент), кривая — фон окна, низ — текст.
+    /// </summary>
+    /// <remarks>
+    /// Так значок любой темы, и не знающей про него, — в её цветах: кривая
+    /// фоном окна читается прорезью в плитке, как серая на листе вариантов
+    /// владельца 21.10, а акцент и текст на фоне окна заведомо видны —
+    /// их сверяет проверка читаемости.
+    /// </remarks>
+    public ThemeColor Logo(string slot) =>
+        Colors.TryGetValue(slot, out var set)
+            ? set
+            : slot switch
+            {
+                ThemeSlots.LogoTop => Colors[ThemeSlots.Accent],
+                ThemeSlots.LogoBand => Colors[ThemeSlots.Backdrop],
+                ThemeSlots.LogoBottom => Colors[ThemeSlots.Text],
+                _ => throw new ArgumentOutOfRangeException(nameof(slot), slot, "не цвет значка"),
+            };
 }
 
 /// <summary>

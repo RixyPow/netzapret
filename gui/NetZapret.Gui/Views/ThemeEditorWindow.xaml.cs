@@ -61,6 +61,18 @@ public partial class ThemeEditorWindow : Window
         (ThemeSlots.AccentDim, "Выделение в поле", "фон выделенного текста"),
     ];
 
+    /// <summary>
+    /// Цвета значка (владелец 21.10: «3 цвета для иконки») — необязательные:
+    /// пока не выбраны, значок следует за «Работает», фоном окна и текстом
+    /// (<see cref="Theme.Logo"/>) и в тему не пишется.
+    /// </summary>
+    private static readonly (string Slot, string Label, string Note)[] LogoSlots =
+    [
+        (ThemeSlots.LogoTop, "Значок: верх", "над кривой; не выбран — как «Работает»"),
+        (ThemeSlots.LogoBand, "Значок: кривая", "не выбрана — как фон окна, прорезью"),
+        (ThemeSlots.LogoBottom, "Значок: низ", "под кривой; не выбран — как текст"),
+    ];
+
     private static readonly double[] Dims = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
     private static readonly double[] Blurs = [0, 12, 24, 40];
     private static readonly double[] Alphas = [1, 0.9, 0.8, 0.7, 0.6];
@@ -118,6 +130,13 @@ public partial class ThemeEditorWindow : Window
         _original = Themes.Current;
         _editingWasFine = editing is not null && ThemeLoader.Load(editing).Ok;
         _colors = ThemeSlots.All.ToDictionary(s => s, s => from[s] with { A = s == ThemeSlots.Surface ? from[s].A : (byte)255 });
+
+        // Цвета значка — только заданные темой: незаданный следует за её цветами.
+        foreach (var slot in ThemeSlots.Logo)
+        {
+            if (from.Colors.TryGetValue(slot, out var logo))
+                _colors[slot] = logo with { A = 255 };
+        }
         _image = from.Background?.Image;
         if (from.Background is { HomePlaced: true } placed)
         {
@@ -217,8 +236,11 @@ public partial class ThemeEditorWindow : Window
         var draft = Draft();
         var failing = ThemeFixer.Failing(draft);
 
+        var preview = Preview();
+
         ColorRows.ItemsSource = Slots
             .Select(s => new ColorRow(s.Slot, s.Label, s.Note, draft[s.Slot], failing.GetValueOrDefault(s.Slot)))
+            .Concat(LogoSlots.Select(s => new ColorRow(s.Slot, s.Label, s.Note, preview.Logo(s.Slot), null)))
             .ToList();
 
         FixButton.Visibility = failing.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -504,13 +526,15 @@ public partial class ThemeEditorWindow : Window
         if (sender is not Button { Tag: string slot })
             return;
 
-        var label = Slots.First(s => s.Slot == slot).Label;
-        var picker = new ColorPickerWindow(_colors[slot], label) { Owner = this };
+        var label = Slots.Concat(LogoSlots).First(s => s.Slot == slot).Label;
+        var current = ThemeSlots.Logo.Contains(slot) ? Preview().Logo(slot) : _colors[slot];
+        var picker = new ColorPickerWindow(current, label) { Owner = this };
 
         if (picker.ShowDialog() != true)
             return;
 
-        _colors[slot] = picker.Chosen with { A = _colors[slot].A };
+        // У значка — выбранный становится заданным: дальше он не следует за цветами темы.
+        _colors[slot] = picker.Chosen with { A = current.A };
 
         // Подпись на главной кнопке — следом за заливкой: иначе первая же
         // светлая заливка с белой подписью не прошла бы проверку.

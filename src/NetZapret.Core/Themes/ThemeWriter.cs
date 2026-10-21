@@ -97,7 +97,9 @@ public static class ThemeWriter
 
         var colors = new JsonObject();
 
-        foreach (var slot in ThemeSlots.All)
+        // Цвета значка — только заданные: незаданный берёт цвета самой темы
+        // (Theme.Logo) и сменится вместе с ними.
+        foreach (var slot in ThemeSlots.All.Concat(ThemeSlots.Logo))
         {
             if (draft.Colors.TryGetValue(slot, out var color))
                 colors[slot] = color.ToString();

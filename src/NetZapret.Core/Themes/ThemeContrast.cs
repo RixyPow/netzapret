@@ -24,6 +24,16 @@ public static class ThemeSlots
         Accent, AccentDim, Danger, Warn, AccentFill, OnAccent, WarnFill,
     ];
 
+    // Три цвета значка (владелец 21.10: «пусть в каждой теме можно будет
+    // настроить 3 цвета для иконки»): верх над кривой, сама кривая и низ
+    // под ней. Не обязательны и в All не входят — не задала тема, значок
+    // берёт её же цвета (Theme.Logo); проверке читаемости они не нужны.
+    public const string LogoTop = "logo-top";
+    public const string LogoBand = "logo-band";
+    public const string LogoBottom = "logo-bottom";
+
+    public static IReadOnlyList<string> Logo { get; } = [LogoTop, LogoBand, LogoBottom];
+
     /// <summary>
     /// Ключ ресурса в окне: <c>accent-fill</c> ⇄ <c>AccentFill</c>.
     /// </summary>

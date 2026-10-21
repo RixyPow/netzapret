@@ -83,6 +83,23 @@ public sealed class ThemeWriterTests : IDisposable
     }
 
     /// <summary>
+    /// Цвет значка пишется, только если выбран (21.10): невыбранный и после
+    /// записи следует за цветами темы.
+    /// </summary>
+    [Fact]
+    public void OnlyChosenLogoColorsAreWritten()
+    {
+        var colors = new Dictionary<string, ThemeColor>(Dark()) { [ThemeSlots.LogoBand] = ThemeColor.Parse("#123456") };
+
+        var id = ThemeWriter.Save(new ThemeDraft { Name = "Значок", Colors = colors }, root: _root);
+        var theme = ThemeLoader.Load(id, _root).Theme!;
+
+        Assert.Equal("#123456", theme.Logo(ThemeSlots.LogoBand).ToString());
+        Assert.False(theme.Colors.ContainsKey(ThemeSlots.LogoTop));
+        Assert.Equal(theme[ThemeSlots.Accent].ToString(), theme.Logo(ThemeSlots.LogoTop).ToString());
+    }
+
+    /// <summary>
     /// Копия темы с живым фоном и «Главной» на всю ширину (как «Рыбка», 08.10)
     /// сохраняет и видео, и ширину.
     /// </summary>

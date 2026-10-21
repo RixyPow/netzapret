@@ -55,7 +55,10 @@ public sealed class ThemeLoaderTests : IDisposable
             var load = ThemeLoader.Load(id, _root);
 
             Assert.True(load.Ok, $"{id}: {string.Join("; ", load.Problems)}");
-            Assert.Equal(ThemeSlots.All.Count, load.Theme!.Colors.Count);
+
+            // Все 14 — и сверх них разве что цвета значка (21.10, у тёмной — эмблема владельца).
+            Assert.All(ThemeSlots.All, slot => Assert.True(load.Theme!.Colors.ContainsKey(slot), $"{id}: нет {slot}"));
+            Assert.All(load.Theme!.Colors.Keys, key => Assert.True(ThemeSlots.All.Contains(key) || ThemeSlots.Logo.Contains(key), $"{id}: {key}"));
         }
     }
 
@@ -74,13 +77,14 @@ public sealed class ThemeLoaderTests : IDisposable
             var text = File.ReadAllText(Path.Combine(repo, "gui", "NetZapret.Gui", "Theme", xaml));
             var theme = ThemeLoader.Load(id, _root).Theme!;
 
-            foreach (var slot in ThemeSlots.All)
+            foreach (var slot in ThemeSlots.All.Concat(ThemeSlots.Logo))
             {
                 var key = ThemeSlots.ResourceKey(slot) + "Color";
                 var match = Regex.Match(text, $"<Color x:Key=\"{key}\">#FF([0-9A-Fa-f]{{6}})</Color>");
 
                 Assert.True(match.Success, $"{xaml}: нет {key}");
-                Assert.Equal("#" + match.Groups[1].Value.ToUpperInvariant(), theme[slot].ToString());
+                var color = ThemeSlots.Logo.Contains(slot) ? theme.Logo(slot) : theme[slot];
+                Assert.Equal("#" + match.Groups[1].Value.ToUpperInvariant(), color.ToString());
             }
         }
     }
@@ -193,6 +197,27 @@ public sealed class ThemeLoaderTests : IDisposable
             { "base": "dark", "background": { "image": "wall.jpg", "home": { "x": 0.5, "y": 0.5, "size": 9 } } }
             """, ("wall.jpg", 16));
         Assert.Contains(big.Problems, p => p.Contains("размер картинки"));
+    }
+
+    /// <summary>
+    /// Три цвета значка (21.10) необязательны: не заданные — «Работает», фон окна
+    /// и текст самой темы, а не основы.
+    /// </summary>
+    [Fact]
+    public void LogoColorsAreOptionalAndFollowTheTheme()
+    {
+        var own = Write("own", """{ "base": "dark", "colors": { "accent": "#112233", "logo-band": "#445566" } }""").Theme!;
+
+        Assert.Equal("#112233", own.Logo(ThemeSlots.LogoTop).ToString());
+        Assert.Equal("#445566", own.Logo(ThemeSlots.LogoBand).ToString());
+        Assert.Equal(own[ThemeSlots.Text].ToString(), own.Logo(ThemeSlots.LogoBottom).ToString());
+
+        // Основа отдаёт только свои 14 цветов: значок тёмной темы — её эмблема,
+        // а тема на её основе с другим акцентом берёт свой.
+        Assert.False(own.Colors.ContainsKey(ThemeSlots.LogoTop));
+
+        Assert.Contains(Write("typo", """{ "base": "dark", "colors": { "logo-middle": "#000000" } }""").Problems,
+            p => p.Contains("logo-middle"));
     }
 
     /// <summary>

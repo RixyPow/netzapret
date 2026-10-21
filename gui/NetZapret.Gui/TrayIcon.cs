@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.IO;
 using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
@@ -101,10 +102,13 @@ internal sealed class TrayIcon : IDisposable
         // другой теме меню оставалось чужим (владелец 24.09).
         _icon = new NotifyIcon
         {
-            Icon = OwnIcon(),
+            Icon = ThemedIcon() ?? OwnIcon(),
             Text = "NetZapret",
             Visible = true,
         };
+
+        // Значок — в цветах эмблемы темы (21.10), и сменилась тема — сменился он.
+        Themes.Changed += OnThemeChanged;
 
         // Любой кнопкой — меню: в нём и состояние, и путь к окну. Двойной
         // щелчок по-прежнему открывает окно сразу.
@@ -187,6 +191,38 @@ internal sealed class TrayIcon : IDisposable
     /// новый виден только после build.cmd. Не нашёлся — стандартный значок
     /// приложений Windows: некрасиво, но работает.
     /// </remarks>
+    /// <summary>
+    /// Эмблема в цветах темы (владелец 21.10: «3 цвета для иконки» у каждой темы);
+    /// <c>null</c> — не собралась, тогда вшитый в exe значок.
+    /// </summary>
+    /// <remarks>
+    /// Из .ico со всеми размерами (<see cref="Emblem.Ico"/>) берётся размер
+    /// трея этой системы — 20 при масштабе 125 %, — а не уменьшенный большой.
+    /// </remarks>
+    private static Icon? ThemedIcon()
+    {
+        try
+        {
+            var (top, band, bottom) = Emblem.Current();
+            using var ico = new MemoryStream(Emblem.Ico(top, band, bottom));
+            return new Icon(ico, SystemInformation.SmallIconSize);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private void OnThemeChanged()
+    {
+        if (ThemedIcon() is not { } next)
+            return;
+
+        var was = _icon.Icon;
+        _icon.Icon = next;
+        was?.Dispose();
+    }
+
     private static Icon OwnIcon()
     {
         try
@@ -553,6 +589,7 @@ internal sealed class TrayIcon : IDisposable
         if (Current == this)
             Current = null;
 
+        Themes.Changed -= OnThemeChanged;
         _refresh.Stop();
         _menu?.Close();
 

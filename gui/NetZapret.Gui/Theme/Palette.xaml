@@ -56,6 +56,15 @@
     <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
     <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
+    <!-- Значок (Emblem): верх, кривая и низ — цвета эмблемы владельца (21.10), как в themes\dark. -->
+    <Color x:Key="LogoTopColor">#FF85B267</Color>
+    <Color x:Key="LogoBandColor">#FF000000</Color>
+    <Color x:Key="LogoBottomColor">#FFFFFFFF</Color>
+
+    <SolidColorBrush x:Key="LogoTop" Color="{StaticResource LogoTopColor}" />
+    <SolidColorBrush x:Key="LogoBand" Color="{StaticResource LogoBandColor}" />
+    <SolidColorBrush x:Key="LogoBottom" Color="{StaticResource LogoBottomColor}" />
+
     <!--
         Шрифт назван явно. По умолчанию WPF берёт Segoe UI в начертании,
         которое на тёмном фоне выглядит тоньше, чем задумано, — а цифры

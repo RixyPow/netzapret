@@ -16,33 +16,30 @@ namespace NetZapret.Gui;
 public partial class MainWindow : Window
 {
     /// <summary>
-    /// «NZ» фигурой — для плитки в меню.
+    /// Значок окна — заголовок и кнопка на панели задач — в цветах эмблемы темы.
     /// </summary>
     /// <remarks>
-    /// Фигура вписывается в плитку по границам самих букв (Stretch у Path),
-    /// и середина у неё настоящая. Строка текста центрировалась по своей высоте
-    /// с запасом шрифта под надстрочные и подстрочные — буквы стояли ниже
-    /// середины (владелец 19.10: «логотип какой-то кривой»). Segoe UI Black —
-    /// есть в каждой Windows, а не шрифт темы, который бывает и тонким.
+    /// Владелец 21.10: «пусть в каждой теме можно будет настроить 3 цвета для
+    /// иконки». Значок самого exe вшит при сборке и от темы не зависит; окну
+    /// же значок можно сменить на ходу, и панель задач берёт его, пока окно
+    /// открыто. Ставится .ico со всеми размерами (Emblem.Ico): из одной картинки
+    /// WPF уменьшал бы сам, и на 16–20 точках кривая расплывалась.
     /// </remarks>
-    internal static readonly System.Windows.Media.Geometry Logo = BuildLogo();
-
-    private static System.Windows.Media.Geometry BuildLogo()
+    private void ShowIcon()
     {
-        var text = new System.Windows.Media.FormattedText(
-            "NZ",
-            System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new System.Windows.Media.Typeface(
-                new System.Windows.Media.FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Black, FontStretches.Normal),
-            100,
-            System.Windows.Media.Brushes.Black,
-            1.0);
+        try
+        {
+            var (top, band, bottom) = Emblem.Current();
+            var ico = new MemoryStream(Emblem.Ico(top, band, bottom));
+            var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
+                ico, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
 
-        var geometry = text.BuildGeometry(new Point(0, 0));
-        geometry.Freeze();
-
-        return geometry;
+            Icon = decoder.Frames[0];
+        }
+        catch (Exception)
+        {
+            // Значок — удобство: остаётся вшитый в exe.
+        }
     }
 
     public MainWindow()
@@ -59,7 +56,9 @@ public partial class MainWindow : Window
         Closed += (_, _) => BackdropVideo.Detach(BackdropLayer);
 
         VersionLabel.Text = "версия " + Version();
-        LogoLetters.Data = Logo;
+        ShowIcon();
+        Themes.Changed += ShowIcon;
+        Closed += (_, _) => Themes.Changed -= ShowIcon;
         ShowOnboardingIfNeeded();
         Loaded += (_, _) => ShowGreetingIfDue();
 

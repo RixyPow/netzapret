@@ -77,6 +77,15 @@
     <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
     <SolidColorBrush x:Key="WarnFill" Color="{StaticResource WarnFillColor}" />
 
+    <!-- Значок (Emblem): у светлой своих цветов нет — её «Работает», фон окна и текст (Theme.Logo). -->
+    <Color x:Key="LogoTopColor">#FF1A7F37</Color>
+    <Color x:Key="LogoBandColor">#FFF6F8FA</Color>
+    <Color x:Key="LogoBottomColor">#FF1F2328</Color>
+
+    <SolidColorBrush x:Key="LogoTop" Color="{StaticResource LogoTopColor}" />
+    <SolidColorBrush x:Key="LogoBand" Color="{StaticResource LogoBandColor}" />
+    <SolidColorBrush x:Key="LogoBottom" Color="{StaticResource LogoBottomColor}" />
+
     <!-- Bahnschrift — основной (владелец, 24.09: «мне очень понравился Bahnschrift,
          пускай он будет основным»); Segoe UI — запас, если его нет в системе. -->
     <FontFamily x:Key="UiFont">Bahnschrift, Segoe UI</FontFamily>

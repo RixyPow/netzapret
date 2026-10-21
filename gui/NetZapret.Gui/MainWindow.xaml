@@ -42,11 +42,10 @@
             <DockPanel LastChildFill="True">
 
                 <!--
-                    Плитка «NZ» рядом с именем — владелец 19.10 («это тоже делай»),
+                    Плитка рядом с именем — владелец 19.10 («это тоже делай»),
                     по макету «Главной»; до того было решено «логотипа нет —
-                    пока оставим что есть». Цвета наоборот к странице — текст
-                    фоном, фон текстом: так плитка видна и в светлой теме,
-                    и в тёмной, без своих цветов у каждой темы.
+                    пока оставим что есть». До 21.10 — буквы «NZ» цветами наоборот
+                    к странице; с 21.10 — эмблема в трёх цветах темы.
                 -->
                 <Grid DockPanel.Dock="Top" Margin="20,24,18,20">
                     <Grid.ColumnDefinitions>
@@ -55,16 +54,20 @@
                     </Grid.ColumnDefinitions>
 
                     <!--
-                        Буквы — фигурой по их собственным границам (MainWindow.Logo),
-                        а не строкой текста: у строки сверху и снизу запас шрифта
-                        под надстрочные и подстрочные, и «NZ» стояло ниже середины
-                        плитки (владелец 19.10: «логотип какой-то кривой»).
+                        С 21.10 — эмблема вместо букв «NZ» (владелец: «эмблему в левом
+                        верхнем тоже поменяй на новую»): три фигуры из svg в цветах
+                        темы (LogoTop, LogoBand, LogoBottom; Emblem). Кривая первой
+                        и с обводкой — в стыках заливок иначе просвечивает шов;
+                        обводка в 5 точек svg — пиксель на плитке в 40 при 125 %.
                     -->
-                    <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource Text}"
-                            VerticalAlignment="Center" Margin="0,0,13,0" Padding="9,12">
-                        <Path x:Name="LogoLetters" Stretch="Uniform" Fill="{DynamicResource Backdrop}"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    <Viewbox Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0">
+                        <Canvas Width="256" Height="256" Clip="{x:Static local:Emblem.Outline}">
+                            <Path Data="{x:Static local:Emblem.Band}" Fill="{DynamicResource LogoBand}"
+                                  Stroke="{DynamicResource LogoBand}" StrokeThickness="5" StrokeLineJoin="Round" />
+                            <Path Data="{x:Static local:Emblem.Top}" Fill="{DynamicResource LogoTop}" />
+                            <Path Data="{x:Static local:Emblem.Bottom}" Fill="{DynamicResource LogoBottom}" />
+                        </Canvas>
+                    </Viewbox>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
