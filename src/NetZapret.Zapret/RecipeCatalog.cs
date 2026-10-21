@@ -250,6 +250,67 @@ public static class RecipeCatalog
                 + "пускают только «белые» имена: 19.10 на адресе 7tv (Hetzner) "
                 + "с именем 4pda.to ответ пришёл целиком, со своим — замёрз.",
         },
+
+        // Четыре приветствия V3nilla из Flowseal 1.10.4 (PR 17925, 20.10) в его же
+        // форме ALT11 на zapret2 (перенос SnAnVl): подделка тем же приветствием,
+        // затем наложение им на настоящее. По словам автора, по чекерам 16 КБ
+        // из разных областей steam-chat, steamstatic и teamspeak пробивают всё,
+        // awswaf не пробивает OVH. У нас не замерено ни одно; наложение в 1100 Б
+        // (длина образца) вживую не проверено. Образцы едут в config/blobs
+        // и объявлены в V12 и V12 Lite; у прочих пресетов — «не объявил образец».
+        new CatalogRecipe
+        {
+            Id = "fake-seqovl-awswaf",
+            Title = "Приветствие awswaf.com (Flowseal)",
+            What = "Шлёт поддельное приветствие с именем узла AWS WAF, затем "
+                + "накладывает его же на настоящее — как в ALT11 у Flowseal.",
+            Steps =
+            [
+                "fake:blob=tls_awswaf:tcp_ts=-600000:repeats=8",
+                "multisplit:pos=1:seqovl=1100:seqovl_pattern=tls_awswaf",
+            ],
+            Note = "Образец V3nilla (Flowseal 1.10.4): «не белый, но пробивает многое», "
+                + "OVH им не открылся. Для сайтов на AWS. У нас не замерен.",
+        },
+        new CatalogRecipe
+        {
+            Id = "fake-seqovl-steam-chat",
+            Title = "Приветствие steam-chat.com (Flowseal)",
+            What = "То же с именем steam-chat.com: подделка и наложение им.",
+            Steps =
+            [
+                "fake:blob=tls_steam_chat:tcp_ts=-600000:repeats=8",
+                "multisplit:pos=1:seqovl=1100:seqovl_pattern=tls_steam_chat",
+            ],
+            Note = "Образец V3nilla (Flowseal 1.10.4): по чекерам 16 КБ из разных "
+                + "областей пробивает всё. У нас не замерен.",
+        },
+        new CatalogRecipe
+        {
+            Id = "fake-seqovl-steamstatic",
+            Title = "Приветствие steamstatic.com (Flowseal)",
+            What = "То же с именем cdn.fastly.steamstatic.com — сеть доставки Fastly.",
+            Steps =
+            [
+                "fake:blob=tls_steamstatic:tcp_ts=-600000:repeats=8",
+                "multisplit:pos=1:seqovl=1100:seqovl_pattern=tls_steamstatic",
+            ],
+            Note = "Образец V3nilla (Flowseal 1.10.4): «похоже, белый», по чекерам "
+                + "16 КБ пробивает. Для сайтов на Fastly. У нас не замерен.",
+        },
+        new CatalogRecipe
+        {
+            Id = "fake-seqovl-teamspeak",
+            Title = "Приветствие teamspeak.com (Flowseal)",
+            What = "То же с именем www.teamspeak.com.",
+            Steps =
+            [
+                "fake:blob=tls_teamspeak:tcp_ts=-600000:repeats=8",
+                "multisplit:pos=1:seqovl=1100:seqovl_pattern=tls_teamspeak",
+            ],
+            Note = "Образец V3nilla (Flowseal 1.10.4): по чекерам 16 КБ пробивает. "
+                + "У нас не замерен.",
+        },
         new CatalogRecipe
         {
             Id = "syndata",

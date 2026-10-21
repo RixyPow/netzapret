@@ -250,9 +250,15 @@ KVN эти имена блокирует, мы пускаем напрямую.
   33 048 записей нашего файла совпадают с `lists/ipset-all.txt.backup`
   в репозитории Flowseal. К нам он попадает из установки Zapret GUI;
 * **три образца пакетов**, которыми эти секции пользуются:
-  `bin/tls_clienthello_max_ru.bin`, `bin/stun2.bin` и `bin/ACTIVE_GAME_UDP.bin`.
+  `bin/tls_clienthello_www_sferum_ru.bin` (до 21.10 — `tls_clienthello_max_ru.bin`;
+  Flowseal сменил подделку в 1.10.4), `bin/stun2.bin` и `bin/ACTIVE_GAME_UDP.bin`.
   Сверка 30.09: побайтно те же файлы, что в `bin/` его репозитория. Тоже
-  едут из установки Zapret GUI.
+  едут из установки Zapret GUI;
+* **семь приветствий V3nilla** из его 1.10.4 (PR 17925, 20.10): TLS с именами
+  awswaf.com, steam-chat.com, steamstatic.com, teamspeak.com и QUIC lemana.pro,
+  steam-chat.com, steamstatic.com. Лежат в `config/blobs/`, едут как
+  `engines/zapret/bin/nz-*.bin`; сверены хэшами с `bin/` его репозитория 21.10.
+  Ими пользуются рецепты каталога «Приветствие … (Flowseal)».
 
 **MIT License, Copyright (c) 2016–2026 bol-van, Copyright (c) 2024–2026
 Flowseal** — обе строки стоят в его

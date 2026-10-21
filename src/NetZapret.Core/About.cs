@@ -75,7 +75,7 @@ public static class About
         // список ipset-all и три образца пакетов сверены с его репозиторием
         // 30.09 — совпадают целиком.
         new("zapret-discord-youtube",
-            "Game filter: секции игр, список адресов ipset-all и образцы пакетов к ним — автор Flowseal",
+            "Game filter: секции игр, список адресов ipset-all, образцы пакетов к ним и приветствия V3nilla из 1.10.4 — автор Flowseal",
             "MIT",
             "https://github.com/Flowseal/zapret-discord-youtube"),
 

@@ -356,6 +356,14 @@ for %%F in ("%ROOT%config\lists\*.txt") do (
     copy /y "%%F" "%ENGINES%\zapret\lists\nz-%%~nxF" >nul
 )
 
+rem Our own blobs - packet samples a preset names with --blob=. Same rule and
+rem the same nz- prefix as the lists: winws2 looks for them in bin\ next to
+rem the engine, and a sample of ours must never shadow one from Zapret GUI.
+rem First ones (21.10): V3nilla's hellos from Flowseal 1.10.4, PR 17925.
+for %%F in ("%ROOT%config\blobs\*.bin") do (
+    copy /y "%%F" "%ENGINES%\zapret\bin\nz-%%~nxF" >nul
+)
+
 
 rem Presets are ours and come from presets\ in the repository. Nothing is taken
 rem from the Zapret installation any more: it keeps two folders and a hundred

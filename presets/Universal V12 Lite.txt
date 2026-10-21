@@ -56,6 +56,18 @@
 --blob=tls_max:@bin/tls_clienthello_max_ru.bin
 --blob=tls_iana:@bin/tls_clienthello_iana_org.bin
 --blob=tls_4pda:@bin/tls_clienthello_4pda_to.bin
+# Приветствия V3nilla из Flowseal 1.10.4 (PR 17925, 20.10): по его словам,
+# steam-chat, steamstatic и teamspeak пробивают «16 КБ» по чекерам из разных
+# областей, awswaf не открывает OVH. Едут из config/blobs как nz-*.bin.
+# Только объявлены — секции их не берут; ими пользуются рецепты каталога
+# «Приветствие … (Flowseal)». У нас не замерены.
+--blob=tls_awswaf:@bin/nz-tls_clienthello_awswaf_com.bin
+--blob=tls_steam_chat:@bin/nz-tls_clienthello_steam_chat_com.bin
+--blob=tls_steamstatic:@bin/nz-tls_clienthello_steamstatic_com.bin
+--blob=tls_teamspeak:@bin/nz-tls_clienthello_teamspeak_com.bin
+--blob=quic_lemana:@bin/nz-quic_initial_lemana_pro.bin
+--blob=quic_steam_chat:@bin/nz-quic_initial_steam_chat_com.bin
+--blob=quic_steamstatic:@bin/nz-quic_initial_steamstatic_com.bin
 --blob=tls_gosuslugi:@bin/tls_clienthello_gosuslugi_ru.bin
 --blob=syndata3:@bin/tls_clienthello_3.bin
 --blob=syn_packet:@bin/syn_packet.bin

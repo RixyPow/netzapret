@@ -17,3 +17,4 @@
 *.dll binary
 *.exe binary
 *.bundle binary
+*.bin binary

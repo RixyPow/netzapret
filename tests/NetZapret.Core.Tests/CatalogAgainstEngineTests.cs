@@ -51,12 +51,20 @@ public sealed class CatalogAgainstEngineTests
         return Directory.Exists(folder) ? folder : null;
     }
 
+    /// <summary>
+    /// Пресет по умолчанию — тот, что получают все (<see cref="NetZapret.Core.AppSettings.DefaultPresetName"/>).
+    /// </summary>
+    /// <remarks>
+    /// До 21.10 здесь стоял Universal V8, давно не умолчание: тест спрашивал
+    /// «объявлены ли образцы каталога» у пресета, которого у людей нет, и
+    /// образцы V3nilla, объявленные в V12 и V12 Lite, краснели бы зря.
+    /// </remarks>
     private static ZapretPreset? Universal()
     {
         if (Repository() is not { } root)
             return null;
 
-        var file = Path.Combine(root, "presets", "Universal V8.txt");
+        var file = Path.Combine(root, "presets", NetZapret.Core.AppSettings.DefaultPresetName + ".txt");
 
         return File.Exists(file) ? new PresetReader().Load(file) : null;
     }
