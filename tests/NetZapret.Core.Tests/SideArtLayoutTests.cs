@@ -61,4 +61,24 @@ public sealed class SideArtLayoutTests
         Assert.Equal(Height * SideArtLayout.MaxSize, SideArtLayout.Place(Page, Height, Aspect, 0.5, 0.5, 10).Height, 3);
         Assert.Equal(Height * SideArtLayout.MinSize, SideArtLayout.Place(Page, Height, Aspect, 0.5, 0.5, 0.01).Height, 3);
     }
+
+    /// <summary>
+    /// Карточка с картинкой — той же раскладкой, что «Главная» (21.10, «миниатюра
+    /// врёт»): колонка карточек не шире 940, карточка от неё на 14, до края 32.
+    /// </summary>
+    [Theory]
+    [InlineData(1302, 794, 922, 348, 772)]
+    [InlineData(1680, 1010, 922, 726, 988)]
+    public void TheTileFollowsTheHomeLayout(double width, double height, double left, double tileWidth, double tileHeight)
+    {
+        var tile = SideArtLayout.Tile(width, height)!.Value;
+
+        Assert.Equal(left, tile.Left, 3);
+        Assert.Equal(12, tile.Top, 3);
+        Assert.Equal(tileWidth, tile.Width, 3);
+        Assert.Equal(tileHeight, tile.Height, 3);
+    }
+
+    [Fact]
+    public void ANarrowPageHasNoTile() => Assert.Null(SideArtLayout.Tile(817, 674));
 }

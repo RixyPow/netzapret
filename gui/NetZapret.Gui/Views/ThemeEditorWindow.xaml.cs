@@ -179,6 +179,10 @@ public partial class ThemeEditorWindow : Window
         Changed();
 
         Closing += OnClosing;
+
+        // Владелец окна (а с ним размер страницы «Главной») известен только после
+        // конструктора — миниатюра раскладывается заново, когда окно встало.
+        Loaded += (_, _) => ShowMini();
     }
 
     private static int Nearest(double[] steps, double value) =>
@@ -319,28 +323,47 @@ public partial class ThemeEditorWindow : Window
         }
     }
 
-    /// <summary>Доля страницы «Главной», занятая колонкой арта, — у окна владельца 300 из 1240.</summary>
-    private const double MiniColumn = 300.0 / 1240;
+    /// <summary>
+    /// Страница «Главной», на которую ляжет картинка, — место раздела в окне
+    /// программы; окна нет (редактор открыт не из него) — развёрнутое окно владельца.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 21.10, снимки миниатюры и «Главной»: «миниатюра врёт». Миниатюра
+    /// держала свою страницу — 480×307 с колонкой картинки «300 из 1240», а у
+    /// развёрнутого окна страница 1302×794 и колонка 362: карточка выходила уже
+    /// и правее, и картинка, уложенная долями страницы, попадала в неё другим
+    /// куском. Теперь страница миниатюры — тех же пропорций, что настоящая,
+    /// и карточка на ней — той же формулой (SideArtLayout.Tile).
+    /// </remarks>
+    private Size Page => Owner is MainWindow { PageSize: { Width: > 0, Height: > 0 } size } ? size : new Size(1302, 794);
 
-    /// <summary>Где карточки «Главной» — доли страницы: слева до колонки, рядами.</summary>
-    private static readonly (double X, double Y, double W, double H)[] MiniCardsAt =
-    [
-        (0.03, 0.10, 0.70, 0.16),
-        (0.03, 0.30, 0.345, 0.20), (0.385, 0.30, 0.345, 0.20),
-        (0.03, 0.55, 0.70, 0.17),
-        (0.03, 0.76, 0.345, 0.15), (0.385, 0.76, 0.345, 0.15),
-    ];
+    private double MiniScale => HomeMini.Width / Page.Width;
+
+    /// <summary>Миниатюра — тех же пропорций, что страница: ширина своя, высота по ней.</summary>
+    private void SizeMini()
+    {
+        double height = Math.Round(HomeMini.Width * Page.Height / Page.Width);
+
+        if (Math.Abs(HomeMini.Height - height) > 0.5)
+            HomeMini.Height = height;
+    }
+
+    /// <summary>Карточка с картинкой на миниатюре; пусто — на такой странице её нет.</summary>
+    private Rect MiniTile() => SideArtLayout.Tile(Page.Width, Page.Height) is { } tile
+        ? new Rect(tile.Left * MiniScale, tile.Top * MiniScale, tile.Width * MiniScale, tile.Height * MiniScale)
+        : Rect.Empty;
 
     /// <summary>
-    /// Карточка с картинкой справа — доли страницы, как у окна владельца: от
-    /// карточек на 14, до края 32, сверху 12, снизу 10 (StatusView, ArtTile).
+    /// Где карточки «Главной»: по ширине — доли колонки карточек (без её полей
+    /// 32), по высоте — доли страницы.
     /// </summary>
-    private static readonly (double X, double Y, double W, double H) MiniTileAt =
-        (1 - MiniColumn - 18.0 / 1240, 12.0 / 794, MiniColumn - (32.0 - 18.0) / 1240, 1 - 22.0 / 794);
-
-    private Rect MiniTile() => new(
-        MiniTileAt.X * HomeMini.Width, MiniTileAt.Y * HomeMini.Height,
-        MiniTileAt.W * HomeMini.Width, MiniTileAt.H * HomeMini.Height);
+    private static readonly (double X, double Y, double W, double H)[] MiniCardsAt =
+    [
+        (0, 0.10, 1, 0.16),
+        (0, 0.30, 0.493, 0.20), (0.507, 0.30, 0.493, 0.20),
+        (0, 0.55, 1, 0.17),
+        (0, 0.76, 0.493, 0.15), (0.507, 0.76, 0.493, 0.15),
+    ];
 
     private double MiniAspect => _poster is { PixelWidth: > 0, PixelHeight: > 0 } p ? (double)p.PixelWidth / p.PixelHeight : 1;
 
@@ -349,10 +372,11 @@ public partial class ThemeEditorWindow : Window
     {
         double width = HomeMini.Width, height = HomeMini.Height;
         var tile = MiniTile();
+        double centre = tile.IsEmpty ? width / 2 : tile.Left + tile.Width / 2;
 
         var (left, top, w, h) = _placed
             ? SideArtLayout.Place(width, height, MiniAspect, _homeX, _homeY, _homeSize)
-            : SideArtLayout.Fit(width, height, tile.Left + tile.Width / 2, MiniAspect);
+            : SideArtLayout.Fit(width, height, centre, MiniAspect);
 
         return new Rect(left, top, w, h);
     }
@@ -360,6 +384,7 @@ public partial class ThemeEditorWindow : Window
     /// <summary>Миниатюра «Главной»: картинка в карточке справа (вне её — тенью), карточки и рамка.</summary>
     private void ShowMini()
     {
+        SizeMini();
         var place = MiniPlace();
         var (_, _, size) = SideArtLayout.Measure(HomeMini.Width, HomeMini.Height, (place.Left, place.Top, place.Width, place.Height));
 
@@ -379,8 +404,9 @@ public partial class ThemeEditorWindow : Window
         var backdrop = _colors[ThemeSlots.Backdrop];
         var tile = MiniTile();
 
-        // Как на «Главной»: картинка лежит по странице, видна в карточке справа.
-        MiniArtLayer.Clip = new RectangleGeometry(tile, 5, 5);
+        // Как на «Главной»: картинка лежит по странице, видна в карточке справа;
+        // на узком окне карточки нет — и картинки на «Главной» нет.
+        MiniArtLayer.Clip = tile.IsEmpty ? Geometry.Empty : new RectangleGeometry(tile, 5, 5);
 
         MiniGround.Fill = _placed ? HomePlacement.Ground(_poster, backdrop) : null;
         MiniArt.Fill = new ImageBrush(_poster)
@@ -403,11 +429,15 @@ public partial class ThemeEditorWindow : Window
 
         MiniCards.Children.Clear();
 
+        // Колонка карточек — от поля 32 до поля 32 своей ширины, как на «Главной».
+        double column = (SideArtLayout.Content(Page.Width) - 64) * MiniScale;
+        double margin = 32 * MiniScale;
+
         foreach (var (x, y, w, h) in MiniCardsAt)
         {
             var shape = new System.Windows.Shapes.Rectangle
             {
-                Width = w * HomeMini.Width,
+                Width = w * column,
                 Height = h * HomeMini.Height,
                 RadiusX = 5,
                 RadiusY = 5,
@@ -416,10 +446,13 @@ public partial class ThemeEditorWindow : Window
                 StrokeThickness = 1,
             };
 
-            Canvas.SetLeft(shape, x * HomeMini.Width);
+            Canvas.SetLeft(shape, margin + x * column);
             Canvas.SetTop(shape, y * HomeMini.Height);
             MiniCards.Children.Add(shape);
         }
+
+        if (tile.IsEmpty)
+            return;
 
         var frame = new System.Windows.Shapes.Rectangle
         {

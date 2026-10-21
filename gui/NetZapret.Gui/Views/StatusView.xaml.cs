@@ -88,7 +88,7 @@ public partial class StatusView : UserControl
     private void OnArtSize(object sender, SizeChangedEventArgs e) => PlaceArt();
 
     /// <summary>Уже этой карточку с картинкой не показываем: в ней была бы полоска, а не персонаж.</summary>
-    private const double ArtTileMin = 200;
+    private const double ArtTileMin = SideArtLayout.TileMin;
 
     /// <summary>Затемнение над персонажем: текста на нём нет, читаемость беречь незачем.</summary>
     private const double ArtDim = 0.12;

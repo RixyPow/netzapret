@@ -19,6 +19,34 @@ namespace NetZapret.Core.Themes;
 /// </remarks>
 public static class SideArtLayout
 {
+    /// <summary>Колонка карточек «Главной»: не уже и не шире (StatusView, ContentColumn).</summary>
+    public const double ContentMin = 560, ContentMax = 940;
+
+    /// <summary>Уже этой карточку с картинкой не показывают (StatusView.ArtTileMin).</summary>
+    public const double TileMin = 200;
+
+    /// <summary>Ширина колонки карточек на странице шириной <paramref name="pageWidth"/>.</summary>
+    /// <remarks>Веса колонок в разметке 100 к 1: карточки берут почти всё, но не больше 940.</remarks>
+    public static double Content(double pageWidth) => Math.Clamp(pageWidth * 100 / 101, ContentMin, ContentMax);
+
+    /// <summary>
+    /// Карточка с картинкой справа в точках страницы; <c>null</c> — места нет.
+    /// </summary>
+    /// <remarks>
+    /// Та же раскладка, что в разметке «Главной» (ArtTile в правой колонке
+    /// с полями −18, 12, 32, 10), — для миниатюры в редакторе тем. Владелец
+    /// 21.10, снимок миниатюры и «Главной»: «миниатюра врёт» — миниатюра
+    /// держала колонку «300 из 1240», а у развёрнутого окна она 362 из 1302,
+    /// и карточка выходила уже и правее. Сверяет с живой раскладкой тест окна.
+    /// </remarks>
+    public static (double Left, double Top, double Width, double Height)? Tile(double pageWidth, double pageHeight)
+    {
+        double content = Content(pageWidth);
+        double width = pageWidth - content - 32 + 18;
+
+        return width < TileMin ? null : (content - 18, 12, width, pageHeight - 12 - 10);
+    }
+
     /// <summary>Наименьшая высота картинки — доля высоты страницы.</summary>
     public const double MinSize = 0.2;
 
