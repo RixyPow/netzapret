@@ -85,7 +85,8 @@ GPLv3 прямо оговаривает такой случай: объедин�
 **LGPL v3 или GPL v2 на выбор**, есть и коммерческая лицензия; текст — файл
 `LICENSE` проекта (в нём LGPL v3, GPL v3 и GPL v2), в архиве — рядом с движком.
 До 22.10 здесь значилось «GPL v3» и стояла только ссылка. Метаданных
-в файлах нет; версию следует уточнять по установке Zapret.
+в файлах нет; они взяты из установки Zapret GUI той версии, что названа
+в `vendor/zapret-gui/VERSION.txt`.
 
 **О подписи драйвера.** `Monkey64.sys` — переименованный драйвер WinDivert,
 подписанный **成都密思听科技有限公司**, сторонней организацией, не имеющей
@@ -116,8 +117,9 @@ GPLv3 прямо оговаривает такой случай: объедин�
 Внутри статически собраны LuaJIT и zlib.
 Единственный файл лицензии форка — MIT bol-van (`docs/LICENSE.txt`, годы
 2016–2026); своего уведомления у прослойки нет. С 03.10 до 07.10 стоял выпуск
-bol-van 1.0.5.2 (коммит `6b6c63e3`), до того — копия из Zapret GUI, версия 1.0.3;
-сборка кладёт наш winws2 поверх неё.
+bol-van 1.0.5.2 (коммит `6b6c63e3`), до того — копия из Zapret GUI, версия 1.0.3.
+В нашей копии файлов Zapret GUI (`vendor/zapret-gui`) его winws2 нет вовсе:
+движок — только наш, из `tools\`.
 
 И шесть модулей его библиотеки в `engines/zapret/lua/`:
 `zapret-lib.lua`, `zapret-antidpi.lua`, `zapret-auto.lua`, `zapret-obfs.lua`,
@@ -156,8 +158,12 @@ MIT разрешает распространение в любом виде, в
 Программа **Zapret GUI**, автор — **loop-uh**:
 [wiki.zapret.moe](https://wiki.zapret.moe/), исходники —
 [git.zapret.moe/zapretdiscordyoutube/zapretgui](https://git.zapret.moe/zapretdiscordyoutube/zapretgui).
-Папка `engines/zapret/` в архиве — это копия её установки, и на ней NetZapret
-стоит не меньше, чем на самом winws2. Из Zapret GUI взято:
+Папка `engines/zapret/` в архиве собрана из нашей копии её файлов —
+[`vendor/zapret-gui`](../vendor/zapret-gui) в репозитории — плюс наш winws2
+и наши списки и образцы с приставкой `nz-`; на этих файлах NetZapret стоит
+не меньше, чем на самом winws2. Копия снята с установки Zapret GUI (какой
+версии и когда — в `vendor/zapret-gui/VERSION.txt`) и обновляется только
+решением владельца, а не сама вместе с Zapret GUI. Из Zapret GUI взято:
 
 * **сценарии десинка на lua** — пятнадцать модулей в `engines/zapret/lua/`:
   `combined-detector.lua`, `custom_diag.lua`, `custom_funcs.lua`,
@@ -186,7 +192,7 @@ MIT разрешает распространение в любом виде, в
 * **каталог адресов**. `config/catalog.zapret.yaml` — выборка из каталога
   установки (`system/hosts_catalog.sqlite3`): те записи «имя — адрес», что
   ответили при проверке в день сборки. Сам каталог `pack.cmd` тоже кладёт
-  в архив, если он есть на машине сборщика. Это адреса чужих публичных
+  в архив — из той же копии. Это адреса чужих публичных
   DNS-сервисов (XBOX DNS, Comss DNS и других), то есть ответы, которые
   те раздают всем желающим; собрал их в каталог автор Zapret GUI;
 * **пины напрямую**. `config/pin-solutions.yaml` — раздел «Напрямую» того же
@@ -250,12 +256,12 @@ KVN эти имена блокирует, мы пускаем напрямую.
 * **список адресов** `engines/zapret/lists/ipset-all.txt` — облака, хостинги
   и Cloudflare, по которым game filter отбирает трафик. Сверка 30.09: все
   33 048 записей нашего файла совпадают с `lists/ipset-all.txt.backup`
-  в репозитории Flowseal. К нам он попадает из установки Zapret GUI;
+  в репозитории Flowseal. К нам он попадает с файлами Zapret GUI (`vendor/zapret-gui`);
 * **три образца пакетов**, которыми эти секции пользуются:
   `bin/tls_clienthello_www_sferum_ru.bin` (до 21.10 — `tls_clienthello_max_ru.bin`;
   Flowseal сменил подделку в 1.10.4), `bin/stun2.bin` и `bin/ACTIVE_GAME_UDP.bin`.
   Сверка 30.09: побайтно те же файлы, что в `bin/` его репозитория. Тоже
-  едут из установки Zapret GUI;
+  едут с файлами Zapret GUI;
 * **семь приветствий V3nilla** из его 1.10.4 (PR 17925, 20.10): TLS с именами
   awswaf.com, steam-chat.com, steamstatic.com, teamspeak.com и QUIC lemana.pro,
   steam-chat.com, steamstatic.com. Лежат в `config/blobs/`, едут как

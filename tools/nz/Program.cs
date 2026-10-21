@@ -45,6 +45,7 @@ return command switch
     "dns-mode" or "днс" => DnsMode(args.ElementAtOrDefault(1)),
     "routes" or "маршруты" => Routes(),
     "catalog" or "каталог" => await Catalog(),
+    "zapret-gui" => ZapretGui(args.ElementAtOrDefault(1)),
     "report" or "отчёт" => Report(),
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     "voice" or "голос" => Voice(),
@@ -419,7 +420,10 @@ int Routes()
 // Проверяет каждую запись живым запросом — минуты, а не секунды.
 async Task<int> Catalog()
 {
-    var zapret = NetZapret.Zapret.ZapretCatalog.Discover();
+    // Из своей копии Zapret GUI, когда она рядом: снимок — с того же каталога,
+    // что уезжает в архив, а не с установки, которая живёт своей жизнью.
+    var copy = Path.GetFullPath(NetZapret.Zapret.ZapretGuiCopy.Folder);
+    var zapret = NetZapret.Zapret.ZapretCatalog.Discover(Directory.Exists(copy) ? copy : null);
 
     if (zapret is null)
     {
@@ -445,6 +449,74 @@ async Task<int> Catalog()
     Console.WriteLine($"записано: {Path.GetFullPath(OwnCatalog.SnapshotPath)}");
 
     return result.Working > 0 ? 0 : 1;
+}
+
+// Своя копия файлов Zapret GUI в vendor\zapret-gui. Без аргумента — только
+// что изменилось бы; «take» — снять. Снимается по слову владельца, как и
+// снимок каталога: обновлённый Zapret GUI не должен попадать в архив сам.
+int ZapretGui(string? action)
+{
+    bool take = action is "take" or "взять";
+
+    if (action is not null && !take)
+        return Unknown("zapret-gui " + action);
+
+    // Только из рабочей копии: копия — часть репозитория, а установка
+    // программы её не держит.
+    if (!File.Exists("NetZapret.sln"))
+    {
+        Console.Error.WriteLine("копия Zapret GUI живёт в рабочей копии — запускайте nz из неё");
+        return 1;
+    }
+
+    var install = NetZapret.Zapret.ZapretPaths.Installations
+        .FirstOrDefault(p => Directory.Exists(Path.Combine(p, "lists")));
+
+    if (install is null)
+    {
+        Console.Error.WriteLine("Zapret GUI не установлен — снимать не с чего");
+        return 1;
+    }
+
+    var copy = Path.GetFullPath(NetZapret.Zapret.ZapretGuiCopy.Folder);
+
+    Console.WriteLine($"установка: {install} — Zapret GUI {NetZapret.Zapret.ZapretGuiCopy.InstalledVersion(install) ?? "(версия не определилась)"}");
+    Console.WriteLine($"копия:     {NetZapret.Zapret.ZapretGuiCopy.Folder} — {NetZapret.Zapret.ZapretGuiCopy.CopyVersion(copy) ?? "нет"}");
+    Console.WriteLine();
+
+    var diff = take
+        ? NetZapret.Zapret.ZapretGuiCopy.Take(install, copy, DateTime.Now)
+        : NetZapret.Zapret.ZapretGuiCopy.Compare(install, copy);
+
+    if (diff.Same)
+    {
+        Console.WriteLine(take ? "копия и так совпадала с установкой; отметка о снятии обновлена" : "копия совпадает с установкой");
+        return 0;
+    }
+
+    void List(string head, IEnumerable<string> lines)
+    {
+        var all = lines.ToList();
+
+        if (all.Count == 0)
+            return;
+
+        Console.WriteLine($"{head} ({all.Count}):");
+
+        foreach (var line in all)
+            Console.WriteLine("  " + line);
+    }
+
+    List("новые", diff.Added);
+    List("убраны", diff.Removed);
+    List("изменены", diff.Changed.Select(c => c.Binary ? $"{c.Path} (двоичный)" : $"{c.Path} (+{c.LinesAdded} −{c.LinesRemoved})"));
+
+    Console.WriteLine();
+    Console.WriteLine(take
+        ? "снято. Дальше: git diff vendor\\zapret-gui, сборка и проверка вживую"
+        : "ничего не записано; снять — nz zapret-gui take");
+
+    return 0;
 }
 
 // Тот же отчёт, что кнопка «Собрать» в «Диагностике»: сборка и вычистка — в библиотеке.
@@ -485,6 +557,9 @@ int Help()
     Console.WriteLine("               как движок спрашивает имена; с аргументом — переключить");
     Console.WriteLine("  nz catalog   снимок рабочих записей каталога Zapret");
     Console.WriteLine("               в config\\catalog.zapret.yaml; идёт несколько минут");
+    Console.WriteLine("  nz zapret-gui [take]");
+    Console.WriteLine("               своя копия файлов Zapret GUI (vendor\\zapret-gui): что изменилось");
+    Console.WriteLine("               в установке; take — снять, только по слову владельца");
     Console.WriteLine("  nz report    отчёт для разбора архивом в reports\\: журналы, настройки, сеть,");
     Console.WriteLine("               диагностика, голос Discord, hosts, сторож серверов, наблюдение —");
     Console.WriteLine("               без ссылок подписок и ключей");

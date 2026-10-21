@@ -1,0 +1,2 @@
+Zapret GUI 21.1.7.163
+Снято 22.10.2026 00:47 из C:\Zapret\Dev командой nz zapret-gui take.

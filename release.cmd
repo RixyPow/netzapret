@@ -3,10 +3,10 @@ rem Packs the distribution and publishes it as a GitHub release.
 rem
 rem   release.cmd 0.1.0
 rem
-rem Runs here rather than in CI on purpose. The archive needs winws2.exe, and
-rem that comes from an installed Zapret 2 - a build server has no way to get
-rem it. CI keeps doing what it is good at: building and running the tests on
-rem every push.
+rem Runs here rather than in CI on purpose. The archive needs winws2.exe,
+rem sing-box and tg-ws-proxy, and those live in tools\ outside git - a build
+rem server has no way to get them. CI keeps doing what it is good at: building
+rem and running the tests on every push.
 rem
 rem ASCII only on purpose: cmd.exe reads batch files in the OEM code page,
 rem and UTF-8 Cyrillic here breaks apart into bogus commands.

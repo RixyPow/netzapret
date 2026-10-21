@@ -271,30 +271,39 @@ if defined TGWS_DIR (
 rem xray is deliberately left out: it is not wired up yet, and its geoip and
 rem geosite databases alone are 27 MB of dead weight.
 
-set "ZAPRET="
-if exist "C:\Zapret\Dev\lists" set "ZAPRET=C:\Zapret\Dev"
-if not defined ZAPRET if exist "C:\Zapret\lists" set "ZAPRET=C:\Zapret"
+rem ---------------------------------------------------------------------------
+rem The Zapret GUI files come from our own copy in vendor\zapret-gui, not from
+rem the installed Zapret GUI. Until 22.10 they were copied from C:\Zapret\Dev
+rem on every build, so an update of the Zapret GUI silently changed the lua
+rem modules, lists and driver we built and shipped. The copy is refreshed only
+rem on the owner's word, with "nz zapret-gui take", which reports what changed;
+rem what it takes and what it leaves out is explained in ZapretGuiCopy.cs.
+rem
+rem Mirrored, not merely copied: build\engines\zapret still held what the old
+rem wholesale copy brought (winws.exe, dnscrypt-proxy, stop.bat, the GUI's own
+rem user lists). Our winws2, nz- lists and nz- blobs are laid over it below.
+rem ---------------------------------------------------------------------------
+set "ZAPRET=%ROOT%vendor\zapret-gui"
 
-if not defined ZAPRET (
+if not exist "%ZAPRET%\lists" (
     echo.
-    echo Zapret not found - desync engine not bundled. Everything else works.
+    echo vendor\zapret-gui not found - desync engine not bundled. Everything else works.
     goto :done
 )
 
-echo Bundling Zapret from %ZAPRET%
+echo Bundling Zapret GUI files from vendor\zapret-gui
 
-rem exe    - winws2 itself, WinDivert and the Cygwin runtime the GUI's copy needs
+rem exe    - WinDivert.dll and its driver Monkey64.sys; winws2 comes from tools\
 rem lists  - hostlists and ipsets the presets reference
 rem lua    - desync recipes loaded by --lua-init and --lua-desync
 rem bin    - blobs referenced by --blob=
 rem windivert.filter - filter templates
-for %%D in (exe lists lua bin windivert.filter) do (
-    if exist "%ZAPRET%\%%D" (
-        robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
-        if errorlevel 8 (
-            echo Failed to bundle %%D
-            exit /b 1
-        )
+rem system - the service catalogue, hosts_catalog.sqlite3
+for %%D in (exe lists lua bin windivert.filter system) do (
+    robocopy "%ZAPRET%\%%D" "%ENGINES%\zapret\%%D" /MIR /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 (
+        echo Failed to bundle %%D
+        exit /b 1
     )
 )
 
@@ -316,11 +325,12 @@ rem against bol-van's v1.0.5.2, same rules: a new connection on port 443 cost
 rem 10-12 ms of CPU instead of 27-32, upload at ~200 Mbit/s held 46-47 % of
 rem the core instead of 69-77 %, speed the same.
 rem
-rem Only the executable; WinDivert.dll stays the Zapret GUI one, which loads
-rem Monkey64.sys. Put the winws2.exe anywhere under tools\ - one copy, since
-rem the last one listed wins; without it the build keeps the Zapret GUI copy.
-rem cygwin1.dll goes only when the chosen winws2 does not import it: bol-van's
-rem own release still needs it, and so does the Zapret GUI copy.
+rem Only the executable; WinDivert.dll is the Zapret GUI one from our copy,
+rem which loads Monkey64.sys. Put the winws2.exe anywhere under tools\ - one
+rem copy, since the last one listed wins. Our copy of the Zapret GUI files
+rem carries no winws2 of its own, so without one in tools\ there is no desync
+rem engine at all. Nor does it carry cygwin1.dll: bol-van's own release needs
+rem one, and then it has to sit next to that winws2.exe in tools\.
 rem ---------------------------------------------------------------------------
 set "WINWS2="
 for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\winws2.exe" 2^>nul') do set "WINWS2=%%F"
@@ -332,7 +342,9 @@ if defined WINWS2 (
         echo Failed to bundle winws2
         exit /b 1
     )
-    findstr /m /i /c:"cygwin1.dll" "%WINWS2%" >nul || del /q "%ENGINES%\zapret\exe\cygwin1.dll" 2>nul
+    for %%W in ("%WINWS2%") do if exist "%%~dpWcygwin1.dll" copy /y "%%~dpWcygwin1.dll" "%ENGINES%\zapret\exe\" >nul
+) else (
+    echo winws2.exe not found under tools\ - the desync engine will not start.
 )
 
 rem ---------------------------------------------------------------------------

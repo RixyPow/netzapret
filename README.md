@@ -766,12 +766,12 @@ winget install Microsoft.DotNet.SDK.8
 TUN. Нужна именно extended: обычный sing-box не знает xhttp, выхода MASQUE
 для WARP и маскировки AmneziaWG. В поставке — 1.14.3-extended-2.7.3 (с 20.10; до того 1.14.1-extended-2.7.2).
 
-**3. Zapret 2** — для десинка. Ставится отдельно, в `C:\Zapret` или
-`C:\Zapret\Dev`; `build.cmd` берёт из установки только то, что читает движок:
-`exe`, `lists`, `lua`, `bin`, `windivert.filter`. Пресеты и свои списки
-из установки не берутся — они наши и лежат в `presets\` и `config\lists\`.
-`winws2.exe` новее, чем в установке, кладётся в `tools\` и едет поверх.
-Сейчас это родная сборка без Cygwin —
+**3. winws2** — для десинка. Остальное, что читает движок десинка (WinDivert,
+списки, модули lua, образцы пакетов, шаблоны фильтра, каталог сервисов), уже
+в репозитории — копией файлов Zapret GUI в [`vendor/zapret-gui`](vendor/zapret-gui);
+ставить Zapret GUI для сборки не нужно. Пресеты и свои списки — тоже наши,
+в `presets\` и `config\lists\`. Сам `winws2.exe` кладётся в `tools\`. Сейчас
+это родная сборка без Cygwin —
 [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork/releases)
 от loop-uh, выпуск `v1.0.5.2-41-g204fd66-native`; почему она и как проверять
 новый выпуск — в [tools/README.md](tools/README.md).
@@ -782,7 +782,7 @@ TUN. Нужна именно extended: обычный sing-box не знает x
 распаковать с файлом `LICENSE` в `tools\tg-ws-proxy-rs-<версия>\`; проверялось
 на 2.5.2. `build.cmd` соберёт и без него, `pack.cmd` — нет.
 
-Без sing-box работает всё, кроме VPN. Без Zapret — всё, кроме десинка. Без
+Без sing-box работает всё, кроме VPN. Без winws2 — всё, кроме десинка. Без
 прокси — всё, кроме вкладки «TG Proxy». Что именно нашлось, показывает раздел
 «Диагностика».
 

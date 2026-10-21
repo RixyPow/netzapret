@@ -175,9 +175,15 @@ public sealed record ZapretPaths
         foreach (var bundled in BundledRoots())
             yield return bundled;
 
-        yield return @"C:\Zapret\Dev";
-        yield return @"C:\Zapret";
+        foreach (var installed in Installations)
+            yield return installed;
     }
+
+    /// <summary>
+    /// Где ставится сам Zapret GUI — оттуда <c>nz zapret-gui</c> снимает
+    /// свою копию его файлов (<see cref="ZapretGuiCopy"/>).
+    /// </summary>
+    public static IReadOnlyList<string> Installations { get; } = [@"C:\Zapret\Dev", @"C:\Zapret"];
 
     /// <summary>Каталог встроенных движков — <c>engines/</c> рядом с программой.</summary>
     public const string BundleDirectory = "engines";
