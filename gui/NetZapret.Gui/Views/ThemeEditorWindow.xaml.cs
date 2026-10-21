@@ -503,9 +503,15 @@ public partial class ThemeEditorWindow : Window
         HomeMini.ReleaseMouseCapture();
     }
 
+    /// <summary>Колесо с Ctrl — размер картинки; без Ctrl — прокрутка страницы редактора.</summary>
+    /// <remarks>
+    /// Владелец 21.10: «сделай так, чтобы прокрутка страницы не трогала размер
+    /// фона». Колесо без Ctrl меняло размер, стоило миниатюре проехать под
+    /// мышью, пока страницу прокручивают, — и укладка сбивалась незаметно.
+    /// </remarks>
     private void OnMiniWheel(object sender, MouseWheelEventArgs e)
     {
-        if (_poster is null)
+        if (_poster is null || Keyboard.Modifiers != ModifierKeys.Control)
             return;
 
         e.Handled = true;
