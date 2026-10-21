@@ -51,10 +51,15 @@ public static class GameFilter
     private const string BlobTls = "nz_game_tls";
     private const string BlobUdp = "nz_game_udp";
 
+    // Приветствие — www.sferum.ru, как у Flowseal с 1.10.4 (20.10): там
+    // стандартная подделка TLS в ALT11, ALT12, EXP и в секциях game filter
+    // сменена с max.ru на sferum, причина в выпуске не названа. Файл
+    // приезжает из установки Zapret GUI вместе с прежним. Помогает ли
+    // смена играм, не замерено — как и сам game filter.
     private static readonly string[] Globals =
     [
         $"--blob={BlobStun}:@bin/stun2.bin",
-        $"--blob={BlobTls}:@bin/tls_clienthello_max_ru.bin",
+        $"--blob={BlobTls}:@bin/tls_clienthello_www_sferum_ru.bin",
         $"--blob={BlobUdp}:@bin/ACTIVE_GAME_UDP.bin",
     ];
 
