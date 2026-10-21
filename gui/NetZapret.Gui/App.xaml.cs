@@ -265,6 +265,10 @@ public partial class App : Application
             // Удобство: не вышло — значок сменится, когда Windows сочтёт кеш устаревшим.
         }
 
+        // Закреплённая на панели задач кнопка — в цветах темы, а не значок
+        // из exe (владелец 21.10, TaskbarPin).
+        TaskbarPin.Start(Dispatcher);
+
         if (e.Args.Contains(TrayIcon.Switch))
         {
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
