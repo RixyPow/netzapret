@@ -115,13 +115,28 @@ public partial class TunnelSettingsWindow : Window
                 ? $"Пока «{settings.PreferredServer}» молчит, трафик пойдёт через другой сервер."
                 : $"Пока «{settings.PreferredServer}» молчит, туннель ждёт его.";
 
+        bool selective = settings.SelectiveRouting == true;
+        Word(SelectiveWord, selective);
+        Selective.IsChecked = selective;
+
+        // Как у прочих строк — сказать, когда настройка ничего не делает:
+        // пулы при WARP и заведённые пулы при выключенной.
+        Line(SelectiveLine, selective
+            ? settings.WarpEnabled ? "Сейчас не действует: туннель идёт через WARP." : string.Empty
+            : settings.Pools.Count > 0
+                ? $"Заведённые пулы ({settings.Pools.Count}) сохранены, но не действуют: их маршруты идут через любые серверы."
+                : string.Empty);
+
         Word(DeadPoolWord, settings.DeadPoolToDefault);
         DeadPool.IsChecked = settings.DeadPoolToDefault;
+        DeadPool.IsEnabled = selective;
 
         Word(FakeIpMemoryWord, settings.FakeIpMemory);
         FakeIpMemory.IsChecked = settings.FakeIpMemory;
 
-        DeadPoolLine.Text = settings.Pools.Count == 0
+        DeadPoolLine.Text = !selective
+            ? "Действует, когда включён Selective Routing."
+            : settings.Pools.Count == 0
             ? "Своих пулов пока нет — все серверы в пуле по умолчанию."
             : settings.DeadPoolToDefault
                 ? "Маршруты молчащего пула пойдут через любые серверы."
@@ -299,6 +314,12 @@ public partial class TunnelSettingsWindow : Window
             FakeIpMemory.IsChecked == true
                 ? "Подставные адреса имён через VPN переживут перезапуск движков."
                 : "После перезапуска движков подставные адреса раздаются заново, как было до 20.10.");
+
+    private void OnSelective(object sender, RoutedEventArgs e) =>
+        Save(s => s with { SelectiveRouting = Selective.IsChecked == true },
+            Selective.IsChecked == true
+                ? "Selective Routing включён: пулы серверов — на вкладке VPN, над подписками."
+                : "Selective Routing выключен: пулов на вкладке нет, маршруты «через VPN» идут через любые серверы.");
 
     private void OnDeadPool(object sender, RoutedEventArgs e) =>
         Save(s => s with { DeadPoolToDefault = DeadPool.IsChecked == true },

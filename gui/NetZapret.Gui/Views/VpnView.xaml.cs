@@ -323,6 +323,10 @@ public partial class VpnView : UserControl
         // и последним элементом виртуального списка (Page): иначе их
         // пришлось бы описывать шаблонами, и имена элементов пропали бы.
         Holder.Children.Clear();
+
+        // Заголовок пулов — с первого показа, а не с первой перерисовки:
+        // иначе он вставал бы над подписками скачком.
+        _poolsOn = AppSettings.Load(AppSettings.DefaultPath).SelectiveRouting == true;
         ShowPage();
 
         SizeChanged += (_, e) => ShowWidth(e.NewSize.Width);
@@ -1211,7 +1215,10 @@ public partial class VpnView : UserControl
     /// </remarks>
     private void ShowPage()
     {
-        var items = new List<object> { TopBlock, PoolsBlock };
+        var items = new List<object> { TopBlock };
+
+        if (_poolsOn)
+            items.Add(PoolsBlock);
 
         foreach (var pool in _poolRows)
         {

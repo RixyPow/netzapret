@@ -97,9 +97,23 @@ public partial class VpnView
         }
     }
 
+    /// <summary>
+    /// Включён ли «Selective Routing» — без него блока пулов на вкладке нет
+    /// (владелец 21.10: «сделай поле пулов серверов отдельной настройкой»).
+    /// </summary>
+    private bool _poolsOn;
+
     /// <summary>Папки пулов из настроек и уже раскрашенных строк подписок.</summary>
     private void ShowPools(AppSettings settings)
     {
+        _poolsOn = settings.SelectiveRouting == true;
+
+        if (!_poolsOn)
+        {
+            _poolRows = [];
+            return;
+        }
+
         // Сервер — первой строкой с таким тегом: тег у движка один на сервер.
         var known = new Dictionary<string, ServerRow>(StringComparer.Ordinal);
 
@@ -343,7 +357,12 @@ public partial class VpnView
     /// <summary>Пункты пулов в меню строки сервера.</summary>
     private void AddPoolItems(ContextMenu menu, ServerRow row)
     {
-        var pools = AppSettings.Load(AppSettings.DefaultPath).Pools;
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (settings.SelectiveRouting != true)
+            return;
+
+        var pools = settings.Pools;
 
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
 

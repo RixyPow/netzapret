@@ -479,7 +479,7 @@ internal static class SupervisorHost
             replacePinned: settings.ReplaceSilentServer,
             dnsViaAuto: options.DnsViaAuto,
             watchUrl: Ping.UrlOf(settings),
-            pools: settings.WarpEnabled ? [] : settings.Pools,
+            pools: settings.EnginePools,
             deadPoolToDefault: settings.DeadPoolToDefault)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
@@ -555,7 +555,7 @@ internal static class SupervisorHost
         IReadOnlyList<System.Net.IPAddress> servers = options.NoProxy
             ? []
             : TunnelEndpoints.Read(options.ProxyConfig,
-                ServerPools.CaptureFirst(Warp.PreferredExit(settings), settings.WarpEnabled ? [] : settings.Pools));
+                ServerPools.CaptureFirst(Warp.PreferredExit(settings), settings.EnginePools));
 
         // И соединения, которые уходят в туннель по подменным адресам.
         var fakeRange = options.NoProxy ? null : TunnelEndpoints.FakeRange(options.ProxyConfig);

@@ -404,4 +404,70 @@ public sealed class ServerPoolsTests
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// «Включить Selective Routing» (владелец 21.10): пулы — отдельной настройкой,
+    /// выключенной по умолчанию. У кого пулы уже заведены, обновление их
+    /// маршруты из пулов не уводит.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Settings_older_than_the_switch_keep_their_pools_working(bool hadPools, bool on)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-pools-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            (new AppSettings { Pools = hadPools ? [Russia] : [] }).Save(path);
+
+            var read = AppSettings.Load(path);
+
+            Assert.Equal(on, read.SelectiveRouting);
+            Assert.Equal(hadPools ? ["ru000001"] : Array.Empty<string>(), read.EnginePools.Select(p => p.Id));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_switch_turned_off_stays_off_with_pools()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-pools-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            (new AppSettings { Pools = [Russia], SelectiveRouting = false }).Save(path);
+
+            var read = AppSettings.Load(path);
+
+            Assert.False(read.SelectiveRouting);
+
+            // Пулы лежат, но движок их не берёт — с включением вернутся.
+            Assert.Equal("ru000001", read.Pools.Single().Id);
+            Assert.Empty(read.EnginePools);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_switch_is_off_from_scratch()
+    {
+        Assert.NotEqual(true, AppSettings.Fresh.SelectiveRouting);
+        Assert.Empty(AppSettings.Fresh.EnginePools);
+    }
+
+    [Fact]
+    public void Warp_takes_the_pools_away_even_with_the_switch_on()
+    {
+        var settings = new AppSettings { Pools = [Russia], SelectiveRouting = true };
+
+        Assert.Same(Russia, settings.EnginePools.Single());
+        Assert.Empty((settings with { WarpEnabled = true }).EnginePools);
+    }
 }

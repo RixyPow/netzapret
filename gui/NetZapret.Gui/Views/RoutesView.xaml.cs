@@ -671,8 +671,10 @@ public partial class RoutesView : UserControl
             var services = Arranged(ordered, settings);
 
             MarkPins(services, data.Pins, data.PinZones, zapretRoot);
-            MarkPools(services, userRules, settings.Pools);
-            _pools = settings.Pools;
+            // Без «Selective Routing» пулов не видно и здесь: маршрут в пул
+            // идёт «через VPN» в пул по умолчанию, так его и показываем.
+            _pools = settings.SelectiveRouting == true ? settings.Pools : null;
+            MarkPools(services, userRules, _pools ?? []);
 
             // Раскрытые папки переживают перерисовку. Прежде любое действие
             // внутри папки — пин, свой маршрут, обновление списка — собирало
@@ -1114,8 +1116,8 @@ public partial class RoutesView : UserControl
     /// </remarks>
     /// <param name="pins">Прибитые имена из hosts — прочитаны в фоне.</param>
     /// <param name="known">Зоны строк, прочитанные в фоне; чего нет — дочитывается здесь.</param>
-    /// <summary>Пулы серверов, заведённые на вкладке VPN, — для окна пути.</summary>
-    private IReadOnlyList<ServerPool> _pools = [];
+    /// <summary>Пулы серверов, заведённые на вкладке VPN, — для окна пути; <c>null</c> — «Selective Routing» выключен.</summary>
+    private IReadOnlyList<ServerPool>? _pools;
 
     /// <summary>
     /// Маршрут «через VPN» в свой пул — пул назван на кнопке пути и в подписи
@@ -3018,7 +3020,7 @@ public partial class RoutesView : UserControl
             // папки перерисовку переживают, так что список остаётся на месте.
             Reload();
 
-            var pool = ServerPools.Find(_pools, ServerPools.IdOf(server));
+            var pool = ServerPools.Find(_pools ?? [], ServerPools.IdOf(server));
 
             Status.Text = pool is not null
                 ? $"Записано: {parts[1]} → через VPN, пул «{pool.Name}». Применится при следующем запуске движков."

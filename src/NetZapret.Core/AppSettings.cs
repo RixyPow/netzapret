@@ -584,6 +584,37 @@ public sealed record AppSettings
     public IReadOnlyList<ServerPool> Pools { get; init; } = [];
 
     /// <summary>
+    /// «Включить Selective Routing» — пулы серверов действуют и видны на вкладке VPN;
+    /// <c>null</c> — настройки старше 21.10.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 21.10: «сделай поле пулов серверов отдельной настройкой
+    /// вкладки впн». Пулы нужны немногим, а блок их стоял над подписками
+    /// у всех. Выключено — блока нет, «В пул» из меню сервера пропадает,
+    /// окно пути маршрута пулов не предлагает, а движок их не берёт: маршруты
+    /// в пулы идут в пул по умолчанию. Сами пулы и ссылки маршрутов на них
+    /// не стираются и с включением возвращаются.
+    /// </para>
+    /// <para>
+    /// По умолчанию выключено. У кого пулы уже есть (с 1.0.0-pre.1), при
+    /// чтении — включено (<see cref="SelectiveRoutingOnce"/>): иначе
+    /// обновление молча увело бы их маршруты из пулов.
+    /// </para>
+    /// </remarks>
+    public bool? SelectiveRouting { get; init; }
+
+    /// <summary>
+    /// Пулы, которые берёт движок: без «Selective Routing» и при WARP — никаких.
+    /// </summary>
+    /// <remarks>
+    /// При WARP подписки на паузе, и пулам вести некуда — их маршруты идут
+    /// в пул по умолчанию, то есть в WARP.
+    /// </remarks>
+    [JsonIgnore]
+    public IReadOnlyList<ServerPool> EnginePools => SelectiveRouting == true && !WarpEnabled ? Pools : [];
+
+    /// <summary>
     /// Пул без живых серверов уводит свои маршруты в пул по умолчанию; иначе — ждёт.
     /// </summary>
     /// <remarks>
@@ -972,6 +1003,16 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// «Selective Routing» для настроек старше 21.10: включён, если пулы уже заведены.
+    /// </summary>
+    /// <remarks>
+    /// Отметки разового перевода не нужно: прочитанное значение пишется
+    /// первым же сохранением, и дальше выключатель значит то, что значит.
+    /// </remarks>
+    private static AppSettings SelectiveRoutingOnce(AppSettings read) =>
+        read.SelectiveRouting is null ? read with { SelectiveRouting = read.Pools.Count > 0 } : read;
+
+    /// <summary>
     /// Сняты ли правила по программе разовым переводом (04.10, <see cref="Rules.ProgramRulesOff"/>); <c>null</c> — ещё нет.
     /// </summary>
     public bool? ProgramRulesRemoved { get; init; }
@@ -1059,11 +1100,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            })))));
+            }))))));
         }
         catch (Exception)
         {

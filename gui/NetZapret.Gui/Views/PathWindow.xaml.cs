@@ -52,6 +52,9 @@ public partial class PathWindow : Window
     private readonly string _desyncNote;
     private readonly IReadOnlyList<ServerPool> _pools;
 
+    /// <summary>«Selective Routing» включён — под «через VPN» выбирается пул.</summary>
+    private readonly bool _poolsOn;
+
     /// <param name="title">Имя маршрута.</param>
     /// <param name="current">Что стоит сейчас.</param>
     /// <param name="pool">Пул маршрута «через VPN»; <c>null</c> — пул по умолчанию.</param>
@@ -60,7 +63,9 @@ public partial class PathWindow : Window
     /// </param>
     /// <param name="canRecipe">Есть ли маршруту рецепт: у списков адресов его нет (владелец 19.10).</param>
     /// <param name="desyncNote">Подпись десинка: каким рецептом он идёт сейчас.</param>
-    /// <param name="pools">Пулы серверов с вкладки VPN.</param>
+    /// <param name="pools">
+    /// Пулы серверов с вкладки VPN; <c>null</c> — «Selective Routing» выключен, и пул не выбирается.
+    /// </param>
     public PathWindow(
         string title,
         PathPick current,
@@ -68,17 +73,19 @@ public partial class PathWindow : Window
         string? defaultLabel,
         bool canRecipe,
         string desyncNote,
-        IReadOnlyList<ServerPool> pools)
+        IReadOnlyList<ServerPool>? pools)
     {
         InitializeComponent();
 
+        _pools = pools ?? [];
+        _poolsOn = pools is not null;
+
         Head.Text = $"Путь: {title}";
         Picked = current;
-        Pool = ServerPools.Find(pools, pool)?.Id;
+        Pool = ServerPools.Find(_pools, pool)?.Id;
         _defaultLabel = defaultLabel;
         _canRecipe = canRecipe;
         _desyncNote = desyncNote;
-        _pools = pools;
 
         Rebuild();
     }
@@ -99,7 +106,7 @@ public partial class PathWindow : Window
             Picked == PathPick.Desync && _canRecipe ? RecipeButton() : null));
 
         Options.Children.Add(Card(PathPick.Proxy, "Через VPN", ProxyNote(),
-            Picked == PathPick.Proxy ? PoolList() : null));
+            Picked == PathPick.Proxy && _poolsOn ? PoolList() : null));
 
         Options.Children.Add(Card(PathPick.Off, "Выключено",
             "Не действует ни этот маршрут, ни заводское правило на тот же список — имена решают другие правила."));

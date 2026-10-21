@@ -151,7 +151,7 @@ internal static class TunnelConfig
             // Так же закреплённые в пулах и пул, мёртвый целиком (идеи №6, 19.10):
             // выброшенный пул без серверов исчез бы из конфига, и его маршруты
             // молча ушли бы в пул по умолчанию — даже когда человек велел ждать.
-            var keep = ServerPools.KeptDespiteDeath(settings.Pools, servers.Select(s => s.Tag), dead);
+            var keep = ServerPools.KeptDespiteDeath(settings.EnginePools, servers.Select(s => s.Tag), dead);
 
             var alive = servers
                 .Where(s => !dead.Contains(s.Tag) || s.Tag == Warp.PreferredExit(settings) || s.IsSelfRegistering
@@ -225,9 +225,9 @@ internal static class TunnelConfig
                     [settings.SubscriptionUrl, .. SubscriptionBook.Load().Entries.Select(e => e.Url)]),
                 PreferredServerTag = Warp.PreferredExit(settings),
 
-                // При WARP подписки на паузе, и пулам вести некуда — их маршруты
-                // идут в пул по умолчанию, то есть в WARP.
-                Pools = settings.WarpEnabled ? [] : settings.Pools,
+                // Без «Selective Routing» и при WARP пулов нет — их маршруты
+                // идут в пул по умолчанию.
+                Pools = settings.EnginePools,
 
                 // «Игнорировать исключения» сюда больше не передаётся:
                 // с 23.09 она отменяет все прямые правила, а не одно
