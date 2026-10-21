@@ -1,90 +1,264 @@
 <UserControl x:Class="NetZapret.Gui.Views.TgProxyView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
     <!--
         Владелец 07.10: «давай создадим отдельную вкладку tg proxy». Прокси —
         tg-ws-proxy-rs третьим движком (TgWsProxy, TgWsProxyService): Telegram
         Desktop без VPN, через WebSocket и домены за Cloudflare.
+        С 21.10 — по макету владельца: карточка прокси с плашкой состояния,
+        три плитки, пути, подключение рядом с ручной настройкой, текущие настройки.
     -->
+    <UserControl.Resources>
+
+        <!-- Значок «скопировать» у подписи: без рамки, как в макете. -->
+        <Style x:Key="CopyGlyph" TargetType="Button">
+            <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+            <Setter Property="Content" Value="&#xE8C8;" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="ToolTip" Value="Скопировать" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <!--
+                        Знак — своим TextBlock со шрифтом значков: строку в ContentPresenter
+                        общий стиль TextBlock красит шрифтом окна, и знак выходит квадратом.
+                    -->
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent" Padding="5,3">
+                            <TextBlock Text="{TemplateBinding Content}" FontFamily="{TemplateBinding FontFamily}"
+                                       FontSize="{TemplateBinding FontSize}" Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource Text}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Значок строки пути и плиток: квадрат со скруглением. -->
+        <Style x:Key="RowTile" TargetType="Border" BasedOn="{StaticResource IconTile}">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Margin" Value="0,0,16,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="RowGlyph" TargetType="TextBlock" BasedOn="{StaticResource TileGlyph}">
+            <Setter Property="FontSize" Value="18" />
+        </Style>
+
+        <!-- Подпись в «Текущих настройках». -->
+        <Style x:Key="FieldLabel" TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="FieldValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,10,0,0" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- Разделитель колонок «Текущих настроек». -->
+        <Style x:Key="ColumnLine" TargetType="Border">
+            <Setter Property="Width" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource Border}" />
+            <Setter Property="Margin" Value="18,0,18,0" />
+        </Style>
+
+    </UserControl.Resources>
+
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
         <!--
             На всю ширину, как «Диагностика»: прежде MaxWidth 980, и на широком
             окне справа оставалась пустая треть (снимок владельца 07.10).
         -->
-        <StackPanel>
+        <StackPanel x:Name="Page" SizeChanged="OnPageSize">
 
-            <TextBlock Text="TG Proxy" Style="{StaticResource Title}" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Прокси для Telegram Desktop на этом компьютере: Telegram работает без VPN — его трафик идёт через WebSocket к Telegram и через домены за Cloudflare, в том же шифровании." />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <!-- Выключатель и состояние. -->
-            <Border Style="{StaticResource Card}" Margin="0,20,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
+                    <TextBlock Text="TG Proxy" Style="{StaticResource Title}" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                               Text="Прокси для Telegram Desktop на этом компьютере. Работает без VPN — трафик идёт через WebSocket к Telegram и через домены за Cloudflare, в том же шифровании." />
+                </StackPanel>
 
-                    <Border Style="{StaticResource IconTile}" Margin="0,0,14,0" VerticalAlignment="Top">
-                        <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE724;" />
-                    </Border>
+                <Button Grid.Column="1" x:Name="HowButton" Style="{StaticResource Ghost}" Click="OnHow"
+                        Content="Как это работает?" gui:ButtonGlyph.Lead="&#xE736;" VerticalAlignment="Center" />
+            </Grid>
 
-                    <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Прокси Telegram" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
-                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                            Content="Поднимается вместе с движками и слушает только этот компьютер — 127.0.0.1. Секрет постоянный: Telegram подключается один раз. Если выключите прокси здесь, выключите его и в Telegram («Тип подключения» → «Без прокси»), иначе Telegram не подключится." />
+            <!-- Пояснение — по кнопке шапки: читают его один раз, а место наверху дорогое. -->
+            <Border x:Name="HowCard" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="Когда он нужен" FontWeight="SemiBold" FontSize="15" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                               Text="Когда Telegram не идёт через VPN: адреса Telegram закрыты, а через прокси он работает целиком, с фото и видео. Работает прокси только вместе с десинком — без него соединения самого прокси режет DPI, и Telegram не подключится. В «Гибриде» и «Туннеле» Telegram и так идёт через VPN — прокси там не обязателен, но и не мешает." />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Только Telegram Desktop на этом компьютере — телефон через него не подключить. Прокси: tg-ws-proxy-rs (valnesfjord) — порт программы tg-ws-proxy (Flowseal), обе под MIT. Журнал — runtime\tg-ws-proxy.log." />
+                </StackPanel>
+            </Border>
+
+            <!-- Прокси: выключатель, состояние, и где он живёт — с движками или без них. -->
+            <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="20,18">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Цвет Telegram, а не темы: значок узнают по нему. -->
+                        <Border Grid.Column="0" Width="56" Height="56" CornerRadius="14" Background="#FF2AABEE"
+                                Margin="0,0,18,0" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource TileGlyph}" FontSize="26" Text="&#xE724;" Foreground="White"
+                                       Margin="-2,2,0,0" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Прокси Telegram" FontWeight="SemiBold" FontSize="18" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0" VerticalAlignment="Center"
+                                                Content="Поднимается вместе с движками и слушает только этот компьютер — 127.0.0.1. Секрет постоянный: Telegram подключается один раз. Если выключите прокси здесь, выключите его и в Telegram («Тип подключения» → «Без прокси»), иначе Telegram не подключится." />
+
+                                <!-- Плашка состояния: цвет и слово — из ShowState. -->
+                                <Grid x:Name="Pill" Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <Border x:Name="PillBack" CornerRadius="13" Opacity="0.14" />
+                                    <Border x:Name="PillFrame" CornerRadius="13" BorderThickness="1" Padding="10,4,12,4">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock x:Name="PillGlyph" FontFamily="{StaticResource IconFont}" FontSize="13"
+                                                       Margin="0,0,7,0" VerticalAlignment="Center" />
+                                            <TextBlock x:Name="PillWord" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+
+                            <TextBlock x:Name="StateText" Style="{StaticResource Caption}" FontSize="13.5" Margin="0,7,0,0" TextWrapping="Wrap" />
+                            <TextBlock x:Name="DesyncWarning" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12.5"
+                                       Foreground="{DynamicResource Warn}" Visibility="Collapsed"
+                                       Text="Без десинка прокси не работает: его соединения к Telegram и к доменам за Cloudflare режет DPI. Включите десинк на «Главной» или во вкладке «Десинк»." />
                         </StackPanel>
 
-                        <TextBlock x:Name="StateText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap" />
-                        <TextBlock x:Name="DesyncWarning" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12.5"
-                                   Foreground="{DynamicResource Warn}" Visibility="Collapsed"
-                                   Text="Без десинка прокси не работает: его соединения к Telegram и к доменам за Cloudflare режет DPI. Включите десинк на «Главной» или во вкладке «Десинк»." />
-                    </StackPanel>
+                        <ToggleButton Grid.Column="2" x:Name="Enabled" Style="{StaticResource Switch}"
+                                      Click="OnEnabled" VerticalAlignment="Center" />
+                    </Grid>
 
-                    <TextBlock Grid.Column="2" x:Name="StateWord" Style="{StaticResource Caption}"
-                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <Border Style="{StaticResource RowLine}" Margin="0,16,0,14" />
 
-                    <ToggleButton Grid.Column="3" x:Name="Enabled" Style="{StaticResource Switch}"
-                                  Click="OnEnabled" VerticalAlignment="Center" />
-                </Grid>
+                    <!-- Без движков (владелец 12.10): прокси держит само окно. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Держать включённым без движков" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AlwaysText" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Прокси работает, пока открыта программа — и в трее, — даже когда движки остановлены. Без десинка его соединения у части провайдеров режет DPI." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="AlwaysWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Always" Style="{StaticResource Switch}"
+                                      Click="OnAlways" VerticalAlignment="Center" />
+                    </Grid>
+                </StackPanel>
             </Border>
 
-            <!-- Без движков (владелец 12.10): прокси держит само окно. -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+            <!-- Три плитки: в одну колонку на узком окне (OnPageSize). -->
+            <UniformGrid x:Name="Tiles" Rows="1" Margin="0,14,0,0">
 
-                    <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
-                        <TextBlock Text="Держать включённым без движков" FontWeight="SemiBold" FontSize="15" />
-                        <TextBlock x:Name="AlwaysText" Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                   Text="Прокси работает, пока открыта программа — и в трее, — даже когда движки остановлены. Без десинка его соединения у части провайдеров режет DPI." />
-                    </StackPanel>
+                <Border x:Name="HealthTile" Style="{StaticResource Card}" Margin="0,0,7,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="1" x:Name="AlwaysWord" Style="{StaticResource Caption}"
-                               VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <Border Style="{StaticResource RowTile}" CornerRadius="20" VerticalAlignment="Top">
+                            <Ellipse x:Name="HealthDot" Width="14" Height="14" />
+                        </Border>
 
-                    <ToggleButton Grid.Column="2" x:Name="Always" Style="{StaticResource Switch}"
-                                  Click="OnAlways" VerticalAlignment="Center" />
-                </Grid>
-            </Border>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Статус подключения" />
+                            <TextBlock x:Name="HealthText" FontWeight="SemiBold" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            <TextBlock x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="AddressTile" Style="{StaticResource Card}" Margin="7,0,7,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource RowTile}" VerticalAlignment="Top">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE7F4;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Локальный адрес" />
+                            <TextBlock x:Name="AddressText" FontWeight="SemiBold" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Только этот компьютер — его и вписывают в Telegram." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border x:Name="TypeTile" Style="{StaticResource Card}" Margin="7,0,0,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource RowTile}" VerticalAlignment="Top">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xF003;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Тип подключения" />
+                            <TextBlock Text="MTProto через WebSocket" FontWeight="SemiBold" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Шифрование самого Telegram, снаружи — обычный WebSocket." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </UniformGrid>
 
             <!--
                 Пути к Telegram (владелец 21.10: «сделай настройку на вкладке прокси»).
                 Ключ default-domains снимал у прокси прямые адреса, и весь Telegram
                 шёл через домены Cloudflare, почти все отвечавшие 503 (TgWsProxy.Arguments).
             -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
                 <StackPanel>
-                    <TextBlock Text="Пути к Telegram" FontWeight="SemiBold" FontSize="15" />
+                    <TextBlock Text="Пути к Telegram" FontWeight="SemiBold" FontSize="16" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
                                Text="Прокси ходит к серверам Telegram напрямую, по WebSocket, а где прямого адреса нет — через домены за Cloudflare из общего списка. Если прокси держит программа, новое действует сразу; если движки — после их перезапуска." />
 
@@ -92,21 +266,26 @@
 
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Border Style="{StaticResource RowTile}">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE774;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                             <TextBlock Text="Напрямую к DC2 и DC4" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                        Text="Переписка и большая часть фото и видео идут на 149.154.167.220, без Cloudflare. Выключите, если у вашего провайдера этот адрес закрыт." />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1" x:Name="DirectMainWord" Style="{StaticResource Caption}"
+                        <TextBlock Grid.Column="2" x:Name="DirectMainWord" Style="{StaticResource Caption}"
                                    VerticalAlignment="Center" Margin="0,0,10,0" />
 
-                        <ToggleButton Grid.Column="2" x:Name="DirectMain" Style="{StaticResource Switch}"
+                        <ToggleButton Grid.Column="3" x:Name="DirectMain" Style="{StaticResource Switch}"
                                       Click="OnDirectMain" VerticalAlignment="Center" />
                     </Grid>
 
@@ -114,21 +293,26 @@
 
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Border Style="{StaticResource RowTile}">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE774;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                             <TextBlock Text="Напрямую к DC1, DC3 и DC5" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                        Text="Их веб-входы — 149.154.174.100 и 149.154.170.100. Адреса отвечают, но настоящий Telegram через них ещё не проверяли: включите на пробу и посмотрите, стало ли лучше." />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1" x:Name="DirectOtherWord" Style="{StaticResource Caption}"
+                        <TextBlock Grid.Column="2" x:Name="DirectOtherWord" Style="{StaticResource Caption}"
                                    VerticalAlignment="Center" Margin="0,0,10,0" />
 
-                        <ToggleButton Grid.Column="2" x:Name="DirectOther" Style="{StaticResource Switch}"
+                        <ToggleButton Grid.Column="3" x:Name="DirectOther" Style="{StaticResource Switch}"
                                       Click="OnDirectOther" VerticalAlignment="Center" />
                     </Grid>
 
@@ -136,82 +320,147 @@
 
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                        <Border Style="{StaticResource RowTile}">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE823;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                             <TextBlock Text="Ждать домен Cloudflare" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                        Text="Сколько ждать ответа одного домена, прежде чем пробовать следующий. Многие домены общего списка молчат: меньше — быстрее их обходит, но на медленной сети может бросить и живой." />
                         </StackPanel>
 
-                        <ComboBox Grid.Column="1" x:Name="CfTimeoutChoice" Width="200" VerticalAlignment="Center"
+                        <ComboBox Grid.Column="2" x:Name="CfTimeoutChoice" Width="230" VerticalAlignment="Center"
                                   SelectionChanged="OnCfTimeout">
                             <ComboBoxItem Content="3 секунды" Tag="3" />
                             <ComboBoxItem Content="5 секунд" Tag="5" />
-                            <ComboBoxItem Content="10 секунд — как у прокси" Tag="10" />
+                            <ComboBoxItem Content="10 секунд (по умолчанию)" Tag="10" />
                         </ComboBox>
                     </Grid>
                 </StackPanel>
             </Border>
 
-            <!-- Подключение Telegram. -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                <StackPanel>
-                    <TextBlock Text="Подключить Telegram Desktop" FontWeight="SemiBold" FontSize="15" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                               Text="Кнопка откроет ссылку прокси в Telegram — он спросит, подключиться ли. Не открылось — скопируйте ссылку, отправьте её себе в «Избранное» и нажмите там." />
+            <!-- Подключение и ручная настройка рядом; на узком окне — одна под другой (OnPageSize). -->
+            <Grid x:Name="ConnectRow" Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <Button x:Name="ConnectButton" Style="{StaticResource Primary}" Click="OnConnect" Padding="18,9">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock FontFamily="{StaticResource IconFont}" FontSize="13" Text="&#xE724;" Margin="0,0,8,0" VerticalAlignment="Center"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                <TextBlock Text="Подключить Telegram" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
+                <Border x:Name="ConnectCard" Style="{StaticResource Card}" Margin="0,0,7,0" Padding="20,16">
+                    <StackPanel>
+                        <TextBlock Text="Подключить Telegram Desktop" FontWeight="SemiBold" FontSize="16" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Text="Кнопка откроет ссылку прокси в Telegram — он спросит, подключиться ли. Не открылось — скопируйте ссылку, отправьте её себе в «Избранное» и нажмите там." />
 
-                        <Button x:Name="CopyButton" Style="{StaticResource Ghost}" Content="Скопировать ссылку"
-                                Click="OnCopy" Margin="8,0,0,0" Padding="14,8" />
+                        <WrapPanel Margin="0,14,0,0">
+                            <Button x:Name="ConnectButton" Style="{StaticResource Primary}" Click="OnConnect"
+                                    Content="Подключить Telegram" gui:ButtonGlyph.Lead="&#xE724;" Padding="20,10" Margin="0,0,10,0" />
+                            <Button x:Name="CopyButton" Style="{StaticResource Ghost}" Click="OnCopy"
+                                    Content="Скопировать ссылку" gui:ButtonGlyph.Lead="&#xE8C8;" Padding="18,10" />
+                        </WrapPanel>
                     </StackPanel>
+                </Border>
 
-                    <Border Style="{StaticResource RowLine}" Margin="0,16,0,12" />
-
-                    <TextBlock Text="Вручную: Настройки → Продвинутые → Тип подключения → Прокси → MTProto"
-                               Style="{StaticResource Caption}" TextWrapping="Wrap" />
-
-                    <Grid Margin="0,8,0,0">
+                <Border x:Name="ManualCard" Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0" Padding="20,16">
+                    <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE713;" VerticalAlignment="Top"
+                                   Margin="0,1,14,0" Foreground="{DynamicResource Muted}" />
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Как настроить вручную?" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Откройте в Telegram: Настройки → Продвинутые → Тип подключения → Прокси → MTProto и впишите сервер, порт и секрет из ссылки ниже." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Текущие настройки: то, что вписывают в Telegram руками. -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
+                <StackPanel>
+                    <TextBlock Text="Текущие настройки" FontWeight="SemiBold" FontSize="16" />
+
+                    <!-- На узком окне ссылка уходит второй строкой во всю ширину (OnPageSize). -->
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="110" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="0.7*" MinWidth="80" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition x:Name="LinkColumn" Width="2.8*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" MinWidth="140" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
 
-                        <TextBlock Grid.Row="0" Text="Сервер" Style="{StaticResource Caption}" Margin="0,0,0,6" />
-                        <TextBlock Grid.Row="0" Grid.Column="1" Text="127.0.0.1" Style="{StaticResource Mono}" />
+                        <StackPanel Grid.Column="0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Сервер" Style="{StaticResource FieldLabel}" />
+                                <Button x:Name="ServerCopy" Style="{StaticResource CopyGlyph}" Click="OnCopyServer" Margin="4,0,0,0" />
+                            </StackPanel>
+                            <TextBlock Text="127.0.0.1" Style="{StaticResource FieldValue}" />
+                        </StackPanel>
 
-                        <TextBlock Grid.Row="1" Text="Порт" Style="{StaticResource Caption}" Margin="0,0,0,6" />
-                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="PortText" Style="{StaticResource Mono}" />
+                        <Border Grid.Column="1" Style="{StaticResource ColumnLine}" />
 
-                        <TextBlock Grid.Row="2" Text="Секрет" Style="{StaticResource Caption}" />
-                        <TextBlock Grid.Row="2" Grid.Column="1" x:Name="SecretText" Style="{StaticResource Mono}" TextWrapping="Wrap" />
+                        <StackPanel Grid.Column="2">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Порт" Style="{StaticResource FieldLabel}" />
+                                <Button x:Name="PortCopy" Style="{StaticResource CopyGlyph}" Click="OnCopyPort" Margin="4,0,0,0" />
+                            </StackPanel>
+                            <TextBlock x:Name="PortText" Style="{StaticResource FieldValue}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="3" x:Name="LinkLine" Style="{StaticResource ColumnLine}" />
+
+                        <StackPanel Grid.Column="4" x:Name="LinkField">
+                            <TextBlock Text="Ссылка для Telegram" Style="{StaticResource FieldLabel}" />
+
+                            <!-- Ссылка несёт секрет — без неё прокси соединения не примет. -->
+                            <Border Margin="0,8,0,0" CornerRadius="8" BorderThickness="1"
+                                    Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock x:Name="LinkText" Margin="14,0,10,0" VerticalAlignment="Center" FontSize="13"
+                                               TextTrimming="CharacterEllipsis" />
+
+                                    <Border Grid.Column="1" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Border}">
+                                        <Button x:Name="LinkCopy" Style="{StaticResource CopyGlyph}" Click="OnCopy"
+                                                FontSize="15" Padding="0" Margin="6,6,6,6" />
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+
+                        <Border Grid.Column="5" Style="{StaticResource ColumnLine}" />
+
+                        <StackPanel Grid.Column="6">
+                            <TextBlock Text="Тип" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="MTProto (WebSocket)" Style="{StaticResource FieldValue}" />
+                        </StackPanel>
                     </Grid>
-                </StackPanel>
-            </Border>
-
-            <!-- Когда он нужен. -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
-                <StackPanel>
-                    <TextBlock Text="Когда он нужен" FontWeight="SemiBold" FontSize="15" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                               Text="Когда Telegram не идёт через VPN: адреса Telegram закрыты, а через прокси он работает целиком, с фото и видео. Работает прокси только вместе с десинком — без него соединения самого прокси режет DPI, и Telegram не подключится. В «Гибриде» и «Туннеле» Telegram и так идёт через VPN — прокси там не обязателен, но и не мешает." />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Только Telegram Desktop на этом компьютере — телефон через него не подключить. Прокси: tg-ws-proxy-rs (valnesfjord) — порт программы tg-ws-proxy (Flowseal), обе под MIT. Журнал — runtime\tg-ws-proxy.log." />
                 </StackPanel>
             </Border>
 
