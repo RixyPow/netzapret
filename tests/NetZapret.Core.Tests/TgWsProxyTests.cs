@@ -47,6 +47,71 @@ public sealed class TgWsProxyTests
         Assert.DoesNotContain("--secret", arguments);
     }
 
+    /// <summary>Все значения ключа: «--dc-ip 2:… --dc-ip 4:…» → [2:…, 4:…].</summary>
+    private static List<string> Values(IReadOnlyList<string> arguments, string key) =>
+        [.. arguments.Select((a, i) => (a, i)).Where(p => p.a == key).Select(p => arguments[p.i + 1])];
+
+    /// <summary>
+    /// --default-domains снимает у прокси прямые адреса по умолчанию — их задаём
+    /// явно, иначе весь Telegram идёт через домены Cloudflare (21.10: почти все 503).
+    /// </summary>
+    [Fact]
+    public void DirectPathToDc2AndDc4IsOnByDefault()
+    {
+        var arguments = TgWsProxy.Arguments(1443);
+
+        Assert.Equal(["2:149.154.167.220", "4:149.154.167.220"], Values(arguments, "--dc-ip"));
+        Assert.Contains("--default-domains", arguments);
+        Assert.DoesNotContain("--cf-connect-timeout", arguments);
+
+        // Так же и из настроек, записанных до этих выключателей.
+        Assert.Equal(new TgWsProxyRoutes(), TgWsProxyRoutes.From(new AppSettings()));
+    }
+
+    [Fact]
+    public void RoutesFromTheTabBecomeKeys()
+    {
+        var onlyCloudflare = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectMain: false));
+        Assert.Empty(Values(onlyCloudflare, "--dc-ip"));
+        Assert.Contains("--default-domains", onlyCloudflare);
+
+        var all = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(DirectOther: true));
+        Assert.Equal(
+            ["2:149.154.167.220", "4:149.154.167.220", "1:149.154.174.100", "3:149.154.174.100", "5:149.154.170.100"],
+            Values(all, "--dc-ip"));
+
+        var quick = TgWsProxy.Arguments(1443, new TgWsProxyRoutes(CfConnectTimeout: 3));
+        Assert.Equal(["3"], Values(quick, "--cf-connect-timeout"));
+
+        // Мусор в настройках — ожидание прокси по умолчанию, а не ключ, на котором он упадёт.
+        Assert.DoesNotContain("--cf-connect-timeout", TgWsProxy.Arguments(1443, new TgWsProxyRoutes(CfConnectTimeout: 0)));
+        Assert.DoesNotContain("--cf-connect-timeout", TgWsProxy.Arguments(1443, new TgWsProxyRoutes(CfConnectTimeout: 600)));
+    }
+
+    [Fact]
+    public void RouteSettingsSurviveTheSettingsFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-tgroutes-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, """{ "TelegramProxy": true }""");
+            var old = AppSettings.Load(path);
+            Assert.True(old.TelegramProxyDirect);
+            Assert.False(old.TelegramProxyDirectOther);
+            Assert.Equal(TgWsProxy.DefaultCfConnectTimeout, old.TelegramProxyCfTimeout);
+
+            (old with { TelegramProxyDirect = false, TelegramProxyDirectOther = true, TelegramProxyCfTimeout = 3 }).Save(path);
+            var read = AppSettings.Load(path);
+
+            Assert.Equal(new TgWsProxyRoutes(false, true, 3), TgWsProxyRoutes.From(read));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void ServiceRefusesWithoutExecutableOrSecret()
     {

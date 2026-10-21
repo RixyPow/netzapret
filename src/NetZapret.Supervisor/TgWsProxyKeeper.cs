@@ -64,7 +64,8 @@ public static class TgWsProxyKeeper
                 TgWsProxy.Executable(),
                 settings.TelegramProxyPort,
                 settings.TelegramProxySecret!,
-                Path.GetFullPath("."))
+                Path.GetFullPath("."),
+                TgWsProxyRoutes.From(settings))
             {
                 OutputLogPath = Path.Combine("runtime", "tg-ws-proxy.log"),
             };
@@ -78,6 +79,23 @@ public static class TgWsProxyKeeper
 
             _running = Task.Run(() => supervisor.RunAsync(token));
         }
+    }
+
+    /// <summary>
+    /// Поднимает прокси окна заново — с ключами из нынешних настроек.
+    /// </summary>
+    /// <remarks>
+    /// Ключи прокси читает только при запуске: путь к Telegram, сменённый на
+    /// вкладке, без перезапуска не действует. Не держит окно прокси — ничего
+    /// не делает: у движков свой, он меняется с их перезапуском.
+    /// </remarks>
+    public static void Restart(AppSettings settings, bool enginesHoldIt)
+    {
+        if (!Running)
+            return;
+
+        Stop();
+        Sync(settings, enginesHoldIt);
     }
 
     /// <summary>Гасит прокси окна и ждёт, пока он уйдёт (не дольше 10 с).</summary>

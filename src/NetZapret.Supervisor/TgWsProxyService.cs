@@ -19,13 +19,17 @@ public sealed class TgWsProxyService : SupervisedService
     private readonly int _port;
     private readonly string _secret;
     private readonly string _workingDirectory;
+    private readonly TgWsProxyRoutes _routes;
 
-    public TgWsProxyService(string executablePath, int port, string secret, string workingDirectory)
+    /// <param name="routes">Пути к Telegram — настройки вкладки; <c>null</c> — по умолчанию.</param>
+    public TgWsProxyService(string executablePath, int port, string secret, string workingDirectory,
+        TgWsProxyRoutes? routes = null)
     {
         _executablePath = executablePath;
         _port = port;
         _secret = secret;
         _workingDirectory = workingDirectory;
+        _routes = routes ?? new TgWsProxyRoutes();
     }
 
     /// <summary>Имя службы — по нему её узнаёт EngineHealth как необязательную.</summary>
@@ -54,7 +58,7 @@ public sealed class TgWsProxyService : SupervisedService
             StandardErrorEncoding = new UTF8Encoding(false),
         };
 
-        foreach (var argument in TgWsProxy.Arguments(_port))
+        foreach (var argument in TgWsProxy.Arguments(_port, _routes))
             startInfo.ArgumentList.Add(argument);
 
         // Секрет — переменной, а не ключом: командную строку видят журналы

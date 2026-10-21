@@ -95,11 +95,95 @@ public static class TgWsProxy
           + "на этом компьютере. Подключить Telegram к нему — кнопкой на вкладке «TG Proxy».";
 
     /// <summary>Ключи запуска; секрет — не здесь, а в <see cref="SecretVariable"/>.</summary>
-    public static IReadOnlyList<string> Arguments(int port) =>
-    [
-        "--host", "127.0.0.1",
-        "--link-ip", "127.0.0.1",
-        "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        "--default-domains",
-    ];
+    /// <remarks>
+    /// <para>
+    /// <c>--default-domains</c> — ради медиа: без него DC203 и прочие дата-центры
+    /// без прямого адреса шли на голый TCP и падали (замер 07.10, 29 таймаутов
+    /// из 35). Но этот ключ молча снимает и прямые адреса по умолчанию (DC2 и DC4
+    /// → 149.154.167.220): в шапке запуска «Target DC IPs:» пусто у 2.5.2, 2.5.4
+    /// и 2.5.6, и весь Telegram шёл через домены Cloudflare общего списка. 21.10
+    /// у владельца из них жили два, и те через раз: за 3,5 ч 321 соединение,
+    /// 292 ответа 503 и 20 таймаутов на пути, 80 сеансов Telegram закрыл сам без
+    /// единого байта — «работает нестабильно». Поэтому прямые адреса задаются
+    /// явно (<see cref="TgWsProxyRoutes"/>), а Cloudflare остаётся запасным путём.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> Arguments(int port, TgWsProxyRoutes? routes = null)
+    {
+        routes ??= new TgWsProxyRoutes();
+
+        var arguments = new List<string>
+        {
+            "--host", "127.0.0.1",
+            "--link-ip", "127.0.0.1",
+            "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "--default-domains",
+        };
+
+        if (routes.DirectMain)
+        {
+            foreach (var target in DirectMain)
+                arguments.AddRange(["--dc-ip", target]);
+        }
+
+        if (routes.DirectOther)
+        {
+            foreach (var target in DirectOther)
+                arguments.AddRange(["--dc-ip", target]);
+        }
+
+        int timeout = CfTimeout(routes.CfConnectTimeout);
+
+        if (timeout != DefaultCfConnectTimeout)
+        {
+            arguments.AddRange(["--cf-connect-timeout",
+                timeout.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
+        }
+
+        return arguments;
+    }
+
+    /// <summary>
+    /// Прямые адреса DC2 и DC4 — те, что прокси берёт по умолчанию без
+    /// <c>--default-domains</c>.
+    /// </summary>
+    /// <remarks>
+    /// Самопроверка прокси 21.10 у владельца (<c>--check-listener</c>, настоящий
+    /// <c>req_pq_multi</c> к DC2): только Cloudflare — 185, 372 и 406 мс, с этими
+    /// адресами — 101–112 мс, «DC2 → WS connected via 149.154.167.220».
+    /// </remarks>
+    public static IReadOnlyList<string> DirectMain { get; } = ["2:149.154.167.220", "4:149.154.167.220"];
+
+    /// <summary>
+    /// Прямые адреса DC1, DC3 и DC5 — веб-входы Telegram по честному DoH
+    /// (kws1 и kws3.web.telegram.org — 149.154.174.100, kws5 — 149.154.170.100).
+    /// </summary>
+    /// <remarks>
+    /// 21.10 в сети владельца все три отвечали по TLS за 0,56–0,68 с. Самопроверка
+    /// прокси ходит только в DC2, и рабочий ли это путь для настоящих соединений,
+    /// не проверено — поэтому выключено по умолчанию.
+    /// </remarks>
+    public static IReadOnlyList<string> DirectOther { get; } =
+        ["1:149.154.174.100", "3:149.154.174.100", "5:149.154.170.100"];
+
+    /// <summary>Ожидание домена Cloudflare по умолчанию у самого прокси, секунды.</summary>
+    public const int DefaultCfConnectTimeout = 10;
+
+    /// <summary>Ожидание домена Cloudflare в разумных пределах.</summary>
+    public static int CfTimeout(int seconds) => seconds is >= 1 and <= 30 ? seconds : DefaultCfConnectTimeout;
+}
+
+/// <summary>Пути прокси к Telegram — настройки вкладки «TG Proxy» (владелец 21.10).</summary>
+/// <param name="DirectMain">Прямой путь к DC2 и DC4 (<see cref="TgWsProxy.DirectMain"/>).</param>
+/// <param name="DirectOther">Прямой путь к DC1, DC3 и DC5 (<see cref="TgWsProxy.DirectOther"/>).</param>
+/// <param name="CfConnectTimeout">Сколько ждать один домен Cloudflare, секунды.</param>
+public sealed record TgWsProxyRoutes(
+    bool DirectMain = true,
+    bool DirectOther = false,
+    int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout)
+{
+    public static TgWsProxyRoutes From(AppSettings settings) => new(
+        settings.TelegramProxyDirect,
+        settings.TelegramProxyDirectOther,
+        settings.TelegramProxyCfTimeout);
 }

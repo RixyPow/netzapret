@@ -77,6 +77,85 @@
                 </Grid>
             </Border>
 
+            <!--
+                Пути к Telegram (владелец 21.10: «сделай настройку на вкладке прокси»).
+                Ключ default-domains снимал у прокси прямые адреса, и весь Telegram
+                шёл через домены Cloudflare, почти все отвечавшие 503 (TgWsProxy.Arguments).
+            -->
+            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+                <StackPanel>
+                    <TextBlock Text="Пути к Telegram" FontWeight="SemiBold" FontSize="15" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                               Text="Прокси ходит к серверам Telegram напрямую, по WebSocket, а где прямого адреса нет — через домены за Cloudflare из общего списка. Если прокси держит программа, новое действует сразу; если движки — после их перезапуска." />
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,14,0,12" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Напрямую к DC2 и DC4" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Переписка и большая часть фото и видео идут на 149.154.167.220, без Cloudflare. Выключите, если у вашего провайдера этот адрес закрыт." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="DirectMainWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="DirectMain" Style="{StaticResource Switch}"
+                                      Click="OnDirectMain" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,12,0,12" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Напрямую к DC1, DC3 и DC5" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Их веб-входы — 149.154.174.100 и 149.154.170.100. Адреса отвечают, но настоящий Telegram через них ещё не проверяли: включите на пробу и посмотрите, стало ли лучше." />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="DirectOtherWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="DirectOther" Style="{StaticResource Switch}"
+                                      Click="OnDirectOther" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,12,0,12" />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Ждать домен Cloudflare" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Сколько ждать ответа одного домена, прежде чем пробовать следующий. Многие домены общего списка молчат: меньше — быстрее их обходит, но на медленной сети может бросить и живой." />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="1" x:Name="CfTimeoutChoice" Width="200" VerticalAlignment="Center"
+                                  SelectionChanged="OnCfTimeout">
+                            <ComboBoxItem Content="3 секунды" Tag="3" />
+                            <ComboBoxItem Content="5 секунд" Tag="5" />
+                            <ComboBoxItem Content="10 секунд — как у прокси" Tag="10" />
+                        </ComboBox>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Подключение Telegram. -->
             <Border Style="{StaticResource Card}" Margin="0,14,0,0">
                 <StackPanel>

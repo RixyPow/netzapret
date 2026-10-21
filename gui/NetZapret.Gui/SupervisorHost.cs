@@ -658,7 +658,8 @@ internal static class SupervisorHost
             executable,
             settings.TelegramProxyPort,
             settings.TelegramProxySecret ?? string.Empty,
-            Path.GetFullPath("."))
+            Path.GetFullPath("."),
+            TgWsProxyRoutes.From(settings))
         {
             OutputLogPath = Path.Combine("runtime", "tg-ws-proxy.log"),
         });

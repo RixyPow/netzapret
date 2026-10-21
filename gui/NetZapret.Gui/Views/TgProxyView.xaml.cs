@@ -45,6 +45,17 @@ public partial class TgProxyView : UserControl
         Always.IsEnabled = settings.TelegramProxy;
         AlwaysWord.Text = settings.TelegramProxyAlways ? "вкл." : "выкл.";
 
+        DirectMain.IsChecked = settings.TelegramProxyDirect;
+        DirectMainWord.Text = settings.TelegramProxyDirect ? "вкл." : "выкл.";
+        DirectOther.IsChecked = settings.TelegramProxyDirectOther;
+        DirectOtherWord.Text = settings.TelegramProxyDirectOther ? "вкл." : "выкл.";
+
+        _showingRoutes = true;
+        var timeout = TgWsProxy.CfTimeout(settings.TelegramProxyCfTimeout).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var items = CfTimeoutChoice.Items.OfType<ComboBoxItem>().ToList();
+        CfTimeoutChoice.SelectedItem = items.FirstOrDefault(i => i.Tag as string == timeout) ?? items[^1];
+        _showingRoutes = false;
+
         // Без десинка прокси молча не работает: его соединения к Telegram
         // и доменам за Cloudflare режет DPI (жалоба пользователя 11.10 —
         // «включаю только его, Telegram не работает, нужен ещё десинк»).
@@ -119,6 +130,74 @@ public partial class TgProxyView : UserControl
             await Task.Delay(1500);
             StateText.Text = Describe(AppSettings.Load(AppSettings.DefaultPath));
         });
+    }
+
+    /// <summary>Выбор показывается, а не делается — события выбора тогда не в счёт.</summary>
+    private bool _showingRoutes;
+
+    private void OnDirectMain(object sender, RoutedEventArgs e)
+    {
+        bool on = DirectMain.IsChecked == true;
+        SaveRoutes(s => s with { TelegramProxyDirect = on },
+            on ? "DC2 и DC4 — напрямую." : "DC2 и DC4 — только через Cloudflare.");
+    }
+
+    private void OnDirectOther(object sender, RoutedEventArgs e)
+    {
+        bool on = DirectOther.IsChecked == true;
+        SaveRoutes(s => s with { TelegramProxyDirectOther = on },
+            on ? "DC1, DC3 и DC5 — напрямую, на пробу." : "DC1, DC3 и DC5 — через Cloudflare.");
+    }
+
+    private void OnCfTimeout(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showingRoutes || CfTimeoutChoice.SelectedItem is not ComboBoxItem { Tag: string tag }
+            || !int.TryParse(tag, out var seconds))
+        {
+            return;
+        }
+
+        if (TgWsProxy.CfTimeout(AppSettings.Load(AppSettings.DefaultPath).TelegramProxyCfTimeout) == seconds)
+            return;
+
+        SaveRoutes(s => s with { TelegramProxyCfTimeout = seconds }, $"Домен Cloudflare прокси ждёт {seconds} с.");
+    }
+
+    /// <summary>
+    /// Пишет пути и применяет их: прокси окна перезапускается сразу, прокси
+    /// движков — с их перезапуском.
+    /// </summary>
+    /// <remarks>
+    /// Ключи прокси читает только при запуске: без перезапуска сменённый путь
+    /// не действует, а вкладка говорила бы о том, чего нет.
+    /// </remarks>
+    private void SaveRoutes(Func<AppSettings, AppSettings> change, string done)
+    {
+        try
+        {
+            var settings = change(AppSettings.Load(AppSettings.DefaultPath));
+            settings.Save(AppSettings.DefaultPath);
+
+            bool byWindow = TgWsProxyKeeper.Running;
+            bool byEngines = !byWindow && settings.TelegramProxyWithEngines && EngineControl.IsRunning;
+
+            // Остановка ждёт ухода процесса до 10 с — не на потоке окна.
+            if (byWindow)
+                _ = Task.Run(() => TgWsProxyKeeper.Restart(settings, enginesHoldIt: false));
+
+            Status.Text = done + (byWindow
+                ? " Прокси перезапущен."
+                : byEngines ? " Применится после перезапуска движков." : string.Empty);
+
+            if (byEngines)
+                (Window.GetWindow(this) as MainWindow)?.OfferRestart("Прокси Telegram — пути");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+
+        ShowState();
     }
 
     private void OnEnabled(object sender, RoutedEventArgs e)
