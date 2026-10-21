@@ -221,9 +221,11 @@
   соединениями к тому же адресу; замерший подресурс — «обрыв после
   рукопожатия», тишина с нулевого байта засчитывается двум подряд. Вживую
   20.10: hetzner — vendors.js 154 866 Б за 0,24 с, reborder.app через туннель —
-  чанк 40 936 Б; саму заморозку подресурса не ловил. Корень 7tv.io отвечает
-  JSON без разметки — ему это не помогает; проба через туннель подресурсы
-  не качает. На ntc.party («Zapret2» №1329, 11.10): счётчик заморозки —
+  чанк 40 936 Б. **Вживую у владельца 21.10 21:28** (168 имён, V12 Lite):
+  twitchcon.com — страница 12 431 Б прошла, чанк `/_next/static/chunks/…js`
+  замер на 16 384 Б, вердикт «обрыв после рукопожатия», почерк «заморозка»
+  его поймал. Корень 7tv.io отвечает JSON без разметки — ему это не
+  помогает; проба через туннель подресурсы не качает. На ntc.party («Zapret2» №1329, 11.10): счётчик заморозки —
   сумма байтов обеих сторон одного соединения, обнуляется новым; по другой
   версии (№1300) — около 25 пакетов, multidisorder с большим числом пакетов
   ловит блок и на белом SNI.
@@ -812,10 +814,28 @@
 - **Game filter — перенос с zapret-discord-youtube, автор Flowseal**
   (`github.com/Flowseal/zapret-discord-youtube`, MIT, в лицензии две строки
   копирайта — bol-van и Flowseal). Его же список `ipset-all` (сверка 30.09:
-  все 33 048 записей совпадают с его `ipset-all.txt.backup`) и три образца
-  пакетов к секциям игр (`tls_clienthello_max_ru.bin`, `stun2.bin`,
-  `ACTIVE_GAME_UDP.bin` — побайтно его). Назван там же, где Zapret GUI;
+  все 33 048 записей совпадают с его `ipset-all.txt.backup`; 21.10 — наш
+  файл равен и его 1.10.4, хэш `b15b5f76` после нормализации CRLF: список
+  к нам приходит из установки Zapret GUI, не из репозитория) и три образца
+  пакетов к секциям игр (`stun2.bin`, `ACTIVE_GAME_UDP.bin` и приветствие:
+  до 21.10 `tls_clienthello_max_ru.bin`, с 21.10 `tls_clienthello_www_sferum_ru.bin` —
+  Flowseal в 1.10.4 сменил стандартную подделку в ALT11, ALT12, EXP и game
+  filter, причину не назвал; у нас не замерено). Назван там же, где Zapret GUI;
   лицензия едет в архив как `engines/zapret/LICENSE-Flowseal.txt`.
+  **Свои образцы пакетов — `config/blobs/*.bin`**, `build.cmd` и `pack.cmd`
+  кладут их как `bin/nz-*.bin` (21.10). Первые семь — приветствия V3nilla из
+  Flowseal 1.10.4 (PR 17925; сверены хэшами): TLS awswaf, steam-chat,
+  steamstatic, teamspeak и QUIC lemana.pro, steam-chat, steamstatic;
+  объявлены в V12 и V12 Lite, секции их не берут, TLS четвёрка — рецептами
+  каталога «Приветствие … (Flowseal)» в форме ALT11 на zapret2
+  (`fake` + `multisplit:seqovl=1100`). Ни один у нас не замерен.
+  **Порт стратегий Flowseal на zapret2** есть у SnAnVl
+  (`github.com/SnAnVl/zapret-discord-youtube`, ветка `zapret2`, 21.10 —
+  «v1.0.5.2 => v1.0.6»): все 22 .bat на `winws2` с `zapret-lib` и
+  `zapret-antidpi`, рецепты `fake:tcp_ts=-600000:repeats=8` + `multisplit:seqovl`,
+  списки list-general/list-google/ipset-all те же, что у нас в `lists\` из
+  Zapret GUI. Готовое сырьё для пресета «Flowseal ALT11», в поставку не брал —
+  решение владельца, `--dry-run` не гонял.
 - **Чужое авторство сверять, а не вспоминать:** лицензию — чтением файла
   из репозитория (`curl` raw), файлы — сравнением (`git hash-object` против
   `sha` из `gh api …/contents`, списки — `comm`). `gh api` без `timeout`
