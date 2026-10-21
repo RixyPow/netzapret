@@ -135,10 +135,17 @@
             </DockPanel>
         </Border>
 
-        <Grid Grid.Column="1">
+        <Grid Grid.Column="1" x:Name="SectionArea">
             <ContentControl x:Name="Section">
                 <views:StatusView />
             </ContentControl>
+
+            <!--
+                «Маршруты» — своим местом: уход их прячет, а не отцепляет
+                (21.10, OnSection). Отцепленные при возврате раскладывали сотню
+                карточек заново — у владельца сторож писал 1,0–1,6 с.
+            -->
+            <ContentControl x:Name="RoutesHost" Visibility="Collapsed" />
 
             <!--
                 Всплывающие карточки — стопкой внизу справа, чтобы две разом

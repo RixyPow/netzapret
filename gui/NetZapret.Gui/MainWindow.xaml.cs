@@ -335,11 +335,11 @@ public partial class MainWindow : Window
         onboarding.Completed += (_, _) =>
         {
             var status = new StatusView();
-            Section.Content = status;
+            ShowPage(status);
             Motion.Page(status);
         };
 
-        Section.Content = onboarding;
+        ShowPage(onboarding);
     }
 
     /// <summary>
@@ -468,11 +468,22 @@ public partial class MainWindow : Window
         // Ушли из мастера в другой раздел — он закрыт, как «Пропустить».
         (Section.Content as OnboardingView)?.Leave();
 
-        Section.Content = name switch
+        // «Маршруты» — своим местом: уход их прячет, а не отцепляет (21.10,
+        // RoutesView.Shared). Без анимации (владелец, 28.09): список из сотни
+        // строк, и его появление по частям только мешает искать.
+        if (name == "routes")
+        {
+            RoutesView.Shared(RoutesHost);
+            Section.Content = null;
+            Section.Visibility = Visibility.Collapsed;
+            RoutesHost.Visibility = Visibility.Visible;
+            return;
+        }
+
+        FrameworkElement page = name switch
         {
             "vpn" => new VpnView(),
             "desync" => new DesyncView(),
-            "routes" => RoutesView.Shared(),
             "tgproxy" => new TgProxyView(),
             "check" => new CheckView(),
             "speed" => new SpeedView(),
@@ -485,17 +496,27 @@ public partial class MainWindow : Window
             _ => new StatusView(),
         };
 
-        // «Маршруты» — без анимации (владелец, 28.09): список из сотни строк,
-        // и его появление по частям только мешает искать.
-        if (name != "routes" && Section.Content is FrameworkElement page)
-            Motion.Page(page);
+        ShowPage(page);
+        Motion.Page(page);
+    }
+
+    /// <summary>Раздел — на место разделов; спрятанные «Маршруты» остаются в окне.</summary>
+    private void ShowPage(FrameworkElement page)
+    {
+        RoutesHost.Visibility = Visibility.Collapsed;
+        Section.Visibility = Visibility.Visible;
+        Section.Content = page;
     }
 
     /// <summary>
     /// Место раздела — им же будет страница «Главной»: для миниатюры в редакторе
     /// тем, чтобы она клала картинку на страницу тех же размеров (21.10, «миниатюра врёт»).
     /// </summary>
-    internal Size PageSize => Section.RenderSize;
+    /// <remarks>
+    /// Размер всей области, а не <c>Section</c>: при открытых «Маршрутах»
+    /// <c>Section</c> спрятан (21.10).
+    /// </remarks>
+    internal Size PageSize => SectionArea.RenderSize;
 
     /// <summary>
     /// Открывает раздел по имени из <c>Tag</c> пункта меню — для быстрых

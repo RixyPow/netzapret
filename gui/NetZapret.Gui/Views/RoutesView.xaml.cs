@@ -571,8 +571,16 @@ public partial class RoutesView : UserControl
         // Список, вставленный в поле поиска, — в окно «Добавить списком» (RoutesView.List).
         DataObject.AddPastingHandler(Search, OnSearchPaste);
 
-        Loaded += (_, _) => Reload();
-        Unloaded += (_, _) => _icons?.Cancel();
+        // По показу, а не по Loaded: с 21.10 уход из раздела его прячет, а не
+        // отцепляет (Shared), и Loaded приходит один раз. Перечитать надо при
+        // каждом возвращении — правила могли поменять в другом разделе или в nz.
+        IsVisibleChanged += (_, e) =>
+        {
+            if (e.NewValue is true)
+                Reload();
+            else
+                _icons?.Cancel();
+        };
     }
 
     /// <summary>Собирает строки из прочитанного (<see cref="ReadAll"/>) — в потоке окна.</summary>
