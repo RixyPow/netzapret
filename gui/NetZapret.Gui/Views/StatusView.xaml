@@ -367,18 +367,11 @@
                             над и под плашками и в просвете между ними (RouteShape).
                             По линиям бегут огоньки, пока движки работают и анимации
                             включены, и только пока раздел на экране (MoveRoutes). Цвет —
-                            состояния, как у кольца (ShowRoutes). Края гаснут маской:
-                            углы карточки скруглены, а слой — прямоугольник.
+                            состояния, как у кольца (ShowRoutes). Маска и скруглённая
+                            обрезка — в коде, по размеру слоя (FrameRoutes): линии не
+                            выходят за плашку слева и за кнопку справа.
                         -->
                         <Canvas x:Name="RouteLayer" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnRouteSize">
-                            <Canvas.OpacityMask>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                                    <GradientStop Offset="0" Color="#00000000" />
-                                    <GradientStop Offset="0.06" Color="#FF000000" />
-                                    <GradientStop Offset="0.94" Color="#FF000000" />
-                                    <GradientStop Offset="1" Color="#00000000" />
-                                </LinearGradientBrush>
-                            </Canvas.OpacityMask>
 
                             <!--
                                 Без BitmapCache: с 20.10 линии гнутся каждый кадр, и картинку

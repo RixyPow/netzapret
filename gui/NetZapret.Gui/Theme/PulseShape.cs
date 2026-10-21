@@ -41,16 +41,4 @@ public static class PulseShape
         outline.Freeze();
         return outline;
     }
-
-    /// <summary>Узлы радиусом <paramref name="dot"/> в вершинах.</summary>
-    public static Geometry Nodes(Point centre, double radius, double dot)
-    {
-        var group = new GeometryGroup();
-
-        foreach (var corner in Corners(centre, radius))
-            group.Children.Add(new EllipseGeometry(corner, dot, dot));
-
-        group.Freeze();
-        return group;
-    }
 }

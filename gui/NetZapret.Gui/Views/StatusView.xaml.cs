@@ -927,6 +927,10 @@ public partial class StatusView : UserControl
         var column = ActionColumn.TranslatePoint(new Point(0, 0), RouteLayer);
         _routeFrame = (w, h, plate.X, column.X, column.Y);
 
+        FrameRoutes(w, h,
+            StatePlate.TranslatePoint(new Point(0, 0), RouteLayer).X,
+            ActionColumn.TranslatePoint(new Point(ActionColumn.ActualWidth, 0), RouteLayer).X);
+
         var layout = Layout(_routeTime);
 
         RouteLines.Children.Clear();
@@ -982,6 +986,49 @@ public partial class StatusView : UserControl
         // Новые линии ещё не крашены, и такт снова в путь, если движки работают.
         _routeColour = null;
         ShowRoutes(_routeKey);
+    }
+
+    /// <summary>Сколько линия гаснет у края плашки и кнопки.</summary>
+    private const double RouteFade = 28;
+
+    /// <summary>
+    /// Линии — только между левым краем плашки «Работает» и правым краем кнопки,
+    /// и в скруглённых углах карточки.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 22.10: «полоски выезжают за пределы тайла, с правой стороны тоже».
+    /// Маска в долях (до 22.10, 6 % по краям) мерилась не слоем, а тем, что
+    /// в нём нарисовано: линии нарочно длиннее слоя (RouteShape.RunOut), и
+    /// затухание уезжало за обрезку — у края карточки линии шли в полную силу
+    /// и в скруглённых углах — поверх рамки (слой — прямоугольник). Теперь маска
+    /// в точках слоя: до плашки и после кнопки линий нет, у их краёв линии
+    /// гаснут на <see cref="RouteFade"/>; обрезка скруглена, как углы карточки.
+    /// </remarks>
+    private void FrameRoutes(double w, double h, double left, double right)
+    {
+        Color Ink(byte alpha) => Color.FromArgb(alpha, 0, 0, 0);
+
+        var mask = new LinearGradientBrush
+        {
+            MappingMode = BrushMappingMode.Absolute,
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(w, 0),
+            GradientStops =
+            {
+                new GradientStop(Ink(0), Math.Clamp(left / w, 0, 1)),
+                new GradientStop(Ink(255), Math.Clamp((left + RouteFade) / w, 0, 1)),
+                new GradientStop(Ink(255), Math.Clamp((right - RouteFade) / w, 0, 1)),
+                new GradientStop(Ink(0), Math.Clamp(right / w, 0, 1)),
+            },
+        };
+
+        mask.Freeze();
+        RouteLayer.OpacityMask = mask;
+
+        // Карточка: скругление 14 за рамкой 2.
+        var clip = new RectangleGeometry(new Rect(0, 0, w, h), 12, 12);
+        clip.Freeze();
+        RouteLayer.Clip = clip;
     }
 
     private RouteShape.Layout Layout(double time)
@@ -1144,10 +1191,10 @@ public partial class StatusView : UserControl
     /// <summary>Сторона поля под волны; кольцо (68) — посередине.</summary>
     private const double PulseBox = 100;
 
-    /// <summary>Радиус узлов: сразу за кольцом (его край — 34) с зазором под свечение.</summary>
+    /// <summary>Радиус, где волна рождается: сразу за кольцом (его край — 34) с зазором под свечение.</summary>
     private const double PulseRadius = 37;
 
-    /// <summary>Во сколько раз волна вырастает за жизнь: от узлов до 47 — на 3 точки не доходя края поля (47 / 37).</summary>
+    /// <summary>Во сколько раз волна вырастает за жизнь: от 37 до 47 — на 3 точки не доходя края поля (47 / 37).</summary>
     private const double PulseReach = 1.27;
 
     /// <summary>На сколько градусов волна поворачивается за жизнь — полшага фигуры.</summary>
@@ -1156,7 +1203,6 @@ public partial class StatusView : UserControl
     /// <summary>Жизнь одной волны; волн три, и выходят они через треть жизни друг за другом.</summary>
     private static readonly TimeSpan PulseLife = TimeSpan.FromSeconds(3.6);
 
-    private System.Windows.Shapes.Path? _pulseNodes;
     private readonly List<System.Windows.Shapes.Path> _ripples = [];
 
     /// <summary>Цвет волн сейчас и идут ли они — повтор на тике опроса ничего не делает.</summary>
@@ -1164,15 +1210,15 @@ public partial class StatusView : UserControl
     private bool _pulseMoving;
 
     /// <summary>
-    /// Шесть узлов вокруг кольца и три волны-шестиугольника над ними.
+    /// Три волны-шестиугольника вокруг кольца.
     /// </summary>
     /// <remarks>
     /// Шестиугольник, а не круг, расходящийся кругами, и не дуга по кольцу:
     /// дуга, бегущая по кругу, — это «загрузка», а «Работает» значит «готово».
-    /// Волна рождается в узлах у самого кольца — её середины сторон ещё
-    /// под ним, — растёт почти до края плашки, поворачиваясь на полшага, и гаснет;
-    /// три волны вразбег дают закрученный узор. Узлы стоят и без анимации:
-    /// без них поле вокруг кольца было бы пустым, с ними — значок.
+    /// Волна рождается у самого кольца — её середины сторон ещё под ним, —
+    /// растёт почти до края плашки, поворачиваясь на полшага, и гаснет;
+    /// три волны вразбег дают закрученный узор. Шести узлов в вершинах с 22.10
+    /// нет (владелец: «убери точки вокруг круга»): без движения стоит одно кольцо.
     /// </remarks>
     private void BuildPulse()
     {
@@ -1201,16 +1247,12 @@ public partial class StatusView : UserControl
             PulseLayer.Children.Add(ripple);
         }
 
-        // Узлы — поверх волн: волна выходит из них, а не накрывает их.
-        _pulseNodes = new System.Windows.Shapes.Path { Data = PulseShape.Nodes(centre, PulseRadius, 2.2) };
-        PulseLayer.Children.Add(_pulseNodes);
-
         // Серыми до первого опроса — как кольцо в разметке.
         ShowPulse("Faint", moving: false);
     }
 
     /// <summary>
-    /// Красит узлы и волны цветом состояния и пускает волны, пока движки работают.
+    /// Красит волны цветом состояния и пускает их, пока движки работают.
     /// </summary>
     /// <remarks>
     /// Цвет — тот же ключ, что у кольца и линий на фоне (ShowDot, ShowRoutes).
@@ -1220,19 +1262,14 @@ public partial class StatusView : UserControl
     /// </remarks>
     private void ShowPulse(string colourKey, bool moving)
     {
-        if (_pulseNodes is null)
+        if (_ripples.Count == 0)
             return;
 
         if (colourKey != _pulseColour)
         {
             _pulseColour = colourKey;
 
-            var colour = StateColour(colourKey);
-            bool idle = colourKey == "Faint";
-
-            _pulseNodes.Fill = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? 0.45 : 0.85)));
-
-            var wave = Frozen(new SolidColorBrush(colour));
+            var wave = Frozen(new SolidColorBrush(StateColour(colourKey)));
 
             foreach (var ripple in _ripples)
             {
