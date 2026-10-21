@@ -1,21 +1,17 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
-using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Themes;
-using NetZapret.Proxy;
 using NetZapret.Subscriptions;
-using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
 /// <summary>
-/// Сценарий первого запуска: знакомство, оформление, подписка, пробный запуск, результат.
+/// Сценарий первого запуска: знакомство, оформление, режим работы, подписка.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -43,9 +39,16 @@ namespace NetZapret.Gui.Views;
 /// пробный запуск и результат стали одним шагом «Запуск и проверка».
 /// </para>
 /// <para>
+/// 21.10 (владелец: «3 вкладку есть ли впн перенеси на 4 вкладку, а 5 вкладку
+/// удали») — четыре: режим третьим, подписка последней, «Запуск и проверка»
+/// убрана вместе с карточкой телеграм-канала. Движки поднимаются на «Главной».
+/// Режим теперь выбирают до подписки, поэтому «Туннель» без неё доступен:
+/// до подписки стоит «Десинк», а подключили её — встаёт «Туннель»
+/// (<see cref="_wantsTunnel"/>).
+/// </para>
+/// <para>
 /// Шага «что у вас не работает» здесь нет — он был первым в исходном
 /// варианте и просил выбрать сервис из полусотни, ничего не решая.
-/// Результат меряет сеть в целом, а не одно выбранное имя.
 /// </para>
 /// <para>
 /// Показывается вместо «Главной» ровно один раз, пока в настройках не стоит
@@ -56,28 +59,18 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class OnboardingView : UserControl
 {
-    private const int LastStep = 5;
+    private const int LastStep = 4;
 
     /// <summary>Мастер закрыт — завершением или пропуском.</summary>
     public event EventHandler? Completed;
 
     private int _step = 1;
 
-    private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(1) };
-
-    private DateTimeOffset? _startedAt;
-
     public OnboardingView()
     {
         InitializeComponent();
 
-        _poll.Tick += (_, _) => UpdateTrial();
-
-        Unloaded += (_, _) =>
-        {
-            _poll.Stop();
-            StopHero();
-        };
+        Unloaded += (_, _) => StopHero();
 
         for (int i = 0; i < LastStep; i++)
         {
@@ -92,9 +85,8 @@ public partial class OnboardingView : UserControl
     {
         1 => Step1,
         2 => Step2,
-        3 => Step3,
-        4 => StepMode,
-        _ => Step4,
+        3 => StepMode,
+        _ => StepVpn,
     };
 
     /// <summary>Кнопки шага — внизу, вне прокрутки, чтобы не уходили под край.</summary>
@@ -102,9 +94,8 @@ public partial class OnboardingView : UserControl
     {
         1 => Step1Buttons,
         2 => Step2Buttons,
-        3 => Step3Buttons,
-        4 => StepModeButtons,
-        _ => Step4Buttons,
+        3 => StepModeButtons,
+        _ => StepVpnButtons,
     };
 
     private void Show(int step)
@@ -139,11 +130,11 @@ public partial class OnboardingView : UserControl
         if (step == 2)
             ShowThemes();
 
-        if (step == 4)
+        if (step == 3)
             ShowModeStep();
 
-        if (step == 5)
-            PrepareTrial();
+        if (step == 4)
+            ShowVpnStep();
     }
 
     /// <summary>
@@ -151,33 +142,18 @@ public partial class OnboardingView : UserControl
     /// </summary>
     /// <remarks>
     /// Раньше эта кнопка закрывала мастер целиком с любого шага — человек,
-    /// нажавший её случайно, терял пробный запуск и результат. Теперь она
-    /// делает то же, что назвал бы следующий шаг сам: на подписке это
-    /// «десинк без VPN», на пробном запуске — «не запускать сейчас».
+    /// нажавший её случайно, терял следующие шаги. На последнем, подписке,
+    /// она «Готово» — то же, что «Нет подписки».
     /// </remarks>
     private void OnHeaderSkip(object sender, RoutedEventArgs e)
     {
-        switch (_step)
-        {
-            case 3:
-                SkipSubscription();
-                break;
-
-            case LastStep:
-                Finish();
-                break;
-
-            default:
-                Show(_step + 1);
-                break;
-        }
+        if (_step == LastStep)
+            Finish();
+        else
+            Show(_step + 1);
     }
 
-    private void OnBack(object sender, RoutedEventArgs e)
-    {
-        _poll.Stop();
-        Show(Math.Max(1, _step - 1));
-    }
+    private void OnBack(object sender, RoutedEventArgs e) => Show(Math.Max(1, _step - 1));
 
     // --- Движение ------------------------------------------------------------
 
@@ -749,115 +725,25 @@ public partial class OnboardingView : UserControl
 
     private void OnThemeNext(object sender, RoutedEventArgs e) => Show(3);
 
-    // --- Шаг 3: подписка на VPN ----------------------------------------------
-
-    private void OnNoSubscription(object sender, RoutedEventArgs e) => SkipSubscription();
+    // --- Шаг 3: режим работы -------------------------------------------------
 
     /// <summary>
-    /// Без подписки режим переключается на «только десинк».
+    /// «Туннель» выбран без выхода — подписку спросит следующий шаг.
     /// </summary>
     /// <remarks>
-    /// Режим по умолчанию — «Выборочно», и он требует туннель для всего,
-    /// что в правилах помечено <c>proxy</c>. Без подписки сборка конфига
-    /// отказывает целиком фразой «Подписка не задана», и пробный запуск
-    /// не поднял бы вообще ничего — ни десинка, который как раз работает
-    /// без всякой подписки.
+    /// Записать его сразу нельзя (<see cref="WorkModes.CanChoose"/>): у движков
+    /// не было бы ни одного движка. До подписки пишется «Десинк» — ушёл
+    /// человек из мастера, не подключив её, у него работает хотя бы он, — а
+    /// загрузилась подписка — «Туннель» (<see cref="ChooseWantedTunnel"/>).
     /// </remarks>
-    private void SkipSubscription()
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl) && settings.PresetName is not null)
-            {
-                (settings with { Mode = OperatingMode.DesyncOnly }).Save(AppSettings.DefaultPath);
-            }
-        }
-        catch (Exception)
-        {
-            // Режим — удобство пробного запуска, а не условие мастера.
-        }
-
-        Show(4);
-    }
-
-    /// <summary>
-    /// Проверяет ссылку и подключает подписку — тот же путь, что в разделе VPN.
-    /// </summary>
-    /// <remarks>
-    /// Ссылка на подписку равносильна паролю: поле — <see cref="PasswordBox"/>,
-    /// значение нигде не печатается и не остаётся в журнале, а после
-    /// использования очищается.
-    /// </remarks>
-    private async void OnAddSubscription(object sender, RoutedEventArgs e)
-    {
-        var raw = SubLink.Password.Trim();
-
-        if (raw.Length == 0)
-        {
-            Step3Status.Text = "Ссылку никто не вставил — нажмите «Нет подписки», если её нет.";
-            return;
-        }
-
-        if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
-        {
-            Step3Status.Text = "Это не похоже на ссылку.";
-            return;
-        }
-
-        parsed = SubscriptionClient.Unwrap(parsed);
-
-        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
-        {
-            Step3Status.Text = "Это не похоже на ссылку подписки: нужна http, https "
-                + "либо обёртка happ, clash или sn.";
-
-            return;
-        }
-
-        Step3Next.IsEnabled = false;
-        Step3Status.Text = "Загружаю список серверов…";
-
-        try
-        {
-            using var client = new SubscriptionClient();
-            var info = await client.FetchAsync(parsed, CancellationToken.None);
-
-            var book = SubscriptionBook.Load();
-
-            var entry = new SubscriptionEntry { Name = book.FreeName(), Url = parsed.ToString() };
-            book.Entries.Add(entry);
-            book.Save();
-
-            SubscriptionBook.MakeActive(entry);
-
-            SubLink.Clear();
-
-            int usable = info.Servers.Count(s => s.IsUsableOutbound);
-            Step3Status.Text = $"Подписка подключена: серверов {usable}.";
-
-            Show(4);
-        }
-        catch (Exception ex)
-        {
-            Step3Status.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
-        }
-        finally
-        {
-            Step3Next.IsEnabled = true;
-        }
-    }
-
-    // --- Шаг 4: режим работы -------------------------------------------------
+    private bool _wantsTunnel;
 
     /// <summary>
     /// Три режима с объяснением; выбран тот, что стоит сейчас.
     /// </summary>
     /// <remarks>
-    /// «Туннель» без подписки и WARP недоступен (<see cref="WorkModes.CanChoose"/>):
-    /// поднимать нечем, и выбор вёл бы к пробному запуску, который ничего
-    /// не поднимет. Стоял он, а выхода нет — отмечается «Десинк».
+    /// «Туннель» доступен и без подписки и WARP: подписка — следующий шаг.
+    /// Выхода нет — под карточкой сказано, что без подписки останется «Десинк».
     /// </remarks>
     private void ShowModeStep()
     {
@@ -867,12 +753,10 @@ public partial class OnboardingView : UserControl
         PickTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
         PickRouteName.Text = WorkModes.Name(WorkMode.Route);
 
-        bool tunnel = WorkModes.CanChoose(settings, WorkMode.Tunnel);
-        PickTunnel.IsEnabled = tunnel;
-        PickTunnelNote.Visibility = tunnel ? Visibility.Collapsed : Visibility.Visible;
+        PickTunnelNote.Visibility = settings.HasTunnelExit ? Visibility.Collapsed : Visibility.Visible;
 
-        var current = WorkModes.Of(settings.Engines) is { } mode && WorkModes.CanChoose(settings, mode)
-            ? mode
+        var current = _wantsTunnel ? WorkMode.Tunnel
+            : WorkModes.Of(settings.Engines) is { } mode && WorkModes.CanChoose(settings, mode) ? mode
             : WorkMode.Desync;
 
         // Путь DNS — какой стоит сейчас; выбор списка не пишется до «Дальше».
@@ -972,8 +856,13 @@ public partial class OnboardingView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             var next = settings;
 
-            if (PickedMode() is { } mode && WorkModes.CanChoose(next, mode))
-                next = WorkModes.Choose(next, mode);
+            var mode = PickedMode();
+            _wantsTunnel = mode == WorkMode.Tunnel && !WorkModes.CanChoose(next, WorkMode.Tunnel);
+
+            if (_wantsTunnel)
+                next = WorkModes.Choose(next, WorkMode.Desync);
+            else if (mode is { } picked)
+                next = WorkModes.Choose(next, picked);
 
             if (PickedDns() is { } route)
                 next = next with { DnsVia = route };
@@ -990,193 +879,141 @@ public partial class OnboardingView : UserControl
             // они видны на «Главной» и вкладках DNS и «TG Proxy».
         }
 
-        Show(5);
+        Show(4);
     }
 
-    // --- Шаг 5: запуск и проверка -------------------------------------------
+    // --- Шаг 4: подписка на VPN ----------------------------------------------
 
-    /// <summary>Проверка сети после подъёма движков уже пошла — второй раз сама не идёт.</summary>
-    private bool _checkedAfterStart;
-
-    private void PrepareTrial()
+    /// <summary>
+    /// Что подписка значит для режима, выбранного шагом раньше, — и кнопки
+    /// в исходном виде: вернулись сюда снова — можно загрузить ещё одну.
+    /// </summary>
+    private void ShowVpnStep()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        _checkedAfterStart = false;
+        var mode = _wantsTunnel ? WorkMode.Tunnel : WorkModes.Of(settings.Engines) ?? WorkMode.Desync;
 
-        var planned = new List<string>();
-
-        if (settings.NeedsDesync)
-            planned.Add("десинк — " + settings.DescribePreset());
-
-        if (settings.NeedsProxy)
-            planned.Add("VPN");
-
-        // Прокси Telegram едет с движками, но сам по себе их не поднимает:
-        // без десинка и VPN запускать по-прежнему нечего.
-        bool startable = planned.Count > 0;
-
-        if (startable && settings.TelegramProxy)
-            planned.Add("прокси Telegram");
-
-        Step4Detail.Text = !startable
-            ? "Запускать пока нечего: ни пресет, ни подписка не заданы. Можно вернуться шагом назад "
-              + "или проверить сеть как есть — проверка скажет, что чинить."
-            : "Поднимутся: " + (planned.Count > 1 ? string.Join(", ", planned.SkipLast(1)) + " и " + planned[^1] : planned[0]) + ". "
-              + "Пара секунд на десинк, до полуминуты на туннель. Как поднимутся — сеть проверится сама.";
-
-        Step4Start.IsEnabled = startable;
-        Step4Status.Text = "Ничего ещё не запускалось.";
-
-        ResultTitle.Text = "Проверка сети";
-        ResultVerdict.Visibility = Visibility.Collapsed;
-        ResultBody.Text = startable
-            ? "Пойдёт сама после запуска. Запускать не хотите — «Проверить» покажет, как сеть отвечает сейчас."
-            : "«Проверить» покажет, как сеть отвечает сейчас.";
-
-        ShowTrialButtons(started: false);
-
-        // Мастер открыт заново при работающих движках — запускать нечего,
-        // проверять можно сразу.
-        if (SupervisorState.Load(SupervisorState.DefaultPath) is { } state && state.IsSupervisorAlive())
+        VpnForMode.Text = mode switch
         {
-            Step4Detail.Text = "Движки уже работают — сеть проверяется под ними. Режим, выбранный на прошлом шаге, "
-                + "применится после перезапуска движков на «Главной».";
-            UpdateTrial();
-        }
+            WorkMode.Tunnel when !settings.HasTunnelExit =>
+                $"Режиму «{WorkModes.Name(WorkMode.Tunnel)}» подписка нужна: без неё поднимать нечего, и останется «{WorkModes.Name(WorkMode.Desync)}».",
+
+            WorkMode.Route when !settings.HasTunnelExit =>
+                $"«{WorkModes.Name(WorkMode.Route)}» без подписки работает как «{WorkModes.Name(WorkMode.Desync)}»: вести в туннель нечего.",
+
+            WorkMode.Desync =>
+                $"Режиму «{WorkModes.Name(WorkMode.Desync)}» подписка не нужна. Подключённая пригодится, если режим потом сменить на «Главной».",
+
+            _ => string.Empty,
+        };
+
+        VpnForMode.Visibility = VpnForMode.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        VpnStatus.Text = string.Empty;
+
+        ShowVpnButtons(subscribed: false);
     }
 
     /// <summary>
-    /// Пока движки не подняты, главная кнопка — «Запустить»; подняты — она
-    /// уходит, и главной становится «Готово».
+    /// Подписка загрузилась — остаётся «Готово»: число серверов видно
+    /// до ухода на «Главную».
     /// </summary>
-    private void ShowTrialButtons(bool started)
+    private void ShowVpnButtons(bool subscribed)
     {
-        Step4Start.Visibility = started ? Visibility.Collapsed : Visibility.Visible;
-        FinishButton.SetResourceReference(StyleProperty, started ? "Primary" : "Ghost");
-        RecheckButton.Content = started ? "Проверить ещё раз" : "Проверить";
+        NoSubscription.Visibility = subscribed ? Visibility.Collapsed : Visibility.Visible;
+        VpnLoad.Visibility = subscribed ? Visibility.Collapsed : Visibility.Visible;
+        VpnDone.Visibility = subscribed ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>Без подписки мастер заканчивается: режим уже выбран шагом раньше.</summary>
+    private void OnNoSubscription(object sender, RoutedEventArgs e) => Finish();
+
     /// <summary>
-    /// Поднимает движки тем же путём, что кнопка «Запустить» на «Главной».
+    /// Проверяет ссылку и подключает подписку — тот же путь, что в разделе VPN.
     /// </summary>
     /// <remarks>
-    /// Только по нажатию, не само при входе на шаг: решать, когда обрывать
-    /// текущий трафик ради обхода, — дело человека, даже во время мастера.
+    /// Ссылка на подписку равносильна паролю: поле — <see cref="PasswordBox"/>,
+    /// значение нигде не печатается и не остаётся в журнале, а после
+    /// использования очищается.
     /// </remarks>
-    private async void OnStep4Start(object sender, RoutedEventArgs e)
+    private async void OnAddSubscription(object sender, RoutedEventArgs e)
     {
-        Step4Start.IsEnabled = false;
-        Step4Status.Text = "Собираю конфиг…";
+        var raw = SubLink.Password.Trim();
 
-        var outcome = await EngineControl.StartAsync("мастер первого запуска", CancellationToken.None);
-
-        if (!outcome.Ok)
+        if (raw.Length == 0)
         {
-            Step4Status.Text = outcome.Message;
-            Step4Start.IsEnabled = true;
+            VpnStatus.Text = "Ссылку никто не вставил — нажмите «Нет подписки», если её нет.";
+            return;
+        }
+
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
+        {
+            VpnStatus.Text = "Это не похоже на ссылку.";
+            return;
+        }
+
+        parsed = SubscriptionClient.Unwrap(parsed);
+
+        if (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)
+        {
+            VpnStatus.Text = "Это не похоже на ссылку подписки: нужна http, https "
+                + "либо обёртка happ, clash или sn.";
 
             return;
         }
 
-        _startedAt = DateTimeOffset.Now;
-        _poll.Start();
-        UpdateTrial();
-    }
-
-    private void UpdateTrial()
-    {
-        var state = SupervisorState.Load(SupervisorState.DefaultPath);
-        bool running = state is not null && state.IsSupervisorAlive();
-
-        if (!running)
-        {
-            var seconds = _startedAt is { } since ? (int)(DateTimeOffset.Now - since).TotalSeconds : 0;
-            Step4Status.Text = $"Поднимается… {seconds} с";
-
-            return;
-        }
-
-        _poll.Stop();
-
-        bool healthy = EngineHealth.Bypass(state!).All(s => s.Health == ServiceHealth.Healthy);
-
-        Step4Status.Text = healthy
-            ? "Движки работают."
-            : "Движки запущены, но не все службы в порядке — подробности на «Главной». "
-              + "Проверка ниже покажет, помогло ли.";
-
-        ShowTrialButtons(started: true);
-
-        // Прежде проверка была следующим шагом и шла по «Дальше»; теперь —
-        // сама, один раз, как только движки поднялись.
-        if (!_checkedAfterStart)
-        {
-            _checkedAfterStart = true;
-            _ = RunCheckAsync();
-        }
-    }
-
-    private void OnRecheck(object sender, RoutedEventArgs e) => _ = RunCheckAsync();
-
-    /// <summary>
-    /// Меряет саму сеть, а не одно выбранное имя.
-    /// </summary>
-    /// <remarks>
-    /// Тот же замер, что открывает полную «Проверку блокировок»: TLS, HTTP
-    /// и DoH решают вердикт, ICMP и IPv6 — свойство сети, а не след
-    /// вмешательства, и на него не влияют.
-    /// </remarks>
-    private async Task RunCheckAsync()
-    {
-        ResultTitle.Text = "Проверяю сеть…";
-        ResultBody.Text = string.Empty;
-        ResultVerdict.Visibility = Visibility.Collapsed;
+        VpnLoad.IsEnabled = false;
+        VpnStatus.Text = "Загружаю список серверов…";
 
         try
         {
-            var baseline = await BlockCheck.MeasureBaselineAsync(CancellationToken.None);
-            ShowResult(baseline);
+            using var client = new SubscriptionClient();
+            var info = await client.FetchAsync(parsed, CancellationToken.None);
+
+            var book = SubscriptionBook.Load();
+
+            var entry = new SubscriptionEntry { Name = book.FreeName(), Url = parsed.ToString() };
+            book.Entries.Add(entry);
+            book.Save();
+
+            SubscriptionBook.MakeActive(entry);
+
+            SubLink.Clear();
+
+            int usable = info.Servers.Count(s => s.IsUsableOutbound);
+            VpnStatus.Text = $"Подписка подключена: серверов {usable}.";
+
+            if (_wantsTunnel)
+                ChooseWantedTunnel();
+
+            ShowVpnButtons(subscribed: true);
         }
         catch (Exception ex)
         {
-            ResultTitle.Text = "Проверка сорвалась";
-            ResultBody.Text = ex.GetBaseException().Message;
+            VpnStatus.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            VpnLoad.IsEnabled = true;
         }
     }
 
-    private void ShowResult(NetworkBaseline baseline)
-    {
-        bool ok = baseline.Tls && baseline.Http;
-
-        ResultTitle.Text = ok ? "Сеть отвечает" : "Сеть отвечает не полностью";
-
-        ResultVerdict.Text = string.Join(" · ", new[]
-        {
-            $"TLS {(baseline.Tls ? "доступен" : "недоступен")}",
-            $"HTTP {(baseline.Http ? "доступен" : "недоступен")}",
-            $"DoH {(baseline.Doh ? "доступен" : "недоступен")}",
-        });
-
-        ResultVerdict.SetResourceReference(TextBlock.ForegroundProperty, ok ? "Accent" : "Danger");
-        ResultVerdict.Visibility = Visibility.Visible;
-
-        ResultBody.Text = ok
-            ? "Обход настроен и сеть под ним отвечает. Что именно теперь открывается — "
-              + "«Проверка блокировок» покажет разом на сотне с лишним имён. Если что-то "
-              + "конкретное всё ещё не работает — «Маршруты» переключают способ для него отдельно."
-            : "TLS или HTTP не отвечают даже так — движки могли не подняться. Загляните "
-              + "на «Главную»: там видно, что именно не запустилось, и можно попробовать снова.";
-    }
-
-    private void OnTelegram(object sender, RoutedEventArgs e)
+    /// <summary>Выход появился — ставит «Туннель», выбранный шагом раньше.</summary>
+    private void ChooseWantedTunnel()
     {
         try
         {
-            Process.Start(new ProcessStartInfo { FileName = About.Telegram, UseShellExecute = true });
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (WorkModes.CanChoose(settings, WorkMode.Tunnel))
+            {
+                WorkModes.Choose(settings, WorkMode.Tunnel).Save(AppSettings.DefaultPath);
+                _wantsTunnel = false;
+                VpnStatus.Text += $" Режим — «{WorkModes.Name(WorkMode.Tunnel)}».";
+            }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            ResultBody.Text = "Не удалось открыть канал: " + ex.GetBaseException().Message;
+            // Не записалось — остаётся «Десинк»; режим меняется на «Главной».
         }
     }
 
@@ -1193,7 +1030,6 @@ public partial class OnboardingView : UserControl
     /// </remarks>
     private void Finish()
     {
-        _poll.Stop();
         MarkDone();
         Completed?.Invoke(this, EventArgs.Empty);
     }
@@ -1208,8 +1044,6 @@ public partial class OnboardingView : UserControl
     /// </remarks>
     public void Leave()
     {
-        _poll.Stop();
-
         if (MarkDone())
             Journal.Write("окно", "мастер первого запуска закрыт уходом в другой раздел");
     }
