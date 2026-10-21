@@ -59,7 +59,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Shape" Background="Transparent"
-                                BorderBrush="{DynamicResource Border}" BorderThickness="1.2"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                 CornerRadius="8" Padding="4,6">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
@@ -69,7 +69,7 @@
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                                <Setter TargetName="Shape" Property="BorderThickness" Value="1.6" />
+                                <Setter TargetName="Shape" Property="BorderThickness" Value="1.5" />
                                 <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -100,7 +100,7 @@
             фоне одна рамка терялась (владелец 24.09: «более выраженные края»),
             а кромка отделяет карточку и на тёмной теме, и на светлой.
         -->
-        <Border x:Name="Plate" Width="280" CornerRadius="10.5" BorderThickness="1">
+        <Border x:Name="Plate" Width="280" CornerRadius="10.5" BorderThickness="1.5">
             <Border.BorderBrush>
                 <SolidColorBrush Color="{DynamicResource TextColor}" Opacity="0.12" />
             </Border.BorderBrush>

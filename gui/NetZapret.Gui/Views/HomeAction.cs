@@ -115,7 +115,7 @@ public sealed class HomeAction : Grid
             Width = 32,
             Height = 32,
             CornerRadius = new CornerRadius(10),
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(2),
             Margin = new Thickness(0, 0, 9, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };

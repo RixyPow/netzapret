@@ -71,7 +71,7 @@
                                                                     23.09: «зелёное на зелёном не очень»).
                                                                 -->
                                                                 <Border x:Name="Row" CornerRadius="6" Padding="8,4"
-                                                                        BorderThickness="1" BorderBrush="Transparent"
+                                                                        BorderThickness="1.5" BorderBrush="Transparent"
                                                                         Background="Transparent">
                                                                     <Grid>
                                                                         <Border x:Name="Bar" Width="3" CornerRadius="1.5"

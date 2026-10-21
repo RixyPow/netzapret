@@ -40,7 +40,7 @@
                     </StackPanel>
 
                     <Border Grid.Column="1" Background="{DynamicResource Raised}" CornerRadius="7"
-                            BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                            BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                             Padding="9,3" Margin="0,0,16,0" VerticalAlignment="Center"
                             ToolTip="Версия Zapret GUI, для которой собран пресет"
                             Visibility="{Binding VersionShown}">
@@ -206,7 +206,7 @@
                         -->
                         <Border Grid.Column="0" Width="92" Height="92" CornerRadius="14"
                                 Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}"
-                                BorderThickness="1" Margin="0,0,20,0" VerticalAlignment="Center">
+                                BorderThickness="1.5" Margin="0,0,20,0" VerticalAlignment="Center">
                             <Grid>
                                 <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE9E9;" FontSize="34"
                                            Foreground="{DynamicResource Accent}" />
@@ -227,7 +227,7 @@
                                       ToolTip="Пресет по умолчанию: с ним NetZapret проверяется в первую очередь">
                                     <Border CornerRadius="7" Background="{DynamicResource Accent}" Opacity="0.16" />
                                     <Border CornerRadius="7" BorderBrush="{DynamicResource Accent}"
-                                            BorderThickness="1" Opacity="0.45" />
+                                            BorderThickness="1.5" Opacity="0.45" />
                                     <TextBlock Text="Рекомендуется" FontSize="12" FontWeight="SemiBold"
                                                Foreground="{DynamicResource Accent}" Margin="10,3" />
                                 </Grid>

@@ -12,7 +12,7 @@
             выдумывает, иначе плитка и отчёт говорили бы разное.
         -->
         <DataTemplate x:Key="TileTemplate">
-            <Button Style="{StaticResource Choice}" Margin="0" Padding="12,9"
+            <Button Style="{StaticResource Choice}" Margin="0" Padding="12,8"
                     Tag="{Binding}" Click="OnTile">
                 <Grid>
                     <Grid.ColumnDefinitions>

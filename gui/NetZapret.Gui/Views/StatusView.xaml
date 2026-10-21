@@ -50,7 +50,7 @@
             и содержимое по середине — значки четырёх плиток стояли бы вразнобой.
         -->
         <Style x:Key="QuickAction" TargetType="Button" BasedOn="{StaticResource Ghost}">
-            <Setter Property="Padding" Value="10,9" />
+            <Setter Property="Padding" Value="10,8" />
             <Setter Property="Background" Value="{DynamicResource Surface}" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -420,7 +420,7 @@
                             -->
                             <Border x:Name="StatePlate" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
                                     Width="340" Height="102" SizeChanged="OnRouteSize"
-                                    Padding="0,0,18,0" CornerRadius="12" BorderThickness="1"
+                                    Padding="0,0,18,0" CornerRadius="12" BorderThickness="1.5"
                                     Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -525,7 +525,7 @@
                                     На подложке (владелец 19.10): поверх волны подписи
                                     без неё терялись.
                                 -->
-                                <Border Margin="0,14,0,0" Padding="0,4" CornerRadius="10" BorderThickness="1"
+                                <Border Margin="0,14,0,0" Padding="0,4" CornerRadius="10" BorderThickness="1.5"
                                         Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid x:Name="Meters">
                                     <Grid.ColumnDefinitions>

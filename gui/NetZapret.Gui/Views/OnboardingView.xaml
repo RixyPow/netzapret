@@ -13,7 +13,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Shape" Background="{DynamicResource Surface}"
-                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="2"
                                 CornerRadius="12" Padding="16,13">
                             <ContentPresenter />
                         </Border>
@@ -22,8 +22,8 @@
                                 <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
+                                <!-- Выбор — цветом рамки, а не толщиной: толщина сдвигала бы подпись. -->
                                 <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
-                                <Setter TargetName="Shape" Property="BorderThickness" Value="2" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="Shape" Property="Opacity" Value="0.5" />

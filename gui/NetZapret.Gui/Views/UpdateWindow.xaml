@@ -80,7 +80,7 @@
         </Grid>
 
         <Border Grid.Row="1" Margin="24,16,24,0" CornerRadius="11" Padding="3" HorizontalAlignment="Left"
-                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
             <StackPanel Orientation="Horizontal">
                 <RadioButton x:Name="NotesTab" Style="{StaticResource UpdateTab}" GroupName="UpdateTab"
                              Content="Что нового" IsChecked="True" Click="OnTab" />

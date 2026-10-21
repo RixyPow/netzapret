@@ -73,7 +73,7 @@
 
                                     <Border Grid.Column="1" CornerRadius="8" Padding="9,1" Margin="10,0,0,0"
                                             HorizontalAlignment="Left" VerticalAlignment="Center"
-                                            BorderBrush="{DynamicResource Accent}" BorderThickness="1"
+                                            BorderBrush="{DynamicResource Accent}" BorderThickness="1.5"
                                             Visibility="{Binding ActiveShown}">
                                         <TextBlock Text="В работе" FontSize="12" Foreground="{DynamicResource Accent}" />
                                     </Border>
@@ -92,10 +92,10 @@
                                     </Grid.ColumnDefinitions>
 
                                     <Grid Height="20">
-                                        <Border CornerRadius="10" BorderThickness="1"
+                                        <Border CornerRadius="10" BorderThickness="1.5"
                                                 BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}" />
 
-                                        <Grid Margin="1">
+                                        <Grid Margin="1.5">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="{Binding UsedStar}" />
                                                 <ColumnDefinition Width="{Binding LeftStar}" />
@@ -213,7 +213,7 @@
 
                                     <Border Grid.Column="1" CornerRadius="8" Padding="9,1" Margin="10,0,0,0"
                                             HorizontalAlignment="Left" VerticalAlignment="Center"
-                                            BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                            BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                                         <TextBlock Text="{Binding Count}" FontSize="12" Foreground="{DynamicResource Muted}" />
                                     </Border>
                                 </Grid>
@@ -276,7 +276,7 @@
                             -->
                             <Grid Grid.Column="1" Width="38" Margin="0,0,14,0" VerticalAlignment="Center">
                                 <Border CornerRadius="4" ClipToBounds="True"
-                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                         Visibility="{Binding FlagShown}">
                                     <Image Source="{Binding Flag}" Width="36" Height="25"
                                            Stretch="UniformToFill"
@@ -284,7 +284,7 @@
                                 </Border>
 
                                 <Border Background="{DynamicResource Raised}"
-                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                         CornerRadius="5" Padding="5,3" HorizontalAlignment="Center"
                                         Visibility="{Binding CountryShown}">
                                     <TextBlock Text="{Binding Country}" FontSize="11" FontWeight="SemiBold"
@@ -305,14 +305,14 @@
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                         <!-- Через этот сервер трафик идёт прямо сейчас — по движку, не по настройке. -->
                                         <Border CornerRadius="8" Padding="8,1" Margin="10,0,0,0" VerticalAlignment="Center"
-                                                BorderBrush="{DynamicResource AccentFill}" BorderThickness="1"
+                                                BorderBrush="{DynamicResource AccentFill}" BorderThickness="1.5"
                                                 Visibility="{Binding NowShown}"
                                                 ToolTip="Через этот сервер трафик идёт сейчас">
                                             <TextBlock Text="Сейчас" FontSize="12" Foreground="{DynamicResource Text}" />
                                         </Border>
 
                                         <Border CornerRadius="8" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
-                                                BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                                 Visibility="{Binding ExcludedShown}"
                                                 ToolTip="Автоподбор его не берёт; выбрать руками можно. Вернуть — в «⋯»">
                                             <TextBlock Text="вне подбора" FontSize="12" Foreground="{DynamicResource Muted}" />
@@ -351,7 +351,7 @@
                             <Grid Grid.Column="5" Width="132" Margin="0,0,14,0"
                                   Visibility="{Binding WideShown, RelativeSource={RelativeSource AncestorType=views:VpnView}}">
                                 <Border CornerRadius="13" Padding="11,4" HorizontalAlignment="Left" VerticalAlignment="Center"
-                                        BorderBrush="{DynamicResource Border}" BorderThickness="1"
+                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
                                         Background="{DynamicResource Raised}" Visibility="{Binding ChipShown}">
                                     <TextBlock Text="{Binding Chip}" FontSize="12" TextTrimming="CharacterEllipsis" />
                                 </Border>
@@ -473,7 +473,7 @@
                                                    MaxWidth="440" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
 
                                         <Border Grid.Column="1" x:Name="CurrentSourcePill" CornerRadius="7" Padding="8,2"
-                                                Margin="12,0,0,0" BorderThickness="1" VerticalAlignment="Center"
+                                                Margin="12,0,0,0" BorderThickness="1.5" VerticalAlignment="Center"
                                                 BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
                                             <TextBlock x:Name="CurrentSource" FontSize="12" Foreground="{DynamicResource Accent}" />
                                         </Border>
@@ -564,7 +564,7 @@
 
                                             <Grid Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center">
                                                 <Border CornerRadius="3" ClipToBounds="True" Visibility="{Binding FlagShown}"
-                                                        BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                                                     <Image Source="{Binding Flag}" Width="24" Height="16" Stretch="UniformToFill"
                                                            RenderOptions.BitmapScalingMode="HighQuality" />
                                                 </Border>
@@ -648,7 +648,7 @@
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <Grid Height="22" HorizontalAlignment="Center">
                                                         <Border CornerRadius="3" ClipToBounds="True" Visibility="{Binding FlagShown}"
-                                                                BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                                                             <Image Source="{Binding Flag}" Width="32" Height="22" Stretch="UniformToFill"
                                                                    RenderOptions.BitmapScalingMode="HighQuality" />
                                                         </Border>
@@ -779,7 +779,7 @@
                     <TextBlock Grid.Column="0" Text="Подписки" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
 
                     <Border Grid.Column="1" CornerRadius="10" Padding="10,3" Margin="12,0,0,0" VerticalAlignment="Center"
-                            Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                            Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                         <TextBlock x:Name="SubsSummary" FontSize="12" Foreground="{DynamicResource Muted}" Text="…" />
                     </Border>
 

@@ -267,7 +267,7 @@ public partial class UpdateWindow : Window
             CornerRadius = new CornerRadius(12),
             Padding = new Thickness(14, 14, 16, 4),
             Margin = new Thickness(0, 6, 0, 8),
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(1.5),
             Background = Brushes.Transparent,
         };
         card.SetResourceReference(Border.BorderBrushProperty, "Border");
@@ -420,7 +420,7 @@ public partial class UpdateWindow : Window
                 Padding = new Thickness(6, 0, 0, 0),
                 Background = Brushes.Transparent,
                 BorderBrush = Brushes.Transparent,
-                BorderThickness = new Thickness(1),
+                BorderThickness = new Thickness(1.5),
                 Cursor = System.Windows.Input.Cursors.Hand,
                 ToolTip = "Читать чейнджлог этой версии",
             };
@@ -638,7 +638,7 @@ public partial class UpdateWindow : Window
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(12, 8, 12, 8),
                     Margin = new Thickness(0, 2, 0, 10),
-                    BorderThickness = new Thickness(1),
+                    BorderThickness = new Thickness(1.5),
                 };
                 frame.SetResourceReference(Border.BackgroundProperty, "Raised");
                 frame.SetResourceReference(Border.BorderBrushProperty, "Border");

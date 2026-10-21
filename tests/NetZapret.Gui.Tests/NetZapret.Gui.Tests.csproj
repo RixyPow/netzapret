@@ -66,6 +66,9 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\gui\NetZapret.Gui\Theme\*.xaml" Link="Xaml\%(Filename).xaml"
           CopyToOutputDirectory="PreserveNewest" />
+    <!-- Код окна — текстом, для BorderThicknessTests: часть плиток собирается в коде. -->
+    <None Include="..\..\gui\NetZapret.Gui\*.cs;..\..\gui\NetZapret.Gui\Views\*.cs;..\..\gui\NetZapret.Gui\Theme\*.cs"
+          Link="Code\%(Filename).cs.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

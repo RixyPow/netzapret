@@ -68,7 +68,7 @@
 
                     <!-- Путь: что мерить. Туннель — только при поднятом движке. -->
                     <Border Grid.Column="1" VerticalAlignment="Center" CornerRadius="13" Padding="4"
-                            Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                            Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                         <StackPanel Orientation="Horizontal">
                             <Button x:Name="ViaTunnel" Style="{StaticResource SegmentOff}" Click="OnTunnel">
                                 <StackPanel Orientation="Horizontal">
@@ -148,7 +148,7 @@
                 </Border>
 
                 <!-- Дуга с кнопкой и, рядом, что именно меряется. -->
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0" Padding="20,14,22,16">
+                <Border Style="{StaticResource Card}" Margin="0,12,0,0" Padding="22,14,22,18">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

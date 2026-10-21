@@ -156,7 +156,7 @@
                                 <!-- Плашка состояния: цвет и слово — из ShowState. -->
                                 <Grid x:Name="Pill" Margin="12,0,0,0" VerticalAlignment="Center">
                                     <Border x:Name="PillBack" CornerRadius="13" Opacity="0.14" />
-                                    <Border x:Name="PillFrame" CornerRadius="13" BorderThickness="1" Padding="10,4,12,4">
+                                    <Border x:Name="PillFrame" CornerRadius="13" BorderThickness="1.5" Padding="10,4,12,4">
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock x:Name="PillGlyph" FontFamily="{StaticResource IconFont}" FontSize="13"
                                                        Margin="0,0,7,0" VerticalAlignment="Center" />
@@ -458,7 +458,7 @@
                             <TextBlock Text="Ссылка для Telegram" Style="{StaticResource FieldLabel}" />
 
                             <!-- Ссылка несёт секрет — без неё прокси соединения не примет. -->
-                            <Border Margin="0,8,0,0" CornerRadius="8" BorderThickness="1"
+                            <Border Margin="0,8,0,0" CornerRadius="8" BorderThickness="1.5"
                                     Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>

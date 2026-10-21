@@ -503,7 +503,7 @@ public partial class OnboardingView : UserControl
 
         var chip = new Border
         {
-            CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.2),
+            CornerRadius = new CornerRadius(10), BorderThickness = new Thickness(1.5),
             Padding = new Thickness(9, 2, 9, 3), Child = row,
         };
         chip.SetResourceReference(Border.BackgroundProperty, "Surface");

@@ -263,7 +263,7 @@
 
                     <StackPanel x:Name="SearchTools" Grid.Column="1" Orientation="Horizontal" Margin="10,0,0,0">
                         <Border x:Name="RouteFilters" CornerRadius="11" Padding="3" VerticalAlignment="Center"
-                                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1">
+                                Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton x:Name="FilterAll" Style="{StaticResource RouteFilter}" GroupName="RouteFilter" Tag="" IsChecked="True" Click="OnRouteFilter">
                                     <StackPanel Orientation="Horizontal">
