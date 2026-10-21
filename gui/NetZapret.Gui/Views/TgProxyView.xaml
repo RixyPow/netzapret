@@ -13,6 +13,18 @@
     -->
     <UserControl.Resources>
 
+        <!--
+            Значок Telegram (владелец 21.10, его картинка): круг с градиентом
+            и самолётик — вектором, в квадрате 1000×1000, как у Telegram.
+            Вектор, а не картинка: не мылится при масштабе окна.
+        -->
+        <Geometry x:Key="TelegramPlane">M226.3,494.7 C372.1,431.2 469.3,389.4 517.9,369.1 C656.8,311.4 685.6,301.3 704.4,301 C708.6,300.9 717.8,302 723.8,306.8 C728.9,310.9 730.3,316.5 730.9,320.4 C731.6,324.2 732.4,333.1 731.8,340 C724.2,419.1 691.7,611 675.1,699.5 C668.1,737 654.3,749.5 640.9,750.8 C611.9,753.4 589.9,731.6 561.7,713.2 C517.7,684.3 492.9,666.3 450.2,638.2 C400.8,605.7 432.8,587.8 460.9,558.6 C468.3,550.9 596.2,434.6 598.7,424 C599,422.7 599.3,417.8 596.4,415.2 C593.4,412.6 589.1,413.5 586,414.2 C581.6,415.2 511.3,461.6 375.1,553.6 C355.2,567.3 337.1,573.9 320.9,573.6 C303,573.2 268.7,563.5 243.2,555.2 C211.9,545 187,539.6 189.1,522.3 C190.3,513.3 202.7,504.1 226.3,494.7 Z</Geometry>
+
+        <LinearGradientBrush x:Key="TelegramBlue" StartPoint="0.5,0" EndPoint="0.5,1">
+            <GradientStop Color="#FF2AABEE" Offset="0" />
+            <GradientStop Color="#FF229ED9" Offset="1" />
+        </LinearGradientBrush>
+
         <!-- Значок «скопировать» у подписи: без рамки, как в макете. -->
         <Style x:Key="CopyGlyph" TargetType="Button">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
@@ -127,12 +139,13 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Цвет Telegram, а не темы: значок узнают по нему. -->
-                        <Border Grid.Column="0" Width="56" Height="56" CornerRadius="14" Background="#FF2AABEE"
-                                Margin="0,0,18,0" VerticalAlignment="Center">
-                            <TextBlock Style="{StaticResource TileGlyph}" FontSize="26" Text="&#xE724;" Foreground="White"
-                                       Margin="-2,2,0,0" />
-                        </Border>
+                        <!-- Значок самого Telegram, его цветами, а не темы: узнают по нему. -->
+                        <Viewbox Grid.Column="0" Width="56" Height="56" Margin="0,0,18,0" VerticalAlignment="Center">
+                            <Canvas Width="1000" Height="1000">
+                                <Ellipse Width="1000" Height="1000" Fill="{StaticResource TelegramBlue}" />
+                                <Path Data="{StaticResource TelegramPlane}" Fill="White" />
+                            </Canvas>
+                        </Viewbox>
 
                         <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
@@ -363,8 +376,18 @@
                                    Text="Кнопка откроет ссылку прокси в Telegram — он спросит, подключиться ли. Не открылось — скопируйте ссылку, отправьте её себе в «Избранное» и нажмите там." />
 
                         <WrapPanel Margin="0,14,0,0">
+                            <!-- Самолётик Telegram, а не знак шрифта «отправить»: кнопка ведёт в Telegram. -->
                             <Button x:Name="ConnectButton" Style="{StaticResource Primary}" Click="OnConnect"
-                                    Content="Подключить Telegram" gui:ButtonGlyph.Lead="&#xE724;" Padding="20,10" Margin="0,0,10,0" />
+                                    Padding="20,10" Margin="0,0,10,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource TelegramPlane}" Stretch="Uniform" Width="16" Height="14"
+                                          Margin="0,1,9,0" VerticalAlignment="Center"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <!-- Вес — кнопки: общий стиль TextBlock его не наследует. -->
+                                    <TextBlock Text="Подключить Telegram" VerticalAlignment="Center"
+                                               FontWeight="{Binding FontWeight, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
                             <Button x:Name="CopyButton" Style="{StaticResource Ghost}" Click="OnCopy"
                                     Content="Скопировать ссылку" gui:ButtonGlyph.Lead="&#xE8C8;" Padding="18,10" />
                         </WrapPanel>
