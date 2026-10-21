@@ -683,6 +683,12 @@ public sealed record AppSettings
     /// </remarks>
     public bool Animations { get; init; } = true;
 
+    /// <summary>
+    /// Отпечаток значка программы при прошлом запуске: сменился — Windows
+    /// перечитывает кеш значков (<see cref="IconCache"/>, 21.10).
+    /// </summary>
+    public string? IconStamp { get; init; }
+
     /// <summary>До 20.10: «Главная» на всю ширину при любой теме; читается только разовым переводом.</summary>
     /// <remarks>
     /// Владелец 01.10: «для тех, кто сидит с базовыми темами». С 20.10 выбор —

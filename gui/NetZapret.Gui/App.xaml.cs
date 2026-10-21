@@ -252,6 +252,18 @@ public partial class App : Application
         // Память замеров серверов — стирается по сроку (владелец 07.10, неделя).
         ServerMemoryClock.Start();
 
+        // Значок программы сменился с прошлого запуска (обновлением) — Windows
+        // перечитывает свой кеш значков, иначе закреплённый на панели задач
+        // ярлык показывал бы прежний (владелец 21.10, IconCache).
+        try
+        {
+            IconCache.RefreshIfChanged(ProgramIconStamp(), AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Удобство: не вышло — значок сменится, когда Windows сочтёт кеш устаревшим.
+        }
+
         if (e.Args.Contains(TrayIcon.Switch))
         {
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
@@ -263,6 +275,24 @@ public partial class App : Application
         }
 
         new MainWindow().Show();
+    }
+
+    /// <summary>
+    /// Отпечаток значка, вшитого в exe: сменился с прошлого запуска — значит, обновлением.
+    /// </summary>
+    /// <remarks>
+    /// По самим точкам значка, а не по номеру версии: версия меняется каждым
+    /// выпуском, а кеш значков стоит перечитывать, только когда сменился значок.
+    /// </remarks>
+    private static string ProgramIconStamp()
+    {
+        using var icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!)!;
+        using var bitmap = icon.ToBitmap();
+        using var png = new MemoryStream();
+
+        bitmap.Save(png, System.Drawing.Imaging.ImageFormat.Png);
+
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png.ToArray()))[..16];
     }
 
     /// <summary>
