@@ -124,6 +124,24 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Null(back.HomeWideThemes);
     }
 
+    /// <summary>Удалённая тема забывается: стояла — встаёт по умолчанию, её выбор ширины уходит (21.10).</summary>
+    [Fact]
+    public void ADeletedThemeIsForgotten()
+    {
+        var settings = (new AppSettings { Theme = "mine" })
+            .WithHomeWide("mine", wide: true, themeWide: false)
+            .WithHomeWide("other", wide: true, themeWide: false);
+
+        var after = settings.WithoutTheme("mine");
+
+        Assert.Null(after.Theme);
+        Assert.False(after.HomeWide("mine", themeWide: false));
+        Assert.True(after.HomeWide("other", themeWide: false));
+
+        // Удалили не ту, что стоит, — стоящая остаётся.
+        Assert.Equal("keep", (new AppSettings { Theme = "keep" }).WithoutTheme("mine").Theme);
+    }
+
     /// <summary>
     /// Общий выключатель до 20.10 переходит в выбор для темы, стоявшей при нём;
     /// прочие темы решают сами.

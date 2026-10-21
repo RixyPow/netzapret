@@ -83,6 +83,24 @@ public sealed class ThemeWriterTests : IDisposable
     }
 
     /// <summary>
+    /// Удаляется только своя тема и только её папка (21.10); встроенную
+    /// и «путь вместо имени» — нет.
+    /// </summary>
+    [Fact]
+    public void OnlyOwnThemesAreDeletedAndOnlyTheirFolders()
+    {
+        var id = ThemeWriter.Save(new ThemeDraft { Name = "Удаляемая", Colors = Dark() }, root: _root);
+        Assert.True(Directory.Exists(Path.Combine(_root, id)));
+
+        ThemeWriter.Delete(id, _root, recycle: false);
+        Assert.False(Directory.Exists(Path.Combine(_root, id)));
+
+        Assert.Throws<InvalidOperationException>(() => ThemeWriter.Delete("dark", _root, recycle: false));
+        Assert.Throws<ArgumentException>(() => ThemeWriter.Delete(@"..\config", _root, recycle: false));
+        Assert.Throws<ArgumentException>(() => ThemeWriter.Delete("..", _root, recycle: false));
+    }
+
+    /// <summary>
     /// Цвет значка пишется, только если выбран (21.10): невыбранный и после
     /// записи следует за цветами темы.
     /// </summary>

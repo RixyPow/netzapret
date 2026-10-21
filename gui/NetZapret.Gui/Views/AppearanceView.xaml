@@ -106,6 +106,9 @@
                         <WrapPanel Margin="0,4,0,4">
                             <Button Style="{StaticResource Primary}" Content="Создать тему" Click="OnCreateTheme" Margin="0,0,8,8" />
                             <Button x:Name="EditThemeButton" Style="{StaticResource Ghost}" Content="Изменить" Click="OnEditTheme" Margin="0,0,8,8" />
+                            <!-- Своя тема — в корзину Windows (владелец 21.10); у встроенной кнопка неактивна. -->
+                            <Button x:Name="DeleteThemeButton" Style="{StaticResource Ghost}" Content="Удалить" Click="OnDeleteTheme" Margin="0,0,8,8"
+                                    ToolTipService.ShowOnDisabled="True" />
                             <Button Style="{StaticResource Ghost}" Content="Выгрузить в файл…" Click="OnExportTheme" Margin="0,0,8,8" />
                             <Button Style="{StaticResource Ghost}" Content="Загрузить из файла…" Click="OnImportTheme" Margin="0,0,8,8" />
                             <!-- Рядом с прочими действиями над темами (владелец, 05.10), а не отдельно в шапке. -->

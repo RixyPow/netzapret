@@ -228,6 +228,43 @@ public static class ThemeWriter
         return cleaned.Length == 0 ? "theme" : cleaned.Length > 40 ? cleaned[..40] : cleaned;
     }
 
+    /// <summary>
+    /// Удаляет свою тему — её папку в <c>themes\</c>. Встроенную — нет.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 21.10: «добавь кнопку удалить тему». Папка уходит в корзину
+    /// Windows, а не стирается: тему собирают вечерами, с картинкой и
+    /// укладкой, и случайное нажатие стоило бы её целиком. Встроенные не
+    /// удаляются: обновление всё равно вернуло бы их файлы.
+    /// </remarks>
+    /// <param name="recycle">В корзину; тесты стирают свою временную папку сами.</param>
+    public static void Delete(string id, string? root = null, bool recycle = true)
+    {
+        if (ThemeLoader.Shipped.Contains(id))
+            throw new InvalidOperationException("встроенные темы едут с программой и не удаляются");
+
+        // Имя папки, а не путь: «..\config» из чужой строки не должно ничего удалить.
+        if (string.IsNullOrWhiteSpace(id) || id.IndexOfAny(['\\', '/', ':']) >= 0 || id.Trim('.').Length == 0)
+            throw new ArgumentException($"«{id}» — не имя папки темы", nameof(id));
+
+        var folder = Path.Combine(root ?? ThemeLoader.DefaultRoot, id);
+
+        if (!Directory.Exists(folder))
+            return;
+
+        if (recycle)
+        {
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(
+                folder,
+                Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        }
+        else
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
     private static string Unique(string slug, string root)
     {
         var id = slug;

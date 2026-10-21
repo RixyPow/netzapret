@@ -747,6 +747,23 @@ public sealed record AppSettings
     }
 
     /// <summary>
+    /// Настройки без удалённой темы <paramref name="themeId"/>: стояла она — встанет
+    /// тема по умолчанию, и её выбор ширины «Главной» забывается.
+    /// </summary>
+    public AppSettings WithoutTheme(string themeId)
+    {
+        var map = HomeWideThemes?
+            .Where(pair => !string.Equals(pair.Key, themeId, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+
+        return this with
+        {
+            Theme = string.Equals(Theme, themeId, StringComparison.OrdinalIgnoreCase) ? null : Theme,
+            HomeWideThemes = map is { Count: > 0 } ? map : null,
+        };
+    }
+
+    /// <summary>
     /// Разовый перевод общего выключателя «Главная на всю ширину» (до 20.10)
     /// в выбор для темы, стоявшей при нём.
     /// </summary>
