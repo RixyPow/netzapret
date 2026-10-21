@@ -211,9 +211,16 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <Border Style="{StaticResource RowTile}" CornerRadius="20" VerticalAlignment="Top">
-                            <Ellipse x:Name="HealthDot" Width="14" Height="14" />
-                        </Border>
+                        <!--
+                            Одна точка, мерцающая, пока прокси работает или ждёт (владелец 22.10:
+                            «один мерцающий кружочек, как раньше был в „Работает“» — точка
+                            хода запуска на «Главной» с 09.09). Ширина колонки — как у плиток
+                            соседей, чтобы подписи трёх плиток стояли вровень.
+                        -->
+                        <Grid Width="40" Margin="0,0,16,0">
+                            <Ellipse x:Name="HealthDot" Width="12" Height="12"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
 
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Статус подключения" />
@@ -263,6 +270,61 @@
                     </Grid>
                 </Border>
             </UniformGrid>
+
+            <!-- Подключение и ручная настройка рядом; на узком окне — одна под другой (OnPageSize). -->
+            <Grid x:Name="ConnectRow" Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border x:Name="ConnectCard" Style="{StaticResource Card}" Margin="0,0,7,0" Padding="20,16">
+                    <StackPanel>
+                        <TextBlock Text="Подключить Telegram Desktop" FontWeight="SemiBold" FontSize="16" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
+                                   Text="Кнопка откроет ссылку прокси в Telegram — он спросит, подключиться ли. Не открылось — скопируйте ссылку, отправьте её себе в «Избранное» и нажмите там." />
+
+                        <WrapPanel Margin="0,14,0,0">
+                            <!-- Самолётик Telegram, а не знак шрифта «отправить»: кнопка ведёт в Telegram. -->
+                            <Button x:Name="ConnectButton" Style="{StaticResource Primary}" Click="OnConnect"
+                                    Padding="20,10" Margin="0,0,10,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Data="{StaticResource TelegramPlane}" Stretch="Uniform" Width="16" Height="14"
+                                          Margin="0,1,9,0" VerticalAlignment="Center"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <!-- Вес — кнопки: общий стиль TextBlock его не наследует. -->
+                                    <TextBlock Text="Подключить Telegram" VerticalAlignment="Center"
+                                               FontWeight="{Binding FontWeight, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="CopyButton" Style="{StaticResource Ghost}" Click="OnCopy"
+                                    Content="Скопировать ссылку" gui:ButtonGlyph.Lead="&#xE8C8;" Padding="18,10" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="ManualCard" Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0" Padding="20,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE713;" VerticalAlignment="Top"
+                                   Margin="0,1,14,0" Foreground="{DynamicResource Muted}" />
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Как настроить вручную?" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Откройте в Telegram: Настройки → Продвинутые → Тип подключения → Прокси → MTProto и впишите сервер, порт и секрет из ссылки ниже." />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
 
             <!--
                 Пути к Telegram (владелец 21.10: «сделай настройку на вкладке прокси»).
@@ -357,61 +419,6 @@
                     </Grid>
                 </StackPanel>
             </Border>
-
-            <!-- Подключение и ручная настройка рядом; на узком окне — одна под другой (OnPageSize). -->
-            <Grid x:Name="ConnectRow" Margin="0,14,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Border x:Name="ConnectCard" Style="{StaticResource Card}" Margin="0,0,7,0" Padding="20,16">
-                    <StackPanel>
-                        <TextBlock Text="Подключить Telegram Desktop" FontWeight="SemiBold" FontSize="16" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                   Text="Кнопка откроет ссылку прокси в Telegram — он спросит, подключиться ли. Не открылось — скопируйте ссылку, отправьте её себе в «Избранное» и нажмите там." />
-
-                        <WrapPanel Margin="0,14,0,0">
-                            <!-- Самолётик Telegram, а не знак шрифта «отправить»: кнопка ведёт в Telegram. -->
-                            <Button x:Name="ConnectButton" Style="{StaticResource Primary}" Click="OnConnect"
-                                    Padding="20,10" Margin="0,0,10,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource TelegramPlane}" Stretch="Uniform" Width="16" Height="14"
-                                          Margin="0,1,9,0" VerticalAlignment="Center"
-                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    <!-- Вес — кнопки: общий стиль TextBlock его не наследует. -->
-                                    <TextBlock Text="Подключить Telegram" VerticalAlignment="Center"
-                                               FontWeight="{Binding FontWeight, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                </StackPanel>
-                            </Button>
-                            <Button x:Name="CopyButton" Style="{StaticResource Ghost}" Click="OnCopy"
-                                    Content="Скопировать ссылку" gui:ButtonGlyph.Lead="&#xE8C8;" Padding="18,10" />
-                        </WrapPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border x:Name="ManualCard" Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0" Padding="20,16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE713;" VerticalAlignment="Top"
-                                   Margin="0,1,14,0" Foreground="{DynamicResource Muted}" />
-
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Как настроить вручную?" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                       Text="Откройте в Telegram: Настройки → Продвинутые → Тип подключения → Прокси → MTProto и впишите сервер, порт и секрет из ссылки ниже." />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </Grid>
 
             <!-- Текущие настройки: то, что вписывают в Telegram руками. -->
             <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">

@@ -21,6 +21,9 @@ public partial class TgProxyView : UserControl
     {
         InitializeComponent();
         Loaded += (_, _) => ShowState();
+
+        // Вкладку сменили — мерцание незачем: окно перерисовывалось бы ради невидимой точки.
+        Unloaded += (_, _) => Pulse(false);
     }
 
     private void ShowState()
@@ -168,6 +171,45 @@ public partial class TgProxyView : UserControl
         StateText.Text = look.Line;
         HealthText.Text = look.Health;
         HealthNote.Text = look.Note;
+
+        // Мерцает живое — работает или ждёт; выключенный и сломанный стоят.
+        Pulse(look.Tone is Tone.Good or Tone.Wait);
+    }
+
+    private bool _pulsing;
+
+    /// <summary>
+    /// Точка статуса мерцает, как точка хода запуска на «Главной» (09.09):
+    /// прозрачность от 1 до 0,2 и обратно за 0,8 с.
+    /// </summary>
+    /// <remarks>
+    /// Уже мерцающую не перезапускаем: состояние перечитывается после каждого
+    /// щелчка, и мерцание дёргалось бы. 30 кадров — как у движения на «Главной».
+    /// </remarks>
+    private void Pulse(bool on)
+    {
+        on &= Motion.Enabled;
+
+        if (on == _pulsing)
+            return;
+
+        _pulsing = on;
+
+        if (!on)
+        {
+            HealthDot.BeginAnimation(OpacityProperty, null);
+            HealthDot.Opacity = 1;
+            return;
+        }
+
+        var blink = new System.Windows.Media.Animation.DoubleAnimation(1, 0.2, TimeSpan.FromSeconds(0.8))
+        {
+            AutoReverse = true,
+            RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+        };
+
+        System.Windows.Media.Animation.Timeline.SetDesiredFrameRate(blink, 30);
+        HealthDot.BeginAnimation(OpacityProperty, blink);
     }
 
     /// <summary>Пояснение «Когда он нужен» — по кнопке шапки.</summary>
