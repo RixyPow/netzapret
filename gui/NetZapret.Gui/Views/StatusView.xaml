@@ -257,16 +257,14 @@
                         <Button Style="{StaticResource Ghost}" Click="OnGitHub" Margin="0,0,8,0"
                                 ToolTip="Исходники, выпуски, вопросы и обсуждения">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE943;" Margin="0,0,8,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <Path Style="{StaticResource LineShape}" Data="{StaticResource GitHubMark}" />
                                 <TextBlock Text="GitHub" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button Style="{StaticResource Ghost}" Click="OnTelegram"
                                 ToolTip="Новости в телеграм-канале: что вышло и зачем обновляться, коротко">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <Path Style="{StaticResource LineShape}" Data="{StaticResource TelegramPlane}" />
                                 <TextBlock Text="Telegram" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
@@ -342,8 +340,7 @@
                             <Button Style="{StaticResource Ghost}" Click="OnTelegram" Margin="0,0,8,0"
                                     ToolTip="Новости в телеграм-канале">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
-                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                    <Path Style="{StaticResource LineShape}" Data="{StaticResource TelegramPlane}" />
                                     <TextBlock Text="Канал" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>

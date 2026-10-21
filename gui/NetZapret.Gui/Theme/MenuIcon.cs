@@ -27,4 +27,17 @@ public static class MenuIcon
     public static string GetGlyph(DependencyObject element) => (string)element.GetValue(GlyphProperty);
 
     public static void SetGlyph(DependencyObject element, string value) => element.SetValue(GlyphProperty, value);
+
+    /// <summary>
+    /// Фигура вместо знака — для того, чего в шрифте нет: самолётик Telegram
+    /// у «TG Proxy» (владелец 22.10). Красится как знак.
+    /// </summary>
+    public static readonly DependencyProperty ShapeProperty = DependencyProperty.RegisterAttached(
+        "Shape", typeof(System.Windows.Media.Geometry), typeof(MenuIcon), new PropertyMetadata(null));
+
+    public static System.Windows.Media.Geometry? GetShape(DependencyObject element) =>
+        (System.Windows.Media.Geometry?)element.GetValue(ShapeProperty);
+
+    public static void SetShape(DependencyObject element, System.Windows.Media.Geometry? value) =>
+        element.SetValue(ShapeProperty, value);
 }

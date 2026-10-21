@@ -212,7 +212,6 @@ public partial class UpdateWindow : Window
         ["vpn"] = "",
         ["desync"] = "",
         ["routes"] = "",
-        ["tgproxy"] = "",
         ["check"] = "",
         ["speed"] = "",
         ["dns"] = "",
@@ -222,6 +221,16 @@ public partial class UpdateWindow : Window
         ["look"] = "",
         ["more"] = "",
         ["general"] = "",
+    };
+
+    /// <summary>
+    /// Значки-фигуры — у пунктов меню, где значок не знак шрифта, а фигура
+    /// (<see cref="MenuIcon"/>.Shape): ключ ресурса. Самолётик Telegram у «TG Proxy»
+    /// (владелец 22.10: «везде»).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> Shapes { get; } = new Dictionary<string, string>
+    {
+        ["tgproxy"] = "TelegramPlane",
     };
 
     /// <summary>
@@ -235,11 +244,29 @@ public partial class UpdateWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition());
 
-        var glyph = new TextBlock { Text = Glyphs.TryGetValue(category.Key, out var known) ? known : Glyphs["general"] };
-        glyph.SetResourceReference(StyleProperty, "TileGlyph");
-        glyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+        FrameworkElement mark;
 
-        var tile = new Border { Child = glyph, Margin = new Thickness(0, 0, 14, 0) };
+        if (Shapes.TryGetValue(category.Key, out var shape))
+        {
+            var figure = new System.Windows.Shapes.Path
+            {
+                Width = 18, Height = 18, Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            };
+
+            figure.SetResourceReference(System.Windows.Shapes.Path.DataProperty, shape);
+            figure.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, "Accent");
+            mark = figure;
+        }
+        else
+        {
+            var glyph = new TextBlock { Text = Glyphs.TryGetValue(category.Key, out var known) ? known : Glyphs["general"] };
+            glyph.SetResourceReference(StyleProperty, "TileGlyph");
+            glyph.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+            mark = glyph;
+        }
+
+        var tile = new Border { Child = mark, Margin = new Thickness(0, 0, 14, 0) };
         tile.SetResourceReference(StyleProperty, "IconTile");
         grid.Children.Add(tile);
 

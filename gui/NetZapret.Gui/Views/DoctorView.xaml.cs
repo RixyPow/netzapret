@@ -33,6 +33,9 @@ public sealed record DoctorTile(string Title, string Glyph, DoctorLevel Level, I
 {
     public bool Open { get; init; }
 
+    /// <summary>Фигура вместо знака <see cref="Glyph"/>; null — знак.</summary>
+    public Geometry? Shape { get; init; }
+
     public double Angle => Chevrons.Angle(Open);
 
     public Brush Color => (Brush)Application.Current.FindResource(DoctorView.KindOf(Level));
@@ -163,7 +166,7 @@ public partial class DoctorView : UserControl
                 var lines = s.Lines.Select(c => Line(c, s.Title)).ToList();
                 var worst = lines.Count == 0 ? DoctorLevel.Ok : lines.Max(l => l.Level);
 
-                return new DoctorTile(s.Title, GlyphOf(s.Title), worst, lines);
+                return new DoctorTile(s.Title, GlyphOf(s.Title), worst, lines) { Shape = ShapeOf(s.Title) };
             })
             .ToList();
 
@@ -232,9 +235,13 @@ public partial class DoctorView : UserControl
         "Имена и hosts" => "\uE8A5",
         "Браузеры и сертификаты" => "\uEB95",
         "Супервизор" => "\uE7E8",
-        "Прокси Telegram" => "\uE724",
+        "Прокси Telegram" => string.Empty,
         _ => "\uE9D9",
     };
+
+    /// <summary>Фигура вместо знака — у Telegram свой самолётик (владелец 22.10: «везде»).</summary>
+    private static Geometry? ShapeOf(string title) =>
+        title == "Прокси Telegram" ? (Geometry)Application.Current.FindResource("TelegramPlane") : null;
 
     private void OnPageSize(object sender, SizeChangedEventArgs e)
     {

@@ -83,21 +83,27 @@ public sealed class UpdateWindowTests
 
         var xaml = File.ReadAllText(Path.Combine(root!.FullName, "gui", "NetZapret.Gui", "MainWindow.xaml"));
         var items = System.Text.RegularExpressions.Regex.Matches(
-            xaml, @"Style=""\{StaticResource RailItem\}"" Content=""([^""]+)"" Tag=""([^""]+)"" local:MenuIcon\.Glyph=""&#x([0-9A-Fa-f]+);""");
+            xaml, @"Style=""\{StaticResource RailItem\}"" Content=""([^""]+)"" Tag=""([^""]+)"" local:MenuIcon\.(?:Glyph=""&#x(?<code>[0-9A-Fa-f]+);""|Shape=""\{StaticResource (?<shape>\w+)\}"")");
 
         Assert.True(items.Count >= 13, $"пунктов меню нашлось {items.Count}: разметка меню поменялась, тест её не узнаёт");
 
         foreach (System.Text.RegularExpressions.Match item in items)
         {
-            var (name, key, code) = (item.Groups[1].Value, item.Groups[2].Value, item.Groups[3].Value);
+            var (name, key) = (item.Groups[1].Value, item.Groups[2].Value);
             var category = NotesCategories.All.SingleOrDefault(c => c.Key == key);
 
             Assert.True(category is not null, $"у пункта меню «{name}» нет раздела чейнджлога");
             Assert.Equal(name, category!.Name);
-            Assert.Equal(((char)Convert.ToInt32(code, 16)).ToString(), UpdateWindow.Glyphs[key]);
+
+            // Значок меню — знак шрифта или фигура (MenuIcon.Shape, самолётик Telegram с 22.10).
+            if (item.Groups["shape"].Success)
+                Assert.Equal(item.Groups["shape"].Value, UpdateWindow.Shapes[key]);
+            else
+                Assert.Equal(((char)Convert.ToInt32(item.Groups["code"].Value, 16)).ToString(), UpdateWindow.Glyphs[key]);
         }
 
-        Assert.All(NotesCategories.All, c => Assert.True(UpdateWindow.Glyphs.ContainsKey(c.Key), $"у раздела «{c.Name}» нет значка"));
+        Assert.All(NotesCategories.All, c => Assert.True(
+            UpdateWindow.Glyphs.ContainsKey(c.Key) || UpdateWindow.Shapes.ContainsKey(c.Key), $"у раздела «{c.Name}» нет значка"));
     }
 
     [Fact]

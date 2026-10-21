@@ -93,7 +93,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="VPN" Tag="vpn" local:MenuIcon.Glyph="&#xE774;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Десинк" Tag="desync" local:MenuIcon.Glyph="&#xE9E9;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Маршруты" Tag="routes" local:MenuIcon.Glyph="&#xE816;" Checked="OnSection" />
-                        <RadioButton Style="{StaticResource RailItem}" Content="TG Proxy" Tag="tgproxy" local:MenuIcon.Glyph="&#xE724;" Checked="OnSection" />
+                        <RadioButton Style="{StaticResource RailItem}" Content="TG Proxy" Tag="tgproxy" local:MenuIcon.Shape="{StaticResource TelegramPlane}" Checked="OnSection" />
 
                         <!--
                             Заголовок группы, а не пункт: прописными, мельче
@@ -188,8 +188,7 @@
                         <Button Style="{StaticResource Ghost}" Padding="14,7" Margin="0,0,8,0" Click="OnGreetingTelegram"
                                 ToolTip="Новости в телеграм-канале">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE724;" Margin="0,0,8,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <Path Style="{StaticResource LineShape}" Data="{StaticResource TelegramPlane}" />
                                 <TextBlock Text="Канал" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
