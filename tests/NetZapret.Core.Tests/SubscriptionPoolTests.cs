@@ -350,4 +350,61 @@ public sealed class SubscriptionPoolTests
         Assert.NotNull(part.Error);
         Assert.Empty(result.Servers);
     }
+
+    /// <summary>
+    /// Молчащая панель не держит чужую (22.10: Secureway молчала 12 с,
+    /// и TRUST на вкладке VPN ждала её, хотя сама отвечает за полсекунды).
+    /// </summary>
+    [Fact]
+    public async Task A_silent_panel_does_not_hold_up_another()
+    {
+        var silent = new TaskCompletionSource();
+        var read = new List<string>();
+
+        var all = SubscriptionPool.ByPanel(
+            ["https://slow.example/sub/1", "https://fast.example/sub/2"],
+            url => url,
+            async url =>
+            {
+                if (url.Contains("slow"))
+                    await silent.Task;
+
+                lock (read)
+                    read.Add(url);
+            });
+
+        Assert.Equal(["https://fast.example/sub/2"], read);
+        Assert.False(all.IsCompleted);
+
+        silent.SetResult();
+        await all;
+
+        Assert.Equal(2, read.Count);
+    }
+
+    /// <summary>Подписки одной панели — по очереди: залпа с одного адреса панель не любит.</summary>
+    [Fact]
+    public async Task One_panel_is_read_in_turn()
+    {
+        var first = new TaskCompletionSource();
+        var started = new List<string>();
+
+        var all = SubscriptionPool.ByPanel(
+            ["https://panel.example/sub/1", "https://panel.example/sub/2"],
+            url => url,
+            async url =>
+            {
+                started.Add(url);
+
+                if (url.EndsWith('1'))
+                    await first.Task;
+            });
+
+        Assert.Equal(["https://panel.example/sub/1"], started);
+
+        first.SetResult();
+        await all;
+
+        Assert.Equal(["https://panel.example/sub/1", "https://panel.example/sub/2"], started);
+    }
 }

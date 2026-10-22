@@ -795,23 +795,36 @@ public partial class VpnView : UserControl
 
         try
         {
-            // По очереди, а не разом: панели подписок нередко одна и та же,
-            // и три запроса в одну секунду с одного адреса ей не нравятся.
+            // Разные панели — разом, одна панель — по очереди (SubscriptionPool.ByPanel):
+            // три запроса в одну секунду с одного адреса панели не нравятся, а
+            // по одной на всех молчащая панель держала соседей. 22.10 Secureway
+            // не отвечала 12 с, и TRUST (0,4–0,7 с) ждала её — обе на «читаю…».
             //
-            // Номер называется вслух: при зависшей панели «Читаю подписки…»
-            // без номера не говорит даже того, которая из трёх не отвечает.
+            // Ждущие называются по имени: при зависшей панели «Читаю подписки…»
+            // не говорит даже того, которая не отвечает.
             bool everyRead = true;
+            var waiting = _rows.Where(r => !r.IsKeys).Select(r => r.Entry.Name).ToList();
 
-            for (int i = 0; i < _rows.Count; i++)
+            void ShowWaiting() => Status.Text = waiting.Count switch
+            {
+                0 => string.Empty,
+                1 => $"Читаю подписку «{waiting[0]}»…",
+                _ => $"Читаю подписки: «{string.Join("», «", waiting)}»…",
+            };
+
+            ShowWaiting();
+
+            // Продолжения FillAsync — в потоке окна: строки, флаг и список
+            // ждущих меняются по одному, хоть панели и отвечают вперемешку.
+            await SubscriptionPool.ByPanel(_rows, r => r.IsKeys ? string.Empty : r.Entry.Url, async row =>
             {
                 token.ThrowIfCancellationRequested();
 
-                Status.Text = _rows.Count > 1
-                    ? $"Читаю подписку {i + 1} из {_rows.Count}…"
-                    : "Читаю подписку…";
+                everyRead &= await FillAsync(row, settings, token, force);
 
-                everyRead &= await FillAsync(_rows[i], settings, token, force);
-            }
+                waiting.Remove(row.Entry.Name);
+                ShowWaiting();
+            });
 
             // Теги пула — до чистки замеров: замеры подписок в работе лежат
             // под ними, и чистка по исходным тегам выбросила бы их.
