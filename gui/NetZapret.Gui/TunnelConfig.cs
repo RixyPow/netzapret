@@ -206,6 +206,7 @@ internal static class TunnelConfig
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
+                Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
                 DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
                 DnsServerType = settings.UseRouterDns ? "udp" : "https",

@@ -50,6 +50,18 @@ public sealed class SingBoxOptions
     /// </remarks>
     public string TunAddressV6 { get; init; } = "fdfe:dcba:9876::1/126";
 
+    /// <summary>
+    /// Есть ли в Windows IPv6 для нашего TUN; нет — туннель только IPv4.
+    /// </summary>
+    /// <remarks>
+    /// Без IPv6 в системе (<see cref="NetZapret.Core.Diagnostics.WindowsIpv6"/>)
+    /// sing-box не может дать адаптеру <see cref="TunAddressV6"/> и падает
+    /// при запуске — issue №34, 22.10. Тогда нет ни адреса IPv6, ни диапазона
+    /// fakeip IPv6: подставной адрес, которым некуда соединиться, хуже, чем
+    /// никакого. Обходить перехват через IPv6 в такой системе тоже нечем.
+    /// </remarks>
+    public bool Ipv6 { get; init; } = true;
+
     /// <summary>Диапазон fakeip для IPv4 — по умолчанию зарезервированный под тесты.</summary>
     public string FakeIpV4Range { get; init; } = "198.18.0.0/15";
 
@@ -888,17 +900,17 @@ public sealed class SingBoxConfigCompiler
         else if (viaPath)
             remote["detour"] = SingBoxOptions.DnsPathTag;
 
-        var servers = new JsonArray
+        var fake = new JsonObject
         {
-            remote,
-            new JsonObject
-            {
-                ["tag"] = "fake",
-                ["type"] = "fakeip",
-                ["inet4_range"] = options.FakeIpV4Range,
-                ["inet6_range"] = options.FakeIpV6Range,
-            },
+            ["tag"] = "fake",
+            ["type"] = "fakeip",
+            ["inet4_range"] = options.FakeIpV4Range,
         };
+
+        if (options.Ipv6)
+            fake["inet6_range"] = options.FakeIpV6Range;
+
+        var servers = new JsonArray { remote, fake };
 
         // Ступень «по TCP» для «авто»: тот же адрес, порт 53, без detour —
         // прямым путём. Включается правилом по режиму в конце списка
@@ -1302,7 +1314,9 @@ public sealed class SingBoxConfigCompiler
             ["type"] = "tun",
             ["tag"] = "tun-in",
             ["interface_name"] = options.TunInterfaceName,
-            ["address"] = new JsonArray { options.TunAddress, options.TunAddressV6 },
+            ["address"] = options.Ipv6
+                ? new JsonArray { options.TunAddress, options.TunAddressV6 }
+                : new JsonArray { options.TunAddress },
             ["mtu"] = options.TunMtu,
             ["auto_route"] = true,
             // strict_route выключен намеренно: он добавляет фильтры WFP,
@@ -1319,11 +1333,10 @@ public sealed class SingBoxConfigCompiler
 
         if (options.Scope == TunnelScope.ProxyOnly)
         {
-            var captured = new List<string>
-            {
-                options.FakeIpV4Range,
-                options.FakeIpV6Range,
-            };
+            var captured = new List<string> { options.FakeIpV4Range };
+
+            if (options.Ipv6)
+                captured.Add(options.FakeIpV6Range);
 
             // Адреса резолверов заводим в туннель намеренно: без перехвата
             // запроса fakeip нечего подменять. Правило hijack-dns в маршрутах
@@ -1352,7 +1365,7 @@ public sealed class SingBoxConfigCompiler
             // Одна сеть приходит и правилом, и секцией capture: список
             // Telegram через VPN стоит в обоих. Повтор движку не нужен.
             var unique = new JsonArray();
-            foreach (var cidr in captured.Select(Prefix).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var cidr in captured.Select(Prefix).Where(c => options.Ipv6 || !IsV6(c)).Distinct(StringComparer.OrdinalIgnoreCase))
                 unique.Add(cidr);
 
             tun["route_address"] = unique;
@@ -1364,7 +1377,7 @@ public sealed class SingBoxConfigCompiler
             // и так вне туннеля, но исключение остаётся страховкой: правило
             // mode: proxy может случайно накрыть адрес, который чинит десинк.
             var excluded = new JsonArray();
-            foreach (var cidr in options.DesyncAddresses.Select(Prefix).Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var cidr in options.DesyncAddresses.Select(Prefix).Where(c => options.Ipv6 || !IsV6(c)).Distinct(StringComparer.OrdinalIgnoreCase))
                 excluded.Add(cidr);
 
             tun["route_exclude_address"] = excluded;
@@ -1372,6 +1385,12 @@ public sealed class SingBoxConfigCompiler
 
         return new JsonArray { tun };
     }
+
+    /// <summary>
+    /// Сеть IPv6. Без IPv6 у адаптера (<see cref="SingBoxOptions.Ipv6"/>)
+    /// маршрут к ней Windows поставить не может — не просим.
+    /// </summary>
+    private static bool IsV6(string cidr) => cidr.Contains(':');
 
     private static JsonArray BuildOutbounds(
         IReadOnlyList<ProxyServer> servers,

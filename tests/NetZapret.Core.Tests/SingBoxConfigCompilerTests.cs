@@ -73,6 +73,67 @@ public class SingBoxConfigCompilerTests
     }
 
     /// <summary>
+    /// IPv6 выключен в Windows — TUN без IPv6 (issue №34, 22.10): sing-box падал
+    /// «set ipv6 address: Element not found» и туннель не поднимался вовсе.
+    /// </summary>
+    [Fact]
+    public void WithoutIpv6TheTunIsIpv4Only()
+    {
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server()],
+            new SingBoxOptions
+            {
+                Scope = TunnelScope.ProxyOnly,
+                DnsServerAddresses = ["192.168.1.1/32", "fec0:0:0:ffff::1/128"],
+                Ipv6 = false,
+            });
+
+        var root = JsonDocument.Parse(result.Json).RootElement;
+        var tun = root.GetProperty("inbounds").EnumerateArray()
+            .Single(inbound => inbound.GetProperty("type").GetString() == "tun");
+
+        Assert.Equal(["172.19.0.1/30"], tun.GetProperty("address").EnumerateArray().Select(a => a.GetString()));
+
+        var routed = tun.GetProperty("route_address").EnumerateArray().Select(a => a.GetString()!).ToList();
+        Assert.Contains("198.18.0.0/15", routed);
+        Assert.Contains("192.168.1.1/32", routed);
+        Assert.DoesNotContain(routed, cidr => cidr.Contains(':'));
+
+        var fake = root.GetProperty("dns").GetProperty("servers").EnumerateArray()
+            .Single(server => server.GetProperty("tag").GetString() == "fake");
+        Assert.False(fake.TryGetProperty("inet6_range", out _));
+
+        var (ok, said) = SingBoxCheck.Run(result.Json);
+        Assert.True(ok, $"sing-box check не пройден: {said}");
+    }
+
+    /// <summary>
+    /// Значение DisabledComponents человека из №34 — 0xffffffff, REG_DWORD приходит
+    /// числом −1. Один бит Teredo (0x01) и «предпочитать IPv4» (0x20) IPv6 нам не выключают.
+    /// </summary>
+    [Theory]
+    [InlineData(-1, true)]
+    [InlineData(0xFF, true)]
+    [InlineData(0x10, true)]
+    [InlineData(0x11, true)]
+    [InlineData(0x01, false)]
+    [InlineData(0x20, false)]
+    [InlineData(0, false)]
+    public void DisabledComponentsIsReadByTheNonTunnelBit(int value, bool disabled)
+    {
+        Assert.Equal(disabled, NetZapret.Core.Diagnostics.WindowsIpv6.Disables(value));
+    }
+
+    [Fact]
+    public void NoDisabledComponentsMeansIpv6IsThere()
+    {
+        Assert.False(NetZapret.Core.Diagnostics.WindowsIpv6.Disables(null));
+        Assert.False(NetZapret.Core.Diagnostics.WindowsIpv6.Disables("0xff"));
+    }
+
+    /// <summary>
     /// Сертификаты — списком Mozilla (19.10): проверка через Windows роняла
     /// движок с 0xc0000005 в root_windows.go.
     /// </summary>
