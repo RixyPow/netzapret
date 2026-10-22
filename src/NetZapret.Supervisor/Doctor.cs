@@ -706,6 +706,13 @@ public static class Doctor
                 // трубы.
                 ServiceHealth.Degraded => Warn($"{service.Name}: запущен, но не отвечает."),
                 ServiceHealth.Dead => Bad($"{service.Name}: процесс умер."),
+
+                // Попытки исчерпаны — поломка, и с причиной: до 22.10 здесь было
+                // «остановлен» оговоркой, а winws2 из обсуждения №33 шесть раз
+                // подряд падал с кодом 433, и «Диагностика» об этом молчала.
+                ServiceHealth.Faulted => Bad(service.LastError is { Length: > 0 } last
+                    ? $"{service.Name}: не поднимается — {last}"
+                    : $"{service.Name}: не поднимается, попытки перезапуска исчерпаны."),
                 _ => Warn($"{service.Name}: остановлен."),
             });
         }

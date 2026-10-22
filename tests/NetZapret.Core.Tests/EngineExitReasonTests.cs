@@ -44,4 +44,45 @@ public sealed class EngineExitReasonTests
         Assert.True(said.Length < 400);
         Assert.EndsWith("…", said);
     }
+
+    /// <summary>
+    /// winws2 FATAL не пишет: причину его отказа несёт строка «windivert: error …»
+    /// (обсуждение №33, 22.10 — код 433 и больше ничего).
+    /// </summary>
+    [Fact]
+    public void WinwsFailureLineIsTheReason()
+    {
+        const string line = "windivert: error opening filter: A device which does not exist was specified.";
+
+        Assert.True(WinwsService.IsFailure(line));
+        Assert.False(WinwsService.IsFailure("windivert initialized. capture is started."));
+        Assert.False(WinwsService.IsFailure("Loading hostlist lists/error-pages.txt"));
+
+        Assert.Equal(
+            "процесс завершился с кодом 433: windivert: error opening filter: A device which does not exist was specified.",
+            SupervisedService.ExitReason(433, line));
+    }
+
+    [Fact]
+    public void Code433IsExplained()
+    {
+        Assert.Contains("WinDivert", NetZapret.Zapret.WinDivertDriver.Explain(433));
+        Assert.Contains("GoodbyeDPI", NetZapret.Zapret.WinDivertDriver.Explain(433));
+        Assert.Null(NetZapret.Zapret.WinDivertDriver.Explain(1));
+    }
+
+    /// <summary>
+    /// Выгрузка драйвера трогает только свой: под именем WinDivert свой драйвер
+    /// держат GoodbyeDPI и другие обходы (22.10).
+    /// </summary>
+    [Theory]
+    [InlineData(@"\??\C:\NetZapret\engines\zapret\exe\Monkey64.sys", true)]
+    [InlineData(@"C:\NetZapret\engines\zapret\exe\Monkey64.sys", true)]
+    [InlineData(@"\??\C:\GoodbyeDPI\x86_64\WinDivert64.sys", false)]
+    [InlineData(@"\??\C:\Zapret\Dev\exe\Monkey64.sys", false)]
+    [InlineData(@"System32\drivers\WinDivert.sys", false)]
+    [InlineData(@"\??\C:\NetZapret\enginesX\Monkey64.sys", false)]
+    [InlineData(null, false)]
+    public void OnlyOurDriverIsOurs(string? imagePath, bool ours) =>
+        Assert.Equal(ours, NetZapret.Zapret.WinDivertDriver.IsOurs(imagePath, @"C:\NetZapret\engines"));
 }

@@ -227,7 +227,8 @@ public abstract class SupervisedService
                 {
                 }
 
-                LastError = ExitReason(Process.ExitCode, _fatal);
+                LastError = ExitReason(Process.ExitCode, _fatal)
+                    + (Advice(Process.ExitCode) is { } advice ? " — " + advice : string.Empty);
                 return false;
             }
 
@@ -287,7 +288,7 @@ public abstract class SupervisedService
             {
                 while (await reader.ReadLineAsync() is { } line)
                 {
-                    if (line.Contains("FATAL", StringComparison.Ordinal))
+                    if (IsFailureLine(line))
                         _fatal = line;
 
                     Observe(line);
@@ -302,6 +303,12 @@ public abstract class SupervisedService
 
     /// <summary>Последняя строка FATAL от движка в этом запуске; пишет насос, читает старт.</summary>
     private volatile string? _fatal;
+
+    /// <summary>Строка вывода, называющая причину отказа: у sing-box — FATAL.</summary>
+    protected virtual bool IsFailureLine(string line) => line.Contains("FATAL", StringComparison.Ordinal);
+
+    /// <summary>Что значит код выхода движка и что делать; <c>null</c> — сказать нечего.</summary>
+    protected virtual string? Advice(int exitCode) => null;
 
     /// <summary>
     /// Почему процесс вышел на старте — словами движка, а не одним кодом.
@@ -1850,6 +1857,23 @@ public sealed class WinwsService : SupervisedService
     }
 
     protected override void ForgetRunState() => _capturing = false;
+
+    /// <summary>
+    /// Строка winws2 о том, почему перехват не начался: «windivert: error opening filter: …».
+    /// </summary>
+    /// <remarks>
+    /// FATAL winws2 не пишет, и до 22.10 причина его отказа в состояние
+    /// не попадала: окно, журнал и отчёт говорили «процесс завершился
+    /// с кодом 433», а строка о WinDivert оставалась в одном winws2.log
+    /// (обсуждение №33).
+    /// </remarks>
+    public static bool IsFailure(string line) =>
+        line.StartsWith("windivert:", StringComparison.OrdinalIgnoreCase)
+        && line.Contains("error", StringComparison.OrdinalIgnoreCase);
+
+    protected override bool IsFailureLine(string line) => base.IsFailureLine(line) || IsFailure(line);
+
+    protected override string? Advice(int exitCode) => NetZapret.Zapret.WinDivertDriver.Explain(exitCode);
 
     public override Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Ready(IsProcessAlive, _capturing, StartedAt, DateTimeOffset.Now)
