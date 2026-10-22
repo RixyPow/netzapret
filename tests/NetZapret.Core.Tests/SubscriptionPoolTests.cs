@@ -382,6 +382,46 @@ public sealed class SubscriptionPoolTests
         Assert.Equal(2, read.Count);
     }
 
+    /// <summary>
+    /// Запас — на вкладку сразу, пока спрашивается панель (22.10), но только
+    /// когда панель и правда будут спрашивать: свежий запас и так отдаётся без сети.
+    /// </summary>
+    [Theory]
+    [InlineData(10, false, false)]
+    [InlineData(10, true, true)]
+    [InlineData(120, false, true)]
+    public void The_reserve_is_shown_while_the_panel_is_asked(int ageMinutes, bool force, bool shown)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+        const string url = "http://127.0.0.1:1/sub";
+
+        try
+        {
+            SubscriptionPool.SaveReserve(folder, url, "trojan://secret@a.example:443#Германия\n");
+            Age(folder, TimeSpan.FromMinutes(ageMinutes));
+
+            var kept = SubscriptionPool.KeptWhileAsking(url, force, DateTimeOffset.Now, folder);
+
+            Assert.Equal(shown, kept is not null);
+
+            if (kept is { } reserve)
+                Assert.Equal("Германия", Assert.Single(reserve.Info.Servers).Tag);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void No_reserve_nothing_to_show()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "nz-pool-" + Guid.NewGuid().ToString("N"));
+
+        Assert.Null(SubscriptionPool.KeptWhileAsking("http://127.0.0.1:1/sub", force: true, DateTimeOffset.Now, folder));
+    }
+
     /// <summary>Подписки одной панели — по очереди: залпа с одного адреса панель не любит.</summary>
     [Fact]
     public async Task One_panel_is_read_in_turn()

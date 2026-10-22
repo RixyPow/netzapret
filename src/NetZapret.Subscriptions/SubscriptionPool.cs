@@ -583,6 +583,27 @@ public static class SubscriptionPool
     public static (SubscriptionInfo Info, DateTimeOffset At)? Kept(string url, string? reserveDirectory = null) =>
         LoadReserve(reserveDirectory ?? DefaultReserveDirectory, url);
 
+    /// <summary>
+    /// Запас, который вкладке VPN показать, пока спрашивается панель; <c>null</c> —
+    /// показывать нечего или панель спрашиваться не будет.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 22.10: «запас подписки показывать сразу с пометкой „обновляю…“,
+    /// ответ панели подставлять, когда придёт». Прежде строка подписки ждала
+    /// панель на «читаю…»: у лежащей Secureway — все 12 с до таймаута, хотя
+    /// её одиннадцать серверов лежали в запасе. Свежий запас (моложе
+    /// <see cref="FreshFor"/>) и без того отдаётся <see cref="ReadOneAsync"/>
+    /// без сети — показывать его дважды незачем.
+    /// </remarks>
+    public static (SubscriptionInfo Info, DateTimeOffset At)? KeptWhileAsking(
+        string url, bool force, DateTimeOffset now, string? reserveDirectory = null)
+    {
+        if (Kept(url, reserveDirectory) is not { } kept || kept.Info.Servers.Count == 0)
+            return null;
+
+        return force || now - kept.At >= FreshFor ? kept : null;
+    }
+
     private static (SubscriptionInfo Info, DateTimeOffset At)? LoadReserve(string folder, string url)
     {
         try
