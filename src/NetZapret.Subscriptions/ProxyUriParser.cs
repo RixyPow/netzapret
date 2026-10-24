@@ -110,9 +110,14 @@ public static class ProxyUriParser
     /// Hysteria2 — та же форма, но транспорт и TLS у него встроенные,
     /// а между портом и query почти всегда стоит '/'.
     /// </summary>
+    /// <remarks>
+    /// Порт бывает и списком — смена портов, см. <see cref="PortHopping"/>:
+    /// «443,20000-50000» прочий разбор за порт не примет.
+    /// </remarks>
     private static ProxyServer ParseHysteria2(string rest)
     {
-        var parts = UriParts.Split(rest);
+        var (body, addressPorts) = PortHopping.FromAddress(rest);
+        var parts = UriParts.Split(body);
 
         if (parts.UserInfo is null)
             throw new FormatException("отсутствует пароль до '@'");
@@ -137,6 +142,7 @@ public static class ProxyUriParser
             // ни отказом, ни сбросом, — и подписка выглядит мёртвой целиком.
             ObfsType = Get(q, "obfs"),
             ObfsPassword = Get(q, "obfs-password") ?? Get(q, "obfsPassword") ?? Get(q, "obfs_password"),
+            HopPorts = PortHopping.Join(addressPorts, PortHopping.FromParameter(Get(q, "mport"))),
             Extra = q,
         };
     }

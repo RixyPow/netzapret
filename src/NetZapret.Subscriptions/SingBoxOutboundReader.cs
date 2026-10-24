@@ -68,6 +68,15 @@ internal static class SingBoxOutboundReader
         var host = Empty(Text(outbound, "server"));
         var port = Port(outbound);
 
+        // Смена портов (PortHopping). server_port при ней бывает пустым —
+        // v2rayN его так и пишет, — и сервер узнаётся по первому порту списка.
+        var hopPorts = kind == ProxyProtocol.Hysteria2
+            ? PortHopping.Normalize(string.Join(',', Strings(outbound, "server_ports")))
+            : null;
+
+        if (port == 0 && hopPorts is not null)
+            port = PortHopping.First(hopPorts);
+
         // У Hysteria первой версии ключ — auth_str, и он бывает пустым:
         // сервер без авторизации законен.
         // У SOCKS и HTTP учётных данных может не быть вовсе; имя — ключ,
@@ -140,6 +149,7 @@ internal static class SingBoxOutboundReader
             AlterId = Number(outbound, "alter_id"),
             ObfsType = Empty(Text(obfs, "type")),
             ObfsPassword = legacyObfs ?? Empty(Text(obfs, "password")),
+            HopPorts = hopPorts,
             Password = kind == ProxyProtocol.Tuic || plainProxy ? Empty(Text(outbound, "password")) : null,
             SocksVersion = kind == ProxyProtocol.Socks ? Empty(Text(outbound, "version")) ?? "5" : null,
             CongestionControl = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "congestion_control")) : null,

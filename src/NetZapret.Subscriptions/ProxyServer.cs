@@ -163,6 +163,18 @@ public sealed record ProxyServer
     public string? ObfsPassword { get; init; }
 
     /// <summary>
+    /// Порты смены у Hysteria2 в записи движка: <c>20000:50000</c>, несколько —
+    /// через запятую; <c>null</c> — без смены. Откуда и зачем — <see cref="PortHopping"/>.
+    /// </summary>
+    /// <remarks>
+    /// Строкой, а не списком, по той же причине, что <see cref="XhttpOptions"/>.
+    /// При смене движок <see cref="Port"/> не берёт вовсе — и первый порт у него
+    /// случайный из этих (sing-quic, HopConn); <see cref="Port"/> остаётся
+    /// окну и узнаванию сервера.
+    /// </remarks>
+    public string? HopPorts { get; init; }
+
+    /// <summary>
     /// Пароль TUIC: ключ у него из двух частей, UUID лежит в <see cref="Credential"/>.
     /// У SOCKS и HTTP — пароль прокси, а имя пользователя — в <see cref="Credential"/>.
     /// </summary>

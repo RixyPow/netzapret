@@ -1736,6 +1736,18 @@ public sealed class SingBoxConfigCompiler
                     outbound["obfs"] = obfs;
                 }
 
+                // Смена портов (PortHopping). server_port рядом движок терпит
+                // (check и запуск, 24.10) и при смене не берёт; интервал —
+                // его же 30 секунд, своего в ссылках не пишут.
+                if (server.HopPorts is { } hopPorts)
+                {
+                    var ports = new JsonArray();
+                    foreach (var range in PortHopping.Ranges(hopPorts))
+                        ports.Add(range);
+
+                    outbound["server_ports"] = ports;
+                }
+
                 break;
 
             // Новые с 01.10: TUIC, Hysteria первой версии, AnyTLS. Собираются
