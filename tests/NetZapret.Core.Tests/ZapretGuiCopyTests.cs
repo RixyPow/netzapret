@@ -149,6 +149,23 @@ public sealed class ZapretGuiCopyTests : IDisposable
     /// вживую: winws2 не поднимался, не найдя списка или модуля. Теперь это
     /// ловит CI.
     /// </remarks>
+    /// <summary>
+    /// Версия — из манифеста, который переписывает обновление изнутри Zapret GUI
+    /// (24.10: 21.1.7.201 при деинсталляторе от 15.10 с «163»).
+    /// </summary>
+    [Fact]
+    public void The_version_comes_from_the_install_manifest()
+    {
+        Assert.Null(ZapretGuiCopy.InstalledVersion(Install));
+
+        Put(Install, @"_internal\install_manifest.json", "{\"schema\":1,\"version\":\"21.1.7.201\",\"channel\":\"dev\",\"files\":[]}");
+        Assert.Equal("21.1.7.201", ZapretGuiCopy.InstalledVersion(Install));
+
+        // Испорченный манифест — не версия.
+        Put(Install, @"_internal\install_manifest.json", "{\"version\":");
+        Assert.Null(ZapretGuiCopy.InstalledVersion(Install));
+    }
+
     [Fact]
     public void Every_file_a_preset_names_is_in_the_repository()
     {

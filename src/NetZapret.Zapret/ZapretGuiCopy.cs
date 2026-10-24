@@ -180,15 +180,27 @@ public static class ZapretGuiCopy
     }
 
     /// <summary>
-    /// Версия установленного Zapret GUI — по его деинсталлятору; <c>null</c> — не нашлась.
+    /// Версия установленного Zapret GUI; <c>null</c> — не нашлась.
     /// </summary>
     /// <remarks>
-    /// Другого номера у установки нет: сама программа лежит в _internal
-    /// (PyInstaller), а версию в свойствах файла несёт только unins000.exe
-    /// (22.10: 21.1.7.163 у установки от 15.10).
+    /// <para>
+    /// Сперва — <c>_internal\install_manifest.json</c>: его переписывает
+    /// обновление изнутри программы. Деинсталлятор unins000.exe оно не трогает:
+    /// 24.10 Zapret GUI сам обновился с 21.1.7.163 до 21.1.7.201 (lua 1.0.6,
+    /// winws2 v1.0.6-25), а unins000.exe от 15.10 по-прежнему говорил «163» —
+    /// и копия записала бы чужой номер.
+    /// </para>
+    /// <para>
+    /// Деинсталлятор — запасом, для установок без манифеста: сама программа
+    /// лежит в _internal (PyInstaller), и версию в свойствах файла несёт только
+    /// он (22.10: 21.1.7.163 у установки от 15.10).
+    /// </para>
     /// </remarks>
     public static string? InstalledVersion(string install)
     {
+        if (ManifestVersion(Path.Combine(install, "_internal", "install_manifest.json")) is { } manifest)
+            return manifest;
+
         var uninstaller = Path.Combine(install, "unins000.exe");
 
         if (!File.Exists(uninstaller))
@@ -197,6 +209,28 @@ public static class ZapretGuiCopy
         var version = FileVersionInfo.GetVersionInfo(uninstaller).ProductVersion?.Trim();
 
         return string.IsNullOrEmpty(version) ? null : version;
+    }
+
+    /// <summary>Поле <c>version</c> манифеста установки; <c>null</c> — нет файла или поля.</summary>
+    private static string? ManifestVersion(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return null;
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+            return document.RootElement.TryGetProperty("version", out var version)
+                && version.ValueKind == System.Text.Json.JsonValueKind.String
+                && version.GetString()?.Trim() is { Length: > 0 } text
+                    ? text
+                    : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Первая строка <see cref="VersionFile"/> копии — «Zapret GUI 21.1.7.163»; <c>null</c> — копии нет.</summary>
