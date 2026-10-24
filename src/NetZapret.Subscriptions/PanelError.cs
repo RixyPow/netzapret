@@ -16,18 +16,39 @@ namespace NetZapret.Subscriptions;
 /// </remarks>
 public static class PanelError
 {
-    public static string Describe(Exception error)
+    public static string Describe(Exception error) => Describe(error, NetZapret.Core.PhysicalNetwork.Up);
+
+    /// <param name="error">Отказ чтения.</param>
+    /// <param name="online">
+    /// Есть ли сеть. Спрашивается только при отказе соединения: ответ панели
+    /// с кодом сеть доказывает и сам.
+    /// </param>
+    /// <remarks>
+    /// Без сети панель ни при чём (23–24.10, <see cref="NetZapret.Core.PhysicalNetwork"/>):
+    /// Windows без адаптера сразу отвечает «такого имени нет», и до 24.10 это
+    /// называлось «панель недоступна».
+    /// </remarks>
+    public static string Describe(Exception error, Func<bool> online)
     {
         var http = error as HttpRequestException ?? error.GetBaseException() as HttpRequestException;
 
         if (http?.StatusCode is { } code)
             return Status(code);
 
-        return error.GetBaseException() switch
+        var inner = error.GetBaseException();
+
+        if (inner is SocketException or TimeoutException && !online())
+            return NetZapret.Core.PhysicalNetwork.Offline;
+
+        return inner switch
         {
+            SocketException { SocketErrorCode: SocketError.HostNotFound or SocketError.NoData or SocketError.TryAgain }
+                => "имя панели не разрешилось — DNS не знает его или не ответил",
+            SocketException { SocketErrorCode: SocketError.ConnectionRefused }
+                => "панель отказала в соединении — сервер жив, но порт закрыт",
             SocketException => "панель недоступна — соединение не установилось",
             TimeoutException => "панель не ответила вовремя",
-            var inner => inner.Message,
+            _ => inner.Message,
         };
     }
 

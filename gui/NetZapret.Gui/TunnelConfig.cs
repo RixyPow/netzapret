@@ -109,7 +109,8 @@ internal static class TunnelConfig
                 foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))
                 {
                     Journal.Write("подписка", part.FromReserve
-                        ? $"«{part.Source.Name}» не ответила — серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
+                        ? $"«{part.Source.Name}» не ответила{(PhysicalNetwork.Up() ? "" : $" ({PhysicalNetwork.Offline})")} — "
+                            + $"серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
                         : $"«{part.Source.Name}» не прочиталась и запаса нет: {part.Error}");
                 }
 
@@ -293,7 +294,7 @@ internal static class TunnelConfig
                     + (keyCount > 0 ? $" и {keyCount} ключей" : string.Empty);
 
             if (reserved > 0)
-                note += $", {reserved} из запаса — панель не ответила";
+                note += $", {reserved} из запаса — " + (PhysicalNetwork.Up() ? "панель не ответила" : "нет сети");
 
             // Про мёртвых говорим вслух. Молча выведенный из автоподбора
             // сервер — это сервер, который человек считает рабочим, а он

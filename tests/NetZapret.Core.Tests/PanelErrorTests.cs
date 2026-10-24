@@ -27,11 +27,32 @@ public sealed class PanelErrorTests
         Assert.Equal(expected, PanelError.Status(code));
     }
 
-    [Fact]
-    public void ANetworkFailureIsNotAnEnglishMessage()
+    [Theory]
+    [InlineData(10061, "панель отказала в соединении — сервер жив, но порт закрыт")]
+    [InlineData(11001, "имя панели не разрешилось — DNS не знает его или не ответил")]
+    [InlineData(10065, "панель недоступна — соединение не установилось")]
+    public void ANetworkFailureIsNotAnEnglishMessage(int socketError, string expected)
     {
-        var error = new HttpRequestException("No connection could be made", new SocketException(10061));
+        var error = new HttpRequestException("No connection could be made", new SocketException(socketError));
 
-        Assert.Equal("панель недоступна — соединение не установилось", PanelError.Describe(error));
+        Assert.Equal(expected, PanelError.Describe(error, online: () => true));
+    }
+
+    /// <summary>
+    /// Без сети панель ни при чём: 23–24.10 у владельца Wi-Fi подключался через
+    /// минуты после пробуждения, а под подписками стояло «панель недоступна».
+    /// </summary>
+    [Fact]
+    public void WithoutANetworkThePanelIsNotBlamed()
+    {
+        var refused = new HttpRequestException("No such host is known", new SocketException(11001));
+        var answered = new HttpRequestException("502", null, HttpStatusCode.BadGateway);
+
+        Assert.Equal(PhysicalNetwork.Offline, PanelError.Describe(refused, online: () => false));
+        Assert.Equal(PhysicalNetwork.Offline, PanelError.Describe(new TimeoutException(), online: () => false));
+
+        // Ответ с кодом — уже доказательство сети, её и не спрашиваем.
+        Assert.Equal("панель ответила ошибкой 502 — неполадка на сервере продавца",
+            PanelError.Describe(answered, online: () => throw new InvalidOperationException()));
     }
 }

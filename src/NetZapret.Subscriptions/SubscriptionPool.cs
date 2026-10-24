@@ -264,9 +264,11 @@ public static class SubscriptionPool
         }
         catch (Exception ex)
         {
-            error = ex is OperationCanceledException
-                ? $"панель не ответила за {SubscriptionClient.DefaultTimeout.TotalSeconds:0} с"
-                : PanelError.Describe(ex);
+            // Тишина без сети — тоже не панель: 23.10 с поднятым TUN и без Wi-Fi
+            // чтение ждало все 12 с.
+            error = ex is not OperationCanceledException ? PanelError.Describe(ex)
+                : !NetZapret.Core.PhysicalNetwork.Up() ? NetZapret.Core.PhysicalNetwork.Offline
+                : $"панель не ответила за {SubscriptionClient.DefaultTimeout.TotalSeconds:0} с";
         }
 
         if (await ReadFallbackAsync(folder, url, cancellationToken) is { } rescued)

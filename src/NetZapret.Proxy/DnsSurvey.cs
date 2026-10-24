@@ -206,36 +206,7 @@ public static class DnsSurvey
     /// <summary>
     /// Индекс физического адаптера с маршрутом по умолчанию; <c>null</c> — не нашли.
     /// </summary>
-    /// <remarks>
-    /// Туннель sing-box — тоже адаптер с адресом и шлюзом, и отличить его
-    /// можно только по имени: он наш, и назван нами.
-    /// </remarks>
-    public static int? PhysicalInterface()
-    {
-        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
-        {
-            if (nic.OperationalStatus != OperationalStatus.Up
-                || nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel
-                || nic.Name.StartsWith("netzapret", StringComparison.OrdinalIgnoreCase)
-                || nic.Description.Contains("wintun", StringComparison.OrdinalIgnoreCase)
-                || nic.Description.Contains("WireGuard", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var props = nic.GetIPProperties();
-
-            if (!props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork
-                    && !g.Address.Equals(IPAddress.Any)))
-            {
-                continue;
-            }
-
-            return props.GetIPv4Properties()?.Index;
-        }
-
-        return null;
-    }
+    public static int? PhysicalInterface() => Core.PhysicalNetwork.Interface();
 
     /// <summary>Привязывает сокет к адаптеру: исходящие пойдут через него, мимо TUN.</summary>
     private static void Bind(Socket socket, int? index)

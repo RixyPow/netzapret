@@ -393,6 +393,7 @@ public sealed class SingBoxService : SupervisedService
     private DateTime? _trafficPortMissingSince;
     private bool _trafficPortMissingNoted;
     private bool _upstreamNoted;
+    private bool _offlineNoted;
 
     /// <summary>
     /// Сколько ждать порт проверки, прежде чем счесть, что его нет в конфиге.
@@ -862,6 +863,7 @@ public sealed class SingBoxService : SupervisedService
         _pinnedPlaced = false;
         Remark = null;
         _upstreamNoted = false;
+        _offlineNoted = false;
         _trafficPortMissingSince = null;
         _trafficPortMissingNoted = false;
         _dnsViaTunnel = null;
@@ -1020,6 +1022,26 @@ public sealed class SingBoxService : SupervisedService
         _lastTrafficOk = _bypass.Engaged
             ? await ExitsAliveAsync(cancellationToken)
             : await CheckTrafficAsync(_trafficPort.Value, cancellationToken);
+
+        // Без сети молчит всё, и выходы тут ни при чём (23–24.10: Wi-Fi после сна и
+        // включения подключался минуты, а «Главная» писала «мёртв выход подписки»).
+        // Обход тоже не включается: увести трафик мимо туннеля некуда, а включённый
+        // держался бы и после того, как сеть появится, до живого замера выхода.
+        if (!_lastTrafficOk && !PhysicalNetwork.Up())
+        {
+            LastError = PhysicalNetwork.Offline;
+
+            if (!_offlineNoted)
+            {
+                _offlineNoted = true;
+                Note($"трафик не проходит: {PhysicalNetwork.Offline}. Серверы подписки и движок тут ни при чём — "
+                    + "проверка продолжится, когда сеть появится.");
+            }
+
+            return ServiceCheck.UpstreamDown;
+        }
+
+        _offlineNoted = false;
 
         await ApplyBypassAsync(_lastTrafficOk, cancellationToken);
 

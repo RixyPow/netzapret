@@ -1,3 +1,4 @@
+using NetZapret.Core;
 using NetZapret.Subscriptions;
 
 namespace NetZapret.Gui;
@@ -18,11 +19,26 @@ namespace NetZapret.Gui;
 /// перезапуск роняет туннель на секунды, и решать это человеку. Следующий
 /// запуск возьмёт уже новый запас — он моложе получаса и читается без сети.
 /// </para>
+/// <para>
+/// Сети нет — панели спрашиваются, когда она появится (24.10). Автозапуск при
+/// входе идёт раньше, чем подключается Wi-Fi: у владельца 23 и 24.10 — на 3–4
+/// минуты, и перечитывание сразу отказывало обеим панелям, а повторить его
+/// было некому, кроме перезапуска руками.
+/// </para>
 /// </remarks>
 internal static class SubscriptionRecheck
 {
     /// <summary>Идёт ли уже: два запуска подряд не должны дважды стучаться в одну панель.</summary>
     private static int _running;
+
+    /// <summary>Сколько ждать сети: дольше — человек, видно, работает без неё.</summary>
+    private static readonly TimeSpan NetworkWait = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// Адаптер поднялся — ещё не значит, что есть DNS: у владельца 24.10 Wi-Fi
+    /// подключился в 11:30:40, а «есть интернет» Windows сказала в 11:30:43.
+    /// </summary>
+    private static readonly TimeSpan NetworkSettle = TimeSpan.FromSeconds(5);
 
     public static async Task RunAsync(IReadOnlyList<PoolPart> deferred)
     {
@@ -31,6 +47,20 @@ internal static class SubscriptionRecheck
 
         try
         {
+            if (!PhysicalNetwork.Up())
+            {
+                Journal.Write("подписка", "сети нет — панели подписок спрошу, когда компьютер подключится");
+
+                if (!await PhysicalNetwork.WaitAsync(NetworkWait, CancellationToken.None))
+                {
+                    Journal.Write("подписка", $"сеть не появилась за {NetworkWait.TotalMinutes:0} мин — панели не спрошены, "
+                        + "серверы остаются из запаса");
+                    return;
+                }
+
+                await Task.Delay(NetworkSettle);
+            }
+
             bool changed = false;
 
             // По одной: панель у подписок часто одна, а залпа она не любит.
