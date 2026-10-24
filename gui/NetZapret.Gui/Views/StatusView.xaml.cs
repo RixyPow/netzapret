@@ -1720,17 +1720,18 @@ public partial class StatusView : UserControl
     /// То, что стоит знать до запуска.
     /// </summary>
     /// <remarks>
-    /// Оба случая измерены на живых машинах и оба приходят молча. Защитник
-    /// со своим сетевым фильтром обесценивает десинк, ничего об этом
-    /// не сообщая; Kaspersky вдобавок возвращает файл hosts к своему
-    /// умолчанию, стирая все пины.
+    /// Измерено на живых машинах и приходит молча: защитник со своим сетевым
+    /// фильтром обесценивает десинк, ничего об этом не сообщая. Что Kaspersky
+    /// вернул hosts к своему умолчанию, с 24.10 говорит только «Диагностика»
+    /// (а ещё «Файл hosts» и проверка блокировок), не «Главная» — владелец:
+    /// «предупреждение … прям на главной, а должно быть в диагностике».
     /// </remarks>
     private IReadOnlyList<EngineRow>? _engines;
     private IReadOnlyList<WarningRow>? _warnings;
     private DateTimeOffset _warningsAt = DateTimeOffset.MinValue;
     private bool _warningsBusy;
 
-    /// <summary>Сколько держать проверку антивирусов и hosts, прежде чем повторить.</summary>
+    /// <summary>Сколько держать проверку антивирусов, прежде чем повторить.</summary>
     private static readonly TimeSpan WarningsInterval = TimeSpan.FromSeconds(30);
 
     /// <summary>
@@ -1805,9 +1806,8 @@ public partial class StatusView : UserControl
     /// Предупреждения — в фоне и раз в полминуты, а не в потоке окна каждые две секунды.
     /// </summary>
     /// <remarks>
-    /// Проверка антивирусов перебирает все процессы системы, а проверка hosts
-    /// читает почти тысячу строк файла. Ни то, ни другое за две секунды
-    /// не меняется, а делалось в потоке окна на каждом тике.
+    /// Проверка антивирусов перебирает все процессы системы. За две секунды
+    /// это не меняется, а делалось в потоке окна на каждом тике.
     /// </remarks>
     private void ShowWarnings(AppSettings settings)
     {
@@ -1839,15 +1839,6 @@ public partial class StatusView : UserControl
     private static IReadOnlyList<WarningRow> CollectWarnings(bool needsDesync)
     {
         var rows = new List<WarningRow>();
-
-        if (HostsEditor.WhoReplaced() is { } who)
-        {
-            rows.Add(new WarningRow(
-                $"Файл hosts переписан: {who}",
-                "Изменённый hosts он считает признаком заражения и вернул файл к своему "
-                + "умолчанию — вместе со всеми пинами. Пин на этой машине не живёт, пока "
-                + "файл не внесён в доверенные."));
-        }
 
         var guards = SecuritySoftware.Running();
 
