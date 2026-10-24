@@ -137,6 +137,9 @@ public static class XrayConfigParser
         if (protocol is "hysteria" or "hysteria2")
             return TryReadHysteria(outbound, protocol, out server, out problem);
 
+        if (protocol is "socks" or "http")
+            return TryReadPlainProxy(outbound, protocol, out server, out problem);
+
         if (kind is null)
         {
             problem = $"outbound «{Text(outbound, "tag") ?? protocol}»: протокол {protocol} не поддерживается";
@@ -266,6 +269,58 @@ public static class XrayConfigParser
     /// обфускации сервер молчит. Отпечаток uTLS тоже не берётся: это
     /// подделка ClientHello у TCP, а Hysteria2 идёт по QUIC.
     /// </remarks>
+    /// <summary>
+    /// Обычный прокси SOCKS или HTTP (обсуждение №35, 22.10).
+    /// </summary>
+    /// <remarks>
+    /// Узел — в <c>settings.servers[0]</c> с <c>users[0].user</c>/<c>pass</c>;
+    /// новые Xray пишут то же плоско в <c>settings</c> (<c>address</c>, <c>port</c>,
+    /// <c>user</c>, <c>pass</c>). Учётных данных может не быть. HTTP с
+    /// <c>security: tls</c> — прокси по HTTPS.
+    /// </remarks>
+    private static bool TryReadPlainProxy(JsonElement outbound, string protocol, out ProxyServer? server, out string? problem)
+    {
+        server = null;
+        problem = null;
+
+        var settings = Section(outbound, "settings");
+        var entry = First(settings, "servers");
+        var user = First(entry, "users");
+
+        var host = Empty(Text(settings, "address")) ?? Empty(Text(entry, "address"));
+        var port = Port(settings);
+        if (port == 0)
+            port = Port(entry);
+
+        if (string.IsNullOrWhiteSpace(host) || port == 0)
+        {
+            problem = $"outbound «{Text(outbound, "tag") ?? protocol}»: не хватает адреса или порта";
+            return false;
+        }
+
+        var stream = Section(outbound, "streamSettings");
+        bool tls = protocol == "http"
+            && (Empty(Text(stream, "security")) ?? "none").Equals("tls", StringComparison.OrdinalIgnoreCase);
+        var tlsSettings = tls ? Section(stream, "tlsSettings") : default;
+
+        server = new ProxyServer
+        {
+            Protocol = protocol == "socks" ? ProxyProtocol.Socks : ProxyProtocol.Http,
+            Tag = Empty(Text(outbound, "tag")) ?? $"{protocol} {host}",
+            Host = host!,
+            Port = port,
+            Credential = Empty(Text(user, "user")) ?? Empty(Text(settings, "user")) ?? string.Empty,
+            Password = Empty(Text(user, "pass")) ?? Empty(Text(settings, "pass")),
+            SocksVersion = protocol == "socks" ? "5" : null,
+            Transport = "tcp",
+            Security = tls ? "tls" : "none",
+            Sni = tls ? Empty(Text(tlsSettings, "serverName")) ?? host : null,
+            AllowInsecure = tls && Flag(tlsSettings, "allowInsecure"),
+        };
+
+        return true;
+    }
+
     private static bool TryReadHysteria(JsonElement outbound, string protocol, out ProxyServer? server, out string? problem)
     {
         server = null;

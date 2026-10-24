@@ -34,11 +34,18 @@ public static class KeyRing
     [
         "vless://", "trojan://", "hysteria2://", "hy2://", "vmess://", "ss://",
         "tuic://", "hysteria://", "anytls://", "wireguard://", "wg://",
+        "socks://", "socks5://", "socks5h://", "socks4://", "socks4a://",
     ];
 
     /// <summary>Похоже ли на ключ, а не на ссылку подписки.</summary>
+    /// <remarks>
+    /// <c>http(s)://</c> — ключ, только если похож на прокси: с портом и без
+    /// пути (<see cref="ProxyUriParser.LooksLikeHttpProxy"/>). Иначе
+    /// вставленная ссылка на подписку стала бы «ключом» (обсуждение №35, 22.10).
+    /// </remarks>
     public static bool IsKey(string text) =>
-        Schemes.Any(s => text.TrimStart().StartsWith(s, StringComparison.OrdinalIgnoreCase));
+        Schemes.Any(s => text.TrimStart().StartsWith(s, StringComparison.OrdinalIgnoreCase))
+        || ProxyUriParser.LooksLikeHttpProxy(text);
 
     /// <summary>
     /// Ключи из вставленного текста: по одному на строку или через пробел.
@@ -67,7 +74,7 @@ public static class KeyRing
         text.Split(['\r', '\n', ' ', '\t'], StringSplitOptions.RemoveEmptyEntries)
             .SelectMany(chunk => System.Text.RegularExpressions.Regex.Split(
                 chunk,
-                @"(?=(?:vless|trojan|hysteria2|hy2|vmess|tuic|hysteria|anytls|wireguard|wg)://)|(?<!vle|vme)(?=ss://)",
+                @"(?=(?:vless|trojan|hysteria2|hy2|vmess|tuic|hysteria|anytls|wireguard|wg|socks5h|socks5|socks4a|socks4|socks)://)|(?<!vle|vme)(?=ss://)",
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             .Select(k => k.Trim())
             .Where(IsKey)

@@ -325,8 +325,8 @@ public partial class SubscriptionAddWindow : Window
 
         if (KeysChosen)
         {
-            Say("Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, "
-                + "wireguard:// и подобные.");
+            Say("Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, socks5://, "
+                + "http://адрес:порт, wireguard:// и подобные.");
             return;
         }
 

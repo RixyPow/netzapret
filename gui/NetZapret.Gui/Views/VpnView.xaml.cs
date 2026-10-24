@@ -1993,8 +1993,8 @@ public partial class VpnView : UserControl
 
         if (fresh.Count == 0)
         {
-            Status.Text = "Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, "
-                + "wireguard:// и подобные.";
+            Status.Text = "Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, socks5://, "
+                + "http://адрес:порт, wireguard:// и подобные.";
             return;
         }
 

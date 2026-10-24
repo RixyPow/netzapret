@@ -1776,6 +1776,19 @@ public sealed class SingBoxConfigCompiler
                 outbound["password"] = server.Credential;
                 break;
 
+            // Обсуждение №35 (22.10): обычные прокси. Имя и пароль — только
+            // если заданы: пустые sing-box отправил бы прокси как настоящие.
+            case ProxyProtocol.Socks:
+                outbound["type"] = "socks";
+                outbound["version"] = server.SocksVersion ?? "5";
+                AddLogin(outbound, server);
+                break;
+
+            case ProxyProtocol.Http:
+                outbound["type"] = "http";
+                AddLogin(outbound, server);
+                break;
+
             case ProxyProtocol.Wireguard:
                 throw new InvalidOperationException(
                     "WireGuard собирается в endpoints, а не в исходящие — см. BuildEndpoints.");
@@ -1793,6 +1806,16 @@ public sealed class SingBoxConfigCompiler
             outbound["transport"] = transport;
 
         return outbound;
+    }
+
+    /// <summary>Имя и пароль прокси SOCKS или HTTP, если они есть.</summary>
+    private static void AddLogin(JsonObject outbound, ProxyServer server)
+    {
+        if (!string.IsNullOrEmpty(server.Credential))
+            outbound["username"] = server.Credential;
+
+        if (!string.IsNullOrEmpty(server.Password))
+            outbound["password"] = server.Password;
     }
 
     /// <summary>

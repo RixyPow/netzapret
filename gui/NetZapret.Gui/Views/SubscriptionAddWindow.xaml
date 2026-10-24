@@ -48,7 +48,7 @@
         <TextBlock Text="Тип" FontWeight="SemiBold" Margin="0,18,0,6" />
         <ComboBox x:Name="KindBox" SelectedIndex="0" SelectionChanged="OnKind">
             <ComboBoxItem Content="Подписка — ссылка от продавца" />
-            <ComboBoxItem Content="Ключи — vless://, trojan://, wireguard:// и другие" />
+            <ComboBoxItem Content="Ключи — vless://, trojan://, socks5://, wireguard:// и другие" />
         </ComboBox>
 
         <StackPanel x:Name="SubscriptionFields">

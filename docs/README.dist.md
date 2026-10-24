@@ -25,7 +25,8 @@
 ## Что понадобится
 
 **Для VPN — подписка или ключи.** Любой провайдер: VLESS, VMess, Trojan,
-Shadowsocks, Hysteria2, Hysteria, TUIC, AnyTLS, WireGuard, AmneziaWG.
+Shadowsocks, Hysteria2, Hysteria, TUIC, AnyTLS, WireGuard, AmneziaWG, обычные
+прокси SOCKS и HTTP(S).
 Добавляется в разделе «VPN» кнопкой «Добавить подписку» — из буфера, из файла,
 с картинки QR-кода.
 

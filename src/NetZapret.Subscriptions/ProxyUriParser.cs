@@ -49,6 +49,11 @@ public static class ProxyUriParser
                 "hysteria" => ParseHysteria(rest),
                 "anytls" => ParseAnyTls(rest),
                 "wireguard" or "wg" => ParseWireGuard(rest),
+                "socks" or "socks5" or "socks5h" => ParseSocks(rest, "5"),
+                "socks4" => ParseSocks(rest, "4"),
+                "socks4a" => ParseSocks(rest, "4a"),
+                "http" => ParseHttp(rest, tls: false),
+                "https" => ParseHttp(rest, tls: true),
                 _ => null,
             };
 
@@ -256,6 +261,136 @@ public static class ProxyUriParser
             AllowInsecure = IsTruthy(Get(q, "insecure")) || IsTruthy(Get(q, "allowInsecure")),
             Extra = q,
         };
+    }
+
+    /// <summary>
+    /// SOCKS: <c>socks5://имя:пароль@host:port#название</c>; учётных данных может не быть.
+    /// </summary>
+    /// <remarks>
+    /// v2rayN и Hiddify пишут учётные данные иначе — base64 от «имя:пароль»
+    /// (<c>socks://dXNlcjpwYXNz@…</c>); понимаются обе формы
+    /// (<see cref="SplitUserPassword"/>). <c>socks5h</c> — та же пятая версия:
+    /// sing-box и так отдаёт прокси имя, а не адрес.
+    /// </remarks>
+    private static ProxyServer ParseSocks(string rest, string version)
+    {
+        var parts = UriParts.Split(rest);
+        var (user, password) = SplitUserPassword(parts.UserInfo);
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Socks,
+            Tag = parts.Fragment ?? $"SOCKS {parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = user,
+            Password = password,
+            SocksVersion = version,
+            Transport = "tcp",
+            Security = "none",
+            Extra = parts.Query,
+        };
+    }
+
+    /// <summary>
+    /// HTTP-прокси: <c>http://имя:пароль@host:port#название</c>, с TLS до прокси — <c>https://</c>.
+    /// </summary>
+    /// <remarks>
+    /// Схема та же, что у ссылки на подписку, и подписку прокси считать нельзя:
+    /// вставленная ссылка панели ушла бы в «Отдельные ключи» мёртвым сервером.
+    /// Прокси — только с явным портом, без пути и без query
+    /// (<see cref="LooksLikeHttpProxy"/>); у подписок путь есть всегда.
+    /// </remarks>
+    private static ProxyServer ParseHttp(string rest, bool tls)
+    {
+        if (!LooksLikeHttpProxy(rest))
+            throw new FormatException("похоже на адрес сайта или подписки, а не на прокси: у прокси есть порт и нет пути");
+
+        var parts = UriParts.Split(rest);
+        var (user, password) = SplitUserPassword(parts.UserInfo);
+
+        return new ProxyServer
+        {
+            Protocol = ProxyProtocol.Http,
+            Tag = parts.Fragment ?? $"{(tls ? "HTTPS" : "HTTP")} {parts.Host}:{parts.Port}",
+            Host = parts.Host,
+            Port = parts.Port,
+            Credential = user,
+            Password = password,
+            Transport = "tcp",
+            Security = tls ? "tls" : "none",
+            Sni = tls ? parts.Host : null,
+            Extra = parts.Query,
+        };
+    }
+
+    /// <summary>
+    /// Похожа ли ссылка <c>http(s)://</c> на прокси, а не на сайт или подписку.
+    /// </summary>
+    /// <param name="link">Ссылка целиком или её часть после <c>://</c>.</param>
+    public static bool LooksLikeHttpProxy(string link)
+    {
+        var text = link.Trim();
+        int scheme = text.IndexOf("://", StringComparison.Ordinal);
+
+        if (scheme >= 0)
+        {
+            var name = text[..scheme];
+            if (!name.Equals("http", StringComparison.OrdinalIgnoreCase) && !name.Equals("https", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            text = text[(scheme + 3)..];
+        }
+
+        int hash = text.IndexOf('#');
+        if (hash >= 0)
+            text = text[..hash];
+
+        if (text.Contains('?'))
+            return false;
+
+        // Один завершающий «/» допустим: так ссылку дописывают браузеры.
+        if (text.EndsWith('/'))
+            text = text[..^1];
+
+        if (text.Contains('/'))
+            return false;
+
+        int at = text.LastIndexOf('@');
+        var hostPort = at >= 0 ? text[(at + 1)..] : text;
+
+        // Порт обязателен: адрес без него — сайт, а не прокси.
+        int close = hostPort.LastIndexOf(']');
+        int colon = hostPort.LastIndexOf(':');
+
+        return colon > close && ushort.TryParse(hostPort[(colon + 1)..], out var port) && port > 0;
+    }
+
+    /// <summary>
+    /// «имя:пароль» из части до <c>@</c>: открытым текстом или в base64.
+    /// </summary>
+    private static (string User, string? Password) SplitUserPassword(string? userInfo)
+    {
+        if (string.IsNullOrEmpty(userInfo))
+            return (string.Empty, null);
+
+        // Двоеточие до раскодирования — открытая форма: пароль сам может
+        // содержать что угодно, кроме сырого «:» в имени.
+        int colon = userInfo.IndexOf(':');
+        if (colon >= 0)
+            return (Uri.UnescapeDataString(userInfo[..colon]), Uri.UnescapeDataString(userInfo[(colon + 1)..]));
+
+        // Имя без пароля тоже бывает «похожим на base64» — верим раскодированному,
+        // только если это читаемый текст с двоеточием.
+        var decoded = Base64.DecodeToString(Uri.UnescapeDataString(userInfo));
+        if (decoded is not null
+            && decoded.IndexOf(':') is var inner and >= 0
+            && decoded.All(c => !char.IsControl(c) && c != '�'))
+        {
+            return (decoded[..inner], decoded[(inner + 1)..]);
+        }
+
+        return (Uri.UnescapeDataString(userInfo), null);
     }
 
     /// <summary>

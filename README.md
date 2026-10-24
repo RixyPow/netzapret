@@ -77,7 +77,8 @@ VPN берёт то, что закрыто по стране, — а NetZapret �
 
 Для VPN нужна **подписка или ключи** — любой провайдер. Поддерживаются
 VLESS, VMess, Trojan, Shadowsocks, Hysteria2, Hysteria (первая версия), TUIC,
-AnyTLS, WireGuard и AmneziaWG.
+AnyTLS, WireGuard и AmneziaWG, а также обычные прокси SOCKS и HTTP(S) —
+ключом вида `socks5://имя:пароль@адрес:порт` или `http://адрес:порт`.
 
 Добавляется на вкладке «VPN» кнопкой **«Добавить подписку»** — отдельным окном,
 как в Happ:

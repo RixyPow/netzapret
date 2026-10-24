@@ -52,6 +52,8 @@ internal static class SingBoxOutboundReader
             "tuic" => ProxyProtocol.Tuic,
             "hysteria" => ProxyProtocol.Hysteria,
             "anytls" => ProxyProtocol.AnyTls,
+            "socks" => ProxyProtocol.Socks,
+            "http" => ProxyProtocol.Http,
             _ => (ProxyProtocol?)null,
         };
 
@@ -68,11 +70,17 @@ internal static class SingBoxOutboundReader
 
         // У Hysteria первой версии ключ — auth_str, и он бывает пустым:
         // сервер без авторизации законен.
+        // У SOCKS и HTTP учётных данных может не быть вовсе; имя — ключ,
+        // пароль ложится в Password (ниже).
+        bool plainProxy = kind is ProxyProtocol.Socks or ProxyProtocol.Http;
+
         var credential = kind is ProxyProtocol.Vless or ProxyProtocol.Vmess or ProxyProtocol.Tuic
             ? Empty(Text(outbound, "uuid"))
             : kind == ProxyProtocol.Hysteria
                 ? Text(outbound, "auth_str") ?? string.Empty
-                : Empty(Text(outbound, "password"));
+                : plainProxy
+                    ? Text(outbound, "username") ?? string.Empty
+                    : Empty(Text(outbound, "password"));
 
         if (host is null || port == 0 || credential is null)
         {
@@ -132,7 +140,8 @@ internal static class SingBoxOutboundReader
             AlterId = Number(outbound, "alter_id"),
             ObfsType = Empty(Text(obfs, "type")),
             ObfsPassword = legacyObfs ?? Empty(Text(obfs, "password")),
-            Password = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "password")) : null,
+            Password = kind == ProxyProtocol.Tuic || plainProxy ? Empty(Text(outbound, "password")) : null,
+            SocksVersion = kind == ProxyProtocol.Socks ? Empty(Text(outbound, "version")) ?? "5" : null,
             CongestionControl = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "congestion_control")) : null,
             UdpRelayMode = kind == ProxyProtocol.Tuic ? Empty(Text(outbound, "udp_relay_mode")) : null,
 
