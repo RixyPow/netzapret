@@ -1873,7 +1873,30 @@ public sealed class WinwsService : SupervisedService
 
     protected override bool IsFailureLine(string line) => base.IsFailureLine(line) || IsFailure(line);
 
-    protected override string? Advice(int exitCode) => NetZapret.Zapret.WinDivertDriver.Explain(exitCode);
+    protected override string? Advice(int exitCode) =>
+        NetZapret.Zapret.WinDivertDriver.Explain(exitCode,
+            exitCode == NetZapret.Zapret.WinDivertDriver.NoSuchDevice ? Nearby() : null);
+
+    /// <summary>
+    /// Чужие обходы рядом — только при отказе WinDivert: перебор процессов
+    /// и служб стоит миллисекунды, а нужен лишь здесь.
+    /// </summary>
+    /// <remarks>
+    /// Свой winws2 к этому мгновению уже вышел, так что номера своих процессов
+    /// не нужны: живой winws2 рядом — чужой или брошенный прежним запуском,
+    /// и драйвер держит он.
+    /// </remarks>
+    private static IReadOnlyList<Core.Diagnostics.OtherBypass> Nearby()
+    {
+        try
+        {
+            return Core.Diagnostics.OtherBypassScan.Find(new HashSet<int>());
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
 
     public override Task<ServiceCheck> CheckFunctionalAsync(CancellationToken cancellationToken) =>
         Task.FromResult(Ready(IsProcessAlive, _capturing, StartedAt, DateTimeOffset.Now)

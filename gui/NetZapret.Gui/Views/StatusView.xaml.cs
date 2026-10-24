@@ -670,6 +670,12 @@ public partial class StatusView : UserControl
                 ? "Один из движков не запущен — обход работает не полностью. Подробности ниже."
                 : "Часть движков не в порядке — подробности ниже.";
 
+        // Причина упавшего движка — целиком строкой ниже, а не только подсказкой
+        // его строки: та в одну строку и обрезается. 22.10 у знакомого владельца
+        // «кодом 433» с объяснением, что делать, было видно лишь при наведении.
+        if (broken && Failures(services) is { Length: > 0 } failures)
+            ShowProblem(failures);
+
         SetEngines(services.Select(Row).ToList());
     }
 
@@ -1858,6 +1864,18 @@ public partial class StatusView : UserControl
 
         return rows;
     }
+
+    /// <summary>Причины упавших движков, по строке на движок: «Десинк: …».</summary>
+    private static string Failures(IEnumerable<ServiceState> services) => string.Join("\n", services
+        .Where(s => s.Health is ServiceHealth.Dead or ServiceHealth.Faulted && s.LastError is { Length: > 0 })
+        .Select(s => $"{EngineTitle(s.Name)}: {s.LastError}"));
+
+    private static string EngineTitle(string name) => name switch
+    {
+        "winws2" => "Десинк",
+        "sing-box" => "Туннель",
+        _ => name,
+    };
 
     private void ShowProblem(string text)
     {

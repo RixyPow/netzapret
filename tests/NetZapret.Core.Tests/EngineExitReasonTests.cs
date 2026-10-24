@@ -72,6 +72,30 @@ public sealed class EngineExitReasonTests
     }
 
     /// <summary>
+    /// Найденный рядом обход назван по имени и с процессом, а служба с автозапуском —
+    /// отдельно (владелец 24.10; случай знакомого 22.10: goodbyedpi.exe и служба GoodbyeDPI).
+    /// </summary>
+    [Fact]
+    public void Code433NamesTheBypassFoundNearby()
+    {
+        Diagnostics.OtherBypass[] nearby =
+        [
+            new("GoodbyeDPI", "процесс goodbyedpi.exe, №5176", Running: true),
+            new("GoodbyeDPI", "служба «GoodbyeDPI»", Running: false),
+        ];
+
+        var text = NetZapret.Zapret.WinDivertDriver.Explain(433, nearby);
+
+        Assert.StartsWith("драйвер перехвата WinDivert занят: рядом работает GoodbyeDPI (процесс goodbyedpi.exe, №5176)", text);
+        Assert.Contains("служба «GoodbyeDPI»", text);
+        Assert.DoesNotContain("Zapret)", text);
+
+        // Только служба, процесса нет — драйвер держит не она: общее объяснение.
+        Assert.Equal(NetZapret.Zapret.WinDivertDriver.Explain(433), NetZapret.Zapret.WinDivertDriver.Explain(433, [nearby[1]]));
+        Assert.Null(NetZapret.Zapret.WinDivertDriver.Explain(1, nearby));
+    }
+
+    /// <summary>
     /// Выгрузка драйвера трогает только свой: под именем WinDivert свой драйвер
     /// держат GoodbyeDPI и другие обходы (22.10).
     /// </summary>
