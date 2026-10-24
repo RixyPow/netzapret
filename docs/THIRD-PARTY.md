@@ -125,8 +125,10 @@ bol-van 1.0.5.2 (коммит `6b6c63e3`), до того — копия из Zap
 
 И шесть модулей его библиотеки в `engines/zapret/lua/`:
 `zapret-lib.lua`, `zapret-antidpi.lua`, `zapret-auto.lua`, `zapret-obfs.lua`,
-`zapret-pcap.lua`, `zapret-tests.lua` — эти по-прежнему из Zapret GUI, то есть
-от версии 1.0.3; номер совместимости Lua у обеих версий один (6). Оттуда же
+`zapret-pcap.lua`, `zapret-tests.lua` — эти по-прежнему из Zapret GUI. С копии
+21.1.7.201 (24.10) первые пять побайтно те же, что в выпуске bol-van 1.0.6,
+`zapret-tests.lua` — старее (пресеты его не подключают); номер совместимости
+Lua у них и у winws2 один (6). Оттуда же
 часть образцов пакетов в `bin/` и частей фильтра в `windivert.filter/`.
 
 **Cygwin больше не входит.** До 07.10 архив вёз `engines/zapret/exe/cygwin1.dll`
