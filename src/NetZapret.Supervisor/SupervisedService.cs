@@ -1224,6 +1224,13 @@ public sealed class SingBoxService : SupervisedService
         ClashApi api, CancellationToken cancellationToken, string? except = null, bool notifyNoLive = false,
         string group = LatencyGroup)
     {
+        // Без сети не ответит никто: перебор отнял бы по 3 с на сервер, а «живых
+        // нет» попросило бы перечитать подписку, которую тоже не прочесть.
+        // 23.10 прогрев так перебрал все 58 серверов за минуту до того, как
+        // подключился Wi-Fi, и каждому записался промах.
+        if (!PhysicalNetwork.Up())
+            return null;
+
         int run = _run;
         var members = await api.MembersAsync(group, cancellationToken);
 
@@ -1253,6 +1260,10 @@ public sealed class SingBoxService : SupervisedService
 
             if (delay is not null)
                 return tag;
+
+            // Сеть пропала посреди перебора — остальных проверять незачем.
+            if (!PhysicalNetwork.Up())
+                return null;
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -1350,7 +1361,9 @@ public sealed class SingBoxService : SupervisedService
         if (_bypass.Engaged)
             Remark = null;
 
-        if (_bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0)
+        // Без сети не отвечает никто, и искать замену — перебрать все серверы
+        // впустую (так перебрал их прогрев 23.10, см. PickOneByOneAsync).
+        if (_bypass.Engaged || _exitCheckSeconds <= 0 || _picking != 0 || !PhysicalNetwork.Up())
             return;
 
         // После промаха — на каждом опросе, иначе по настройке.
@@ -1596,7 +1609,7 @@ public sealed class SingBoxService : SupervisedService
     /// </remarks>
     private async Task WatchPoolsAsync(CancellationToken cancellationToken)
     {
-        if (_exitCheckSeconds <= 0 || _pools.Count == 0)
+        if (_exitCheckSeconds <= 0 || _pools.Count == 0 || !PhysicalNetwork.Up())
             return;
 
         var measured = new Dictionary<string, TimeSpan?>(StringComparer.Ordinal);

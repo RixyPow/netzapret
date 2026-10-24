@@ -43,6 +43,31 @@ public sealed class ServerHealthCacheTests : IDisposable
     }
 
     /// <summary>
+    /// Промах без сети — не о сервере: 23–24.10 прогрев до подключения Wi-Fi
+    /// записал 76 промахов, и «мигающими» стали 45 серверов из 58.
+    /// </summary>
+    [Fact]
+    public void AMissWithoutANetworkIsNotTheServers()
+    {
+        var cache = ServerHealthCache.Load(_path);
+        cache.Set(Entry("Эстония", success: true, ms: 150), online: () => false);
+        cache.Set(Entry("Эстония", success: false, ms: null), online: () => false);
+        cache.Set(Entry("Швеция", success: false, ms: null), online: () => false);
+
+        var estonia = cache.Find("Эстония")!;
+        Assert.True(estonia.Success);
+        Assert.Equal([true], estonia.Recent);
+        Assert.Null(cache.Find("Швеция"));
+
+        // С сетью промах — как всегда; ответ сеть доказывает сам, её не спрашиваем.
+        cache.Set(Entry("Швеция", success: false, ms: null), online: () => true);
+        cache.Set(Entry("Эстония", success: true, ms: 140), online: () => throw new InvalidOperationException());
+
+        Assert.Equal(1, cache.Find("Швеция")!.Failures);
+        Assert.Equal([true, true], cache.Find("Эстония")!.Recent);
+    }
+
+    /// <summary>
     /// Две копии — окно и надзор — не затирают записи друг друга.
     /// </summary>
     /// <remarks>

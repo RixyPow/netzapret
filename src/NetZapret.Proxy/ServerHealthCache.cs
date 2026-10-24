@@ -272,8 +272,22 @@ public sealed class ServerHealthCache
     /// Пришедшее значение <see cref="ServerHealth.Failures"/> игнорируется
     /// намеренно — оно выводится из прежнего состояния, а не задаётся.
     /// </remarks>
-    public void Set(ServerHealth health)
+    public void Set(ServerHealth health) => Set(health, Core.PhysicalNetwork.Up);
+
+    /// <param name="health">Замер.</param>
+    /// <param name="online">Есть ли сеть; спрашивается только о промахе.</param>
+    /// <remarks>
+    /// Промах без сети не записывается: он не о сервере. 23.10 после сна Wi-Fi
+    /// у владельца подключился в 10:27:37, а прогрев движка с 10:26:20 перебрал
+    /// все 58 серверов в поисках живого и каждому записал промах; 24.10 таких
+    /// ещё 17. К отчёту 24.10 11:50 «мигающими» стали 45 из 58 — и ушли из
+    /// автоподбора, хотя на замере в 11:41 ответили 45.
+    /// </remarks>
+    internal void Set(ServerHealth health, Func<bool> online)
     {
+        if (!health.Success && !online())
+            return;
+
         Apply(_entries, health);
         _pending.Add(health);
     }
