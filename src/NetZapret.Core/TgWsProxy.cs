@@ -141,7 +141,55 @@ public static class TgWsProxy
                 timeout.ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         }
 
+        // Свои воркеры — ступенью cfworker между прямым WebSocket и общими
+        // доменами (порядок ступеней у прокси по умолчанию: ws, cfworker,
+        // cfproxy, mtproto, tcp — docs/Fallbacks.md). Воркер по коду Flowseal
+        // принимает WebSocket на /apiws и открывает TCP к DC, которого ему
+        // назвали в запросе; своего домена не требует — workers.dev.
+        var workers = WorkerDomains(routes.WorkerDomains);
+
+        if (workers.Count > 0)
+            arguments.AddRange(["--cf-worker-domain", string.Join(",", workers)]);
+
         return arguments;
+    }
+
+    /// <summary>Как завести свой воркер — инструкция Flowseal с кодом воркера.</summary>
+    public const string WorkerGuideUrl = "https://github.com/Flowseal/tg-ws-proxy/blob/main/docs/RU/CfWorker.md";
+
+    /// <summary>
+    /// Домены воркеров из строки настроек: по одному, без схемы и пути,
+    /// без повторов; негодное отброшено.
+    /// </summary>
+    /// <remarks>
+    /// Человек вставляет то, что скопировал из панели Cloudflare: то голый домен
+    /// <c>random-1234.user.workers.dev</c>, то адрес с <c>https://</c> и косой
+    /// чертой. Прокси ждёт домен, и ключ с мусором уронил бы его при запуске.
+    /// </remarks>
+    public static IReadOnlyList<string> WorkerDomains(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return [];
+
+        var result = new List<string>();
+
+        foreach (var piece in text.Split([',', ';', ' ', '\n', '\r', '\t'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = piece.Trim();
+
+            if (Uri.TryCreate(candidate.Contains("://", StringComparison.Ordinal) ? candidate : "https://" + candidate,
+                    UriKind.Absolute, out var uri)
+                && uri.HostNameType == UriHostNameType.Dns
+                && uri.Host.Contains('.'))
+            {
+                var host = uri.Host.ToLowerInvariant();
+
+                if (!result.Contains(host))
+                    result.Add(host);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -178,13 +226,16 @@ public static class TgWsProxy
 /// <param name="DirectMain">Прямой путь к DC2 и DC4 (<see cref="TgWsProxy.DirectMain"/>).</param>
 /// <param name="DirectOther">Прямой путь к DC1, DC3 и DC5 (<see cref="TgWsProxy.DirectOther"/>).</param>
 /// <param name="CfConnectTimeout">Сколько ждать один домен Cloudflare, секунды.</param>
+/// <param name="WorkerDomains">Свои воркеры Cloudflare через запятую (<see cref="TgWsProxy.WorkerDomains"/>); пусто — нет.</param>
 public sealed record TgWsProxyRoutes(
     bool DirectMain = false,
     bool DirectOther = false,
-    int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout)
+    int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout,
+    string? WorkerDomains = null)
 {
     public static TgWsProxyRoutes From(AppSettings settings) => new(
         settings.TelegramProxyDirect,
         settings.TelegramProxyDirectOther,
-        settings.TelegramProxyCfTimeout);
+        settings.TelegramProxyCfTimeout,
+        settings.TelegramProxyWorkerDomains);
 }

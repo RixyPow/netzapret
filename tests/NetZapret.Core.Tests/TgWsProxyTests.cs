@@ -88,6 +88,25 @@ public sealed class TgWsProxyTests
         Assert.DoesNotContain("--cf-connect-timeout", TgWsProxy.Arguments(1443, new TgWsProxyRoutes(CfConnectTimeout: 600)));
     }
 
+    /// <summary>
+    /// Свой воркер Cloudflare (24.10): общие домены упираются в рейтлимит
+    /// Cloudflare и отвечают 503 (Flowseal на ntc.party 22.10), свой — нет.
+    /// Домен берётся как скопирован из панели: со схемой, чертой, пробелами.
+    /// </summary>
+    [Fact]
+    public void WorkerDomainsBecomeOneKeyAndAreCleaned()
+    {
+        var routes = new TgWsProxyRoutes(WorkerDomains: " https://Random-1234.user.workers.dev/ , second.workers.dev;second.workers.dev\n");
+
+        Assert.Equal(["random-1234.user.workers.dev", "second.workers.dev"], TgWsProxy.WorkerDomains(routes.WorkerDomains));
+        Assert.Equal(["random-1234.user.workers.dev,second.workers.dev"], Values(TgWsProxy.Arguments(1443, routes), "--cf-worker-domain"));
+
+        // Пусто и мусор — без ключа: прокси с пустым доменом не поднимется.
+        Assert.DoesNotContain("--cf-worker-domain", TgWsProxy.Arguments(1443, new TgWsProxyRoutes(WorkerDomains: "   ")));
+        Assert.DoesNotContain("--cf-worker-domain", TgWsProxy.Arguments(1443, new TgWsProxyRoutes(WorkerDomains: "не домен, /// , localhost")));
+        Assert.Empty(TgWsProxy.WorkerDomains(null));
+    }
+
     [Fact]
     public void RouteSettingsSurviveTheSettingsFile()
     {
@@ -101,10 +120,10 @@ public sealed class TgWsProxyTests
             Assert.False(old.TelegramProxyDirectOther);
             Assert.Equal(TgWsProxy.DefaultCfConnectTimeout, old.TelegramProxyCfTimeout);
 
-            (old with { TelegramProxyDirect = true, TelegramProxyDirectOther = true, TelegramProxyCfTimeout = 3 }).Save(path);
+            (old with { TelegramProxyDirect = true, TelegramProxyDirectOther = true, TelegramProxyCfTimeout = 3, TelegramProxyWorkerDomains = "w.workers.dev" }).Save(path);
             var read = AppSettings.Load(path);
 
-            Assert.Equal(new TgWsProxyRoutes(true, true, 3), TgWsProxyRoutes.From(read));
+            Assert.Equal(new TgWsProxyRoutes(true, true, 3, "w.workers.dev"), TgWsProxyRoutes.From(read));
         }
         finally
         {

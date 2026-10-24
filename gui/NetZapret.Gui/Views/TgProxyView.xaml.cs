@@ -59,6 +59,12 @@ public partial class TgProxyView : UserControl
         var timeout = TgWsProxy.CfTimeout(settings.TelegramProxyCfTimeout).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var items = CfTimeoutChoice.Items.OfType<ComboBoxItem>().ToList();
         CfTimeoutChoice.SelectedItem = items.FirstOrDefault(i => i.Tag as string == timeout) ?? items[^1];
+
+        // Поле не трогается, пока человек в нём печатает: показ приходит
+        // и по таймеру состояния, и затёр бы недописанный домен.
+        if (!WorkerDomains.IsKeyboardFocusWithin)
+            WorkerDomains.Text = settings.TelegramProxyWorkerDomains ?? string.Empty;
+
         _showingRoutes = false;
 
         // Без десинка прокси молча не работает: его соединения к Telegram
@@ -327,6 +333,54 @@ public partial class TgProxyView : UserControl
             return;
 
         SaveRoutes(s => s with { TelegramProxyCfTimeout = seconds }, $"Домен Cloudflare прокси ждёт {seconds} с.");
+    }
+
+    private void OnWorkerDomains(object sender, RoutedEventArgs e) => SaveWorkerDomains();
+
+    private void OnWorkerDomainsKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter)
+            return;
+
+        e.Handled = true;
+        SaveWorkerDomains();
+    }
+
+    /// <summary>
+    /// Пишет домены воркеров, как их вычистил <see cref="TgWsProxy.WorkerDomains"/>:
+    /// в поле остаётся то, что уйдёт прокси, а не то, что вставили.
+    /// </summary>
+    private void SaveWorkerDomains()
+    {
+        if (_showingRoutes)
+            return;
+
+        var domains = TgWsProxy.WorkerDomains(WorkerDomains.Text);
+        var text = string.Join(", ", domains);
+        var saved = AppSettings.Load(AppSettings.DefaultPath).TelegramProxyWorkerDomains ?? string.Empty;
+
+        if (text != WorkerDomains.Text.Trim())
+            WorkerDomains.Text = text;
+
+        if (text == saved.Trim())
+            return;
+
+        SaveRoutes(s => s with { TelegramProxyWorkerDomains = text.Length == 0 ? null : text },
+            domains.Count == 0
+                ? "Свой воркер убран — только общий список Cloudflare."
+                : domains.Count == 1 ? $"Свой воркер: {domains[0]}." : $"Своих воркеров: {domains.Count}.");
+    }
+
+    private void OnWorkerGuide(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = TgWsProxy.WorkerGuideUrl, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть инструкцию: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>

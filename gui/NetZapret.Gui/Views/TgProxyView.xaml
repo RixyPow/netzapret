@@ -416,6 +416,37 @@
                             <ComboBoxItem Content="10 секунд (по умолчанию)" Tag="10" />
                         </ComboBox>
                     </Grid>
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,12,0,12" />
+
+                    <!-- Свой воркер Cloudflare (24.10). Общие домены Cloudflare упираются
+                         в его рейтлимит и отвечают 503 пачками — Flowseal на ntc.party 22.10.
+                         Свой воркер бесплатный и без своего домена; создаётся по его
+                         инструкции с готовым кодом, сюда вписывается домен из панели. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource RowTile}">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE753;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Свой воркер Cloudflare" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Общие домены Cloudflare делят на всех и упираются в его лимит — отсюда ответы 503 и медиа через раз. Свой воркер бесплатный, домен покупать не нужно: пять минут по инструкции, потом вписать сюда домен вида имя.workers.dev. Несколько — через запятую." />
+                            <TextBox x:Name="WorkerDomains" Margin="0,8,0,0" VerticalContentAlignment="Center"
+                                     gui:Hint.Text="random-1234.user.workers.dev"
+                                     LostFocus="OnWorkerDomains" KeyDown="OnWorkerDomainsKey" />
+                        </StackPanel>
+
+                        <Button Grid.Column="2" x:Name="WorkerGuide" Style="{StaticResource Ghost}" Content="Как создать"
+                                VerticalAlignment="Center" Click="OnWorkerGuide"
+                                ToolTip="Инструкция Flowseal с кодом воркера — откроется в браузере" />
+                    </Grid>
                 </StackPanel>
             </Border>
 

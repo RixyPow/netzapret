@@ -398,6 +398,18 @@ public sealed record AppSettings
     public int TelegramProxyCfTimeout { get; init; } = TgWsProxy.DefaultCfConnectTimeout;
 
     /// <summary>
+    /// Свои воркеры Cloudflare для прокси Telegram — домены через запятую
+    /// (<see cref="TgWsProxy.WorkerDomains"/>); пусто — только общий список.
+    /// </summary>
+    /// <remarks>
+    /// Общие домены Cloudflare упираются в его рейтлимит — отсюда 503 пачками
+    /// (Flowseal на ntc.party 22.10: «503 CF-проксирования = рейтлимит от
+    /// Cloudflare… советую настроить CF-worker»). Свой воркер бесплатный и без
+    /// домена, инструкция — <see cref="TgWsProxy.WorkerGuideUrl"/>.
+    /// </remarks>
+    public string? TelegramProxyWorkerDomains { get; init; }
+
+    /// <summary>
     /// Держать автоподбор сервера подальше от отечественных выходов.
     /// </summary>
     /// <remarks>
