@@ -86,6 +86,19 @@ public static class LocalNetworks
     /// </remarks>
     public static IReadOnlyList<string> VirtualLans { get; } = ["25.0.0.0/8", "26.0.0.0/8", "2620:9b::/96"];
 
+    /// <summary>Адрес из сетей виртуальных локалок (<see cref="VirtualLans"/>).</summary>
+    public static bool IsVirtualLan(IPAddress address)
+    {
+        if (address.IsIPv4MappedToIPv6)
+            address = address.MapToIPv4();
+
+        if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            return IsHamachiV6(address);
+
+        return address.AddressFamily == AddressFamily.InterNetwork
+            && address.GetAddressBytes()[0] is 25 or 26;
+    }
+
     /// <summary>
     /// Проверяет, относится ли адрес к локальным: loopback, приватные диапазоны
     /// RFC 1918, link-local, CGNAT, виртуальные локалки (<see cref="VirtualLans"/>),
