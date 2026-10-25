@@ -221,6 +221,10 @@ internal static class TunnelConfig
                 DnsThroughTunnel = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Tunnel,
                 DnsViaAuto = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto,
 
+                // Выбранный резолвер замолчит — надзор переведёт имена на запасной
+                // (25.10: умер Comss DNS, и при «напрямую» висело всё).
+                DnsSpare = DnsSpare.For(settings.DnsServer),
+
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.
                 PanelHosts = SubscriptionHosts.From(

@@ -328,6 +328,8 @@ public sealed class ProcessSupervisor
             RestartCount = s.RestartCount,
             LastError = s.LastError,
             Remark = s.Remark,
+            DnsNotice = s.DnsNotice,
+            DnsDown = s.DnsDown,
         }).ToList(),
     };
 

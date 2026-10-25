@@ -27,6 +27,11 @@ public sealed record DnsUpstream(string Type, string Server, string? Name, strin
     /// </summary>
     public bool TcpFallback { get; init; }
 
+    /// <summary>
+    /// Запасной резолвер из конфига (<see cref="SingBoxOptions.DnsSpareTag"/>); <c>null</c> — его нет.
+    /// </summary>
+    public DnsUpstream? Spare { get; init; }
+
     /// <summary>Резолвер <c>remote</c> из конфига; <c>null</c> — конфига нет или резолвера в нём нет.</summary>
     public static DnsUpstream? FromConfig(string configPath)
     {
@@ -41,22 +46,29 @@ public sealed record DnsUpstream(string Type, string Server, string? Name, strin
             }
 
             DnsUpstream? remote = null;
+            DnsUpstream? spare = null;
             bool tcp = false;
 
             foreach (var server in servers.EnumerateArray())
             {
-                if (Text(server, "tag") == SingBoxOptions.DnsTcpTag)
+                var tag = Text(server, "tag");
+
+                if (tag == SingBoxOptions.DnsTcpTag)
                     tcp = true;
 
-                if (Text(server, "tag") != "remote" || Text(server, "server") is not { Length: > 0 } address)
+                if (tag is not ("remote" or SingBoxOptions.DnsSpareTag) || Text(server, "server") is not { Length: > 0 } address)
                     continue;
 
                 string? name = server.TryGetProperty("tls", out var tls) ? Text(tls, "server_name") : null;
+                var upstream = new DnsUpstream(Text(server, "type") ?? "udp", address, name, Text(server, "path"));
 
-                remote = new DnsUpstream(Text(server, "type") ?? "udp", address, name, Text(server, "path"));
+                if (tag == "remote")
+                    remote = upstream;
+                else
+                    spare = upstream;
             }
 
-            return remote is null ? null : remote with { TcpFallback = tcp };
+            return remote is null ? null : remote with { TcpFallback = tcp, Spare = spare };
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {

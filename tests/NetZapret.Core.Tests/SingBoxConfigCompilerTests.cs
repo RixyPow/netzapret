@@ -476,6 +476,90 @@ public class SingBoxConfigCompilerTests
             r => r.TryGetProperty("clash_mode", out _));
     }
 
+    /// <summary>
+    /// Запасной резолвер (25.10): и при «напрямую» — прямым путём, правилом по
+    /// режиму последним. У владельца умер Comss DNS, и при «напрямую» висело всё.
+    /// </summary>
+    [Fact]
+    public void DirectDnsCarriesASpareSwitchedByClashMode()
+    {
+        var options = new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsServer = "83.220.169.155",
+            DnsServerName = "dns.comss.one",
+            DnsSpare = DnsSpare.For("83.220.169.155"),
+        };
+
+        var root = CompileWith(ProxyOnlyRules, options);
+        var spare = DnsServer(root, SingBoxOptions.DnsSpareTag);
+
+        Assert.Equal("https", spare.GetProperty("type").GetString());
+        Assert.Equal("8.8.4.4", spare.GetProperty("server").GetString());
+        Assert.Equal("dns.google", spare.GetProperty("tls").GetProperty("server_name").GetString());
+        Assert.False(spare.TryGetProperty("detour", out _));
+
+        var last = root.GetProperty("dns").GetProperty("rules").EnumerateArray().Last();
+
+        Assert.Equal(SingBoxOptions.DnsSpareMode, last.GetProperty("clash_mode").GetString());
+        Assert.Equal(SingBoxOptions.DnsSpareTag, last.GetProperty("server").GetString());
+        Assert.Equal("remote", root.GetProperty("dns").GetProperty("final").GetString());
+
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var check = SingBoxCheck.Run(new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], options).Json);
+        Assert.True(check.Ok, check.Said);
+    }
+
+    /// <summary>При «авто» — и ступень TCP, и запасной: режим один, правило действует то, чей режим стоит.</summary>
+    [Fact]
+    public void AutoDnsCarriesBothTheTcpStepAndTheSpare()
+    {
+        var options = new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsServer = "8.8.4.4",
+            DnsViaAuto = true,
+            DnsSpare = DnsSpare.For("8.8.4.4"),
+        };
+
+        var root = CompileWith(ProxyOnlyRules, options);
+        var modes = root.GetProperty("dns").GetProperty("rules").EnumerateArray()
+            .Where(r => r.TryGetProperty("clash_mode", out _))
+            .Select(r => r.GetProperty("clash_mode").GetString())
+            .ToList();
+
+        Assert.Equal([SingBoxOptions.DnsTcpMode, SingBoxOptions.DnsSpareMode], modes);
+        Assert.Equal("1.1.1.1", DnsServer(root, SingBoxOptions.DnsSpareTag).GetProperty("server").GetString());
+
+        var engine = RuleSetLoader.Load(ProxyOnlyRules);
+        var check = SingBoxCheck.Run(new SingBoxConfigCompiler().Compile(engine.RuleSet, [Server()], options).Json);
+        Assert.True(check.Ok, check.Said);
+    }
+
+    /// <summary>
+    /// Через туннель запасного нет — прямой путь там не меряется; и запасной,
+    /// совпавший с выбранным, не нужен.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "83.220.169.155")]
+    [InlineData(false, "8.8.4.4")]
+    public void NoSpareThroughTheTunnelOrForItself(bool throughTunnel, string server)
+    {
+        var root = CompileWith(ProxyOnlyRules, new SingBoxOptions
+        {
+            Scope = TunnelScope.ProxyOnly,
+            DnsServerAddresses = ["8.8.8.8/32"],
+            DnsServer = server,
+            DnsThroughTunnel = throughTunnel,
+            DnsSpare = DnsSurvey.Providers.First(p => p.TlsAddress == "8.8.4.4"),
+        });
+
+        Assert.DoesNotContain(root.GetProperty("dns").GetProperty("servers").EnumerateArray(),
+            s => s.GetProperty("tag").GetString() == SingBoxOptions.DnsSpareTag);
+    }
+
     /// <summary>«Напрямую» — без переключателя: резолвер мимо туннеля, как прежде.</summary>
     [Fact]
     public void DirectDnsHasNoSwitch()

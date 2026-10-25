@@ -103,6 +103,18 @@ public abstract class SupervisedService
     /// </remarks>
     public string? Remark { get; protected set; }
 
+    /// <summary>
+    /// Что с резолвером движка (<see cref="DnsLadder.Notice"/>); <c>null</c> — отвечает.
+    /// </summary>
+    /// <remarks>
+    /// Отдельно от <see cref="Remark"/>: тот вкладка VPN читает как «временную
+    /// замену» сервера.
+    /// </remarks>
+    public string? DnsNotice { get; protected set; }
+
+    /// <summary>Не отвечает ни выбранный резолвер, ни запасной: имена не разрешаются.</summary>
+    public bool DnsDown { get; protected set; }
+
     /// <summary>Процесс существует и не завершился.</summary>
     public bool IsProcessAlive => Process is { HasExited: false };
 
@@ -492,14 +504,23 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Отвечает ли тот же резолвер по TCP, пока DoH напрямую лежит (<see cref="MeasureDirectDnsAsync"/>).</summary>
     private bool _directTcpOk;
 
-    /// <summary>Стоит ли режим «по TCP» в движке; <c>null</c> — не ставили, в конфиге режим по умолчанию.</summary>
-    private bool? _dnsViaTcp;
+    /// <summary>Отвечает ли запасной резолвер, пока выбранный лежит (<see cref="MeasureDirectDnsAsync"/>).</summary>
+    private bool _spareOk;
 
-    /// <summary>Нужна ли ступень TCP в туннель вместо: DoH лежит, а TCP отвечает.</summary>
-    private bool DnsWantsTcp => !_directDnsOk && _directTcpOk;
+    /// <summary>Какой режим Clash API стоит в движке; <c>null</c> — не ставили, в конфиге режим по умолчанию.</summary>
+    private string? _dnsMode;
 
-    /// <summary>Прямого пути к резолверу нет ни по DoH, ни по TCP — остаётся туннель.</summary>
-    private bool DnsWantsTunnel => !_directDnsOk && !_directTcpOk;
+    /// <summary>Сказано ли в журнал, что имена не разрешаются вовсе: говорится раз, а не каждые 30 с.</summary>
+    private bool _dnsDownNoted;
+
+    /// <summary>Выбранный резолвер не отвечает ни по DoH, ни по TCP, запасной тоже — остаётся туннель.</summary>
+    private bool DnsNeedsTunnel => !_directDnsOk && !_directTcpOk && !_spareOk;
+
+    /// <summary>
+    /// Следит ли надзор за резолвером: при «авто» — всегда, при «напрямую» —
+    /// когда в конфиге есть запасной (с 25.10).
+    /// </summary>
+    private bool DnsWatched => _dnsViaAuto || (_directDns ??= DnsUpstream.FromConfig(_configPath))?.Spare is not null;
 
     /// <summary>
     /// Проверяет, отвечает ли резолвер движка напрямую, мимо туннеля, и, если
@@ -514,11 +535,20 @@ public sealed class SingBoxService : SupervisedService
     /// </para>
     /// <para>
     /// TCP меряется на каждой проверке, пока DoH лежит: умрёт и он — следующая
-    /// ступень туннель (20.10, см. SingBoxOptions.DnsViaAuto).
+    /// ступень запасной резолвер, за ним туннель (20.10, см. SingBoxOptions.DnsViaAuto).
+    /// Запасной — только когда и TCP не выручил: ступень TCP держит тот резолвер,
+    /// который человек выбрал.
+    /// </para>
+    /// <para>
+    /// Без сети не меряется вовсе: молчат все резолверы, и выбранный был бы
+    /// объявлен мёртвым ни за что (23–24.10, Wi-Fi после пробуждения).
     /// </para>
     /// </remarks>
     private async Task MeasureDirectDnsAsync(CancellationToken cancellationToken)
     {
+        if (!PhysicalNetwork.Up())
+            return;
+
         _directDns ??= DnsUpstream.FromConfig(_configPath);
 
         bool answers = _directDns is null || await _directDns.AnswersDirectlyAsync(cancellationToken);
@@ -528,6 +558,7 @@ public sealed class SingBoxService : SupervisedService
             _directDnsAnswers = 0;
             _directDnsOk = false;
             _directTcpOk = _directDns is not null && await _directDns.AnswersByTcpAsync(cancellationToken);
+            _spareOk = !_directTcpOk && _directDns?.Spare is { } spare && await spare.AnswersDirectlyAsync(cancellationToken);
             return;
         }
 
@@ -535,7 +566,28 @@ public sealed class SingBoxService : SupervisedService
         {
             _directDnsOk = true;
             _directTcpOk = false;
+            _spareOk = false;
         }
+    }
+
+    /// <summary>
+    /// Своя проверка резолвера раз в <see cref="_trafficCheckEvery"/> опросов — когда
+    /// «Проверки прохода» нет, и у движка только ради DNS.
+    /// </summary>
+    /// <param name="tunnel">Можно ли уходить в туннель: «авто» и есть выход.</param>
+    private async Task WatchDnsAsync(bool tunnel, CancellationToken cancellationToken)
+    {
+        if (_dnsCheckCounter++ % _trafficCheckEvery == 0)
+        {
+            await MeasureDirectDnsAsync(cancellationToken);
+
+            // Туннель спрашиваем, только когда не выручили ни TCP, ни запасной:
+            // его проверка — запрос через сервер подписки.
+            if (tunnel && DnsNeedsTunnel)
+                _dnsLastOk = await CheckTrafficAsync(SingBoxOptions.DefaultHealthPort, cancellationToken);
+        }
+
+        await ApplyDnsPathAsync(tunnel && _dnsLastOk, cancellationToken);
     }
 
     /// <summary>
@@ -563,48 +615,92 @@ public sealed class SingBoxService : SupervisedService
     /// (так собран конфиг). Неудача переключения не беда: попробуем
     /// на следующем опросе, состояние не запоминается.
     /// </para>
+    /// <para>
+    /// С 25.10 — и запасной резолвер (<see cref="DnsLadder"/>), тоже режимом,
+    /// и при пути «напрямую»: там ступеней TCP и туннеля нет, есть только он.
+    /// </para>
     /// </remarks>
-    private async Task ApplyDnsPathAsync(bool viaTunnel, bool viaTcp, CancellationToken cancellationToken)
+    /// <param name="tunnelOk">Туннель пропускает трафик: в него можно увести DNS при «авто».</param>
+    private async Task ApplyDnsPathAsync(bool tunnelOk, CancellationToken cancellationToken)
     {
+        var step = DnsLadder.Choose(_directDnsOk, _directTcpOk, _spareOk, _dnsViaAuto && tunnelOk);
+        bool viaTunnel = step == DnsLadder.Step.Tunnel;
+
+        var mode = step switch
+        {
+            DnsLadder.Step.Tcp => SingBoxOptions.DnsTcpMode,
+            DnsLadder.Step.Spare => SingBoxOptions.DnsSpareMode,
+            _ => SingBoxOptions.DnsRuleMode,
+        };
+
         // Ещё не ставили и менять не надо — переключатель и так «напрямую»,
         // режим — по умолчанию.
         if (_dnsViaTunnel is null && !viaTunnel)
             _dnsViaTunnel = false;
 
-        if (_dnsViaTcp is null && !viaTcp)
-            _dnsViaTcp = false;
+        if (_dnsMode is null && mode == SingBoxOptions.DnsRuleMode)
+            _dnsMode = mode;
 
         bool pathChanges = _dnsViaTunnel != viaTunnel;
-        bool modeChanges = _dnsViaTcp != viaTcp;
+        bool modeChanges = _dnsMode != mode;
 
-        if (!pathChanges && !modeChanges)
-            return;
-
-        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
-
-        if (pathChanges)
+        if (pathChanges || modeChanges)
         {
-            if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, viaTunnel ? SelectorGroup : "direct", cancellationToken))
-                return;
+            using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
-            _dnsViaTunnel = viaTunnel;
+            // Переключателя пути нет без «авто» — но тогда и в туннель не уходим.
+            if (pathChanges)
+            {
+                if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, viaTunnel ? SelectorGroup : "direct", cancellationToken))
+                    return;
+
+                _dnsViaTunnel = viaTunnel;
+            }
+
+            if (modeChanges)
+            {
+                if (!await api.SetModeAsync(mode, cancellationToken))
+                    return;
+
+                _dnsMode = mode;
+            }
+
+            if (step != DnsLadder.Step.None)
+                Note(DnsNote(step));
         }
 
-        if (modeChanges)
+        ShowDns(step);
+    }
+
+    /// <summary>Резолвер из конфига словами: «Comss.one (83.220.169.155)».</summary>
+    private string Primary => _directDns is { } upstream ? DnsSpare.Describe(upstream.Server) : "движка";
+
+    private string? SpareWords => _directDns?.Spare is { } spare ? DnsSpare.Describe(spare.Server) : null;
+
+    private string DnsNote(DnsLadder.Step step)
+    {
+        var prefix = _dnsViaAuto ? "DNS (авто): " : "DNS: ";
+
+        return prefix + step switch
         {
-            if (!await api.SetModeAsync(viaTcp ? SingBoxOptions.DnsTcpMode : SingBoxOptions.DnsRuleMode, cancellationToken))
-                return;
+            DnsLadder.Step.Direct => $"резолвер {Primary} снова отвечает — имена спрашиваются у него.",
+            _ => DnsLadder.Notice(step, Primary, SpareWords) + ".",
+        };
+    }
 
-            _dnsViaTcp = viaTcp;
-        }
+    /// <summary>
+    /// Пометка для «Главной» и «Диагностики» (<see cref="SupervisedService.DnsNotice"/>);
+    /// что имена не разрешаются вовсе — в журнал один раз.
+    /// </summary>
+    private void ShowDns(DnsLadder.Step step)
+    {
+        DnsNotice = DnsLadder.Notice(step, Primary, SpareWords);
+        DnsDown = step == DnsLadder.Step.None;
 
-        Note(viaTcp
-            ? "DNS (авто): DoH напрямую не отвечает — имена спрашиваются у того же резолвера по TCP."
-            : viaTunnel
-                ? "DNS (авто): резолвер напрямую не отвечает ни по DoH, ни по TCP — имена спрашиваются через туннель."
-                : _directDnsOk
-                    ? "DNS (авто): резолвер снова отвечает напрямую — имена спрашиваются напрямую."
-                    : "DNS (авто): туннель не пропускает трафик — имена спрашиваются напрямую, хотя и там резолвер не отвечал.");
+        if (DnsDown && !_dnsDownNoted)
+            Note(DnsNote(step));
+
+        _dnsDownNoted = DnsDown;
     }
 
     /// <summary>Решения сторожа: когда искать замену и когда возвращать закреплённый выход.</summary>
@@ -871,6 +967,17 @@ public sealed class SingBoxService : SupervisedService
         _directDns = null;
         _directDnsOk = true;
         _directDnsAnswers = 0;
+
+        // Режим DNS новый движок берёт из конфига — по умолчанию. До 25.10 прежний
+        // помнился: после перезапуска надзор считал «по TCP» поставленным и не
+        // ставил его в движок, который снова спрашивал молчащий DoH.
+        _directTcpOk = false;
+        _spareOk = false;
+        _dnsMode = null;
+        _dnsLastOk = false;
+        _dnsDownNoted = false;
+        DnsNotice = null;
+        DnsDown = false;
         Volatile.Write(ref _realityRefusedTicks, 0);
 
         foreach (var pool in _pools)
@@ -948,7 +1055,16 @@ public sealed class SingBoxService : SupervisedService
             return ServiceCheck.Broken;
 
         // Ради DNS сторожить выход и проверять проход трафика нечем: выхода нет.
-        if (!_warm || _dnsOnly)
+        // А резолвер есть — он и есть вся работа такого движка.
+        if (_dnsOnly)
+        {
+            if (DnsWatched)
+                await WatchDnsAsync(tunnel: false, cancellationToken);
+
+            return ServiceCheck.Healthy;
+        }
+
+        if (!_warm)
             return ServiceCheck.Healthy;
 
         await WatchExitAsync(cancellationToken);
@@ -956,24 +1072,11 @@ public sealed class SingBoxService : SupervisedService
 
         if (_trafficPort is null)
         {
-            // «Авто» для DNS решает по проходу трафика и без «Проверки
-            // прохода» в настройках: своей проверкой через вход health-in,
-            // так же редко. Здоровья службы она не меняет.
-            if (_dnsViaAuto)
-            {
-                if (_dnsCheckCounter++ % _trafficCheckEvery == 0)
-                {
-                    await MeasureDirectDnsAsync(cancellationToken);
-
-                    // Туннель спрашиваем, только когда прямой путь отказал
-                    // и по DoH, и по TCP: его проверка — запрос через сервер
-                    // подписки.
-                    if (DnsWantsTunnel)
-                        _dnsLastOk = await CheckTrafficAsync(SingBoxOptions.DefaultHealthPort, cancellationToken);
-                }
-
-                await ApplyDnsPathAsync(DnsWantsTunnel && _dnsLastOk, DnsWantsTcp, cancellationToken);
-            }
+            // Резолвер — и без «Проверки прохода» в настройках: своей проверкой,
+            // так же редко; туннель для «авто» — через вход health-in. Здоровья
+            // службы она не меняет.
+            if (DnsWatched)
+                await WatchDnsAsync(tunnel: _dnsViaAuto, cancellationToken);
 
             return ServiceCheck.Healthy;
         }
@@ -1009,8 +1112,8 @@ public sealed class SingBoxService : SupervisedService
         // Между проверками используется её последний результат.
         if (_checkCounter++ % _trafficCheckEvery != 0)
         {
-            if (_dnsViaAuto)
-                await ApplyDnsPathAsync(DnsWantsTunnel && _lastTrafficOk && !_bypass.Engaged, DnsWantsTcp, cancellationToken);
+            if (DnsWatched)
+                await ApplyDnsPathAsync(_lastTrafficOk && !_bypass.Engaged, cancellationToken);
 
             return _lastTrafficOk ? ServiceCheck.Healthy : ServiceCheck.UpstreamDown;
         }
@@ -1045,10 +1148,10 @@ public sealed class SingBoxService : SupervisedService
 
         await ApplyBypassAsync(_lastTrafficOk, cancellationToken);
 
-        if (_dnsViaAuto)
+        if (DnsWatched)
         {
             await MeasureDirectDnsAsync(cancellationToken);
-            await ApplyDnsPathAsync(DnsWantsTunnel && _lastTrafficOk && !_bypass.Engaged, DnsWantsTcp, cancellationToken);
+            await ApplyDnsPathAsync(_lastTrafficOk && !_bypass.Engaged, cancellationToken);
         }
 
         if (_lastTrafficOk)

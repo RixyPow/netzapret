@@ -206,6 +206,39 @@ public sealed class SingBoxOptions
         && System.Net.IPAddress.TryParse(DnsServer, out _);
 
     /// <summary>
+    /// Запасной резолвер (<see cref="Proxy.DnsSpare"/>): сервер <see cref="DnsSpareTag"/>
+    /// и правило DNS по режиму <see cref="DnsSpareMode"/>, который надзор ставит,
+    /// когда выбранный резолвер не отвечает; <c>null</c> — без запасного.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Тем же рычагом, что ступень TCP: режим Clash API движок проверяет на каждый
+    /// запрос, а <c>fallback</c> форка платит за молчащий резолвер 5 с на каждое имя
+    /// (опыт 20.10). При любом пути — «напрямую» и «авто», — кроме «через туннель»:
+    /// там резолвер ходит через выход, и мерить его прямой путь бессмысленно.
+    /// Запасной идёт прямым путём, без detour.
+    /// </para>
+    /// <para>
+    /// Не покрывает <c>default_domain_resolver</c> — им движок разрешает имена
+    /// своих серверов: там сервер назван прямо, мимо правил. При «авто» это
+    /// <c>bootstrap</c>, при «напрямую» — выбранный резолвер, и сервер подписки,
+    /// заданный именем, при мёртвом резолвере не найдётся и с запасным.
+    /// </para>
+    /// </remarks>
+    public DnsProvider? DnsSpare { get; init; }
+
+    /// <summary>Тег запасного резолвера.</summary>
+    public const string DnsSpareTag = "remote-spare";
+
+    /// <summary>Режим Clash API, в котором имена спрашиваются у запасного (<see cref="DnsSpareTag"/>).</summary>
+    public const string DnsSpareMode = "dns-spare";
+
+    /// <summary>Есть ли в этом конфиге запасной резолвер (<see cref="DnsSpareTag"/>).</summary>
+    internal bool DnsSpareStep =>
+        DnsSpare is { TlsAddress: { } address, TlsName: not null } && !DnsThroughTunnel
+        && !string.Equals(address, DnsServer, StringComparison.Ordinal);
+
+    /// <summary>
     /// Имена панелей подписок: при <see cref="DnsThroughTunnel"/> они
     /// разрешаются через <c>bootstrap</c>, в обход туннеля.
     /// </summary>
@@ -925,6 +958,24 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
+        // Запасной резолвер — прямым путём, без detour; включается правилом
+        // по режиму в конце списка (см. SingBoxOptions.DnsSpare).
+        if (options.DnsSpareStep)
+        {
+            var spare = new JsonObject
+            {
+                ["tag"] = SingBoxOptions.DnsSpareTag,
+                ["type"] = "https",
+                ["server"] = options.DnsSpare!.TlsAddress,
+                ["tls"] = new JsonObject { ["server_name"] = options.DnsSpare.TlsName },
+            };
+
+            if (options.DnsSpare.DohPath is { } path && path != "/dns-query")
+                spare["path"] = path;
+
+            servers.Add(spare);
+        }
+
         if (bootstrap)
         {
             // Имена самих серверов подписки разрешаются в обход туннеля,
@@ -1070,6 +1121,17 @@ public sealed class SingBoxConfigCompiler
             {
                 ["clash_mode"] = SingBoxOptions.DnsTcpMode,
                 ["server"] = SingBoxOptions.DnsTcpTag,
+            });
+        }
+
+        // Так же и запасной: режим один на движок, так что TCP и запасной
+        // друг другу не мешают — какой режим стоит, то правило и действует.
+        if (options.DnsSpareStep)
+        {
+            rules.Add(new JsonObject
+            {
+                ["clash_mode"] = SingBoxOptions.DnsSpareMode,
+                ["server"] = SingBoxOptions.DnsSpareTag,
             });
         }
 

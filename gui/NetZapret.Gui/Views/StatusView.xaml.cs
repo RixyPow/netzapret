@@ -640,12 +640,21 @@ public partial class StatusView : UserControl
             // место на их месте читается как «их нет вовсе», тогда как раздел
             // отвечает на другой вопрос: что должно работать и работает ли.
             SetEngines(Planned(settings, "остановлен", "Faint"));
+            SetDnsWarning(null);
 
             return;
         }
 
         var services = state!.Services;
-        bool healthy = services.All(s => s.Health == ServiceHealth.Healthy);
+
+        // Резолвер, который не отвечает, — не «Работает»: 25.10 у владельца умер
+        // Comss DNS, каждое имя ждало 11–12 с, «всё виснет», а «Главная» была зелёной.
+        bool dnsDown = services.Any(s => s.DnsDown);
+        bool healthy = services.All(s => s.Health == ServiceHealth.Healthy) && !dnsDown;
+
+        SetDnsWarning(services.FirstOrDefault(s => s.DnsNotice is { Length: > 0 }) is { } dns
+            ? DnsWarning(dns)
+            : null);
 
         // Три состояния, а не два. «Оговорки» бывают разной тяжести: движок,
         // которому не удалась глубокая проверка, ещё несёт трафик, а умерший
@@ -668,7 +677,9 @@ public partial class StatusView : UserControl
             ? $"Запущено {Ago(state.StartedAt)}."
             : broken
                 ? "Один из движков не запущен — обход работает не полностью. Подробности ниже."
-                : "Часть движков не в порядке — подробности ниже.";
+                : dnsDown
+                    ? "Резолвер движка не отвечает — сайты открываются с задержкой или не открываются. Подробности ниже."
+                    : "Часть движков не в порядке — подробности ниже.";
 
         // Причина упавшего движка — целиком строкой ниже, а не только подсказкой
         // его строки: та в одну строку и обрезается. 22.10 у знакомого владельца
@@ -1827,13 +1838,50 @@ public partial class StatusView : UserControl
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
+    /// <summary>Предупреждения о защитниках — из фоновой проверки раз в полминуты.</summary>
+    private IReadOnlyList<WarningRow> _guardWarnings = [];
+
+    /// <summary>Карточка о резолвере движка — из состояния надзора, каждые две секунды.</summary>
+    private WarningRow? _dnsWarning;
+
     private void SetWarnings(IReadOnlyList<WarningRow> rows)
     {
+        _guardWarnings = rows;
+        ShowAllWarnings();
+    }
+
+    private void SetDnsWarning(WarningRow? row)
+    {
+        if (row == _dnsWarning)
+            return;
+
+        _dnsWarning = row;
+        ShowAllWarnings();
+    }
+
+    /// <summary>Резолвер — первым: без имён не работает ничего, и это важнее защитника.</summary>
+    private void ShowAllWarnings()
+    {
+        IReadOnlyList<WarningRow> rows = _dnsWarning is { } dns ? [dns, .. _guardWarnings] : _guardWarnings;
+
         if (_warnings is not null && _warnings.SequenceEqual(rows))
             return;
 
         _warnings = rows;
         Warnings.ItemsSource = rows;
+    }
+
+    /// <summary>Карточка о резолвере (SingBoxService, DnsLadder): что с ним и что делать.</summary>
+    private static WarningRow DnsWarning(ServiceState service)
+    {
+        var notice = service.DnsNotice!;
+
+        return service.DnsDown
+            ? new WarningRow("Резолвер движка не отвечает",
+                char.ToUpper(notice[0]) + notice[1..] + ". Выберите другой резолвер на вкладке DNS и перезапустите движки.")
+            : new WarningRow("Резолвер движка не отвечает — работает запасной путь",
+                char.ToUpper(notice[0]) + notice[1..] + ". Сайты открываются; вернётся сам, как только резолвер ответит. "
+                + "Чтобы не зависеть от него, выберите другой на вкладке DNS.");
     }
 
     private static IReadOnlyList<WarningRow> CollectWarnings(bool needsDesync)
