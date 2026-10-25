@@ -384,22 +384,21 @@ public partial class VpnView
             return;
         }
 
-        var into = Item("", "В пул", () => { });
-
+        // Пулы — пунктами самого меню, а не подменю «В пул»: шаблон нашего
+        // меню (Controls.xaml) подменю не раскрывает — «Маршруты» наткнулись
+        // на это 13.10, а здесь 19.10 я снова собрал подменю, и «⋯ → В пул»
+        // не делал ничего (обсуждение №19, 24.10).
         foreach (var pool in pools)
         {
             bool inside = pool.Servers.Contains(row.Tag, StringComparer.Ordinal);
             var target = pool;
 
-            into.Items.Add(Item(inside ? "" : string.Empty, pool.Name, () => PutIntoPool(target, row), !inside));
+            menu.Items.Add(inside
+                ? Item("", $"Уже в пуле «{pool.Name}»", () => { }, enabled: false)
+                : Item("", $"В пул «{pool.Name}»", () => PutIntoPool(target, row)));
         }
 
-        if (pools.Count > 0)
-            into.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
-
-        into.Items.Add(Item("", "Новый пул…", () => NewPool(row)));
-
-        menu.Items.Add(into);
+        menu.Items.Add(Item("", "В новый пул…", () => NewPool(row)));
     }
 
     /// <summary>Кладёт сервер в пул; подписку вне работы ставит в работу — иначе его нет в конфиге.</summary>
