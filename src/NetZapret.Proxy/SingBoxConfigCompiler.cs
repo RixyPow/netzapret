@@ -1716,7 +1716,8 @@ public sealed class SingBoxConfigCompiler
 
             case ProxyProtocol.Shadowsocks:
                 outbound["type"] = "shadowsocks";
-                outbound["method"] = server.Method ?? "aes-256-gcm";
+                // Короткие имена Xray и Clash — полными: sing-box их не знает (№38).
+                outbound["method"] = ShadowsocksMethods.ForSingBox(server.Method) ?? ShadowsocksMethods.Default;
                 outbound["password"] = server.Credential;
                 break;
 

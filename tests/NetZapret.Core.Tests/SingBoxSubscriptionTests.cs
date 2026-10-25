@@ -170,6 +170,61 @@ public sealed class SingBoxSubscriptionTests
         }
     }
 
+    /// <summary>
+    /// Короткое имя шифра Xray принимается движком, незнакомое — пропускается,
+    /// и конфиг жив (обсуждение №38: «unknown method: chacha20-poly1305» ронял туннель).
+    /// </summary>
+    [Fact]
+    public void Shadowsocks_alias_passes_sing_box_check_and_unknown_method_is_skipped()
+    {
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        ProxyServer Ss(string tag, string method) => new()
+        {
+            Protocol = ProxyProtocol.Shadowsocks,
+            Tag = tag,
+            Host = "1.2.3.4",
+            Port = 8388,
+            Credential = "ss-secret",
+            Method = method,
+        };
+
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []\n");
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet, [Ss("alias", "chacha20-poly1305"), Ss("unknown", "salsa20")], new SingBoxOptions());
+
+        Assert.Equal(["alias"], result.UsedServers.Select(s => s.Tag));
+        Assert.Contains("\"chacha20-ietf-poly1305\"", result.Json);
+        Assert.DoesNotContain("salsa20", result.Json);
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, result.Json);
+
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var said = process.StandardError.ReadToEnd() + process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, said);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string? FindSingBox()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)

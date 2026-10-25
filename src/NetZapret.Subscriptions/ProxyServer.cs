@@ -279,8 +279,12 @@ public sealed record ProxyServer
     /// приходилось пропускать: подписка из семнадцати серверов показывала
     /// четырнадцать, а целиком построенная на xhttp — ноль. Замер 2026-09-11:
     /// extended разбирает такой конфиг, обычный 1.13.19 отказывается.
+    /// Остаётся шифр Shadowsocks: незнакомый sing-box ронял весь конфиг
+    /// (обсуждение №38, «unknown method: chacha20-poly1305»), поэтому сервер
+    /// с ним пропускается — <see cref="ShadowsocksMethods"/>.
     /// </remarks>
-    public bool IsSupportedBySingBox => true;
+    public bool IsSupportedBySingBox =>
+        Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null;
 
     /// <summary>
     /// Адрес, в который вообще можно дозвониться.
