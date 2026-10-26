@@ -1,0 +1,29 @@
+<Project>
+
+  <!--
+    Свои общие настройки папки android/. MSBuild берёт ближайший
+    Directory.Build.props и выше не идёт, а корневой задаёт Windows:
+    net8.0-windows и x64. Приложению для телефона (arm64) и интерфейсу
+    на Avalonia x64 нельзя — сборка не загрузилась бы.
+
+    Библиотеки src/ по-прежнему собираются со своим корневым props:
+    приложение берёт их цель net8.0 (AnyCPU).
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <Product>NetZapret</Product>
+    <Company>RixyPow</Company>
+    <Copyright>Copyright (c) 2026 RixyPow. MIT License.</Copyright>
+    <RepositoryUrl>https://github.com/RixyPow/netzapret</RepositoryUrl>
+
+    <!--
+      Версия — та же, что у Windows: одна строка в корневом props, чтобы
+      номер не расходился между системами.
+    -->
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)..\Directory.Build.props')), '(?&lt;=&lt;Version&gt;)[^&lt;]+').Value)</Version>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Что FileProvider вправе отдать наружу: только копии в cache/share/.
+  Не files/ целиком — там config/ со ссылками подписок.
+-->
+<paths>
+  <cache-path name="share" path="share/" />
+</paths>

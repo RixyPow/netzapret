@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Эмблема «туннельный эффект» — те же три пути svg, что рисует Emblem
+  в окне Windows, в цветах тёмной темы (Emblem.Default).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+  <path
+      android:fillColor="@color/nz_band"
+      android:pathData="M255.99,149.37v30.14c-81.42,0-137.42-54.66-167.67-91.15v127.01H0v-30.14h58.18V61.52c0-8.98,5.72-16.93,14.23-19.79,8.49-2.85,17.84.02,23.25,7.17l.55.72c22.61,29.85,75.56,99.74,159.78,99.75Z" />
+  <path
+      android:fillColor="@color/nz_top"
+      android:pathData="M255.99,27.63v121.74c-84.22-.01-137.17-69.9-159.78-99.75l-.55-.72c-5.41-7.15-14.76-10.02-23.25-7.17-8.51,2.86-14.23,10.81-14.23,19.79v123.71H0V27.63C0,12.37,12.37,0,27.62,0h200.75c15.25,0,27.62,12.37,27.62,27.63Z" />
+  <path
+      android:fillColor="@color/nz_bottom"
+      android:pathData="M255.99,179.51v48.86c0,15.26-12.37,27.63-27.62,27.63H27.62c-15.25,0-27.62-12.37-27.62-27.63v-13h88.32v-127.01c30.25,36.49,86.25,91.15,167.67,91.15Z" />
+</vector>

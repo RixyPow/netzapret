@@ -1,0 +1,230 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Приложение для телефона — хозяин: распаковка поставки, крючки библиотек
+    src/, VPN-служба и движки. Интерфейс — в NetZapret.Mobile, код libbox —
+    в Java/ (DESIGN.md: привязка libbox к C# валит мост сборщика мусора).
+
+    Собирается из папки android/ — у неё свой global.json (.NET 10): SDK
+    ищется от текущей папки вверх, и из корня репозитория взялся бы .NET 8,
+    у которого нет рабочей нагрузки Android 36. Одной командой — build.ps1.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <!-- 24 — как у libbox.aar (minSdkVersion в его манифесте) и у ByeDPI (clang -target …android24). -->
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <RootNamespace>NetZapret.Android</RootNamespace>
+    <AssemblyName>NetZapret.Android</AssemblyName>
+    <ApplicationId>io.github.rixypow.netzapret</ApplicationId>
+    <ApplicationTitle>NetZapret</ApplicationTitle>
+
+    <!--
+      Движки у нас только под arm64: libbox собран gomobile с -target android/arm64,
+      ByeDPI и nfqws2 лежат в tools\android\…\arm64-v8a. APK с другими ABI
+      ставился бы на 32-битные телефоны и падал на первом же запуске движка.
+    -->
+    <RuntimeIdentifier>android-arm64</RuntimeIdentifier>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+
+    <!--
+      Профильный AOT .NET для Android — по профилю приложений MAUI; шаблон
+      Avalonia его выключает, и мы тоже: профиль не наш, а сборка вдвое дольше.
+    -->
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+
+    <!--
+      Обработчик HTTP — управляемый (portability.md S11). По умолчанию .NET для
+      Android подменяет HttpClientHandler на AndroidMessageHandler, а библиотеки
+      ходят через SOCKS5 с паролем (EngineKeys.Proxy) и привязывают сокеты
+      к адаптеру — это умеет только SocketsHttpHandler.
+    -->
+    <UseNativeHttpHandler>false</UseNativeHttpHandler>
+
+    <!--
+      Обрезка и System.Text.Json (portability.md S12). Release обрезает сборки,
+      а с обрезкой выключается JSON через отражение — им читаются настройки,
+      состояние и кэши во всех библиотеках (JsonSerializerContext нет ни одного).
+      Без этих трёх строк всё работало бы в Debug и падало только в Release.
+      YamlDotNet (правила) тоже разбирает отражением.
+    -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <TrimMode>partial</TrimMode>
+
+    <!--
+      Как у Windows-версии (корневой props): одинаковое поведение строк
+      и меньше APK — данные ICU не нужны.
+    -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!--
+      Номер версии — из корневого props (android/Directory.Build.props берёт
+      его оттуда). versionCode обязан расти с каждым выпуском, иначе телефон
+      откажется ставить обновление поверх: Major·1 000 000 + Minor·1000 + Patch.
+      Суффикс «-pre.N» в число не входит, в versionName — входит.
+    -->
+    <_NzVersionCore>$([System.Text.RegularExpressions.Regex]::Replace('$(Version)', '-.*$', ''))</_NzVersionCore>
+    <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
+    <ApplicationVersion>$([MSBuild]::Add($([MSBuild]::Add($([MSBuild]::Multiply($([System.Version]::Parse($(_NzVersionCore)).Major), 1000000)), $([MSBuild]::Multiply($([System.Version]::Parse($(_NzVersionCore)).Minor), 1000)))), $([System.Version]::Parse($(_NzVersionCore)).Build)))</ApplicationVersion>
+
+    <!-- Корень репозитория: поставка берётся прямо из его папок, без копий в git. -->
+    <NzRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..'))\</NzRoot>
+    <NzEngines>$(NzRoot)tools\android\</NzEngines>
+  </PropertyGroup>
+
+  <!--
+    Сборка конфига (WP1) и командные строки десинка (WP2) пишутся параллельно
+    в своих рабочих копиях. Пока их файлов здесь нет, EngineStart.cs собирается
+    без них и отвечает «сборка конфига ещё не подключена»; после слияния
+    символ ставится сам. -p:NzIntegrated=false — собрать без них нарочно.
+  -->
+  <PropertyGroup Condition="'$(NzIntegrated)' == '' and Exists('$(NzRoot)src\NetZapret.Proxy\EngineConfigBuilder.cs') and Exists('$(NzRoot)src\NetZapret.Zapret\ByeDpiCommandLine.cs') and Exists('$(NzRoot)src\NetZapret.Zapret\Nfqws2CommandLine.cs')">
+    <NzIntegrated>true</NzIntegrated>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NzIntegrated)' == 'true'">
+    <DefineConstants>$(DefineConstants);NZ_INTEGRATED</DefineConstants>
+  </PropertyGroup>
+
+  <!--
+    Интерфейс (NetZapret.Mobile) пишется параллельно. Пока в нём нет App,
+    APK собирается с заглушкой из Placeholder/ — чтобы хозяина можно было
+    поставить на телефон и проверить кнопками «Запустить/Остановить».
+
+    -p:NzWithoutMobile=true — собрать вовсе без проекта интерфейса (он посреди
+    правки и не компилируется): договор IMobileHost и настройки телефона
+    берутся его же файлами, интерфейс — заглушка.
+  -->
+  <PropertyGroup Condition="'$(NzWithoutMobile)' == 'true'">
+    <NzPlaceholderApp>true</NzPlaceholderApp>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NzPlaceholderApp)' == '' and !Exists('$(MSBuildThisFileDirectory)..\NetZapret.Mobile\App.axaml.cs') and !Exists('$(MSBuildThisFileDirectory)..\NetZapret.Mobile\App.cs')">
+    <NzPlaceholderApp>true</NzPlaceholderApp>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(NzPlaceholderApp)' == 'true'">
+    <DefineConstants>$(DefineConstants);NZ_PLACEHOLDER_APP</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(NzPlaceholderApp)' != 'true'">
+    <Compile Remove="Placeholder\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Android" Version="12.1.4" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(NzWithoutMobile)' != 'true'">
+    <ProjectReference Include="..\NetZapret.Mobile\NetZapret.Mobile.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(NzWithoutMobile)' == 'true'">
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <Compile Include="..\NetZapret.Mobile\IMobileHost.cs" Link="Mobile\IMobileHost.cs" />
+    <Compile Include="..\NetZapret.Mobile\MobileSettings.cs" Link="Mobile\MobileSettings.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+  </ItemGroup>
+
+  <!--
+    Корни обрезки (portability.md S12): типы библиотек читаются и пишутся
+    JSON и YAML через отражение — обрезанное свойство молча пропало бы из
+    настроек человека.
+  -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="NetZapret.Core" RootMode="All" />
+    <TrimmerRootAssembly Include="NetZapret.Subscriptions" RootMode="All" />
+    <TrimmerRootAssembly Include="NetZapret.Proxy" RootMode="All" />
+    <TrimmerRootAssembly Include="NetZapret.Zapret" RootMode="All" />
+    <TrimmerRootAssembly Include="NetZapret.Mobile" RootMode="All" Condition="'$(NzWithoutMobile)' != 'true'" />
+    <TrimmerRootAssembly Include="YamlDotNet" RootMode="All" />
+  </ItemGroup>
+
+  <!--
+    libbox — без привязки к C#: весь код, который его трогает, в Java/
+    (DESIGN.md). Классы libbox нужны только javac и упаковщику.
+  -->
+  <ItemGroup>
+    <AndroidLibrary Include="$(NzEngines)libbox-1.14.3-extended-2.7.3\libbox.aar" Bind="false" />
+  </ItemGroup>
+
+  <!--
+    Java-часть (WP3). Bind="false": из C# она зовётся через JNI (NzBoxBridge),
+    генератор привязок ей не нужен. -p:NzNoJava=true — собрать без неё, если
+    недописанная Java ломает сборку; мост тогда честно скажет, что моста нет.
+  -->
+  <ItemGroup>
+    <!--
+      SDK и сам берёт **\*.java проекта в AndroidJavaSource (с Bind=true):
+      сначала убрать его вариант, потом добавить свой.
+    -->
+    <AndroidJavaSource Remove="Java\**" />
+    <AndroidJavaSource Include="Java\**\*.java" Bind="false" Condition="'$(NzNoJava)' != 'true'" />
+    <!--
+      Правила сжатия Java (WP3): если когда-нибудь включат R8, он без них
+      переименовал бы NzBox, который C# ищет по имени, и классы libbox, которые
+      Go зовёт по именам. Сейчас R8 не включён — правила ничего не меняют.
+    -->
+    <ProguardConfiguration Include="Java\proguard.cfg" Condition="'$(NzNoJava)' != 'true' and Exists('Java\proguard.cfg')" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="Java\**" />
+  </ItemGroup>
+
+  <!--
+    Исполняемые движки под видом библиотек: имя lib*.so — то, по чему
+    установщик распаковывает файл в nativeLibraryDir. Запускать файлы из своей
+    папки данных приложению с targetSdk ≥ 29 нельзя (W^X), из nativeLibraryDir —
+    можно. Поэтому и extractNativeLibs="true" в манифесте.
+  -->
+  <ItemGroup>
+    <AndroidNativeLibrary Include="$(NzEngines)byedpi-ba532298-nz\arm64-v8a\libbyedpi.so" Abi="arm64-v8a" />
+    <AndroidNativeLibrary Include="$(NzEngines)zapret2-v1.0.6\arm64-v8a\libnfqws2.so" Abi="arm64-v8a" />
+  </ItemGroup>
+
+  <!--
+    Поставка — те же папки репозитория, что build.cmd кладёт в установку
+    Windows, и в той же раскладке (portability.md S1): правка пресета,
+    списка или lua доходит до телефона пересборкой APK, без копий в git.
+    При первом запуске и смене версии Payload распаковывает assets/payload/
+    в папку данных приложения.
+
+    Личное в поставку не попадает никогда (CLAUDE.md, «Секреты»): настройки
+    со ссылкой подписки, книга подписок, свои правила, порядок пресетов, свои
+    резолверы, свои списки, копии файлов. В рабочей копии их нет, но сборка
+    из папки владельца иначе увезла бы их в APK.
+  -->
+  <ItemGroup>
+    <_NzConfigExclude Include="$(NzRoot)config\netzapret.json;$(NzRoot)config\subscriptions.json;$(NzRoot)config\rules.user.yaml;$(NzRoot)config\preset-order.json;$(NzRoot)config\dns.user.json;$(NzRoot)config\mobile.json;$(NzRoot)config\subscription.cache.json;$(NzRoot)config\hosts;$(NzRoot)config\lists\own\**;$(NzRoot)config\**\*.bak*;$(NzRoot)config\blobs\**" />
+
+    <AndroidAsset Include="$(NzRoot)config\**\*" Exclude="@(_NzConfigExclude)" Link="Assets\payload\config\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="$(NzRoot)presets\*.txt" Link="Assets\payload\presets\%(Filename)%(Extension)" />
+
+    <!-- lists\user — автосписок Zapret GUI владельца: pack.cmd отказывается его везти, мы тоже. -->
+    <AndroidAsset Include="$(NzRoot)vendor\zapret-gui\lists\**\*" Exclude="$(NzRoot)vendor\zapret-gui\lists\user\**" Link="Assets\payload\engines\zapret\lists\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="$(NzRoot)vendor\zapret-gui\lua\**\*" Link="Assets\payload\engines\zapret\lua\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- Только образцы пакетов: .py и .hex рядом с ними — заготовки Zapret GUI, движку не нужны. -->
+    <AndroidAsset Include="$(NzRoot)vendor\zapret-gui\bin\*.bin" Link="Assets\payload\engines\zapret\bin\%(Filename)%(Extension)" />
+
+    <!--
+      Свои списки и образцы — движку с приставкой nz-, как в build.cmd: секции
+      пресетов ссылаются на lists/nz-…, и чужой одноимённый файл не затеняется.
+      Нетронутые копии списков нужны и ListCarry — по ним видно, что человек
+      дописал в config/lists.
+    -->
+    <AndroidAsset Include="$(NzRoot)config\lists\*.txt" Link="Assets\payload\engines\zapret\lists\nz-%(Filename)%(Extension)" />
+    <AndroidAsset Include="$(NzRoot)config\blobs\*.bin" Link="Assets\payload\engines\zapret\bin\nz-%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!--
+    Без движков APK собрался бы, а на телефоне молча не поднялся бы ни VPN,
+    ни десинк. engines.ps1 кладёт их в tools\android.
+  -->
+  <Target Name="NzCheckEngines" BeforeTargets="Build">
+    <Error Condition="!Exists('$(NzEngines)libbox-1.14.3-extended-2.7.3\libbox.aar')" Text="Нет libbox.aar в tools\android — запустите android\engines.ps1." />
+    <Error Condition="!Exists('$(NzEngines)byedpi-ba532298-nz\arm64-v8a\libbyedpi.so')" Text="Нет libbyedpi.so в tools\android — запустите android\engines.ps1." />
+    <Error Condition="!Exists('$(NzEngines)zapret2-v1.0.6\arm64-v8a\libnfqws2.so')" Text="Нет libnfqws2.so в tools\android — запустите android\engines.ps1." />
+  </Target>
+
+</Project>

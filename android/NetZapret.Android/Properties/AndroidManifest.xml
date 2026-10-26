@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Манифест NetZapret для Android. Пакет и версию подставляет сборка
+  (ApplicationId, ApplicationVersion), активность и приложение — атрибуты C#
+  (MainActivity, MainApplication). Службы — Java-классы WP3 (Java/), их
+  здесь объявляем руками: у Java-кода нет атрибутов, которые прочла бы сборка.
+
+  internalOnly: VPN с «постоянным подключением» и запуском после загрузки
+  не работает с SD-карты — система не видит приложение, пока карта не смонтирована.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:installLocation="internalOnly">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <!-- VPN-служба вправе быть systemExempted (Android 14+): иначе её тип пришлось бы выдумывать. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Маршруты по приложению: без него Android 11+ показывает только часть установленного. -->
+  <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+  <!--
+    extractNativeLibs="true": libbyedpi.so и libnfqws2.so — исполняемые файлы,
+    запускаются из nativeLibraryDir. Без распаковки они остаются внутри APK,
+    и запускать нечего (W^X запрещает исполнять файлы из папки данных).
+
+    allowBackup="false": в config/ лежат ссылки подписок и ключи серверов
+    (CLAUDE.md: ссылка равносильна паролю) — в облачную копию им нельзя.
+
+    Процесс один (без android:process у служб): именованные мьютексы библиотек
+    (журнал надзора, кэш замеров) работают только внутри процесса — portability.md S9.
+  -->
+  <application
+      android:label="NetZapret"
+      android:icon="@drawable/icon"
+      android:roundIcon="@drawable/icon"
+      android:allowBackup="false"
+      android:fullBackupContent="false"
+      android:extractNativeLibs="true"
+      android:supportsRtl="true">
+
+    <service
+        android:name="org.netzapret.android.NzVpnService"
+        android:permission="android.permission.BIND_VPN_SERVICE"
+        android:exported="false"
+        android:foregroundServiceType="systemExempted">
+      <intent-filter>
+        <action android:name="android.net.VpnService" />
+      </intent-filter>
+      <meta-data android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON" android:value="true" />
+    </service>
+
+    <service
+        android:name="org.netzapret.android.NzTileService"
+        android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+        android:exported="true"
+        android:icon="@drawable/ic_tile"
+        android:label="NetZapret">
+      <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE" />
+      </intent-filter>
+      <!-- Android 13+ показывает плитку переключателем: включить и выключить VPN одним касанием. -->
+      <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+    </service>
+
+    <!--
+      «Поделиться» отчётом и журналами: файл копируется в cache/share
+      и отдаётся ссылкой content:// с разрешением на чтение — с Android 7
+      file:// в чужое приложение не передать. FileProvider — из AndroidX.Core,
+      он приходит вместе с Avalonia.Android.
+    -->
+    <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="io.github.rixypow.netzapret.share"
+        android:exported="false"
+        android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/nz_share_paths" />
+    </provider>
+
+  </application>
+</manifest>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<resources>
+  <!--
+    Тема окна до того, как Avalonia нарисует своё: без строки действий
+    и с фоном цвета приложения, чтобы при запуске не мигало белым.
+    AppCompat приходит вместе с Avalonia.Android.
+  -->
+  <style name="MyTheme" />
+
+  <style name="MyTheme.NoActionBar" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
+    <item name="android:windowActionBar">false</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:windowBackground">@color/nz_background</item>
+  </style>
+</resources>

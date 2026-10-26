@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Цвета эмблемы тёмной темы Windows-версии (Emblem.Default): верх — главная кнопка, полоса — фон окна, низ — текст. -->
+  <color name="nz_top">#2EA043</color>
+  <color name="nz_band">#0D1117</color>
+  <color name="nz_bottom">#E6EDF3</color>
+  <color name="nz_background">#F6F8FA</color>
+</resources>
