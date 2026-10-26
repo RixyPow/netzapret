@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Интерфейс телефона на Avalonia — без единого вызова Android: всё
+    платформенное идёт через IMobileHost. Поэтому тот же интерфейс
+    открывается на Windows (NetZapret.Mobile.Preview) с поддельным
+    хозяином — смотреть и снимать экраны без телефона, — а потом может
+    уехать на iPhone.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Окно просмотра снимает разделы и открывает листы напрямую. -->
+    <InternalsVisibleTo Include="NetZapret.Mobile.Preview" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NetZapret.Core\NetZapret.Core.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Subscriptions\NetZapret.Subscriptions.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Proxy\NetZapret.Proxy.csproj" />
+    <ProjectReference Include="..\..\src\NetZapret.Zapret\NetZapret.Zapret.csproj" />
+  </ItemGroup>
+
+</Project>

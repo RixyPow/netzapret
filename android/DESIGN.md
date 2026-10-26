@@ -206,6 +206,24 @@ public sealed record PlatformFacts(bool Root, string? PrivateDns, bool BatteryOp
 public sealed record InstalledApp(string Package, string Label, bool System);
 ```
 
+Вход интерфейса (WP5): класс приложения Avalonia — `NetZapret.Mobile.App`
+(`App.axaml`, тема Fluent, тёмная). Хозяин ставит `App.Host` **до** запуска
+Avalonia (`AvaloniaAndroidApplication<App>` — в `OnCreate` своего
+`Application` до `base.OnCreate()` либо в конструкторе); корень — `MainView`
+в `ISingleViewApplicationLifetime.MainView` (на Windows-просмотре — окно).
+Рабочая папка процесса и `AppPaths.ProgramDirectory` — `FilesDirectory`
+(хозяин ставит их сам до первого обращения к библиотекам; интерфейс читает
+`config/…` относительными путями, как окно Windows).
+
+Настройки только телефона — `config/mobile.json`, тип
+`NetZapret.Mobile.MobileSettings` (`Load()`/`Save()`): `Desync`
+(`ByeDpi`|`Fragment` — ByeDPI или фрагментация sing-box), `Strategy`
+(`Preset`|`Default`|`Custom` — те же имена, что `ByeDpiStrategy`),
+`CustomArguments`, `UseRoot` (nfqws2, если есть root). Хозяин читает их
+при запуске и собирает `ByeDpiRequest`. Маршрут приложения — обычное
+правило `UserRulesFile` с `MatchKind.Process` и **именем пакета**
+в значении; компилятор на Android пишет его в `package_name`.
+
 ## Кто чем владеет (параллельная работа)
 
 | Часть | Файлы | Где собирать |
@@ -221,7 +239,7 @@ public sealed record InstalledApp(string Package, string Label, bool System);
 
 ## Сборка
 
-- Инструменты (без прав администратора) — `C:\Users\rogfa\.nz-android`:
+- Инструменты (без прав администратора) — `%USERPROFILE%\.nz-android`:
   `dotnet` 10.0.403 с рабочей нагрузкой android 36.1.118, JDK 17, Go 1.26.10,
   Android SDK (platform 36, build-tools 36.0.0, NDK 28.2.13676358), gomobile
   v0.1.13 SagerNet.

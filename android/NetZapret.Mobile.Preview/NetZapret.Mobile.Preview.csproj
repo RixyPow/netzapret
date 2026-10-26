@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Интерфейс телефона в окне Windows 412×915 с поддельным хозяином:
+    смотреть экраны без телефона и снимать их в PNG (ключ «shots» с папкой,
+    без окна — Avalonia.Headless со Skia). Движков здесь нет: поддельный
+    хозяин отвечает выдуманными состояниями и в сеть не ходит.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!--
+      Только Windows: без этого Avalonia.Desktop кладёт рядом родные
+      библиотеки под все системы — 576 МБ на одну сборку, а диск не резиновый.
+    -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetZapret.Mobile\NetZapret.Mobile.csproj" />
+  </ItemGroup>
+
+</Project>

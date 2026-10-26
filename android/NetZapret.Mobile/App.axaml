@@ -1,0 +1,33 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="NetZapret.Mobile.App"
+             RequestedThemeVariant="Dark">
+
+  <!--
+    Тёмная по умолчанию — цвета встроенной темы «Тёмная» окна Windows
+    (themes/dark/theme.json, gui/NetZapret.Gui/Theme/Palette.xaml): одна
+    программа должна узнаваться на обеих системах. Светлой темы на телефоне
+    пока нет — её выбор P2 (android/DESIGN.md, ui.md §3.8).
+  -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://NetZapret.Mobile/Theme/Palette.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark"
+                               Accent="#FF2EA043"
+                               RegionColor="#FF0D1117"
+                               AltHigh="#FF0D1117"
+                               ErrorText="#FFF85149" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://NetZapret.Mobile/Theme/Styles.axaml" />
+  </Application.Styles>
+
+</Application>

@@ -1,0 +1,61 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- Значения — те же, что у темы «Тёмная» окна Windows (themes/dark/theme.json). -->
+  <Color x:Key="BackdropColor">#FF0D1117</Color>
+  <Color x:Key="SurfaceColor">#FF161B22</Color>
+  <Color x:Key="RaisedColor">#FF1C2128</Color>
+  <Color x:Key="LineColor">#FF30363D</Color>
+  <Color x:Key="TextColor">#FFE6EDF3</Color>
+  <Color x:Key="MutedColor">#FF8B949E</Color>
+  <Color x:Key="FaintColor">#FF6E7681</Color>
+  <Color x:Key="AccentColor">#FF3FB950</Color>
+  <Color x:Key="AccentDimColor">#FF2EA043</Color>
+  <Color x:Key="DangerColor">#FFF85149</Color>
+  <Color x:Key="WarnColor">#FFD29922</Color>
+  <Color x:Key="AccentFillColor">#FF2EA043</Color>
+  <Color x:Key="OnAccentColor">#FF06110A</Color>
+  <Color x:Key="InfoColor">#FF58A6FF</Color>
+
+  <SolidColorBrush x:Key="Backdrop" Color="{StaticResource BackdropColor}" />
+  <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
+  <SolidColorBrush x:Key="Raised" Color="{StaticResource RaisedColor}" />
+  <SolidColorBrush x:Key="Line" Color="{StaticResource LineColor}" />
+  <SolidColorBrush x:Key="Text" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="Muted" Color="{StaticResource MutedColor}" />
+  <SolidColorBrush x:Key="Faint" Color="{StaticResource FaintColor}" />
+  <SolidColorBrush x:Key="Accent" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush x:Key="AccentDim" Color="{StaticResource AccentDimColor}" />
+  <SolidColorBrush x:Key="Danger" Color="{StaticResource DangerColor}" />
+  <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+  <SolidColorBrush x:Key="AccentFill" Color="{StaticResource AccentFillColor}" />
+  <SolidColorBrush x:Key="OnAccent" Color="{StaticResource OnAccentColor}" />
+  <SolidColorBrush x:Key="Info" Color="{StaticResource InfoColor}" />
+  <SolidColorBrush x:Key="Scrim" Color="#B3000000" />
+
+  <!-- Ключи темы Fluent: обычные кнопки и поля — в цветах страницы, а не серые. -->
+  <SolidColorBrush x:Key="ButtonBackground" Color="{StaticResource RaisedColor}" />
+  <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FF262C36" />
+  <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#FF30363D" />
+  <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="{StaticResource SurfaceColor}" />
+  <SolidColorBrush x:Key="ButtonForeground" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="ButtonForegroundPressed" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="ButtonForegroundDisabled" Color="{StaticResource FaintColor}" />
+  <SolidColorBrush x:Key="ButtonBorderBrush" Color="{StaticResource LineColor}" />
+  <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#FF484F58" />
+  <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#FF484F58" />
+  <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="{StaticResource LineColor}" />
+  <SolidColorBrush x:Key="TextControlBackground" Color="{StaticResource BackdropColor}" />
+  <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="{StaticResource BackdropColor}" />
+  <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="{StaticResource BackdropColor}" />
+  <SolidColorBrush x:Key="TextControlBorderBrush" Color="{StaticResource LineColor}" />
+  <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#FF484F58" />
+  <SolidColorBrush x:Key="TextControlForeground" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="TextControlForegroundFocused" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="{StaticResource TextColor}" />
+  <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="{StaticResource FaintColor}" />
+  <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="{StaticResource FaintColor}" />
+  <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="{StaticResource FaintColor}" />
+
+</ResourceDictionary>
