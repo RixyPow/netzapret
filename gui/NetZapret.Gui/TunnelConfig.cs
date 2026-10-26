@@ -29,294 +29,41 @@ internal sealed record BuildOutcome(bool Ok, string Message, string? Warning = n
 /// </remarks>
 internal static class TunnelConfig
 {
+    /// <summary>Собирает конфиг туннеля и пишет его рядом с прочим рантаймом.</summary>
+    /// <remarks>
+    /// С 27.10 — обёртка над общей сборкой (<see cref="EngineConfigBuilder.BuildTunnelAsync"/>):
+    /// ту же зовёт телефон. Здесь остались только побочные действия окна —
+    /// перенос ссылки подписки, напоминание о сроке и перепроверка панелей
+    /// после запуска.
+    /// </remarks>
     public static async Task<BuildOutcome> BuildAsync(
         AppSettings settings,
         CancellationToken cancellationToken)
     {
-        // Выхода нет вовсе — ни подписки, ни WARP. Дальше идти незачем:
-        // конфиг вышел бы с пустой группой выходов, и движок держал бы TUN,
-        // не умея никуда доставить.
-        //
-        // Смотрим на оба источника, а не на одну ссылку: WARP заведён ровно
-        // затем, чтобы работать без подписки, и прежде он в одиночку
-        // не поднимался — отказ приходил раньше, чем кто-либо смотрел
-        // на выключатель.
-        if (!settings.HasTunnelExit)
-        {
-            return new BuildOutcome(false,
-                "Ни подписки, ни WARP — заворачивать трафик некуда. "
-                + "Добавьте ссылку в разделе «VPN» либо включите там же бесплатный WARP.");
-        }
-
         try
         {
-            var requestedDns = settings;
-            var routerDns = RouterDnsConnection.Resolve(settings);
-            settings = routerDns.Settings;
-            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
-            var (ruleSet, zapretRoot) = LoadRules(settings);
+            // Книга одна на всю сборку: перенос ссылки (new-url) правит ту же,
+            // из которой собран пул, — как было, пока сборка жила здесь.
+            var book = SubscriptionBook.Load();
+            var built = await EngineConfigBuilder.BuildTunnelAsync(settings, WindowsEngineHost.Create(book), cancellationToken);
 
-            // WARP и подписки — одно из двух (владелец, 01.10; Warp.TunnelExits).
-            // При включённом WARP подписки на паузе, и ходить за ними незачем:
-            // запуск не ждёт панелей, которые всё равно не понадобятся.
-            IReadOnlyList<ProxyServer> fromSubscription = [];
-            int sourceCount = 0, keyCount = 0, reserved = 0;
-            IReadOnlyList<PoolPart> deferred = [];
-
-            if (!settings.WarpEnabled)
+            // Что поставщик сказал заголовками (15.10): перенёс подписку —
+            // ссылка в книге новая; срок кончается — напомнить, раз в сутки.
+            if (built.Pool is { } pool)
             {
-                // Пул (0.9.0): серверы всех подписок в работе, а не одной
-                // действующей. Указатель из настроек — на случай, когда список
-                // подписок пуст, а ссылку поставила консоль.
-                var book = SubscriptionBook.Load();
-
-                var sources = book.Pool
-                    .Select(e => new PoolSource(e.Name, e.Url))
-                    .ToList();
-
-                if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
-                    sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
-
-                // Отдельные ключи — последним источником пула (0.9.0). Панели
-                // с запасом моложе суток запуск не ждёт — их спросят после
-                // (SubscriptionPool.StartFromReserveFor, SubscriptionRecheck).
-                var pool = await SubscriptionPool.BuildAsync(sources, cancellationToken, keys: book.PoolKeys, deferPanels: true);
-                deferred = pool.Parts.Where(p => p.Deferred).ToList();
-                fromSubscription = pool.Servers;
-                sourceCount = sources.Count;
-                keyCount = book.PoolKeys.Count;
-                reserved = pool.Parts.Count(p => p.FromReserve);
-
-                // Подписки были, а серверов нет ни от одной, и запаса тоже:
-                // собирать не из чего, и сказать надо, почему. Имена подписок,
-                // не ссылки: ссылка — пароль.
-                if ((sources.Count > 0 || book.PoolKeys.Count > 0) && fromSubscription.Count == 0)
-                {
-                    return new BuildOutcome(false, "Конфиг не собрался: ни подписки, ни ключи не дали серверов: "
-                        + string.Join("; ", pool.Parts.Select(p => $"«{p.Source.Name}» — {p.Error ?? "пусто"}")) + ".");
-                }
-
-                // Что поставщик сказал заголовками (15.10): перенёс подписку —
-                // ссылка в книге новая; срок кончается — напомнить, раз в сутки.
                 foreach (var part in pool.Parts.Where(p => p.Info is not null))
                 {
-                    SubscriptionBook.Follow(book, part.Source.Url, part.Info!.NewUrl);
+                    SubscriptionBook.Follow(book, part.Source.Url, part.Info!.NewUrl,
+                        message => Journal.Write("подписка", message));
                     SubscriptionNotices.RemindExpiry(part.Source.Name, part.Source.Url, part.Info);
-                }
-
-                // Кто пришёл из запаса — в журнал: без этого «сервер из вчерашнего
-                // списка» было бы нечем объяснить.
-                foreach (var part in pool.Parts.Where(p => p.FromReserve || p.Error is not null))
-                {
-                    Journal.Write("подписка", part.FromReserve
-                        ? $"«{part.Source.Name}» не ответила{(PhysicalNetwork.Up() ? "" : $" ({PhysicalNetwork.Offline})")} — "
-                            + $"серверы из запаса от {part.ReserveAt:dd.MM HH:mm}"
-                        : $"«{part.Source.Name}» не прочиталась и запаса нет: {part.Error}");
-                }
-
-                foreach (var part in deferred)
-                {
-                    Journal.Write("подписка",
-                        $"«{part.Source.Name}»: запуск из запаса от {part.ReserveAt:dd.MM HH:mm}, панель спрошу после запуска");
                 }
             }
 
-            var servers = Warp.TunnelExits(settings, fromSubscription);
-
-            var capture = AddressListReader.Expand(ruleSet.CaptureEntries, zapretRoot, out _);
-
-            // hosts бьёт любой резолв, включая наш: прибитый там домен
-            // не получит fakeip и уйдёт мимо туннеля, сколько бы правил
-            // на него ни стояло.
-            var pinned = HostsFile.CollectPinnedProxy(ruleSet, out _);
-
-            var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
-
-            // Кто из серверов заведомо мёртв — по нашим же замерам. Сборка
-            // в сеть не ходит и судить о живости не может, поэтому список
-            // приносим ей мы.
-            var options = new SingBoxOptions();
-            var dead = ServerHealthCache.Load().Dead(options.DeadAfterFailures);
-
-            // «В пуле только рабочие» (владелец, 28.09) — буквально: мёртвый
-            // по замерам сервер в конфиг не идёт вовсе, а не только выводится
-            // из автоподбора. С пулом из трёх подписок в конфиге стало 118
-            // выходов, и sing-box поднимался 7 секунд против прежних двух;
-            // каждый мёртвый выход — лишняя работа движку ни за что.
-            // Закреплённый человеком остаётся — его выбрали руками. И не до
-            // пустоты: мёртвыми бывают все сразу — по устаревшим замерам, —
-            // и тогда пусть движок перебирает всех. В списке вкладки мёртвые
-            // видны по-прежнему; удачный замер вернёт сервер со следующим
-            // запуском.
-            //
-            // Так же закреплённые в пулах и пул, мёртвый целиком (идеи №6, 19.10):
-            // выброшенный пул без серверов исчез бы из конфига, и его маршруты
-            // молча ушли бы в пул по умолчанию — даже когда человек велел ждать.
-            var keep = ServerPools.KeptDespiteDeath(settings.EnginePools, servers.Select(s => s.Tag), dead);
-
-            var alive = servers
-                .Where(s => !dead.Contains(s.Tag) || s.Tag == Warp.PreferredExit(settings) || s.IsSelfRegistering
-                    || keep.Contains(s.Tag))
-                .ToList();
-
-            int dropped = servers.Count - alive.Count;
-
-            if (alive.Any(s => !s.IsSelfRegistering))
-                servers = alive;
-            else
-                dropped = 0;
-
-            // Охват TUN следует за десинком, а не за настройкой, и это
-            // исправление 21.09.
-            //
-            // «Только прокси» заведено ради сосуществования с winws2: TUN
-            // забирает один диапазон fakeip, и WinDivert видит исходные
-            // потоки приложений, а не переоткрытые сокетом sing-box. Пока
-            // десинк работает, это необходимо.
-            //
-            // Без десинка защищать нечего, а режим «всё через туннель» такая
-            // настройка ломает начисто: route_address у TUN остаётся списком
-            // из fakeip и десятка адресов, ютуб со своим настоящим адресом
-            // Google в туннель не попадает вовсе и уходит напрямую. Владелец
-            // это и увидел: «на режиме только туннель не работает ютуб» —
-            // и был прав, назвав следствие: выключение winws2 оказалось
-            // единственным, что режим делал.
-            //
-            // С 23.09 — по TunnelTakesAll: при игнорируемых исключениях
-            // туннель забирает всё и при включённом выключателе десинка.
-            //
-            // С 29.09 — и не при программе, которую правила ведут в туннель
-            // (RuleSet.RoutesProgramIntoTunnel, обсуждение №10): её трафик
-            // идёт на адреса, которых в выборочном перехвате нет.
-            //
-            // С 01.10 — только без десинка (ProgramCapture.ForcesFullCapture,
-            // владелец): при десинке весь трафик через движок ломал голос Discord.
-            bool byProgram = ProgramCapture.ForcesFullCapture(ruleSet, settings.NeedsDesync);
-            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !byProgram;
-
-            // Полный перехват только ради программы — игры с маршрутом мимо VPN
-            // выводятся из туннеля и идут так же, как без этого правила
-            // (ProgramCapture, 30.09). Выбранный человеком режим «всё через
-            // туннель» не трогаем: там туннель забирает всё по его решению.
-            bool forcedByProgram = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && byProgram;
-
-            var keptOut = forcedByProgram
-                ? AddressListReader.Expand(ProgramCapture.KeepOut(ruleSet), zapretRoot, out _)
-                : [];
-
-            var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
-            {
-                Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
-                Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
-                DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
-                DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
-                DnsServerType = settings.UseRouterDns ? "udp" : "https",
-                RouterDns = settings.UseRouterDns,
-                RouterDnsInterface = routerDns.Interface?.Name,
-
-                // Имя сертификата и путь — у провайдера из списка выбора.
-                // Адрес, вписанный руками, идёт как прежде: без имени.
-                DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
-                DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
-                DnsThroughTunnel = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Tunnel,
-                DnsViaAuto = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto,
-
-                // Выбранный резолвер замолчит — надзор переведёт имена на запасной
-                // (25.10: умер Comss DNS, и при «напрямую» висело всё).
-                DnsSpare = DnsSpare.For(settings.DnsServer),
-
-                // Все подписки из книги, а не одна действующая: переключаются
-                // на другую как раз тогда, когда выход текущей лёг.
-                PanelHosts = SubscriptionHosts.From(
-                    [settings.SubscriptionUrl, .. SubscriptionBook.Load().Entries.Select(e => e.Url)]),
-                PreferredServerTag = Warp.PreferredExit(settings),
-
-                // Без «Selective Routing» и при WARP пулов нет — их маршруты
-                // идут в пул по умолчанию.
-                Pools = settings.EnginePools,
-
-                // «Игнорировать исключения» сюда больше не передаётся:
-                // с 23.09 она отменяет все прямые правила, а не одно
-                // российское, и делает это режимом — ProxyStrict, где
-                // правил нет вовсе. См. EngineChoice.Mode.
-                ForeignExitsOnly = settings.ForeignExitsOnly,
-
-                // Вход проверки — всегда, а не только под «Проверку прохода
-                // трафика». Через него же идут замер скорости через туннель
-                // и проверка блокировок через туннель, а проверка прохода
-                // по умолчанию выключена. До 0.10.3 у большинства замер
-                // «через туннель» падал с «конечный компьютер отверг запрос»
-                // (жалоба 01.10): стучаться было не во что. Стучится ли
-                // в него сам супервизор, решает по-прежнему VerifyTraffic
-                // (SupervisorHost), — лишний вход ему не мешает.
-                HealthInbound = true,
-
-                // Новые пароли служебных входов на каждую сборку: окно, nz
-                // и сторож читают их из этого же конфига (EngineKeys.Current).
-                Keys = EngineKeys.Generate(),
-
-                CaptureAddresses = capture,
-                DesyncAddresses = keptOut,
-                PinnedProxyAddresses = pinned.Addresses,
-                PinnedProxyNames = pinned.Names,
-                AddressOverrides = addresses,
-
-                // Мёртвые — мимо автоподбора, но в селекторе остаются:
-                // закрепить такой сервер руками законное желание, он мог
-                // подняться между нашими замерами. Убранные человеком — так же.
-                DeadServerTags = dead
-                    .Concat(settings.AutoPickExcluded)
-                    .ToHashSet(StringComparer.Ordinal),
-
-                // Отвечающие через раз (ServerHealth.Flaky) — в автоподборе,
-                // но после стабильных, по выключателю «Сначала стабильные».
-                // С 29.09 по 27.10 они выводились из автоподбора вовсе
-                // (владелец: «они просто должны идти после зеленых»).
-                FlakyServerTags = settings.StableFirst
-                    ? ServerHealthCache.Load().Flaky().ToHashSet(StringComparer.Ordinal)
-                    : new HashSet<string>(StringComparer.Ordinal),
-
-                // Проверка серверов — как настроил человек (AppSettings).
-                LatencyTestInterval = $"{Math.Max(1, settings.FullCheckMinutes)}m",
-
-                // Адрес проверки — один на всех (Ping, 07.10): прежде автоподбор
-                // движка ходил на https://www.gstatic.com, а сторож и замер вкладки —
-                // на http://cp.cloudflare.com.
-                LatencyTestUrl = Ping.UrlOf(settings),
-                TlsFragment = settings.TlsFragment,
-                StoreFakeIp = settings.FakeIpMemory,
-                AutoPickPerEntry = Math.Max(0, settings.AutoPickPerEntry),
-                KnownLatency = ServerHealthCache.Load().Latencies(),
-            });
-
-            SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
-            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
-
-            var note = settings.WarpEnabled
-                ? "Конфиг собран: туннель через WARP, подписки на паузе"
-                : $"Конфиг собран: {result.UsedServers.Count} серверов"
-                    + (sourceCount > 1 ? $" из {sourceCount} подписок" : string.Empty)
-                    + (keyCount > 0 ? $" и {keyCount} ключей" : string.Empty);
-
-            if (reserved > 0)
-                note += $", {reserved} из запаса — " + (PhysicalNetwork.Up() ? "панель не ответила" : "нет сети");
-
-            // Про мёртвых говорим вслух. Молча выведенный из автоподбора
-            // сервер — это сервер, который человек считает рабочим, а он
-            // не участвует в выборе, и почему — не видно нигде.
-            if (dead.Count > 0)
-                note += dropped > 0
-                    ? $", {dropped} не отвечали и в конфиг не взяты"
-                    : $", {dead.Count} не отвечали и выведены из автоподбора";
-
-            if (result.SkippedServers.Count > 0)
-                note += $", {result.SkippedServers.Count} пропущено";
-
             // Не ждём: запуск идёт следом и не должен стоять за панелью.
-            if (deferred.Count > 0)
-                _ = SubscriptionRecheck.RunAsync(deferred);
+            if (built.Ok && built.Deferred.Count > 0)
+                _ = SubscriptionRecheck.RunAsync(built.Deferred);
 
-            return new BuildOutcome(true, note + ".", routerDns.Warning);
+            return new BuildOutcome(built.Ok, built.Message, built.Warning);
         }
         catch (Exception ex)
         {
@@ -328,48 +75,19 @@ internal static class TunnelConfig
     /// Собирает конфиг движка, который при одном десинке только отвечает на DNS.
     /// </summary>
     /// <remarks>
-    /// Когда — <see cref="AppSettings.NeedsDnsEngine"/>, как — <see cref="DnsEngine"/>.
-    /// Пишется в тот же файл, что конфиг туннеля: при одном десинке тот
-    /// не нужен, а следующий запуск с туннелем соберёт его заново.
+    /// Когда — <see cref="AppSettings.NeedsDnsEngine"/>, как — <see cref="DnsEngine"/>;
+    /// сама сборка — <see cref="EngineConfigBuilder.BuildDnsOnly"/>.
     /// </remarks>
     public static BuildOutcome BuildDnsOnly(AppSettings settings)
     {
-        try
-        {
-            var requestedDns = settings;
-            var routerDns = RouterDnsConnection.Resolve(settings);
-            settings = routerDns.Settings;
-            if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
-            var resolvers = SystemResolvers.Discover();
+        var built = EngineConfigBuilder.BuildDnsOnly(settings, WindowsEngineHost.Create());
 
-            // Без адресов резолверов движку нечего ловить: TUN поднялся бы
-            // впустую, а Windows спрашивала бы мимо него.
-            if (resolvers.Count == 0)
-                return new BuildOutcome(false, "DNS через движок не поднят: резолверы Windows не нашлись.");
-
-            var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
-            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(), routerDns.Interface?.Name);
-
-            SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
-            RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
-
-            return new BuildOutcome(true, settings.UseRouterDns
-                ? $"DNS через движок: UDP/53 к роутеру {settings.RouterDnsAddress} через LAN."
-                : $"DNS через движок: запросы Windows к {string.Join(", ", resolvers)} уходят на {settings.DnsServer} по DoH.", routerDns.Warning);
-        }
-        catch (Exception ex)
-        {
-            return new BuildOutcome(false, "DNS через движок не поднят: " + ex.GetBaseException().Message);
-        }
+        return new BuildOutcome(built.Ok, built.Message, built.Warning);
     }
 
     /// <summary>Правила так, как их увидят движки, — общим кодом с nz.</summary>
-    private static (RuleSet RuleSet, string? ZapretRoot) LoadRules(AppSettings settings)
-    {
-        var (engine, zapretRoot) = RuleSetExpander.LoadFor(settings);
-
-        return (engine.RuleSet, zapretRoot);
-    }
+    private static (RuleSet RuleSet, string? ZapretRoot) LoadRules(AppSettings settings) =>
+        WindowsEngineHost.LoadRules(settings);
 
     /// <summary>
     /// Пишет winws2 его списки: исключения и свои рецепты.

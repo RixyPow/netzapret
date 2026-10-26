@@ -47,23 +47,35 @@ public static class DnsEngine
     /// <summary>Конфиг движка, который только отвечает на DNS.</summary>
     /// <param name="systemResolvers">Резолверы Windows префиксами (<see cref="SystemResolvers.Discover"/>).</param>
     /// <param name="addressOverrides">Подставленные адреса — как у туннеля, нашим резолвером.</param>
+    /// <param name="keys">Пароли служебных входов; на телефоне <c>null</c> — входов там нет.</param>
+    /// <param name="android">Телефон: файл пинов и приложения мимо VPN; <c>null</c> — Windows.</param>
     public static CompilationResult Compile(
         AppSettings settings,
         IReadOnlyList<string> systemResolvers,
         IReadOnlyDictionary<string, string> addressOverrides,
-        EngineKeys keys, string? routerInterface = null)
+        EngineKeys? keys, string? routerInterface = null,
+        AndroidEngine? android = null)
     {
         var provider = DnsSurvey.ByAddress(settings.DnsServer);
 
+        // Адаптер для DNS роутера ищется только на Windows: на телефоне
+        // привязки нет (SingBoxConfigCompiler.BuildDns), и искать незачем.
+        var routerName = !settings.UseRouterDns ? null
+            : android is not null ? routerInterface
+            : routerInterface ?? RouterDnsConnection.Find(settings.RouterDnsAddress).Name;
+
         return new SingBoxConfigCompiler().Compile(NoRoutes, [], new SingBoxOptions
         {
+            Platform = android is null ? SingBoxPlatform.Windows : SingBoxPlatform.Android,
+            HostsFilePath = android?.HostsFilePath,
+            ExcludePackages = android?.ExcludePackages ?? [],
+            IncludePackages = android?.IncludePackages ?? [],
             Scope = TunnelScope.ProxyOnly,
             DnsServerAddresses = systemResolvers,
             DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
             DnsServerType = settings.UseRouterDns ? "udp" : "https",
             RouterDns = settings.UseRouterDns,
-            RouterDnsInterface = settings.UseRouterDns
-                ? routerInterface ?? RouterDnsConnection.Find(settings.RouterDnsAddress).Name : null,
+            RouterDnsInterface = routerName,
             DnsServerName = provider?.TlsName,
             DnsServerPath = provider?.DohPath,
 

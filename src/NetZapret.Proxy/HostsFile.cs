@@ -72,11 +72,21 @@ public enum DesyncBypass
 /// </remarks>
 public static class HostsFile
 {
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.System),
-        "drivers",
-        "etc",
-        "hosts");
+    /// <summary>Файл пинов: системный hosts на Windows, свой в папке приложения на телефоне.</summary>
+    /// <remarks>
+    /// На телефоне системный hosts без root не править, а папка System там
+    /// пустая строка — путь вышел бы относительным «drivers/etc/hosts».
+    /// Свой файл читает резолвер <c>nz-hosts</c> движка
+    /// (<see cref="SingBoxOptions.HostsFilePath"/>), и всё, что пишет
+    /// <see cref="HostsEditor"/>, — блок, пометки, копии — работает с ним так же.
+    /// </remarks>
+    public static string DefaultPath => OperatingSystem.IsAndroid()
+        ? Path.GetFullPath(Path.Combine("config", "hosts"))
+        : Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "drivers",
+            "etc",
+            "hosts");
 
     /// <summary>
     /// Возвращает соответствие «имя — прибитые адреса».

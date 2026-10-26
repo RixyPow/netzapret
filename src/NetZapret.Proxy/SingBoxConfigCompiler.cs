@@ -483,6 +483,75 @@ public sealed class SingBoxOptions
     /// из конфига правил.
     /// </summary>
     public IReadOnlyList<string> CaptureAddresses { get; init; } = Array.Empty<string>();
+
+    // ── Телефон (27.10, docs/android.md). Значения по умолчанию дают
+    // Windows-конфиг байт в байт прежним: всё ниже действует только при
+    // Platform = Android, и сборка для Windows их не задаёт.
+
+    /// <summary>Для какой системы конфиг: libbox на телефоне и sing-box.exe понимают разное.</summary>
+    public SingBoxPlatform Platform { get; init; } = SingBoxPlatform.Windows;
+
+    /// <summary>
+    /// Файл пинов на телефоне — резолвер <c>nz-hosts</c> с этим путём; <c>null</c> — нет.
+    /// </summary>
+    /// <remarks>
+    /// Системный hosts без root не править, а Windows спрашивает свой раньше
+    /// движка. На телефоне его роль играет резолвер движка, и правило к нему
+    /// стоит раньше подставленных адресов и fakeip — как hosts на Windows
+    /// бьёт и то и другое. Движок перечитывает файл сам (не чаще раза в 5 с).
+    /// </remarks>
+    public string? HostsFilePath { get; init; }
+
+    /// <summary>Приложения мимо VPN (<c>exclude_package</c>): своё, ByeDPI и российские.</summary>
+    public IReadOnlyList<string> ExcludePackages { get; init; } = [];
+
+    /// <summary>Только эти приложения через VPN (<c>include_package</c>). Вместе с исключениями VpnService не принимает.</summary>
+    public IReadOnlyList<string> IncludePackages { get; init; } = [];
+
+    /// <summary>
+    /// ByeDPI для маршрута «десинк» на телефоне без root; <c>null</c> — нет.
+    /// </summary>
+    public DesyncSocks? DesyncSocks { get; init; }
+
+    /// <summary>Тег исходящего к ByeDPI.</summary>
+    public const string DesyncTag = "desync";
+
+    /// <summary>
+    /// Имена секций <c>pass</c> пресета: при ByeDPI они идут напрямую, а не в него.
+    /// </summary>
+    /// <remarks>
+    /// У winws2 секция <c>pass</c> — «не трогать», и «десинк + pass» там то же,
+    /// что «напрямую» (замер A/B/A 29.09). ByeDPI запасные группы (<c>-A t,s</c>)
+    /// применяет к любому соединению, пришедшему к нему, и имя «не трогать»
+    /// тронул бы при первой же заминке. Поэтому такие имена до него не доводятся.
+    /// </remarks>
+    public IReadOnlyList<string> DesyncPassHosts { get; init; } = [];
+
+    /// <summary>
+    /// Чем режется маршрут «десинк» без root и без ByeDPI; <c>Off</c> — не режется.
+    /// </summary>
+    public TlsFragment DesyncFragment { get; init; } = TlsFragment.Off;
+
+    /// <summary>Пауза <c>tls_fragment</c>, когда ждать ACK движок не может; <c>null</c> — его 500 мс.</summary>
+    public string? DesyncFragmentFallbackDelay { get; init; }
+
+    /// <summary>
+    /// QUIC (UDP 443) к именам «десинка» — отказом: браузер уходит на TCP, где десинк есть.
+    /// </summary>
+    public bool DesyncRejectQuic { get; init; }
+
+    /// <summary>
+    /// Невыведенный трафик при «десинке по умолчанию» — тоже через десинк.
+    /// </summary>
+    /// <remarks>
+    /// На Windows «по умолчанию — десинк» значит: мимо туннеля, а winws2 сам
+    /// решает по спискам пресета, трогать ли поток. ByeDPI делает то же своими
+    /// группами (<c>-H</c> из списков пресета), но видит только то, что ему
+    /// отдали. Без этого YouTube, Discord и прочее, чего нет в «Маршрутах»,
+    /// до десинка не доходило бы вовсе: в поставляемых правилах «десинк»
+    /// явно стоит у трёх частей, остальное — умолчание.
+    /// </remarks>
+    public bool DesyncDefault { get; init; }
 }
 
 /// <summary>
@@ -559,14 +628,28 @@ public sealed class SingBoxConfigCompiler
 
     public CompilationResult Compile(RuleSet ruleSet, IReadOnlyList<ProxyServer> servers, SingBoxOptions options)
     {
+        bool android = options.Platform == SingBoxPlatform.Android;
+
+        // На телефоне адаптер для привязки не нужен: сокеты движка и так
+        // защищены от VPN (protect) и уходят в настоящую сеть, а имени
+        // адаптера Windows там нет вовсе.
         if (options.RouterDns && (options.DnsServerType != "udp"
             || !RouterDnsSettings.TryNormalize(options.DnsServer, out _)
-            || string.IsNullOrWhiteSpace(options.RouterDnsInterface)))
+            || (!android && string.IsNullOrWhiteSpace(options.RouterDnsInterface))))
             throw new ArgumentException("DNS роутера требует LAN IPv4, UDP и физический LAN-интерфейс.");
+
+        // Вход local-in — открытый прокси на 127.0.0.1, а на телефоне слушатель
+        // на петле видит любое приложение (методичка Минцифры, docs/android.md §7).
+        if (android && !options.UseTun)
+            throw new ArgumentException("На телефоне движок работает только с TUN: локальный вход без пароля был бы виден любому приложению.");
+
+        if (android && options.IncludePackages.Count > 0 && options.ExcludePackages.Count > 0)
+            throw new ArgumentException("VpnService не принимает «только эти приложения» и «кроме этих» вместе.");
+
         var usable = servers.Where(s => s.IsUsableOutbound).ToList();
         var skipped = servers.Where(s => !s.IsUsableOutbound).ToList();
 
-        var tags = AssignUniqueTags(usable);
+        var tags = AssignUniqueTags(usable, options);
 
         var root = new JsonObject
         {
@@ -576,17 +659,24 @@ public sealed class SingBoxConfigCompiler
             ["inbounds"] = BuildInbounds(options, CollectProxyAddresses(ruleSet)),
             ["outbounds"] = BuildOutbounds(usable, tags, options, PoolsInUse(ruleSet, options)),
             ["route"] = BuildRoute(ruleSet, tags, options),
-            ["experimental"] = new JsonObject
-            {
-                ["clash_api"] = new JsonObject { ["external_controller"] = options.ClashApiListen },
-            },
+            ["experimental"] = new JsonObject(),
         };
 
-        // Секрет Clash API: без него любая программа на машине переключает
-        // выход, читает список соединений и просит замерить задержку выхода
-        // до своего сервера — а тот видит адрес VPN (см. EngineKeys).
-        if (options.Keys is { ClashSecret.Length: > 0 } keys)
-            ((JsonObject)root["experimental"]!["clash_api"]!)["secret"] = keys.ClashSecret;
+        // Clash API — только на Windows. На телефоне порт 9090 на петле читает
+        // сканер RKNHardering (адреса серверов), а управление идёт внутренним
+        // каналом libbox (сервер команд на Unix-сокете в папке приложения).
+        if (!android)
+        {
+            var clash = new JsonObject { ["external_controller"] = options.ClashApiListen };
+
+            // Секрет Clash API: без него любая программа на машине переключает
+            // выход, читает список соединений и просит замерить задержку выхода
+            // до своего сервера — а тот видит адрес VPN (см. EngineKeys).
+            if (options.Keys is { ClashSecret.Length: > 0 } keys)
+                clash["secret"] = keys.ClashSecret;
+
+            ((JsonObject)root["experimental"]!)["clash_api"] = clash;
+        }
 
         // Раздел заводится только при надобности: пустой массив endpoints
         // движок принимает, но лишняя секция в конфиге — лишний повод
@@ -606,7 +696,10 @@ public sealed class SingBoxConfigCompiler
         // он переживает удаление программы и хранит ещё и выбор в селекторе.
         bool masque = usable.Any(s => s.IsSelfRegistering);
 
-        if (masque || options.StoreFakeIp)
+        // На телефоне — всегда: libbox заводит кэш сам, даже без этого раздела
+        // (с платформой — всегда, box.go), и тогда кладёт его куда решит.
+        // Заданный путь хотя бы наш и известен.
+        if (masque || options.StoreFakeIp || android)
         {
             var cache = Path.GetFullPath(options.CachePath);
 
@@ -663,6 +756,32 @@ public sealed class SingBoxConfigCompiler
     /// </remarks>
     private static JsonObject Certificates() => new() { ["store"] = "mozilla" };
 
+    /// <summary>Как маршрут «десинк» выходит из движка.</summary>
+    private enum DesyncWay
+    {
+        /// <summary>
+        /// <c>direct</c>: десинк делает кто-то рядом — winws2 на Windows, nfqws2
+        /// с root на телефоне, — он и видит поток на настоящем интерфейсе.
+        /// </summary>
+        Direct,
+
+        /// <summary>В ByeDPI исходящим <c>socks</c> (телефон без root).</summary>
+        Socks,
+
+        /// <summary><c>direct</c> с нарезкой приветствия самим движком (телефон без root и без ByeDPI).</summary>
+        Fragment,
+    }
+
+    /// <summary>
+    /// Десинк внутри движка — только на телефоне: на Windows его делает winws2,
+    /// и маршрут остаётся <c>direct</c>, как был.
+    /// </summary>
+    private static DesyncWay DesyncWayOf(SingBoxOptions options) =>
+        options.Platform != SingBoxPlatform.Android ? DesyncWay.Direct
+        : options.DesyncSocks is not null ? DesyncWay.Socks
+        : options.DesyncFragment != TlsFragment.Off ? DesyncWay.Fragment
+        : DesyncWay.Direct;
+
     /// <summary>
     /// Собирает минимальный конфиг для проверки одного сервера.
     /// </summary>
@@ -677,6 +796,12 @@ public sealed class SingBoxConfigCompiler
 
     /// <summary>Тег автоподбора по задержке; спрятан за селектором.</summary>
     private const string LatencyTag = "auto-latency";
+
+    /// <summary>Резолвер пинов телефона — файл hosts в папке приложения.</summary>
+    internal const string HostsTag = "nz-hosts";
+
+    private static bool HostsFileServer(SingBoxOptions options) =>
+        options.Platform == SingBoxPlatform.Android && !string.IsNullOrWhiteSpace(options.HostsFilePath);
 
     /// <summary>Резолвер для имён самих серверов подписки, всегда в обход туннеля.</summary>
     private const string BootstrapTag = "bootstrap";
@@ -843,10 +968,15 @@ public sealed class SingBoxConfigCompiler
     /// Теги должны быть уникальны — sing-box адресует outbound'ы по ним, а имена
     /// серверов в подписках повторяются.
     /// </summary>
-    private static Dictionary<ProxyServer, string> AssignUniqueTags(IReadOnlyList<ProxyServer> servers)
+    private static Dictionary<ProxyServer, string> AssignUniqueTags(IReadOnlyList<ProxyServer> servers, SingBoxOptions options)
     {
         var tags = new Dictionary<ProxyServer, string>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "direct", "auto" };
+
+        // Сервер по имени «desync» занял бы тег исходящего к ByeDPI. Только
+        // когда тот есть: иначе тег свободен, и прежние теги не меняются.
+        if (DesyncWayOf(options) == DesyncWay.Socks)
+            used.Add(SingBoxOptions.DesyncTag);
 
         foreach (var server in servers)
         {
@@ -919,7 +1049,12 @@ public sealed class SingBoxConfigCompiler
         if (options.RouterDns)
         {
             remote["server_port"] = 53;
-            remote["bind_interface"] = options.RouterDnsInterface;
+
+            // На Windows адаптер есть всегда (проверка в Compile). На телефоне
+            // его нет: привязка к имени потребовала бы Network.bindSocket, а
+            // защищённый сокет движка и так уходит в Wi-Fi.
+            if (!string.IsNullOrWhiteSpace(options.RouterDnsInterface))
+                remote["bind_interface"] = options.RouterDnsInterface;
         }
         if (options.DnsServerType == "https")
         {
@@ -1020,6 +1155,20 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
+        // Пины телефона (HostsFilePath): файл в папке приложения вместо
+        // системного hosts, которого без root не править.
+        bool hostsFile = HostsFileServer(options);
+
+        if (hostsFile)
+        {
+            servers.Add(new JsonObject
+            {
+                ["tag"] = HostsTag,
+                ["type"] = "hosts",
+                ["path"] = new JsonArray { options.HostsFilePath },
+            });
+        }
+
         // independent_cache не пишется: в 1.14.0 он объявлен устаревшим, а в
         // 1.16.0 будет убран, и кэш там разделяется сам по резолверам. Держать
         // ключ до последнего значило бы чинить его по чужому расписанию —
@@ -1048,6 +1197,23 @@ public sealed class SingBoxConfigCompiler
                 ["rcode"] = "NXDOMAIN",
             },
         };
+
+        // Пин телефона — раньше подставленных адресов и fakeip: на Windows
+        // системный hosts отвечает прежде, чем спрашивают движок, и бьёт
+        // и то и другое. Только A и AAAA: hosts Windows других записей
+        // не знает, а резолвер hosts на HTTPS (тип 65) ответил бы NXDOMAIN.
+        // Без кэша — правка файла должна доходить за его 5 с, а не за 600 с
+        // срока ответа.
+        if (hostsFile)
+        {
+            rules.Add(new JsonObject
+            {
+                ["preferred_by"] = new JsonArray { HostsTag },
+                ["query_type"] = new JsonArray { "A", "AAAA" },
+                ["server"] = HostsTag,
+                ["disable_cache"] = true,
+            });
+        }
 
         if (options.AddressOverrides.Count > 0)
         {
@@ -1299,6 +1465,9 @@ public sealed class SingBoxConfigCompiler
         }
     }
 
+    private static bool HealthInboundEmitted(SingBoxOptions options) =>
+        options.HealthInbound && options.Platform == SingBoxPlatform.Windows;
+
     private static JsonArray BuildInbounds(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
         var inbounds = options.UseTun
@@ -1318,7 +1487,11 @@ public sealed class SingBoxConfigCompiler
         // с туннелем локального прокси нет вовсе, и проверять проход трафика
         // было не через что. Порт один и тот же в обоих режимах, поэтому
         // супервизору не нужно знать, с TUN поднят движок или без него.
-        if (options.HealthInbound)
+        //
+        // На телефоне — никогда: слушатель на петле там виден любому
+        // приложению, пароль или нет (docs/android.md §7), а мерить туннель
+        // libbox умеет своим каналом.
+        if (HealthInboundEmitted(options))
         {
             var health = new JsonObject
             {
@@ -1384,27 +1557,37 @@ public sealed class SingBoxConfigCompiler
 
     private static JsonArray BuildTunInbound(SingBoxOptions options, IReadOnlyList<string> proxyAddresses)
     {
+        bool android = options.Platform == SingBoxPlatform.Android;
+
         var tun = new JsonObject
         {
             ["type"] = "tun",
             ["tag"] = "tun-in",
-            ["interface_name"] = options.TunInterfaceName,
-            ["address"] = options.Ipv6
-                ? new JsonArray { options.TunAddress, options.TunAddressV6 }
-                : new JsonArray { options.TunAddress },
-            ["mtu"] = options.TunMtu,
-            ["auto_route"] = true,
-            // strict_route выключен намеренно: он добавляет фильтры WFP,
-            // блокирующие трафик мимо туннеля, а нам нужно, чтобы direct
-            // и desync спокойно уходили на реальный интерфейс к WinDivert.
-            ["strict_route"] = false,
-            ["stack"] = "gvisor",
-
-            // Адаптеру TUN — только DNS по IPv4 (TunDnsAddress). Без ключа
-            // sing-tun ставит ему и IPv6-адрес DNS, а Java берёт DNS со всех
-            // адаптеров, IPv6 вперёд, и наш TUN в этом списке первый.
-            ["dns_address"] = new JsonArray { TunDnsAddress(options.TunAddress) },
         };
+
+        // Имя устройства на телефоне даёт VpnService, а libbox читает его
+        // обратно сам. Узел вставляется на прежнее место, чтобы Windows-конфиг
+        // не сдвинулся ни на байт.
+        if (!android)
+            tun["interface_name"] = options.TunInterfaceName;
+
+        tun["address"] = options.Ipv6
+            ? new JsonArray { options.TunAddress, options.TunAddressV6 }
+            : new JsonArray { options.TunAddress };
+        tun["mtu"] = options.TunMtu;
+        tun["auto_route"] = true;
+
+        // strict_route выключен намеренно: он добавляет фильтры WFP,
+        // блокирующие трафик мимо туннеля, а нам нужно, чтобы direct
+        // и desync спокойно уходили на реальный интерфейс к WinDivert.
+        // На телефоне libbox его не читает вовсе (allowBypass не зовём).
+        tun["strict_route"] = false;
+        tun["stack"] = "gvisor";
+
+        // Адаптеру TUN — только DNS по IPv4 (TunDnsAddress). Без ключа
+        // sing-tun ставит ему и IPv6-адрес DNS, а Java берёт DNS со всех
+        // адаптеров, IPv6 вперёд, и наш TUN в этом списке первый.
+        tun["dns_address"] = new JsonArray { TunDnsAddress(options.TunAddress) };
 
         if (options.Scope == TunnelScope.ProxyOnly)
         {
@@ -1458,7 +1641,27 @@ public sealed class SingBoxConfigCompiler
             tun["route_exclude_address"] = excluded;
         }
 
+        // Приложения мимо VPN — силами самой службы (addDisallowedApplication):
+        // своё (через него ходят ByeDPI и пробы «напрямую») и российские,
+        // которые ищут VPN (docs/android.md §7). Списки взаимоисключающи —
+        // проверено в Compile. Поля по uid libbox не принимает вовсе.
+        if (android && Strings(options.ExcludePackages) is { Count: > 0 } excludePackages)
+            tun["exclude_package"] = excludePackages;
+
+        if (android && Strings(options.IncludePackages) is { Count: > 0 } includePackages)
+            tun["include_package"] = includePackages;
+
         return new JsonArray { tun };
+    }
+
+    private static JsonArray Strings(IEnumerable<string> values)
+    {
+        var array = new JsonArray();
+
+        foreach (var value in values.Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim()).Distinct(StringComparer.Ordinal))
+            array.Add(value);
+
+        return array;
     }
 
     /// <summary>
@@ -1477,6 +1680,26 @@ public sealed class SingBoxConfigCompiler
         {
             new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
         };
+
+        // ByeDPI — аналог winws2 на телефоне без root: дочерний процесс,
+        // SOCKS5 на петле с именем и паролем на сессию (правка
+        // android/patches/byedpi-nz-auth.patch: без неё он открыт любому
+        // приложению). Только TCP: UDP-группы без root ByeDPI почти не умеет,
+        // и маршрут «десинк» ведёт UDP напрямую.
+        if (DesyncWayOf(options) == DesyncWay.Socks && options.DesyncSocks is { } socks)
+        {
+            outbounds.Add(new JsonObject
+            {
+                ["type"] = "socks",
+                ["tag"] = SingBoxOptions.DesyncTag,
+                ["server"] = "127.0.0.1",
+                ["server_port"] = socks.Port,
+                ["version"] = "5",
+                ["username"] = socks.Username,
+                ["password"] = socks.Password,
+                ["network"] = "tcp",
+            });
+        }
 
         // Endpoint'ы описаны отдельным разделом, но в группы входят наравне
         // с исходящими: для urltest и селектора это такой же тег.
@@ -2345,7 +2568,7 @@ public sealed class SingBoxConfigCompiler
         // режиме напрямую: замер 28.09 — через health-in пришёл домашний
         // адрес, тот же, что без прокси. «Проверка прохода трафика» проверяла
         // домашнюю сеть, а не туннель.
-        if (options.HealthInbound && haveServers)
+        if (HealthInboundEmitted(options) && haveServers)
         {
             rules.Add(new JsonObject
             {
@@ -2364,6 +2587,24 @@ public sealed class SingBoxConfigCompiler
         // Остальные правила при этом действительно лишние: всё, что не выведено
         // явно, и так уходит в туннель по final.
         var final = ResolveFinal(ruleSet, tags, options, haveServers);
+        var way = DesyncWayOf(options);
+
+        // Невыведенное идёт в десинк движка (ByeDPI или нарезка) — см.
+        // SingBoxOptions.DesyncDefault. Только при «по умолчанию — десинк»:
+        // при «напрямую» или VPN умолчание остаётся как есть.
+        bool desyncByDefault = way != DesyncWay.Direct && options.DesyncDefault
+            && ruleSet.Operating == OperatingMode.Selective
+            && ruleSet.DefaultMode == RoutingMode.Desync
+            && final == "direct";
+
+        // Куда правило ведёт на деле. На Windows «десинк» и «напрямую» для
+        // движка одно — direct; на телефоне без root «десинк» — свой путь.
+        string Effective(RoutingRule rule) =>
+            way != DesyncWay.Direct && rule.Mode == RoutingMode.Desync
+                ? SingBoxOptions.DesyncTag
+                : ResolveOutbound(rule.Mode, rule.Server, tags, options, haveServers);
+
+        var finalEffective = desyncByDefault ? SingBoxOptions.DesyncTag : final;
 
         IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
@@ -2372,9 +2613,13 @@ public sealed class SingBoxConfigCompiler
             // «напрямую» для sing-box одно и то же, и 117 тысяч имён в конфиге
             // ничего бы не решили. До маршрута этих правил не было вовсе, так
             // что поведение движка то же. Отправленный через VPN — пишется.
+            //
+            // Сравнивается путь на деле, а не исходящий (27.10): на телефоне
+            // без root реестр «десинком» идёт в ByeDPI, а умолчание — может
+            // и напрямую; тогда перечень нужен в конфиге.
             OperatingMode.Selective => ruleSet.Rules
                 .Where(r => !(Core.Services.ServiceCatalog.IsBulk(r.Value)
-                    && ResolveOutbound(r.Mode, r.Server, tags, options, haveServers) == final))
+                    && Effective(r) == finalEffective))
                 .ToList(),
 
             OperatingMode.ProxyAll => ForProxyAll(ruleSet.Rules),
@@ -2426,10 +2671,26 @@ public sealed class SingBoxConfigCompiler
         foreach (var rule in applicable)
         {
             var node = BuildRule(rule, tags, options, haveServers);
-            if (node is not null)
+
+            if (node is null)
+                continue;
+
+            if (way != DesyncWay.Direct && rule.Mode == RoutingMode.Desync)
+            {
+                foreach (var desync in DesyncRules(node, options, way))
+                    rules.Add(desync);
+            }
+            else
+            {
                 rules.Add(node);
+            }
         }
 
+        if (desyncByDefault)
+        {
+            foreach (var desync in DesyncDefaultRules(options, way))
+                rules.Add(desync);
+        }
 
         return new JsonObject
         {
@@ -2504,6 +2765,177 @@ public sealed class SingBoxConfigCompiler
         };
     }
 
+    /// <summary>Имя пакета Android: <c>org.telegram.messenger</c>, а не <c>Telegram.exe</c> и не путь.</summary>
+    internal static bool LooksLikePackage(string value)
+    {
+        var text = value.Trim();
+
+        return !text.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            && System.Text.RegularExpressions.Regex.IsMatch(text, @"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$");
+    }
+
+    /// <summary>
+    /// Правило «десинк» на телефоне без root — несколькими правилами движка на том же месте.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// На том же месте, а не отдельным правилом раньше всех: первое
+    /// совпадение решает, и ранний «десинк» отнял бы имя у правила «через
+    /// VPN» выше него. Поэтому каждое следующее повторяет совпадение
+    /// исходного и стоит вплотную к нему.
+    /// </para>
+    /// <para>
+    /// По порядку: QUIC — отказом (<see cref="SingBoxOptions.DesyncRejectQuic"/>),
+    /// затем TCP — в ByeDPI или с нарезкой приветствия, затем остальное
+    /// (UDP) — напрямую, как было.
+    /// </para>
+    /// <para>
+    /// Перед ByeDPI имя разрешается движком (<c>resolve</c>): ему уходит адрес,
+    /// а не имя. Иначе имя разрешал бы сам ByeDPI — системным DNS мимо VPN,
+    /// который у части операторов подменяют (ByeDPI запускается с <c>-N</c>
+    /// и имя отвергнет). Резолвер — правилами DNS движка, так что пины
+    /// (<c>nz-hosts</c>) и подставленные адреса действуют и здесь; fakeip
+    /// при таком разрешении движок не выдаёт.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<JsonObject> DesyncRules(JsonObject node, SingBoxOptions options, DesyncWay way)
+    {
+        JsonObject Match()
+        {
+            var match = (JsonObject)node.DeepClone();
+            match.Remove("outbound");
+            return match;
+        }
+
+        if (options.DesyncRejectQuic)
+        {
+            var quic = Match();
+            quic["network"] = new JsonArray { "udp" };
+            quic["port"] = new JsonArray { 443 };
+            quic["action"] = "reject";
+            yield return quic;
+        }
+
+        if (way == DesyncWay.Fragment)
+        {
+            // Нарезка действует только на TLS поверх TCP — UDP её не заметит,
+            // так что второе правило ни к чему: одно на всё.
+            yield return WithFragment(node, options);
+            yield break;
+        }
+
+        // Правилу только по адресам разрешать нечего: ip_cidr совпадает лишь
+        // с соединением, у которого уже адрес. Правило по имени или по пакету
+        // ловит и соединения с именем (fakeip, sniff) — им разрешение нужно.
+        if (node.Any(item => item.Key is not ("ip_cidr" or "outbound")))
+        {
+            var resolve = Match();
+            resolve["network"] = new JsonArray { "tcp" };
+            resolve["action"] = "resolve";
+            resolve["strategy"] = "prefer_ipv4";
+            yield return resolve;
+        }
+
+        var tcp = Match();
+        tcp["network"] = new JsonArray { "tcp" };
+        yield return ToDesync(tcp, options);
+
+        yield return node;
+    }
+
+    /// <summary>
+    /// Хвост маршрутов при «по умолчанию — десинк» (<see cref="SingBoxOptions.DesyncDefault"/>):
+    /// невыведенное — тем же путём, что правило «десинк».
+    /// </summary>
+    private static IEnumerable<JsonObject> DesyncDefaultRules(SingBoxOptions options, DesyncWay way)
+    {
+        // Имена секций pass — напрямую, мимо ByeDPI (SingBoxOptions.DesyncPassHosts).
+        // Здесь, в хвосте, это задевает только невыведенное: всё, что
+        // выше решили правила, уже ушло своим путём.
+        if (way == DesyncWay.Socks && options.DesyncPassHosts.Count > 0)
+            yield return new JsonObject { ["domain_suffix"] = Strings(options.DesyncPassHosts), ["outbound"] = "direct" };
+
+        if (options.DesyncRejectQuic)
+        {
+            yield return new JsonObject
+            {
+                ["network"] = new JsonArray { "udp" },
+                ["port"] = new JsonArray { 443 },
+                ["action"] = "reject",
+            };
+        }
+
+        if (way == DesyncWay.Fragment)
+        {
+            // Без условий и без выхода: опции ложатся на соединение, а выход
+            // даёт final — direct.
+            yield return WithFragment(new JsonObject { ["action"] = "route-options" }, options);
+            yield break;
+        }
+
+        yield return new JsonObject
+        {
+            ["network"] = new JsonArray { "tcp" },
+            ["action"] = "resolve",
+            ["strategy"] = "prefer_ipv4",
+        };
+
+        yield return new JsonObject
+        {
+            ["network"] = new JsonArray { "tcp" },
+            ["outbound"] = SingBoxOptions.DesyncTag,
+        };
+    }
+
+    /// <summary>
+    /// В ByeDPI — кроме имён секций <c>pass</c>: те проваливаются к следующему
+    /// правилу, то есть напрямую.
+    /// </summary>
+    private static JsonObject ToDesync(JsonObject match, SingBoxOptions options)
+    {
+        if (options.DesyncPassHosts.Count == 0)
+        {
+            match["outbound"] = SingBoxOptions.DesyncTag;
+            return match;
+        }
+
+        // В простом правиле условия по имени складываются через «или», и
+        // исключение пришлось бы вписать в каждое. Логическое «и» с
+        // обращённым списком делает это одним узлом.
+        return new JsonObject
+        {
+            ["type"] = "logical",
+            ["mode"] = "and",
+            ["rules"] = new JsonArray
+            {
+                match,
+                new JsonObject { ["domain_suffix"] = Strings(options.DesyncPassHosts), ["invert"] = true },
+            },
+            ["outbound"] = SingBoxOptions.DesyncTag,
+        };
+    }
+
+    /// <summary>
+    /// Нарезка приветствия правилом (route-options движка): записями TLS —
+    /// дешевле, пакетами TCP — сильнее. Оба сразу движок не принимает.
+    /// </summary>
+    private static JsonObject WithFragment(JsonObject rule, SingBoxOptions options)
+    {
+        if (options.DesyncFragment == TlsFragment.Packets)
+        {
+            rule["tls_fragment"] = true;
+
+            if (!string.IsNullOrWhiteSpace(options.DesyncFragmentFallbackDelay))
+                rule["tls_fragment_fallback_delay"] = options.DesyncFragmentFallbackDelay;
+        }
+        else
+        {
+            rule["tls_record_fragment"] = true;
+        }
+
+        return rule;
+    }
+
     private static JsonObject? BuildRule(
         RoutingRule rule,
         IReadOnlyDictionary<ProxyServer, string> tags,
@@ -2515,6 +2947,20 @@ public sealed class SingBoxConfigCompiler
 
         switch (rule.Match)
         {
+            case MatchKind.Process when options.Platform == SingBoxPlatform.Android:
+            {
+                // На телефоне владелец соединения — пакет, а не файл: process_name
+                // и process_path там не работают (документация: только Linux,
+                // Windows, macOS). Похожее на имя пакета идёт в package_name,
+                // остальное (*.exe, пути) не значит на телефоне ничего и
+                // выбрасывается — правило без условия совпало бы со всем.
+                if (!LooksLikePackage(rule.Value))
+                    return null;
+
+                node["package_name"] = new JsonArray { rule.Value.Trim() };
+                break;
+            }
+
             case MatchKind.Process:
             {
                 // sing-box различает имя файла и полный путь разными полями.

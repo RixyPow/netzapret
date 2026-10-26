@@ -3,6 +3,7 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using NetZapret.Core;
 using NetZapret.Gui.Views;
+using NetZapret.Subscriptions;
 using Xunit;
 
 namespace NetZapret.Gui.Tests;

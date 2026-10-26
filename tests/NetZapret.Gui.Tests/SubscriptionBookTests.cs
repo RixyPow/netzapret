@@ -1,5 +1,6 @@
 using System.IO;
 using NetZapret.Core;
+using NetZapret.Subscriptions;
 using Xunit;
 
 namespace NetZapret.Gui.Tests;

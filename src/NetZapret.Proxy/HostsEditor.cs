@@ -1304,6 +1304,11 @@ public static class HostsEditor
     /// </remarks>
     public static bool FlushDns()
     {
+        // На телефоне сбрасывать нечего и нечем: пины читает движок из своего
+        // файла и сам замечает правку (не чаще раза в 5 с), ipconfig там нет.
+        if (!OperatingSystem.IsWindows())
+            return true;
+
         try
         {
             using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo

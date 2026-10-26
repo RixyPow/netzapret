@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using NetZapret.Core;
 
-namespace NetZapret.Gui;
+namespace NetZapret.Subscriptions;
 
 /// <summary>Одна подписка: имя, ссылка и то, раскрыта ли её папка.</summary>
 public sealed class SubscriptionEntry
@@ -204,14 +204,22 @@ public sealed class SubscriptionBook
     /// Поставщик перенёс подписку (<c>new-url</c>): ссылка в книге, в настройках и запас — новые.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Как в Happ (владелец 15.10: «делай»): поставщик меняет адрес панели,
     /// а люди узнают об этом, когда старый перестаёт отвечать. Правится
     /// переданная книга, а не перечитанная с диска: вкладка VPN держит свою
     /// в памяти и при следующей записи вернула бы старую ссылку. Ссылки —
     /// пароли: в журнале только имя подписки.
+    /// </para>
+    /// <para>
+    /// Журнал — через <paramref name="note"/>: книга с 27.10 живёт в библиотеке
+    /// (её читает и сборка конфига на телефоне), а общий журнал окна —
+    /// в окне. Строка та же, что прежде, ссылки в ней нет.
+    /// </para>
     /// </remarks>
+    /// <param name="note">Куда сказать о переносе; <c>null</c> — никуда.</param>
     /// <returns>Перенесено ли хоть что-то.</returns>
-    public static bool Follow(SubscriptionBook book, string oldUrl, string? newUrl)
+    public static bool Follow(SubscriptionBook book, string oldUrl, string? newUrl, Action<string>? note = null)
     {
         if (string.IsNullOrWhiteSpace(newUrl) || Same(oldUrl, newUrl))
             return false;
@@ -231,8 +239,8 @@ public sealed class SubscriptionBook
         if (Same(settings.SubscriptionUrl, oldUrl))
             (settings with { SubscriptionUrl = newUrl }).Save(AppSettings.DefaultPath);
 
-        NetZapret.Subscriptions.SubscriptionPool.MoveReserve(oldUrl, newUrl);
-        Journal.Write("подписка", $"«{moved[0].Name}»: поставщик перенёс подписку на новый адрес — ссылка заменена");
+        SubscriptionPool.MoveReserve(oldUrl, newUrl);
+        note?.Invoke($"«{moved[0].Name}»: поставщик перенёс подписку на новый адрес — ссылка заменена");
 
         return true;
     }
