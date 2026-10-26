@@ -274,6 +274,7 @@ public sealed record ProxyServer
 
     /// <summary>Движок, способный обслужить этот сервер.</summary>
     /// <remarks>
+    /// <para>
     /// По протоколу и транспорту отсеивать больше нечего. Транспорт xhttp —
     /// придумка Xray, и до перехода на сборку extended серверы с ним
     /// приходилось пропускать: подписка из семнадцати серверов показывала
@@ -282,9 +283,38 @@ public sealed record ProxyServer
     /// Остаётся шифр Shadowsocks: незнакомый sing-box ронял весь конфиг
     /// (обсуждение №38, «unknown method: chacha20-poly1305»), поэтому сервер
     /// с ним пропускается — <see cref="ShadowsocksMethods"/>.
+    /// </para>
+    /// <para>
+    /// И REALITY без годного открытого ключа. Там же, в №38, 25.10: публичная
+    /// подписка на ~11 800 серверов роняла туннель целиком — «initialize
+    /// outbound[198]: invalid public_key». Замер 27.10 по этой подписке: из 2 602
+    /// ссылок с REALITY у двух нет <c>pbk</c> вовсе, и генератор включал REALITY
+    /// без ключа. Ключ — base64url 32 байт (x25519); иной sing-box отвергает
+    /// так же, поэтому мерится декодированием, а не наличием.
+    /// </para>
     /// </remarks>
     public bool IsSupportedBySingBox =>
-        Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null;
+        (Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null)
+        && (!Security.Equals("reality", StringComparison.OrdinalIgnoreCase) || IsRealityKey(RealityPublicKey));
+
+    /// <summary>Открытый ключ REALITY: base64 (обычный или url) от 32 байт.</summary>
+    internal static bool IsRealityKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            return false;
+
+        var text = key.Trim().TrimEnd('=').Replace('-', '+').Replace('_', '/');
+        int padding = text.Length % 4;
+
+        if (padding == 1)
+            return false;
+
+        if (padding > 0)
+            text = text.PadRight(text.Length + (4 - padding), '=');
+
+        Span<byte> bytes = stackalloc byte[64];
+        return Convert.TryFromBase64String(text, bytes, out int written) && written == 32;
+    }
 
     /// <summary>
     /// Адрес, в который вообще можно дозвониться.
