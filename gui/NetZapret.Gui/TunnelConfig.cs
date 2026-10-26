@@ -100,7 +100,8 @@ internal static class TunnelConfig
                 // ссылка в книге новая; срок кончается — напомнить, раз в сутки.
                 foreach (var part in pool.Parts.Where(p => p.Info is not null))
                 {
-                    SubscriptionBook.Follow(book, part.Source.Url, part.Info!.NewUrl);
+                    SubscriptionBook.Follow(book, part.Source.Url, part.Info!.NewUrl,
+                        message => Journal.Write("подписка", message));
                     SubscriptionNotices.RemindExpiry(part.Source.Name, part.Source.Url, part.Info);
                 }
 

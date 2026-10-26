@@ -86,7 +86,8 @@ internal static class SubscriptionRecheck
                     continue;
                 }
 
-                SubscriptionBook.Follow(SubscriptionBook.Load(), part.Source.Url, info.NewUrl);
+                SubscriptionBook.Follow(SubscriptionBook.Load(), part.Source.Url, info.NewUrl,
+                    message => Journal.Write("подписка", message));
                 SubscriptionNotices.RemindExpiry(part.Source.Name, part.Source.Url, info);
 
                 // Сравнивается с тем, что ушло в движок: с запасом, а не с пулом —

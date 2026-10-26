@@ -938,7 +938,8 @@ public partial class VpnView : UserControl
             // книге тоже: вкладка держит свою и записала бы старую обратно.
             if (read.Source != SubscriptionReadSource.Reserve)
             {
-                SubscriptionBook.Follow(_book, row.Entry.Url, info.NewUrl);
+                SubscriptionBook.Follow(_book, row.Entry.Url, info.NewUrl,
+                    message => Journal.Write("подписка", message));
                 SubscriptionNotices.RemindExpiry(row.Entry.Name, row.Entry.Url, info);
             }
 

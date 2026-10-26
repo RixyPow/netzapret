@@ -10,6 +10,7 @@ using NetZapret.Core.Rules;
 using NetZapret.Core.Themes;
 using NetZapret.Core.Updates;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
