@@ -140,11 +140,12 @@ public static class ByeDpiCommandLine
     /// группа из первой тридцатки. Прочитано в коде 27.10, не замерено.
     /// </para>
     /// <para>
-    /// Тридцать одна — номера 0–30, где сдвиг определён. Правка ByeDPI
-    /// (<c>(uint64_t)1 &lt;&lt; dp->id</c>) вернула бы 64.
+    /// Наша правка ByeDPI (<c>android/patches/byedpi-nz-auth.patch</c>, 27.10)
+    /// ставит <c>(uint64_t)1 &lt;&lt; dp->id</c> — тогда групп 64, сколько бит
+    /// в маске. Сборка ByeDPI без правки снова упрётся в тридцать одну.
     /// </para>
     /// </remarks>
-    public const int GroupLimit = 31;
+    public const int GroupLimit = 64;
 
     /// <summary>Собирает запуск ByeDPI.</summary>
     /// <exception cref="InvalidOperationException">

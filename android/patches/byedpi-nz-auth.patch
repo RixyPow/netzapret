@@ -11,6 +11,21 @@ index 02f2597..8fb8254 100644
  
  struct buffer {
      size_t size;
+diff --git a/main.c b/main.c
+index 8e4860b..cdf4e2c 100644
+--- a/main.c
++++ b/main.c
+@@ -605,7 +605,9 @@ static struct desync_params *add_group(struct desync_params *prev)
+         prev->next = dp;
+     }
+     dp->id = params.dp_n;
+-    dp->bit = 1 << dp->id;
++    /* NetZapret: 1 — int, сдвиг на 31 и больше — неопределённое поведение:
++       на arm64 бит повторялся, и группы с 32-й были недостижимы. */
++    dp->bit = (uint64_t)1 << dp->id;
+     dp->str = "";
+     
+     params.dp_n++;
 diff --git a/proxy.c b/proxy.c
 index 5b96d3c..58eb95e 100644
 --- a/proxy.c

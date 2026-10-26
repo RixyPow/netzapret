@@ -498,7 +498,9 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
 
         var text = new System.Text.StringBuilder("--wf-tcp-out=443\n");
 
-        for (int i = 0; i < 40; i++)
+        // Больше ByeDpiCommandLine.GroupLimit (64 с правкой сдвига бита ByeDPI):
+        // чередование рецептов не даёт склеить соседние секции.
+        for (int i = 0; i < 80; i++)
         {
             text.Append($"--new\n--name=s{i}\n--filter-tcp=443\n--hostlist=lists/same.txt\n");
             text.Append(i % 2 == 0 ? "--lua-desync=multidisorder:pos=1\n" : "--lua-desync=hostfakesplit:host=ozon.ru\n");
