@@ -167,8 +167,7 @@ public static class RouterDnsConnection
     private static async Task<DnsWire.Answer?> AskAsync(Lan lan, string address, string name, CancellationToken ct)
     {
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        if (OperatingSystem.IsWindows())
-            socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(lan.Index));
+        Core.PhysicalNetwork.Bind(socket, lan.Index);
         socket.Bind(new IPEndPoint(lan.LocalAddress, 0));
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(TimeSpan.FromSeconds(4));

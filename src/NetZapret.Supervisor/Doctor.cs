@@ -271,7 +271,7 @@ public static class Doctor
     private static IReadOnlyList<DoctorCheck> Engines()
     {
         var lines = new List<DoctorCheck>();
-        var singBox = Path.Combine(AppContext.BaseDirectory, "engines", "sing-box", "sing-box.exe");
+        var singBox = Path.Combine(AppPaths.ProgramDirectory, "engines", "sing-box", "sing-box.exe");
 
         if (File.Exists(singBox))
         {

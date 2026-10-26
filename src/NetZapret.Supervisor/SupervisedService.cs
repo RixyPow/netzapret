@@ -65,7 +65,14 @@ public abstract class SupervisedService
 {
     public abstract string Name { get; }
 
-    protected Process? Process { get; set; }
+    /// <summary>Запущенный движок (<see cref="EngineLauncher.Start"/>).</summary>
+    protected IEngineProcess? Engine { get; private set; }
+
+    /// <summary>
+    /// Процесс ОС движка; <c>null</c> — не запущен или живёт не отдельным
+    /// процессом (libbox внутри приложения на Android).
+    /// </summary>
+    protected Process? Process => (Engine as OsEngineProcess)?.Process;
 
     /// <summary>
     /// Куда складывать вывод службы. Если не задан, вывод отбрасывается,
@@ -85,7 +92,7 @@ public abstract class SupervisedService
     private string? _outputLogPath;
     private RollingLog? _log;
 
-    public int? ProcessId => Process is { HasExited: false } ? Process.Id : null;
+    public int? ProcessId => Engine is { HasExited: false } ? Engine.Id : null;
 
     public DateTimeOffset? StartedAt { get; private set; }
 
@@ -116,7 +123,7 @@ public abstract class SupervisedService
     public bool DnsDown { get; protected set; }
 
     /// <summary>Процесс существует и не завершился.</summary>
-    public bool IsProcessAlive => Process is { HasExited: false };
+    public bool IsProcessAlive => Engine is { HasExited: false };
 
     /// <summary>
     /// Функциональная проверка: слушается ли порт, отвечает ли API.
@@ -193,7 +200,7 @@ public abstract class SupervisedService
 
         try
         {
-            Process = Process.Start(BuildStartInfo());
+            Engine = EngineLauncher.Start(this, BuildStartInfo());
         }
         catch (Exception ex)
         {
@@ -201,7 +208,7 @@ public abstract class SupervisedService
             return false;
         }
 
-        if (Process is null)
+        if (Engine is null)
         {
             LastError = "процесс не запустился";
             return false;
@@ -209,15 +216,16 @@ public abstract class SupervisedService
 
         // Включаем в задание сразу после запуска: если супервизор умрёт
         // аварийно, система погасит движок вместе с ним.
-        Job?.Assign(Process);
+        if (Process is { } process)
+            Job?.Assign(process);
 
         // Вывод обязан вычитываться. Перенаправленный и никем не читаемый
         // конвейер заполняется и намертво блокирует дочерний процесс на записи
         // в stdout — служба при этом выглядит живой и проходит проверку порта.
         var pumps = new[]
         {
-            StartOutputPump(Process.StandardOutput),
-            StartOutputPump(Process.StandardError),
+            StartOutputPump(Engine.StandardOutput),
+            StartOutputPump(Engine.StandardError),
         };
 
         StartedAt = DateTimeOffset.Now;
@@ -239,8 +247,8 @@ public abstract class SupervisedService
                 {
                 }
 
-                LastError = ExitReason(Process.ExitCode, _fatal)
-                    + (Advice(Process.ExitCode) is { } advice ? " — " + advice : string.Empty);
+                LastError = ExitReason(Engine.ExitCode, _fatal)
+                    + (Advice(Engine.ExitCode) is { } advice ? " — " + advice : string.Empty);
                 return false;
             }
 
@@ -263,17 +271,17 @@ public abstract class SupervisedService
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (Process is null || Process.HasExited)
+        if (Engine is null || Engine.HasExited)
         {
-            Process = null;
+            Engine = null;
             StartedAt = null;
             return;
         }
 
         try
         {
-            Process.Kill(entireProcessTree: true);
-            await Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            Engine.Kill(entireProcessTree: true);
+            await Engine.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
         }
         catch (Exception)
         {
@@ -281,8 +289,8 @@ public abstract class SupervisedService
         }
         finally
         {
-            Process?.Dispose();
-            Process = null;
+            Engine?.Dispose();
+            Engine = null;
             StartedAt = null;
             OnStopped();
         }

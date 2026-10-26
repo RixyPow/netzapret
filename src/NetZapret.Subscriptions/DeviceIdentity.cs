@@ -31,14 +31,30 @@ public static class DeviceIdentity
     /// <summary>Постоянный номер этого устройства: 32 шестнадцатеричных знака.</summary>
     public static string Id => Hwid.Value;
 
+    /// <summary>
+    /// Описание устройства от приложения; <c>null</c> — читается из Windows.
+    /// </summary>
+    /// <remarks>
+    /// Реестра на Android нет, а назваться панели «Windows» с телефона —
+    /// неправда, которую панель с лимитом устройств посчитала бы чужим
+    /// устройством. Приложение ставит его до первого запроса подписки:
+    /// номер считается один раз.
+    /// </remarks>
+    public static Func<DeviceDescription>? Describe { get; set; }
+
     /// <summary>Заголовки, которыми клиенты с HWID называют себя панели.</summary>
-    public static IReadOnlyList<KeyValuePair<string, string>> Headers() =>
-    [
-        new("x-hwid", Id),
-        new("x-device-os", "Windows"),
-        new("x-ver-os", Environment.OSVersion.Version.ToString()),
-        new("x-device-model", Model()),
-    ];
+    public static IReadOnlyList<KeyValuePair<string, string>> Headers()
+    {
+        var described = Describe?.Invoke();
+
+        return
+        [
+            new("x-hwid", Id),
+            new("x-device-os", described?.Os ?? "Windows"),
+            new("x-ver-os", described?.OsVersion ?? Environment.OSVersion.Version.ToString()),
+            new("x-device-model", Model(described)),
+        ];
+    }
 
     /// <summary>Отпечаток из идентификатора Windows; запасной — из имени машины.</summary>
     internal static string FromSeed(string seed) =>
@@ -49,20 +65,24 @@ public static class DeviceIdentity
     {
         // Без MachineGuid (урезанная система, запрет на чтение) — имя машины:
         // тоже постоянное, и тоже уходит только отпечатком.
-        var seed = Read(@"SOFTWARE\Microsoft\Cryptography", "MachineGuid") ?? Environment.MachineName;
+        var seed = Describe?.Invoke().Seed is { Length: > 0 } given
+            ? given
+            : Read(@"SOFTWARE\Microsoft\Cryptography", "MachineGuid") ?? Environment.MachineName;
 
         return FromSeed(seed);
     }
 
     /// <summary>Модель компьютера из описания BIOS; неизвестна — «Windows PC».</summary>
-    private static string Model()
+    private static string Model(DeviceDescription? described)
     {
-        var model = Read(@"HARDWARE\DESCRIPTION\System\BIOS", "SystemProductName")?.Trim();
+        var model = (described is null
+            ? Read(@"HARDWARE\DESCRIPTION\System\BIOS", "SystemProductName")
+            : described.Model)?.Trim();
 
         // Заголовок HTTP — только печатные ASCII: модель с чем-то иным
         // уронила бы весь запрос подписки, а не одно поле.
         return string.IsNullOrEmpty(model) || model.Any(c => c < 0x20 || c > 0x7E)
-            ? "Windows PC"
+            ? described?.Os ?? "Windows PC"
             : model;
     }
 
@@ -85,3 +105,10 @@ public static class DeviceIdentity
         }
     }
 }
+
+/// <summary>Что устройство говорит о себе панели подписки.</summary>
+/// <param name="Seed">Постоянный исходник номера; панели уходит только его отпечаток.</param>
+/// <param name="Os">Система — заголовок <c>x-device-os</c>.</param>
+/// <param name="OsVersion">Её версия — <c>x-ver-os</c>.</param>
+/// <param name="Model">Модель — <c>x-device-model</c>; не печатная ASCII — заменяется на <paramref name="Os"/>.</param>
+public sealed record DeviceDescription(string Seed, string Os, string OsVersion, string Model);

@@ -22,7 +22,7 @@ public sealed class SingBoxRunner : IAsyncDisposable
 {
     private readonly string _executablePath;
     private readonly string _configPath;
-    private Process? _process;
+    private Core.IEngineProcess? _process;
     private bool _disposed;
 
     public SingBoxRunner(string executablePath, string configPath)
@@ -62,7 +62,7 @@ public sealed class SingBoxRunner : IAsyncDisposable
             RedirectStandardError = true,
         };
 
-        _process = Process.Start(startInfo)
+        _process = Core.EngineLauncher.Start(this, startInfo)
             ?? throw new InvalidOperationException($"Не удалось запустить {_executablePath}.");
 
         return await WaitForPortAsync(readinessPort, timeout, cancellationToken);

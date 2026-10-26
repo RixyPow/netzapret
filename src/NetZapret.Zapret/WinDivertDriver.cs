@@ -119,7 +119,7 @@ public static class WinDivertDriver
         if (alive.Count > 0)
             return $"Драйвер перехвата оставлен: им пользуется {string.Join(", ", alive)}.";
 
-        var engines = Path.Combine(AppContext.BaseDirectory, ZapretPaths.BundleDirectory);
+        var engines = Path.Combine(Core.AppPaths.ProgramDirectory, ZapretPaths.BundleDirectory);
         var stopped = new List<string>();
         var foreign = new List<string>();
 

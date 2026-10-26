@@ -28,6 +28,12 @@ public sealed class ProcessJob : IDisposable
 
     public ProcessJob()
     {
+        // Объекты задания есть только в Windows; вне её kernel32 нет вовсе,
+        // и вызов бросил бы DllNotFoundException посреди запуска надзора.
+        // Без задания поведение прежнее (IsAvailable = false).
+        if (!OperatingSystem.IsWindows())
+            return;
+
         _handle = CreateJobObjectW(IntPtr.Zero, null);
 
         if (_handle == IntPtr.Zero)

@@ -214,8 +214,7 @@ public static class DnsSurvey
         if (index is not { } value)
             return;
 
-        // IP_UNICAST_IF = 31; индекс — в сетевом порядке байт.
-        socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(value));
+        Core.PhysicalNetwork.Bind(socket, value);
     }
 
     /// <summary>Один запрос по UDP; ответ и время, либо причина отказа.</summary>

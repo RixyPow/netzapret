@@ -42,7 +42,7 @@ public static class TgWsProxy
 
     /// <summary>Где движок лежит в поставке.</summary>
     public static string Executable(string? baseDirectory = null) =>
-        Path.Combine(baseDirectory ?? AppContext.BaseDirectory, "engines", "tg-ws-proxy", "tg-ws-proxy.exe");
+        Path.Combine(baseDirectory ?? AppPaths.ProgramDirectory, "engines", "tg-ws-proxy", "tg-ws-proxy.exe");
 
     /// <summary>Новый секрет — 16 случайных байтов, 32 шестнадцатеричных знака.</summary>
     public static string NewSecret() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();

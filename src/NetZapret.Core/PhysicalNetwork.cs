@@ -38,9 +38,47 @@ public static class PhysicalNetwork
     public const string Offline = "нет сети — компьютер не подключён к Wi-Fi или кабелю";
 
     /// <summary>
+    /// Откуда брать физическую сеть, если не из адаптеров Windows; <c>null</c> — из них.
+    /// </summary>
+    /// <remarks>
+    /// На Android шлюзы адаптеров не читаются: .NET бросает
+    /// PlatformNotSupportedException на GatewayAddresses (/proc/net/route
+    /// приложению закрыт). Физическую сеть там знает ConnectivityManager —
+    /// приложение отдаёт индекс её интерфейса или <c>null</c>, когда сети нет.
+    /// </remarks>
+    public static Func<int?>? InterfaceSource { get; set; }
+
+    /// <summary>
+    /// Чем привязывать сокет к физической сети, если не IP_UNICAST_IF; <c>null</c> — им.
+    /// </summary>
+    /// <remarks>
+    /// IP_UNICAST_IF есть только в Windows. На Android сокет уводят мимо
+    /// своего TUN иначе — VpnService.protect(fd) или Network.bindSocket, — и это
+    /// знает только приложение.
+    /// </remarks>
+    public static Action<Socket, int>? SocketBinder { get; set; }
+
+    /// <summary>
     /// Индекс физического адаптера с маршрутом по умолчанию; <c>null</c> — не нашли.
     /// </summary>
-    public static int? Interface()
+    public static int? Interface() => InterfaceSource is { } source ? source() : FromAdapters();
+
+    /// <summary>Привязывает сокет к физическому адаптеру: исходящие пойдут через него, мимо TUN.</summary>
+    public static void Bind(Socket socket, int index)
+    {
+        if (SocketBinder is { } binder)
+        {
+            binder(socket, index);
+            return;
+        }
+
+        // IP_UNICAST_IF = 31; индекс — в сетевом порядке байт. Вне Windows
+        // такого параметра нет, и без привязчика сокет идёт по таблице маршрутов.
+        if (OperatingSystem.IsWindows())
+            socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(index));
+    }
+
+    private static int? FromAdapters()
     {
         var candidates = new List<Candidate>();
 

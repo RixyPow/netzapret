@@ -58,7 +58,7 @@ public static class InstallRoot
     {
         try
         {
-            if (Find(Directory.GetCurrentDirectory(), AppContext.BaseDirectory) is { } root)
+            if (Find(Directory.GetCurrentDirectory(), AppPaths.ProgramDirectory) is { } root)
                 Directory.SetCurrentDirectory(root);
         }
         catch (Exception)
