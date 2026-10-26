@@ -1,0 +1,8 @@
+{
+  "//": "Приложение Android собирается .NET 10: у .NET 8 нет рабочей нагрузки под Android API 36. Windows-часть по-прежнему на SDK из корневого global.json.",
+  "sdk": {
+    "version": "10.0.403",
+    "rollForward": "latestFeature",
+    "allowPrerelease": false
+  }
+}

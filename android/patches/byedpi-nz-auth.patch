@@ -1,0 +1,157 @@
+diff --git a/conev.h b/conev.h
+index 02f2597..8fb8254 100644
+--- a/conev.h
++++ b/conev.h
+@@ -53,6 +53,8 @@ typedef int (*evcb_t)(struct poolhd *, struct eval *, int);
+ #define FLAG_S5 2
+ #define FLAG_CONN 4
+ #define FLAG_HTTP 8
++/* NetZapret: SOCKS5 ждёт имя и пароль (RFC 1929). */
++#define FLAG_S5AUTH 16
+ 
+ struct buffer {
+     size_t size;
+diff --git a/proxy.c b/proxy.c
+index 5b96d3c..58eb95e 100644
+--- a/proxy.c
++++ b/proxy.c
+@@ -151,11 +151,65 @@ static int resolve(const char *chost, int len,
+ }
+ 
+ 
++/*
++ * NetZapret: имя и пароль SOCKS5 (RFC 1929) из переменной окружения
++ * NZ_BYEDPI_AUTH=имя:пароль. На телефоне любое приложение может открыть
++ * 127.0.0.1 чужого приложения, а ByeDPI ходит мимо VPN: без пароля через
++ * него узнаётся настоящий адрес, а сам ответ 05 00 выдаёт средство обхода.
++ * С паролем на приветствие без метода 0x02 ByeDPI молчит и закрывает
++ * соединение — сканеру нечего опознать.
++ */
++static const char *nz_auth_user, *nz_auth_pass;
++static size_t nz_auth_ulen, nz_auth_plen;
++static int nz_auth_init;
++
++static int nz_auth_enabled(void)
++{
++    if (!nz_auth_init) {
++        nz_auth_init = 1;
++        const char *v = getenv("NZ_BYEDPI_AUTH");
++        const char *sep = v ? strchr(v, ':') : 0;
++        if (sep && sep != v && sep[1] && (sep - v) < 256 && strlen(sep + 1) < 256) {
++            char *copy = strdup(v);
++            if (copy) {
++                copy[sep - v] = 0;
++                nz_auth_user = copy;
++                nz_auth_pass = copy + (sep - v) + 1;
++                nz_auth_ulen = strlen(nz_auth_user);
++                nz_auth_plen = strlen(nz_auth_pass);
++            }
++        }
++    }
++    return nz_auth_user != 0;
++}
++
++/* Сравнение за время, не зависящее от совпавшей части. */
++static int nz_same(const char *a, size_t alen, const char *b, size_t blen)
++{
++    uint8_t diff = (uint8_t)(alen != blen);
++    for (size_t i = 0; i < alen && i < blen; i++)
++        diff |= (uint8_t)(a[i] ^ b[i]);
++    return diff == 0;
++}
++
++/* 0 — без пароля, 1 — ждём имя и пароль, -1 — закрыть. */
+ static int auth_socks5(int fd, const char *buffer, ssize_t n)
+ {
+     if (n <= 2 || (uint8_t)buffer[1] != (n - 2)) {
+         return -1;
+     }
++    if (nz_auth_enabled()) {
++        for (long i = 2; i < n; i++)
++            if ((uint8_t)buffer[i] == S_AUTH_PASS) {
++                uint8_t a[2] = { S_VER5, S_AUTH_PASS };
++                if (send(fd, (char *)a, sizeof(a), 0) < 0) {
++                    uniperror("send");
++                    return -1;
++                }
++                return 1;
++            }
++        return -1;
++    }
+     uint8_t c = S_AUTH_BAD;
+     for (long i = 2; i < n; i++)
+         if (buffer[i] == S_AUTH_NONE) {
+@@ -170,6 +224,30 @@ static int auth_socks5(int fd, const char *buffer, ssize_t n)
+     return c != S_AUTH_BAD ? 0 : -1;
+ }
+ 
++/* Подсогласование RFC 1929: 01 ulen имя plen пароль. */
++static int auth_socks5_pass(int fd, const char *buffer, ssize_t n)
++{
++    if (n < 3 || (uint8_t)buffer[0] != 0x01) {
++        return -1;
++    }
++    size_t ulen = (uint8_t)buffer[1];
++    if ((ssize_t)(2 + ulen + 1) > n) {
++        return -1;
++    }
++    size_t plen = (uint8_t)buffer[2 + ulen];
++    if ((ssize_t)(3 + ulen + plen) != n) {
++        return -1;
++    }
++    int ok = nz_same(buffer + 2, ulen, nz_auth_user, nz_auth_ulen)
++        & nz_same(buffer + 3 + ulen, plen, nz_auth_pass, nz_auth_plen);
++    uint8_t a[2] = { 0x01, ok ? 0x00 : 0x01 };
++    if (send(fd, (char *)a, sizeof(a), 0) < 0) {
++        uniperror("send");
++        return -1;
++    }
++    return ok ? 0 : -1;
++}
++
+ 
+ static int resp_s5_error(int fd, int e)
+ {
+@@ -856,10 +934,11 @@ static int handle_s5(struct poolhd *pool, struct eval *val,
+             struct buffer *buff, ssize_t n, union sockaddr_u *dst)
+ {
+     if (val->flag != FLAG_S5) {
+-        if (auth_socks5(val->fd, buff->data, n)) {
++        int a = auth_socks5(val->fd, buff->data, n);
++        if (a < 0) {
+             return -1;
+         }
+-        val->flag = FLAG_S5;
++        val->flag = a ? FLAG_S5AUTH : FLAG_S5;
+         return 0;
+     }
+     if (n < S_SIZE_MIN) {
+@@ -908,7 +987,15 @@ int on_request(struct poolhd *pool, struct eval *val, int et)
+     }
+     int error = 0;
+     bool skip_conn = 0;
+-    
++
++    /* Подсогласование начинается с 01, а не с 05 — до проверки версии. */
++    if (val->flag == FLAG_S5AUTH) {
++        if (auth_socks5_pass(val->fd, buff->data, n)) {
++            return -1;
++        }
++        val->flag = FLAG_S5;
++        return 0;
++    }
+     if ((params.mode & MODE_SOCKS5) && *buff->data == S_VER5) {
+         if ((error = handle_s5(pool, val, buff, n, &dst)) > 0) {
+             return -1;
+diff --git a/proxy.h b/proxy.h
+index 73fbfc4..c094432 100644
+--- a/proxy.h
++++ b/proxy.h
+@@ -53,6 +53,7 @@ struct s5_rep {
+ #pragma pack(pop)
+ 
+ #define S_AUTH_NONE 0x00
++#define S_AUTH_PASS 0x02
+ #define S_AUTH_BAD 0xff
+ 
+ #define S_ATP_I4 0x01
