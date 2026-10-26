@@ -91,7 +91,9 @@ public static class AutostartTask
     /// в выгруженных задачах.
     /// </remarks>
     public static string CurrentUserId() =>
-        System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
+        OperatingSystem.IsWindows()
+            ? System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName
+            : Environment.UserName;
 
     public static string BuildXml(AutostartOptions options)
     {

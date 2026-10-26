@@ -1,5 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Под Windows и под чистый net8.0 — его берёт приложение для Android
+    (docs/android.md). TargetFramework из Directory.Build.props гасится:
+    пока он задан, MSBuild не делит сборку по TargetFrameworks.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net8.0-windows;net8.0</TargetFrameworks>
+    <TargetFramework></TargetFramework>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="13.7.1" />
     <InternalsVisibleTo Include="NetZapret.Core.Tests" />

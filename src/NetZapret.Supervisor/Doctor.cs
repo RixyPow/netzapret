@@ -128,6 +128,10 @@ public static class Doctor
 
     private static IReadOnlyList<DoctorCheck> Elevation()
     {
+        // Права администратора — понятие Windows; на Android судит приложение (root, VpnService).
+        if (!OperatingSystem.IsWindows())
+            return [];
+
         using var identity = WindowsIdentity.GetCurrent();
         bool elevated = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
 

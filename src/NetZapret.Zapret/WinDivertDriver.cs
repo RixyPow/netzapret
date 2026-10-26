@@ -154,6 +154,10 @@ public static class WinDivertDriver
     /// <summary>Путь драйвера службы из реестра (только чтение); <c>null</c> — службы нет.</summary>
     private static string? ImagePath(string service)
     {
+        // Службы драйвера бывают только в Windows: вне её — «службы нет».
+        if (!OperatingSystem.IsWindows())
+            return null;
+
         try
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{service}");

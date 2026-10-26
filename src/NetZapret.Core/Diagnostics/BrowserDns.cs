@@ -130,6 +130,10 @@ public static class BrowserDns
 
     private static (string Mode, string? Template)? FromPolicy(string key)
     {
+        // Реестр есть только в Windows; на Android политики браузеров не видно.
+        if (!OperatingSystem.IsWindows())
+            return null;
+
         foreach (var hive in new[] { Registry.LocalMachine, Registry.CurrentUser })
         {
             try

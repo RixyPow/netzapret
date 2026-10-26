@@ -34,6 +34,10 @@ public static class WindowsIpv6
     /// <summary>Выключен ли IPv6 для адаптеров вроде нашего TUN.</summary>
     public static bool Disabled()
     {
+        // Вне Windows такого запрета нет — как «не прочли».
+        if (!OperatingSystem.IsWindows())
+            return false;
+
         try
         {
             using var key = Registry.LocalMachine.OpenSubKey(Key);

@@ -6,6 +6,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <PlatformTarget>x64</PlatformTarget>
+    <!--
+      Библиотеки src/ собираются ещё и под чистый net8.0 — его берёт
+      приложение для Android. Там x64 неверен: телефон — arm64, и сборка
+      под одну платформу не загрузилась бы. Во внутренней сборке
+      мультитаргета TargetFramework задан глобально, поэтому условие
+      здесь, в props, видит именно его.
+    -->
+    <PlatformTarget Condition="'$(TargetFramework)' == 'net8.0'">AnyCPU</PlatformTarget>
     <InvariantGlobalization>true</InvariantGlobalization>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -63,8 +71,12 @@
     Проект целиком x64-only: WFP-интероп содержит зашитые смещения полей
     структур для x64 ABI. Сборка под x86/ARM64 даст молча неверный разбор,
     поэтому лучше упасть на этапе компиляции.
+    Сторож — только для сборки под Windows: чистый net8.0 (Android) WFP
+    не зовёт, а x64 ему как раз нельзя. Условие у цели, а не у свойства:
+    TargetPlatformIdentifier известен лишь после разбора TargetFramework.
   -->
-  <Target Name="GuardAgainstNonX64" BeforeTargets="Build">
+  <Target Name="GuardAgainstNonX64" BeforeTargets="Build"
+          Condition="'$(TargetPlatformIdentifier)' == 'Windows'">
     <Error Condition="'$(PlatformTarget)' != 'x64'"
            Text="NetZapret собирается только под x64 (WFP-интероп завязан на x64 layout)." />
   </Target>

@@ -116,6 +116,10 @@ public static class OtherBypassScan
     /// </remarks>
     private static IEnumerable<(string Service, string Image)> AutoServices()
     {
+        // Ветка служб — реестр Windows; на Android служб в этом смысле нет.
+        if (!OperatingSystem.IsWindows())
+            yield break;
+
         RegistryKey? services = null;
 
         try

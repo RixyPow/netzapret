@@ -68,6 +68,10 @@ public static class DeviceIdentity
 
     private static string? Read(string key, string name)
     {
+        // Реестр есть только в Windows: вне её — «не прочли», как при запрете.
+        if (!OperatingSystem.IsWindows())
+            return null;
+
         try
         {
             using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
