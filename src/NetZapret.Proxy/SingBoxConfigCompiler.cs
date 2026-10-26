@@ -346,6 +346,19 @@ public sealed class SingBoxOptions
         new Dictionary<string, double>(StringComparer.Ordinal);
 
     /// <summary>
+    /// Отвечающие через раз (<see cref="ServerHealth.Flaky"/>): в автоподборе,
+    /// но место из двух с одного входа достаётся им после стабильных.
+    /// </summary>
+    /// <remarks>
+    /// До 27.10 они шли в <see cref="DeadServerTags"/> и автоподбор не видел их
+    /// вовсе. Порядок между стабильными и мигающими держит надзор
+    /// (<see cref="ServerHealthCache.PickOrder"/>): urltest движка порядка
+    /// не знает, а после прогрева селектор и так стоит прямо на сервере.
+    /// </remarks>
+    public IReadOnlySet<string> FlakyServerTags { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
     /// На сколько миллисекунд новый сервер должен опережать текущий,
     /// чтобы произошло переключение.
     /// </summary>
@@ -2135,9 +2148,13 @@ public sealed class SingBoxConfigCompiler
         double Rank(ProxyServer s) =>
             options.KnownLatency.TryGetValue(s.Tag, out var ms) ? ms : double.MaxValue;
 
+        // Мигающий не занимает место стабильного с того же входа (27.10).
         var keep = servers
             .GroupBy(s => $"{s.Host.Trim().ToLowerInvariant()}:{s.Port}")
-            .SelectMany(g => g.OrderBy(Rank).Take(options.AutoPickPerEntry))
+            .SelectMany(g => g
+                .OrderBy(s => options.FlakyServerTags.Contains(s.Tag) ? 1 : 0)
+                .ThenBy(Rank)
+                .Take(options.AutoPickPerEntry))
             .ToHashSet();
 
         // Порядок подписки сохраняется: по нему идут и замер, и показ.

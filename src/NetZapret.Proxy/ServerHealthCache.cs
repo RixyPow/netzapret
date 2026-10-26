@@ -422,9 +422,37 @@ public sealed class ServerHealthCache
     /// <summary>Сколько последних исходов помнить.</summary>
     public const int RecentSize = 10;
 
-    /// <summary>Отвечающие через раз (<see cref="ServerHealth.Flaky"/>) — мимо автоподбора, как мёртвые.</summary>
+    /// <summary>Отвечающие через раз (<see cref="ServerHealth.Flaky"/>) — в автоподборе после стабильных.</summary>
     public IReadOnlyCollection<string> Flaky() =>
         _entries.Values.Where(e => e.Flaky).Select(e => e.Tag).ToList();
+
+    /// <summary>
+    /// Место сервера в очереди автоподбора: отвечающие, при «Сначала стабильные»
+    /// за ними мигающие, затем незамеренные и молчащие.
+    /// </summary>
+    /// <remarks>
+    /// С 29.09 мигающие выводились из автоподбора вовсе, как мёртвые. Владелец
+    /// 27.10: «почему сервера с желтыми показателями вовсе выключаются из
+    /// автовыбора? они просто должны идти после зеленых». 26.10 у TRUST
+    /// неровными были почти все страны, и автоподбору оставалось меньше, чем
+    /// отвечало. Тот же порядок — у ленты и сортировки вкладки VPN.
+    /// </remarks>
+    public static int PickRank(ServerHealth? health, bool stableFirst) => health switch
+    {
+        { Success: true, Flaky: true } when stableFirst => 1,
+        { Success: true } => 0,
+        null => 2,
+        _ => 3,
+    };
+
+    /// <summary>
+    /// В каком порядке надзор пробует серверы автоподбора: по <see cref="PickRank"/>,
+    /// внутри — по последней задержке.
+    /// </summary>
+    public IReadOnlyList<string> PickOrder(IEnumerable<string> tags, bool stableFirst) =>
+        tags.OrderBy(tag => PickRank(Find(tag), stableFirst))
+            .ThenBy(tag => Find(tag) is { Success: true, LatencyMs: { } ms } ? ms : double.MaxValue)
+            .ToList();
 
     /// <summary>
     /// Теги, которые не отвечали <paramref name="times"/> проверок подряд.

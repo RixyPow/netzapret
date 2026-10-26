@@ -1227,15 +1227,9 @@ public partial class VpnView : UserControl
 
     /// <summary>
     /// Ранг для сортировки по задержке: живые, затем — при «Сначала стабильные» —
-    /// живые, но мигающие, затем незамеренные и мёртвые.
+    /// живые, но мигающие, затем незамеренные и мёртвые. Тот же, что у автоподбора.
     /// </summary>
-    private int Rank(ServerRow row) => Seen(row.Tag) switch
-    {
-        { Success: true, Flaky: true } when _stableFirst => 1,
-        { Success: true } => 0,
-        null => 2,
-        _ => 3,
-    };
+    private int Rank(ServerRow row) => ServerHealthCache.PickRank(Seen(row.Tag), _stableFirst);
 
     /// <summary>«Сначала стабильные» — из настроек, обновляется при каждой пересборке строк.</summary>
     private bool _stableFirst = true;
@@ -3154,7 +3148,7 @@ public partial class VpnView : UserControl
             Reshow();
 
             Status.Text = settings.StableFirst
-                ? "Сначала стабильные: мигающие серверы — мимо автоподбора и после стабильных в ленте."
+                ? "Сначала стабильные: мигающие серверы — после стабильных в автоподборе и в ленте."
                 : "Только по задержке: мигающие серверы — наравне со всеми.";
 
             this.Offer("Отбор серверов изменён");

@@ -862,6 +862,34 @@ public class SingBoxConfigCompilerTests
         Assert.Contains("d", selector.GetProperty("outbounds").EnumerateArray().Select(e => e.GetString()));
     }
 
+    /// <summary>
+    /// Мигающий — в автоподборе, но после стабильных (владелец 27.10: «они просто
+    /// должны идти после зеленых»); до того он выводился из группы вовсе.
+    /// </summary>
+    [Fact]
+    public void AFlakyServerStaysInTheAutoPickButYieldsItsEntrySlot()
+    {
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var servers = new[]
+        {
+            Server("a"), Server("b"), Server("c"),
+            Server("other") with { Host = "other.example.com" },
+        };
+
+        var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions
+        {
+            // «c» быстрейший, но мигает: место с входа достаётся «a» и «b».
+            KnownLatency = new Dictionary<string, double> { ["c"] = 10, ["a"] = 20, ["b"] = 300, ["other"] = 50 },
+            FlakyServerTags = new HashSet<string> { "c", "other" },
+        });
+
+        var auto = JsonDocument.Parse(result.Json).RootElement.GetProperty("outbounds").EnumerateArray()
+            .Single(o => o.GetProperty("tag").GetString() == "auto-latency");
+
+        // «other» мигает, но на своём входе он один — и остаётся в группе.
+        Assert.Equal(["a", "b", "other"], auto.GetProperty("outbounds").EnumerateArray().Select(e => e.GetString()));
+    }
+
     [Fact]
     public void XhttpTransportCarriesPadding()
     {

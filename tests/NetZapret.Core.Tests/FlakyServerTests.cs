@@ -76,6 +76,39 @@ public sealed class FlakyServerTests
         Assert.False(With(true, false, false).Find("ОБС")!.Flaky);
     }
 
+    /// <summary>
+    /// Надзор пробует зелёных, за ними жёлтых, затем незамеренных и молчащих
+    /// (владелец 27.10: мигающие «должны идти после зеленых», а не выпадать).
+    /// </summary>
+    [Fact]
+    public void Flaky_servers_are_tried_after_the_stable_ones()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-health-{Guid.NewGuid():N}.json");
+        var cache = ServerHealthCache.Load(path);
+
+        void Check(string tag, int ms, params bool[] outcomes)
+        {
+            foreach (var ok in outcomes)
+                cache.Set(new ServerHealth { Tag = tag, Success = ok, LatencyMs = ok ? ms : null, CheckedAt = DateTimeOffset.Now });
+        }
+
+        Check("быстрый мигающий", 50, true, false, true, false, true);
+        Check("медленный стабильный", 400, true, true, true, true, true);
+        Check("стабильный", 200, true, true, true, true, true);
+        Check("молчит", 0, true, true, true, true, false);
+
+        string[] members = ["молчит", "не замерян", "быстрый мигающий", "медленный стабильный", "стабильный"];
+
+        Assert.Equal(
+            ["стабильный", "медленный стабильный", "быстрый мигающий", "не замерян", "молчит"],
+            cache.PickOrder(members, stableFirst: true));
+
+        // «Только по задержке» — мигающий наравне со всеми.
+        Assert.Equal(
+            ["быстрый мигающий", "стабильный", "медленный стабильный", "не замерян", "молчит"],
+            cache.PickOrder(members, stableFirst: false));
+    }
+
     [Fact]
     public void Only_the_last_ten_are_remembered()
     {

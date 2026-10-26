@@ -480,7 +480,8 @@ internal static class SupervisorHost
             dnsViaAuto: options.DnsViaAuto,
             watchUrl: Ping.UrlOf(settings),
             pools: settings.EnginePools,
-            deadPoolToDefault: settings.DeadPoolToDefault)
+            deadPoolToDefault: settings.DeadPoolToDefault,
+            stableFirst: settings.StableFirst)
         {
             OutputLogPath = Path.Combine("runtime", "sing-box.log"),
         };

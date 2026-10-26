@@ -443,6 +443,10 @@ public sealed class SingBoxService : SupervisedService
     /// DNS «авто» (AppSettings.DnsVia): переключатель пути DNS в конфиге ставится
     /// по прямому пути к резолверу и проходу трафика — см. <see cref="ApplyDnsPathAsync"/>.
     /// </param>
+    /// <param name="stableFirst">
+    /// «Сначала стабильные» (AppSettings.StableFirst): мигающие серверы надзор
+    /// пробует после стабильных (<see cref="ServerHealthCache.PickOrder"/>).
+    /// </param>
     public SingBoxService(
         string executablePath,
         string configPath,
@@ -457,8 +461,10 @@ public sealed class SingBoxService : SupervisedService
         bool dnsViaAuto = false,
         string? watchUrl = null,
         IReadOnlyList<ServerPool>? pools = null,
-        bool deadPoolToDefault = true)
+        bool deadPoolToDefault = true,
+        bool stableFirst = true)
     {
+        _stableFirst = stableFirst;
         _pools = [.. (pools ?? []).Select(p => new PoolState(p, replacePinned))];
         _deadPoolToDefault = deadPoolToDefault;
         _watchUrl = string.IsNullOrWhiteSpace(watchUrl) ? Ping.Cloudflare : watchUrl;
@@ -476,6 +482,9 @@ public sealed class SingBoxService : SupervisedService
     }
 
     private readonly string? _preferredExit;
+
+    /// <summary>Мигающие — после стабильных; см. параметр конструктора.</summary>
+    private readonly bool _stableFirst;
 
     /// <summary>Движок только ради DNS — см. параметр конструктора.</summary>
     private readonly bool _dnsOnly;
@@ -1349,12 +1358,10 @@ public sealed class SingBoxService : SupervisedService
         // сервера». Перебор всех по 3 с — до полуминуты без сети сверх
         // полуминуты ожидания проверки; в порядке замеров первый живой
         // обычно и есть быстрейший, и находится за секунды.
-        var known = ServerHealthCache.Load().Latencies();
-
-        var ordered = members
-            .Where(tag => tag != except)
-            .OrderBy(tag => known.TryGetValue(tag, out var ms) ? ms : double.MaxValue)
-            .ToList();
+        //
+        // Мигающие — после стабильных (27.10): до того их не было в группе вовсе.
+        var ordered = ServerHealthCache.Load()
+            .PickOrder(members.Where(tag => tag != except), _stableFirst);
 
         foreach (var tag in ordered)
         {

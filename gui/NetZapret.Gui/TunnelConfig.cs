@@ -263,17 +263,18 @@ internal static class TunnelConfig
 
                 // Мёртвые — мимо автоподбора, но в селекторе остаются:
                 // закрепить такой сервер руками законное желание, он мог
-                // подняться между нашими замерами.
-                // И убранные человеком, и отвечающие через раз (ServerHealth.Flaky):
-                // в селекторе они остаются, выбрать руками можно, а автоподбор
-                // на них не садится.
-                //
-                // Мигающие — по выключателю «Сначала стабильные» (01.10), по
-                // умолчанию включённому: с 29.09 они выводились всегда.
+                // подняться между нашими замерами. Убранные человеком — так же.
                 DeadServerTags = dead
                     .Concat(settings.AutoPickExcluded)
-                    .Concat(settings.StableFirst ? ServerHealthCache.Load().Flaky() : [])
                     .ToHashSet(StringComparer.Ordinal),
+
+                // Отвечающие через раз (ServerHealth.Flaky) — в автоподборе,
+                // но после стабильных, по выключателю «Сначала стабильные».
+                // С 29.09 по 27.10 они выводились из автоподбора вовсе
+                // (владелец: «они просто должны идти после зеленых»).
+                FlakyServerTags = settings.StableFirst
+                    ? ServerHealthCache.Load().Flaky().ToHashSet(StringComparer.Ordinal)
+                    : new HashSet<string>(StringComparer.Ordinal),
 
                 // Проверка серверов — как настроил человек (AppSettings).
                 LatencyTestInterval = $"{Math.Max(1, settings.FullCheckMinutes)}m",
