@@ -111,7 +111,22 @@ public sealed record QuickTile(
     Visibility MarkShown,
     Brush Edge,
     Brush Fill,
-    string Tip);
+    string Tip)
+{
+    /// <summary>
+    /// Подпись плитки: на заливке выбранной — on-accent, как у главной кнопки.
+    /// </summary>
+    /// <remarks>
+    /// Прежде выбранная плитка писала обычным текстом и приглушённым на заливке
+    /// accent-fill: у светлой название 3,1:1 к зелёному #1A7F37, а подпись
+    /// «быстрейший» 1,05:1 — её не было видно (снимок 27.10); у тёмной 2,9:1
+    /// и 1,1:1. Пару on-accent и accent-fill проверка темы держит не ниже 4,5:1
+    /// (у светлой 5,1, у тёмной 5,7).
+    /// </remarks>
+    public required Brush Ink { get; init; }
+
+    public required Brush Soft { get; init; }
+}
 
 /// <summary>Строка «Недавних серверов»: флаг, а нет его — знак (буквы страны, у WARP — облачко).</summary>
 public sealed record RecentRow(
@@ -2942,9 +2957,13 @@ public partial class VpnView : UserControl
 
         var tiles = new List<QuickTile>
         {
-            new(null, "Авто", "быстрейший", (Brush)FindResource("Muted"),
+            new(null, "Авто", "быстрейший", On(auto, "Muted"),
                 null, Visibility.Collapsed, "", icons, Visibility.Visible,
-                Edge(auto), Fill(auto), "Автоподбор: быстрейший из живых"),
+                Edge(auto), Fill(auto), "Автоподбор: быстрейший из живых")
+            {
+                Ink = On(auto, "Text"),
+                Soft = On(auto, "Muted"),
+            },
         };
 
         // Мёртвые и незамеренные — в конце: лента для быстрого выбора, а не перечень.
@@ -2966,7 +2985,7 @@ public partial class VpnView : UserControl
                 server.Tag,
                 Short(name.Length > 0 ? name : server.Tag),
                 Seen(server.Tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—",
-                (Brush)FindResource(Key(server.Tag)),
+                On(chosen, Key(server.Tag)),
                 flag,
                 flag is null ? Visibility.Collapsed : Visibility.Visible,
                 flag is null ? (country.Length == 2 ? country : "•") : string.Empty,
@@ -2974,13 +2993,20 @@ public partial class VpnView : UserControl
                 flag is null ? Visibility.Visible : Visibility.Collapsed,
                 Edge(chosen),
                 Fill(chosen),
-                server.Tag));
+                server.Tag)
+            {
+                Ink = On(chosen, "Text"),
+                Soft = On(chosen, "Muted"),
+            });
         }
 
         QuickServers.ItemsSource = tiles;
 
         Brush Edge(bool on) => (Brush)FindResource(on ? "Accent" : "Border");
         Brush Fill(bool on) => (Brush)FindResource(on ? "AccentFill" : "Surface");
+
+        // На заливке выбранной — on-accent, иначе свой цвет (QuickTile.Ink).
+        Brush On(bool on, string key) => (Brush)FindResource(on ? "OnAccent" : key);
     }
 
     /// <summary>Короткое имя для плитки: «Эстония — TLS XHTTP» → «Эстония».</summary>

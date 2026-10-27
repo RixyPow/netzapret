@@ -653,12 +653,12 @@
                                                                    RenderOptions.BitmapScalingMode="HighQuality" />
                                                         </Border>
                                                         <TextBlock Text="{Binding Mark}" FontFamily="{Binding MarkFont}" FontSize="16"
-                                                                   FontWeight="SemiBold" Foreground="{DynamicResource Muted}"
+                                                                   FontWeight="SemiBold" Foreground="{Binding Soft}"
                                                                    VerticalAlignment="Center" HorizontalAlignment="Center"
                                                                    Visibility="{Binding MarkShown}" />
                                                     </Grid>
 
-                                                    <TextBlock Text="{Binding Title}" Margin="0,8,0,0" FontWeight="SemiBold"
+                                                    <TextBlock Text="{Binding Title}" Margin="0,8,0,0" FontWeight="SemiBold" Foreground="{Binding Ink}"
                                                                TextAlignment="Center" TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding Latency}" Style="{StaticResource Mono}" Margin="0,3,0,0"
                                                                TextAlignment="Center" Foreground="{Binding Color}" />
