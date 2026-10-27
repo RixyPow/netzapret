@@ -383,6 +383,7 @@ public partial class RecipeWindow : Window
                 + "поверх него. Перезапустите движки на «Главной» — и проверка пойдёт, не останавливая их.",
                 "Warn", "⏸");
 
+            Journal.Write("рецепты", $"{_domain}: {Status.Text}");
             return;
         }
 
@@ -391,6 +392,7 @@ public partial class RecipeWindow : Window
         if (paths is null || !File.Exists(paths.ExecutablePath))
         {
             Say("winws2 не найден рядом с программой — проверять нечем.", "Danger", "✕");
+            Journal.Write("рецепты", $"{_domain}: {Status.Text}");
             return;
         }
 
@@ -403,6 +405,11 @@ public partial class RecipeWindow : Window
 
         int worked = 0;
         int tried = 0;
+
+        // Каждый рецепт — в журнал одной строкой на проверку, как у «Сайт
+        // не открывается?». Без неё проверку 27.10 было не восстановить:
+        // окно закрыто — и что оно показало, не знает никто.
+        var heard = new List<string>();
 
         // Все соединения проверки — с портов пробы: их видит только пробный
         // winws2, основной десинк их не трогает.
@@ -477,6 +484,7 @@ public partial class RecipeWindow : Window
                     flow.Page ? "Accent" : ok ? "Warn" : "Danger");
 
                 row.Edge = (Brush)FindResource(ok ? "Accent" : "Border");
+                heard.Add($"«{row.Title}» — {row.Verdict}");
 
                 if (ok)
                     worked++;
@@ -518,6 +526,11 @@ public partial class RecipeWindow : Window
             TestButton.IsEnabled = true;
             TestButton.Content = "Проверить все";
             StopButton.IsEnabled = false;
+
+            // Итог — тем же текстом, что в полосе ответа: он и называет, чем кончилось.
+            Journal.Write("рецепты", $"{_domain}{(_address is { } at ? $" ({at})" : string.Empty)}: "
+                + (heard.Count > 0 ? string.Join("; ", heard) + " → " : string.Empty)
+                + Status.Text);
         }
     }
 
