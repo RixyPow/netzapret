@@ -138,6 +138,17 @@ public static class SiteFixer
         var decision = engine.Evaluate(ConnectionEvent.Describe(host));
         var route = settings.Engines.Effective(decision.Mode, settings.NeedsProxy);
 
+        // «Десинк» с рецептом pass — это «напрямую»: профиль pass пропускает имя
+        // мимо всего десинка. Иначе подбор пробует «напрямую» как другой путь —
+        // и сравнивает путь сам с собой. 27.10 seriesgraph.com (часть «десинк, pass»):
+        // «как есть» замерло на 27 380 Б, «напрямую» один раз прошло — записалось
+        // «напрямую», а через минуту то же «напрямую» замерло на тех же 27 380 Б.
+        if (route == RoutingMode.Desync && decision.Rule?.Recipe is { } own
+            && own.Trim().Equals(RecipeCatalog.Pass, StringComparison.OrdinalIgnoreCase))
+        {
+            route = RoutingMode.Direct;
+        }
+
         // Как есть — она же и называет симптом.
         progress?.Report($"Проверяю {host} как есть…");
         var now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
