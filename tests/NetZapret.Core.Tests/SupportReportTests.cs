@@ -251,6 +251,31 @@ public sealed class SupportReportTests : IDisposable
         Assert.Contains("первая ошибка прошлого запуска", text);
     }
 
+    /// <summary>
+    /// Журнал неудачной проверки сервера — в отчёте, а её конфиг с ключами — нет
+    /// (№40, 28.10: молчание AmneziaWG было видно только в журнале пробы).
+    /// </summary>
+    [Fact]
+    public void ProbeLogsAreInTheReportButProbeConfigsAreNot()
+    {
+        var probes = Path.Combine(_root, "runtime", "probe");
+        Directory.CreateDirectory(probes);
+
+        File.WriteAllText(Path.Combine(probes, "probe-AWG.log"),
+            "DEBUG endpoint/wireguard[probe-out]: handshake did not complete after 5 seconds, retrying (try 2)\n");
+        File.WriteAllText(Path.Combine(probes, "probe-AWG.json"), $"{{\"private_key\": \"{Uuid}\"}}");
+
+        var result = SupportReport.Create("1.2.0 (1)", root: _root);
+
+        Assert.Contains("probe/probe-AWG.log", result.Files);
+        Assert.DoesNotContain(result.Files, f => f.Contains("probe-AWG.json", StringComparison.Ordinal));
+
+        var text = ReadAll(result.Path);
+
+        Assert.Contains("handshake did not complete", text);
+        Assert.DoesNotContain(Uuid, text);
+    }
+
     /// <summary>Из hosts — строки с адресами и наш блок, без пояснений Microsoft.</summary>
     [Fact]
     public void TheHostsExcerptKeepsPinsAndOurBlock()

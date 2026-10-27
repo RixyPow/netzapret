@@ -146,6 +146,14 @@ public static class SupportReport
             AddLog(parts, log, At(root, Path.Combine("runtime", log)));
             AddLog(parts, Path.GetFileNameWithoutExtension(log) + ".1.log", At(root, Path.Combine("runtime", log + ".1")));
         }
+
+        // Журналы неудачных проверок серверов: «не отвечает» на вкладке VPN
+        // мерит отдельный sing-box, и его журнал в sing-box.log не попадает
+        // (№40, 28.10: почему AmneziaWG молчит, по отчёту было не понять).
+        // Удачные проверки свои журналы стирают; конфиги проб с ключами
+        // (probe-*.json) не берутся.
+        foreach (var probe in ProbeLogs(At(root, Path.Combine("runtime", "probe"))))
+            AddLog(parts, "probe/" + probe.Name, probe.FullName);
         // Наблюдение (владелец 10.10: «и отдельно по программам, и отдельно
         // полностью журнал»). Сводка — всегда, и без журнала: «не включали»
         // тоже ответ, а пустое место читалось бы как «не попало в отчёт».
@@ -517,6 +525,27 @@ public static class SupportReport
     /// <summary>Путь от корня установки; без корня — от рабочего каталога, как у окна.</summary>
     private static string At(string? root, string relative) =>
         string.IsNullOrEmpty(root) ? relative : Path.Combine(root, relative);
+
+    /// <summary>Сколько журналов проверок серверов брать — свежие первыми.</summary>
+    private const int ProbeLogLimit = 10;
+
+    /// <summary>Журналы неудачных проверок серверов, свежие первыми.</summary>
+    internal static IReadOnlyList<FileInfo> ProbeLogs(string directory)
+    {
+        try
+        {
+            return Directory.Exists(directory)
+                ? new DirectoryInfo(directory).GetFiles("probe-*.log")
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .Take(ProbeLogLimit)
+                    .ToList()
+                : [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
 
     private static void AddLog(List<(string, string)> parts, string name, string path)
     {

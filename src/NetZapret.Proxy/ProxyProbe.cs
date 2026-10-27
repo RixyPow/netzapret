@@ -290,7 +290,11 @@ public sealed class ProxyProbe
         }
 
         var keys = EngineKeys.Generate();
-        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, options.LogLevel, address, keys, options.Fragment);
+        // WireGuard о неудачном рукопожатии пишет только на уровне debug: на warn
+        // журнал неудачной проверки был пуст, и в отчёте №40 (28.10) не было видно,
+        // дошёл ли сервер хоть до ответа. Ключей wireguard-go в журнал не пишет.
+        var level = server.IsEndpoint ? "debug" : options.LogLevel;
+        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, level, address, keys, options.Fragment);
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
         var stopwatch = Stopwatch.StartNew();
