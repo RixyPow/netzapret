@@ -238,6 +238,26 @@ public enum BlockKind
     /// нужен другой адрес того же CDN или туннель.
     /// </remarks>
     TlsByAddress,
+
+    /// <summary>
+    /// Связь исправна, сайт ответил 403 и причину не назвал.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// До 27.10 любой 403 звался <see cref="GeoBlock"/>. Отчёт владельца
+    /// 27.10: themoviedb.org «отказывает по стране», а в браузере открыт.
+    /// Это была его собственная проверка на робота («Just a moment…» через
+    /// CloudFront, без метки Cloudflare). ns.photonengine.io отвечает
+    /// «403 HTTP not supported»: это сервер игры, а не сайт. Все настоящие
+    /// отказы того же прогона страну называли: x.ai — «not available in your
+    /// region», Miro — «countries and regions».
+    /// </para>
+    /// <para>
+    /// Почему отказали, проба не знает: робот, адрес или страна без
+    /// объяснений. Решает браузер: открылся там — отказали только пробе.
+    /// </para>
+    /// </remarks>
+    Forbidden,
 }
 
 /// <summary>Исход одной пробы.</summary>
@@ -254,8 +274,13 @@ public sealed record ProbeOutcome
     /// <remarks>
     /// Отличается от всех прочих неудач тем, что связь исправна. Отказал
     /// не канал, а собеседник, и лечится это не тем же самым.
+    /// С 27.10 — только отказ, который называет страну или регион сам
+    /// (или 451, или переадресация на страницу отказа); прочий 403 — <see cref="Forbidden"/>.
     /// </remarks>
     public bool Refused { get; init; }
+
+    /// <summary>Сайт ответил 403, страну не назвал и робота не проверял.</summary>
+    public bool Forbidden { get; init; }
 
     /// <summary>
     /// Сторона отказалась от версии протокола, а не оборвала разговор.
@@ -509,6 +534,7 @@ public sealed record TargetReport
         BlockKind.Handshake => "наше приветствие TLS отвергнуто",
         BlockKind.TlsWhiteOnly => "пропускают только разрешённые имена",
         BlockKind.TlsByAddress => "рукопожатие режут по адресу",
+        BlockKind.Forbidden => "сайт отказал, причину не назвал",
         _ => "нет адреса у имени",
     };
 
@@ -542,7 +568,7 @@ public sealed record TargetReport
             var decisive = Kind switch
             {
                 BlockKind.None => null,
-                BlockKind.GeoBlock or BlockKind.Stall => Data,
+                BlockKind.GeoBlock or BlockKind.Forbidden or BlockKind.Stall => Data,
                 BlockKind.TlsDpi or BlockKind.Handshake or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
@@ -619,6 +645,7 @@ public sealed record TargetReport
         BlockKind.Handshake => "ничего не нужно — в браузере откроется",
         BlockKind.TlsWhiteOnly => "рецепт с подделкой разрешённого имени (наложение 4pda), иначе VPN",
         BlockKind.TlsByAddress => "другой адрес того же CDN или VPN — десинк по имени не поможет",
+        BlockKind.Forbidden => "открыть в браузере: открывается — ничего не нужно, отказ и там — VPN",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -1554,7 +1581,10 @@ public static class BlockCheck
             // Данные пришли, но это отказ самого сайта. Всё, что мы умеем
             // мерить, говорит «работает», и по своим меркам оно право —
             // работает связь, а отказывает сайт.
-            return data.Refused ? BlockKind.GeoBlock : BlockKind.None;
+            if (data.Refused)
+                return BlockKind.GeoBlock;
+
+            return data.Forbidden ? BlockKind.Forbidden : BlockKind.None;
         }
 
         if (tcp.Ok && tls.Reset)
@@ -2277,7 +2307,25 @@ public static class BlockCheck
             // сам, а проба — нет. Замер 23.09: openai.com и claude.ai через
             // пин в hosts отвечали именно так, с узла во Франкфурте, и числились
             // «отказывает по стране», пока ChatGPT в браузере работал.
-            bool refused = status is 403 or 451 && !challenged || regionRefusal;
+            bool cloudflare = challenged;
+
+            // И отказ по стране — только тот, что страну называет. 27.10
+            // themoviedb.org звался «отказывает по стране» при открытом в
+            // браузере сайте: 403 был его собственной проверкой на робота,
+            // «Just a moment…» через CloudFront, без метки Cloudflare. Настоящие
+            // отказы того же прогона говорили словами: x.ai — «not available
+            // in your region», Miro — «countries and regions». 451 — отказ
+            // по закону, называть ему ничего не нужно.
+            var said = status is 403 && kept is not null && header > 0
+                && PageAssets.Decode(kept.ToArray()[header..], chunked, contentEncoding) is { } refusal
+                    ? VisibleText(refusal)
+                    : null;
+
+            var region = RegionPhrase(said);
+            bool refused = regionRefusal || status is 451 || status is 403 && region is not null;
+
+            challenged = !refused && (challenged || status is 403 && LooksLikeBotCheck(said));
+            bool forbidden = status is 403 && !refused && !challenged;
 
             // Маленькая страница, пришедшая целиком, заморозки показать
             // не могла — в разметке ищутся скрипты и стили той же зоны,
@@ -2294,11 +2342,16 @@ public static class BlockCheck
             {
                 Ok = true,
                 Refused = refused,
+                Forbidden = forbidden,
                 Elapsed = stopwatch.Elapsed,
                 Detail = refused
-                    ? $"сайт ответил {status} — связь исправна, отказывает он сам"
+                    ? region is not null
+                        ? $"сайт ответил {status}: «{region}» — связь исправна, отказывает он сам"
+                        : $"сайт ответил {status} — связь исправна, отказывает он сам"
+                    : forbidden
+                        ? $"сайт ответил {status} и причину не назвал — связь исправна"
                     : challenged
-                        ? "Cloudflare проверяет на робота — связь исправна, браузер проверку пройдёт"
+                        ? $"{(cloudflare ? "Cloudflare" : "сайт")} проверяет на робота — связь исправна, браузер проверку пройдёт"
                         : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
                 Received = total,
                 Moved = moved,
@@ -2389,7 +2442,7 @@ public static class BlockCheck
                 };
             }
 
-            if (asset.Ok && !asset.Refused && asset.Received >= Signatures.FreezeTo)
+            if (asset.Ok && !asset.Refused && !asset.Forbidden && asset.Received >= Signatures.FreezeTo)
             {
                 return data with
                 {
@@ -2536,6 +2589,103 @@ public static class BlockCheck
     /// </remarks>
     internal static bool IsBotChallenge(byte[] buffer, int length) =>
         string.Equals(HeaderValue(buffer, length, "cf-mitigated"), "challenge", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>То, что человек увидел бы на странице: без скриптов, стилей и разметки.</summary>
+    /// <remarks>
+    /// Скрипты вырезаются целиком: страница отказа x.ai по стране тянет
+    /// <c>/cdn-cgi/challenge-platform/…</c>, а в скрипте проверки TMDB есть
+    /// «cookies blocked» — по ним вердикт решался бы чужими словами.
+    /// </remarks>
+    internal static string VisibleText(string body)
+    {
+        var text = System.Text.RegularExpressions.Regex.Replace(body,
+            @"<(script|style)\b[^>]*>.*?</\1\s*>", " ",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+
+        text = System.Text.RegularExpressions.Regex.Replace(text, "<[^>]*>", " ");
+
+        return System.Text.RegularExpressions.Regex.Replace(WebUtility.HtmlDecode(text), @"\s+", " ").Trim();
+    }
+
+    /// <summary>
+    /// Фраза ответа, где сайт отказывает по стране или региону; <c>null</c> — страну он не назвал.
+    /// </summary>
+    /// <remarks>
+    /// Нужны оба слова, отказа и места: «region» встречается и в разметке
+    /// обычной страницы. Ответ API — тот же текст без разметки: у OpenAI это
+    /// «Country, region, or territory not supported».
+    /// </remarks>
+    internal static string? RegionPhrase(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return null;
+
+        var lower = text.ToLowerInvariant();
+
+        if (!RefusalWords.Any(lower.Contains))
+            return null;
+
+        foreach (var place in PlaceWords)
+        {
+            int at = lower.IndexOf(place, StringComparison.Ordinal);
+
+            if (at < 0)
+                continue;
+
+            int start = at == 0 ? 0 : text.LastIndexOfAny(PhraseEnds, at - 1) + 1;
+            int end = text.IndexOfAny(PhraseEnds, at);
+
+            if (end < 0)
+                end = text.Length;
+
+            // Длинная фраза режется вокруг слова о месте, а не с начала: у Miro
+            // с начала в 120 знаков «countries» не попадало (27.10).
+            if (end - start > 120)
+            {
+                int from = Math.Max(start, at - 70);
+                int to = Math.Min(end, at + 50);
+
+                if (from > start && text.IndexOf(' ', from) is var space and >= 0 && space < at)
+                    from = space + 1;
+
+                if (to < end && text.LastIndexOf(' ', to) is var last && last > at)
+                    to = last;
+
+                return (from > start ? "…" : "") + text[from..to].Trim() + (to < end ? "…" : "");
+            }
+
+            return text[start..end].Trim();
+        }
+
+        return null;
+    }
+
+    private static readonly string[] RefusalWords =
+    [
+        "not available", "unavailable", "not supported", "unsupported", "restrict", "blocked",
+        "denied", "banned", "недоступ", "не доступ", "заблокир", "ограничен", "запрещ",
+    ];
+
+    // «Стран» без окончания нельзя: оно же начало «страницы».
+    private static readonly string[] PlaceWords =
+        ["region", "country", "countries", "territor", "стране", "страны", "регион"];
+
+    private static readonly char[] PhraseEnds = ['.', '!', '?', '"', '{', '}'];
+
+    /// <summary>Страница проверки на робота — по тексту, когда метки Cloudflare нет.</summary>
+    /// <remarks>
+    /// TMDB проверяет сам, через CloudFront, и метки <c>cf-mitigated</c> у него
+    /// нет, а заголовок тот же: «Just a moment…», дальше «Checking your browser…»
+    /// (замер 27.10).
+    /// </remarks>
+    internal static bool LooksLikeBotCheck(string? text) =>
+        text is not null && BotCheckWords.Any(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
+
+    private static readonly string[] BotCheckWords =
+    [
+        "just a moment", "checking your browser", "verify you are human", "verifying you are human",
+        "captcha", "are you a robot", "ddos-guard",
+    ];
 
     /// <summary>
     /// Объявлен ли в <c>alt-svc</c> HTTP/3: <c>h3=":443"</c>, а не старые черновики

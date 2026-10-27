@@ -193,6 +193,73 @@ public class BlockCheckTests
         Assert.Contains("десинк не поможет", Report(BlockKind.GeoBlock).Remedy());
     }
 
+    /// <summary>
+    /// 403, который страну не назвал, — не отказ по стране.
+    /// </summary>
+    /// <remarks>
+    /// Отчёт владельца 27.10: themoviedb.org «отказывает по стране», а в
+    /// браузере открыт. 403 был проверкой на робота самого TMDB, без метки
+    /// Cloudflare. Тексты ниже — ответы того же вечера, сняты curl.
+    /// </remarks>
+    [Theory]
+    [InlineData("This service is not available in your region.", "This service is not available in your region")]
+    [InlineData("You are blocked This request has been blocked. To comply with applicable export control and economic "
+        + "sanctions laws, Miro takes measures to restrict access from countries and regions not falling under Miro's "
+        + "Support Policy .", "restrict access from countries and regions")]
+    [InlineData("{\"error\":{\"message\":\"Country, region, or territory not supported\",\"code\":\"unsupported_country_region_territory\"}}",
+        "Country, region, or territory not supported")]
+    [InlineData("Сервис недоступен в вашей стране.", "Сервис недоступен в вашей стране")]
+    public void A_refusal_that_names_the_country_is_read_as_one(string text, string phrase)
+    {
+        var said = BlockCheck.RegionPhrase(text);
+
+        Assert.NotNull(said);
+        Assert.Contains(phrase, said);
+        Assert.True(said!.Length <= 124);
+    }
+
+    [Theory]
+    [InlineData("Just a moment... - The Movie Database (TMDb) Checking your browser... Please enable JavaScript and cookies to continue.")]
+    [InlineData("HTTP not supported")]
+    [InlineData("403 Forbidden nginx")]
+    [InlineData("Страница недоступна")]
+    [InlineData(null)]
+    public void A_refusal_without_a_country_is_not_read_as_one(string? text)
+    {
+        Assert.Null(BlockCheck.RegionPhrase(text));
+    }
+
+    [Fact]
+    public void A_bot_check_is_known_by_its_words_and_scripts_do_not_count()
+    {
+        // Страница TMDB: в скрипте «cookies blocked», у x.ai — challenge-platform.
+        // Решает то, что видно на странице.
+        var tmdb = BlockCheck.VisibleText(
+            "<html><head><title>Just a moment... - The Movie Database (TMDb)</title></head><body>"
+            + "<p>Checking your browser...</p><script>// cookies blocked, or the client keeps changing address\n</script></body></html>");
+
+        Assert.True(BlockCheck.LooksLikeBotCheck(tmdb));
+        Assert.Null(BlockCheck.RegionPhrase(tmdb));
+        Assert.DoesNotContain("cookies blocked", tmdb);
+
+        var xai = BlockCheck.VisibleText(
+            "<body>This service is not available in your region.<script>a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'</script></body>");
+
+        Assert.Equal("This service is not available in your region.", xai);
+        Assert.False(BlockCheck.LooksLikeBotCheck(xai));
+    }
+
+    [Fact]
+    public void A_bare_refusal_is_its_own_verdict()
+    {
+        var forbidden = new ProbeOutcome { Ok = true, Forbidden = true };
+
+        Assert.Equal(BlockKind.Forbidden, BlockCheck.Classify(Ok(), Ok(), Ok(), forbidden));
+        Assert.Contains("браузере", Report(BlockKind.Forbidden).Remedy());
+        Assert.True(Report(BlockKind.Forbidden).Actionable);
+        Assert.False(Report(BlockKind.Forbidden).MayBeCrowding);
+    }
+
     /// <summary>Оборванный CNAME лечится подстановкой адреса, а не маршрутом.</summary>
     /// <remarks>
     /// Случай <c>tr.rbxcdn.com</c>: Roblox отдаёт по нему ссылки на превью,

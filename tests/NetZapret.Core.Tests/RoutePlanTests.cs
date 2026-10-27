@@ -75,6 +75,15 @@ public sealed class RoutePlanTests
         Assert.Contains("Zapret DNS", plan.Advice);
     }
 
+    [Fact]
+    public void A_bare_refusal_tries_vpn_and_says_the_browser_decides()
+    {
+        var plan = RoutePlan.For(Report(BlockKind.Forbidden), RoutingMode.Desync, desync: true, tunnel: true);
+
+        Assert.Equal([RouteTry.Vpn], Kinds(plan));
+        Assert.Contains("браузере", plan.Advice);
+    }
+
     [Theory]
     [InlineData(BlockKind.Dns)]
     [InlineData(BlockKind.Sinkhole)]
