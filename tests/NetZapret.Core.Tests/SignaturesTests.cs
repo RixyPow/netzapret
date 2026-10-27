@@ -53,6 +53,28 @@ public sealed class SignaturesTests
         Assert.Equal(["steamcommunity.com", "skinsrestorer.net"], freeze.Hosts);
     }
 
+    /// <summary>
+    /// Поздняя заморозка — ровно 26 011 и 27 380 Б у разных сайтов (27.10); своим почерком, не теснотой.
+    /// </summary>
+    [Fact]
+    public void TheLateFreezeIsItsOwnSignature()
+    {
+        var found = Signatures.Find(
+        [
+            Report("itch.io", BlockKind.Stall, received: 26_011),
+            Report("seriesgraph.com", BlockKind.Stall, received: 26_011),
+            Report("firstlook.gg", BlockKind.Stall, received: 27_380),
+            Report("twitchcon.com", BlockKind.Stall, received: 16_384),
+            Report("slow.example", BlockKind.Stall, received: 40_000),
+        ]);
+
+        var late = Assert.Single(found, f => f.Signature == Signatures.LateFreeze);
+
+        Assert.Equal(["itch.io", "seriesgraph.com", "firstlook.gg"], late.Hosts);
+        Assert.Contains("4pda", Signatures.LateFreeze.Remedy);
+        Assert.Equal(["twitchcon.com"], Assert.Single(found, f => f.Signature == Signatures.Freeze).Hosts);
+    }
+
     [Fact]
     public void ADeadPinNeedsTheProbeToGoToThePinnedAddress()
     {

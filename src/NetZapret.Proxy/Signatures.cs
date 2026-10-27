@@ -69,12 +69,19 @@ public static class Signatures
     /// <remarks>
     /// Замеры: 14 381 Б у steamcommunity.com, 13 505 Б у skinsrestorer.net,
     /// ~16 КБ у списков отзыва Let's Encrypt (28.09). С запасом в обе стороны.
-    /// 26 011 Б у itch.io и x.ai (20.09) — теснота самой проверки, не заморозка:
-    /// в тишине оба дочитались.
     /// </remarks>
     public const int FreezeFrom = 12_000;
 
     public const int FreezeTo = 20_000;
+
+    /// <summary>Пределы поздней заморозки — 26 011 и 27 380 Б (<see cref="LateFreeze"/>).</summary>
+    /// <remarks>
+    /// 20.09 26 011 Б у itch.io и x.ai я записал теснотой самой проверки: в тишине
+    /// оба дочитались. 27.10 это опровергнуто — curl в одиночку встаёт ровно там же.
+    /// </remarks>
+    public const int LateFreezeFrom = 25_500;
+
+    public const int LateFreezeTo = 28_000;
 
     /// <summary>Сколько закрытых имён на одном адресе — уже узел, а не совпадение.</summary>
     public const int NodeFloor = 3;
@@ -114,6 +121,21 @@ public static class Signatures
             + "и заморозку. Не помог — VPN.",
         Origin = "steamcommunity.com — 14 381 Б три раза из трёх; skinsrestorer.net — 13 505 Б, вылечен "
             + "рецептом на ClientHello; списки отзыва Let's Encrypt — около 16 КБ (28.09).",
+    };
+
+    public static Signature LateFreeze { get; } = new()
+    {
+        Id = "freeze-26k",
+        Title = $"Поток замер на {LateFreezeFrom / 1000}–{LateFreezeTo / 1000} КБ",
+        Meaning = "Рукопожатие прошло, страница пошла — и встала ровно на 26 011 или 27 380 Б. У разных сайтов "
+            + "число одно и то же, и curl в одиночку встаёт там же — это не медленный сайт и не теснота проверки, "
+            + "а заморозка по объёму, как у полутора десятков килобайт, только позже. Встречалась у сайтов "
+            + "на Cloudflare (104.26.x).",
+        Remedy = "рецепт с подделкой разрешённого имени — «Наложение приветствием 4pda». Его сам подберёт "
+            + "«Автоподбор» в окне пути маршрута или «Сайт не открывается?». Не помог — VPN.",
+        Origin = "27.10 — itch.io 26 011 Б (curl: 25 140 Б тела), seriesgraph.com 26 011 Б (curl: 24 796 Б тела "
+            + "и 1 209 Б заголовков), firstlook.gg 27 380 Б; itch.io и firstlook.gg вылечило наложение 4pda "
+            + "(itch.io после него — 229 374 Б за 0,6 с). 20.09 itch.io и x.ai — те же 26 011 и 27 380 Б.",
     };
 
     public static Signature SharedNode { get; } = new()
@@ -171,7 +193,7 @@ public static class Signatures
     };
 
     /// <summary>Все почерки — в том порядке, в каком их показывают.</summary>
-    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, SharedNode, PartlySilent, EchHidden, QuicSilent];
+    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, LateFreeze, SharedNode, PartlySilent, EchHidden, QuicSilent];
 
     /// <summary>
     /// Почерки в результатах одного прогона.
@@ -321,20 +343,23 @@ public static class Signatures
 
     private static IEnumerable<SignatureFinding> Freezes(List<TargetReport> reports)
     {
-        var frozen = reports
-            .Where(r => r.Kind == BlockKind.Stall && r.Data.Received is >= FreezeFrom and <= FreezeTo)
-            .ToList();
-
-        if (frozen.Count == 0)
-            yield break;
-
-        yield return new SignatureFinding
+        foreach (var (signature, from, to) in new[] { (Freeze, FreezeFrom, FreezeTo), (LateFreeze, LateFreezeFrom, LateFreezeTo) })
         {
-            Signature = Freeze,
-            Headline = Freeze.Title,
-            Hosts = frozen.Select(r => r.Host).ToList(),
-            Lines = frozen.Select(r => $"{r.Host} — {r.Data.Received:N0} Б").ToList(),
-        };
+            var frozen = reports
+                .Where(r => r.Kind == BlockKind.Stall && r.Data.Received is { } got && got >= from && got <= to)
+                .ToList();
+
+            if (frozen.Count == 0)
+                continue;
+
+            yield return new SignatureFinding
+            {
+                Signature = signature,
+                Headline = signature.Title,
+                Hosts = frozen.Select(r => r.Host).ToList(),
+                Lines = frozen.Select(r => $"{r.Host} — {r.Data.Received:N0} Б").ToList(),
+            };
+        }
     }
 
     private static IEnumerable<SignatureFinding> SharedNodes(List<TargetReport> reports, HashSet<string> taken)
