@@ -1773,8 +1773,9 @@ public sealed class SingBoxConfigCompiler
             case ProxyProtocol.Vless:
                 outbound["type"] = "vless";
                 outbound["uuid"] = server.Credential;
-                if (!string.IsNullOrEmpty(server.Flow))
-                    outbound["flow"] = server.Flow;
+                // Клиентский вариант Vision из Xray — обычным: sing-box его не знает (№38).
+                if (VlessFlows.ForSingBox(server.Flow) is { Length: > 0 } flow)
+                    outbound["flow"] = flow;
                 break;
 
             case ProxyProtocol.Vmess:

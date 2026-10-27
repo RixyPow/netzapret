@@ -292,9 +292,15 @@ public sealed record ProxyServer
     /// без ключа. Ключ — base64url 32 байт (x25519); иной sing-box отвергает
     /// так же, поэтому мерится декодированием, а не наличием.
     /// </para>
+    /// <para>
+    /// И незнакомый flow VLESS: та же подписка 27.10, уже без серверов REALITY
+    /// без ключа, падала на «unsupported flow: xtls-rprx-vision-udp443» —
+    /// <see cref="VlessFlows"/>.
+    /// </para>
     /// </remarks>
     public bool IsSupportedBySingBox =>
         (Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null)
+        && (Protocol != ProxyProtocol.Vless || VlessFlows.ForSingBox(Flow) is not null)
         && (!Security.Equals("reality", StringComparison.OrdinalIgnoreCase) || IsRealityKey(RealityPublicKey));
 
     /// <summary>Открытый ключ REALITY: base64 (обычный или url) от 32 байт.</summary>
