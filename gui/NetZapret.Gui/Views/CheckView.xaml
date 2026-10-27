@@ -505,25 +505,50 @@
                                 </StackPanel>
                             </Border>
 
-                            <TextBlock Text="{Binding Explain}" TextWrapping="Wrap" Margin="0,10,0,0" />
-                            <TextBlock Text="{Binding Bypass}" Visibility="{Binding BypassShown}" Style="{StaticResource Caption}"
-                                       Foreground="{DynamicResource Warn}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                            <!--
+                                Что выяснилось и что делать — на подложке (владелец 27.10:
+                                «тексту можно сделать какую-то подложку»). Лечение — своей
+                                строкой: в конце длинного абзаца с цитатой сайта его не видели.
+                                Секция пресета ушла в «Подробности»: жёлтой строкой здесь
+                                она читалась как беда, а это справка.
+                            -->
+                            <Border Margin="0,10,0,0" CornerRadius="10" Padding="14,12" Background="{DynamicResource Raised}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Explain}" TextWrapping="Wrap" LineHeight="20" />
+                                    <Grid Margin="0,10,0,0" Visibility="{Binding RemedyShown}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Что делать:" FontWeight="SemiBold" Margin="0,0,6,0" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Remedy}" TextWrapping="Wrap" LineHeight="20" />
+                                    </Grid>
+                                    <TextBlock Text="{Binding Warning}" Visibility="{Binding WarningShown}"
+                                               Foreground="{DynamicResource Warn}" TextWrapping="Wrap" LineHeight="20" Margin="0,10,0,0" />
+                                </StackPanel>
+                            </Border>
 
-                            <WrapPanel Margin="0,12,0,0">
+                            <!--
+                                Две кнопки в одну строку, поровну. «Перепроверить», а не
+                                «Проверить ещё раз»: с ним вторая кнопка не помещалась
+                                и уходила на свою строку (владелец 27.10).
+                            -->
+                            <UniformGrid Columns="{Binding ActionColumns}" Margin="-4,8,-4,0">
                                 <Button x:Name="FixButton" Style="{StaticResource Primary}" Content="Подобрать маршрут"
-                                        Click="OnFix" Margin="0,0,8,8" Padding="14,9" Visibility="{Binding ActionShown}"
+                                        Click="OnFix" Margin="4" Padding="10,9" Visibility="{Binding ActionShown}"
                                         ToolTip="Проверить имя всеми путями и записать первый открывший — как «Сайт не открывается?»" />
-                                <Button x:Name="RecheckButton" Style="{StaticResource Ghost}" Click="OnRecheck" Margin="0,0,8,8" Padding="12,9">
+                                <Button x:Name="RecheckButton" Style="{StaticResource Ghost}" Click="OnRecheck" Margin="4" Padding="10,9"
+                                        ToolTip="Проверить это имя ещё раз">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE72C;" FontFamily="{StaticResource IconFont}" FontSize="13"
                                                    Margin="0,1,8,0" VerticalAlignment="Center" />
-                                        <TextBlock Text="Проверить ещё раз" />
+                                        <TextBlock Text="Перепроверить" />
                                     </StackPanel>
                                 </Button>
-                            </WrapPanel>
+                            </UniformGrid>
 
                             <!-- Ход и итог подбора маршрута. -->
-                            <StackPanel Visibility="{Binding FixShown}">
+                            <StackPanel Visibility="{Binding FixShown}" Margin="0,8,0,0">
                                 <ItemsControl ItemsSource="{Binding FixLines}" ItemTemplate="{StaticResource DotLine}" />
                                 <TextBlock Text="{Binding FixSummary}" TextWrapping="Wrap" Margin="0,6,0,0"
                                            Foreground="{Binding FixInk}" />
@@ -531,24 +556,57 @@
                                         HorizontalAlignment="Left" Margin="0,8,0,0" Visibility="{Binding RevealShown}" />
                             </StackPanel>
 
+                            <!-- Стадии — плитками по две: столбиком они занимали полпанели. -->
                             <TextBlock Text="Стадии" Style="{StaticResource PanelHead}" />
-                            <ItemsControl ItemsSource="{Binding Stages}" ItemTemplate="{StaticResource DotLine}" />
-
-                            <TextBlock Text="Подробности" Style="{StaticResource PanelHead}" />
-                            <ItemsControl x:Name="Details">
+                            <ItemsControl ItemsSource="{Binding Stages}" Margin="-4,0,-4,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="2" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Grid Margin="0,3">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="96" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Muted}" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
-                                        </Grid>
+                                        <Border Margin="4" CornerRadius="10" Padding="12,8" Background="{DynamicResource Raised}"
+                                                ToolTip="{Binding Value}">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="8" Height="8" Fill="{Binding Ink}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Value}" Style="{StaticResource Caption}" Margin="16,3,0,0"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- Подробности — таблицей: подпись слева, значение справа, строки через черту. -->
+                            <TextBlock Text="Подробности" Style="{StaticResource PanelHead}" />
+                            <Border CornerRadius="10" BorderBrush="{DynamicResource Border}" BorderThickness="1.5" Padding="12,2">
+                                <ItemsControl x:Name="Details">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border x:Name="Line" BorderBrush="{DynamicResource Border}" BorderThickness="0,1,0,0" Padding="0,7">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="88" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Label}" Foreground="{DynamicResource Muted}" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                                                </Grid>
+                                            </Border>
+                                            <DataTemplate.Triggers>
+                                                <!-- У первой строки черты сверху нет: её даёт рамка таблицы. -->
+                                                <DataTrigger Binding="{Binding RelativeSource={RelativeSource PreviousData}}" Value="{x:Null}">
+                                                    <Setter TargetName="Line" Property="BorderThickness" Value="0" />
+                                                </DataTrigger>
+                                            </DataTemplate.Triggers>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
 
                             <!--
                                 Тот же замер другим путём (владелец 27.10): через VPN —

@@ -63,6 +63,22 @@ public sealed class CheckRow : INotifyPropertyChanged
 
     public required Visibility BypassShown { get; init; }
 
+    /// <summary>Предупреждение для панели: имя вне десинка, подмена DNS, замер мимо туннеля.</summary>
+    public required string Warning { get; init; }
+
+    public Visibility WarningShown => Warning.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Какая секция пресета взяла бы имя — справка для «Подробностей».</summary>
+    public required string Section { get; init; }
+
+    /// <summary>Чем лечится — отдельной строкой панели; пусто — лечить нечего.</summary>
+    public required string Remedy { get; init; }
+
+    public Visibility RemedyShown => Remedy.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>Кнопок в ряду: «Подобрать маршрут» есть только у того, что лечится.</summary>
+    public int ActionColumns => Actionable ? 2 : 1;
+
     /// <summary>
     /// Есть ли по этой строке что делать.
     /// </summary>
@@ -1100,7 +1116,17 @@ public partial class CheckView : UserControl
         //
         // Только у провалившихся, как и в консоли: у «доступен» объяснять
         // нечего, а пометка на всех пятидесяти строках стала бы шумом.
-        var note = report.Actionable ? HostsFile.DescribeBypass(bypass) : string.Empty;
+        //
+        // Подмена DNS важнее всех прочих пометок и потому ставится вместо них.
+        // Она не уточняет вердикт, а отменяет его: до настоящего сайта мы
+        // не дошли вовсе, и всё, что замерено, замерено на чужом узле.
+        // Лечения в совете названо два, и оба верны: подстановка адреса
+        // в hosts и туннель. Рецепта — нет: он судит по имени в приветствии,
+        // а подменён адрес. На этом я и обжёгся 19.09: мерил QUIC по адресу
+        // из подменённого ответа и получал «QUIC не доходит» при исправном QUIC.
+        var warning = report.Spoof.Spoofed
+            ? report.Spoof.Advice
+            : report.Actionable ? HostsFile.DescribeBypass(bypass) : string.Empty;
 
         // Какая секция пресета взяла бы это имя. Без неё правка пресета —
         // угадывание: чинят секцию, до которой исполнение не доходит, потому
@@ -1109,32 +1135,15 @@ public partial class CheckView : UserControl
         // не доходила очередь; пять новых секций встали ниже «Моих сайтов»
         // и не работали ни дня.
         //
-        // Не показывается там, где имя выведено из-под десинка: список
-        // исключений уходит в --hostlist-exclude, и winws2 отбрасывает имя
-        // раньше, чем начнёт разбирать профили, — секция вычисляется
-        // и ничего не значит.
-        // Подмена DNS важнее всех прочих пометок и потому ставится раньше них.
-        //
-        // Она не уточняет вердикт, а отменяет его: до настоящего сайта мы
-        // не дошли вовсе, и всё, что замерено, замерено на чужом узле.
-        // Секция пресета к такому имени отношения не имеет — рецепт судит
-        // по имени в приветствии, а подменён адрес, — и показать её значило бы
-        // отправить чинить пресет там, где правится файл hosts.
-        //
-        // На этом я и обжёгся 19.09: мерил QUIC по адресу из подменённого
-        // ответа и получал «QUIC не доходит» при исправном QUIC.
-        if (report.Spoof.Spoofed)
+        // Не показывается там, где имя выведено из-под десинка или подменено:
+        // секция вычисляется и ничего не значит. С 27.10 — справка в таблице
+        // «Подробностей», а не предупреждение: жёлтой строкой над кнопками
+        // она читалась как беда (владелец).
+        var section = string.Empty;
+
+        if (!report.Spoof.Spoofed && report.Actionable && warning.Length == 0 && _zones is { } zones)
         {
-            // Лечения названо два, и оба верны. Подстановка адреса в hosts
-            // короче и не требует туннеля; туннель длиннее, но работает,
-            // когда настоящего адреса взять негде — на выходе имя разрешают
-            // уже не из России. Чего здесь точно не надо, так это рецепта:
-            // он судит по имени в приветствии, а подменён адрес.
-            note = report.Spoof.Advice;
-        }
-        else if (report.Actionable && note.Length == 0 && _zones is { } zones)
-        {
-            note = zones.MatchFor(report.Host) is { } match
+            section = zones.MatchFor(report.Host) is { } match
                 ? $"секция #{match.Ordinal} {match.Describe()}"
                 : "секция: ни одна доменная не совпала";
         }
@@ -1148,14 +1157,15 @@ public partial class CheckView : UserControl
         // t.me, telegram.org, instagram.com, facebook.com, valheim.com,
         // linkedin.com, rutracker.org — получили в разделе «ПОЧЕМУ» строку
         // про туннель. У «доступен» объяснять нечего: имя открылось, и каким
-        // путём оно шло, вердикта не меняет. Консоль так и делала с самого
-        // начала — там пометка стоит после выхода по !Actionable, — и два
-        // вида одного замера разошлись словами.
+        // путём оно шло, вердикта не меняет.
         if (report.Actionable && report.TunnelMissed)
         {
-            note = "правило ведёт в VPN, а замер пошёл напрямую — вердикт не о туннеле"
-                + (note.Length == 0 ? string.Empty : "; " + note);
+            warning = "правило ведёт в VPN, а замер пошёл напрямую — вердикт не о туннеле"
+                + (warning.Length == 0 ? string.Empty : "; " + warning);
         }
+
+        // В файл отчёта — обе пометки одной строкой, как было.
+        var note = string.Join("; ", new[] { warning, section }.Where(s => s.Length > 0));
 
         var (status, ink) = report.Reach switch
         {
@@ -1191,6 +1201,9 @@ public partial class CheckView : UserControl
             WhyShown = report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
             Bypass = note,
             BypassShown = note.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
+            Warning = warning,
+            Section = section,
+            Remedy = report.Actionable ? report.Remedy().TrimEnd('.') + "." : string.Empty,
             Actionable = report.Actionable,
             Status = status,
             StatusInk = dot,
@@ -1279,9 +1292,10 @@ public partial class CheckView : UserControl
         var said = report.Describe();
         var why = report.Why;
 
+        // Лечение — не здесь, а своей строкой панели (CheckRow.Remedy): слитое
+        // с объяснением, оно терялось в конце длинного абзаца (владелец 27.10).
         return char.ToUpperInvariant(said[0]) + said[1..]
-            + (why is { Length: > 0 } ? ": " + why.TrimEnd('.') : string.Empty) + "."
-            + (report.Actionable ? " Лечится: " + report.Remedy().TrimEnd('.') + "." : string.Empty);
+            + (why is { Length: > 0 } ? ": " + why.TrimEnd('.') : string.Empty) + ".";
     }
 
     /// <summary>Стадии замера — точкой и словами.</summary>
@@ -2101,7 +2115,14 @@ public partial class CheckView : UserControl
             ? "не проверялся"
             : quic.Ok ? "отвечает" : "молчит — браузер ждёт его и подвисает"));
 
-        lines.Add(new("Маршрут", row.Bypass.Length > 0 ? $"{row.Route} · {row.Bypass}" : row.Route));
+        lines.Add(new("Маршрут", row.Route));
+
+        if (row.Section.Length > 0)
+        {
+            lines.Add(new("Секция", row.Section.StartsWith("секция: ", StringComparison.Ordinal)
+                ? "ни одна по имени не совпала"
+                : row.Section["секция ".Length..]));
+        }
 
         foreach (var finding in _findings.Where(f => f.Hosts.Contains(report.Host, StringComparer.OrdinalIgnoreCase)))
             lines.Add(new("Почерк", $"{finding.Signature.Title}. {finding.Signature.Remedy}"));
