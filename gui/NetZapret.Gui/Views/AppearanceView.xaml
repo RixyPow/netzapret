@@ -66,28 +66,39 @@
                                         </Button.Template>
 
                                         <StackPanel Width="112">
-                                            <Border Height="84" CornerRadius="12" BorderThickness="2"
-                                                    Background="{Binding Backdrop}" BorderBrush="{Binding Edge}">
-                                                <Grid>
-                                                    <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Image}" />
-                                                    <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Backdrop}"
-                                                               Opacity="{Binding Dim}" />
+                                            <Grid Height="84">
+                                                <Border Margin="1" CornerRadius="11" Padding="1" Background="{Binding Backdrop}">
+                                                    <Grid>
+                                                        <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Image}" />
+                                                        <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Backdrop}"
+                                                                   Opacity="{Binding Dim}" />
 
-                                                    <Border Background="{Binding Surface}" CornerRadius="5"
-                                                            Width="52" Height="14" Margin="10,10,0,0"
-                                                            HorizontalAlignment="Left" VerticalAlignment="Top" />
-                                                    <Border Background="{Binding Fill}" CornerRadius="5"
-                                                            Width="44" Height="14" Margin="0,30,10,0"
-                                                            HorizontalAlignment="Right" VerticalAlignment="Top" />
+                                                        <Border Background="{Binding Surface}" CornerRadius="5"
+                                                                Width="52" Height="14" Margin="10,10,0,0"
+                                                                HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                                        <Border Background="{Binding Fill}" CornerRadius="5"
+                                                                Width="44" Height="14" Margin="0,30,10,0"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top" />
 
-                                                    <Grid Width="18" Height="18" Margin="0,0,0,9"
-                                                          HorizontalAlignment="Center" VerticalAlignment="Bottom">
-                                                        <Ellipse Stroke="{Binding Ring}" StrokeThickness="1.5" />
-                                                        <Ellipse Width="10" Height="10" Fill="{Binding Dot}"
-                                                                 Visibility="{Binding DotShown}" />
+                                                        <Grid Width="18" Height="18" Margin="0,0,0,9"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Bottom">
+                                                            <Ellipse Stroke="{Binding Ring}" StrokeThickness="1.5" />
+                                                            <Ellipse Width="10" Height="10" Fill="{Binding Dot}"
+                                                                     Visibility="{Binding DotShown}" />
+                                                        </Grid>
                                                     </Grid>
-                                                </Grid>
-                                            </Border>
+                                                </Border>
+
+                                                <!--
+                                                    Рамка — поверх картинки, отдельным слоем (владелец 27.10:
+                                                    «скругления тонкие… рваные»). Border рисует рамку под своим
+                                                    содержимым, и картинка со скруглением 10 заходила на неё
+                                                    изнутри: на углах линия выходила тоньше сторон и с рваным краем.
+                                                    Подложка — на точку внутри рамки: иначе её сглаженный край
+                                                    темнил бы снаружи сглаженный край рамки.
+                                                -->
+                                                <Border CornerRadius="12" BorderThickness="2" BorderBrush="{Binding Edge}" />
+                                            </Grid>
 
                                             <TextBlock Text="{Binding Name}" Foreground="{Binding NameColor}"
                                                        HorizontalAlignment="Center" Margin="0,7,0,0"
