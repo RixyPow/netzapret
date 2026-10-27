@@ -95,6 +95,11 @@ public sealed record ServerRow(
     /// <remarks>
     /// В пуле «Выбрать» закрепляет сервер в этом пуле, а не в пуле по умолчанию.
     /// </remarks>
+    /// <summary>Описание от панели под именем: «Для WiFi (не тратит ГБ)» — из подписки.</summary>
+    public string? Description { get; init; }
+
+    public Visibility DescriptionShown => string.IsNullOrEmpty(Description) ? Visibility.Collapsed : Visibility.Visible;
+
     public string? PoolId { get; init; }
 }
 
@@ -1147,7 +1152,7 @@ public partial class VpnView : UserControl
                 "выбрать",
                 true,
                 server.IsMeasurable,
-                Chip: chip);
+                Chip: chip) { Description = server.Description };
 
             return Decorate(row, settings);
         });

@@ -320,6 +320,11 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <!-- Описание от панели (27.10, отчёт DxHell): «Для WiFi (не тратит ГБ)» — по нему и выбирают сервер. -->
+                                <TextBlock Text="{Binding Description}" Style="{StaticResource Caption}"
+                                           Margin="0,3,0,0" TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding DescriptionShown}" />
+
                                 <TextBlock Text="{Binding Detail}" Style="{StaticResource Caption}"
                                            Margin="0,3,0,0" TextTrimming="CharacterEllipsis"
                                            Visibility="{Binding NarrowShown, RelativeSource={RelativeSource AncestorType=views:VpnView}}" />

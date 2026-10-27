@@ -1,4 +1,5 @@
 using System.Globalization;
+using NetZapret.Core;
 
 namespace NetZapret.Subscriptions;
 
@@ -12,6 +13,18 @@ public static class SubscriptionParser
     /// от такого списка. Формат определяется автоматически.
     /// </summary>
     public static (IReadOnlyList<ProxyServer> Servers, IReadOnlyList<string> Errors) ParseBody(string body)
+    {
+        var (servers, errors) = ParseRaw(body);
+
+        // Описание, приклеенное к имени панелью, — отдельно (ServerDescription):
+        // здесь, а не в каждом разборщике, — хвост бывает и у ссылок, и у
+        // имён в документе Xray.
+        return ([.. servers.Select(s => ServerDescription.Split(s.Tag) is var (name, description) && description is not null
+            ? s with { Tag = name, Description = description }
+            : s)], errors);
+    }
+
+    private static (IReadOnlyList<ProxyServer> Servers, IReadOnlyList<string> Errors) ParseRaw(string body)
     {
         var servers = new List<ProxyServer>();
         var errors = new List<string>();

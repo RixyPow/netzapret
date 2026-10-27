@@ -89,6 +89,9 @@ public sealed record ProxyServer
     /// <summary>Имя из фрагмента ссылки; используется как тег outbound'а.</summary>
     public required string Tag { get; init; }
 
+    /// <summary>Описание от панели — «Для WiFi (не тратит ГБ)»; в имя не входит (<see cref="Core.ServerDescription"/>).</summary>
+    public string? Description { get; init; }
+
     public required string Host { get; init; }
 
     public required ushort Port { get; init; }

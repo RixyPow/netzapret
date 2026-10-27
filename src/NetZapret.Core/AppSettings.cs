@@ -1061,6 +1061,32 @@ public sealed record AppSettings
         read.SelectiveRouting is null ? read with { SelectiveRouting = read.Pools.Count > 0 } : read;
 
     /// <summary>
+    /// Теги серверов в настройках — без хвоста описания (<see cref="ServerDescription"/>).
+    /// </summary>
+    /// <remarks>
+    /// С 27.10 разбор подписки отрезает «?serverDescription=…» от имени, и записанные
+    /// прежде теги с хвостом не нашлись бы: закреплённый сервер ушёл бы в автоподбор,
+    /// исключённые вернулись бы в него, пулы опустели. Снимать хвост можно при каждом
+    /// чтении — второй раз снимать нечего.
+    /// </remarks>
+    private static AppSettings WithoutServerDescriptions(AppSettings read)
+    {
+        static string? Clean(string? tag) => tag is null ? null : ServerDescription.Strip(tag);
+
+        return read with
+        {
+            PreferredServer = Clean(read.PreferredServer),
+            AutoPickExcluded = [.. read.AutoPickExcluded.Select(ServerDescription.Strip).Distinct()],
+            Pools = [.. read.Pools.Select(p => p with
+            {
+                Servers = [.. p.Servers.Select(ServerDescription.Strip).Distinct()],
+                Preferred = Clean(p.Preferred),
+                Held = Clean(p.Held),
+            })],
+        };
+    }
+
+    /// <summary>
     /// Сняты ли правила по программе разовым переводом (04.10, <see cref="Rules.ProgramRulesOff"/>); <c>null</c> — ещё нет.
     /// </summary>
     public bool? ProgramRulesRemoved { get; init; }
@@ -1148,11 +1174,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return WithoutServerDescriptions(SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            }))))));
+            })))))));
         }
         catch (Exception)
         {
