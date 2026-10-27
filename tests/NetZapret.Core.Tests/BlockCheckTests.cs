@@ -653,6 +653,29 @@ public class BlockCheckTests
     }
 
     /// <summary>
+    /// Чужой сертификат — не «доступен»: elevenlabs.io 27.10, пин на прокси с сертификатом instaposts.halahala.ru.
+    /// </summary>
+    [Fact]
+    public void A_foreign_certificate_is_not_an_open_site()
+    {
+        var foreign = new DnsSpoofResult
+        {
+            Verdict = DnsVerdict.ForeignCertificate,
+            Detail = "по адресу отвечает не «elevenlabs.io», а «instaposts.halahala.ru»",
+        };
+
+        var (kind, tcp) = BlockCheck.WithSpoof(BlockKind.None, Ok(), foreign);
+
+        Assert.Equal(BlockKind.Dns, kind);
+        Assert.Contains("instaposts.halahala.ru", tcp.Detail);
+        Assert.Contains("пин", Report(BlockKind.Dns).Remedy());
+
+        // Чистый сертификат и уже закрытое имя — как были.
+        Assert.Equal(BlockKind.None, BlockCheck.WithSpoof(BlockKind.None, Ok(), DnsSpoofResult.Clean).Kind);
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.WithSpoof(BlockKind.TlsDpi, Ok(), foreign).Kind);
+    }
+
+    /// <summary>
     /// Одно молчание нейтрального имени белым списком не считается: после ответа
     /// на разрешённое оно спрашивается ещё раз (obsidian.md, 27.10 22:20).
     /// </summary>
