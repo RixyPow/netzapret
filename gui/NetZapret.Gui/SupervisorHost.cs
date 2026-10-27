@@ -125,6 +125,56 @@ internal static class SupervisorHost
         return arguments;
     }
 
+    /// <summary>
+    /// Ставит kill switch, если он включён и режим «Туннель»; иначе <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Не поставился — движки всё равно поднимаются, а отказ пишется в журнал:
+    /// запереть человеку сеть из-за сбоя WFP хуже, чем работать без защиты,
+    /// которую он к тому же увидит в журнале.
+    /// </remarks>
+    private static KillSwitch? EngageKillSwitch(Options options)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (!settings.KillSwitchActive)
+            return null;
+
+        // Туннеля нет — защищать нечем: без выхода VPN при kill switch
+        // не было бы сети вовсе.
+        if (options.NoProxy || options.DnsOnly)
+        {
+            Console.WriteLine("Kill switch: туннель не поднимается (нет выхода VPN) — фильтры не ставлю.");
+            return null;
+        }
+
+        if (Engines.FindSingBox() is not { } singBox)
+            return null;
+
+        var apps = new List<string> { singBox };
+
+        // Сам NetZapret ходит мимо туннеля за подпиской, обновлением и прямыми
+        // проверками DNS — без этого при мёртвом выходе не прочесть даже подписку.
+        if (Environment.ProcessPath is { } self)
+            apps.Add(self);
+
+        var tun = new SingBoxOptions();
+        var v4 = System.Net.IPAddress.Parse(tun.TunAddress.Split('/')[0]);
+        var v6 = NetZapret.Core.Diagnostics.WindowsIpv6.Disabled() ? null : System.Net.IPAddress.Parse(tun.TunAddressV6.Split('/')[0]);
+
+        try
+        {
+            var engaged = KillSwitch.Engage(KillSwitch.Plan(apps, v4, v6));
+            Console.WriteLine($"Kill switch: трафик мимо туннеля заблокирован ({engaged.RuleCount} правил WFP), снимется с остановкой движков.");
+            return engaged;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Kill switch не включился ({ex.GetBaseException().Message}) — движки поднимаются без него.");
+            return null;
+        }
+    }
+
     public static async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
         var options = Parse(args);
@@ -192,6 +242,10 @@ internal static class SupervisorHost
                 Console.Error.WriteLine("Прежний супервизор не уступил замок за 15 с — второй не запускаю.");
                 return 2;
             }
+
+            // Kill switch — до движков: иначе первые секунды до TUN шли бы мимо
+            // него. Живёт, пока жив надзор (динамическая сессия WFP), — см. KillSwitch.
+            using var killSwitch = EngageKillSwitch(options);
 
             var services = new List<SupervisedService>();
 
@@ -473,7 +527,9 @@ internal static class SupervisorHost
 
         var service = new SingBoxService(
             singBox, options.ProxyConfig, 9090, trafficPort,
-            bypassWhenDead: settings.BypassWhenTunnelDead,
+            // При kill switch обхода нет: он вёл бы трафик напрямую через сам
+            // sing-box, а движку фильтры мимо туннеля пропускают.
+            bypassWhenDead: settings.BypassWhenTunnelDead && !settings.KillSwitchActive,
             preferredExit: Warp.PreferredExit(settings),
             exitCheckSeconds: settings.ExitCheckSeconds,
             replacePinned: settings.ReplaceSilentServer,

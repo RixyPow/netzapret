@@ -488,6 +488,30 @@ public sealed record AppSettings
     public bool BypassWhenTunnelDead { get; init; } = true;
 
     /// <summary>
+    /// Kill switch: в режиме «Туннель» трафик мимо туннеля блокируется фильтрами Windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Владелец 27.10: «давай сделаем килсвитч как настройку на вкладке впн»;
+    /// выбран жёсткий и только для «Туннеля». Вопрос из чата того же дня:
+    /// «чтобы трафик не шёл через домашний адрес в случае падения VPN».
+    /// До этого защиты не было вовсе: при мёртвых выходах трафик уводил
+    /// в обход <see cref="BypassWhenTunnelDead"/>, а при падении или
+    /// перезапуске sing-box исчезал TUN, и всё шло напрямую.
+    /// </para>
+    /// <para>
+    /// Действует только в «Туннеле» (<see cref="KillSwitchActive"/>): в «Гибриде»
+    /// десинк и «напрямую» идут мимо туннеля по замыслу. Выключен по умолчанию:
+    /// при мёртвом туннеле сети нет совсем, и человек должен выбрать это сам.
+    /// </para>
+    /// </remarks>
+    public bool KillSwitch { get; init; }
+
+    /// <summary>Действует ли kill switch при нынешних выключателях: включён и режим «Туннель».</summary>
+    [JsonIgnore]
+    public bool KillSwitchActive => KillSwitch && Engines.TunnelTakesAll;
+
+    /// <summary>
     /// Подменять выбранный руками сервер, пока он молчит.
     /// </summary>
     /// <remarks>

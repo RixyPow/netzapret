@@ -1631,6 +1631,7 @@ public partial class VpnView : UserControl
         ShowPickLine(_pickBase);
         ForeignSwitch.IsChecked = settings.ForeignExitsOnly;
         StableSwitch.IsChecked = settings.StableFirst;
+        ShowKillSwitch(settings);
 
         // Выход — следом, не дожидаясь таймера: иначе первые четверть минуты
         // на вкладке строка была бы без него.
@@ -3136,6 +3137,35 @@ public partial class VpnView : UserControl
             >= 2 and <= 4 => few,
             _ => many,
         };
+
+    /// <summary>Выключатель kill switch и строка под ним: действует ли он при нынешнем режиме.</summary>
+    private void ShowKillSwitch(AppSettings settings)
+    {
+        KillSwitchToggle.IsChecked = settings.KillSwitch;
+
+        KillSwitchLine.Text = !settings.KillSwitch
+            ? "Выключен: если VPN упадёт, трафик пойдёт с вашего настоящего адреса."
+            : settings.KillSwitchActive
+                ? "Включён: если VPN упадёт, сети не будет, пока туннель не поднимется."
+                : "Включён, но действует только в режиме «Туннель».";
+    }
+
+    private void OnKillSwitch(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            settings = settings with { KillSwitch = KillSwitchToggle.IsChecked == true };
+            settings.Save(AppSettings.DefaultPath);
+
+            ShowKillSwitch(settings);
+            this.Offer(settings.KillSwitch ? "Kill switch включён" : "Kill switch выключен");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось: " + ex.GetBaseException().Message;
+        }
+    }
 
     private void OnStable(object sender, RoutedEventArgs e)
     {

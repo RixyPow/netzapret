@@ -741,6 +741,36 @@
                     </Grid>
                 </Border>
 
+                <!--
+                    Kill switch (владелец 27.10: «давай сделаем килсвитч как
+                    настройку на вкладке впн»; жёсткий, только в «Туннеле»).
+                    Фильтры ставит надзор — KillSwitch, SupervisorHost.EngageKillSwitch.
+                -->
+                <Border x:Name="KillSwitchCard" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="18,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource IconTile}" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE72E;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Kill switch" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Не пускает трафик мимо VPN. Пока движки работают, Windows выпускает в сеть только то, что идёт через туннель, — и когда серверы не отвечают, и пока движок туннеля падает или перезапускается. Сети в это время нет совсем: так трафик не уйдёт с вашего настоящего адреса.&#x0a;&#x0a;Действует только в режиме «Туннель»: в «Гибриде» десинк и «напрямую» идут мимо туннеля по замыслу. Локальная сеть (роутер, принтер) и сам NetZapret работают и при нём.&#x0a;&#x0a;Снимается, когда вы останавливаете движки или закрываете программу, — в системе ничего не остаётся. «Обход туннеля» при нём не срабатывает. Применяется при следующем запуске движков." />
+                            </StackPanel>
+                            <TextBlock x:Name="KillSwitchLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <ToggleButton Grid.Column="2" x:Name="KillSwitchToggle" Style="{StaticResource Switch}" VerticalAlignment="Center" Click="OnKillSwitch" />
+                    </Grid>
+                </Border>
+
             </StackPanel>
 
             <!--
