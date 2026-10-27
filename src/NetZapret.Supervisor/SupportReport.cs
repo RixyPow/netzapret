@@ -132,6 +132,12 @@ public static class SupportReport
         if (Servers(root) is { } servers)
             parts.Add(("servers.txt", servers));
 
+        // Что в подписках вообще есть и что отброшено (DxHell 27.10): сторож
+        // знает только проверенные серверы, а вопрос был, нет ли у нас тех,
+        // через которые работает Happ. Ключей тут нет (SubscriptionDigest).
+        parts.Add(("subscriptions.txt", Section(() => Subscriptions.SubscriptionDigest.Describe(
+            book, At(root, Subscriptions.SubscriptionPool.DefaultReserveDirectory)))));
+
         // Журналы сменяются по размеру (RollingLog, 4 МБ), а не по запуску:
         // winws2 пишет строку на соединение, и начало запуска с его первой
         // ошибкой к сбору отчёта нередко уже в прошлом поколении.

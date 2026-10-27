@@ -382,6 +382,22 @@ public sealed record ProxyServer
     public bool IsUsableOutbound => IsSupportedBySingBox && HasDialableAddress;
 
     /// <summary>
+    /// Почему сервер не идёт в конфиг — словами; годится — <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// Для отчёта (27.10, DxHell): Happ ходил на адреса, которых у нас не было
+    /// ни в замерах, ни в движке, и из отчёта нельзя было сказать, нет ли их
+    /// в подписке или они отброшены. Причины — те же, что у <see cref="IsUsableOutbound"/>.
+    /// Ни ключа, ни шифра пароля здесь нет: шифр — название, а не секрет.
+    /// </remarks>
+    public string? Unusable =>
+        !HasDialableAddress ? "адреса нет — разделитель или заглушка"
+        : Protocol == ProxyProtocol.Shadowsocks && ShadowsocksMethods.ForSingBox(Method) is null ? $"незнакомый шифр Shadowsocks «{Method}»"
+        : Protocol == ProxyProtocol.Vless && VlessFlows.ForSingBox(Flow) is null ? $"незнакомый flow «{Flow}»"
+        : Security.Equals("reality", StringComparison.OrdinalIgnoreCase) && !IsRealityKey(RealityPublicKey) ? "у REALITY нет годного открытого ключа"
+        : null;
+
+    /// <summary>
     /// Протокол словом — для окна.
     /// </summary>
     /// <remarks>
