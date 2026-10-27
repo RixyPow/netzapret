@@ -314,6 +314,9 @@ public sealed record ProbeOutcome
     /// </remarks>
     public IReadOnlyList<string> Assets { get; init; } = [];
 
+    /// <summary>Сайт объявил HTTP/3 (<c>alt-svc: h3</c>) — браузер пойдёт к нему и по QUIC.</summary>
+    public bool OffersHttp3 { get; init; }
+
     public string Describe() => Ok
         ? "ок"
         : Reset ? "RST"
@@ -436,6 +439,16 @@ public sealed record TargetReport
     /// имя откроется, хотя проба с настоящим именем закрыта.
     /// </summary>
     public bool EchHelloAccepted { get; init; }
+
+    /// <summary>
+    /// Рукопожатие QUIC с тем же адресом; <c>null</c> — не спрашивали.
+    /// </summary>
+    /// <remarks>
+    /// Спрашивается только у открытых по TCP, объявивших HTTP/3: браузер к ним
+    /// пойдёт и по QUIC, и молчащий QUIC он ждёт (<see cref="QuicProbe"/>).
+    /// На вердикт не влияет — по TCP сайт открывается.
+    /// </remarks>
+    public ProbeOutcome? Quic { get; init; }
 
     /// <summary>
     /// Ячейка рукопожатия: версия при успехе, причина отказа при неудаче.
@@ -1086,6 +1099,10 @@ public static class BlockCheck
         var walk = await WalkAsync(host, real, cancellationToken);
         var (answered, tcp, tls, data) = (walk.Answered, walk.Tcp, walk.Tls, walk.Data);
 
+        // Объявление HTTP/3 — у страницы, а не у подресурса: его докачка ниже
+        // заменит исход передачи.
+        bool offersHttp3 = data.OffersHttp3;
+
         // Страница прошла, но была мала для заморозки — за ней докачивается
         // её скрипт или стиль, как сделал бы браузер (PageAssets).
         if (data.Assets.Count > 0)
@@ -1242,6 +1259,13 @@ public static class BlockCheck
                 echAccepted = (await BrowserHello.AskAsync(answered, echName, Timeout, cancellationToken)).Answer == HelloAnswer.Accepted;
         }
 
+        // Открыт по TCP и объявил HTTP/3 — браузер пойдёт к нему и по QUIC,
+        // а молчащий QUIC он ждёт: 15.10 YouTube подвисал в Хроме при TCP
+        // на 187 Мбит/с. Мимо туннеля: через TUN проба мерила бы трубу.
+        var quic = !viaTunnel && kind == BlockKind.None && offersHttp3 && answered is not null
+            ? await QuicProbe.AskAsync(answered, host, Timeout, cancellationToken)
+            : null;
+
         return new TargetReport
         {
             Host = host,
@@ -1254,6 +1278,7 @@ public static class BlockCheck
             Kind = kind,
             EchName = echName,
             EchHelloAccepted = echAccepted,
+            Quic = quic,
 
             // Через туннель вердикт о подмене не выносится, и это важно.
             // Проксируемому имени движок выдаёт fakeip из 198.18.0.0/15,
@@ -2090,6 +2115,7 @@ public static class BlockCheck
             long? promised = null;
             bool challenged = false;
             bool regionRefusal = false;
+            bool offersHttp3 = false;
             bool chunked = false;
             string? moved = null;
             string? contentEncoding = null;
@@ -2154,6 +2180,7 @@ public static class BlockCheck
                     promised = ParseContentLength(buffer, read);
                     header = HeaderLength(buffer, read);
                     challenged = IsBotChallenge(buffer, read);
+                    offersHttp3 = OffersHttp3(HeaderValue(buffer, read, "alt-svc"));
 
                     // Отказ по стране бывает и переадресацией: claude.ai по
                     // настоящему адресу — 302 на app-unavailable-in-region
@@ -2250,6 +2277,7 @@ public static class BlockCheck
                 Received = total,
                 Moved = moved,
                 Assets = assets,
+                OffersHttp3 = offersHttp3,
             };
         }
         catch (Exception ex)
@@ -2482,6 +2510,14 @@ public static class BlockCheck
     /// </remarks>
     internal static bool IsBotChallenge(byte[] buffer, int length) =>
         string.Equals(HeaderValue(buffer, length, "cf-mitigated"), "challenge", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Объявлен ли в <c>alt-svc</c> HTTP/3: <c>h3=":443"</c>, а не старые черновики
+    /// <c>h3-29</c> и не одно <c>clear</c>.
+    /// </summary>
+    internal static bool OffersHttp3(string? altSvc) =>
+        altSvc is not null
+        && altSvc.Split(',').Any(entry => entry.TrimStart().StartsWith("h3=", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Имя, на которое переадресует ответ, если это другое имя той же зоны.

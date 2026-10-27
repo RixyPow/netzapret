@@ -228,6 +228,41 @@ public sealed class SignaturesTests
         Assert.Contains("Почерк известен: " + Signatures.Freeze.Origin, text);
     }
 
+    /// <summary>
+    /// QUIC молчит при открытом TCP (15.10, YouTube в Хроме) — почерк, а не вердикт:
+    /// по TCP сайт открывается, но браузер ждёт HTTP/3.
+    /// </summary>
+    [Fact]
+    public void ASilentQuicBesideWorkingTcpIsASignature()
+    {
+        var found = Signatures.Find(
+        [
+            Report("www.youtube.com", BlockKind.None, answered: "142.251.1.1")
+                with { Quic = new ProbeOutcome { Ok = false, Detail = "QUIC молчит 4 с" } },
+            Report("www.google.com", BlockKind.None) with { Quic = new ProbeOutcome { Ok = true } },
+            Report("example.com", BlockKind.None),
+            Report("closed.example", BlockKind.TlsDpi) with { Quic = new ProbeOutcome { Ok = false } },
+        ]);
+
+        var quic = Assert.Single(found, f => f.Signature == Signatures.QuicSilent);
+
+        Assert.Equal(["www.youtube.com"], quic.Hosts);
+        Assert.False(quic.Calm);
+    }
+
+    /// <summary>Посредник из hosts везёт только TCP (27.10, spotify.com на AstraCat): секция QUIC не поможет.</summary>
+    [Fact]
+    public void ASilentQuicOnAPinnedRelaySaysSo()
+    {
+        var found = Signatures.Find(
+            [Report("spotify.com", BlockKind.None, answered: "217.60.179.6") with { Quic = new ProbeOutcome { Ok = false, Detail = "QUIC молчит 4 с" } }],
+            Hosts(("spotify.com", "217.60.179.6")));
+
+        var quic = Assert.Single(found, f => f.Signature == Signatures.QuicSilent);
+
+        Assert.Contains("посредник везёт только TCP", Assert.Single(quic.Lines));
+    }
+
     /// <summary>Новые вердикты по рукопожатию — тоже закрытые имена на узле.</summary>
     [Fact]
     public void AnAddressCutHandshakeCountsTowardsASharedNode()

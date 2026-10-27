@@ -606,4 +606,13 @@ public class BlockCheckTests
         Assert.Equal(BlockKind.TlsWhiteOnly, BlockCheck.Reconcile(Report(BlockKind.TlsByAddress), Report(BlockKind.TlsWhiteOnly)).Kind);
         Assert.Equal(BlockKind.TlsDpi, BlockCheck.Reconcile(Report(BlockKind.TlsDpi), Report(BlockKind.TlsByAddress)).Kind);
     }
+
+    [Theory]
+    [InlineData("h3=\":443\"; ma=86400", true)]
+    [InlineData("h3-29=\":443\", h3=\":443\"; ma=2592000", true)]
+    [InlineData("h3-29=\":443\"; ma=86400", false)]
+    [InlineData("clear", false)]
+    [InlineData(null, false)]
+    public void Http3_is_offered_only_by_a_final_h3_entry(string? altSvc, bool offered) =>
+        Assert.Equal(offered, BlockCheck.OffersHttp3(altSvc));
 }

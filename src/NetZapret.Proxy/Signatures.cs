@@ -156,8 +156,22 @@ public static class Signatures
             + "добавили в список стратегии; проверка рецепта — curl --ech hard (TesterTi, №102).",
     };
 
+    public static Signature QuicSilent { get; } = new()
+    {
+        Id = "quic-silent",
+        Title = "QUIC молчит, а TCP работает",
+        Meaning = "Сайт объявляет HTTP/3, по TCP он открывается, а рукопожатие QUIC (UDP 443) с тем же адресом "
+            + "не проходит. Браузер пробует и HTTP/3 и ждёт его — страница открывается с задержкой или «зависает», "
+            + "хотя проверка по TCP говорит «доступен». DPI режет UDP хуже и непредсказуемее, чем TCP.",
+        Remedy = "подделка QUIC по имени для этих имён — секция вроде «youtube.com (QUIC по имени)» в V11 и V12 "
+            + "или рецепт QUIC в «Маршрутах». Без десинка — выключить QUIC в браузере "
+            + "(chrome://flags/#enable-quic → Disabled): браузер уйдёт на TCP.",
+        Origin = "15.10 — YouTube подвисал в Хроме: QUIC к googlevideo и www.youtube.com резали по имени, TCP шёл "
+            + "на 187 Мбит/с; вики zapret.moe, «Отключение QUIC как обход таймаутов ТСПУ» (прочитано 27.10).",
+    };
+
     /// <summary>Все почерки — в том порядке, в каком их показывают.</summary>
-    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, SharedNode, PartlySilent, EchHidden];
+    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, SharedNode, PartlySilent, EchHidden, QuicSilent];
 
     /// <summary>
     /// Почерки в результатах одного прогона.
@@ -199,8 +213,36 @@ public static class Signatures
         found.AddRange(SharedNodes(direct, taken));
         found.AddRange(PartlySilentNames(direct));
         found.AddRange(EchHiddenNames(direct));
+        found.AddRange(QuicSilentNames(direct, hosts));
 
         return found;
+    }
+
+    private static IEnumerable<SignatureFinding> QuicSilentNames(
+        List<TargetReport> reports,
+        IReadOnlyDictionary<string, List<IPAddress>>? hosts)
+    {
+        var silent = reports.Where(r => r.Kind == BlockKind.None && r.Quic is { Ok: false }).ToList();
+
+        if (silent.Count == 0)
+            yield break;
+
+        // Посредник из hosts везёт по имени только TCP (27.10: spotify.com на
+        // AstraCat 217.60.179.6 — QUIC молчит 4 с), и секция QUIC тут ни при чём.
+        bool Pinned(TargetReport r) =>
+            hosts is not null && r.Answered is { } a && PinOf(hosts, r.Host) is { } pinned
+            && pinned.Any(p => p.ToString() == a);
+
+        yield return new SignatureFinding
+        {
+            Signature = QuicSilent,
+            Headline = QuicSilent.Title,
+            Hosts = silent.Select(r => r.Host).ToList(),
+            Lines = silent.Select(r => $"{r.Host} — по TCP доступен, {r.Quic!.Detail}"
+                + (r.Answered is { } a ? $" ({a})" : string.Empty)
+                + (Pinned(r) ? "; адрес из hosts — посредник везёт только TCP, поможет лишь выключить QUIC в браузере" : string.Empty))
+                .ToList(),
+        };
     }
 
     private static IEnumerable<SignatureFinding> EchHiddenNames(List<TargetReport> reports)
