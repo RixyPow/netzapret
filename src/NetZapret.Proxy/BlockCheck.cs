@@ -897,19 +897,36 @@ public static class BlockCheck
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var neutral = await BrowserHello.AskAsync(via, NameProbeNeutral, Timeout, cancellationToken);
-
-        HelloResult? allowed = Reached(neutral)
-            ? null
-            : await BrowserHello.AskAsync(via, NameProbeAllowed, Timeout, cancellationToken);
-
-        var (kind, said) = ByNames(neutral, allowed);
+        var (kind, said) = await AskNamesAsync(
+            name => BrowserHello.AskAsync(via, name, Timeout, cancellationToken));
 
         return report with
         {
             Kind = kind,
             Tls = report.Tls with { Detail = report.Tls.Detail is { Length: > 0 } before ? $"{before}; {said}" : said },
         };
+    }
+
+    /// <summary>Спрашивает адрес чужими именами и судит по ответам.</summary>
+    /// <remarks>
+    /// Разрешённое прошло, а нейтральное — нет: прежде чем звать подсеть белым
+    /// списком, нейтральное спрашивается ещё раз. Ответ на разрешённое уже
+    /// доказал, что адрес жив в эту секунду, так что повтор стоит до трёх секунд
+    /// и только в этой ветке. 27.10 22:20 obsidian.md на 104.26.1.147 вышел
+    /// «пропускают только разрешённые имена» по одному молчанию example.com,
+    /// а следом мимо десинка и через него example.com на том же адресе принят
+    /// 7 из 7 — и после четырёх заглушённых obsidian.md подряд, как в проверке.
+    /// </remarks>
+    internal static async Task<(BlockKind Kind, string Said)> AskNamesAsync(Func<string, Task<HelloResult>> ask)
+    {
+        var neutral = await ask(NameProbeNeutral);
+
+        HelloResult? allowed = Reached(neutral) ? null : await ask(NameProbeAllowed);
+
+        if (allowed is { } white && Reached(white))
+            neutral = await ask(NameProbeNeutral);
+
+        return ByNames(neutral, allowed);
     }
 
     /// <summary>Дошло ли приветствие до стороны: ответ словами — тоже ответ.</summary>

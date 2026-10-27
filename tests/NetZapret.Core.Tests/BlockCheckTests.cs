@@ -639,6 +639,49 @@ public class BlockCheckTests
     }
 
     /// <summary>
+    /// Одно молчание нейтрального имени белым списком не считается: после ответа
+    /// на разрешённое оно спрашивается ещё раз (obsidian.md, 27.10 22:20).
+    /// </summary>
+    [Fact]
+    public async Task A_single_silence_of_the_neutral_name_is_asked_again()
+    {
+        async Task<(BlockKind Kind, List<string> Asked)> Run(params HelloAnswer[] answers)
+        {
+            var asked = new List<string>();
+            var next = new Queue<HelloAnswer>(answers);
+
+            var (kind, _) = await BlockCheck.AskNamesAsync(name =>
+            {
+                asked.Add(name);
+                return Task.FromResult(Hello(next.Dequeue(), "ответа нет"));
+            });
+
+            return (kind, asked);
+        }
+
+        var transient = await Run(HelloAnswer.Silence, HelloAnswer.Accepted, HelloAnswer.Accepted);
+
+        Assert.Equal(BlockKind.TlsDpi, transient.Kind);
+        Assert.Equal([BlockCheck.NameProbeNeutral, BlockCheck.NameProbeAllowed, BlockCheck.NameProbeNeutral], transient.Asked);
+
+        var white = await Run(HelloAnswer.Silence, HelloAnswer.Accepted, HelloAnswer.Silence);
+
+        Assert.Equal(BlockKind.TlsWhiteOnly, white.Kind);
+
+        // Без ответа на разрешённое повтора нет: адрес молчит на оба.
+        var address = await Run(HelloAnswer.Silence, HelloAnswer.Silence);
+
+        Assert.Equal(BlockKind.TlsByAddress, address.Kind);
+        Assert.Equal(2, address.Asked.Count);
+
+        // Нейтральное ответило с первого раза — разрешённое не спрашивается.
+        var name = await Run(HelloAnswer.Accepted);
+
+        Assert.Equal(BlockKind.TlsDpi, name.Kind);
+        Assert.Single(name.Asked);
+    }
+
+    /// <summary>
     /// Закрытие без слова по адресу не судит: так закрывает и сервер, не знающий
     /// имени (вики: «сервер сам отвергает чужое имя»).
     /// </summary>
