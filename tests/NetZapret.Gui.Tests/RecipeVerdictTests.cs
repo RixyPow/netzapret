@@ -109,23 +109,35 @@ public sealed class RecipeVerdictTests
     }
 
     [Theory]
-    [InlineData(200, true, true)]
-    [InlineData(204, true, true)]
-    [InlineData(301, true, false)]
-    [InlineData(302, true, false)]
-    [InlineData(403, false, false)]
-    [InlineData(500, false, false)]
-    public void Where_the_line_is_drawn(int status, bool passed, bool page)
+    [InlineData(200, true, true, true)]
+    [InlineData(204, true, true, true)]
+    [InlineData(301, true, false, false)]
+    [InlineData(302, true, false, false)]
+    [InlineData(403, false, false, true)]
+    [InlineData(404, false, false, true)]
+    [InlineData(500, false, false, true)]
+    public void Where_the_line_is_drawn(int status, bool passed, bool page, bool opens)
     {
-        // 4xx и 5xx фильтр тоже прошли бы — сервер ответил, — но отличить
-        // отказ сайта от отказа фильтра по одному коду нельзя, и обещать
-        // рабочий рецепт по ним неправильно. Пусть считаются неудачей:
-        // ошибка в эту сторону стоит лишнего перебора, а в обратную —
-        // выбранного рецепта, который ничего не чинит.
+        // Перенаправление — пройденный фильтр, но не ответ: за ним идут дальше.
+        // 4xx и 5xx — конечный ответ сервера. До перебора доходит только имя,
+        // где без рецепта сервер не ответил вовсе, так что ответ любым кодом
+        // с рецептом — его заслуга (27.10: i.ytimg.com отвечает 404 на «/»,
+        // и прежняя граница записала в «не помогает» все рабочие рецепты).
         var flow = Answer(status, 900);
 
         Assert.Equal(passed, flow.Passed);
         Assert.Equal(page, flow.Page);
+        Assert.Equal(opens, flow.Opens);
+        Assert.True(flow.Answered);
+    }
+
+    [Fact]
+    public void A_site_error_is_named_by_its_code()
+    {
+        var flow = Answer(404, 1503);
+
+        Assert.Contains("ответ сервера 404", RecipeWindow.Verdict(flow, Second));
+        Assert.DoesNotContain("не помогает", RecipeWindow.Verdict(flow, Second));
     }
 
     [Fact]

@@ -438,7 +438,10 @@ public partial class RecipeWindow : Window
             // нет, отвечала про резолвер вместо фильтра. Разные мерки в одном
             // окне вдобавок расходятся в ответах — а сравнивать предстоит
             // именно их.
-            if (await OpensAsync(_domain, _work.Token) is { Passed: true } bare)
+            //
+            // Ответ сервера любым кодом, 404 тоже, — уже «открывается»: фильтр
+            // так не отвечает, а дальше этот замер — точка отсчёта (Flow.Opens).
+            if (await OpensAsync(_domain, _work.Token) is { Answered: true } bare)
             {
                 Say($"{_domain} открывается и без десинка — {Verdict(bare, TimeSpan.Zero)}. "
                     + "Рецепт ему не нужен, берите «решает пресет».", "Accent", "✓");
@@ -460,11 +463,11 @@ public partial class RecipeWindow : Window
                 var flow = await TryAsync(paths, row, _work.Token);
                 clock.Stop();
 
-                // Открывшим считается тот, кто довёл до страницы, а не тот,
-                // кто прошёл фильтр. Разница вскрылась 21.09: все рецепты
-                // получали 301 на apex Instagram и числились рабочими,
+                // Открывшим считается тот, кто довёл до конечного ответа сервера,
+                // а не тот, кто прошёл фильтр. Разница вскрылась 21.09: все
+                // рецепты получали 301 на apex Instagram и числились рабочими,
                 // притом что сайт не грузился ни с одним.
-                bool ok = flow.Page;
+                bool ok = flow.Opens;
 
                 // Время — только у дошедших до страницы. У остальных оно
                 // означает срок ожидания либо длину цепочки перенаправлений,
@@ -481,7 +484,7 @@ public partial class RecipeWindow : Window
                 // фильтр, но не пришедшая страница, и валить его в одну
                 // кучу с отказом так же неверно, как с успехом.
                 row.VerdictColour = (Brush)FindResource(
-                    flow.Page ? "Accent" : ok ? "Warn" : "Danger");
+                    ok ? "Accent" : flow.Passed ? "Warn" : "Danger");
 
                 row.Edge = (Brush)FindResource(ok ? "Accent" : "Border");
                 heard.Add($"«{row.Title}» — {row.Verdict}");
@@ -740,10 +743,15 @@ public partial class RecipeWindow : Window
     /// </remarks>
     internal static string Verdict(Flow flow, TimeSpan took)
     {
+        var seconds = $"{took.TotalSeconds:0.0} с";
+
+        // Ошибку сайта называем кодом: «сервер закрыл соединение» на месте
+        // «ответ 404» скрыло 27.10, что рецепт до сервера довёл.
+        if (flow.Status >= 400)
+            return $"ответ сервера {flow.Status}, {flow.Bytes} Б, {seconds}";
+
         if (!flow.Passed)
             return "не помогает — " + flow.Ending;
-
-        var seconds = $"{took.TotalSeconds:0.0} с";
 
         if (flow.Page)
             return $"страница {flow.Status}, {flow.Bytes} Б, {seconds}";
@@ -796,6 +804,30 @@ public partial class RecipeWindow : Window
 
         /// <summary>Пришла настоящая страница, а не перенаправление.</summary>
         public bool Page => Status is >= 200 and < 300;
+
+        /// <summary>Сервер ответил по HTTP — каким бы кодом ни было.</summary>
+        public bool Answered => Status is not null;
+
+        /// <summary>
+        /// Рецепт довёл до конечного ответа сервера: страница или его ошибка, но не перенаправление.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// 4xx и 5xx с 21.09 считались неудачей: по одному коду не отличить
+        /// отказ сайта от отказа фильтра. Но отличать есть с чем: до рецептов
+        /// окно меряет имя без рецепта, и до перебора доходит только то, где
+        /// сервер не ответил вовсе. Без рецепта тишина, с рецептом — ответ
+        /// сервера: соединение провёл рецепт, какой бы код сайт ни отдал.
+        /// </para>
+        /// <para>
+        /// Прежнее правило делало окно бесполезным для узлов без главной
+        /// страницы. Владелец 27.10, i.ytimg.com: превью YouTube грузятся,
+        /// а «не помогает» у всех рецептов — режущие приводили к ответу 404
+        /// (1503 Б, им узел отвечает на <c>/</c> и через основной десинк),
+        /// и вердикт ещё и прятал код за «сервер закрыл соединение».
+        /// </para>
+        /// </remarks>
+        public bool Opens => Page || Status >= 400;
 
         public static Flow Nothing(string ending) => new() { Bytes = 0, Ending = ending };
     }
