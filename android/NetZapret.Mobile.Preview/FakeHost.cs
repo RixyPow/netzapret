@@ -15,13 +15,26 @@ internal sealed class FakeHost : IMobileHost
 {
     private readonly object _gate = new();
     private string _selected = "auto-latency";
-    private readonly Dictionary<string, int> _delays;
+
+    /// <summary>Память замеров, как у движка: тег → задержка и время (секунды Unix).</summary>
+    /// <remarks>
+    /// Провала в ней нет: настоящий движок при провале запись стирает
+    /// (daemon/started_service.go, URLTest), и просмотр делает так же —
+    /// иначе вкладка VPN показывала бы здесь то, чего на телефоне не бывает.
+    /// </remarks>
+    private readonly Dictionary<string, (int Delay, long Time)> _history;
+
+    /// <summary>Сервер, который на замере не отвечает — последний в списке.</summary>
+    private readonly string _dead = Program.DemoServers[^1].Name;
 
     public FakeHost(string filesDirectory)
     {
         FilesDirectory = filesDirectory;
-        _delays = Program.DemoServers.Select((s, i) => (s.Name, Delay: 40 + i * 37 % 260)).ToDictionary(x => x.Name, x => x.Delay);
-        _delays[Program.DemoServers[^1].Name] = 65535;
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 600;
+        _history = Program.DemoServers
+            .Select((s, i) => (s.Name, Delay: 40 + i * 37 % 260))
+            .Where(x => x.Name != _dead)
+            .ToDictionary(x => x.Name, x => (Delay: x.Delay, Time: now));
     }
 
     public string FilesDirectory { get; }
@@ -79,12 +92,25 @@ internal sealed class FakeHost : IMobileHost
                     return Task.FromResult("{}");
 
                 case "urltest":
-                    var group = (string?)JsonNode.Parse(argJson)?["group"];
+                    var tag = (string?)JsonNode.Parse(argJson)?["group"];
 
-                    if (group is not null && _delays.ContainsKey(group))
-                        _delays[group] = Random.Shared.Next(35, 320);
+                    if (tag is not { } measured || !Program.DemoServers.Any(s => s.Name == measured))
+                        return Task.FromResult("""{"error":"outbound not found"}""");
 
-                    return Task.FromResult("{}");
+                    // Как движок: команда отвечает сразу, итог — позже, в памяти
+                    // замеров; провал стирает запись.
+                    _ = Task.Delay(Random.Shared.Next(300, 1500)).ContinueWith(_ =>
+                    {
+                        lock (_gate)
+                        {
+                            if (measured == _dead)
+                                _history.Remove(measured);
+                            else
+                                _history[measured] = (Random.Shared.Next(35, 320), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                        }
+                    }, TaskScheduler.Default);
+
+                    return Task.FromResult("""{"ok":true}""");
 
                 case "logs":
                     return Task.FromResult(new JsonArray([.. Status.Log.Select(l => (JsonNode?)l)]).ToJsonString());
@@ -101,13 +127,15 @@ internal sealed class FakeHost : IMobileHost
             return """{"error":"движок не запущен"}""";
 
         var names = Program.DemoServers.Select(s => s.Name).ToList();
-        var fastest = _delays.Where(d => d.Value < 65535).OrderBy(d => d.Value).First().Key;
+        var fastest = _history.Count == 0 ? names[0] : _history.OrderBy(d => d.Value.Delay).First().Key;
 
+        // Как NzCommands.writeGroups: записи нет — delay и time нули.
         JsonObject Item(string tag, string type) => new()
         {
             ["tag"] = tag,
             ["type"] = type,
-            ["delay"] = _delays.TryGetValue(tag, out var ms) ? ms : 0,
+            ["delay"] = _history.TryGetValue(tag, out var seen) ? seen.Delay : 0,
+            ["time"] = _history.TryGetValue(tag, out var at) ? at.Time : 0,
         };
 
         var selector = new JsonObject

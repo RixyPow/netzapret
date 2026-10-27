@@ -18,8 +18,12 @@ namespace NetZapret.Mobile.Screens;
 /// «Через туннель» здесь нет: на Windows он шёл через вход <c>health-in</c>,
 /// а на телефоне слушателей на 127.0.0.1 без пароля нет (android/DESIGN.md).
 /// Путь замера через выход — решение за владельцем (ui.md, шов S3).
-/// Замер «напрямую» при поднятом VPN идёт через туннель движка, как весь
-/// трафик приложения, — об этом сказано на экране.
+/// </para>
+/// <para>
+/// Замер идёт напрямую всегда, и при поднятом VPN тоже: пакет приложения
+/// выведен из своего VPN (<c>exclude_package</c>, android/DESIGN.md) —
+/// через него ходит ByeDPI. До 27.10 здесь и на экране было сказано, что
+/// при поднятом VPN это скорость через туннель, — неверно.
 /// </para>
 /// </remarks>
 internal sealed class SpeedSection : Section
@@ -50,8 +54,8 @@ internal sealed class SpeedSection : Section
         Body.Children.Add(_run);
         Body.Children.Add(Ui.Stack(6, _bar, _status));
         Body.Children.Add(Ui.Card(Ui.Text("Замер качает и отдаёт около 100–200 МБ — на мобильной сети это "
-            + "трафик тарифа. Когда VPN поднят, приложение ходит через него, как и всё остальное, — тогда "
-            + "это скорость через туннель.", "muted", "small"), "warncard"));
+            + "трафик тарифа. Это скорость сети без туннеля, и когда VPN поднят: сам NetZapret из своего "
+            + "VPN выведен.", "muted", "small"), "warncard"));
     }
 
     public override string Title => "Замер скорости";

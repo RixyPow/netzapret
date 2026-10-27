@@ -108,23 +108,50 @@ internal sealed class DnsSection : Section
         }
     }
 
+    /// <summary>Какой путь DNS на телефоне действует на деле при выбранном в настройках.</summary>
+    /// <remarks>
+    /// «Авто» на Windows — лестница надзора (DnsLadder в SingBoxService): молчит
+    /// DoH — тот же резолвер по TCP, затем запасной, затем туннель, через Clash
+    /// API на ходу. На телефоне надзора нет, и переключать некому: селектор
+    /// <c>dns-path</c> в конфиге всю сессию стоит на своём «direct», то есть
+    /// «авто» — ровно «напрямую». Так и показывается, а выбор — из двух
+    /// (разбор 27.10). Вернуть «авто», когда лестница появится в хозяине.
+    /// </remarks>
+    internal static DnsRoute OnPhone(DnsRoute route) => route == DnsRoute.Auto ? DnsRoute.Direct : route;
+
     private void ShowPath()
     {
         _path.Children.Clear();
         var settings = AppSettings.Load(AppSettings.DefaultPath);
-        DnsRoute[] routes = [DnsRoute.Auto, DnsRoute.Direct, DnsRoute.Tunnel];
+        DnsRoute[] routes = [DnsRoute.Direct, DnsRoute.Tunnel];
 
-        var explain = Ui.Text(DnsRoutes.Explain(settings), "muted", "small");
+        var explain = Ui.Text(ExplainOnPhone(settings), "muted", "small");
 
         _path.Children.Add(Ui.Caption("Путь запросов"));
-        _path.Children.Add(Ui.Segmented(routes.Select(r => Capitalize(DnsRoutes.Word(r))).ToList(), Array.IndexOf(routes, settings.DnsVia), index =>
+        _path.Children.Add(Ui.Segmented(routes.Select(r => Capitalize(DnsRoutes.Word(r))).ToList(), Array.IndexOf(routes, OnPhone(settings.DnsVia)), index =>
         {
             var fresh = AppSettings.Load(AppSettings.DefaultPath) with { DnsVia = routes[index] };
             fresh.Save(AppSettings.DefaultPath);
-            explain.Text = DnsRoutes.Explain(fresh);
+            explain.Text = ExplainOnPhone(fresh);
             Shell.OfferRestart("DNS: " + DnsRoutes.Word(routes[index]));
         }));
         _path.Children.Add(explain);
+    }
+
+    /// <summary>
+    /// Пояснение пути без обещаний надзора: слова Windows про «авто» говорят,
+    /// что программа сама уйдёт на TCP и в туннель, а про «напрямую» — советуют
+    /// «авто», которого на телефоне нет.
+    /// </summary>
+    private static string ExplainOnPhone(AppSettings settings)
+    {
+        if (settings.UseRouterDns || !settings.NeedsProxy || OnPhone(settings.DnsVia) != DnsRoute.Direct)
+            return DnsRoutes.Explain(settings);
+
+        return "Запросы идут напрямую к выбранному резолверу, и сайты получают адреса рядом с вами. "
+            + "Перекроет оператор DoH — а в августе 2026 это сделали несколько российских, — ставьте "
+            + "«Через туннель»: сам телефон путь DNS не переключает. На Windows это делает сторож движков "
+            + "(«авто»: TCP, запасной резолвер, туннель), на телефоне его пока нет.";
     }
 
     private static string Capitalize(string word) => word.Length == 0 ? word : char.ToUpperInvariant(word[0]) + word[1..];

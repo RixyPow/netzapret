@@ -45,17 +45,30 @@ internal sealed class SettingsSection : Section
         _desync.Children.Clear();
         var mobile = MobileSettings.Load();
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        // Root подтверждён в этом процессе. Спрашивает его хозяин только при
+        // запуске движков и только с включённым nfqws2 (окно Magisk без спроса
+        // навязчиво), поэтому «нет» здесь — и «отказали», и «ещё не спрашивали».
         bool root = SafeRoot();
 
         _desync.Children.Add(Ui.Caption("Десинк"));
 
-        if (root)
+        // Переключатель — всегда, а не только при известном root: прежде он
+        // появлялся, лишь когда root уже подтверждён, а подтверждался root
+        // только с включённым переключателем. Замкнутый круг — на телефоне
+        // с Magisk nfqws2 было не включить вовсе (разбор 27.10).
+        _desync.Children.Add(Ui.Switch(
+            "nfqws2 с root",
+            "Тот же движок, что winws2 на Windows, с теми же пресетами и списками. Root спросят при запуске "
+            + "движков — окном менеджера root (Magisk). Не дадут или root нет — десинк пойдёт без root.",
+            mobile.UseRoot,
+            on => Save(MobileSettings.Load() with { UseRoot = on }, on ? "Десинк: nfqws2 (root)" : "Десинк: без root")));
+
+        if (mobile.UseRoot && !root)
         {
-            _desync.Children.Add(Ui.Switch(
-                "nfqws2 с root",
-                "Тот же движок, что winws2 на Windows, с теми же пресетами и списками. Без root — ByeDPI.",
-                mobile.UseRoot,
-                on => Save(MobileSettings.Load() with { UseRoot = on }, on ? "Десинк: nfqws2 (root)" : "Десинк: без root")));
+            _desync.Children.Add(Ui.Text("Root ещё не подтверждён: его спросят при запуске движков. Ответ "
+                + "запоминается до перезапуска приложения — отказ меняют в самом менеджере root. Пока root нет, "
+                + "десинк идёт без него, по настройкам ниже.", "muted", "small"));
         }
 
         bool rootOn = root && mobile.UseRoot;
@@ -102,11 +115,15 @@ internal sealed class SettingsSection : Section
             }
         }
 
-        if (rootOn || mobile.Desync == DesyncEngine.ByeDpi && mobile.Strategy == DesyncStrategy.Preset)
+        // С nfqws2 пресет нужен, даже пока root не подтверждён: ByeDPI со своей
+        // стратегией его не берёт, а nfqws2 после «да» в Magisk возьмёт.
+        if (mobile.UseRoot || mobile.Desync == DesyncEngine.ByeDpi && mobile.Strategy == DesyncStrategy.Preset)
         {
             _desync.Children.Add(Ui.Text("Пресет", "h3"));
-            _desync.Children.Add(Ui.Text("Те же пресеты, что у Windows: секции переводятся в стратегию "
-                + (rootOn ? "nfqws2." : "ByeDPI. Что без root не переводится, пропускается."), "muted", "small"));
+            _desync.Children.Add(Ui.Text(rootOn
+                ? "Те же пресеты, что у Windows: nfqws2 берёт их секции, как winws2."
+                : "Те же пресеты, что у Windows: секции переводятся в стратегию ByeDPI. Что без root не переводится, "
+                  + "пропускается." + (mobile.UseRoot ? " С root пресет возьмёт nfqws2 целиком." : string.Empty), "muted", "small"));
 
             // Пресетов полтора десятка: списком в карточке выбранный уезжал за экран.
             // Здесь — выбранный строкой, весь список — листом.
@@ -190,19 +207,25 @@ internal sealed class SettingsSection : Section
             }
         }
 
+        // «Обход, если туннель лёг» здесь нет: на Windows его делает сторож
+        // надзора (SingBoxService, bypassWhenDead), а на телефоне надзора нет,
+        // и настройку никто не читал бы — выключатель обещал бы то, чего нет
+        // (разбор 27.10). Вернуть вместе со сторожем выходов в хозяине.
         return Ui.Card(Ui.Stack(12,
             Ui.Caption("Туннель"),
             Ui.Switch("Только зарубежные",
                 "Автоподбор не берёт отечественные выходы: через них не работает то, ради чего туннель нужен",
                 settings.ForeignExitsOnly,
                 on => Write(s => s with { ForeignExitsOnly = on }, on ? "Только зарубежные" : "Все выходы")),
+
+            // Мигающих сборка конфига узнаёт из памяти замеров. На Windows её
+            // пополняют сторож и замер при запуске, на телефоне — только
+            // «Замерить все» на вкладке VPN: так и сказано, иначе выключатель
+            // выглядел бы работающим без единого замера.
             Ui.Switch("Сначала стабильные",
-                "Серверы, что отвечают через раз, автоподбор берёт последними",
+                "Серверы, что отвечают через раз, автоподбор берёт последними. На телефоне — по замерам "
+                + "«Замерить все» на вкладке VPN: сам в фоне он серверы не мерит",
                 settings.StableFirst,
-                on => Write(s => s with { StableFirst = on }, on ? "Сначала стабильные" : "Только по задержке")),
-            Ui.Switch("Обход, если туннель лёг",
-                "Ни один выход не отвечает — трафик идёт напрямую, пока туннель не оживёт",
-                settings.BypassWhenTunnelDead,
-                on => Write(s => s with { BypassWhenTunnelDead = on }, on ? "Обход при мёртвом туннеле" : "Без обхода"))));
+                on => Write(s => s with { StableFirst = on }, on ? "Сначала стабильные" : "Только по задержке"))));
     }
 }

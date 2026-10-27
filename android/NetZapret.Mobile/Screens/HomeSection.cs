@@ -90,7 +90,16 @@ internal sealed class HomeSection : Section
         // Живой выход — пока раздел на экране и движки работают: раз в три
         // секунды, как у окна. Невидимой «Главной» опрашивать некого.
         _poll = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-        _poll.Tick += (_, _) => _ = PollExitAsync();
+        _poll.Tick += (_, _) =>
+        {
+            // «Подняты N мин назад» прежде обновлялось каждой строкой журнала:
+            // извещение о смене состояния шло и на неё. С 27.10 журнал
+            // извещений не шлёт (MainView), и минуты считает этот опрос.
+            if (Host.Status is { IsRunning: true } running && _state.Text == "Работает")
+                _hint.Text = Since(running.StartedAt);
+
+            _ = PollExitAsync();
+        };
         _poll.Start();
         _ = PollExitAsync();
     }
@@ -147,7 +156,7 @@ internal sealed class HomeSection : Section
         _restart.IsVisible = status.State == "running" && !busy;
 
         ShowWarnings(status, facts);
-        ShowParams(settings, mobile, facts);
+        ShowParams(settings, mobile, facts, status);
         ShowEngines(status, settings, desyncExpected);
     }
 
@@ -258,7 +267,7 @@ internal sealed class HomeSection : Section
         _mode.Children.Add(complaint);
     }
 
-    private void ShowParams(AppSettings settings, MobileSettings mobile, PlatformFacts? facts)
+    private void ShowParams(AppSettings settings, MobileSettings mobile, PlatformFacts? facts, EngineStatus status)
     {
         _params.Children.Clear();
         _params.Children.Add(Ui.Caption("Параметры подключения"));
@@ -275,7 +284,7 @@ internal sealed class HomeSection : Section
         _params.Children.Add(Tappable(serverRow, () => Shell.SelectTab(MainView.VpnTab)));
 
         var dns = DnsSurvey.ByAddress(settings.DnsServer)?.Name ?? settings.DnsServer;
-        _params.Children.Add(Tappable(Ui.Pair("DNS", $"{dns} · {DnsRoutes.Word(settings.DnsVia)}"),
+        _params.Children.Add(Tappable(Ui.Pair("DNS", $"{dns} · {DnsRoutes.Word(DnsSection.OnPhone(settings.DnsVia))}"),
             () => Shell.OpenIn(MainView.MoreTab, new DnsSection(Shell))));
 
         string subscriptions;
@@ -290,7 +299,15 @@ internal sealed class HomeSection : Section
         }
 
         _params.Children.Add(Plain(Ui.Pair("Подписки", subscriptions)));
-        _params.Children.Add(Tappable(Ui.Pair("Десинк", mobile.DescribeDesync(facts?.Root == true)),
+
+        // nfqws2 включён, а root ещё не спрашивали: до запуска не известно,
+        // что поднимется, — так и сказано. После запуска «нет» значит отказ
+        // (хозяин спросил при запуске), и десинк идёт без root.
+        var desync = mobile.UseRoot && facts?.Root != true && !status.IsRunning
+            ? "nfqws2, если root дадут; иначе " + mobile.DescribeDesync(false)
+            : mobile.DescribeDesync(facts?.Root == true);
+
+        _params.Children.Add(Tappable(Ui.Pair("Десинк", desync),
             () => Shell.OpenIn(MainView.MoreTab, new SettingsSection(Shell))));
 
         if (settings.PresetName is { } preset)

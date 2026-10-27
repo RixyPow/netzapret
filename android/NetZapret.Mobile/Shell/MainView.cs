@@ -49,6 +49,9 @@ public sealed class MainView : UserControl
     private bool _stopRequested;
     private readonly Action _statusHandler;
 
+    /// <summary>Что было в последнем разосланном <see cref="EngineChanged"/> — без журнала.</summary>
+    private (string, string?, DateTimeOffset?, bool, int)? _lastStatus;
+
     internal const int HomeTab = 0, VpnTab = 1, RoutesTab = 2, CheckTab = 3, MoreTab = 4;
 
     public MainView(IMobileHost host)
@@ -177,7 +180,23 @@ public sealed class MainView : UserControl
         layers.Children.Add(_overlay);
         Content = layers;
 
-        _statusHandler = () => Dispatcher.UIThread.Post(() => EngineChanged?.Invoke());
+        // Хозяин извещает о любой смене ответа NzBox, а в нём и хвост журнала:
+        // при работающем движке это каждая новая строка, до раза в секунду.
+        // Разделам журнал не нужен (раздел «Журнал» читает его своим опросом),
+        // а каждое извещение пересобирало «Главную» и вкладку VPN — до сотен
+        // строк серверов, и касание, попавшее на пересборку, терялось (разбор
+        // 27.10). Дальше идёт только смена того, что разделы показывают.
+        _statusHandler = () => Dispatcher.UIThread.Post(() =>
+        {
+            var status = Host.Status;
+            var seen = (status.State, status.Error, status.StartedAt, status.DesyncRunning, status.DesyncRestarts);
+
+            if (_lastStatus == seen)
+                return;
+
+            _lastStatus = seen;
+            EngineChanged?.Invoke();
+        });
 
         SelectTab(HomeTab);
 

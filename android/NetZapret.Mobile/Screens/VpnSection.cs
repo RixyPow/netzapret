@@ -21,16 +21,52 @@ namespace NetZapret.Mobile.Screens;
 /// нужен ни на Windows, ни здесь.
 /// </para>
 /// <para>
-/// Замер — по одному серверу, по очереди (CLAUDE.md, «Продавцов не бить
-/// залпом»): у Trust все страны — один вход, и пачка проверок разом
-/// закрывала его на минуту. Команда <c>urltest</c> группе мерит всех разом,
-/// поэтому её зовём только по серверу (android/DESIGN.md §4).
+/// Замер — не больше двух серверов разом, и каждый ждёт своего итога
+/// (CLAUDE.md, «Продавцов не бить залпом»): у Trust все страны — один вход,
+/// и пачка из 16–26 проверок разом закрывала его на минуту. Команда
+/// <c>urltest</c> группе мерит всех разом, поэтому её зовём только по серверу
+/// (android/DESIGN.md §4). Сервер команд libbox на неё отвечает сразу, а сам
+/// замер идёт в движке ещё до 20 с (daemon/started_service.go, URLTest), —
+/// итог вкладка ждёт по памяти замеров в группах. До 27.10 следующий замер
+/// уходил через 0,4 с, не дождавшись прошлого: на медленных серверах
+/// это и был залп.
+/// </para>
+/// <para>
+/// Строки серверов при опросе движка не пересоздаются: задержка и «Выбран»
+/// меняются на месте (<see cref="RowView"/>). Пересборка сотни строк раз
+/// в пять секунд ела процессор, а касание, пришедшееся на неё, терялось —
+/// нажатая кнопка уходила из дерева раньше, чем человек отпускал палец.
+/// Окно Windows пришло к тому же («Маршруты», 13.10).
 /// </para>
 /// </remarks>
 internal sealed class VpnSection : Section
 {
     /// <summary>Сколько серверов папки показывать сразу: у подписок бывает и 400.</summary>
     private const int FirstRows = 30;
+
+    /// <summary>Замеров разом. Два — то, что держит один вход (<see cref="ServerSweep.PerEntry"/>).</summary>
+    /// <remarks>
+    /// Всего два, а не два на вход: вкладка входов серверов не знает, а два
+    /// разом — не больше двух и на любом одном входе. Медленнее окна Windows
+    /// (там до восьми, по два с входа), зато без адресов в данных вкладки.
+    /// </remarks>
+    private const int MeasureAtOnce = ServerSweep.PerEntry;
+
+    /// <summary>
+    /// Сколько ждать итога одного замера. Движок ставит соединение до 5 с
+    /// (C.TCPConnectTimeout) и ждёт ответа до 15 с (C.TCPTimeout), плюс запас.
+    /// </summary>
+    /// <remarks>
+    /// Сервер с мультиплексом движок мерит дважды (прогрев и замер) — до ~40 с;
+    /// такой может ещё мериться, когда пойдёт следующий, — выйдет три-четыре
+    /// разом, а не залп.
+    /// </remarks>
+    private static readonly TimeSpan ResultWait = TimeSpan.FromSeconds(25);
+
+    private static readonly TimeSpan ResultPoll = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Снимок групп моложе этого не спрашивается заново: два замера ждут итога вместе.</summary>
+    private static readonly TimeSpan GroupsFresh = TimeSpan.FromMilliseconds(400);
 
     private readonly StackPanel _current = new() { Spacing = 8 };
     private readonly StackPanel _folders = new() { Spacing = 12 };
@@ -45,6 +81,39 @@ internal sealed class VpnSection : Section
     private DispatcherTimer? _poll;
     private CancellationTokenSource? _measuring;
     private bool _refreshing;
+
+    /// <summary>Итог последнего действия (замер, чтение подписок) — держится до следующего.</summary>
+    private string? _note;
+
+    /// <summary>Строки серверов на экране по тегу — для правки на месте.</summary>
+    /// <remarks>Список: у папки не в работе тег свой, и он может совпасть с тегом пула.</remarks>
+    private readonly Dictionary<string, List<RowView>> _rows = new(StringComparer.Ordinal);
+
+    private RowView? _autoRow;
+
+    /// <summary>
+    /// Серверы, не ответившие на замер вкладки: тег → когда это решено
+    /// (секунды Unix). Движок провал не хранит — стирает запись, — и без
+    /// этой памяти мёртвый сервер просто терял свою цифру.
+    /// </summary>
+    private readonly Dictionary<string, long> _silent = new(StringComparer.Ordinal);
+
+    private Task<EngineSnapshot>? _groupsFetch;
+    private EngineSnapshot _groups = EngineSnapshot.Empty;
+    private DateTime _groupsAt;
+
+    /// <summary>Строка сервера (или «Авто» — <c>Tag</c> null) и то, что в ней меняется на месте.</summary>
+    private sealed record RowView(string? Tag, bool InWork, Button Button, TextBlock Delay, TextBlock Mark);
+
+    /// <summary>Ответ движка на <c>groups</c>, разобранный один раз.</summary>
+    private sealed record EngineSnapshot(IReadOnlyList<EngineGroup> Groups, IReadOnlyDictionary<string, TestMark> History)
+    {
+        public static EngineSnapshot Empty { get; } = new([], new Dictionary<string, TestMark>());
+    }
+
+    private enum MeasureResult { Answered, Silent, Skipped, EngineGone }
+
+    private readonly record struct Measured(MeasureResult Result, int DelayMs = 0);
 
     public VpnSection(MainView shell) : base(shell)
     {
@@ -142,14 +211,17 @@ internal sealed class VpnSection : Section
         return result;
     }
 
+    /// <summary>Опрос движка: кто выбран и последние замеры — правкой строк на месте, без пересборки.</summary>
     private async Task PollAsync()
     {
+        ShowMeasure();
+
         if (!Host.Status.IsRunning)
         {
             if (_live.Server is not null)
             {
                 _live = (null, true);
-                ShowAll();
+                ShowCurrent();
             }
 
             return;
@@ -157,10 +229,7 @@ internal sealed class VpnSection : Section
 
         try
         {
-            var groups = EngineGroups.Parse(await Task.Run(() => Host.CommandAsync("groups", "{}")));
-            _live = EngineGroups.Current(groups);
-            _delays = EngineGroups.Delays(groups);
-            ShowAll();
+            ApplySnapshot(await GroupsAsync(force: true));
         }
         catch (Exception)
         {
@@ -168,15 +237,109 @@ internal sealed class VpnSection : Section
         }
     }
 
+    /// <summary>Снимок групп движка; моложе <see cref="GroupsFresh"/> — прежний, если не <paramref name="force"/>.</summary>
+    /// <remarks>
+    /// Всё — в потоке окна (продолжения await возвращаются в него), поэтому
+    /// общий запрос и снимок делятся без блокировок.
+    /// </remarks>
+    private Task<EngineSnapshot> GroupsAsync(bool force = false)
+    {
+        if (_groupsFetch is { IsCompleted: false } pending)
+            return pending;
+
+        if (!force && DateTime.UtcNow - _groupsAt < GroupsFresh)
+            return Task.FromResult(_groups);
+
+        return _groupsFetch = FetchGroupsAsync();
+    }
+
+    private async Task<EngineSnapshot> FetchGroupsAsync()
+    {
+        var json = await Task.Run(() => Host.CommandAsync("groups", "{}"));
+        var groups = EngineGroups.Parse(json);
+        _groups = new EngineSnapshot(groups, EngineGroups.History(groups));
+        _groupsAt = DateTime.UtcNow;
+        return _groups;
+    }
+
+    /// <summary>Показать снимок: выбранный и задержки — только то, что изменилось.</summary>
+    private void ApplySnapshot(EngineSnapshot snapshot)
+    {
+        var live = EngineGroups.Current(snapshot.Groups);
+        bool changed = live != _live;
+        _live = live;
+        changed |= ApplyDelays(Merge(snapshot.History));
+
+        if (changed)
+            ShowCurrent();
+    }
+
+    /// <summary>Замеры движка и провалы замера вкладки — в одно: тег → мс, <c>-1</c> — нет ответа.</summary>
+    private Dictionary<string, int> Merge(IReadOnlyDictionary<string, TestMark> history)
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var (tag, mark) in history)
+            result[tag] = mark.Delay;
+
+        foreach (var (tag, at) in _silent.ToList())
+        {
+            // Движок ответил позже нашего «нет ответа» (свой замер группы
+            // или следующий наш) — верим ему; иначе провал стоит.
+            if (history.TryGetValue(tag, out var mark) && mark.Time >= at)
+                _silent.Remove(tag);
+            else
+                result[tag] = -1;
+        }
+
+        return result;
+    }
+
+    /// <summary>Новые задержки — в строки на месте; <c>true</c> — что-то изменилось.</summary>
+    private bool ApplyDelays(IReadOnlyDictionary<string, int> delays)
+    {
+        var old = _delays;
+
+        if (old.Count == delays.Count && old.All(pair => delays.TryGetValue(pair.Key, out var same) && same == pair.Value))
+            return false;
+
+        _delays = delays;
+
+        foreach (var (tag, views) in _rows)
+        {
+            bool had = old.TryGetValue(tag, out var before);
+            bool has = delays.TryGetValue(tag, out var now);
+
+            if (had == has && before == now)
+                continue;
+
+            foreach (var view in views)
+                ShowDelay(view);
+        }
+
+        return true;
+    }
+
     private void ShowAll()
     {
         ShowCurrent();
         ShowFolders();
-        _measure.IsEnabled = Host.Status.IsRunning && _measuring is null || _measuring is not null;
-        _measure.Content = new TextBlock { Text = _measuring is null ? "Замерить все" : "Остановить замер", TextAlignment = TextAlignment.Center };
+        ShowMeasure();
+    }
 
-        if (_measuring is null && !_refreshing)
-            _progress.Text = Host.Status.IsRunning ? string.Empty : "Замер — когда движки работают: серверы меряет сам движок.";
+    /// <summary>Кнопка замера и строка под ней. Содержимое кнопки — только при смене: опрос зовёт это раз в пять секунд.</summary>
+    private void ShowMeasure()
+    {
+        bool busy = _measuring is not null;
+        _measure.IsEnabled = Host.Status.IsRunning || busy;
+
+        var word = busy ? "Остановить замер" : "Замерить все";
+
+        if ((_measure.Content as TextBlock)?.Text != word)
+            _measure.Content = new TextBlock { Text = word, TextAlignment = TextAlignment.Center };
+
+        if (!busy && !_refreshing)
+            _progress.Text = _note ?? (Host.Status.IsRunning ? string.Empty : "Замер — когда движки работают: серверы меряет сам движок.");
 
         _progress.IsVisible = !string.IsNullOrEmpty(_progress.Text);
     }
@@ -241,9 +404,15 @@ internal sealed class VpnSection : Section
         return Ui.Card(toggle);
     }
 
+    /// <summary>
+    /// Папки и строки серверов заново — только после действий человека и чтения
+    /// подписок; опрос движка правит строки на месте (<see cref="ApplySnapshot"/>).
+    /// </summary>
     private void ShowFolders()
     {
         _folders.Children.Clear();
+        _rows.Clear();
+        _autoRow = null;
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var preferred = settings.PreferredServer;
 
@@ -253,6 +422,7 @@ internal sealed class VpnSection : Section
             "Авто",
             "Автоподбор: движок сам берёт быстрейший из живых",
             null,
+            true,
             preferred is null,
             () => _ = ChooseAsync(null, null));
 
@@ -322,6 +492,7 @@ internal sealed class VpnSection : Section
                     server.Name,
                     server.Protocol,
                     server.Tag,
+                    folder.Working,
                     folder.Working && server.Tag == preferred,
                     () => _ = ChooseAsync(folder, server)));
             }
@@ -346,7 +517,7 @@ internal sealed class VpnSection : Section
         return Ui.Card(stack);
     }
 
-    private Button ServerButton(string? country, string name, string? hint, string? tag, bool chosen, Action onTap)
+    private Button ServerButton(string? country, string name, string? hint, string? tag, bool inWork, bool chosen, Action onTap)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 10 };
 
@@ -367,32 +538,73 @@ internal sealed class VpnSection : Section
         right.HorizontalAlignment = HorizontalAlignment.Right;
         right.VerticalAlignment = VerticalAlignment.Center;
 
-        if (tag is not null && _delays.TryGetValue(tag, out var ms))
-        {
-            var delay = Ui.Text(ms > 0 ? $"{ms} мс" : "нет ответа", "small");
-            delay.Foreground = Ui.Brush(ms <= 0 ? "Danger" : ms < 200 ? "Accent" : ms < 500 ? "Warn" : "Danger");
-            delay.HorizontalAlignment = HorizontalAlignment.Right;
-            right.Children.Add(delay);
-        }
+        // Задержка и «Выбран» есть у каждой строки, скрытые: опрос их только
+        // показывает и прячет, а строку не трогает.
+        var delay = Ui.Text("", "small");
+        delay.HorizontalAlignment = HorizontalAlignment.Right;
+        right.Children.Add(delay);
 
-        if (chosen)
-        {
-            var mark = Ui.Text("Выбран", "accent", "small");
-            mark.HorizontalAlignment = HorizontalAlignment.Right;
-            mark.FontWeight = FontWeight.SemiBold;
-            right.Children.Add(mark);
-        }
+        var mark = Ui.Text("Выбран", "accent", "small");
+        mark.HorizontalAlignment = HorizontalAlignment.Right;
+        mark.FontWeight = FontWeight.SemiBold;
+        right.Children.Add(mark);
 
         Grid.SetColumn(right, 2);
         grid.Children.Add(right);
 
         var button = new Button { Content = grid, Classes = { "row" }, MinHeight = 52 };
-
-        if (chosen)
-            button.Background = Ui.Brush("Raised");
-
         button.Click += (_, _) => onTap();
+
+        var view = new RowView(tag, inWork, button, delay, mark);
+
+        if (tag is null)
+            _autoRow = view;
+        else if (_rows.TryGetValue(tag, out var same))
+            same.Add(view);
+        else
+            _rows[tag] = [view];
+
+        ShowDelay(view);
+        ShowMark(view, chosen);
         return button;
+    }
+
+    private void ShowDelay(RowView view)
+    {
+        if (view.Tag is not null && _delays.TryGetValue(view.Tag, out var ms))
+        {
+            view.Delay.Text = ms > 0 ? $"{ms} мс" : "нет ответа";
+            view.Delay.Foreground = Ui.Brush(ms <= 0 ? "Danger" : ms < 200 ? "Accent" : ms < 500 ? "Warn" : "Danger");
+            view.Delay.IsVisible = true;
+        }
+        else
+        {
+            view.Delay.IsVisible = false;
+        }
+    }
+
+    private static void ShowMark(RowView view, bool chosen)
+    {
+        view.Mark.IsVisible = chosen;
+
+        // Не выбран — фон из стиля «row», а не прозрачный своим значением.
+        if (chosen)
+            view.Button.Background = Ui.Brush("Raised");
+        else
+            view.Button.ClearValue(Button.BackgroundProperty);
+    }
+
+    /// <summary>«Выбран» по настройкам — на месте, без пересборки папок.</summary>
+    private void ShowMarks(string? preferred)
+    {
+        if (_autoRow is { } auto)
+            ShowMark(auto, preferred is null);
+
+        foreach (var views in _rows.Values)
+        {
+            foreach (var view in views)
+                ShowMark(view, view.InWork && view.Tag == preferred);
+        }
     }
 
     /// <summary>Выбрать сервер (или «Авто» — <paramref name="server"/> null).</summary>
@@ -402,6 +614,7 @@ internal sealed class VpnSection : Section
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             string? tag = server?.Tag;
+            bool regrouped = false;
 
             if (server is not null && settings.WarpEnabled)
             {
@@ -419,9 +632,19 @@ internal sealed class VpnSection : Section
                 var same = fresh.FirstOrDefault(f => f.IsKeys == folder.IsKeys && f.Name == folder.Name);
                 tag = same is not null && index >= 0 && index < same.Servers.Count ? same.Servers[index].Tag : server.Tag;
                 _data = fresh;
+                regrouped = true;
             }
 
             (AppSettings.Load(AppSettings.DefaultPath) with { PreferredServer = tag }).Save(AppSettings.DefaultPath);
+
+            // Папка вошла в работу — у её серверов новые теги, строки заново;
+            // иначе «Выбран» переезжает на месте.
+            if (regrouped)
+                ShowFolders();
+            else
+                ShowMarks(tag);
+
+            ShowCurrent();
 
             var label = tag is null ? "Автоподбор" : TunnelStatus.NameOf(tag);
 
@@ -440,7 +663,6 @@ internal sealed class VpnSection : Section
             else
             {
                 Shell.Say($"Выбран «{label}» — применится при запуске.");
-                ShowAll();
             }
         }
         catch (Exception ex)
@@ -541,6 +763,7 @@ internal sealed class VpnSection : Section
             return;
 
         _refreshing = true;
+        _note = null;
         _progress.Text = "Читаю подписки…";
         _progress.IsVisible = true;
 
@@ -564,7 +787,9 @@ internal sealed class VpnSection : Section
                 }
             }));
 
-            _progress.Text = problems.Count == 0
+            // В итог действия, а не прямо в строку: прежде следующая же
+            // перерисовка стирала его, и ошибки панелей не было видно.
+            _note = problems.Count == 0
                 ? entries.Count == 0 ? "Подписок нет." : "Подписки прочитаны."
                 : string.Join("\n", problems);
 
@@ -573,11 +798,12 @@ internal sealed class VpnSection : Section
         }
         catch (Exception ex)
         {
-            _progress.Text = "Не прочиталось: " + ex.GetBaseException().Message;
+            _note = "Не прочиталось: " + ex.GetBaseException().Message;
         }
         finally
         {
             _refreshing = false;
+            ShowMeasure();
             Reload();
         }
     }
@@ -596,38 +822,179 @@ internal sealed class VpnSection : Section
         var tags = VpnData.PoolTags(_data);
         _measuring = new CancellationTokenSource();
         var token = _measuring.Token;
-        ShowAll();
+        _note = null;
+        _progress.Text = $"Замер: 0 из {tags.Count}…";
+        ShowMeasure();
+
+        // Память замеров — та же, что у окна Windows (ServerSweep пишет её
+        // так же): по ней «Сначала стабильные» узнаёт мигающих, а вкладка
+        // показывает задержки, пока движок стоит. Другого писателя у неё на
+        // телефоне нет — сторожа надзора здесь нет.
+        ServerHealthCache? health = null;
 
         try
         {
-            for (int i = 0; i < tags.Count && !token.IsCancellationRequested; i++)
+            health = await Task.Run(() => ServerHealthCache.Load());
+        }
+        catch (Exception)
+        {
+            // Не прочиталась — замер всё равно идёт, только без памяти.
+        }
+
+        int done = 0, answered = 0, silent = 0, skipped = 0, recorded = 0;
+        bool engineGone = false;
+
+        void Record(string tag, bool success, int? ms)
+        {
+            if (health is null)
+                return;
+
+            health.Set(new ServerHealth { Tag = tag, Success = success, LatencyMs = ms, CheckedAt = DateTimeOffset.Now });
+            recorded++;
+        }
+
+        try
+        {
+            using var slots = new SemaphoreSlim(MeasureAtOnce);
+
+            // Все продолжения — в потоке окна: счётчики и строки без блокировок.
+            var work = tags.Select(async tag =>
             {
-                _progress.Text = $"Замер: {i + 1} из {tags.Count}…";
-                await Host.CommandAsync("urltest", EngineGroups.GroupArgument(tags[i]));
+                await slots.WaitAsync(token);
 
-                // По одному и с паузой: вход продавца закрывается от пачки проверок.
-                await Task.Delay(400, token);
-                await PollAsync();
-            }
+                try
+                {
+                    if (engineGone)
+                        return;
 
-            _progress.Text = token.IsCancellationRequested ? "Замер остановлен." : "Замер окончен.";
+                    var outcome = await MeasureOneAsync(tag, token);
+
+                    switch (outcome.Result)
+                    {
+                        case MeasureResult.Answered:
+                            answered++;
+                            _silent.Remove(tag);
+                            Record(tag, true, outcome.DelayMs);
+                            break;
+                        case MeasureResult.Silent:
+                            silent++;
+                            _silent[tag] = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                            Record(tag, false, null);
+                            break;
+                        case MeasureResult.EngineGone:
+                            engineGone = true;
+                            return;
+                        default:
+                            // Движок замер не принял (сервера нет в конфиге — папку
+                            // включили без перезапуска): это не «нет ответа».
+                            skipped++;
+                            break;
+                    }
+
+                    done++;
+                    _progress.Text = $"Замер: {done} из {tags.Count}…";
+                    ApplySnapshot(_groups);
+                }
+                finally
+                {
+                    slots.Release();
+                }
+            }).ToList();
+
+            await Task.WhenAll(work);
+
+            _note = engineGone
+                ? $"Движки остановились — замер прерван: ответили {answered}, нет ответа у {silent}."
+                : $"Замер окончен: ответили {answered} из {tags.Count}"
+                  + (silent > 0 ? $", нет ответа у {silent}" : string.Empty)
+                  + (skipped > 0 ? $", не замерено {skipped} — движок их не взял, возможно, нужен перезапуск" : string.Empty) + ".";
         }
         catch (OperationCanceledException)
         {
-            _progress.Text = "Замер остановлен.";
+            _note = $"Замер остановлен: ответили {answered}, нет ответа у {silent}.";
         }
         catch (Exception ex)
         {
-            _progress.Text = "Замер прерван: " + ex.GetBaseException().Message;
+            _note = "Замер прерван: " + ex.GetBaseException().Message;
         }
         finally
         {
             _measuring.Dispose();
             _measuring = null;
-            ShowAll();
-            _progress.IsVisible = true;
+            ShowMeasure();
+
+            // «Остановить» сохраняет замеренное, как у окна Windows.
+            if (health is { } memory && recorded > 0)
+                _ = Task.Run(() => memory.Save());
         }
     }
+
+    /// <summary>
+    /// Замер одного сервера движком — с ожиданием итога, а не только ответа
+    /// на команду.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Итог узнаётся по памяти замеров в группах: удача — запись с временем
+    /// не раньше нашей команды; провал — запись стёрта (движок стирает её при
+    /// провале). Не было записи и не появилась за <see cref="ResultWait"/> —
+    /// провал: иначе его не отличить.
+    /// </para>
+    /// <para>
+    /// Адрес проверки — зашитый в движке (gstatic, generate_204), а не
+    /// выбранный в настройках, как на Windows: сервер команд libbox адреса
+    /// не принимает. Чтобы мерить своим, нужна правка Go в libbox.
+    /// </para>
+    /// </remarks>
+    private async Task<Measured> MeasureOneAsync(string tag, CancellationToken token)
+    {
+        try
+        {
+            var before = Seen(await GroupsAsync(), tag);
+            long sentAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var answer = await Task.Run(() => Host.CommandAsync("urltest", EngineGroups.GroupArgument(tag)), token);
+
+            if (EngineGroups.Error(answer) is not null)
+                return new(Host.Status.IsRunning ? MeasureResult.Skipped : MeasureResult.EngineGone);
+
+            var deadline = DateTime.UtcNow + ResultWait;
+
+            while (true)
+            {
+                await Task.Delay(ResultPoll, token);
+
+                if (!Host.Status.IsRunning)
+                    return new(MeasureResult.EngineGone);
+
+                var now = Seen(await GroupsAsync(), tag);
+
+                if (now is { } fresh && fresh.Time >= sentAt && fresh != before)
+                    return new(MeasureResult.Answered, fresh.Delay);
+
+                if (before is not null && now is null)
+                    return new(MeasureResult.Silent);
+
+                if (DateTime.UtcNow >= deadline)
+                {
+                    return now is { } late && late.Time >= sentAt
+                        ? new(MeasureResult.Answered, late.Delay)
+                        : new(MeasureResult.Silent);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Команда не прошла (мост, движок посреди остановки) — не «нет ответа» сервера.
+            return new(Host.Status.IsRunning ? MeasureResult.Skipped : MeasureResult.EngineGone);
+        }
+    }
+
+    private static TestMark? Seen(EngineSnapshot snapshot, string tag) =>
+        snapshot.History.TryGetValue(tag, out var mark) ? mark : null;
 
     // ── Добавление ────────────────────────────────────────────────────────
 

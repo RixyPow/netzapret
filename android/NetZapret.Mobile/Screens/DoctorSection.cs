@@ -86,9 +86,19 @@ internal sealed class DoctorSection : Section
                 ? (Level.Good, "Постоянный VPN", "Включён для NetZapret — Android поднимет его сам после перезагрузки.")
                 : (Level.Info, "Постоянный VPN", "Выключен. Чтобы VPN поднимался сам после перезагрузки — настройки Android → VPN → NetZapret."));
 
+            // Root хозяин спрашивает только при запуске и только с включённым
+            // nfqws2, так что «нет» в сведениях — и отказ, и «не спрашивали».
+            // Прежде здесь стояло «Нет» на любом телефоне без включённого nfqws2,
+            // в том числе с Magisk (разбор 27.10).
+            var withoutRoot = mobile.Desync == DesyncEngine.ByeDpi ? "ByeDPI" : "нарезка приветствия в sing-box";
+
             rows.Add(facts.Root
-                ? (Level.Info, "Root", mobile.UseRoot ? "Есть, nfqws2 включён в настройках." : "Есть. nfqws2 включается в «Настройках»; без него десинк — ByeDPI.")
-                : (Level.Info, "Root", "Нет — десинк делает ByeDPI, root ему не нужен."));
+                ? (Level.Info, "Root", mobile.UseRoot ? "Есть, nfqws2 включён в настройках." : $"Есть. nfqws2 включается в «Настройках»; без него десинк — {withoutRoot}.")
+                : mobile.UseRoot
+                    ? (Level.Info, "Root", "Не подтверждён. Его спрашивают при запуске движков; менеджер root отказал или "
+                        + $"root нет — десинк идёт без него: {withoutRoot}. Отказ меняют в самом менеджере (Magisk) и перезапускают приложение.")
+                    : (Level.Info, "Root", $"Не проверялся: он нужен только nfqws2, а тот выключен — десинк идёт без него: {withoutRoot}. "
+                        + "Включить nfqws2 — в «Настройках», root спросят при запуске."));
 
             rows.Add((Level.Info, "Устройство", $"Android API {facts.Sdk}, {facts.Abi}, NetZapret {facts.AppVersion}"));
         }

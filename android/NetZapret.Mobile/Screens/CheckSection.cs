@@ -28,6 +28,17 @@ namespace NetZapret.Mobile.Screens;
 /// Проверка не обрывается уходом на другую вкладку — идёт минуты, и человек
 /// успевает заглянуть на «Главную». Прерывает её только «Прервать».
 /// </para>
+/// <para>
+/// Пробы идут из самого приложения, а его пакет выведен из своего же VPN
+/// (<c>exclude_package</c>, android/DESIGN.md): через него ходит ByeDPI,
+/// и иначе тот замкнулся бы сам на себя. Поэтому, в отличие от Windows,
+/// и при работающих движках проба не проходит ни туннель, ни ByeDPI, ни
+/// пины телефона (они — в DNS движка) — видна сеть без NetZapret. С root
+/// nfqws2 ловит пакеты в iptables без отбора по приложению, и десинк к
+/// пробам применяется; VPN и пины — всё равно нет. До 27.10 экран говорил
+/// «видно сеть уже с обходом», а имена, заведённые в VPN, пробовались
+/// напрямую с домашнего адреса — оператор видел их имена в TLS.
+/// </para>
 /// </remarks>
 internal sealed class CheckSection : Section
 {
@@ -37,21 +48,31 @@ internal sealed class CheckSection : Section
     private readonly ProgressBar _bar = new() { Minimum = 0, Maximum = 1, IsVisible = false };
     private readonly TextBlock _status = Ui.Text("", "muted", "small");
     private readonly Border _banner;
+    private readonly TextBlock _bannerText = Ui.Text("", "small");
     private readonly StackPanel _summary = new() { Spacing = 8 };
     private readonly StackPanel _results = new() { Spacing = 8 };
     private readonly List<TargetReport> _reports = [];
+
+    /// <summary>Имена, заведённые в VPN, — при работающем туннеле не пробуются (имя и часть сервиса).</summary>
+    private readonly List<(string Host, string Service)> _skipped = [];
+
+    /// <summary>Имена с путём «Десинк», проверенные мимо обхода (без root): у их карточек — пометка.</summary>
+    private readonly HashSet<string> _pastDesync = new(StringComparer.OrdinalIgnoreCase);
+
     private CancellationTokenSource? _running;
     private bool _deep;
     private bool _showOk;
     private string? _reportPath;
+
+    /// <summary>Что видела последняя проверка — для шапки отчёта.</summary>
+    private string _seen = string.Empty;
 
     public CheckSection(MainView shell) : base(shell)
     {
         _run = Ui.Button("Проверить", () => _ = RunAsync(), "primary", "big");
         _run.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-        _banner = Ui.Card(Ui.Text("Движки работают — видно сеть уже с обходом. Чтобы увидеть, что закрыто "
-            + "без NetZapret, остановите их на «Главной».", "small"), "warncard");
+        _banner = Ui.Card(_bannerText, "warncard");
 
         Body.Children.Add(Ui.Text("Что закрыто в этой сети и чем это лечится. Проверка идёт минуты: "
             + "по каждому имени соединение, и каждое ждёт ответа.", "muted"));
@@ -69,7 +90,48 @@ internal sealed class CheckSection : Section
 
     protected override void Shown() => ShowBanner();
 
-    private void ShowBanner() => _banner.IsVisible = Host.Status.IsRunning;
+    private void ShowBanner()
+    {
+        _banner.IsVisible = Host.Status.IsRunning;
+
+        if (_banner.IsVisible)
+            _bannerText.Text = Explain(NfqwsRuns(), TunnelUp());
+    }
+
+    /// <summary>Что проверка видит при работающих движках — словами для шапки и отчёта.</summary>
+    private static string Explain(bool nfqws, bool tunnel)
+    {
+        var text = nfqws
+            ? "Движки работают. nfqws2 ловит пакеты и самой проверки — по десинку видно сеть с обходом. "
+              + "Но проверка идёт мимо VPN, и пины телефона ей не видны."
+            : "Движки работают, но проверка ходит из самого NetZapret — мимо его VPN и мимо десинка. Видно "
+              + "сеть без обхода, как при остановленных движках, и пины телефона пробам не видны.";
+
+        return tunnel
+            ? text + " Имена, которые правила ведут через VPN, сейчас не проверяются: проба напрямую показала бы "
+              + "оператору, куда вы ходите через VPN. Проверить их как есть — остановив движки на «Главной»."
+            : text;
+    }
+
+    /// <summary>Работает ли десинк nfqws2 (root): его iptables ловит и пакеты приложения.</summary>
+    /// <remarks>
+    /// По сведениям хозяина: root подтверждён в этом процессе (спрашивается
+    /// при запуске) и выбран в настройках. Нет nfqws2 в поставке — хозяин
+    /// откатится на ByeDPI, а здесь об этом не узнать; редкий случай.
+    /// </remarks>
+    private bool NfqwsRuns()
+    {
+        try
+        {
+            return Host.Status.IsRunning && Host.Facts().Root && MobileSettings.Load().UseRoot;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private bool TunnelUp() => Host.Status.IsRunning && AppSettings.Load(AppSettings.DefaultPath).NeedsProxy;
 
     private async Task RunAsync()
     {
@@ -83,17 +145,21 @@ internal sealed class CheckSection : Section
         _running = new CancellationTokenSource();
         var token = _running.Token;
         _reports.Clear();
+        _skipped.Clear();
+        _pastDesync.Clear();
         _reportPath = null;
         _results.Children.Clear();
         _summary.Children.Clear();
         SetRunning(true);
         _status.Text = "Собираю список имён…";
 
-        bool tunnel = Host.Status.IsRunning;
+        bool running = Host.Status.IsRunning;
+        bool nfqws = NfqwsRuns();
+        _seen = running ? Explain(nfqws, TunnelUp()) : "Движки стояли — сеть как есть.";
 
         try
         {
-            var (targets, engine) = await Task.Run(() => Prepare(_deep), token);
+            var (targets, engine, tunnel) = await Task.Run(() => Prepare(_deep), token);
             _bar.Maximum = Math.Max(1, targets.Count);
             _bar.Value = 0;
             _status.Text = $"Проверено 0 из {targets.Count}…";
@@ -101,16 +167,35 @@ internal sealed class CheckSection : Section
             using var slots = new SemaphoreSlim(Parallelism);
             int done = 0;
 
-            var running = targets.Select(async target =>
+            var probes = targets.Select(async target =>
             {
                 await slots.WaitAsync(token);
 
                 try
                 {
-                    // Имя, заведённое в туннель, проверяется как туннельное: вердикты
-                    // про DPI к нему неприменимы (BlockCheck.CheckAsync, throughTunnel).
-                    bool tunnelled = tunnel && Proxied(engine, target.Host);
-                    var report = await Task.Run(() => BlockCheck.CheckAsync(target.Host, target.Service, token, tunnelled), token);
+                    var route = Route(engine, target.Host);
+
+                    // Туннель поднят, а правила ведут имя в VPN: проба ушла бы
+                    // напрямую, мимо VPN (наш пакет из него выведен), — оператор
+                    // увидел бы имя в TLS с домашнего адреса, а вердикт был бы не
+                    // о том пути, которым ходят приложения. Не пробуем.
+                    if (running && tunnel && route == RoutingMode.Proxy)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            done++;
+                            _bar.Value = done;
+                            _status.Text = $"Проверено {done} из {targets.Count}…";
+                            _skipped.Add(target);
+                            ShowResults();
+                        });
+
+                        return;
+                    }
+
+                    // throughTunnel не передаётся: туннеля у пробы нет никогда, и
+                    // ждать его (TargetReport.ExpectedTunnel) было бы неправдой.
+                    var report = await Task.Run(() => BlockCheck.CheckAsync(target.Host, target.Service, token), token);
 
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -121,6 +206,11 @@ internal sealed class CheckSection : Section
                         // Маркеры зон без адреса — не строки итога (CheckView.RunAsync).
                         if (report.Kind == BlockKind.NoAddress && !OwnLists.IsOwnTarget(target.Service))
                             return;
+
+                        // Путь «Десинк», а проба шла мимо него: вердикт — о сети
+                        // без обхода, приложениям телефона десинк это имя чинит.
+                        if (running && !nfqws && route == RoutingMode.Desync)
+                            _pastDesync.Add(report.Host);
 
                         _reports.Add(report);
                         ShowResults();
@@ -134,7 +224,7 @@ internal sealed class CheckSection : Section
 
             try
             {
-                await Task.WhenAll(running);
+                await Task.WhenAll(probes);
             }
             catch (OperationCanceledException)
             {
@@ -176,7 +266,8 @@ internal sealed class CheckSection : Section
         _bar.IsVisible = running;
     }
 
-    private static (IReadOnlyList<(string Host, string Service)> Targets, RuleEngine? Engine) Prepare(bool deep)
+    /// <returns>Цели, правила и поднимается ли туннель при этих настройках.</returns>
+    private static (IReadOnlyList<(string Host, string Service)> Targets, RuleEngine? Engine, bool Tunnel) Prepare(bool deep)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
         var zapretRoot = ZapretPaths.Discover()?.Root;
@@ -189,10 +280,10 @@ internal sealed class CheckSection : Section
         }
         catch (Exception)
         {
-            // Без правил проверка всё равно идёт — только без пометки «через туннель».
+            // Без правил проверка всё равно идёт — только не знает путей имён.
         }
 
-        return (Targets(zapretRoot, deep), engine);
+        return (Targets(zapretRoot, deep), engine, settings.NeedsProxy);
     }
 
     /// <summary>Цели проверки — как у окна Windows (CheckView.Targets).</summary>
@@ -256,22 +347,23 @@ internal sealed class CheckSection : Section
         return targets;
     }
 
-    private static bool Proxied(RuleEngine? engine, string host) =>
-        engine is not null && engine.Evaluate(new ConnectionEvent
+    /// <summary>Куда правила ведут имя; <c>null</c> — правила не прочитались.</summary>
+    private static RoutingMode? Route(RuleEngine? engine, string host) =>
+        engine?.Evaluate(new ConnectionEvent
         {
             Timestamp = DateTimeOffset.Now,
             Protocol = ProtocolKind.Tcp,
             RemoteAddress = null,
             RemotePort = 443,
             Hostname = host,
-        }).Mode == RoutingMode.Proxy;
+        }).Mode;
 
     private void ShowResults()
     {
         _summary.Children.Clear();
         _results.Children.Clear();
 
-        if (_reports.Count == 0)
+        if (_reports.Count == 0 && _skipped.Count == 0)
             return;
 
         var bad = _reports.Where(r => r.Kind != BlockKind.None).OrderByDescending(r => r.Actionable).ThenBy(r => r.Service).ToList();
@@ -281,11 +373,24 @@ internal sealed class CheckSection : Section
             Ui.Caption("Итог"),
             Ui.Text($"Доступно {good.Count} из {_reports.Count}", "h2"));
 
-        foreach (var group in bad.Where(r => r.Actionable).GroupBy(r => r.Describe()))
+        // Имена с путём «Десинк», закрытые мимо обхода, — отдельной строкой:
+        // совет «лечится десинком» им уже выполнен правилами.
+        foreach (var group in bad.Where(r => r.Actionable && !_pastDesync.Contains(r.Host)).GroupBy(r => r.Describe()))
         {
             var sample = group.First();
             head.Children.Add(Ui.Text($"{Capital(group.Key)} — {group.Count()}: {sample.Remedy()}", "small"));
         }
+
+        int pastDesync = bad.Count(r => _pastDesync.Contains(r.Host));
+
+        if (pastDesync > 0)
+        {
+            head.Children.Add(Ui.Text($"С путём «Десинк» — {pastDesync}: закрыты без обхода, а проба шла мимо него. "
+                + "Открываются ли они в приложениях — смотрите в самих приложениях.", "small"));
+        }
+
+        if (_skipped.Count > 0)
+            head.Children.Add(Ui.Text($"Через VPN, не проверялись: {_skipped.Count}.", "small"));
 
         if (_running is null && _reportPath is not null)
         {
@@ -298,6 +403,19 @@ internal sealed class CheckSection : Section
 
         foreach (var report in bad)
             _results.Children.Add(ReportCard(report));
+
+        if (_skipped.Count > 0)
+        {
+            const int ListedAtMost = 12;
+            var names = string.Join(", ", _skipped.Take(ListedAtMost).Select(s => s.Host))
+                + (_skipped.Count > ListedAtMost ? $" и ещё {_skipped.Count - ListedAtMost}" : string.Empty);
+
+            _results.Children.Add(Ui.Card(Ui.Stack(4,
+                Ui.Text($"Через VPN — не проверялись ({_skipped.Count})", "h3"),
+                Ui.Text("Правила ведут их в VPN, а проба из NetZapret идёт мимо него, напрямую: проверять их сейчас "
+                    + "значило бы показать оператору, куда вы ходите через VPN. Как есть — при остановленных движках.", "muted", "small"),
+                Ui.Text(names, "small"))));
+        }
 
         if (good.Count > 0)
         {
@@ -329,7 +447,7 @@ internal sealed class CheckSection : Section
         }
     }
 
-    private static Control ReportCard(TargetReport report)
+    private Control ReportCard(TargetReport report)
     {
         var colour = report.Kind switch
         {
@@ -347,6 +465,10 @@ internal sealed class CheckSection : Section
             verdict,
             report.Why is null ? null : Ui.Text(report.Why, "muted", "small"),
             Ui.Text("Лечится: " + report.Remedy(), "small"),
+            _pastDesync.Contains(report.Host)
+                ? Ui.Text("Путь этого имени — «Десинк»: приложениям телефона обход его чинит, а проба шла мимо "
+                    + "обхода — вердикт о сети без NetZapret.", "faint", "small")
+                : null,
             report.Tunnelled ? Ui.Text("Шло через туннель.", "faint", "small") : null);
 
         var card = Ui.Card(lines);
@@ -365,14 +487,20 @@ internal sealed class CheckSection : Section
             var path = Path.GetFullPath(Path.Combine("reports", $"check-{DateTime.Now:yyyyMMdd-HHmmss}.txt"));
             var text = new StringBuilder();
             text.AppendLine($"NetZapret — проверка блокировок, {DateTime.Now:dd.MM.yyyy HH:mm}");
-            text.AppendLine(Host.Status.IsRunning ? "Движки работали — сеть с обходом." : "Движки стояли — сеть как есть.");
+            // Что видела проверка — словами экрана: «сеть с обходом» прежде
+            // стояло здесь при любом запуске движков, хотя пробы шли мимо них.
+            text.AppendLine(_seen);
             text.AppendLine();
 
             foreach (var report in _reports.OrderBy(r => r.Kind == BlockKind.None).ThenBy(r => r.Service))
             {
                 text.AppendLine($"{report.Host}\t{report.Service}\t{report.Describe()}\t"
-                    + $"TCP: {report.Tcp.Describe()}\tTLS: {report.DescribeTls()}\tданные: {report.DescribeData()}");
+                    + $"TCP: {report.Tcp.Describe()}\tTLS: {report.DescribeTls()}\tданные: {report.DescribeData()}"
+                    + (_pastDesync.Contains(report.Host) ? "\tпуть «Десинк», проба мимо обхода" : string.Empty));
             }
+
+            foreach (var (host, service) in _skipped)
+                text.AppendLine($"{host}\t{service}\tчерез VPN — не проверялось");
 
             File.WriteAllText(path, text.ToString(), new UTF8Encoding(false));
             return path;

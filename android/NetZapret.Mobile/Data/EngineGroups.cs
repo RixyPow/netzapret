@@ -4,8 +4,12 @@ using System.Text.Json.Nodes;
 namespace NetZapret.Mobile.Data;
 
 /// <summary>Член группы движка: сервер или вложенная группа, с последним замером.</summary>
-/// <param name="Delay">Мс последнего замера; <c>null</c> — не мерился, 0 и меньше движок так и отдаёт.</param>
-internal sealed record GroupItem(string Tag, string Type, int? Delay);
+/// <param name="Delay">Мс последнего удачного замера; <c>null</c> — записи нет.</param>
+/// <param name="Time">Когда он сделан, секунды Unix; <c>null</c> — записи нет.</param>
+internal sealed record GroupItem(string Tag, string Type, int? Delay, long? Time);
+
+/// <summary>Запись замера в памяти движка: задержка и когда замерено (секунды Unix).</summary>
+internal readonly record struct TestMark(int Delay, long Time);
 
 internal sealed record EngineGroup(string Tag, string Type, string? Selected, IReadOnlyList<GroupItem> Items);
 
@@ -23,9 +27,6 @@ internal static class EngineGroups
     public const string Selector = "auto";
 
     public const string AutoPick = "auto-latency";
-
-    /// <summary>У libbox провал замера — это предельная задержка, а не ноль.</summary>
-    private const int Failed = 65535;
 
     public static IReadOnlyList<EngineGroup> Parse(string? json)
     {
@@ -46,7 +47,8 @@ internal static class EngineGroups
                     .Select(i => new GroupItem(
                         (string?)i["tag"] ?? string.Empty,
                         (string?)i["type"] ?? string.Empty,
-                        i["delay"] is JsonValue d && d.TryGetValue<int>(out var ms) && ms > 0 ? ms : null))
+                        i["delay"] is JsonValue d && d.TryGetValue<int>(out var ms) && ms > 0 ? ms : null,
+                        i["time"] is JsonValue t && t.TryGetValue<long>(out var at) && at > 0 ? at : null))
                     .Where(i => i.Tag.Length > 0)
                     .ToList();
 
@@ -69,15 +71,23 @@ internal static class EngineGroups
         }
     }
 
-    /// <summary>Задержки серверов из всех групп: тег → мс; провал замера — <c>-1</c>.</summary>
-    public static IReadOnlyDictionary<string, int> Delays(IReadOnlyList<EngineGroup> groups)
+    /// <summary>Последние удачные замеры серверов из всех групп: тег → задержка и время.</summary>
+    /// <remarks>
+    /// Провала замера здесь не видно вовсе: движок (daemon/started_service.go,
+    /// URLTest) при провале запись стирает, и сервер приходит с задержкой 0 —
+    /// как ни разу не мерившийся. Прежде здесь ждали 65535 как знак провала,
+    /// но его движок не пишет нигде, и «нет ответа» не показывалось никогда
+    /// (разбор 27.10). Провал вкладка VPN запоминает сама, по своему замеру.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, TestMark> History(IReadOnlyList<EngineGroup> groups)
     {
-        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        var result = new Dictionary<string, TestMark>(StringComparer.Ordinal);
 
         foreach (var item in groups.SelectMany(g => g.Items))
         {
+            // Время из старого ответа без «time» — ноль: свежим такой замер не сочтётся.
             if (item.Delay is { } ms)
-                result[item.Tag] = ms >= Failed ? -1 : ms;
+                result[item.Tag] = new TestMark(ms, item.Time ?? 0);
         }
 
         return result;

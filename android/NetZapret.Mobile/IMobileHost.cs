@@ -59,6 +59,11 @@ public sealed record EngineStatus(
     public bool IsRunning => State == "running";
 }
 
+/// <param name="Root">
+/// Root подтверждён в этом процессе. Хозяин спрашивает его только при запуске
+/// движков с включённым nfqws2, поэтому <c>false</c> — и «отказали», и «ещё не
+/// спрашивали»: интерфейс обязан говорить «не подтверждён», а не «нет».
+/// </param>
 /// <param name="PrivateDns">Частный DNS телефона: null — выключен, "auto" — автоматически, иначе имя сервера.</param>
 /// <param name="BatteryOptimized">Система вправе усыплять приложение — VPN может падать в фоне.</param>
 public sealed record PlatformFacts(
