@@ -1658,6 +1658,16 @@ public sealed class SingBoxConfigCompiler
                 ["address"] = addresses,
                 ["private_key"] = server.Credential,
                 ["peers"] = new JsonArray { peer },
+
+                // Без detour движок открывает сокеты IPv4 и IPv6 сразу и привязывает
+                // оба к сетевой карте; где на карте выключен IPv6, падает весь сокет:
+                // «unable to update bind: An invalid argument was supplied», и ни
+                // одного рукопожатия (обсуждение №40, 28.10: после включения IPv6
+                // ошибка из журнала ушла). С detour берётся сокет одного семейства —
+                // к адресу сервера (замер 28.10, sing-box 2.7.3: «receive incoming
+                // receive» вместо пары v4/v6). Цена: сервер, заданный именем, только
+                // по IPv4.
+                ["detour"] = "direct",
             };
 
             // AmneziaWG — блок маскировки сборки extended; типы значений

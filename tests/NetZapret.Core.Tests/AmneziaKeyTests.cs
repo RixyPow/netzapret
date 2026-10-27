@@ -225,5 +225,9 @@ public sealed class AmneziaKeyTests
 
         var check = SingBoxCheck.Run(result.Json);
         Assert.True(check.Ok, check.Said);
+
+        // Сокет одного семейства, а не пара v4/v6 на карте без IPv6 (№40, 28.10).
+        var endpoint = JsonNode.Parse(result.Json)!["endpoints"]!.AsArray().Single()!;
+        Assert.Equal("direct", (string?)endpoint["detour"]);
     }
 }
