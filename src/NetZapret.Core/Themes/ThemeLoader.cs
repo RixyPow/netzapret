@@ -40,10 +40,11 @@ public static class ThemeLoader
     /// 30.09 («пару расцветок на любой вкус»). Основами
     /// они не служат: основа — только тёмная и светлая, чтобы чужая тема
     /// не зависела от темы, которую мы однажды поправим. С картинкой едут
-    /// только три, по слову владельца: «Слойка 1» (30.09), Blissfield (01.10)
-    /// и «Рыбка» с живым фоном (08.10).
+    /// только те, что по слову владельца: «Слойка 1» (30.09), Blissfield (01.10),
+    /// «Рыбка» с живым фоном (08.10), «Слойка 2» (20.10) и «Слойка 3» — светлая,
+    /// арт Слойки (27.10: «да, добавить»).
     /// </remarks>
-    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1", "sloyka2", "blissfield", "fish"];
+    public static IReadOnlyList<string> Shipped { get; } = ["dark", "light", "grey", "tinted", "violet", "ocean", "coffee", "rose", "cream", "sloyka1", "sloyka2", "sloyka3", "blissfield", "fish"];
 
     public const long MaxImageBytes = 20 * 1024 * 1024;
     public const long MaxFontBytes = 8 * 1024 * 1024;

@@ -239,11 +239,12 @@ for %%T in (dark light grey tinted violet ocean coffee rose cream) do (
 )
 rem Shipped themes with a picture, by the owner's word: sloyka1 - art by an
 rem acquaintance of the owner, with her permission (30.09); sloyka2 - the
-rem earlier Sloyka, shipped by the owner's word 20.10; blissfield -
+rem earlier Sloyka, shipped by the owner's word 20.10; sloyka3 - light,
+rem art by the same Sloyka, by the owner's word 27.10; blissfield -
 rem made for the project (01.10); fish - a looping video background, the
 rem owner's file (08.10). Every other picture theme in a working copy is
 rem somebody else's art and stays out.
-for %%T in (sloyka1 sloyka2 blissfield fish) do (
+for %%T in (sloyka1 sloyka2 sloyka3 blissfield fish) do (
     robocopy "%ROOT%themes\%%T" "%STAGE%\themes\%%T" theme.json background.jpg background.mp4 /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
     if errorlevel 8 exit /b 1
 )
