@@ -87,34 +87,84 @@ public static class ByeDpiCommandLine
     public const string Listen = "socks5://127.0.0.1";
 
     /// <summary>
-    /// Общие ключи: отказ на имена (<c>-N</c>), до 1024 клиентов, 3 с на ответ.
+    /// Общие ключи: отказ на имена (<c>-N</c>), до 1024 клиентов, 3 с на первый ответ.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>-N</c> — потому что имя в запросе ByeDPI разрешает сам, синхронно
     /// и системным DNS мимо VPN, у провайдера, подменявшего открытый DNS летом
     /// 2026 года; адрес ему отдаёт sing-box (<c>resolve</c>). <c>-c 1024</c> —
     /// через ByeDPI идёт весь «десинк» телефона, по два дескриптора на
-    /// соединение. <c>-T 3</c> — чтобы запасная группа (<c>t</c>) сработала
-    /// на молчании за 3 с, а не за минуты таймаута ядра.
+    /// соединение.
+    /// </para>
+    /// <para>
+    /// <c>-T 3:0:0:8192</c> — чтобы запасная группа (<c>t</c>) сработала на
+    /// молчании за 3 с, а не за минуты таймаута ядра, и только в начале
+    /// соединения. Голое <c>-T 3</c> ставит <c>TCP_USER_TIMEOUT</c> в 3 с
+    /// (<c>setup_conn</c>, extend.c) и снимает его лишь по четвёртому полю —
+    /// когда принято больше <c>b</c> байт (<c>tcp_recv_hook</c>); при <c>b</c> = 0
+    /// не снимает никогда (main@ba532298; снятие после первого раунда убрано
+    /// коммитом 5b894d5, январь 2026, — README и наша заметка byedpi.md писали
+    /// прежнее). С тремя секундами на всю жизнь соединения заминка радио
+    /// на 3–4 с (переход между вышками, лифт) рвала бы любое соединение,
+    /// у которого в эту минуту есть неподтверждённые данные телефона — запрос,
+    /// отправка, служебный кадр HTTP/2, — а таймаут ядра (~15 мин) её пережил бы;
+    /// ByeDPI к тому же записал бы адрес в запасную. 8192 байт — с запасом на ответ сервера TLS 1.3
+    /// с сертификатом (4–6 КБ): до тех пор молчание — признак блокировки, и тем
+    /// же порогом ByeDPI снимает пометку TLS, по которой FIN в первом раунде
+    /// считается отказом (<c>on_fin</c>). Пауза записи (второе поле) — 0: таймер
+    /// заморозки не ставится. Прочитано в коде 27.10, на телефоне не проверено.
+    /// </para>
     /// </remarks>
-    public const string Header = "-N -c 1024 -T 3";
+    public const string Header = "-N -c 1024 -T 3:0:0:8192";
 
     /// <summary>Первая группа строки по умолчанию: по умолчанию в ByeByeDPI, держится дольше всех.</summary>
     public const string FirstGroup = "-K t,h -o1 -r-5+se";
 
     /// <summary>
-    /// Запасные группы: срабатывают, когда нет ServerHello или соединение
-    /// оборвано (<c>-A t,s</c>), — у любой группы, и у переведённой из пресета.
+    /// Срок записи кэша «адрес:порт → группа» у запасных групп — сутки.
     /// </summary>
     /// <remarks>
-    /// Вторая — подделка с именем Google и случайными полями (май 2026,
-    /// ByeDPIAndroid №415, №420), третья и четвёртая — ещё две ходовые строки
-    /// 2026 года (<c>byedpi.md</c> §4.2). На телефоне не проверены.
+    /// Срок — свойство группы, на которую указывает запись (<c>cache_get</c>
+    /// смотрит <c>cache_ttl</c> её группы), и по умолчанию он 0, то есть
+    /// вечный: адрес, однажды ушедший в запасную, оставался бы в ней до
+    /// перезапуска ByeDPI — с VPN «всегда» это дни, хотя основная группа
+    /// работала. Раз в сутки — снова первая (byedpi.md §4.3).
     /// </remarks>
-    public const string Fallbacks =
-        "-A t,s -K t,h -d1 -n www.google.com -Q rand -f-1 "
-        + "-A t,s -K t,h " + ByeDpiRecipes.MultiStage + " "
-        + "-A t,s -K t,h -q1+s -s25+s -o5+s";
+    private const string CacheTtl = "-u 86400";
+
+    /// <summary>Подделка с именем Google и случайными полями (май 2026, ByeDPIAndroid №415, №420).</summary>
+    private const string Fallback1 = "-A t,s -K t,h -d1 -n www.google.com -Q rand -f-1 " + CacheTtl;
+
+    /// <summary>Многоступенчатый беспорядок, рвущий имя (byedpi.md §4.2).</summary>
+    private const string Fallback2 = "-A t,s -K t,h " + ByeDpiRecipes.MultiStage + " " + CacheTtl;
+
+    /// <summary>Ещё одна ходовая строка 2026 года (byedpi.md §4.2).</summary>
+    private const string Fallback3 = "-A t,s -K t,h -q1+s -s25+s -o5+s " + CacheTtl;
+
+    /// <summary>
+    /// Запасные группы: срабатывают, когда нет ServerHello или соединение
+    /// оборвано (<c>-A t,s</c>), — у группы, за которой стоят вплотную.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Вплотную — потому что иначе до них не дойти. <c>on_trigger</c> (extend.c,
+    /// main@ba532298) ищет следующую группу с начала строки, минуя уже
+    /// проверенные, и останавливается на первой непроверенной без условия
+    /// (<c>-A n</c>): «unreach ip», соединение рвётся, запасные не пробуются.
+    /// До 27.10 они стояли одним блоком в конце строки, и дойти до них могла
+    /// только последняя группа TCP пресета; при UDP в ByeDPI — ни одна.
+    /// Теперь в переводе пресета цепочка стоит за каждой группой с приёмами
+    /// (<see cref="Build"/>), а в строке по умолчанию — за первой группой.
+    /// </para>
+    /// <para>
+    /// На телефоне не проверены.
+    /// </para>
+    /// </remarks>
+    public const string Fallbacks = Fallback1 + " " + Fallback2 + " " + Fallback3;
+
+    /// <summary>Запасные группы по одной — в порядке, в каком их отдают, когда все не помещаются.</summary>
+    private static readonly string[] FallbackChain = [Fallback1, Fallback2, Fallback3];
 
     /// <summary>Группа UDP строки по умолчанию: одна подделка перед первой датаграммой.</summary>
     public const string UdpGroup = "-A n -K u -a1";
@@ -126,7 +176,8 @@ public static class ByeDpiCommandLine
     public const string DefaultStrategy = Header + " " + FirstGroup + " " + Fallbacks + " " + UdpGroup;
 
     /// <summary>
-    /// Сколько групп выдерживает ByeDPI — вместе с пустой, которую он дописывает сам.
+    /// Сколько групп выдерживает ByeDPI — вместе с пустой, которую он дописывает сам
+    /// и запасными за группами пресета.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -270,7 +321,12 @@ public static class ByeDpiCommandLine
         public CidrSet? Cidrs => Addresses is null ? null : _cidrs ??= CidrSet.From(Addresses);
 
         /// <summary>Чем группа отличается для склейки: протокол, вид отбора и приёмы.</summary>
-        public string Key => $"{Proto}|{(Hosts is null ? "" : "H")}{(Addresses is null ? "" : "J")}|{Recipe.Key}";
+        /// <remarks>
+        /// <c>pass</c> отдельно от группы без приёмов (<see cref="ByeDpiRecipeKind.Empty"/>),
+        /// хотя ключей у обеих нет: с 27.10 за второй стоят запасные, за первой — нет.
+        /// </remarks>
+        public string Key =>
+            $"{Proto}|{(Hosts is null ? "" : "H")}{(Addresses is null ? "" : "J")}|{(Recipe.Kind == ByeDpiRecipeKind.Pass ? "pass" : Recipe.Key)}";
 
         public string Title => string.IsNullOrWhiteSpace(Name) ? $"секция {Index}" : Name;
 
@@ -296,6 +352,9 @@ public static class ByeDpiCommandLine
         public required Proto Proto { get; init; }
         public required string Key { get; init; }
         public List<Part> Members { get; } = [];
+
+        /// <summary>Группа <c>pass</c>: имена секции не трогать, запасных за ней нет.</summary>
+        public bool IsPass => Members[0].Recipe.Kind == ByeDpiRecipeKind.Pass;
     }
 
     /// <summary>Ключи winws2, общие для всех профилей (как <c>WinwsCommandLine.SplitGlobals</c>).</summary>
@@ -519,8 +578,25 @@ public static class ByeDpiCommandLine
     }
 
     /// <summary>
-    /// Группы пресета: склейка, файлы списков, ключи; в конце — запасные.
+    /// Группы пресета: склейка, файлы списков, ключи; за каждой группой TCP
+    /// с приёмами — её запасные, группы UDP — после всех групп TCP.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Запасные — за каждой группой, а не одним блоком в конце: из группы
+    /// пресета ByeDPI доходит только до запасных, стоящих вплотную за ней
+    /// (см. <see cref="Fallbacks"/>). За группой <c>pass</c> их нет: у winws2
+    /// такие имена не трогает никто, а запасная тронула бы их при первой заминке.
+    /// </para>
+    /// <para>
+    /// Групп на всех не хватает быстро: цепочка из трёх за каждой группой
+    /// вчетверо умножила бы строку. Поэтому уступки по порядку: группы UDP
+    /// из пресета (QUIC к именам десинка sing-box и так отклоняет), затем
+    /// цепочка короче — по две, по одной запасной на группу, — и только когда
+    /// и по одной не хватает, запасные получают первые группы, а остальные
+    /// остаются без них. Каждая уступка — строкой в предупреждениях.
+    /// </para>
+    /// </remarks>
     private static List<string> Groups(
         List<Part> parts,
         ByeDpiRequest request,
@@ -530,31 +606,83 @@ public static class ByeDpiCommandLine
         var tcp = Merge(parts.Where(p => p.Proto == Proto.Tcp).ToList());
         var udp = Merge(parts.Where(p => p.Proto == Proto.Udp).ToList());
 
-        int fallbacks = ByeDpiRecipes.Split(Fallbacks).Count(t => t == "-A");
-        int tail = fallbacks + (request.Udp ? 1 : 0) + 1;   // + пустая группа, которую ByeDPI дописывает сам
+        // Ни одной группы TCP: первая группа строки всё равно должна быть
+        // ограничена, иначе она — без -K — забрала бы и весь UDP. Приёмов у неё
+        // нет, и запасные — её.
+        bool noTcp = tcp.Count == 0;
 
-        // Не помещается: сперва уступает UDP из пресета — QUIC к именам десинка
-        // sing-box и так отклоняет, браузер уходит на TCP.
-        if (Math.Max(tcp.Count, 1) + udp.Count + tail > GroupLimit && udp.Count > 0)
+        // Сколько групп без запасных: пресета, своя UDP и пустая, которую
+        // ByeDPI дописывает сам.
+        int Base() => Math.Max(tcp.Count, 1) + udp.Count + (request.Udp ? 1 : 0) + 1;
+
+        int rescuable = noTcp ? 1 : tcp.Count(g => !g.IsPass);
+
+        if (Base() > GroupLimit && udp.Count > 0)
         {
             warnings.Add($"групп больше {GroupLimit}: группы UDP из пресета ({udp.Count}) не включены");
             udp.Clear();
         }
 
-        int total = Math.Max(tcp.Count, 1) + udp.Count + tail;
-
-        if (total > GroupLimit)
+        if (Base() > GroupLimit)
         {
             throw new InvalidOperationException(
-                $"пресет даёт {total} групп ByeDPI вместе с запасными, а ByeDPI выдерживает {GroupLimit} — выберите пресет легче или строку по умолчанию");
+                $"пресет даёт {Base()} групп ByeDPI и без запасных, а ByeDPI выдерживает {GroupLimit} — выберите пресет легче или строку по умолчанию");
+        }
+
+        // Хоть по одной запасной каждой группе с приёмами — важнее UDP из пресета.
+        if (GroupLimit - Base() < rescuable && udp.Count > 0)
+        {
+            warnings.Add($"запасным группам не хватает места: группы UDP из пресета ({udp.Count}) не включены");
+            udp.Clear();
+        }
+
+        int spare = GroupLimit - Base();
+        int chain = FallbackChain.Length;
+
+        while (chain > 0 && rescuable * chain > spare)
+            chain--;
+
+        // И по одной не хватает: запасная — первым группам, сколько поместится.
+        int rescued = chain > 0 ? rescuable : spare;
+
+        if (chain == 0)
+        {
+            chain = 1;
+            warnings.Add($"запасная группа есть только у {rescued} групп из {rescuable}: у остальных при отказе"
+                + " ByeDPI не попробует ничего — выберите пресет легче или строку по умолчанию");
+        }
+        else if (chain < FallbackChain.Length)
+        {
+            warnings.Add($"запасных групп по {chain} за каждой группой пресета вместо {FallbackChain.Length}:"
+                + $" больше не помещается в {GroupLimit}");
         }
 
         var arguments = new List<string>(ByeDpiRecipes.Split(Header));
+        int head = arguments.Count;
         int number = 0;
 
+        void Fallback()
+        {
+            if (rescued <= 0)
+                return;
+
+            for (int i = 0; i < chain; i++)
+                arguments.AddRange(ByeDpiRecipes.Split(FallbackChain[i]));
+
+            rescued--;
+        }
+
+        if (noTcp)
+        {
+            arguments.AddRange(["-K", "t,h"]);
+            Fallback();
+        }
+
+        // UDP — после всех TCP и их запасных: группа UDP без условия (-A n)
+        // между группой TCP и её запасными оборвала бы поиск (on_trigger).
         foreach (var group in tcp.Concat(udp))
         {
-            if (number > 0)
+            if (arguments.Count > head)
                 arguments.AddRange(["-A", "n"]);
 
             arguments.AddRange(group.Proto == Proto.Tcp ? ["-K", "t,h"] : ["-K", "u"]);
@@ -578,17 +706,10 @@ public static class ByeDpiCommandLine
 
             arguments.AddRange(group.Members[0].Recipe.Tokens);
             number++;
-        }
 
-        // Ни одной группы TCP: первая группа строки всё равно должна быть
-        // ограничена, иначе она — без -K — забрала бы и весь UDP.
-        if (number == 0)
-        {
-            arguments.AddRange(["-K", "t,h"]);
-            number++;
+            if (group.Proto == Proto.Tcp && !group.IsPass)
+                Fallback();
         }
-
-        arguments.AddRange(ByeDpiRecipes.Split(Fallbacks));
 
         if (request.Udp)
             arguments.AddRange(ByeDpiRecipes.Split(UdpGroup));
@@ -657,10 +778,14 @@ public static class ByeDpiCommandLine
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Запасные группы ByeDPI (<c>-A t,s</c>) срабатывают на любом соединении,
-    /// и группа <c>pass</c> от них не спасает: при отказе Riot или GitHub получили
-    /// бы подделки. Поэтому эти имена sing-box ведёт напрямую, мимо ByeDPI —
-    /// «напрямую» и «десинк + pass» в winws2 одинаковы (замер A/B/A 29.09).
+    /// За группой <c>pass</c> запасных нет (<see cref="Groups"/>), но кэш ByeDPI
+    /// помнит «адрес:порт → группа» и отдаёт запись любому имени на том же
+    /// адресе (<c>connect_hook</c>, main@ba532298): на общем адресе CDN Riot или
+    /// GitHub получили бы приёмы запасной группы, в которую ушло соседнее имя.
+    /// Поэтому эти имена sing-box ведёт напрямую, мимо ByeDPI — «напрямую»
+    /// и «десинк + pass» в winws2 одинаковы (замер A/B/A 29.09). До 27.10 здесь
+    /// стояло, что запасные срабатывают на любом соединении, — неверно: из
+    /// группы пресета до них доходит только соседняя (<see cref="Fallbacks"/>).
     /// </para>
     /// <para>
     /// Не все имена секции: имя, которое забирает секция с рецептом выше,

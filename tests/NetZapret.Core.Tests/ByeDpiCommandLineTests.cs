@@ -143,6 +143,49 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
     private static bool HasPair(IReadOnlyList<string> words, string key, string value) =>
         Enumerable.Range(0, Math.Max(0, words.Count - 1)).Any(i => words[i] == key && words[i + 1] == value);
 
+    /// <summary>Группы строки с условием, которым каждая начата (<c>-A …</c>); у первой — пусто.</summary>
+    private static List<(string Trigger, List<string> Words)> Chain(IReadOnlyList<string> arguments)
+    {
+        var groups = new List<(string Trigger, List<string> Words)> { ("", new List<string>()) };
+
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            if (arguments[i] == "-A" && i + 1 < arguments.Count)
+            {
+                groups.Add((arguments[++i], new List<string>()));
+                continue;
+            }
+
+            groups[^1].Words.Add(arguments[i]);
+        }
+
+        return groups;
+    }
+
+    /// <summary>Есть ли у группы приёмы — слова кроме отбора (<c>-K</c>, <c>-H</c>, <c>-j</c>) и срока кэша.</summary>
+    private static bool HasRecipe(List<string> words)
+    {
+        for (int i = 0; i < words.Count; i++)
+        {
+            if (words[i] is "-K" or "-H" or "-j" or "-u" or "-i" or "-p" or "-c" or "-T")
+            {
+                i++;
+                continue;
+            }
+
+            if (words[i] is "-N" or "-U")
+                continue;
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Сколько групп пресета — без запасных (<c>-A t,s</c>).</summary>
+    private static int PresetGroups(IReadOnlyList<string> arguments) =>
+        Chain(arguments).Count(g => g.Trigger != "t,s");
+
     [Fact]
     public void V12LiteFitsIntoTheGroupsByeDpiCanReach()
     {
@@ -156,7 +199,94 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
         Assert.True(groups <= 64);
 
         // Склейка действительно склеивает: секций TCP в V12 Lite больше шестидесяти.
-        Assert.True(groups < 40, $"групп {groups}");
+        int preset = PresetGroups(plan.Arguments);
+        Assert.True(preset < 40, $"групп пресета {preset}");
+    }
+
+    /// <summary>
+    /// Запасные доступны из каждой группы с приёмами: ByeDPI ищет следующую группу
+    /// с начала строки и обрывает поиск на первой непроверенной без условия
+    /// (<c>on_trigger</c>, main@ba532298) — значит, запасная обязана стоять
+    /// вплотную за группой, а не одним блоком в конце строки (разбор 27.10).
+    /// </summary>
+    [Fact]
+    public void EveryGroupWithARecipeReachesAFallback()
+    {
+        if (V12Lite() is not { } plan || V12Lite(r => r with { Udp = true }) is not { } udp)
+            return;
+
+        foreach (var arguments in new[] { plan.Arguments, udp.Arguments })
+        {
+            var chain = Chain(arguments);
+
+            for (int i = 0; i < chain.Count; i++)
+            {
+                var (trigger, words) = chain[i];
+
+                if (trigger == "t,s" || !HasPair(words, "-K", "t,h") || !HasRecipe(words))
+                    continue;
+
+                Assert.True(i + 1 < chain.Count && chain[i + 1].Trigger == "t,s",
+                    $"за группой {i} ({string.Join(' ', words.Take(6))}…) нет запасной");
+            }
+
+            // UDP — только после последней группы TCP и её запасных.
+            int lastTcp = chain.FindLastIndex(g => HasPair(g.Words, "-K", "t,h"));
+            int firstUdp = chain.FindIndex(g => HasPair(g.Words, "-K", "u"));
+            Assert.True(firstUdp < 0 || firstUdp > lastTcp, $"UDP {firstUdp}, последняя TCP {lastTcp}");
+
+            // Все запасные — со сроком кэша: иначе адрес оставался бы в запасной до перезапуска ByeDPI.
+            Assert.All(chain.Where(g => g.Trigger == "t,s"), g => Assert.True(HasPair(g.Words, "-u", "86400")));
+        }
+    }
+
+    /// <summary>
+    /// За группой <c>pass</c> запасных нет, за группой без приёмов (без root
+    /// не переводится) — есть, и склеиться они не могут, хотя ключей нет у обеих.
+    /// </summary>
+    [Fact]
+    public void PassGroupsGetNoFallbacksAndDoNotMergeWithEmptyOnes()
+    {
+        Directory.CreateDirectory(Path.Combine(_work, "lists"));
+        File.WriteAllText(Path.Combine(_work, "lists", "a.txt"), "a.example\n");
+        File.WriteAllText(Path.Combine(_work, "lists", "p.txt"), "p.example\n");
+        File.WriteAllText(Path.Combine(_work, "lists", "e.txt"), "e.example\n");
+
+        var path = Path.Combine(_work, "pass.txt");
+        File.WriteAllText(path, """
+            --wf-tcp-out=443
+            --new
+            --name=A
+            --filter-tcp=443
+            --hostlist=lists/a.txt
+            --lua-desync=multidisorder:pos=1,host+2
+            --new
+            --name=P
+            --filter-tcp=443
+            --hostlist=lists/p.txt
+            --lua-desync=pass
+            --new
+            --name=E
+            --filter-tcp=443
+            --hostlist=lists/e.txt
+            --lua-desync=send:repeats=2
+            --lua-desync=syndata:blob=tls_google
+            """);
+
+        var plan = ByeDpiCommandLine.Build(new ByeDpiRequest
+        {
+            PresetPath = path,
+            ZapretRoot = _work,
+            WorkDirectory = _work,
+            Port = Port,
+        });
+
+        var triggers = Chain(plan.Arguments).Select(g => g.Trigger).ToList();
+        var full = Enumerable.Repeat("t,s", 3);
+
+        // A, три запасные, P без запасных, E (без приёмов) и три запасные.
+        Assert.Equal(new[] { "" }.Concat(full).Append("n").Append("n").Concat(full), triggers);
+        Assert.Equal("-U", plan.Arguments[^1]);
     }
 
     [Fact]
@@ -235,11 +365,18 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
             return;
 
         Assert.Equal(
-            ["-i", "socks5://127.0.0.1", "-p", "41234", "-N", "-c", "1024", "-T", "3"],
+            ["-i", "socks5://127.0.0.1", "-p", "41234", "-N", "-c", "1024", "-T", "3:0:0:8192"],
             plan.Arguments.Take(9));
 
-        var fallbacks = ByeDpiCommandLine.Fallbacks.Split(' ').Append("-U").ToList();
-        Assert.Equal(fallbacks, plan.Arguments.TakeLast(fallbacks.Count));
+        // Последняя группа пресета (IP fallback Discord) — со своими запасными,
+        // в конце — отказ UDP.
+        var chain = Chain(plan.Arguments);
+        Assert.Equal("t,s", chain[^1].Trigger);
+        Assert.Equal("-U", plan.Arguments[^1]);
+
+        var first = ByeDpiCommandLine.Fallbacks.Split(" -A ")[0].Split(' ').Skip(2).ToList();
+        int lastPreset = chain.FindLastIndex(g => g.Trigger != "t,s");
+        Assert.Equal(first, chain[lastPreset + 1].Words.Where(w => w != "-U"));
 
         // Секция 0 (до первого --new) не потерялась: git.zapret.moe — первая группа.
         Assert.Contains("git.zapret.moe", plan.Files["g00-hosts.txt"].Split('\n'));
@@ -327,11 +464,13 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
         Assert.Equal(expected.Append("-U"), noUdp.Arguments);
         Assert.Empty(udp.Files);
 
+        // Запасные — вплотную за первой группой, со сроком кэша в сутки; таймаут
+        // ядра снимается после первых 8 КБ ответа (разбор 27.10).
         Assert.Equal(
-            "-N -c 1024 -T 3 -K t,h -o1 -r-5+se "
-            + "-A t,s -K t,h -d1 -n www.google.com -Q rand -f-1 "
-            + "-A t,s -K t,h -d1 -d3+s -s6+s -d9+s -s12+s -d15+s -s20+s -d25+s -s30+s -d35+s -r1+s "
-            + "-A t,s -K t,h -q1+s -s25+s -o5+s "
+            "-N -c 1024 -T 3:0:0:8192 -K t,h -o1 -r-5+se "
+            + "-A t,s -K t,h -d1 -n www.google.com -Q rand -f-1 -u 86400 "
+            + "-A t,s -K t,h -d1 -d3+s -s6+s -d9+s -s12+s -d15+s -s20+s -d25+s -s30+s -d35+s -r1+s -u 86400 "
+            + "-A t,s -K t,h -q1+s -s25+s -o5+s -u 86400 "
             + "-A n -K u -a1",
             ByeDpiCommandLine.DefaultStrategy);
 
@@ -476,8 +615,7 @@ public sealed class ByeDpiCommandLineTests : IClassFixture<ZapretRootFixture>, I
                 Port = Port,
             });
 
-            int fallbacks = ByeDpiCommandLine.Fallbacks.Split(' ').Count(w => w == "-A");
-            return Groups(plan.Arguments).Count - fallbacks;
+            return PresetGroups(plan.Arguments);
         }
 
         // A и C — один перевод (многоступенчатый -d/-s), B им не мешает: две группы.

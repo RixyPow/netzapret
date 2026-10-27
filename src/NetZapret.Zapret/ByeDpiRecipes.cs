@@ -78,7 +78,7 @@ internal static class ByeDpiRecipes
         // Пресеты «white sni» и «shadow probes»: секция — это перебор стратегий
         // с памятью winws2 (strategy=N у каждого шага). Разбирать его по шагам
         // значило бы склеить сорок рецептов в один, которого автор не писал.
-        // Перебор у ByeDPI свой — запасные группы -A t,s в конце строки.
+        // Перебор у ByeDPI свой — запасные группы -A t,s за группой секции.
         if (steps.Any(s => Rotation.Contains(s.Name) || s.Has("strategy")))
             return new ByeDpiRecipe([], ByeDpiRecipeKind.Empty, ["автоподбор winws2 (circular)"]);
 
