@@ -208,8 +208,18 @@ public static class WinwsCommandLine
             // Без первого профиля пресета: он стоит в голове, до первого --new,
             // и иначе тоже взялся бы за пакеты пробы.
             var (globals, _) = SplitGlobals(preset.GlobalArguments);
+            var own = OwnProfile(recipe, excludeList: null, shielded: false);
 
-            arguments = [.. globals, .. OwnProfile(recipe, excludeList: null, shielded: false)];
+            // И без своего --new: с ним перед рецептом оставался профиль из
+            // одних глобальных ключей. winws2 считает его пользовательским
+            // («2 user defined desync profile(s)» в --dry-run), фильтров у него
+            // нет — подходит под любой пакет, и пакеты пробы доставались ему,
+            // а не рецепту. Так 27.10 на i.ytimg.com, который пресет открывает,
+            // «не помог» ни один из 17 рецептов.
+            if (own[0] == "--new")
+                own.RemoveAt(0);
+
+            arguments = [.. globals, .. own];
         }
 
         return TunnelCapture.OnlyProbes(arguments) ? arguments : null;

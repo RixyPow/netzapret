@@ -83,6 +83,10 @@ public sealed class ProbeCaptureTests
         Assert.DoesNotContain("--hostlist=lists/head.txt", line);
         Assert.False(TunnelCapture.KeepsProbesOut(line));
 
+        // Профиль рецепта — единственный: --new завёл бы перед ним пустой
+        // профиль, который подходит под всё и забирает пакеты пробы.
+        Assert.DoesNotContain("--new", line);
+
         // Без рецепта — пресет целиком, тоже только на портах пробы.
         var whole = WinwsCommandLine.ProbeLine(preset, null)!;
 
