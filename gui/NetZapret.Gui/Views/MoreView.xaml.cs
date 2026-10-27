@@ -566,8 +566,12 @@ public partial class MoreView : UserControl
                 + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
                 + (result.Applied is { } mode ? $" → записан маршрут {mode}" : " → маршрут не менялся"));
 
-            if (result.Applied is not null && result.NeedsRestart)
-                this.Offer($"Маршрут для {result.Host}: через VPN");
+            if (result.Applied is { } applied && result.NeedsRestart)
+            {
+                this.Offer($"Маршрут для {result.Host}: " + (applied == RoutingMode.Proxy
+                    ? "через VPN"
+                    : result.Recipe is { } recipe ? $"десинк, {recipe}" : "десинк"));
+            }
         }
         catch (Exception ex)
         {

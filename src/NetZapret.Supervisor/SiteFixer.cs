@@ -3,6 +3,7 @@ using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
+using NetZapret.Zapret;
 
 namespace NetZapret.Supervisor;
 
@@ -11,16 +12,18 @@ public sealed record SiteFixStep(string Path, bool Works, string Detail);
 
 /// <summary>Итог «Сайт не открывается».</summary>
 /// <param name="Applied">Какой маршрут записан; <c>null</c> — ничего не менялось.</param>
-/// <param name="NeedsRestart">Маршрут вступит в силу с перезапуском движков (VPN: подменные адреса раздаёт туннель).</param>
+/// <param name="NeedsRestart">Маршрут вступит в силу с перезапуском движков (VPN: подменные адреса раздаёт туннель; рецепт: свой профиль winws2).</param>
+/// <param name="Recipe">Записанный рецепт десинка — название из каталога; <c>null</c> — без своего рецепта.</param>
 public sealed record SiteFixResult(
     string? Host,
     IReadOnlyList<SiteFixStep> Steps,
     RoutingMode? Applied,
     bool NeedsRestart,
-    string Summary);
+    string Summary,
+    string? Recipe = null);
 
 /// <summary>
-/// «Сайт не открывается»: пробует пути по очереди и сам записывает сработавший.
+/// «Сайт не открывается»: подбирает маршрут по симптому и сам записывает сработавший.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -31,14 +34,17 @@ public sealed record SiteFixResult(
 /// которые у провайдера и не закрыты, — aternos.org, translate.google.com.
 /// </para>
 /// <para>
+/// С 27.10 — автоподбор (владелец: «прогоняем блокчек на конкретный домен и по
+/// симптомам выбираем оптимальный маршрут»): проверка блокировок называет
+/// симптом, <see cref="RoutePlan"/> по таблице «симптом — маршрут» — что пробовать
+/// и в каком порядке, и каждый шаг пробуется вживую; берётся первый открывший.
+/// </para>
+/// <para>
 /// Путь «напрямую» меряется честно, без перезапуска: имя на время кладётся
 /// в щит (<c>runtime\desync-exclude.txt</c>), а winws2 перечитывает списки
 /// сам при их изменении (документация bol-van: «перезапуск nfqws2 не нужен»).
-/// Путь через VPN — через вход проверки движка: он ведёт в туннель.
-/// </para>
-/// <para>
-/// Порядок — от дешёвого к дорогому: как есть, напрямую, через VPN. Туннель
-/// последним — он тратит трафик подписки и прибавляет задержку.
+/// Рецепты — пробным winws2 на своих портах (<see cref="RecipeTrial"/>), не трогая
+/// работающий десинк. Путь через VPN — через вход проверки движка: он ведёт в туннель.
 /// </para>
 /// </remarks>
 public static class SiteFixer
@@ -94,60 +100,237 @@ public static class SiteFixer
         var decision = engine.Evaluate(ConnectionEvent.Describe(host));
         var route = settings.Engines.Effective(decision.Mode, settings.NeedsProxy);
 
-        // 1. Как есть.
+        // Как есть — она же и называет симптом.
         progress?.Report($"Проверяю {host} как есть…");
         var now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
-        steps.Add(new($"как есть ({Word(route)})", now.Kind == BlockKind.None, now.Describe()));
+        steps.Add(new($"как есть ({Word(route)})", now.Kind == BlockKind.None, Said(now)));
+
+        var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy);
 
         if (now.Kind == BlockKind.None)
         {
             return new(host, steps, null, false,
-                $"{host} открывается как есть ({Word(route)}) — маршрут менять незачем. Если в браузере "
-                + "не открывается, дело не в маршруте: попробуйте обновить страницу без кэша (Ctrl+F5) "
-                + "или открыть в другом браузере.");
+                $"{host} открывается как есть ({Word(route)}) — маршрут менять незачем. "
+                + (plan.Advice is { } quic
+                    ? quic
+                    : "Если в браузере не открывается, дело не в маршруте: попробуйте окно инкогнито "
+                        + "(браузер держит старые соединения) или другой браузер."));
         }
 
-        // 2. Напрямую — через щит, если сейчас его трогает десинк.
-        if (route == RoutingMode.Desync && settings.NeedsDesync)
+        foreach (var step in plan.Steps)
         {
-            progress?.Report($"Пробую {host} напрямую, без десинка…");
+            cancellationToken.ThrowIfCancellationRequested();
 
-            if (await TryShieldedAsync(host, cancellationToken) is { } direct)
+            switch (step.Kind)
             {
-                steps.Add(direct.Step);
-
-                if (direct.Step.Works)
+                case RouteTry.Direct:
                 {
-                    Save(host, RoutingMode.Direct);
+                    progress?.Report($"Пробую {host} напрямую, без десинка…");
 
-                    return new(host, steps, RoutingMode.Direct, false,
-                        $"{host} открывается напрямую, а десинк ему мешал. Записал маршрут «напрямую» "
-                        + $"для {RuleValue(host)} — действует уже сейчас, перезапуск не нужен.");
+                    if (await TryShieldedAsync(host, cancellationToken) is not { } direct)
+                        break;
+
+                    steps.Add(direct.Step);
+
+                    if (direct.Step.Works)
+                    {
+                        Save(host, RoutingMode.Direct);
+
+                        return new(host, steps, RoutingMode.Direct, false,
+                            $"{host} открывается напрямую, а десинк ему мешал. Записал маршрут «напрямую» "
+                            + $"для {RuleValue(host)} — действует уже сейчас, перезапуск не нужен.");
+                    }
+
+                    break;
                 }
-            }
-        }
 
-        // 3. Через VPN.
-        if (settings.NeedsProxy && route != RoutingMode.Proxy)
-        {
-            progress?.Report($"Пробую {host} через VPN…");
+                case RouteTry.Preset or RouteTry.Recipes:
+                {
+                    var found = await TryDesyncAsync(host, step, state, settings, steps, progress, cancellationToken);
 
-            var vpn = await ThroughTunnelAsync(host, cancellationToken);
-            steps.Add(vpn);
+                    if (found is { } desync)
+                    {
+                        Save(host, RoutingMode.Desync, desync.Id);
 
-            if (vpn.Works)
-            {
-                Save(host, RoutingMode.Proxy);
+                        return new(host, steps, RoutingMode.Desync, true,
+                            $"{host} открывается {(desync.Id is null ? "с десинком пресета" : $"с рецептом «{desync.Title}»")}"
+                            + $" ({desync.Detail}). Записал маршрут «десинк»"
+                            + (desync.Id is null ? string.Empty : $" с этим рецептом")
+                            + $" для {RuleValue(host)} — заработает после перезапуска движков.",
+                            desync.Id is null ? null : desync.Title);
+                    }
 
-                return new(host, steps, RoutingMode.Proxy, true, ViaVpnSummary(host, steps));
+                    break;
+                }
+
+                case RouteTry.Vpn:
+                {
+                    progress?.Report($"Пробую {host} через VPN…");
+
+                    var vpn = await ThroughTunnelAsync(host, cancellationToken);
+                    steps.Add(vpn);
+
+                    if (vpn.Works)
+                    {
+                        Save(host, RoutingMode.Proxy);
+
+                        return new(host, steps, RoutingMode.Proxy, true, ViaVpnSummary(host, steps));
+                    }
+
+                    break;
+                }
             }
         }
 
         var tried = string.Join("; ", steps.Select(s => $"{s.Path} — {s.Detail}"));
 
         return new(host, steps, null, false,
-            $"{host} не открылся ни одним путём ({tried}). Маршрут не менял. "
-            + (settings.NeedsProxy ? "Возможно, лежит сам сайт." : "Включите туннель — через VPN он, возможно, откроется."));
+            $"{host} не открылся ни одним путём ({tried}). Маршрут не менял."
+            + (plan.Advice is { } advice
+                ? " " + advice
+                : settings.NeedsProxy ? " Возможно, лежит сам сайт." : " Включите туннель — через VPN он, возможно, откроется."));
+    }
+
+    /// <summary>Сколько рецептов пробовать за один подбор.</summary>
+    /// <remarks>
+    /// Неработающий рецепт стоит срока рукопожатия — четыре секунды — и подъёма
+    /// winws2; восемь — около минуты. Порядок задан по симптому (<see cref="RoutePlan"/>),
+    /// так что вероятные идут первыми.
+    /// </remarks>
+    public const int RecipeBudget = 8;
+
+    /// <summary>Вердикт словами — с адресом, на котором он получен.</summary>
+    private static string Said(TargetReport report) =>
+        report.Describe() + (report.Answered is { } a ? $", {a}" : string.Empty)
+        + (report.Kind != BlockKind.None && report.Why is { } why ? $": {why}" : string.Empty);
+
+    /// <summary>
+    /// Можно ли пробовать десинк пробным winws2; нельзя — почему.
+    /// </summary>
+    public static string? WhyNoTrial(SupervisorState state, bool elevated) =>
+        !elevated
+            ? "не пробовал: пробному winws2 нужны права администратора — запустите nz из терминала администратора"
+            : state.Services.FirstOrDefault(s => s.Name == "winws2") is not { } winws
+                ? "не пробовал: десинк не запущен"
+                : !winws.KeepsProbesOut
+                    ? "не пробовал: десинк запущен без портов пробы — перезапустите движки новой сборкой "
+                        + "(или у пресета свой фильтр перехвата файлом)"
+                    : null;
+
+    /// <summary>
+    /// Пробует десинк пробным winws2: пресет целиком либо рецепты по очереди; первый открывший — ответ.
+    /// </summary>
+    private static async Task<(string? Id, string Title, string Detail)?> TryDesyncAsync(
+        string host,
+        RoutePlanStep step,
+        SupervisorState state,
+        AppSettings settings,
+        List<SiteFixStep> steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        string label = step.Kind == RouteTry.Preset ? "десинк пресета" : "рецепты десинка";
+
+        if (WhyNoTrial(state, Environment.IsPrivilegedProcess) is { } why)
+        {
+            steps.Add(new(label, false, why));
+            return null;
+        }
+
+        var paths = ZapretPaths.Discover();
+        var presetPath = settings.PresetName is { } name ? ZapretPaths.FindPreset(name) : null;
+
+        if (paths is null || presetPath is null)
+        {
+            steps.Add(new(label, false, "не пробовал: не найден Zapret или выбранный пресет"));
+            return null;
+        }
+
+        var preset = new PresetReader().Load(presetPath);
+        var bare = host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
+
+        if (step.Kind == RouteTry.Preset)
+        {
+            progress?.Report($"Пробую {host} с десинком пресета «{preset.Name}»…");
+
+            var outcome = await TrialAsync(paths, preset, null, host, cancellationToken);
+            steps.Add(new(label, outcome.Works, outcome.Detail));
+
+            return outcome.Works ? (null, "десинк пресета", outcome.Detail) : null;
+        }
+
+        IReadOnlyDictionary<string, string>? providers = null;
+
+        try
+        {
+            providers = LuaModules.Providers(LuaModules.Scan(paths.LuaDirectory));
+        }
+        catch (Exception)
+        {
+            // Не прочиталось — годность рецептов не проверить; winws2 скажет сам.
+        }
+
+        var runnable = step.Recipes
+            .Select(RecipeCatalog.Find)
+            .OfType<CatalogRecipe>()
+            .Where(r => providers is null || RecipeCatalog.Check(r, preset, providers).Runnable)
+            .Take(RecipeBudget)
+            .ToList();
+
+        var ports = PresetPorts.ForDomains(preset, paths.Root, [bare]);
+        int tried = 0;
+
+        foreach (var recipe in runnable)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report($"Пробую {host} с рецептом «{recipe.Title}» ({++tried} из {runnable.Count})…");
+
+            var profile = new OwnDesyncProfile
+            {
+                Name = "проба: " + recipe.Id,
+                Steps = recipe.Steps,
+                HostListPath = RecipeTrial.ListPath,
+                Ports = ports,
+            };
+
+            var outcome = await TrialAsync(paths, preset, profile, host, cancellationToken);
+            steps.Add(new($"рецепт «{recipe.Title}»", outcome.Works, outcome.Detail));
+
+            if (outcome.Works)
+                return (recipe.Id, recipe.Title, outcome.Detail);
+
+            // Пробный winws2 не поднялся вовсе — дальше будет то же самое.
+            if (outcome.Broken)
+                break;
+        }
+
+        return null;
+    }
+
+    /// <summary>Одна проба пробным winws2; <c>Broken</c> — сам winws2 не поднялся.</summary>
+    private static async Task<(bool Works, string Detail, bool Broken)> TrialAsync(
+        ZapretPaths paths,
+        ZapretPreset preset,
+        OwnDesyncProfile? recipe,
+        string host,
+        CancellationToken cancellationToken)
+    {
+        var bare = host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(RecipeTrial.ListPath)!);
+        await File.WriteAllTextAsync(RecipeTrial.ListPath, bare + Environment.NewLine, cancellationToken);
+
+        var (trial, failure) = await RecipeTrial.StartAsync(paths, preset, recipe, cancellationToken);
+
+        if (trial is null)
+            return (false, failure ?? "пробный winws2 не поднялся", true);
+
+        await using (trial)
+        {
+            var report = await BlockCheck.TrialAsync(host, cancellationToken);
+
+            return (report.Kind == BlockKind.None, Said(report), false);
+        }
     }
 
     /// <summary>
@@ -162,11 +345,14 @@ public static class SiteFixer
     public static string ViaVpnSummary(string host, IReadOnlyList<SiteFixStep> steps)
     {
         var failed = steps.Where(s => !s.Works).Select(s => s.Path).ToList();
+        int recipes = steps.Count(s => s.Path.StartsWith("рецепт «", StringComparison.Ordinal));
 
         return $"{host} не открылся ({string.Join(", ", failed)}), а через VPN открывается. "
             + $"Записал маршрут «через VPN» для {RuleValue(host)} — заработает после перезапуска движков. "
-            + "Другие рецепты десинка я не пробовал: если хотите без VPN, поставьте сайту «десинк» "
-            + "и выберите рецепт в «Маршрутах».";
+            + (recipes > 0
+                ? $"Рецептов десинка перепробовано {recipes} — ни один не открыл."
+                : "Другие рецепты десинка я не пробовал: если хотите без VPN, поставьте сайту «десинк» "
+                    + "и выберите рецепт в «Маршрутах».");
     }
 
     /// <summary>
@@ -242,10 +428,10 @@ public static class SiteFixer
         }
     }
 
-    private static void Save(string host, RoutingMode mode)
+    private static void Save(string host, RoutingMode mode, string? recipe = null)
     {
         var file = UserRulesFile.Load();
-        file.Set(MatchKind.Domain, RuleValue(host), mode);
+        file.Set(MatchKind.Domain, RuleValue(host), mode, recipe);
         file.Save();
     }
 
