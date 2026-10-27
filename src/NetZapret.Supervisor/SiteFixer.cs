@@ -8,19 +8,23 @@ using NetZapret.Zapret;
 namespace NetZapret.Supervisor;
 
 /// <summary>Один опробованный путь и чем он кончился.</summary>
-public sealed record SiteFixStep(string Path, bool Works, string Detail);
+/// <param name="Try">Что пробовали (<see cref="RouteTry"/>); <c>null</c> — проверка «как есть».</param>
+/// <param name="Recipe">Рецепт каталога — у шага с рецептом.</param>
+public sealed record SiteFixStep(string Path, bool Works, string Detail, RouteTry? Try = null, string? Recipe = null);
 
 /// <summary>Итог «Сайт не открывается».</summary>
 /// <param name="Applied">Какой маршрут записан; <c>null</c> — ничего не менялось.</param>
 /// <param name="NeedsRestart">Маршрут вступит в силу с перезапуском движков (VPN: подменные адреса раздаёт туннель; рецепт: свой профиль winws2).</param>
 /// <param name="Recipe">Записанный рецепт десинка — название из каталога; <c>null</c> — без своего рецепта.</param>
+/// <param name="Advice">Совет из таблицы «симптом — маршрут» (<see cref="RoutePlan.Advice"/>); <c>null</c> — нечего.</param>
 public sealed record SiteFixResult(
     string? Host,
     IReadOnlyList<SiteFixStep> Steps,
     RoutingMode? Applied,
     bool NeedsRestart,
     string Summary,
-    string? Recipe = null);
+    string? Recipe = null,
+    string? Advice = null);
 
 /// <summary>
 /// «Сайт не открывается»: подбирает маршрут по симптому и сам записывает сработавший.
@@ -75,13 +79,15 @@ public static class SiteFixer
     public static string RuleValue(string host) =>
         "*." + (host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host);
 
+    /// <param name="stepDone">Каждый опробованный шаг — сразу, как кончился: окно показывает ход, а не ждёт минуту.</param>
     public static async Task<SiteFixResult> FixAsync(
         string input,
         IProgress<string>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<SiteFixStep>? stepDone = null)
     {
         var host = HostOf(input);
-        var steps = new List<SiteFixStep>();
+        var steps = new StepLog(stepDone);
 
         if (host is null)
             return new(null, steps, null, false, "Не понял адрес. Вставьте ссылку или имя сайта, например aternos.org.");
@@ -109,12 +115,13 @@ public static class SiteFixer
 
         if (now.Kind == BlockKind.None)
         {
+            var open = plan.Advice
+                ?? "Если в браузере не открывается, дело не в маршруте: попробуйте окно инкогнито "
+                    + "(браузер держит старые соединения) или другой браузер.";
+
             return new(host, steps, null, false,
-                $"{host} открывается как есть ({Word(route)}) — маршрут менять незачем. "
-                + (plan.Advice is { } quic
-                    ? quic
-                    : "Если в браузере не открывается, дело не в маршруте: попробуйте окно инкогнито "
-                        + "(браузер держит старые соединения) или другой браузер."));
+                $"{host} открывается как есть ({Word(route)}) — маршрут менять незачем. {open}",
+                Advice: open);
         }
 
         foreach (var step in plan.Steps)
@@ -183,12 +190,22 @@ public static class SiteFixer
         }
 
         var tried = string.Join("; ", steps.Select(s => $"{s.Path} — {s.Detail}"));
+        var advice = plan.Advice
+            ?? (settings.NeedsProxy ? "Возможно, лежит сам сайт." : "Включите туннель — через VPN он, возможно, откроется.");
 
         return new(host, steps, null, false,
-            $"{host} не открылся ни одним путём ({tried}). Маршрут не менял."
-            + (plan.Advice is { } advice
-                ? " " + advice
-                : settings.NeedsProxy ? " Возможно, лежит сам сайт." : " Включите туннель — через VPN он, возможно, откроется."));
+            $"{host} не открылся ни одним путём ({tried}). Маршрут не менял. {advice}",
+            Advice: advice);
+    }
+
+    /// <summary>Опробованные шаги — и каждый новый сразу наружу (<c>stepDone</c>).</summary>
+    private sealed class StepLog(IProgress<SiteFixStep>? done) : List<SiteFixStep>
+    {
+        public new void Add(SiteFixStep step)
+        {
+            base.Add(step);
+            done?.Report(step);
+        }
     }
 
     /// <summary>Сколько рецептов пробовать за один подбор.</summary>
@@ -225,7 +242,7 @@ public static class SiteFixer
         RoutePlanStep step,
         SupervisorState state,
         AppSettings settings,
-        List<SiteFixStep> steps,
+        StepLog steps,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -233,7 +250,7 @@ public static class SiteFixer
 
         if (WhyNoTrial(state, Environment.IsPrivilegedProcess) is { } why)
         {
-            steps.Add(new(label, false, why));
+            steps.Add(new(label, false, why, step.Kind));
             return null;
         }
 
@@ -242,7 +259,7 @@ public static class SiteFixer
 
         if (paths is null || presetPath is null)
         {
-            steps.Add(new(label, false, "не пробовал: не найден Zapret или выбранный пресет"));
+            steps.Add(new(label, false, "не пробовал: не найден Zapret или выбранный пресет", step.Kind));
             return null;
         }
 
@@ -254,7 +271,7 @@ public static class SiteFixer
             progress?.Report($"Пробую {host} с десинком пресета «{preset.Name}»…");
 
             var outcome = await TrialAsync(paths, preset, null, host, cancellationToken);
-            steps.Add(new(label, outcome.Works, outcome.Detail));
+            steps.Add(new(label, outcome.Works, outcome.Detail, RouteTry.Preset));
 
             return outcome.Works ? (null, "десинк пресета", outcome.Detail) : null;
         }
@@ -294,7 +311,7 @@ public static class SiteFixer
             };
 
             var outcome = await TrialAsync(paths, preset, profile, host, cancellationToken);
-            steps.Add(new($"рецепт «{recipe.Title}»", outcome.Works, outcome.Detail));
+            steps.Add(new($"рецепт «{recipe.Title}»", outcome.Works, outcome.Detail, RouteTry.Recipes, recipe.Title));
 
             if (outcome.Works)
                 return (recipe.Id, recipe.Title, outcome.Detail);
@@ -392,7 +409,7 @@ public static class SiteFixer
                 await File.WriteAllTextAsync(path, original, CancellationToken.None);
         }
 
-        return (new SiteFixStep("напрямую", works, report?.Describe() ?? "не проверилось"), works);
+        return (new SiteFixStep("напрямую", works, report is null ? "не проверилось" : Said(report), RouteTry.Direct), works);
     }
 
     /// <summary>Запрос через вход проверки движка: он ведёт в туннель.</summary>
@@ -416,15 +433,15 @@ public static class SiteFixer
             // Cloudflare, её браузер проходит; 451 — отказ по закону.
             bool works = code < 500 && code != 451;
 
-            return new("через VPN", works, $"ответ {code}");
+            return new("через VPN", works, $"ответ {code}", RouteTry.Vpn);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new("через VPN", false, "нет ответа за 10 с");
+            return new("через VPN", false, "нет ответа за 10 с", RouteTry.Vpn);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return new("через VPN", false, ex.GetBaseException().Message);
+            return new("через VPN", false, ex.GetBaseException().Message, RouteTry.Vpn);
         }
     }
 
