@@ -434,23 +434,6 @@ internal static class TunnelConfig
     }
 
     /// <summary>
-    /// Имена одного правила: само имя либо всё содержимое его списка.
-    /// </summary>
-    /// <remarks>
-    /// Списки к этому моменту уже развёрнуты <c>RuleSetExpander</c>'ом, так
-    /// что читать файл заново не нужно. Звёздочка снимается: в списках Zapret
-    /// записи — это зоны, и winws2 понимает их так же, без маски.
-    /// </remarks>
-    private static IEnumerable<string> Names(RoutingRule rule)
-    {
-        var values = rule.Match == MatchKind.HostList
-            ? rule.HostListDomains
-            : [rule.Value];
-
-        return values.Select(v => v.StartsWith("*.", StringComparison.Ordinal) ? v[2..] : v);
-    }
-
-    /// <summary>
     /// Раскладывает имена с выбранным рецептом по профилям winws2.
     /// </summary>
     /// <remarks>
@@ -463,12 +446,9 @@ internal static class TunnelConfig
         {
             // И одиночные имена, и списки: у сервиса рецепт нужен чаще, чем
             // у своего домена, — там десятки имён, и когда пресет их не
-            // открывает, разбираться руками не в чем.
-            var chosen = ruleSet.Rules
-                .Where(r => r.Mode == RoutingMode.Desync
-                    && r.Match is MatchKind.Domain or MatchKind.HostList
-                    && !string.IsNullOrWhiteSpace(r.Recipe))
-                .ToList();
+            // открывает, разбираться руками не в чем. Каждое имя — только
+            // у правила, которое выигрывает его первым (OwnRecipeNames, 27.10).
+            var chosen = OwnRecipeNames.Winning(ruleSet);
 
             if (chosen.Count == 0)
             {
@@ -506,7 +486,7 @@ internal static class TunnelConfig
             }
 
             var groups = chosen
-                .GroupBy(r => r.Recipe!, StringComparer.OrdinalIgnoreCase)
+                .GroupBy(c => c.Rule.Recipe!, c => c.Names, StringComparer.OrdinalIgnoreCase)
                 .Select(group =>
                 {
                     // По обоим источникам: рецепт мог быть выбран из каталога,
@@ -517,7 +497,7 @@ internal static class TunnelConfig
                     var recipe = RecipeResolver.Find(preset, group.Key, providers);
 
                     var domains = (IReadOnlyList<string>)group
-                        .SelectMany(Names)
+                        .SelectMany(names => names)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
 
