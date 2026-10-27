@@ -10,7 +10,7 @@ namespace NetZapret.Android.Startup;
 
 /// <summary>
 /// Что делается до первого обращения к библиотекам src/ — в этом порядке
-/// (portability.md §8, п. 6).
+/// (portability.md §8, п. 6), и до любой службы процесса.
 /// </summary>
 /// <remarks>
 /// Порядок не прихоть: <c>ZapretPaths.PresetDirectory</c> читает
@@ -54,6 +54,12 @@ internal static class AppStartup
         // 2–3. Папка программы и текущая папка — та, куда распаковано.
         AppPaths.ProgramDirectory = files;
         Directory.SetCurrentDirectory(files);
+
+#if NZ_INTEGRATED
+        // Сохранённый запуск nfqws2 — к этому процессу и этой установке APK:
+        // постоянный VPN и плитка поднимут службу из него раньше, чем окно.
+        SavedRootStart.Rebind(context, files);
+#endif
 
         // 4. Устройство для панелей подписок с HWID.
         var description = Describe(context, files);

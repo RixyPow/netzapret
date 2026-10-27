@@ -34,7 +34,14 @@ internal sealed record EngineStartRequest(
 internal sealed record ByeDpiLaunch(IReadOnlyList<string> Arguments, int Port, string Auth, string WorkDirectory);
 
 /// <summary>nfqws2 через su: команды подъёма и остановки (сценарии лежат в runtime/).</summary>
-internal sealed record RootLaunch(IReadOnlyList<string> Start, IReadOnlyList<string> Stop);
+/// <param name="Digest">
+/// SHA-256 сценариев этого запуска. Команды su от запуска к запуску одни и те
+/// же (путь к сценарию), а служба при повторном запросе перезапускает nfqws2,
+/// только если сменилась root-часть запроса (NzVpnService.reload): без отпечатка
+/// новые аргументы — свои рецепты, другой пресет — до работающего nfqws2
+/// не доходили бы до полной остановки.
+/// </param>
+internal sealed record RootLaunch(IReadOnlyList<string> Start, IReadOnlyList<string> Stop, string Digest);
 
 /// <summary>Итог подготовки: конфиг записан, десинк описан — или причина, почему нет.</summary>
 internal sealed record EnginePrepared(
@@ -155,6 +162,9 @@ internal static class EngineStart
                 json.WriteStartObject("root");
                 WriteArray(json, "start", root.Start);
                 WriteArray(json, "stop", root.Stop);
+
+                // Java его не читает — он входит в слепок root-части (NzRequest.Root.key).
+                json.WriteString("digest", root.Digest);
                 json.WriteEndObject();
             }
             else
@@ -261,6 +271,42 @@ internal static class EngineStart
 
         var plan = EngineConfigBuilder.Plan(settings, host);
 
+        // С root и без туннеля план библиотеки не поднимает движок вовсе:
+        // «десинк внутри движка» он видит только без root, а DNS-движок — только
+        // при «DNS через туннель» или DNS роутера. При DNS «авто» (по умолчанию)
+        // и «Только десинк» или «Гибриде» без подписки запуск отвечал «Запускать
+        // нечего», и nfqws2 не поднимался никогда (найдено чтением 27.10). Без
+        // движка на телефоне нельзя: NzBox без конфига не стартует, а пины
+        // hosts и DNS живут в sing-box (DESIGN.md: «Только десинк» — тот же TUN
+        // без исходящих подписки).
+        //
+        // Поэтому собираем конфиг «без выходов», как у телефона без root, но
+        // с десинком мимо движка: без ByeDPI, без нарезки и без отказа QUIC —
+        // маршрут «десинк» тогда direct (SingBoxConfigCompiler.DesyncWayOf), и
+        // его пакеты ловит nfqws2, как winws2 на Windows. Цена — перехват TUN
+        // полный, а не выборочный: так библиотека собирает конфиг без root.
+        // Место правке — EngineConfigBuilder.Plan (без туннеля при десинке на
+        // телефоне — движок всегда); когда она там будет, план придёт с
+        // FragmentOnly, и эта ветка не понадобится.
+        if (useRoot && !plan.Tunnel && !plan.DnsOnly && !plan.FragmentOnly)
+        {
+            host = host with
+            {
+                Android = host.Android! with
+                {
+                    Root = false,
+                    Socks = null,
+                    DesyncPassHosts = [],
+                    DesyncFragment = TlsFragment.Off,
+                    DesyncFragmentDefault = false,
+                    DesyncSocksDefault = false,
+                    DesyncRejectQuic = false,
+                },
+            };
+
+            plan = EngineConfigBuilder.Plan(settings, host);
+        }
+
         EngineBuild build;
 
         if (plan.Tunnel || plan.FragmentOnly)
@@ -282,9 +328,11 @@ internal static class EngineStart
 
         if (useRoot)
         {
-            // После конфига: списки щита и своих рецептов пишет его сборка,
-            // а адреса серверов для исключения из перехвата берутся из него же.
-            var (launch, error) = await PrepareRootAsync(request, settings, zapretRoot, configPath, warnings, cancellationToken);
+            // После конфига: адреса серверов для исключения из перехвата
+            // берутся из него. Списки щита и своих рецептов пишет сам запуск
+            // nfqws2 (DesyncLists) — сборка конфига их не пишет.
+            var (launch, error) = await PrepareRootAsync(
+                request, settings, zapretRoot, configPath, hostsPath, plan.Tunnel, warnings, cancellationToken);
 
             if (error is not null)
                 return EnginePrepared.Failed(error);
@@ -388,9 +436,11 @@ internal static class EngineStart
     /// подъёма и остановки — от библиотеки (Nfqws2CommandLine.Scripts), здесь
     /// только то, что знает телефон: uid, номер процесса, папки и ядро.
     /// </summary>
+    /// <param name="hostsPath">Файл пинов телефона — щит берёт прибитые в нём имена.</param>
+    /// <param name="tunnelUp">Поднимается ли туннель (план запуска) — от этого причина у имён «через VPN».</param>
     private static async Task<(RootLaunch? Launch, string? Error)> PrepareRootAsync(
         EngineStartRequest request, AppSettings settings, string zapretRoot, string configPath,
-        List<string> warnings, CancellationToken cancellationToken)
+        string hostsPath, bool tunnelUp, List<string> warnings, CancellationToken cancellationToken)
     {
         var runtime = Path.Combine(request.FilesDirectory, "runtime");
 
@@ -410,12 +460,13 @@ internal static class EngineStart
             LogFile = Path.Combine(runtime, "nfqws2.log"),
         };
 
-        // Щит и дыры в нём пишет сборка конфига — здесь их только подбирают,
-        // как SupervisorHost.AddWinws на Windows.
-        var exclude = File.Exists(WinwsCommandLine.DefaultExcludeListPath) ? Path.GetFullPath(WinwsCommandLine.DefaultExcludeListPath) : null;
-        var keep = File.Exists(WinwsCommandLine.DefaultKeepListPath) ? Path.GetFullPath(WinwsCommandLine.DefaultKeepListPath) : null;
+        // Щит, дыры в нём, свои рецепты и UDP Riot — заново на каждый запуск,
+        // как окно Windows перед winws2 (TunnelConfig.WriteDesyncLists). Прежде
+        // здесь их только подбирали с диска, а писать их на телефоне было
+        // некому — nfqws2 поднимался без щита (DesyncLists, 27.10).
+        var lists = DesyncLists.Write(settings, preset, request.FilesDirectory, zapretRoot, hostsPath, tunnelUp, warnings);
 
-        var launch = Nfqws2CommandLine.Build(preset, host, exclude, OwnDesyncLists.Read(), settings.GameFilter, settings.Capture, keep);
+        var launch = Nfqws2CommandLine.Build(preset, host, lists.Exclude, lists.Own, settings.GameFilter, settings.Capture, lists.Keep);
         WinwsCommandLine.PrepareWritable(launch.Arguments, zapretRoot);
 
         var missing = WinwsCommandLine.FindMissingFiles(preset, zapretRoot);
@@ -442,7 +493,7 @@ internal static class EngineStart
         {
             Servers = TunnelEndpoints.Read(configPath, ServerPools.CaptureFirst(Warp.PreferredExit(settings), settings.EnginePools)),
             FakeRange = TunnelEndpoints.FakeRange(configPath),
-            UdpOff = UdpOffDesync.Read(),
+            UdpOff = lists.UdpOff,
             Lans = LocalNetworks.VirtualLans,
         };
 
@@ -471,7 +522,14 @@ internal static class EngineStart
         File.WriteAllText(host.LogFile, "");
         File.WriteAllText(host.PidFile, "");
 
-        return (new RootLaunch(scripts.Start, scripts.Stop), null);
+        var digest = new StringBuilder();
+
+        foreach (var (file, text) in scripts.Files.OrderBy(each => each.Key, StringComparer.Ordinal))
+            digest.Append(file).Append('\n').Append(text).Append('\n');
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(digest.ToString()))).ToLowerInvariant();
+
+        return (new RootLaunch(scripts.Start, scripts.Stop, hash), null);
     }
 #endif
 }

@@ -69,6 +69,32 @@ $apk = Get-ChildItem -LiteralPath $output -Filter '*-Signed.apk' | Sort-Object L
 
 if (-not $apk) { throw "APK не найден в $output." }
 
+# 4. Последний рубеж, как проверка в конце pack.cmd: утёкший APK не отозвать.
+#    Сборка уже отказывается сама (цель NzRefusePersonal в .csproj), здесь —
+#    по готовому архиву, тем же образцом из .csproj (один на обоих), чтобы
+#    личное не прошло и мимо цели. Читается .NET-ом: Get-Content в
+#    PowerShell 5.1 прочёл бы UTF-8 без BOM как ANSI (CLAUDE.md, «Код»).
+$projectXml = [xml][IO.File]::ReadAllText($Project)
+$personal = @($projectXml.Project.PropertyGroup | Where-Object { $_._NzPersonalAsset } | ForEach-Object { $_._NzPersonalAsset })[0]
+
+if (-not $personal) { throw "В .csproj нет образца личного (_NzPersonalAsset) — проверить APK нечем." }
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [IO.Compression.ZipFile]::OpenRead($apk.FullName)
+
+try {
+    $leaked = @($archive.Entries | Where-Object { $_.FullName -match $personal } | ForEach-Object { $_.FullName })
+}
+finally {
+    $archive.Dispose()
+}
+
+if ($leaked.Count -gt 0) {
+    # Ни подписанного, ни неподписанного не оставлять: оба несут то же личное.
+    Get-ChildItem -LiteralPath $output -Filter '*.apk' | Remove-Item -Force
+    throw ("Отказ: в APK попало личное — {0}. APK удалён." -f ($leaked -join ', '))
+}
+
 $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk.FullName).Hash.ToLowerInvariant()
 Write-Host ''
 Write-Host "APK:     $($apk.FullName)"

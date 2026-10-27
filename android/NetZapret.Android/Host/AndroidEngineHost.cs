@@ -230,6 +230,11 @@ public sealed class AndroidEngineHost : IMobileHost
         int vpns = PhysicalNetworkWatch.VpnNetworkCount();
         bool otherVpn = vpns > (_status.IsRunning ? 1 : 0);
 
+        // Root — подтверждённый в этом процессе (договор PlatformFacts.Root):
+        // «не спрашивали» тоже false. Признаков вроде «su лежит» здесь нет
+        // нарочно: выключатель nfqws2 интерфейс показывает и без root (разбор
+        // 27.10 — прежде круг: выключатель ждал root, root ждал выключателя),
+        // а «Есть» в «Диагностике» должно значить «дали», а не «похоже».
         return new PlatformFacts(
             Root: RootShell.Known ?? false,
             PrivateDns: privateDns,

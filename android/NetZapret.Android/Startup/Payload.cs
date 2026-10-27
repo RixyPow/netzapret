@@ -36,8 +36,9 @@ internal static class Payload
     private static string ManifestPath(string files) => Path.Combine(files, "runtime", "payload.files");
 
     /// <summary>
-    /// Личные файлы (CLAUDE.md, «Секреты»): их в поставке нет, а если бы
-    /// оказались — распаковка их не перепишет и уборка не удалит.
+    /// Личные файлы (CLAUDE.md, «Секреты»): их в поставке нет (config/ берётся
+    /// в APK по списку разрешённых, и сборка отказывается, если личное всё же
+    /// попало), а если бы оказались — распаковка их не перепишет и уборка не удалит.
     /// </summary>
     private static readonly string[] Personal =
     [
@@ -49,15 +50,29 @@ internal static class Payload
         "config/subscription.cache.json",
         "config/hosts",
         "config/mobile.json",
+
+        // Ключ WireGuard и ключ доступа WARP прежних лет (.gitignore): файл
+        // больше не пишется, но в старых рабочих копиях лежит.
+        "config/warp.json",
     ];
+
+    /// <summary>
+    /// Хвосты имён, которые оставляют сохранения личного: <c>.tmp</c> —
+    /// AppSettings.Save со ссылкой подписки, если подмена не удалась;
+    /// <c>.broken</c> — отложенные битые свои правила и резолверы;
+    /// <c>.nz-new</c> — недописанная распаковка.
+    /// </summary>
+    private static readonly string[] PersonalTails = [".tmp", ".broken", ".nz-new"];
 
     public static bool IsPersonal(string relative)
     {
         var path = relative.Replace('\\', '/');
+        var name = Path.GetFileName(path);
 
         return Personal.Contains(path, StringComparer.OrdinalIgnoreCase)
             || path.StartsWith("config/lists/own/", StringComparison.OrdinalIgnoreCase)
-            || Path.GetFileName(path).Contains(".bak", StringComparison.OrdinalIgnoreCase);
+            || name.Contains(".bak", StringComparison.OrdinalIgnoreCase)
+            || PersonalTails.Any(tail => name.EndsWith(tail, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Распаковать, если APK сменился; вернуть, было ли что распаковывать.</summary>

@@ -192,13 +192,21 @@
 
     Личное в поставку не попадает никогда (CLAUDE.md, «Секреты»): настройки
     со ссылкой подписки, книга подписок, свои правила, порядок пресетов, свои
-    резолверы, свои списки, копии файлов. В рабочей копии их нет, но сборка
-    из папки владельца иначе увезла бы их в APK.
+    резолверы, свои списки, ключ WARP, копии файлов. В рабочей копии их нет,
+    но сборка из папки владельца увезла бы их в APK.
+
+    Поэтому config\ — по списку разрешённых, тем же, что pack.cmd кладёт
+    в архив Windows, а не «всё, кроме личного». До 27.10 было наоборот,
+    и список личного отставал от .gitignore: config\warp.json (закрытый ключ
+    WireGuard и ключ доступа WARP — у владельца он лежит, 515 байт, 27.10),
+    config\*.tmp (AppSettings.Save со ссылкой подписки, если подмена файла
+    не удалась) и *.broken уехали бы в APK, а оттуда — на каждый телефон.
+    Новый файл config\, нужный телефону, дописывается сюда и в pack.cmd.
   -->
   <ItemGroup>
-    <_NzConfigExclude Include="$(NzRoot)config\netzapret.json;$(NzRoot)config\subscriptions.json;$(NzRoot)config\rules.user.yaml;$(NzRoot)config\preset-order.json;$(NzRoot)config\dns.user.json;$(NzRoot)config\mobile.json;$(NzRoot)config\subscription.cache.json;$(NzRoot)config\hosts;$(NzRoot)config\lists\own\**;$(NzRoot)config\**\*.bak*;$(NzRoot)config\blobs\**" />
-
-    <AndroidAsset Include="$(NzRoot)config\**\*" Exclude="@(_NzConfigExclude)" Link="Assets\payload\config\%(RecursiveDir)%(Filename)%(Extension)" />
+    <AndroidAsset Include="$(NzRoot)config\rules.yaml;$(NzRoot)config\netzapret.example.json;$(NzRoot)config\addresses.yaml;$(NzRoot)config\catalog.yaml;$(NzRoot)config\catalog.zapret.yaml;$(NzRoot)config\pin-solutions.yaml" Link="Assets\payload\config\%(Filename)%(Extension)" />
+    <!-- Без подпапок: в lists\own\ — свои списки человека. -->
+    <AndroidAsset Include="$(NzRoot)config\lists\*.txt;$(NzRoot)config\lists\README.md" Link="Assets\payload\config\lists\%(Filename)%(Extension)" />
     <AndroidAsset Include="$(NzRoot)presets\*.txt" Link="Assets\payload\presets\%(Filename)%(Extension)" />
 
     <!-- lists\user — автосписок Zapret GUI владельца: pack.cmd отказывается его везти, мы тоже. -->
@@ -216,6 +224,26 @@
     <AndroidAsset Include="$(NzRoot)config\lists\*.txt" Link="Assets\payload\engines\zapret\lists\nz-%(Filename)%(Extension)" />
     <AndroidAsset Include="$(NzRoot)config\blobs\*.bin" Link="Assets\payload\engines\zapret\bin\nz-%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <!--
+    Последний рубеж, как проверка в конце pack.cmd: утёкший APK не отозвать.
+    Список разрешённых выше личного не берёт, но правка с маской (**\*) или
+    новый Include вернули бы прежнюю беду молча — поэтому личное ищется
+    по готовому набору поставки, и сборка отказывается до упаковки
+    (BeforeBuild — первым в CoreBuild). Имена — личное из .gitignore
+    и Payload.Personal; хвосты .tmp/.broken/.bak — недописанные сохранения
+    и копии личного.
+  -->
+  <PropertyGroup>
+    <_NzPersonalAsset>(?i)^Assets[\\/]payload[\\/](config[\\/]((netzapret|subscriptions|warp|preset-order|mobile|subscription\.cache|dns\.user)\.json|rules\.user\.yaml|hosts)([.][^\\/]*)?$|config[\\/]lists[\\/]own[\\/]|config[\\/].*\.bak|.*\.(tmp|broken|nz-new)$|engines[\\/]zapret[\\/]lists[\\/]user[\\/]|runtime[\\/]|reports[\\/])</_NzPersonalAsset>
+  </PropertyGroup>
+
+  <Target Name="NzRefusePersonal" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <_NzPersonal Include="@(AndroidAsset)" Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(AndroidAsset.Link)', '$(_NzPersonalAsset)'))" />
+    </ItemGroup>
+    <Error Condition="'@(_NzPersonal)' != ''" Text="Отказ: в поставку APK попало личное — @(_NzPersonal->'%(Link)', ', '). Оно не должно уехать на телефоны (CLAUDE.md, «Секреты»): уберите файл или поправьте AndroidAsset." />
+  </Target>
 
   <!--
     Без движков APK собрался бы, а на телефоне молча не поднялся бы ни VPN,
