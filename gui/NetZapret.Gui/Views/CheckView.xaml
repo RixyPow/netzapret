@@ -206,8 +206,14 @@
 
                 <Button x:Name="StopButton" Style="{StaticResource Ghost}" Content="Прервать"
                         Click="OnStop" Margin="0,0,8,4" IsEnabled="False" />
+                <!--
+                    Ширина постоянная: подпись меняется с глубиной («Проверить всё»,
+                    «Проверить полностью», «Проверить «Discord»»), и кнопка по
+                    подписи двигала весь ряд слева от себя (владелец 27.10:
+                    «плашка сверху скачет»).
+                -->
                 <Button x:Name="RunButton" Style="{StaticResource Primary}" Content="Проверить всё"
-                        Click="OnRun" Margin="0,0,0,4" />
+                        Width="210" Click="OnRun" Margin="0,0,0,4" />
             </WrapPanel>
         </Grid>
 

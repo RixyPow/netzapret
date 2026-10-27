@@ -427,9 +427,9 @@ public partial class CheckView : UserControl
 
         var what = _target.Describe;
 
-        // Длинные имена режутся: кнопка стоит в ряду с выбором глубины
-        // и «Прервать», и растянуть её значит сдвинуть оба.
-        return "Проверить " + (what.Length > 18 ? what[..17] + "…" : what);
+        // Длинные имена режутся: ширина кнопки постоянная, и подпись
+        // длиннее её ушла бы за край.
+        return "Проверить «" + (what.Length > 11 ? what[..10] + "…" : what) + "»";
     }
 
     /// <summary>
@@ -499,6 +499,7 @@ public partial class CheckView : UserControl
 
         View.RunButton.IsEnabled = false;
         View.StopButton.IsEnabled = true;
+        View.Recount();
 
         bool interrupted = false;
 
@@ -588,6 +589,10 @@ public partial class CheckView : UserControl
 
             View.RunButton.IsEnabled = true;
             View.StopButton.IsEnabled = false;
+
+            // Счёт и подсказки — по снятому признаку: иначе в итоге оставалось
+            // «Проверка идёт…» под «Готово» (снимок владельца 27.10).
+            View.Recount();
 
             // Прерванная проверка тоже пишется: набранное до остановки —
             // такой же замер, а переделывать его ради файла значит потратить
@@ -830,27 +835,43 @@ public partial class CheckView : UserControl
         if (target?.Host is { } own)
             return [(own.TrimStart('*', '.'), OwnLists.NameLabel)];
 
-        var only = target?.Service;
+        // Папка или маршрут «Маршрутов» (27.10): по четыре имени с маршрута — теми
+        // же именами, что «Маршруты» показывают у строки (RouteKeys.Zones).
+        if (target is { Routes.Count: > 0 })
+        {
+            var picked = new List<(string, string)>();
+            var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (key, label) in target.Routes)
+            {
+                foreach (var host in RouteKeys.Zones(key, zapretRoot)
+                    .Where(h => !NotWorthChecking.Contains(h))
+                    .Take(4))
+                {
+                    if (taken.Add(host))
+                        picked.Add((host, label));
+                }
+            }
+
+            return picked;
+        }
 
         // Одно имя с части — быстрая; два — полная. Второе имя и отделяет
         // случайную неудачу одного хоста от закрытой части целиком: одно имя
-        // ошибается само по себе, два подряд — уже нет. Для одного сервиса
-        // берётся четыре: там время есть, а подробность и есть смысл выбора.
+        // ошибается само по себе, два подряд — уже нет. Точечная берёт по четыре
+        // (выше): там время есть, а подробность и есть смысл выбора.
         //
         // 26.09 полная ненадолго брала три — ради claudeusercontent.com
         // третьей строкой claude.txt. Правильным оказалось не расширять
         // проверку, а дать имени свою часть: то, что ломается врозь,
         // и проверяется врозь.
-        int perPart = only is not null ? 4 : deep ? 2 : 1;
+        int perPart = deep ? 2 : 1;
 
         var targets = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var service in ServiceCatalog.All)
         {
-            if (only is not null && !string.Equals(service.Name, only, StringComparison.OrdinalIgnoreCase))
-                continue;
-
             foreach (var part in service.Parts)
             {
                 // Адресные части проверять нечем: у них нет имени, а стучаться
@@ -884,24 +905,21 @@ public partial class CheckView : UserControl
             }
         }
 
-        // Своё — в общей проверке, не при выборе одного сервиса. Владелец
-        // 26.09: всё, что добавлено в маршруты, обязано быть в проверке;
-        // прежде она знала только каталог, и свой список в отчёт не попадал.
-        if (only is null)
+        // Своё — в общей проверке. Владелец 26.09: всё, что добавлено в маршруты,
+        // обязано быть в проверке; прежде она знала только каталог, и свой
+        // список в отчёт не попадал.
+        try
         {
-            try
+            foreach (var (host, label) in OwnLists.CheckTargets(UserRulesFile.Load(), perPart))
             {
-                foreach (var (host, label) in OwnLists.CheckTargets(UserRulesFile.Load(), perPart))
-                {
-                    if (!NotWorthChecking.Contains(host) && seen.Add(host))
-                        targets.Add((host, label));
-                }
+                if (!NotWorthChecking.Contains(host) && seen.Add(host))
+                    targets.Add((host, label));
             }
-            catch (Exception)
-            {
-                // Свои правила не прочитались — проверка каталога от этого
-                // не теряет смысла.
-            }
+        }
+        catch (Exception)
+        {
+            // Свои правила не прочитались — проверка каталога от этого
+            // не теряет смысла.
         }
 
         return targets;

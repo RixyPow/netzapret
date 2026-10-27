@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:gui="clr-namespace:NetZapret.Gui"
         Title="Что проверить"
-        Width="460" Height="560"
+        Width="480" Height="640"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="{DynamicResource Backdrop}"
@@ -21,15 +21,16 @@
         <StackPanel Grid.Row="0">
             <TextBlock Text="Точечная проверка" FontSize="17" FontWeight="SemiBold" />
             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Один сервис целиком — по четыре имени с каждой его части. Либо своё имя, если нужно проверить что-то, чего в справочнике нет." />
+                       Text="Папка или маршрут из «Маршрутов» — по четыре имени с каждого маршрута. Либо своё имя, если нужно проверить что-то, чего там нет." />
         </StackPanel>
 
         <!--
-            Своё имя стоит выше списка намеренно: кто пришёл сюда с готовым
-            именем, не должен сперва пролистывать два десятка чужих.
+            Одно поле на два дела: набранное сужает список ниже, а не выбрано
+            в нём ничего — проверяется само набранное имя. Выше списка намеренно:
+            кто пришёл с готовым именем, не должен сперва пролистывать чужие.
         -->
         <StackPanel Grid.Row="1" Margin="0,18,0,0">
-            <TextBlock Text="Своё имя" Style="{StaticResource Caption}" />
+            <TextBlock Text="Своё имя или поиск" Style="{StaticResource Caption}" />
             <TextBox x:Name="Own" Margin="0,6,0,0" Padding="10,8"
                      Background="{DynamicResource Surface}"
                      Foreground="{DynamicResource Text}"
@@ -37,9 +38,7 @@
                      CaretBrush="{DynamicResource Text}"
                      FontFamily="{DynamicResource MonoFont}"
                      TextChanged="OnOwnChanged"
-                     gui:Hint.Text="example.com" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Например example.com. Проверяется ровно это имя, четырьмя пробами." />
+                     gui:Hint.Text="example.com или Discord" />
         </StackPanel>
 
         <!--
@@ -53,20 +52,37 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Text="Или сервис из справочника" Style="{StaticResource Caption}" />
+            <TextBlock Grid.Row="0" Text="Или папка, маршрут из «Маршрутов»" Style="{StaticResource Caption}" />
 
-            <ListBox Grid.Row="1" x:Name="Services" Margin="0,6,0,0"
+            <ListBox Grid.Row="1" x:Name="Items" Margin="0,6,0,0"
                      Background="{DynamicResource Surface}"
                      Foreground="{DynamicResource Text}"
                      BorderBrush="{DynamicResource Border}"
                      ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     SelectionChanged="OnServiceChosen"
-                     MouseDoubleClick="OnServiceConfirmed" />
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.IsVirtualizing="True"
+                     SelectionChanged="OnItemChosen"
+                     MouseDoubleClick="OnItemConfirmed">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="{Binding Indent}" Height="28">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Title}" FontWeight="{Binding Weight}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Text="{Binding Detail}" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" Margin="10,0,6,0" Visibility="{Binding DetailShown}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
         </Grid>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
             <Button Content="Отмена" Style="{StaticResource Ghost}" Margin="0,0,8,0" Click="OnCancel" />
-            <Button x:Name="Accept" Content="Проверить" Style="{StaticResource Primary}"
+            <Button x:Name="Accept" Content="Проверить" Style="{StaticResource Primary}" MinWidth="150"
                     IsEnabled="False" Click="OnAccept" />
         </StackPanel>
     </Grid>
