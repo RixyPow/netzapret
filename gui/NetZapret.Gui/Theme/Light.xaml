@@ -63,6 +63,7 @@
     <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
     <SolidColorBrush x:Key="Raised" Color="{StaticResource RaisedColor}" />
     <SolidColorBrush x:Key="Border" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="CardEdge" Color="{StaticResource BorderColor}" />
 
     <SolidColorBrush x:Key="Text" Color="{StaticResource TextColor}" />
     <SolidColorBrush x:Key="Muted" Color="{StaticResource MutedColor}" />

@@ -340,7 +340,7 @@ public partial class DoctorView : UserControl
             ItemTemplate = (DataTemplate)FindResource("LineTemplate"),
         };
 
-        var card = new Border { Margin = new Thickness(0, 0, 0, 10), Child = lines, Padding = new Thickness(18, 14, 18, 4) };
+        var card = new Card { Margin = new Thickness(0, 0, 0, 10), Child = lines, Padding = new Thickness(18, 14, 18, 4) };
         card.SetResourceReference(StyleProperty, "Card");
 
         Motion.Arrive(card, dy: -6, ms: 180);

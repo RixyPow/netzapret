@@ -26,10 +26,10 @@
         <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
                    TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />
 
-        <Border x:Name="ClashCard" Style="{StaticResource Card}" Margin="0,16,0,0"
+        <gui:Card x:Name="ClashCard" Style="{StaticResource Card}" Margin="0,16,0,0"
                 BorderBrush="{DynamicResource Warn}" Visibility="Collapsed">
             <TextBlock x:Name="ClashText" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-        </Border>
+        </gui:Card>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
             <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"

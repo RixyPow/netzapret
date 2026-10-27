@@ -16,7 +16,7 @@
     -->
     <UserControl.Resources>
         <DataTemplate x:Key="PresetItem">
-            <Border Style="{StaticResource Card}" BorderBrush="{Binding Edge}"
+            <gui:Card Style="{StaticResource Card}" BorderBrush="{Binding Edge}"
                     Margin="0,0,0,10" Padding="20,12,12,12">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -70,7 +70,7 @@
                             ToolTip="Ещё: открыть в редакторе, показать файл"
                             Tag="{Binding File}" Click="OnRowMore" />
                 </Grid>
-            </Border>
+            </gui:Card>
         </DataTemplate>
 
         <!--
@@ -80,7 +80,7 @@
             доступно с нынешним пресетом.
         -->
         <DataTemplate x:Key="RecipeItem">
-            <Border Style="{StaticResource Card}" Margin="0,0,0,10"
+            <gui:Card Style="{StaticResource Card}" Margin="0,0,0,10"
                     BorderBrush="{Binding Edge}">
                 <StackPanel>
                     <Grid>
@@ -126,7 +126,7 @@
                                    TextWrapping="Wrap" />
                     </Border>
                 </StackPanel>
-            </Border>
+            </gui:Card>
         </DataTemplate>
 
         <!-- Плитка в «Параметрах работы»: та же рамка, что у строки выбора, без нажатия. -->
@@ -176,14 +176,14 @@
                     выбирается, сохраняется и не действует ничем: winws2
                     просто некому запустить.
                 -->
-                <Border x:Name="MissingCard" Style="{StaticResource Card}" Margin="0,20,0,0"
+                <gui:Card x:Name="MissingCard" Style="{StaticResource Card}" Margin="0,20,0,0"
                         BorderBrush="{DynamicResource Danger}" Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock x:Name="MissingTitle" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
                         <TextBlock x:Name="MissingBody" Style="{StaticResource Caption}"
                                    Margin="0,6,0,0" TextWrapping="Wrap" />
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Выбранный пресет. Кнопки «Не запускать десинк» нет
@@ -191,7 +191,7 @@
                     на «Главной», и второй путь к тому же стоял на самом
                     видном месте вкладки.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="18">
+                <gui:Card Style="{StaticResource Card}" Margin="0,20,0,0" Padding="18">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -246,7 +246,7 @@
                             </StackPanel>
                         </Button>
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
 
@@ -255,7 +255,7 @@
                     окне друг под другом (OnParamsSize): рядом в 580 точек
                     подписи ломались в столбик по слову.
                 -->
-                <Border Style="{StaticResource Card}" Margin="0,12,0,0" Padding="16,14,16,16">
+                <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0" Padding="16,14,16,16">
                     <StackPanel>
                         <TextBlock Text="Параметры работы" FontWeight="SemiBold" FontSize="15" Margin="2,0,0,12" />
 
@@ -350,7 +350,7 @@
                         <TextBlock x:Name="CaptureHint" Style="{StaticResource Caption}"
                                    Margin="2,12,0,0" TextWrapping="Wrap" />
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Каталог стоит здесь, а не в конце вкладки, потому что

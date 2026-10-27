@@ -49,10 +49,16 @@
         и 125 % — два пикселя, половина — целый пиксель, рамка внутри.
         Плитки и карточки — 2, плашки, поля и кнопки — 1,5. Сторожит
         BorderThicknessTests.
+
+        В светлых темах (27.10) карточка — класс Card: под ней тень, а рамка
+        цвета CardEdge, на 40 % ближе к самой карточке, чем border. На светлом
+        глубину даёт только тень, и рамка border рядом с ней была вторым
+        контуром (Themes.Build, Card.cs). У тёмных CardEdge — тот же border,
+        тени нет.
     -->
-    <Style x:Key="Card" TargetType="Border">
+    <Style x:Key="Card" TargetType="local:Card">
         <Setter Property="Background" Value="{DynamicResource Surface}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
         <Setter Property="BorderThickness" Value="2" />
         <Setter Property="CornerRadius" Value="14" />
         <Setter Property="Padding" Value="18,16" />
@@ -739,9 +745,9 @@
         Пояснений в строках нет вовсе. Тому, что не помещается в подпись,
         место под значком «i».
     -->
-    <Style x:Key="SettingsGroup" TargetType="Border">
+    <Style x:Key="SettingsGroup" TargetType="local:Card">
         <Setter Property="Background" Value="{DynamicResource Surface}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
         <Setter Property="BorderThickness" Value="1.5" />
         <Setter Property="CornerRadius" Value="14" />
         <Setter Property="local:Glass.IsOn" Value="True" />

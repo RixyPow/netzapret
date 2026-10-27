@@ -118,7 +118,7 @@
             </Grid>
 
             <!-- Пояснение — по кнопке шапки: читают его один раз, а место наверху дорогое. -->
-            <Border x:Name="HowCard" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
+            <gui:Card x:Name="HowCard" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
                 <StackPanel>
                     <TextBlock Text="Когда он нужен" FontWeight="SemiBold" FontSize="15" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
@@ -126,10 +126,10 @@
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Только Telegram Desktop на этом компьютере — телефон через него не подключить. Прокси: tg-ws-proxy-rs (valnesfjord) — порт программы tg-ws-proxy (Flowseal), обе под MIT. Журнал — runtime\tg-ws-proxy.log." />
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!-- Прокси: выключатель, состояние, и где он живёт — с движками или без них. -->
-            <Border Style="{StaticResource Card}" Margin="0,20,0,0" Padding="20,18">
+            <gui:Card Style="{StaticResource Card}" Margin="0,20,0,0" Padding="20,18">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -198,12 +198,12 @@
                                       Click="OnAlways" VerticalAlignment="Center" />
                     </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!-- Три плитки: в одну колонку на узком окне (OnPageSize). -->
             <UniformGrid x:Name="Tiles" Rows="1" Margin="0,14,0,0">
 
-                <Border x:Name="HealthTile" Style="{StaticResource Card}" Margin="0,0,7,0">
+                <gui:Card x:Name="HealthTile" Style="{StaticResource Card}" Margin="0,0,7,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -227,9 +227,9 @@
                             <TextBlock x:Name="HealthNote" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border x:Name="AddressTile" Style="{StaticResource Card}" Margin="7,0,7,0">
+                <gui:Card x:Name="AddressTile" Style="{StaticResource Card}" Margin="7,0,7,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -247,9 +247,9 @@
                                        Text="Только этот компьютер — его и вписывают в Telegram." />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border x:Name="TypeTile" Style="{StaticResource Card}" Margin="7,0,0,0">
+                <gui:Card x:Name="TypeTile" Style="{StaticResource Card}" Margin="7,0,0,0">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -267,7 +267,7 @@
                                        Text="Шифрование самого Telegram, снаружи — обычный WebSocket." />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
             </UniformGrid>
 
             <!-- Подключение и ручная настройка рядом; на узком окне — одна под другой (OnPageSize). -->
@@ -281,7 +281,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Border x:Name="ConnectCard" Style="{StaticResource Card}" Margin="0,0,7,0" Padding="20,16">
+                <gui:Card x:Name="ConnectCard" Style="{StaticResource Card}" Margin="0,0,7,0" Padding="20,16">
                     <StackPanel>
                         <TextBlock Text="Подключить Telegram Desktop" FontWeight="SemiBold" FontSize="16" />
                         <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
@@ -304,9 +304,9 @@
                                     Content="Скопировать ссылку" gui:ButtonGlyph.Lead="&#xE8C8;" Padding="18,10" />
                         </WrapPanel>
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
-                <Border x:Name="ManualCard" Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0" Padding="20,16">
+                <gui:Card x:Name="ManualCard" Grid.Column="1" Style="{StaticResource Card}" Margin="7,0,0,0" Padding="20,16">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -322,7 +322,7 @@
                                        Text="Откройте в Telegram: Настройки → Продвинутые → Тип подключения → Прокси → MTProto и впишите сервер, порт и секрет из ссылки ниже." />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
             </Grid>
 
             <!--
@@ -330,7 +330,7 @@
                 Ключ default-domains снимал у прокси прямые адреса, и весь Telegram
                 шёл через домены Cloudflare, почти все отвечавшие 503 (TgWsProxy.Arguments).
             -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
+            <gui:Card Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
                 <StackPanel>
                     <TextBlock Text="Пути к Telegram" FontWeight="SemiBold" FontSize="16" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
@@ -448,10 +448,10 @@
                                 ToolTip="Инструкция Flowseal с кодом воркера — откроется в браузере" />
                     </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!-- Текущие настройки: то, что вписывают в Telegram руками. -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
+            <gui:Card Style="{StaticResource Card}" Margin="0,14,0,0" Padding="20,16">
                 <StackPanel>
                     <TextBlock Text="Текущие настройки" FontWeight="SemiBold" FontSize="16" />
 
@@ -522,7 +522,7 @@
                         </StackPanel>
                     </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,14,0,0" TextWrapping="Wrap" />
         </StackPanel>

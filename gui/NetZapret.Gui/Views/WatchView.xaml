@@ -105,7 +105,7 @@
                        Margin="2,12,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
             <!-- Ответ пунктов «Почему так» и «Проверить это имя» из меню строки. -->
-            <Border x:Name="Details" Style="{StaticResource Card}" Margin="0,12,0,0" Visibility="Collapsed">
+            <gui:Card x:Name="Details" Style="{StaticResource Card}" Margin="0,12,0,0" Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -119,7 +119,7 @@
                     <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Закрыть"
                             VerticalAlignment="Top" Margin="12,0,0,0" Click="OnDetailsClose" />
                 </Grid>
-            </Border>
+            </gui:Card>
         </StackPanel>
 
         <!--
@@ -160,7 +160,7 @@
 
                 <!-- Счётчики: имён и адресов рядом — разрыв выдаёт браузер со своим DoH. -->
                 <UniformGrid Grid.Row="1" Rows="1" Margin="0,12,0,0">
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -172,8 +172,8 @@
                                 <TextBlock Text="соединений" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -185,8 +185,8 @@
                                 <TextBlock Text="под правило" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -198,8 +198,8 @@
                                 <TextBlock Text="имён узнано" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -211,8 +211,8 @@
                                 <TextBlock Text="адресов" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -224,7 +224,7 @@
                                 <TextBlock x:Name="ClockCaption" Text="выключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
+                    </gui:Card>
                 </UniformGrid>
 
                 <!--
@@ -256,7 +256,7 @@
                     Прокрутка внутри шаблона списка, а не снаружи: иначе
                     VirtualizingStackPanel получает бесконечную высоту и строит всё.
                 -->
-                <Border x:Name="TableCard" Grid.Row="3" Style="{StaticResource Card}" Padding="0">
+                <gui:Card x:Name="TableCard" Grid.Row="3" Style="{StaticResource Card}" Padding="0">
                         <ItemsControl x:Name="Rows"
                                       VirtualizingPanel.IsVirtualizing="True"
                                       VirtualizingPanel.VirtualizationMode="Recycling"
@@ -322,7 +322,7 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                </Border>
+                </gui:Card>
 
                 <TextBlock Grid.Row="4" Style="{StaticResource Caption}" Margin="4,8,0,0" TextWrapping="Wrap"
                            Text="● — известно точно: подставной адрес движка, сам движок, домашняя сеть · ○ — так сказали бы правила, движок не спрашивали" />
@@ -348,7 +348,7 @@
                     <ColumnDefinition x:Name="SideC2" Width="0" />
                 </Grid.ColumnDefinitions>
 
-                <Border x:Name="RingCard" Style="{StaticResource Card}" Margin="0,0,0,12">
+                <gui:Card x:Name="RingCard" Style="{StaticResource Card}" Margin="0,0,0,12">
                     <!--
                         Легенда справа от кольца, и на широком окне тоже: под
                         кольцом она отнимала у «Сайтов» ~120 точек высоты —
@@ -397,9 +397,9 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border x:Name="ProgramsCard" Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
+                <gui:Card x:Name="ProgramsCard" Grid.Row="1" Style="{StaticResource Card}" Margin="0,0,0,12">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -418,9 +418,9 @@
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border x:Name="SitesCard" Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top">
+                <gui:Card x:Name="SitesCard" Grid.Row="2" Style="{StaticResource Card}" VerticalAlignment="Top">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -439,7 +439,7 @@
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
                     </Grid>
-                </Border>
+                </gui:Card>
             </Grid>
             </Border>
         </Grid>

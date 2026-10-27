@@ -34,7 +34,7 @@
                     и VPN и записывает первый сработавший. Решение целиком в
                     SiteFixer и RoutePlan.
                 -->
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Сайт не открывается?" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -119,11 +119,11 @@
                             </ItemsControl>
                         </StackPanel>
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <TextBlock Text="Первый запуск" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -139,11 +139,11 @@
                         <Button Grid.Column="1" Style="{StaticResource Ghost}"
                                 Content="Повторить" Click="OnRestartOnboarding" VerticalAlignment="Center" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <TextBlock Text="Антивирус" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -163,12 +163,12 @@
                         <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
                                    Text="Исключается одна папка, а не отключается защита. Defender опознаёт в winws2.exe библиотеку WinDivert и удаляет файл — наблюдалось вживую. Снимать защиту со всей системы ради этого не нужно и нельзя: программа, глушащая антивирус, сама выглядит как вредонос." />
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
 
                 <TextBlock Text="Папки" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <WrapPanel>
                             <Button Style="{StaticResource Ghost}" Content="Программа" Tag="."
@@ -187,7 +187,7 @@
                                    Foreground="{DynamicResource Muted}" Margin="0,4,0,0"
                                    TextWrapping="Wrap" />
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Просьба из обсуждения #2. Список компонентов приходит
@@ -196,7 +196,7 @@
                 -->
                 <TextBlock Text="О программе" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <TextBlock x:Name="AuthorValue" Style="{StaticResource Caption}" TextWrapping="Wrap" />
 
@@ -279,7 +279,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Обслуживание идёт последним намеренно: это разовые действия,
@@ -288,7 +288,7 @@
                 -->
                 <TextBlock Text="Обслуживание" FontWeight="SemiBold" FontSize="15" Margin="4,22,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
 
                         <!--
@@ -390,7 +390,7 @@
                         </Grid>
 
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
             </StackPanel>
         </Grid>

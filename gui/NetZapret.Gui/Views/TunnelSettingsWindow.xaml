@@ -40,7 +40,7 @@
 
             <TextBlock Text="КУДА ИДЁТ ТРАФИК" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
 
-            <Border Style="{StaticResource SettingsGroup}">
+            <gui:Card Style="{StaticResource SettingsGroup}">
                 <StackPanel>
 <!--
                         Два выключателя вместо списка режимов. Задумка
@@ -144,11 +144,11 @@
                     </Grid>
 
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <TextBlock Text="КОГДА ТУННЕЛЬ НЕ РАБОТАЕТ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
-            <Border Style="{StaticResource SettingsGroup}">
+            <gui:Card Style="{StaticResource SettingsGroup}">
                 <StackPanel>
                     <!--
                         Первой: замена сервера срабатывает раньше обхода
@@ -245,7 +245,7 @@
                                       Click="OnBypass" VerticalAlignment="Center" />
                     </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!--
                 Проверка серверов — как часто и как напористо. Владелец 28.09:
@@ -262,7 +262,7 @@
             -->
             <TextBlock Text="СОЕДИНЕНИЕ С СЕРВЕРОМ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
-            <Border Style="{StaticResource SettingsGroup}">
+            <gui:Card Style="{StaticResource SettingsGroup}">
                 <StackPanel>
                 <Grid Margin="16,13">
                     <Grid.ColumnDefinitions>
@@ -325,11 +325,11 @@
                                   Click="OnFakeIpMemory" VerticalAlignment="Center" />
                 </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <TextBlock Text="ПРОВЕРКА СЕРВЕРОВ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
-            <Border Style="{StaticResource SettingsGroup}">
+            <gui:Card Style="{StaticResource SettingsGroup}">
                 <StackPanel>
                     <!--
                         Переехало из «Ещё → Прочее» (владелец, 05.10): проверка
@@ -617,7 +617,7 @@
                         </ComboBox>
                     </Grid>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
         </StackPanel>
     </ScrollViewer>

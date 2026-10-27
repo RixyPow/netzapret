@@ -209,6 +209,27 @@ public static class Themes
 
         var backdrop = (Brush)dictionary["Backdrop"];
 
+        var lift = Lift.For(ToColor(theme[ThemeSlots.Text]), theme[ThemeSlots.Backdrop].Luminance);
+        dictionary[Card.LiftKey] = lift;
+
+        // Край карточки. Где есть тень, границу карточки задаёт она, и рамка
+        // цвета border (он же у полей и кнопок) рисовала второй контур —
+        // светлая тема выглядела чертежом. Рамка остаётся (владелец 21.10:
+        // «границы тайлов пропадают»), но на 40 % ближе к самой карточке.
+        // Поля и кнопки внутри карточек держат прежний border.
+        var edge = theme[ThemeSlots.Border];
+
+        if (lift is not null)
+        {
+            var surface = theme[ThemeSlots.Surface];
+
+            byte Toward(byte from, byte to) => (byte)Math.Round(from + (to - from) * 0.4);
+
+            edge = edge with { R = Toward(edge.R, surface.R), G = Toward(edge.G, surface.G), B = Toward(edge.B, surface.B) };
+        }
+
+        dictionary["CardEdge"] = Frozen(new SolidColorBrush(ToColor(edge)));
+
         dictionary["GlassImage"] = null;
 
         if (theme.Background is { } background && look.Background)

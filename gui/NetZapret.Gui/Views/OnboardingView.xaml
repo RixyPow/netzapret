@@ -1,6 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.OnboardingView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
     <UserControl.Resources>
@@ -95,34 +96,34 @@
                         каждая по-своему проходит ТСПУ. Подпись выше называет
                         дороги в том же порядке.
                     -->
-                    <Border Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0,6">
+                    <gui:Card Style="{StaticResource Card}" Margin="0,18,0,0" Padding="0,6">
                         <Viewbox Stretch="Uniform" MaxHeight="300">
                             <Canvas x:Name="Hero" Width="700" Height="298" ClipToBounds="True" />
                         </Viewbox>
-                    </Border>
+                    </gui:Card>
 
                     <UniformGrid x:Name="Features" Columns="3" Margin="-5,14,-5,0">
-                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                        <gui:Card Style="{StaticResource Card}" Margin="5,0" Opacity="0">
                             <StackPanel>
                                 <TextBlock Text="Десинк" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                            Text="Режет и переставляет первые пакеты, чтобы ТСПУ не узнал сайт. Работает без подписки." />
                             </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                        </gui:Card>
+                        <gui:Card Style="{StaticResource Card}" Margin="5,0" Opacity="0">
                             <StackPanel>
                                 <TextBlock Text="VPN по маршрутам" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                            Text="В туннель уходит только то, что назвали. Банки, игры и российские сайты идут как шли." />
                             </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource Card}" Margin="5,0" Opacity="0">
+                        </gui:Card>
+                        <gui:Card Style="{StaticResource Card}" Margin="5,0" Opacity="0">
                             <StackPanel>
                                 <TextBlock Text="Разбор" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                            Text="Проверка блокировок и диагностика говорят, что сломалось и чем лечится, а не «не работает»." />
                             </StackPanel>
-                        </Border>
+                        </gui:Card>
                     </UniformGrid>
                 </StackPanel>
 

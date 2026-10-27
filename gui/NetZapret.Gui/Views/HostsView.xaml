@@ -122,14 +122,14 @@
 
         <StackPanel Grid.Row="1">
             <!-- Стёртый защитником файл: сказать до того, как человек решит, что ничего не прибивал. -->
-            <Border x:Name="ReplacedCard" Style="{StaticResource Card}" Margin="0,16,0,0"
+            <gui:Card x:Name="ReplacedCard" Style="{StaticResource Card}" Margin="0,16,0,0"
                     BorderBrush="{DynamicResource Danger}" Visibility="Collapsed">
                 <StackPanel>
                     <TextBlock x:Name="ReplacedTitle" FontWeight="SemiBold" Foreground="{DynamicResource Danger}" />
                     <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"
                                Text="Изменённый hosts он считает признаком заражения и вернул файл к своему умолчанию — вместе со всеми пинами. Пин на этой машине не живёт, пока файл не внесён в доверенные в настройках защитника." />
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!--
                 Повторы: имя прибито не в первый раз. Windows берёт первую
@@ -137,7 +137,7 @@
                 Замер 23.09: 68 повторов, из них 29 — тот же адрес в блоке
                 ZapretGUI, 39 — ChatGPT на старом адресе под нашим пином.
             -->
-            <Border x:Name="RepeatsCard" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,10"
+            <gui:Card x:Name="RepeatsCard" Style="{StaticResource Card}" Margin="0,16,0,0" Padding="14,10"
                     Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -157,7 +157,7 @@
                     <Button Grid.Column="2" x:Name="RepeatsButton" Style="{StaticResource Ghost}"
                             Click="OnRemoveRepeats" Margin="8,0,0,0" VerticalAlignment="Center" />
                 </Grid>
-            </Border>
+            </gui:Card>
 
             <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="2,12,0,0"
                        TextWrapping="Wrap" Visibility="Collapsed" />
@@ -182,7 +182,7 @@
                 </Grid.RowDefinitions>
 
                 <UniformGrid Grid.Row="0" Rows="1">
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -194,8 +194,8 @@
                                 <TextBlock Text="записей всего" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -207,8 +207,8 @@
                                 <TextBlock Text="поставлено нами" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10" Margin="0,0,8,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -220,8 +220,8 @@
                                 <TextBlock Text="отключено" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Padding="14,10">
+                    </gui:Card>
+                    <gui:Card Style="{StaticResource Card}" Padding="14,10">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -234,7 +234,7 @@
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
-                    </Border>
+                    </gui:Card>
                 </UniformGrid>
 
                 <!-- Лупа поверх поля: отступ 17, шаблон складывает Padding дважды (см. Hint.cs). -->
@@ -259,7 +259,7 @@
                     получает бесконечную высоту и строит всё. Заголовок — отдельной
                     строкой над списком, чтобы не уезжал.
                 -->
-                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0" Margin="0,12,0,0">
+                <gui:Card Grid.Row="2" Style="{StaticResource Card}" Padding="0" Margin="0,12,0,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -374,9 +374,9 @@
                         <TextBlock x:Name="EmptyText" Grid.Row="1" Style="{StaticResource Caption}"
                                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border Grid.Row="3" Style="{StaticResource Card}" Padding="14,8" Margin="0,12,0,0">
+                <gui:Card Grid.Row="3" Style="{StaticResource Card}" Padding="14,8" Margin="0,12,0,0">
                     <WrapPanel>
                         <TextBlock x:Name="SelectedText" Text="Выбрано: 0" VerticalAlignment="Center"
                                    Margin="0,0,14,0" MinWidth="90" />
@@ -390,14 +390,14 @@
                         <Button x:Name="ClearSelectionButton" Style="{StaticResource Ghost}" Content="Снять выбор"
                                 Click="OnClearSelection" IsEnabled="False" />
                     </WrapPanel>
-                </Border>
+                </gui:Card>
             </Grid>
 
             <!-- Правая колонка; на узком окне — под таблицей, по кнопке «Добавить запись» (OnBodySize). -->
             <ScrollViewer x:Name="SideHost" Grid.Column="1" Style="{StaticResource PageScroll}"
                           Margin="16,0,0,0" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <Border Style="{StaticResource Card}">
+                    <gui:Card Style="{StaticResource Card}">
                         <StackPanel>
                             <TextBlock Text="Добавить запись" FontWeight="SemiBold" FontSize="15" />
 
@@ -437,9 +437,9 @@
                                     Click="OnAddPin" Margin="0,14,0,0" HorizontalAlignment="Stretch"
                                     gui:ButtonGlyph.Lead="&#xE710;" />
                         </StackPanel>
-                    </Border>
+                    </gui:Card>
 
-                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                                 <TextBlock Text="Источники записей" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -464,10 +464,10 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-                    </Border>
+                    </gui:Card>
 
                     <!-- Подсказка обязана говорить правду (владелец 19.10): «отменяет любой маршрут» — неверно. -->
-                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0">
                         <StackPanel>
                             <TextBlock Text="Что делает запись" FontWeight="SemiBold" />
                             <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
@@ -479,9 +479,9 @@
                             <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                        Text="Перед каждой правкой рядом с файлом ложится его копия." />
                         </StackPanel>
-                    </Border>
+                    </gui:Card>
 
-                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                    <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0">
                         <StackPanel>
                             <TextBlock Text="Расположение файла" FontWeight="SemiBold" />
                             <TextBlock x:Name="PathText" Style="{StaticResource Mono}" FontSize="12" Margin="0,8,0,0"
@@ -489,7 +489,7 @@
                             <Button Style="{StaticResource Ghost}" Content="Открыть папку" Click="OnOpenFolder"
                                     Margin="0,10,0,0" HorizontalAlignment="Stretch" gui:ButtonGlyph.Lead="&#xE838;" />
                         </StackPanel>
-                    </Border>
+                    </gui:Card>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

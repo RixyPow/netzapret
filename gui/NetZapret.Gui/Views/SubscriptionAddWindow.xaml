@@ -68,7 +68,7 @@
                        Text="Лягут в папку «Отдельные ключи»; имя каждому — из самого ключа." />
         </StackPanel>
 
-        <Border Style="{StaticResource SettingsGroup}" Margin="0,18,0,0">
+        <gui:Card Style="{StaticResource SettingsGroup}" Margin="0,18,0,0">
             <Grid Margin="16,13">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -88,7 +88,7 @@
                 <ToggleButton Grid.Column="2" x:Name="InPool" Style="{StaticResource Switch}" IsChecked="True"
                               Click="OnInPool" VerticalAlignment="Center" />
             </Grid>
-        </Border>
+        </gui:Card>
 
         <TextBlock Style="{StaticResource Caption}" Margin="0,14,0,0" TextWrapping="Wrap"
                    Text="Ссылка и ключи равносильны паролю: после добавления они не показываются — ни здесь, ни на вкладке." />

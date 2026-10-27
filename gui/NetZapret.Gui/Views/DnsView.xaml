@@ -54,7 +54,7 @@
                     Cloudflare и OpenDNS по UDP отвечали из RIPN-NS5-RU-MSK
                     и подменяли четыре закрытых имени из пяти, по DoH и DoT — сами.
                 -->
-                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Card}">
+                <gui:Card Grid.Row="0" Grid.Column="0" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -80,7 +80,7 @@
                         <Button Grid.Column="2" x:Name="SurveyButton" Style="{StaticResource Primary}" Padding="18,9"
                                 Content="Проверить" Click="OnSurvey" VerticalAlignment="Top" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Адреса посредников — по кнопке (владелец, 30.09: «даже
@@ -89,7 +89,7 @@
                     проверка это соединение на каждый прибитый адрес, и при
                     мёртвых ещё опрос всех посредников.
                 -->
-                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Card}">
+                <gui:Card Grid.Row="0" Grid.Column="2" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -116,9 +116,9 @@
                                 Content="Проверить" Click="OnPins" VerticalAlignment="Top"
                                 ToolTip="Проверить актуальные адреса посредников и заменить умершие пины" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
-                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Card}">
+                <gui:Card Grid.Row="2" Grid.Column="0" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -158,14 +158,14 @@
                                        Margin="0,10,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <!--
                     Что стоит у самой Windows. Не для правки — мы её настройки
                     не трогаем, — а чтобы было видно, кому уходят запросы всего,
                     что мимо туннеля.
                 -->
-                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Card}">
+                <gui:Card Grid.Row="2" Grid.Column="2" Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -192,11 +192,11 @@
                                        Text="Мы их только читаем: подмена системного DNS ломает то, что от него зависит, и переживает удаление программы." />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
             </Grid>
 
             <!-- Таблица обзора — во всю ширину, когда есть что показать. -->
-            <Border x:Name="SurveyHead" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
+            <gui:Card x:Name="SurveyHead" Style="{StaticResource Card}" Margin="0,14,0,0" Visibility="Collapsed">
                 <StackPanel>
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
@@ -241,7 +241,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <!--
                 Автовыбор (отзыв пользователя и решение владельца, 25.09):
@@ -272,7 +272,7 @@
                 </Grid>
             </Button>
 
-            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+            <gui:Card Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -295,7 +295,7 @@
                     <TextBlock x:Name="RouterDnsStatus" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                                Text="Перед включением программа проверит роутер: отвечает ли он и не подменяет ли заблокированные имена." />
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <TextBlock Text="Резолверы туннеля" FontWeight="SemiBold" FontSize="16" Margin="2,22,0,0" />
             <TextBlock Style="{StaticResource Caption}" Margin="2,4,0,0" TextWrapping="Wrap"
@@ -389,7 +389,7 @@
                 Перед записью меряется тем же обзором: не ответивший
                 не записывается, подменяющий — записывается с предупреждением.
             -->
-            <Border Style="{StaticResource Card}" Margin="0,20,0,0">
+            <gui:Card Style="{StaticResource Card}" Margin="0,20,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -436,7 +436,7 @@
                                    TextWrapping="Wrap" Visibility="Collapsed" />
                     </StackPanel>
                 </Grid>
-            </Border>
+            </gui:Card>
 
         </StackPanel>
     </ScrollViewer>

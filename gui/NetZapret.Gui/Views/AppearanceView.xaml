@@ -1,6 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.AppearanceView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
     <!--
@@ -31,7 +32,7 @@
                     проверку контраста, видна приглушённой, а причина — в
                     подсказке и под плитками.
                 -->
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -306,7 +307,7 @@
                                       SelectionChanged="OnTrayDensity" />
                         </Grid>
                     </StackPanel>
-                </Border>
+                </gui:Card>
             </StackPanel>
         </Grid>
     </ScrollViewer>

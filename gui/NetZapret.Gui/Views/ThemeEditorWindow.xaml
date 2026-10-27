@@ -1,6 +1,7 @@
 <Window x:Class="NetZapret.Gui.Views.ThemeEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
         Title="Своя тема" Height="760" Width="720"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
         Background="{DynamicResource Backdrop}">
@@ -26,7 +27,7 @@
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
             <StackPanel Margin="0,0,8,0">
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="140" />
@@ -35,7 +36,7 @@
                         <TextBlock Text="Название" VerticalAlignment="Center" />
                         <TextBox Grid.Column="1" x:Name="NameField" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <TextBlock Text="Цвета" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
 
@@ -68,7 +69,7 @@
 
                 <TextBlock Text="Фон" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
 
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
@@ -204,12 +205,12 @@
                                     HorizontalAlignment="Left" Margin="0,10,0,0" Click="OnHomeReset" />
                         </StackPanel>
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <TextBlock Text="Шрифт" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
 
                 <!-- Один на всю тему; каждый в списке написан собой. -->
-                <Border Style="{StaticResource Card}">
+                <gui:Card Style="{StaticResource Card}">
                     <ComboBox x:Name="FontChoice" SelectionChanged="OnChanged">
                         <ComboBox.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -222,7 +223,7 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
-                </Border>
+                </gui:Card>
             </StackPanel>
         </ScrollViewer>
 

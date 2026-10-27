@@ -215,7 +215,7 @@
                 Вопрос задают, когда сервис уходит не туда, — то есть в ту же
                 минуту, когда открывают этот раздел.
             -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0">
+            <gui:Card Style="{StaticResource Card}" Margin="0,14,0,0">
                 <StackPanel>
                     <TextBlock Text="Куда пойдёт соединение" FontWeight="SemiBold" FontSize="15" />
 
@@ -295,7 +295,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <TextBlock Text="Состояние компонентов" FontWeight="SemiBold" FontSize="15" Margin="4,24,0,10" />
 
@@ -306,7 +306,7 @@
                 Подробности. При поломках и оговорках раскрыты сразу и стоят на
                 «Только замечания»: свёрнутый список прятал бы красное за щелчком.
             -->
-            <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,12">
+            <gui:Card Style="{StaticResource Card}" Margin="0,14,0,0" Padding="18,12">
                 <StackPanel>
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -346,7 +346,7 @@
                                    Text="Ничего не нашлось." Margin="4,0,0,8" />
                     </StackPanel>
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
         </StackPanel>
     </ScrollViewer>

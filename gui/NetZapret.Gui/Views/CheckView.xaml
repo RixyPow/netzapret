@@ -1,6 +1,7 @@
 <UserControl x:Class="NetZapret.Gui.Views.CheckView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:gui="clr-namespace:NetZapret.Gui"
              Background="{DynamicResource Chrome}">
 
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
@@ -54,14 +55,14 @@
                     работающем обходе видно сеть уже вылеченной, а не такой,
                     какая она есть.
                 -->
-                <Border x:Name="SetupCard" Style="{StaticResource Card}" Margin="0,20,0,0"
+                <gui:Card x:Name="SetupCard" Style="{StaticResource Card}" Margin="0,20,0,0"
                         BorderBrush="{DynamicResource Warn}" Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock x:Name="SetupTitle" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
                         <TextBlock x:Name="SetupBody" Style="{StaticResource Caption}"
                                    TextWrapping="Wrap" Margin="0,6,0,0" />
                     </StackPanel>
-                </Border>
+                </gui:Card>
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,18,0,0" TextWrapping="Wrap"
                            Text="Проверка идёт минуты: по каждому имени соединение, и каждое ждёт ответа." />
@@ -88,7 +89,7 @@
                 <ItemsControl x:Name="Rows">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,4" Padding="18,9">
+                            <gui:Card Style="{StaticResource Card}" Margin="0,0,0,4" Padding="18,9">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
@@ -175,7 +176,7 @@
                                                Margin="0,4,0,0" TextWrapping="Wrap"
                                                Visibility="{Binding BypassShown}" />
                                 </StackPanel>
-                            </Border>
+                            </gui:Card>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -184,7 +185,7 @@
                 <ItemsControl x:Name="Sections" Margin="0,18,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,10"
+                            <gui:Card Style="{StaticResource Card}" Margin="0,0,0,10"
                                     BorderBrush="{Binding Color}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
@@ -192,7 +193,7 @@
                                     <TextBlock Text="{Binding Body}" Style="{StaticResource Caption}"
                                                TextWrapping="Wrap" Margin="0,8,0,0" />
                                 </StackPanel>
-                            </Border>
+                            </gui:Card>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

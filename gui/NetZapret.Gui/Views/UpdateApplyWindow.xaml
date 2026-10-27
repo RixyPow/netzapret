@@ -1,6 +1,7 @@
 <Window x:Class="NetZapret.Gui.Views.UpdateApplyWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
         Title="NetZapret — Обновление"
         Width="840" Height="660" MinWidth="680" MinHeight="560"
         WindowStartupLocation="CenterScreen"
@@ -34,14 +35,14 @@
             </Grid.ColumnDefinitions>
 
             <!-- Шаги. -->
-            <Border Grid.Column="0" Style="{StaticResource Card}" Padding="20,16">
+            <gui:Card Grid.Column="0" Style="{StaticResource Card}" Padding="20,16">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
                     <StackPanel x:Name="Steps" VerticalAlignment="Top" />
                 </ScrollViewer>
-            </Border>
+            </gui:Card>
 
             <!-- Что нового — разделы чейнджлога, первая строка каждого. -->
-            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="20,16">
+            <gui:Card Grid.Column="2" Style="{StaticResource Card}" Padding="20,16">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -58,23 +59,23 @@
                                    TextDecorations="{x:Null}">Весь список</Hyperlink>
                     </TextBlock>
                 </Grid>
-            </Border>
+            </gui:Card>
         </Grid>
 
         <!-- Низ: подсказка, ошибка с кнопками или итог. -->
         <Grid Grid.Row="2" Margin="0,14,0,0">
 
-            <Border x:Name="InfoPanel" Style="{StaticResource Card}" Padding="20,14">
+            <gui:Card x:Name="InfoPanel" Style="{StaticResource Card}" Padding="20,14">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock FontFamily="{StaticResource IconFont}" Text="&#xE946;" FontSize="18"
                                VerticalAlignment="Center" Foreground="{DynamicResource Muted}" />
                     <TextBlock x:Name="InfoText" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"
                                Text="Не закрывайте окно — это займёт несколько секунд." />
                 </StackPanel>
-            </Border>
+            </gui:Card>
 
             <StackPanel x:Name="ErrorPanel" Visibility="Collapsed">
-                <Border Style="{StaticResource Card}" Padding="20,14" BorderBrush="{DynamicResource Danger}">
+                <gui:Card Style="{StaticResource Card}" Padding="20,14" BorderBrush="{DynamicResource Danger}">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -99,7 +100,7 @@
                             </TextBlock>
                         </StackPanel>
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <StackPanel x:Name="ErrorButtons" Orientation="Horizontal" Margin="0,12,0,0">
                     <Button x:Name="RetryButton" Style="{StaticResource Primary}" Content="Повторить"
@@ -113,7 +114,7 @@
             </StackPanel>
 
             <StackPanel x:Name="DonePanel" Visibility="Collapsed">
-                <Border Style="{StaticResource Card}" Padding="20,14">
+                <gui:Card Style="{StaticResource Card}" Padding="20,14">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
@@ -136,7 +137,7 @@
                         <Button Grid.Column="2" x:Name="OpenButton" Style="{StaticResource Primary}"
                                 Content="Открыть сейчас" Padding="22,9" VerticalAlignment="Center" Click="OnOpenNow" />
                     </Grid>
-                </Border>
+                </gui:Card>
 
                 <TextBlock x:Name="CloseNote" Style="{StaticResource Caption}" Margin="4,10,0,0"
                            Text="Окно закроется само через несколько секунд." />

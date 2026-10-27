@@ -52,15 +52,16 @@
         <Style x:Key="QuickAction" TargetType="Button" BasedOn="{StaticResource Ghost}">
             <Setter Property="Padding" Value="10,8" />
             <Setter Property="Background" Value="{DynamicResource Surface}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Shape" Background="{TemplateBinding Background}"
+                        <local:Card x:Name="Shape" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2"
                                 CornerRadius="14" Padding="{TemplateBinding Padding}"
                                 local:Glass.IsOn="True">
                             <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
+                        </local:Card>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
@@ -131,7 +132,7 @@
             Таких карточек четыре, в два ряда: пресет и параметры, автозапуск
             и обновление (у него те же поля — в UpdatePanel.xaml).
         -->
-        <Style x:Key="HomeCard" TargetType="Border" BasedOn="{StaticResource Card}">
+        <Style x:Key="HomeCard" TargetType="local:Card" BasedOn="{StaticResource Card}">
             <Setter Property="Padding" Value="18,13" />
         </Style>
     </UserControl.Resources>
@@ -277,7 +278,7 @@
                     «Не сейчас» прячет её до следующей версии. Решение владельца
                     23.09: карточка и точка у пункта меню, без уведомлений Windows.
                 -->
-                <Border Grid.Row="1" x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,18,0,0"
+                <local:Card Grid.Row="1" x:Name="UpdateCard" Style="{StaticResource Card}" Margin="0,18,0,0"
                         BorderBrush="{DynamicResource Accent}" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -300,7 +301,7 @@
                                     Click="OnUpdateNow" />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </local:Card>
 
                 <!--
                     Просьба о звезде и канале (владелец, 01.10). Одной строкой
@@ -308,7 +309,7 @@
                     Показывается после мастера первого запуска — до него
                     человеку не до звёзд.
                 -->
-                <Border Grid.Row="2" x:Name="SupportCard" Style="{StaticResource Card}" Margin="0,18,0,0"
+                <local:Card Grid.Row="2" x:Name="SupportCard" Style="{StaticResource Card}" Margin="0,18,0,0"
                         Padding="18,12,12,12" Visibility="Collapsed">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -348,7 +349,7 @@
                                     ToolTip="Больше не показывать" />
                         </StackPanel>
                     </Grid>
-                </Border>
+                </local:Card>
 
                 <!--
                     Карточка состояния. Крупный знак и одна строка словами:
@@ -358,7 +359,7 @@
                     знак и свечение красятся вместе, в ShowDot, и разойтись
                     им нечем.
                 -->
-                <Border Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
+                <local:Card Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
                     <Grid>
                         <!--
                             Линии на фоне карточки (владелец 20.10: «параболы, перегибы,
@@ -548,7 +549,7 @@
                             </StackPanel>
                         </Grid>
                     </Grid>
-                </Border>
+                </local:Card>
 
                 <!-- Пресет и параметры подключения — рядом, как в макете. -->
                 <Grid Grid.Row="6" Margin="0,8,0,0">
@@ -558,7 +559,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource HomeCard}">
+                    <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
                         <StackPanel>
                             <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
@@ -605,10 +606,10 @@
                                 </Button>
                             </Grid>
                         </StackPanel>
-                    </Border>
+                    </local:Card>
 
                     <!-- Настройка. Только показ: правка — в своих разделах. -->
-                    <Border Grid.Column="2" Style="{StaticResource HomeCard}">
+                    <local:Card Grid.Column="2" Style="{StaticResource HomeCard}">
                         <StackPanel>
                             <TextBlock Text="Параметры подключения" Style="{StaticResource Caption}" FontSize="12.5" />
 
@@ -654,7 +655,7 @@
                                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                             </Grid>
                         </StackPanel>
-                    </Border>
+                    </local:Card>
                 </Grid>
 
                 <!--
@@ -666,14 +667,14 @@
                 <ItemsControl Grid.Row="7" x:Name="Warnings">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,8,0,0"
+                            <local:Card Style="{StaticResource Card}" Margin="0,8,0,0"
                                     BorderBrush="{DynamicResource Warn}">
                                 <StackPanel>
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
                                     <TextBlock Text="{Binding Body}" Style="{StaticResource Caption}"
                                                TextWrapping="Wrap" Margin="0,6,0,0" />
                                 </StackPanel>
-                            </Border>
+                            </local:Card>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -697,7 +698,7 @@
                     смене режима. Здесь сегменты наверху, а под ними одна строка —
                     пояснение выбранного режима и его движки, всегда одной высоты.
                 -->
-                <Border Grid.Row="10" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="14,12,14,12">
+                <local:Card Grid.Row="10" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="14,12,14,12">
                     <StackPanel>
                         <!-- Подпись — как «Текущий пресет» у соседних карточек и с тем же отступом слева. -->
                         <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,6" />
@@ -785,7 +786,7 @@
                             </StackPanel>
                         </Grid>
                     </StackPanel>
-                </Border>
+                </local:Card>
 
                 <!-- Жалоба на сочетание движков; пусто — строки нет вовсе, и отступа тоже. -->
                 <TextBlock Grid.Row="11" x:Name="EnginesLine" Style="{StaticResource Caption}"
@@ -799,7 +800,7 @@
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Style="{StaticResource HomeCard}">
+                    <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -846,7 +847,7 @@
                             <ToggleButton Grid.Column="2" x:Name="AutostartSwitch" Style="{StaticResource Switch}"
                                           Click="OnAutostart" VerticalAlignment="Top" />
                         </Grid>
-                    </Border>
+                    </local:Card>
 
                     <views:UpdatePanel Grid.Column="2" x:Name="Updates" />
                 </Grid>
