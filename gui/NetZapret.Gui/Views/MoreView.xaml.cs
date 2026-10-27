@@ -540,12 +540,6 @@ public partial class MoreView : UserControl
             OnFix(sender, e);
     }
 
-    /// <summary>Шаги подбора на экране — по мере проверки.</summary>
-    private readonly System.Collections.ObjectModel.ObservableCollection<FixStepRow> _fixRows = [];
-
-    /// <summary>Строка-заголовок рецептов: появляется с первым рецептом, итог пишется в неё.</summary>
-    private FixStepRow? _recipesRow;
-
     /// <summary>Имя последнего подбора — для «Показать в «Маршрутах»».</summary>
     private string? _fixHost;
 
@@ -561,10 +555,11 @@ public partial class MoreView : UserControl
 
         FixButton.IsEnabled = false;
         FixButton.Content = "Проверяю…";
-        StartFix();
+        _fixHost = null;
+        Fix.Start();
 
-        var progress = new Progress<string>(text => FixNow.Text = text);
-        var stepDone = new Progress<SiteFixStep>(AddFixStep);
+        var progress = new Progress<string>(Fix.Now);
+        var stepDone = new Progress<SiteFixStep>(Fix.Add);
 
         try
         {
@@ -585,8 +580,7 @@ public partial class MoreView : UserControl
         }
         catch (Exception ex)
         {
-            FixNowLine.Visibility = Visibility.Collapsed;
-            Outcome(Glyphs.Warning, "Warn", "Проверка не удалась", ex.GetBaseException().Message, reveal: false);
+            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", "Проверка не удалась", ex.GetBaseException().Message);
         }
         finally
         {
@@ -595,145 +589,51 @@ public partial class MoreView : UserControl
         }
     }
 
-    /// <summary>Чистит прошлый подбор и показывает ход нового.</summary>
-    internal void StartFix()
-    {
-        FixSteps.ItemsSource ??= _fixRows;
-        _fixRows.Clear();
-        _recipesRow = null;
-        _fixHost = null;
-
-        FixPanel.Visibility = Visibility.Visible;
-        FixOutcome.Visibility = Visibility.Collapsed;
-        FixNowLine.Visibility = Visibility.Visible;
-        FixNow.Text = "Проверяю…";
-    }
-
-    /// <summary>Строка на опробованный шаг; рецепты — под общим заголовком с отступом.</summary>
-    internal void AddFixStep(SiteFixStep step)
-    {
-        bool skipped = step.Detail.StartsWith("не пробовал", StringComparison.Ordinal);
-
-        if (step.Try == RouteTry.Recipes && step.Recipe is not null)
-        {
-            if (_recipesRow is null)
-            {
-                _recipesRow = new FixStepRow
-                {
-                    Glyph = Glyphs.Recipes,
-                    Tone = (Brush)FindResource("Muted"),
-                    Title = "Рецепты десинка",
-                    Weight = FontWeights.SemiBold,
-                };
-
-                _fixRows.Add(_recipesRow);
-            }
-
-            _fixRows.Add(new FixStepRow
-            {
-                Glyph = step.Works ? Glyphs.Ok : Glyphs.No,
-                Tone = (Brush)FindResource(step.Works ? "Accent" : "Danger"),
-                Title = step.Recipe,
-                Detail = step.Detail,
-                Indent = new Thickness(24, 0, 0, 0),
-            });
-
-            int tried = _fixRows.Count(r => r.Indent.Left > 0);
-            int worked = _fixRows.Count(r => r.Indent.Left > 0 && r.Glyph == Glyphs.Ok);
-
-            _recipesRow.Detail = worked > 0 ? $"открыл {tried}-й по счёту" : $"опробовано {tried}, ни один не открыл";
-            _recipesRow.Glyph = worked > 0 ? Glyphs.Ok : Glyphs.Recipes;
-            _recipesRow.Tone = (Brush)FindResource(worked > 0 ? "Accent" : "Muted");
-            return;
-        }
-
-        _fixRows.Add(new FixStepRow
-        {
-            Glyph = skipped ? Glyphs.Warning : step.Works ? Glyphs.Ok : Glyphs.No,
-            Tone = (Brush)FindResource(skipped ? "Warn" : step.Works ? "Accent" : "Danger"),
-            Title = StepTitle(step),
-            Detail = step.Detail,
-            Weight = FontWeights.SemiBold,
-        });
-    }
-
-    /// <summary>Что пробовали — словами для строки.</summary>
-    private static string StepTitle(SiteFixStep step) => step.Try switch
-    {
-        null => "Как есть" + (step.Path.IndexOf('(') is var at and >= 0 ? " · " + step.Path[(at + 1)..].TrimEnd(')') : string.Empty),
-        RouteTry.Direct => "Напрямую, без десинка",
-        RouteTry.Preset => "Десинк пресета",
-        RouteTry.Recipes => "Рецепты десинка",
-        RouteTry.Vpn => "Через VPN",
-        _ => step.Path,
-    };
-
     /// <summary>Итог подбора — плашкой над ходом.</summary>
-    internal void ShowFix(SiteFixResult result)
+    private void ShowFix(SiteFixResult result)
     {
         _fixHost = result.Host;
-        FixNowLine.Visibility = Visibility.Collapsed;
-
-        // Шаги, пришедшие не по ходу (например, ход выключен), — дорисовываем.
-        if (_fixRows.Count == 0)
-        {
-            foreach (var step in result.Steps)
-                AddFixStep(step);
-        }
+        Fix.Finish(result.Steps);
 
         if (result.Host is null || result.Steps.Count == 0)
         {
-            Outcome(Glyphs.Warning, "Warn", result.Summary, null, reveal: false);
+            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", result.Summary, null);
             return;
         }
 
         var rule = SiteFixer.RuleValue(result.Host);
+        const string reveal = "Показать в «Маршрутах»";
 
         switch (result.Applied)
         {
             case RoutingMode.Direct:
-                Outcome(Glyphs.Ok, "Accent", $"Записан маршрут «напрямую» для {rule}",
-                    "Десинк этому сайту мешал. Действует уже сейчас.", reveal: true);
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"Записан маршрут «напрямую» для {rule}",
+                    "Десинк этому сайту мешал. Действует уже сейчас.", reveal);
                 break;
 
             case RoutingMode.Desync:
-                Outcome(Glyphs.Ok, "Accent",
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent",
                     $"Записан маршрут «десинк»{(result.Recipe is { } recipe ? $" с рецептом «{recipe}»" : string.Empty)} для {rule}",
-                    "Заработает после перезапуска движков.", reveal: true);
+                    "Заработает после перезапуска движков.", reveal);
                 break;
 
             case RoutingMode.Proxy:
                 int recipes = result.Steps.Count(s => s.Try == RouteTry.Recipes && s.Recipe is not null);
 
-                Outcome(Glyphs.Ok, "Accent", $"Записан маршрут «через VPN» для {rule}",
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"Записан маршрут «через VPN» для {rule}",
                     "Заработает после перезапуска движков."
                     + (recipes > 0 ? $" Рецептов десинка опробовано {recipes} — ни один не открыл." : string.Empty),
-                    reveal: true);
+                    reveal);
                 break;
 
             default:
                 bool open = result.Steps[0].Works;
 
-                Outcome(open ? Glyphs.Ok : Glyphs.No, open ? "Accent" : "Danger",
+                Fix.Outcome(open ? FixProgress.Glyphs.Ok : FixProgress.Glyphs.No, open ? "Accent" : "Danger",
                     open ? $"{result.Host} открывается как есть — менять нечего" : $"{result.Host} не открылся ни одним путём — маршрут не менял",
-                    result.Advice, reveal: false);
+                    result.Advice);
                 break;
         }
-    }
-
-    private void Outcome(string glyph, string tone, string head, string? note, bool reveal)
-    {
-        var brush = (Brush)FindResource(tone);
-
-        FixOutcomeGlyph.Text = glyph;
-        FixOutcomeGlyph.Foreground = brush;
-        FixOutcome.BorderBrush = brush;
-        FixOutcomeHead.Text = head;
-        FixOutcomeNote.Text = note ?? string.Empty;
-        FixOutcomeNote.Visibility = string.IsNullOrWhiteSpace(note) ? Visibility.Collapsed : Visibility.Visible;
-        FixReveal.Visibility = reveal ? Visibility.Visible : Visibility.Collapsed;
-        FixOutcome.Visibility = Visibility.Visible;
-        FixPanel.Visibility = Visibility.Visible;
     }
 
     /// <summary>«Маршруты» на части, чьё правило теперь решает это имя (RoutesView.Reveal) — отбор сбрасывается на «Все».</summary>
@@ -744,57 +644,5 @@ public partial class MoreView : UserControl
 
         RoutesView.PendingReveal = _fixHost;
         (Window.GetWindow(this) as MainWindow)?.Open("routes");
-    }
-
-    /// <summary>Знаки строк подбора — Segoe Fluent Icons (MDL2 те же коды).</summary>
-    internal static class Glyphs
-    {
-        public const string Ok = "";
-        public const string No = "";
-        public const string Warning = "";
-        public const string Recipes = "";
-    }
-}
-
-/// <summary>Строка хода подбора: значок, что пробовали, чем кончилось.</summary>
-public sealed class FixStepRow : System.ComponentModel.INotifyPropertyChanged
-{
-    private string _glyph = string.Empty;
-    private Brush _tone = Brushes.Transparent;
-    private string _detail = string.Empty;
-
-    public string Glyph
-    {
-        get => _glyph;
-        set => Set(ref _glyph, value);
-    }
-
-    public Brush Tone
-    {
-        get => _tone;
-        set => Set(ref _tone, value);
-    }
-
-    public required string Title { get; init; }
-
-    public string Detail
-    {
-        get => _detail;
-        set => Set(ref _detail, value);
-    }
-
-    public Thickness Indent { get; init; }
-
-    public FontWeight Weight { get; init; } = FontWeights.Normal;
-
-    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-
-    private void Set<T>(ref T field, T value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value))
-            return;
-
-        field = value;
-        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
     }
 }

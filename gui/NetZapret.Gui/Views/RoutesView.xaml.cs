@@ -2837,7 +2837,8 @@ public partial class RoutesView : UserControl
                 ? "Чинит пресет; свой рецепт — кнопкой «Рецепт…», когда десинк выбран."
                 : "Чинят секции пресета по адресам — своего рецепта у адресов нет.";
 
-        var window = new PathWindow(row.Title, current, row.PoolId, row.DefaultLabel, canRecipe, desyncNote, _pools)
+        var window = new PathWindow(row.Title, current, row.PoolId, row.DefaultLabel, canRecipe, desyncNote, _pools,
+            probe: row.Probe is { Length: > 0 } probe ? probe : null)
         {
             Owner = Window.GetWindow(this),
         };
@@ -2864,6 +2865,11 @@ public partial class RoutesView : UserControl
 
             case PathPick.Desync when window.RecipeWanted && row.Probe is { Length: > 0 } example:
                 AskLater(row.Key, value, example, match, RoutingMode.Desync);
+                break;
+
+            // Рецепт нашёл автоподбор окна — пишется в правило самого маршрута.
+            case PathPick.Desync when window.FoundRecipe is { } found:
+                Write(row.Key, value, match, RoutingMode.Desync, recipe: found);
                 break;
 
             case PathPick.Desync:

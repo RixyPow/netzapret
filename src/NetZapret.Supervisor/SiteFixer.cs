@@ -17,6 +17,8 @@ public sealed record SiteFixStep(string Path, bool Works, string Detail, RouteTr
 /// <param name="NeedsRestart">Маршрут вступит в силу с перезапуском движков (VPN: подменные адреса раздаёт туннель; рецепт: свой профиль winws2).</param>
 /// <param name="Recipe">Записанный рецепт десинка — название из каталога; <c>null</c> — без своего рецепта.</param>
 /// <param name="Advice">Совет из таблицы «симптом — маршрут» (<see cref="RoutePlan.Advice"/>); <c>null</c> — нечего.</param>
+/// <param name="Found">Какой путь открыл имя — и при подборе без записи (<see cref="SiteFixer.PickAsync"/>).</param>
+/// <param name="RecipeId">Рецепт открывшего пути — идентификатор каталога, как его пишет правило.</param>
 public sealed record SiteFixResult(
     string? Host,
     IReadOnlyList<SiteFixStep> Steps,
@@ -24,7 +26,9 @@ public sealed record SiteFixResult(
     bool NeedsRestart,
     string Summary,
     string? Recipe = null,
-    string? Advice = null);
+    string? Advice = null,
+    RoutingMode? Found = null,
+    string? RecipeId = null);
 
 /// <summary>
 /// «Сайт не открывается»: подбирает маршрут по симптому и сам записывает сработавший.
@@ -80,11 +84,39 @@ public static class SiteFixer
         "*." + (host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host);
 
     /// <param name="stepDone">Каждый опробованный шаг — сразу, как кончился: окно показывает ход, а не ждёт минуту.</param>
-    public static async Task<SiteFixResult> FixAsync(
+    public static Task<SiteFixResult> FixAsync(
         string input,
         IProgress<string>? progress,
         CancellationToken cancellationToken,
-        IProgress<SiteFixStep>? stepDone = null)
+        IProgress<SiteFixStep>? stepDone = null) =>
+        RunAsync(input, write: true, recipes: true, progress, cancellationToken, stepDone);
+
+    /// <summary>
+    /// Тот же подбор, но без записи: какой путь открыл имя — в <see cref="SiteFixResult.Found"/>.
+    /// </summary>
+    /// <remarks>
+    /// Для кнопки «Автоподбор» в окне пути маршрута (владелец 27.10: «я вижу это
+    /// как кнопку автоподбор в выборе маршрута»). Записывать там должен сам маршрут,
+    /// его список, а не новое правило на имя, — и только по «Готово»: окно отмечает
+    /// найденный путь, человек соглашается. Щит после пробы «напрямую» поэтому
+    /// возвращается всегда: отменённое окно не должно оставить имя без десинка.
+    /// </remarks>
+    /// <param name="recipes">Пробовать ли рецепты: у маршрутов-списков адресов своего рецепта нет.</param>
+    public static Task<SiteFixResult> PickAsync(
+        string host,
+        bool recipes,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken,
+        IProgress<SiteFixStep>? stepDone = null) =>
+        RunAsync(host, write: false, recipes, progress, cancellationToken, stepDone);
+
+    private static async Task<SiteFixResult> RunAsync(
+        string input,
+        bool write,
+        bool recipes,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken,
+        IProgress<SiteFixStep>? stepDone)
     {
         var host = HostOf(input);
         var steps = new StepLog(stepDone);
@@ -124,7 +156,7 @@ public static class SiteFixer
                 Advice: open);
         }
 
-        foreach (var step in plan.Steps)
+        foreach (var step in plan.Steps.Where(s => recipes || s.Kind != RouteTry.Recipes))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -134,40 +166,47 @@ public static class SiteFixer
                 {
                     progress?.Report($"Пробую {host} напрямую, без десинка…");
 
-                    if (await TryShieldedAsync(host, cancellationToken) is not { } direct)
+                    if (await TryShieldedAsync(host, keep: write, cancellationToken) is not { } direct)
                         break;
 
                     steps.Add(direct.Step);
 
-                    if (direct.Step.Works)
-                    {
-                        Save(host, RoutingMode.Direct);
+                    if (!direct.Step.Works)
+                        break;
 
-                        return new(host, steps, RoutingMode.Direct, false,
-                            $"{host} открывается напрямую, а десинк ему мешал. Записал маршрут «напрямую» "
-                            + $"для {RuleValue(host)} — действует уже сейчас, перезапуск не нужен.");
+                    if (!write)
+                    {
+                        return new(host, steps, null, false, $"{host} открывается напрямую, а десинк ему мешал.",
+                            Found: RoutingMode.Direct);
                     }
 
-                    break;
+                    Save(host, RoutingMode.Direct);
+
+                    return new(host, steps, RoutingMode.Direct, false,
+                        $"{host} открывается напрямую, а десинк ему мешал. Записал маршрут «напрямую» "
+                        + $"для {RuleValue(host)} — действует уже сейчас, перезапуск не нужен.",
+                        Found: RoutingMode.Direct);
                 }
 
                 case RouteTry.Preset or RouteTry.Recipes:
                 {
-                    var found = await TryDesyncAsync(host, step, state, settings, steps, progress, cancellationToken);
+                    if (await TryDesyncAsync(host, step, state, settings, steps, progress, cancellationToken) is not { } desync)
+                        break;
 
-                    if (found is { } desync)
-                    {
-                        Save(host, RoutingMode.Desync, desync.Id);
+                    var opens = $"{host} открывается {(desync.Id is null ? "с десинком пресета" : $"с рецептом «{desync.Title}»")}"
+                        + $" ({desync.Detail}).";
+                    var title = desync.Id is null ? null : desync.Title;
 
-                        return new(host, steps, RoutingMode.Desync, true,
-                            $"{host} открывается {(desync.Id is null ? "с десинком пресета" : $"с рецептом «{desync.Title}»")}"
-                            + $" ({desync.Detail}). Записал маршрут «десинк»"
-                            + (desync.Id is null ? string.Empty : $" с этим рецептом")
-                            + $" для {RuleValue(host)} — заработает после перезапуска движков.",
-                            desync.Id is null ? null : desync.Title);
-                    }
+                    if (!write)
+                        return new(host, steps, null, true, opens, title, Found: RoutingMode.Desync, RecipeId: desync.Id);
 
-                    break;
+                    Save(host, RoutingMode.Desync, desync.Id);
+
+                    return new(host, steps, RoutingMode.Desync, true,
+                        opens + " Записал маршрут «десинк»"
+                        + (desync.Id is null ? string.Empty : $" с этим рецептом")
+                        + $" для {RuleValue(host)} — заработает после перезапуска движков.",
+                        title, Found: RoutingMode.Desync, RecipeId: desync.Id);
                 }
 
                 case RouteTry.Vpn:
@@ -177,14 +216,15 @@ public static class SiteFixer
                     var vpn = await ThroughTunnelAsync(host, cancellationToken);
                     steps.Add(vpn);
 
-                    if (vpn.Works)
-                    {
-                        Save(host, RoutingMode.Proxy);
+                    if (!vpn.Works)
+                        break;
 
-                        return new(host, steps, RoutingMode.Proxy, true, ViaVpnSummary(host, steps));
-                    }
+                    if (!write)
+                        return new(host, steps, null, true, $"{host} открывается через VPN.", Found: RoutingMode.Proxy);
 
-                    break;
+                    Save(host, RoutingMode.Proxy);
+
+                    return new(host, steps, RoutingMode.Proxy, true, ViaVpnSummary(host, steps), Found: RoutingMode.Proxy);
                 }
             }
         }
@@ -378,9 +418,13 @@ public static class SiteFixer
     /// <remarks>
     /// Щит восстанавливается дословно, если путь не сработал. Сработал — имя
     /// в щите остаётся: правило «напрямую» будет записано, и при следующем
-    /// запуске щит соберётся с ним же.
+    /// запуске щит соберётся с ним же. Без записи (<paramref name="keep"/> —
+    /// <c>false</c>) щит возвращается всегда.
     /// </remarks>
-    private static async Task<(SiteFixStep Step, bool Kept)?> TryShieldedAsync(string host, CancellationToken cancellationToken)
+    private static async Task<(SiteFixStep Step, bool Kept)?> TryShieldedAsync(
+        string host,
+        bool keep,
+        CancellationToken cancellationToken)
     {
         var path = NetZapret.Zapret.WinwsCommandLine.DefaultExcludeListPath;
 
@@ -405,11 +449,11 @@ public static class SiteFixer
         }
         finally
         {
-            if (!works)
+            if (!works || !keep)
                 await File.WriteAllTextAsync(path, original, CancellationToken.None);
         }
 
-        return (new SiteFixStep("напрямую", works, report is null ? "не проверилось" : Said(report), RouteTry.Direct), works);
+        return (new SiteFixStep("напрямую", works, report is null ? "не проверилось" : Said(report), RouteTry.Direct), works && keep);
     }
 
     /// <summary>Запрос через вход проверки движка: он ведёт в туннель.</summary>

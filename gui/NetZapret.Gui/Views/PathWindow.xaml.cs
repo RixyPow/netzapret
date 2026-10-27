@@ -1,6 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
 using NetZapret.Core;
+using NetZapret.Core.Rules;
+using NetZapret.Supervisor;
+using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
 
@@ -36,6 +39,14 @@ public enum PathPick
 /// значило бы держать её в двух местах. Отсюда оно открывается кнопкой
 /// «Рецепт…» у десинка.
 /// </para>
+/// <para>
+/// С 27.10 — «Автоподбор» (владелец: «я вижу это как кнопку автоподбор в выборе
+/// маршрута»): подбор «Сайт не открывается?» на примере маршрута, без записи
+/// (<see cref="SiteFixer.PickAsync"/>). Открывший путь отмечается здесь же,
+/// пишет его «Готово» — в правило самого маршрута, а не новым правилом на имя.
+/// «По умолчанию» — кнопкой между «Отмена» и «Готово» (владелец, тогда же):
+/// это не путь, а снятие своего правила.
+/// </para>
 /// </remarks>
 public partial class PathWindow : Window
 {
@@ -47,13 +58,24 @@ public partial class PathWindow : Window
     /// <summary>Нажато «Рецепт…» — выбрать рецепт десинка следом.</summary>
     public bool RecipeWanted { get; private set; }
 
+    /// <summary>Рецепт, найденный автоподбором (идентификатор каталога); пишется при «десинке».</summary>
+    public string? FoundRecipe { get; private set; }
+
     private readonly string? _defaultLabel;
     private readonly bool _canRecipe;
-    private readonly string _desyncNote;
+    private string _desyncNote;
     private readonly IReadOnlyList<ServerPool> _pools;
 
     /// <summary>«Selective Routing» включён — под «через VPN» выбирается пул.</summary>
     private readonly bool _poolsOn;
+
+    /// <summary>Имя-пример маршрута, на котором идёт автоподбор.</summary>
+    private readonly string? _probe;
+
+    private readonly string _title;
+
+    /// <summary>Идущий автоподбор — гасится закрытием окна.</summary>
+    private CancellationTokenSource? _picking;
 
     /// <param name="title">Имя маршрута.</param>
     /// <param name="current">Что стоит сейчас.</param>
@@ -66,6 +88,7 @@ public partial class PathWindow : Window
     /// <param name="pools">
     /// Пулы серверов с вкладки VPN; <c>null</c> — «Selective Routing» выключен, и пул не выбирается.
     /// </param>
+    /// <param name="probe">Имя-пример маршрута для автоподбора; <c>null</c> — подбирать не на чем.</param>
     public PathWindow(
         string title,
         PathPick current,
@@ -73,19 +96,43 @@ public partial class PathWindow : Window
         string? defaultLabel,
         bool canRecipe,
         string desyncNote,
-        IReadOnlyList<ServerPool>? pools)
+        IReadOnlyList<ServerPool>? pools,
+        string? probe = null)
     {
         InitializeComponent();
 
         _pools = pools ?? [];
         _poolsOn = pools is not null;
 
+        _title = title;
         Head.Text = $"Путь: {title}";
         Picked = current;
         Pool = ServerPools.Find(_pools, pool)?.Id;
         _defaultLabel = defaultLabel;
         _canRecipe = canRecipe;
         _desyncNote = desyncNote;
+        _probe = probe;
+
+        if (defaultLabel is { } fallback)
+        {
+            DefaultButton.Visibility = Visibility.Visible;
+            DefaultButton.ToolTip = $"Снять своё правило: маршрут пойдёт, как задано заводскими правилами, — {fallback}.";
+
+            // Своего правила и так нет — снимать нечего.
+            DefaultButton.IsEnabled = current != PathPick.Default;
+
+            if (current == PathPick.Default)
+            {
+                DefaultNow.Text = $"Сейчас своего правила нет — по умолчанию: {fallback}.";
+                DefaultNow.Visibility = Visibility.Visible;
+            }
+        }
+
+        if (probe is { Length: > 0 })
+        {
+            PickRow.Visibility = Visibility.Visible;
+            PickNote.Text = $"Проверит {probe} и отметит первый открывший путь — до минуты. Движки должны быть запущены.";
+        }
 
         Rebuild();
     }
@@ -93,12 +140,6 @@ public partial class PathWindow : Window
     private void Rebuild()
     {
         Options.Children.Clear();
-
-        if (_defaultLabel is { } fallback)
-        {
-            Options.Children.Add(Card(PathPick.Default, $"По умолчанию — {fallback}",
-                "Своего правила нет: маршрут идёт, как задано заводскими правилами."));
-        }
 
         Options.Children.Add(Card(PathPick.Direct, "Напрямую", "Мимо VPN и без десинка — как без программы."));
 
@@ -244,6 +285,110 @@ public partial class PathWindow : Window
         (2 or 3 or 4, not (12 or 13 or 14)) => $"{count} сервера",
         _ => $"{count} серверов",
     };
+
+    /// <summary>
+    /// Автоподбор на имени-примере: подбор без записи, открывший путь — отметкой.
+    /// </summary>
+    private async void OnPick(object sender, RoutedEventArgs e)
+    {
+        if (_probe is not { Length: > 0 } probe || _picking is not null)
+            return;
+
+        _picking = new CancellationTokenSource();
+        var token = _picking.Token;
+
+        PickButton.IsEnabled = false;
+        PickButton.Content = "Проверяю…";
+        Fix.Start();
+
+        var progress = new Progress<string>(Fix.Now);
+        var stepDone = new Progress<SiteFixStep>(Fix.Add);
+
+        try
+        {
+            var result = await Task.Run(() => SiteFixer.PickAsync(probe, _canRecipe, progress, token, stepDone), token);
+
+            Fix.Finish(result.Steps);
+            ShowPick(result);
+
+            Journal.Write("автоподбор", $"«{_title}» на {probe}: "
+                + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
+                + (result.Found is { } found
+                    ? $" → отмечен путь {found}{(result.RecipeId is { } id ? $", рецепт {id}" : string.Empty)}"
+                    : " → путь не найден"));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Окно закрыто посреди подбора — показывать некому.
+        }
+        catch (Exception ex)
+        {
+            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", "Подбор не удался", ex.GetBaseException().Message);
+        }
+        finally
+        {
+            _picking?.Dispose();
+            _picking = null;
+
+            if (IsLoaded)
+            {
+                PickButton.IsEnabled = true;
+                PickButton.Content = "Автоподбор";
+            }
+        }
+    }
+
+    /// <summary>Итог автоподбора: открывший путь отмечается, записывает его «Готово».</summary>
+    private void ShowPick(SiteFixResult result)
+    {
+        const string apply = "Отмечено ниже — запишется по «Готово», заработает после перезапуска движков.";
+
+        if (result.Steps.Count == 0)
+        {
+            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", result.Summary, null);
+            return;
+        }
+
+        switch (result.Found)
+        {
+            case RoutingMode.Direct:
+                Picked = PathPick.Direct;
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", "Открывается напрямую — десинк ему мешал", apply);
+                break;
+
+            case RoutingMode.Desync:
+                Picked = PathPick.Desync;
+                FoundRecipe = result.RecipeId;
+                _desyncNote = result.Recipe is { } title ? $"рецепт «{title}» — подобран автоподбором" : "десинк пресета — подобран автоподбором";
+
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent",
+                    result.Recipe is { } recipe ? $"Открывается с рецептом «{recipe}»" : "Открывается с десинком пресета", apply);
+                break;
+
+            case RoutingMode.Proxy:
+                Picked = PathPick.Proxy;
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", "Открывается через VPN", apply);
+                break;
+
+            default:
+                bool open = result.Steps[0].Works;
+
+                Fix.Outcome(open ? FixProgress.Glyphs.Ok : FixProgress.Glyphs.No, open ? "Accent" : "Danger",
+                    open ? $"{result.Host} открывается как есть — менять нечего" : $"{result.Host} не открылся ни одним путём",
+                    result.Advice);
+                return;
+        }
+
+        Rebuild();
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e) => _picking?.Cancel();
+
+    private void OnDefault(object sender, RoutedEventArgs e)
+    {
+        Picked = PathPick.Default;
+        DialogResult = true;
+    }
 
     private void OnDone(object sender, RoutedEventArgs e) => DialogResult = true;
 

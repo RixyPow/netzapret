@@ -1,10 +1,13 @@
 <Window x:Class="NetZapret.Gui.Views.PathWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
+        xmlns:views="clr-namespace:NetZapret.Gui.Views"
         Title="Путь маршрута" Width="560" SizeToContent="Height" MaxHeight="860"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Backdrop}"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        Closing="OnClosing">
 
     <!--
         Выбор пути отдельным окном (владелец 19.10, идеи №6): выключено,
@@ -22,17 +25,41 @@
             <StackPanel>
                 <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
 
-                <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,10" TextWrapping="Wrap"
+                <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                            Text="Куда идут имена и адреса этого маршрута. Применится при следующем запуске движков." />
 
-                <StackPanel x:Name="Options" />
+                <TextBlock x:Name="DefaultNow" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Visibility="Collapsed" />
+
+                <!--
+                    Автоподбор (владелец 27.10: «я вижу это как кнопку автоподбор
+                    в выборе маршрута») — тот же подбор, что «Сайт не открывается?»,
+                    на примере маршрута; найденный путь отмечается ниже, пишет «Готово».
+                -->
+                <Grid x:Name="PickRow" Margin="0,14,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button x:Name="PickButton" Style="{StaticResource Ghost}" Content="Автоподбор"
+                            gui:ButtonGlyph.Lead="&#xE945;" Click="OnPick" VerticalAlignment="Center" />
+                    <TextBlock x:Name="PickNote" Grid.Column="1" Style="{StaticResource Caption}" Margin="12,0,0,0"
+                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                </Grid>
+
+                <views:FixProgress x:Name="Fix" Margin="0,12,0,0" />
+
+                <StackPanel x:Name="Options" Margin="0,10,0,0" />
             </StackPanel>
         </ScrollViewer>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="28,18,28,24">
             <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
                     Margin="0,0,8,0" Click="OnCancel" />
-            <Button Style="{StaticResource Primary}" Content="Готово" IsDefault="True" Click="OnDone" />
+            <Button x:Name="DefaultButton" Style="{StaticResource Ghost}" Content="По умолчанию"
+                    Margin="0,0,8,0" Click="OnDefault" Visibility="Collapsed" />
+            <Button x:Name="DoneButton" Style="{StaticResource Primary}" Content="Готово" IsDefault="True" Click="OnDone" />
         </StackPanel>
     </Grid>
 </Window>
