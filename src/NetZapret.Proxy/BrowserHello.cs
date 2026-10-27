@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using NetZapret.Core;
 
 namespace NetZapret.Proxy;
 
@@ -331,7 +332,7 @@ public static class BrowserHello
 
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork);
+            using var client = ProbePorts.Client(AddressFamily.InterNetwork);
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             limit.CancelAfter(connect);
 

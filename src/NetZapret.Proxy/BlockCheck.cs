@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using NetZapret.Core;
 
 namespace NetZapret.Proxy;
 
@@ -816,6 +817,29 @@ public static class BlockCheck
         await NamesAsync(await ProbeAsync(host, service, cancellationToken, throughTunnel), cancellationToken);
 
     /// <summary>
+    /// Одна проба с портов пробы (<see cref="ProbePorts"/>) — для пробного winws2 с рецептом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Соединения — только с портов пробы: их перехватывает пробный winws2,
+    /// а основной не трогает (подбор маршрута, 27.10). Те же стадии, что у
+    /// обычной пробы, — TCP, рукопожатие, передача с заморозкой и подресурсами:
+    /// рецепт должен довести до страницы, а не только до рукопожатия.
+    /// </para>
+    /// <para>
+    /// Без переспроса браузерным приветствием, ECH, QUIC, чужих имён и сверок
+    /// через DoH: вопрос один — открывается ли имя с этим рецептом, а каждая
+    /// лишняя проба стоила бы секунд на каждом рецепте подбора.
+    /// </para>
+    /// </remarks>
+    public static async Task<TargetReport> TrialAsync(string host, CancellationToken cancellationToken)
+    {
+        using var ports = ProbePorts.Use();
+
+        return await ProbeAsync(host, null, cancellationToken, throughTunnel: false, trial: true);
+    }
+
+    /// <summary>
     /// Уточняет «DPI по TLS» пробой с чужим именем на тот же адрес.
     /// </summary>
     /// <remarks>
@@ -982,12 +1006,14 @@ public static class BlockCheck
         foreignTunnels.Count > 0 ? BlockKind.ForeignFakeIp : BlockKind.RouterFakeIp;
 
     /// <param name="followed">Это уже имя из переадресации — дальше не идти.</param>
+    /// <param name="trial">Проба рецепта (<see cref="TrialAsync"/>): только стадии, без лишних вопросов.</param>
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
         CancellationToken cancellationToken,
         bool throughTunnel,
-        bool followed = false)
+        bool followed = false,
+        bool trial = false)
     {
         IPAddress[] addresses;
 
@@ -1128,7 +1154,7 @@ public static class BlockCheck
         // по образцу браузера. Это единственное место, где проба открывает
         // второе соединение, и открывает она его только там, где первое
         // уже провалилось.
-        if (!tls.Ok && tcp.Ok && answered is not null)
+        if (!tls.Ok && tcp.Ok && answered is not null && !trial)
             tls = await AskBrowserHelloAsync(tls, answered, host, cancellationToken);
 
         // Разбор идёт по замеренному пути, а не по обещанному правилами.
@@ -1192,7 +1218,7 @@ public static class BlockCheck
         // системный DNS разрешал в 157.240.205.60, куда соединение не встаёт,
         // а 1.1.1.1 давал 57.144.249.32, который отвечает за десятые доли.
         // Первое лечится VPN, второе — сменой резолвера, и путать их дорого.
-        if (kind == BlockKind.Full && !viaTunnel)
+        if (kind == BlockKind.Full && !viaTunnel && !trial)
         {
             var honest = await DohResolveAsync(host, cancellationToken);
 
@@ -1236,7 +1262,7 @@ public static class BlockCheck
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var there = await ProbeAsync(next, service, cancellationToken, throughTunnel, followed: true);
+            var there = await ProbeAsync(next, service, cancellationToken, throughTunnel, followed: true, trial: trial);
 
             return there with
             {
@@ -1251,7 +1277,7 @@ public static class BlockCheck
         string? echName = null;
         bool echAccepted = false;
 
-        if (!viaTunnel && kind is BlockKind.TlsDpi or BlockKind.Stall && answered is not null)
+        if (!viaTunnel && !trial && kind is BlockKind.TlsDpi or BlockKind.Stall && answered is not null)
         {
             echName = await EchRecord.PublicNameAsync(host, Timeout, cancellationToken);
 
@@ -1262,7 +1288,7 @@ public static class BlockCheck
         // Открыт по TCP и объявил HTTP/3 — браузер пойдёт к нему и по QUIC,
         // а молчащий QUIC он ждёт: 15.10 YouTube подвисал в Хроме при TCP
         // на 187 Мбит/с. Мимо туннеля: через TUN проба мерила бы трубу.
-        var quic = !viaTunnel && kind == BlockKind.None && offersHttp3 && answered is not null
+        var quic = !viaTunnel && !trial && kind == BlockKind.None && offersHttp3 && answered is not null
             ? await QuicProbe.AskAsync(answered, host, Timeout, cancellationToken)
             : null;
 
@@ -1285,7 +1311,7 @@ public static class BlockCheck
             // а настоящее разрешение происходит на выходе — судить по тому,
             // что мы видим здесь, значило бы объявлять подменой собственную
             // работу туннеля.
-            Spoof = viaTunnel ? DnsSpoofResult.Unknown : await SettleSpoofAsync(host, real, walk.Spoof, cancellationToken),
+            Spoof = viaTunnel ? DnsSpoofResult.Unknown : trial ? walk.Spoof : await SettleSpoofAsync(host, real, walk.Spoof, cancellationToken),
 
             Addresses = shown,
             Answered = answered?.ToString(),
@@ -1625,7 +1651,7 @@ public static class BlockCheck
         // измерение сети, где имени соответствует известно что.
         if (targets.Count == 0)
         {
-            var client = new TcpClient(family);
+            var client = ProbePorts.Client(family);
 
             try
             {
@@ -1657,7 +1683,7 @@ public static class BlockCheck
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var client = new TcpClient(family);
+            var client = ProbePorts.Client(family);
 
             try
             {
@@ -2598,7 +2624,7 @@ public static class BlockCheck
 
         try
         {
-            using var client = new TcpClient(AddressFamily.InterNetwork);
+            using var client = ProbePorts.Client(AddressFamily.InterNetwork);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(Timeout);
 

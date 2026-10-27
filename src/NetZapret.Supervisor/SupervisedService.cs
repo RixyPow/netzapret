@@ -115,6 +115,12 @@ public abstract class SupervisedService
     /// <summary>Не отвечает ни выбранный резолвер, ни запасной: имена не разрешаются.</summary>
     public bool DnsDown { get; protected set; }
 
+    /// <summary>
+    /// Десинк не перехватывает порты пробы рецептов (<see cref="Core.ProbePorts"/>):
+    /// рядом можно поднять пробный winws2. У прочих служб — ложно.
+    /// </summary>
+    public virtual bool KeepsProbesOut => false;
+
     /// <summary>Процесс существует и не завершился.</summary>
     public bool IsProcessAlive => Process is { HasExited: false };
 
@@ -1937,6 +1943,12 @@ public sealed class WinwsService : SupervisedService
     }
 
     public override string Name => "winws2";
+
+    /// <summary>
+    /// Строка запуска выводит порты пробы из перехвата — у сборки до 27.10
+    /// и у пресета со своим <c>--wf-raw-filter</c> файлом не выводит.
+    /// </summary>
+    public override bool KeepsProbesOut => Zapret.TunnelCapture.KeepsProbesOut(_arguments);
 
     public override IReadOnlyList<string> EngineProcessNames => ["winws2", "winws"];
 

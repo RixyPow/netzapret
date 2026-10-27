@@ -152,6 +152,12 @@ public sealed record ServiceState
     /// <summary>Имена не разрешаются вовсе (SupervisedService.DnsDown).</summary>
     public bool DnsDown { get; init; }
 
+    /// <summary>
+    /// Десинк не перехватывает порты пробы рецептов (SupervisedService.KeepsProbesOut):
+    /// подбор маршрута может поднять рядом пробный winws2.
+    /// </summary>
+    public bool KeepsProbesOut { get; init; }
+
     /// <summary>С какого момента держится нынешнее <see cref="Health"/>; <c>null</c> — неизвестно.</summary>
     public DateTimeOffset? HealthSince { get; init; }
 }

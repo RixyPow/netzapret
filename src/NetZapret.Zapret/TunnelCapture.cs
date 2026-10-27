@@ -78,6 +78,46 @@ public static class TunnelCapture
         if (filter.Length == 0)
             return;
 
+        Merge(arguments, filter);
+    }
+
+    /// <summary>
+    /// Выводит из перехвата порты пробы рецептов (<see cref="Core.ProbePorts"/>):
+    /// на них работает пробный winws2 с одним рецептом.
+    /// </summary>
+    /// <remarks>
+    /// Всегда, а не только на время подбора: пересобирать строку и поднимать
+    /// десинк заново ради каждой пробы значило бы рвать соединения человека.
+    /// Четыре сравнения — место двух адресов в <see cref="Limit"/>. Пресет
+    /// со своим <c>--wf-raw-filter</c> файлом их не примет — тогда
+    /// <see cref="KeepsProbesOut"/> ложно, и подбор рецептов не идёт.
+    /// </remarks>
+    public static void KeepProbesOut(List<string> arguments) => Merge(arguments, ProbeFilter);
+
+    /// <summary>Выведены ли порты пробы из перехвата этой строки.</summary>
+    public static bool KeepsProbesOut(IReadOnlyList<string> arguments) =>
+        arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase) && a.Contains(ProbeFilter, StringComparison.Ordinal));
+
+    /// <summary>«Не пакет пробы» — тем же отрицанием, что и всё здесь.</summary>
+    public static string ProbeFilter => $"({Core.ProbePorts.Packets} ? false : true)";
+
+    /// <summary>
+    /// Сужает перехват пробного winws2 до портов пробы — условием «И» на всё,
+    /// что перехватывал бы пресет.
+    /// </summary>
+    /// <returns><c>false</c> — у пресета свой фильтр файлом, сузить нечем.</returns>
+    public static bool OnlyProbes(List<string> arguments)
+    {
+        var only = $"({Core.ProbePorts.Packets})";
+
+        Merge(arguments, only);
+
+        return arguments.Any(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase) && a.Contains(only, StringComparison.Ordinal));
+    }
+
+    /// <summary>Сливает условие с уже стоящим <c>--wf-raw-filter</c>: ключ у winws2 один.</summary>
+    private static void Merge(List<string> arguments, string filter)
+    {
         int index = arguments.FindIndex(a => a.StartsWith(Key, StringComparison.OrdinalIgnoreCase));
 
         if (index < 0)

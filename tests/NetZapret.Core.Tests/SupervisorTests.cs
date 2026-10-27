@@ -144,7 +144,10 @@ public sealed class WinwsCommandLineTests : IDisposable
     {
         var arguments = WinwsCommandLine.Build(Load()).ToList();
 
-        Assert.Equal("--wf-tcp-out=80,443", arguments[0]);
+        // Первым — наш единственный ключ перехвата с портами пробы рецептов (27.10),
+        // за ним глобальные ключи пресета как в файле.
+        Assert.Equal("--wf-raw-filter=" + TunnelCapture.ProbeFilter, arguments[0]);
+        Assert.Equal("--wf-tcp-out=80,443", arguments[1]);
         Assert.Equal(2, arguments.Count(a => a == "--new"));
         Assert.True(
             arguments.IndexOf("--wf-tcp-out=80,443") < arguments.IndexOf("--new"),

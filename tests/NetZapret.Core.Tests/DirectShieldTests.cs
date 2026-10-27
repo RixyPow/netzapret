@@ -159,14 +159,16 @@ public sealed class DirectShieldTests : IDisposable
         Assert.Contains("--filter-tcp=*", shield);
         Assert.Contains("--filter-udp=443", shield);
 
-        // Глобальные ключи остались в голове и перед щитом.
+        // Глобальные ключи остались в голове и перед щитом — за нашим ключом
+        // перехвата с портами пробы рецептов (27.10).
+        Assert.Equal("--wf-raw-filter=" + TunnelCapture.ProbeFilter, shield[0]);
         Assert.Equal(
             [
                 "--lua-init=@lua/zapret-lib.lua",
                 "--wf-tcp-out=80,443-65535",
                 "--blob=quic_google:@bin/quic_initial_www_google_com.bin",
             ],
-            shield.Take(3));
+            shield.Skip(1).Take(3));
 
         Assert.Equal(
             [
@@ -237,7 +239,9 @@ public sealed class DirectShieldTests : IDisposable
         var profiles = Profiles(WinwsCommandLine.Build(preset, Exclude("example.com"), own: []));
 
         Assert.Equal(2, profiles.Count);
-        Assert.Equal("--wf-tcp=80,443", profiles[0][0]);
+
+        // Первым — наш ключ перехвата с портами пробы (27.10), за ним голова пресета.
+        Assert.Equal("--wf-tcp=80,443", profiles[0][1]);
         Assert.Contains(ShieldName, profiles[0]);
         Assert.Contains("--name=Discord UDP", profiles[1]);
     }
@@ -258,8 +262,10 @@ public sealed class DirectShieldTests : IDisposable
 
             Assert.DoesNotContain(ShieldName, arguments);
 
-            // Голова ровно как в файле — ничего не переставлено.
-            Assert.Equal(preset.GlobalArguments, arguments.Take(preset.GlobalArguments.Count));
+            // Голова ровно как в файле — ничего не переставлено; перед ней
+            // только наш ключ перехвата с портами пробы (27.10).
+            Assert.Equal("--wf-raw-filter=" + TunnelCapture.ProbeFilter, arguments[0]);
+            Assert.Equal(preset.GlobalArguments, arguments.Skip(1).Take(preset.GlobalArguments.Count));
         }
     }
 

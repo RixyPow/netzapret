@@ -117,6 +117,10 @@ public static class WinwsCommandLine
 
         TunnelCapture.Apply(arguments, tunnelServers, tunnelFakeRange, udpOff, tunAddresses, lans);
 
+        // Порты пробы рецептов — пробному winws2 (27.10): иначе рецепт
+        // проверялся бы поверх десинка, а не сам по себе.
+        TunnelCapture.KeepProbesOut(arguments);
+
         return arguments;
     }
 
@@ -164,9 +168,63 @@ public static class WinwsCommandLine
             if (profile.Steps.Count == 0 || string.IsNullOrWhiteSpace(profile.HostListPath))
                 continue;
 
-            arguments.Add("--new");
-            arguments.Add($"--name=NetZapret: {profile.Name}");
+            arguments.AddRange(OwnProfile(profile, excludeList, shielded));
+        }
 
+        AddSections(arguments, preset, excludeList, shielded);
+
+        return arguments;
+    }
+
+    /// <summary>
+    /// Строка пробного winws2: глобальные ключи пресета, перехват только портов
+    /// пробы (<see cref="Core.ProbePorts"/>) и профили — один рецепт либо пресет целиком.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Подбор маршрута (27.10) проверяет рецепт, не останавливая десинк: основной
+    /// winws2 порты пробы не перехватывает (<see cref="TunnelCapture.KeepProbesOut"/>),
+    /// а этот перехватывает только их. Профиль рецепта собирается тем же кодом,
+    /// что свой профиль в основной строке, — иначе проверка мерила бы не то,
+    /// что потом применится.
+    /// </para>
+    /// <para>
+    /// Без рецепта — пресет целиком, без щита и своих профилей: так проверяется
+    /// «десинк по умолчанию» у имени, которое сейчас идёт напрямую.
+    /// </para>
+    /// </remarks>
+    /// <returns><c>null</c> — у пресета свой <c>--wf-raw-filter</c> файлом, и перехват к портам пробы не сузить.</returns>
+    public static IReadOnlyList<string>? ProbeLine(ZapretPreset preset, OwnDesyncProfile? recipe)
+    {
+        List<string> arguments;
+
+        if (recipe is null)
+        {
+            arguments = [.. preset.GlobalArguments];
+            AddSections(arguments, preset, excludeList: null, shielded: false);
+        }
+        else
+        {
+            // Без первого профиля пресета: он стоит в голове, до первого --new,
+            // и иначе тоже взялся бы за пакеты пробы.
+            var (globals, _) = SplitGlobals(preset.GlobalArguments);
+
+            arguments = [.. globals, .. OwnProfile(recipe, excludeList: null, shielded: false)];
+        }
+
+        return TunnelCapture.OnlyProbes(arguments) ? arguments : null;
+    }
+
+    /// <summary>Свой профиль — имена, которым выбран рецепт.</summary>
+    private static List<string> OwnProfile(OwnDesyncProfile profile, string? excludeList, bool shielded)
+    {
+        var arguments = new List<string>
+        {
+            "--new",
+            $"--name=NetZapret: {profile.Name}",
+        };
+
+        {
             // Порты те же, что у подменяемой секции. Зашитое 80,443 стоило
             // дорого: у Discord секция объявлена на восьми портах, и пять
             // из них — запасные HTTPS у Cloudflare, куда клиент уходит сам,
@@ -204,6 +262,12 @@ public static class WinwsCommandLine
                 arguments.Add($"--lua-desync={step}");
         }
 
+        return arguments;
+    }
+
+    /// <summary>Секции пресета по порядку, каждая своим <c>--new</c>.</summary>
+    private static void AddSections(List<string> arguments, ZapretPreset preset, string? excludeList, bool shielded)
+    {
         foreach (var section in preset.Sections)
         {
             arguments.Add("--new");
@@ -242,8 +306,6 @@ public static class WinwsCommandLine
 
             arguments.AddRange(section.RawArguments);
         }
-
-        return arguments;
     }
 
     /// <summary>

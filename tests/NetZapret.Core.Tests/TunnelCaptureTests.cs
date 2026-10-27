@@ -64,8 +64,12 @@ public sealed class TunnelCaptureTests
         }
     }
 
+    /// <summary>
+    /// Без серверов строка та же, что с пустым списком, и из перехвата выведены
+    /// только порты пробы рецептов (27.10) — ключ встаёт всегда.
+    /// </summary>
     [Fact]
-    public void WithoutServersTheCommandLineIsUntouched()
+    public void WithoutServersOnlyTheProbePortsLeaveTheCapture()
     {
         foreach (var preset in ShippedPresets())
         {
@@ -73,12 +77,13 @@ public sealed class TunnelCaptureTests
             var empty = WinwsCommandLine.Build(preset, gameFilter: true, tunnelServers: []).ToList();
 
             Assert.Equal(plain, empty);
-            Assert.DoesNotContain(empty, a => a.StartsWith("--wf-raw-filter=", StringComparison.Ordinal));
+            Assert.Equal("--wf-raw-filter=" + TunnelCapture.ProbeFilter, empty[0]);
+            Assert.True(TunnelCapture.KeepsProbesOut(empty));
         }
     }
 
     /// <summary>
-    /// Один ключ в самом начале; всё остальное — та же строка до последнего ключа.
+    /// Серверы встают в тот же единственный ключ рядом с портами пробы; всё остальное — та же строка.
     /// </summary>
     [Fact]
     public void ServersAddOneKeyAndChangeNothingElse()
@@ -90,9 +95,10 @@ public sealed class TunnelCaptureTests
             var plain = WinwsCommandLine.Build(preset, gameFilter: true).ToList();
             var bypass = WinwsCommandLine.Build(preset, gameFilter: true, tunnelServers: Servers).ToList();
 
-            Assert.Equal("--wf-raw-filter=" + Expected, bypass[0]);
-            Assert.Equal(plain, bypass.Skip(1));
+            Assert.Equal($"--wf-raw-filter=({Expected}) and {TunnelCapture.ProbeFilter}", bypass[0]);
+            Assert.Equal(plain.Skip(1), bypass.Skip(1));
             Assert.Equal(Servers.Count, TunnelCapture.Applied(bypass, Servers));
+            Assert.True(TunnelCapture.KeepsProbesOut(bypass));
 
             checkedPresets++;
         }
@@ -218,7 +224,7 @@ public sealed class TunnelCaptureTests
         var arguments = WinwsCommandLine.Build(preset, tunnelServers: Servers);
 
         Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=", StringComparison.Ordinal));
-        Assert.Contains("--wf-raw-filter=(ip.TTL>1) and " + Expected, arguments);
+        Assert.Contains($"--wf-raw-filter=((ip.TTL>1) and {Expected}) and {TunnelCapture.ProbeFilter}", arguments);
         Assert.Equal(Servers.Count, TunnelCapture.Applied(arguments, Servers));
     }
 
@@ -233,6 +239,9 @@ public sealed class TunnelCaptureTests
 
         Assert.Equal(plain, arguments);
         Assert.Equal(0, TunnelCapture.Applied(arguments, Servers));
+
+        // Порты пробы тоже не встали — и подбор рецептов это видит.
+        Assert.False(TunnelCapture.KeepsProbesOut(arguments));
     }
 
     [Fact]
@@ -245,7 +254,8 @@ public sealed class TunnelCaptureTests
         var arguments = WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), tunnelServers: many);
         var filter = Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=", StringComparison.Ordinal));
 
-        Assert.Equal(TunnelCapture.Limit * 2, filter.Split(" or ").Length);
+        // Плюс одно «или» внутри портов пробы.
+        Assert.Equal(TunnelCapture.Limit * 2 + 1, filter.Split(" or ").Length);
         Assert.Contains($"ip.DstAddr={many[TunnelCapture.Limit - 1]} ", filter);
         Assert.DoesNotContain($"ip.DstAddr={many[TunnelCapture.Limit]} ", filter);
         Assert.Equal(TunnelCapture.Limit, TunnelCapture.Applied(arguments, many));
@@ -313,7 +323,7 @@ public sealed class TunnelCaptureTests
     {
         var arguments = WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), udpOff: ["104.160.128.0/19"]);
 
-        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=((udp and ", StringComparison.Ordinal));
+        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=(((udp and ", StringComparison.Ordinal));
         Assert.True(TunnelCapture.Carries(arguments, [], null, ["104.160.128.0/19"]));
         Assert.False(TunnelCapture.Carries(arguments, [], null, ["185.40.64.0/22"]));
     }
@@ -343,7 +353,7 @@ public sealed class TunnelCaptureTests
 
         var arguments = WinwsCommandLine.Build(WithHead("--wf-tcp-out=443"), lans: LocalNetworks.VirtualLans);
 
-        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=((ip.DstAddr>=25.0.0.0 ", StringComparison.Ordinal));
+        Assert.Single(arguments, a => a.StartsWith("--wf-raw-filter=(((ip.DstAddr>=25.0.0.0 ", StringComparison.Ordinal));
         Assert.True(TunnelCapture.Carries(arguments, [], null, null, null, LocalNetworks.VirtualLans));
 
         // Без сетей — прежняя строка, знак в знак.
@@ -392,6 +402,12 @@ public sealed class TunnelCaptureTests
                 TunnelCapture.Filter(many, "198.18.0.0/15"),
                 TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks()),
                 TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks(), null, LocalNetworks.VirtualLans),
+
+                // Порты пробы рецептов (27.10): в основном фильтре — отрицанием
+                // рядом со всем прочим, у пробного winws2 — сами по себе.
+                $"({TunnelCapture.Filter(many, "198.18.0.0/15", RiotNetworks(), null, LocalNetworks.VirtualLans)}) and {TunnelCapture.ProbeFilter}",
+                TunnelCapture.ProbeFilter,
+                $"({ProbePorts.Packets})",
             })
             {
                 bool ok = compile(filter, 0, new byte[65536], 65536, out var error, out uint position);

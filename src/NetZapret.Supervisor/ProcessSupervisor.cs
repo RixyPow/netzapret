@@ -330,6 +330,7 @@ public sealed class ProcessSupervisor
             Remark = s.Remark,
             DnsNotice = s.DnsNotice,
             DnsDown = s.DnsDown,
+            KeepsProbesOut = s.KeepsProbesOut,
         }).ToList(),
     };
 
