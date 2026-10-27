@@ -84,7 +84,52 @@ public sealed class SubscriptionClient : IDisposable
     {
         // Ссылки вида happ://add/https://... — обёртка клиента вокруг обычного URL.
         var target = Unwrap(subscriptionUrl);
+        WentAroundTunnel = false;
 
+        try
+        {
+            return await FetchWithAsync(_http, target, cancellationToken);
+        }
+        catch (Exception ex) when (Unreached(ex, cancellationToken))
+        {
+            // Через туннель панель не ответила — спросить мимо него (PanelBypass).
+            // Не вышло и так — отказ прежний: он про то, что видит человек.
+            if (!await PanelBypass.TunnelledAsync(target.Host, cancellationToken)
+                || PanelBypass.Client(_http.Timeout == Timeout.InfiniteTimeSpan ? DefaultTimeout : _http.Timeout) is not { } direct)
+            {
+                throw;
+            }
+
+            using (direct)
+            {
+                foreach (var (name, value) in DeviceIdentity.Headers())
+                    direct.DefaultRequestHeaders.TryAddWithoutValidation(name, value);
+
+                try
+                {
+                    var info = await FetchWithAsync(direct, target, cancellationToken);
+                    WentAroundTunnel = true;
+                    return info;
+                }
+                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(ex);
+                    throw;
+                }
+            }
+        }
+    }
+
+    /// <summary>Прочитана ли подписка последним разом мимо туннеля (<see cref="PanelBypass"/>).</summary>
+    public bool WentAroundTunnel { get; private set; }
+
+    /// <summary>Панель не ответила вовсе — а не ответила отказом: такое лечится другой дорогой.</summary>
+    private static bool Unreached(Exception ex, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested
+        && ex is TaskCanceledException or HttpRequestException { StatusCode: null };
+
+    private async Task<SubscriptionInfo> FetchWithAsync(HttpClient http, Uri target, CancellationToken cancellationToken)
+    {
         HttpResponseMessage? response = null;
 
         try
@@ -114,7 +159,7 @@ public sealed class SubscriptionClient : IDisposable
                 if (!request.Headers.UserAgent.TryParseAdd(agent))
                     request.Headers.TryAddWithoutValidation("User-Agent", agent);
 
-                response = await _http.SendAsync(request, cancellationToken);
+                response = await http.SendAsync(request, cancellationToken);
 
                 // Отказ «такого нет» или «не для тебя» — пробуем другое имя;
                 // сбой самой панели (5xx) другим именем не лечится.
