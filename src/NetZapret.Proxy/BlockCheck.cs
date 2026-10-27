@@ -907,6 +907,18 @@ public static class BlockCheck
         };
     }
 
+    /// <summary>
+    /// Первый адрес, если все адреса имени — домашние или петля; <c>null</c> — есть публичный или нет никакого.
+    /// </summary>
+    internal static string? PrivateOnly(IReadOnlyCollection<string> addresses)
+    {
+        var parsed = addresses.Select(text => IPAddress.TryParse(text, out var address) ? address : null).ToList();
+
+        return parsed.Count > 0 && parsed.All(a => a is not null && (DnsSpoof.IsPrivate(a) || DnsSpoof.IsSinkhole(a)))
+            ? parsed[0]!.ToString()
+            : null;
+    }
+
     /// <summary>Спрашивает адрес чужими именами и судит по ответам.</summary>
     /// <remarks>
     /// Разрешённое прошло, а нейтральное — нет: прежде чем звать подсеть белым
@@ -1249,6 +1261,28 @@ public static class BlockCheck
                     Http = Failed(null),
                     Data = Failed(null),
                     Kind = missing is null ? BlockKind.NoAddress : BlockKind.BrokenCname,
+                    Tunnelled = viaTunnel,
+                    ExpectedTunnel = throughTunnel,
+                };
+            }
+
+            // Адрес есть, но только домашний или петля — так записан сам домен:
+            // это ответ честного DoH, а не подмена. У zapret.moe 27.10 запись A —
+            // 192.168.0.1 (сайты на wiki. и git.). Проверка весь вечер звала его
+            // «туннель не доставил», а отдельный движок с тем же сервером —
+            // «вот теперь совет сменить сервер обоснован». Выход VPN к домашнему
+            // адресу не пойдёт ни с какого сервера.
+            if (PrivateOnly(exists) is { } home)
+            {
+                return new TargetReport
+                {
+                    Host = host,
+                    Service = service,
+                    Tcp = Failed($"у имени только частный адрес {home} — оно покрывает зону, а сайты на поддоменах"),
+                    Tls = Failed(null),
+                    Http = Failed(null),
+                    Data = Failed(null),
+                    Kind = BlockKind.NoAddress,
                     Tunnelled = viaTunnel,
                     ExpectedTunnel = throughTunnel,
                 };
