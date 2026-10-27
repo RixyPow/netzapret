@@ -193,6 +193,13 @@ public static class AmneziaKey
         foreach (var key in AmneziaFields)
             Line(text, key, Field(key));
 
+        // Незнакомую движку маскировку — тоже: разбор файла её назовёт, а не потеряет.
+        foreach (var (key, _) in fields)
+        {
+            if (AmneziaSettings.Unsupported([key]).Count > 0)
+                Line(text, key, Text(fields, key));
+        }
+
         text.AppendLine("[Peer]");
         Line(text, "PublicKey", Field("server_pub_key"));
         Line(text, "PresharedKey", Field("psk_key"));

@@ -7,7 +7,8 @@ namespace NetZapret.Subscriptions;
 /// <param name="Keys">Ключи — уже в виде строк для «Отдельных ключей».</param>
 /// <param name="SubscriptionUrl">Ссылка подписки, обёртки клиентов уже развёрнуты.</param>
 /// <param name="Problem">Почему не нашлось ничего — словами для строки состояния, без самой ссылки.</param>
-public sealed record ImportFound(IReadOnlyList<string> Keys, string? SubscriptionUrl, string? Problem);
+/// <param name="Note">Оговорка к найденным ключам — например, маскировка AmneziaWG, которой движок не знает.</param>
+public sealed record ImportFound(IReadOnlyList<string> Keys, string? SubscriptionUrl, string? Problem, string? Note = null);
 
 /// <summary>
 /// Ключи и подписки из буфера, файла и QR-кода.
@@ -38,7 +39,7 @@ public static class KeyImport
         if (WireGuardConf.Looks(text))
         {
             return WireGuardConf.TryParse(text, name, out var server, out var error)
-                ? new([WireGuardConf.ToLink(server!)], null, null)
+                ? Found([WireGuardConf.ToLink(server!)])
                 : new([], null, "файл WireGuard не разбирается: " + error);
         }
 
@@ -60,14 +61,14 @@ public static class KeyImport
             links.AddRange(KeyRing.Split(text));
 
             return links.Count > 0
-                ? new(links, null, null)
+                ? Found(links)
                 : new([], null, "ключ AmneziaVPN не разбирается: " + (problem ?? "ключа vpn:// не нашлось"));
         }
 
         var keys = KeyRing.Split(text);
 
         if (keys.Count > 0)
-            return new(keys, null, null);
+            return Found(keys);
 
         var line = text.Trim();
 
@@ -80,6 +81,27 @@ public static class KeyImport
         }
 
         return new([], null, "ни ключей, ни ссылки подписки");
+    }
+
+    /// <summary>
+    /// Ключи — с оговоркой, если у AmneziaWG есть маскировка, которой движок не знает.
+    /// </summary>
+    /// <remarks>
+    /// Такой сервер добавляется: параметры едут в ссылке и заработают, когда их
+    /// узнает движок. Но молчать о них нельзя — без них сервер AmneziaWG
+    /// рукопожатие не примет, и «не отвечает» выглядело бы загадкой (№40, 28.10).
+    /// </remarks>
+    private static ImportFound Found(IReadOnlyList<string> keys)
+    {
+        var unknown = keys
+            .SelectMany(k => ProxyUriParser.TryParse(k, out var server, out _) && server!.IsEndpoint
+                ? AmneziaSettings.Unsupported(server.Extra.Keys)
+                : [])
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new(keys, null, null, unknown.Count == 0 ? null
+            : $"параметров AmneziaWG {string.Join(", ", unknown)} движок не знает — сервер может не ответить");
     }
 
     /// <summary>

@@ -230,4 +230,34 @@ public sealed class AmneziaKeyTests
         var endpoint = JsonNode.Parse(result.Json)!["endpoints"]!.AsArray().Single()!;
         Assert.Equal("direct", (string?)endpoint["detour"]);
     }
+
+    /// <summary>
+    /// Маскировка, которой движок не знает (J1–J3, Itime у AmneziaWG 1.5), не теряется
+    /// молча: едет в ссылке и называется при добавлении.
+    /// </summary>
+    [Fact]
+    public void Masking_the_engine_does_not_know_is_kept_and_named()
+    {
+        var conf = Conf.Replace("Jc = 4", "Jc = 4\nJ1 = <r 2>\nItime = 120", StringComparison.Ordinal);
+
+        var found = KeyImport.FromText(conf, "Новый AWG");
+
+        var link = Assert.Single(found.Keys);
+        Assert.Contains("j1=", link);
+        Assert.Contains("itime=120", link);
+        Assert.Equal("параметров AmneziaWG J1, Itime движок не знает — сервер может не ответить", found.Note);
+
+        // Ссылка разбирается в тот же сервер, и оговорка та же.
+        Assert.Equal(found.Note, KeyImport.FromText(link).Note);
+
+        // Движку они не передаются: он бы отверг весь конфиг.
+        Assert.True(ProxyUriParser.TryParse(link, out var server, out _));
+        Assert.DoesNotContain("j1", server!.AmneziaOptions);
+    }
+
+    [Fact]
+    public void Known_masking_gives_no_note()
+    {
+        Assert.Null(KeyImport.FromText(Conf, "AWG").Note);
+    }
 }

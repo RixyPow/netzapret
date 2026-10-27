@@ -100,6 +100,11 @@ public static class WireGuardConf
                     ? keep
                     : 30,
             AmneziaOptions = AmneziaSettings.From(key => face.TryGetValue(key, out var value) ? value : null),
+
+            // Маскировку, которой движок не знает, не выбрасываем: она едет в ссылке
+            // и называется при добавлении (обсуждение №40).
+            Extra = AmneziaSettings.Unsupported(face.Keys)
+                .ToDictionary(k => k, k => face[k], StringComparer.OrdinalIgnoreCase),
         };
     }
 
@@ -135,6 +140,12 @@ public static class WireGuardConf
 
                 query.Add(key + "=" + Uri.EscapeDataString(text));
             }
+        }
+
+        foreach (var (key, value) in server.Extra)
+        {
+            if (AmneziaSettings.Unsupported([key]).Count > 0)
+                query.Add(key.ToLowerInvariant() + "=" + Uri.EscapeDataString(value));
         }
 
         var host = server.Host.Contains(':') ? $"[{server.Host}]" : server.Host;

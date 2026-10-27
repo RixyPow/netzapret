@@ -27,6 +27,26 @@ public static class AmneziaSettings
     private static readonly string[] Headers = ["h1", "h2", "h3", "h4"];
     private static readonly string[] Signatures = ["i1", "i2", "i3", "i4", "i5"];
 
+    /// <summary>
+    /// Параметры маскировки, которых движок не знает: J1–J3 и Itime у AmneziaWG 1.5
+    /// и всё, что похоже на параметр маскировки, но не из наших списков.
+    /// </summary>
+    /// <remarks>
+    /// Прежде такие ключи отбрасывались молча, и сервер с ними «не отвечал» без
+    /// единого слова о причине (обсуждение №40, 28.10). Знает ли их движок, сверено
+    /// по строкам sing-box 2.7.3: jc, jmin, jmax, s1–s4, h1–h4, i1–i5 — и только.
+    /// </remarks>
+    public static IReadOnlyList<string> Unsupported(IEnumerable<string> keys) =>
+        keys.Where(k => LooksAmnezia.IsMatch(k)
+                && !Numbers.Concat(Headers).Concat(Signatures).Contains(k, StringComparer.OrdinalIgnoreCase))
+            .Select(k => k.Length <= 2 ? k.ToUpperInvariant() : char.ToUpperInvariant(k[0]) + k[1..].ToLowerInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static readonly System.Text.RegularExpressions.Regex LooksAmnezia = new(
+        @"^(?:[jshi]\d+|jc|jmin|jmax|itime)$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
     /// <param name="get">Значение по имени ключа без учёта регистра, <c>null</c> — нет такого.</param>
     /// <returns>Блок JSON строкой; <c>null</c>, если маскировки нет — обычный WireGuard.</returns>
     /// <exception cref="FormatException">Числовой ключ задан не числом.</exception>
