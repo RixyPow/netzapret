@@ -56,6 +56,58 @@ public static class OwnDesyncLists
         }
     }
 
+    /// <summary>
+    /// Свой профиль, который заберёт имя, — для пометки в отчёте; <c>null</c> — ни один.
+    /// </summary>
+    /// <remarks>
+    /// Свои профили winws2 ставит раньше секций пресета, и имя на своём рецепте
+    /// ведёт он, а не секция. Проверка блокировок спрашивала только секции
+    /// (<see cref="PresetZones"/>) и у таких имён писала «секция: ни одна доменная
+    /// не совпала» — 27.10 у seriesgraph.com на рецепте «Наложение приветствием
+    /// 4pda» и прежде на pass. Списки читаются один раз, первый совпавший —
+    /// как у winws2.
+    /// </remarks>
+    public static Func<string, PresetMatch?> Lookup(IReadOnlyList<OwnDesyncProfile> profiles)
+    {
+        var zones = new List<(OwnDesyncProfile Profile, HashSet<string> Names)>();
+
+        foreach (var profile in profiles)
+        {
+            try
+            {
+                var names = File.ReadAllLines(profile.HostListPath)
+                    .Select(line => line.Trim().TrimStart('*', '.'))
+                    .Where(line => line.Length > 0 && !line.StartsWith('#'))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                zones.Add((profile, names));
+            }
+            catch (Exception)
+            {
+                // Списка нет — профиль winws2 тоже не поднимет (Read его отбрасывает).
+            }
+        }
+
+        return host =>
+        {
+            foreach (var (profile, names) in zones)
+            {
+                if (HostNames.ZoneChain(host).Any(names.Contains))
+                {
+                    return new PresetMatch
+                    {
+                        Ordinal = 0,
+                        Name = profile.Name,
+                        Recipes = profile.Steps,
+                        IsPassThrough = RecipeCatalog.IsPass(profile.Steps),
+                    };
+                }
+            }
+
+            return null;
+        };
+    }
+
     public static IReadOnlyList<OwnDesyncProfile> Read(string? path = null)
     {
         var target = path ?? DefaultPath;

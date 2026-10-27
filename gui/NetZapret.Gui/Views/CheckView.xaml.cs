@@ -287,6 +287,9 @@ public partial class CheckView : UserControl
     /// </remarks>
     private static PresetZones? _zones;
 
+    /// <summary>Свои рецепты — winws2 ставит их раньше секций пресета (OwnDesyncLists.Lookup).</summary>
+    private static Func<string, PresetMatch?>? _own;
+
     private static CancellationTokenSource? _work;
     private static bool _running;
 
@@ -545,11 +548,14 @@ public partial class CheckView : UserControl
             _owners = await Task.Run(() => AddressOwners.Load(zapretRoot));
 
             _zones = null;
+            _own = null;
 
             try
             {
                 if (settings.PresetName is { } name && ZapretPaths.FindPreset(name) is { } path)
                     _zones = PresetZones.Build(new PresetReader().Load(path), zapretRoot);
+
+                _own = OwnDesyncLists.Lookup(OwnDesyncLists.Read());
             }
             catch (Exception)
             {
@@ -1141,7 +1147,11 @@ public partial class CheckView : UserControl
         // она читалась как беда (владелец).
         var section = string.Empty;
 
-        if (!report.Spoof.Spoofed && report.Actionable && warning.Length == 0 && _zones is { } zones)
+        if (!report.Spoof.Spoofed && report.Actionable && warning.Length == 0 && _own?.Invoke(report.Host) is { } own)
+        {
+            section = $"свой рецепт {own.Describe()}";
+        }
+        else if (!report.Spoof.Spoofed && report.Actionable && warning.Length == 0 && _zones is { } zones)
         {
             section = zones.MatchFor(report.Host) is { } match
                 ? $"секция #{match.Ordinal} {match.Describe()}"
