@@ -120,6 +120,7 @@ public sealed class EngineConfigBuilderGoldenTests : IDisposable
             ExcludePackages = ["ru.sberbankmobile"],
             DesyncSocks = new DesyncSocks(41234, "nz", "secret-for-test"),
             DesyncPassHosts = ["github.com"],
+            DesyncShieldNames = ["notion.so"],
             DesyncFragment = TlsFragment.Records,
             DesyncRejectQuic = true,
             DesyncDefault = true,

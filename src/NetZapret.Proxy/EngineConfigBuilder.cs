@@ -160,7 +160,10 @@ public sealed record EngineBuild(
 
 /// <summary>Что поднимать.</summary>
 /// <param name="Tunnel">Туннель с выходами.</param>
-/// <param name="DnsOnly">Движок только ради DNS при одном десинке (<see cref="AppSettings.NeedsDnsEngine"/>).</param>
+/// <param name="DnsOnly">
+/// Движок только ради DNS при одном десинке (<see cref="AppSettings.NeedsDnsEngine"/>);
+/// на телефоне с root — при любом десинке без туннеля: пины и DoH там только у движка.
+/// </param>
 /// <param name="FragmentOnly">
 /// Телефон без root: туннеля нет, а десинк есть — движок нужен, чтобы вести
 /// «десинк» в ByeDPI или резать приветствие. Собирается <see cref="EngineConfigBuilder.BuildTunnelAsync"/> без выходов.
@@ -180,7 +183,14 @@ public sealed record TunnelInputs(
     IReadOnlyCollection<string> Dead,
     ServerHealthCache Health,
     EngineKeys? Keys,
-    IReadOnlyList<string?> PanelUrls);
+    IReadOnlyList<string?> PanelUrls)
+{
+    /// <summary>
+    /// Прибитые имена, которые на телефоне без root ведутся мимо ByeDPI и нарезки
+    /// (<see cref="HostsFile.PinsOffDesync"/>); на Windows и с root не берутся.
+    /// </summary>
+    public IReadOnlyList<string> ShieldPins { get; init; } = [];
+}
 
 /// <summary>
 /// Сборка конфига движка из настроек, правил и подписок — одна для окна и телефона.
@@ -210,10 +220,22 @@ public static class EngineConfigBuilder
         // Без root десинк живёт в самом движке (ByeDPI исходящим или нарезка),
         // так что при одном десинке движок нужен целиком, а не ради DNS:
         // DNS он тогда тоже делает. С root десинк — nfqws2 рядом, как на Windows.
-        bool desyncInside = settings.NeedsDesync && AndroidOf(host) is { Root: false };
+        var android = AndroidOf(host);
+        bool desyncInside = settings.NeedsDesync && android is { Root: false };
         bool alone = !tunnel && desyncInside;
 
-        return new EnginePlan(tunnel, !tunnel && !alone && settings.NeedsDnsEngine, alone);
+        // С root и без туннеля движок ради DNS нужен всегда, а не только при
+        // «через туннель» или DNS роутера, как на Windows (NeedsDnsEngine):
+        // nfqws2 на телефоне поднимается только запуском движка (NzBox.start
+        // с конфигом), а пины (nz-hosts) и DoH на телефоне есть только у
+        // движка — hosts и резолвер Windows там ничего не заменяют. Без этого
+        // при DNS «авто» (по умолчанию) план выходил пустым, и «Только десинк»
+        // с root отвечал «запускать нечего» (разбор 27.10). Только DNS, а не
+        // полный TUN без выходов: с root поток приложения должен уйти мимо
+        // TUN под своим uid, где его видят правила iptables nfqws2.
+        bool rootAlone = !tunnel && settings.NeedsDesync && android is { Root: true };
+
+        return new EnginePlan(tunnel, !tunnel && !alone && (settings.NeedsDnsEngine || rootAlone), alone);
     }
 
     /// <summary>
@@ -404,7 +426,15 @@ public static class EngineConfigBuilder
                 // и сторож читают их из этого же конфига (EngineKeys.Current).
                 // На телефоне служебных входов нет — и паролей тоже.
                 android is null ? EngineKeys.Generate() : null,
-                sources.PanelUrls));
+                sources.PanelUrls)
+            {
+                // Щит пинов winws2 на телефоне без root: прибитое имя ведёт на
+                // посредника, и рецепт ByeDPI или нарезка рвали бы рукопожатие
+                // с ним (HostsFile.DescribeDesyncExclusions, замер 06.10).
+                ShieldPins = android is { Root: false }
+                    ? HostsFile.PinsOffDesync(ruleSet, host.HostsPath ?? android.HostsFilePath)
+                    : [],
+            });
 
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, options);
 
@@ -599,6 +629,7 @@ public static class EngineConfigBuilder
             IncludePackages = android?.IncludePackages ?? [],
             DesyncSocks = inside?.Socks,
             DesyncPassHosts = inside?.Socks is not null ? inside.DesyncPassHosts : [],
+            DesyncShieldNames = inside is not null ? inputs.ShieldPins : [],
             DesyncFragment = inside is { Socks: null } ? inside.DesyncFragment : TlsFragment.Off,
             DesyncFragmentFallbackDelay = inside?.DesyncFragmentFallbackDelay,
             DesyncRejectQuic = inside?.DesyncRejectQuic ?? false,

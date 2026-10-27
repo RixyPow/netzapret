@@ -393,6 +393,54 @@ public static class HostsFile
     }
 
     /// <summary>
+    /// Прибитые имена, которые на телефоне без root ведутся мимо десинка движка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Тот же щит, что у winws2 (<see cref="DescribeDesyncExclusions"/>, причина
+    /// <see cref="DesyncBypass.Pin"/>): пин ведёт на посредника, а рецепт,
+    /// выверенный на настоящей сети доставки, рвёт рукопожатие с ним — замер
+    /// 06.10, chatgpt.com и notion.so со щитом 20 из 20, под рецептом 0 из 10.
+    /// На телефоне без root щита у ByeDPI нет: nz-hosts отдаёт приложению адрес
+    /// пина, и маршрут решало одно правило имени — «десинк» или умолчание вели
+    /// посредника в ByeDPI или под нарезку (разбор 27.10).
+    /// </para>
+    /// <para>
+    /// Без имён «через VPN»: их ведёт в туннель правило пинов
+    /// (<see cref="CollectPinnedProxy"/>), а щит «напрямую» перехватил бы их,
+    /// когда приложение пришло не на адрес пина (свой DoH). Без пинов,
+    /// помеченных <c># nz:desync</c>, — им десинк нужен (<see cref="HostsEditor.DesyncMark"/>).
+    /// Имена дословно, а не зонами: прибито само имя, а не его поддомены.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<string> PinsOffDesync(Core.Rules.RuleSet ruleSet, string? hostsPath = null)
+    {
+        var hosts = Read(hostsPath);
+
+        // Пусто — и порядок правил не нужен: с реестром блокировок он строится
+        // на 117 тысячах имён.
+        if (hosts.Count == 0)
+            return [];
+
+        var order = RuleOrder.Of(ruleSet);
+        var ownAddress = HostsEditor.DesyncPins(hostsPath);
+        var result = new List<string>();
+
+        foreach (var (name, addresses) in hosts)
+        {
+            if (addresses.Count == 0 || ownAddress.Contains(name) || name.Contains('*'))
+                continue;
+
+            if (order.FirstMatch(name) == Core.Rules.RoutingMode.Proxy)
+                continue;
+
+            result.Add(name);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Чем выведено из-под десинка это имя; <see cref="DesyncBypass.None"/> — ничем.
     /// </summary>
     /// <remarks>

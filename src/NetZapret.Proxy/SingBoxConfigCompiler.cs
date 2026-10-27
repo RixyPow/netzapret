@@ -521,11 +521,26 @@ public sealed class SingBoxOptions
     /// </summary>
     /// <remarks>
     /// У winws2 секция <c>pass</c> — «не трогать», и «десинк + pass» там то же,
-    /// что «напрямую» (замер A/B/A 29.09). ByeDPI запасные группы (<c>-A t,s</c>)
-    /// применяет к любому соединению, пришедшему к нему, и имя «не трогать»
-    /// тронул бы при первой же заминке. Поэтому такие имена до него не доводятся.
+    /// что «напрямую» (замер A/B/A 29.09). У группы <c>pass</c> в ByeDPI запасных
+    /// нет, но кэш ByeDPI помнит «адрес:порт → группа»: имя на общем адресе
+    /// CDN, где соседнее имя ушло в запасную группу, получило бы её приёмы
+    /// (<c>connect_hook</c> берёт группу из кэша по адресу, main@ba532298).
+    /// Поэтому такие имена до него не доводятся. До 27.10 здесь стояло, что
+    /// запасные группы срабатывают на любом соединении, — неверно: из группы
+    /// пресета до них доходит только соседняя (ByeDpiCommandLine.Fallbacks).
     /// </remarks>
     public IReadOnlyList<string> DesyncPassHosts { get; init; } = [];
+
+    /// <summary>
+    /// Прибитые в hosts имена: на телефоне без root — напрямую, мимо ByeDPI и нарезки.
+    /// </summary>
+    /// <remarks>
+    /// Щит пинов winws2 (<see cref="HostsFile.PinsOffDesync"/>) на языке движка.
+    /// Одним правилом раньше правил человека и после правила пинов «через VPN»,
+    /// по имени дословно. Действует только при десинке внутри движка
+    /// (ByeDPI или нарезка); на Windows и с root его делает щит winws2 и nfqws2.
+    /// </remarks>
+    public IReadOnlyList<string> DesyncShieldNames { get; init; } = [];
 
     /// <summary>
     /// Чем режется маршрут «десинк» без root и без ByeDPI; <c>Off</c> — не режется.
@@ -1258,6 +1273,31 @@ public sealed class SingBoxConfigCompiler
             foreach (var rule in Merged(OrderedDomainRules(ruleSet, haveServers, proxyGlobs: false)))
                 rules.Add(rule);
         }
+        else if (PhoneSelectiveDns(options, ruleSet, haveServers))
+        {
+            // Телефон без root: перехват полный, но fakeip — только именам
+            // «через VPN», как в выборочном режиме Windows (27.10). Прежде здесь
+            // fakeip получало каждое имя, и всё, что шло по имени, приходило
+            // к маршрутам с подставным адресом: правила по адресам (свой адрес
+            // «через VPN», ipset-ru → «напрямую») не совпадали ни с одним
+            // таким соединением (ip_cidr у имени без адреса — ложь,
+            // rule_item_cidr.go), а «напрямую» и нарезка соединялись по имени
+            // резолвером по умолчанию — при «авто» это bootstrap, то есть DNS
+            // оператора. Теперь прочие имена получают настоящий адрес от remote.
+            // Маски посередине fakeip не получают, как в «Гибриде» Windows:
+            // перехват полный, и в туннель их всё равно приведёт правило по имени
+            // из SNI, а одна такая маска «через VPN» заставила бы выписать
+            // в DNS всё, что выше неё, — с реестром 117 тысяч имён.
+            foreach (var rule in Merged(OrderedDomainRules(ruleSet, haveServers, proxyGlobs: false)))
+                rules.Add(rule);
+
+            // Имя с настоящим адресом движок узнаёт по SNI (sniff); соединению,
+            // которое не разобрать (не TLS, не HTTP, не QUIC), имя отдаёт
+            // обратная таблица ответов DNS — иначе правила по именам его
+            // не видели бы вовсе. На телефоне приложения спрашивают DNS движка
+            // (адрес DNS сети VPN), так что таблица полная. Не проверено на телефоне.
+            dns["reverse_mapping"] = true;
+        }
         else if (options.Scope != TunnelScope.ProxyOnly)
         {
             rules.Add(new JsonObject
@@ -1319,6 +1359,21 @@ public sealed class SingBoxConfigCompiler
 
         return dns;
     }
+
+    /// <summary>
+    /// Телефон с полным перехватом в «Гибриде»: fakeip только именам «через VPN».
+    /// </summary>
+    /// <remarks>
+    /// При умолчании «через VPN» всё невыведенное идёт в туннель, и подставной
+    /// адрес нужен любому имени — там остаётся прежнее «fakeip каждому»: иначе
+    /// правило DNS пришлось бы писать каждому правилу «напрямую» и «десинк»,
+    /// с реестром блокировок — на 117 тысяч имён.
+    /// </remarks>
+    private static bool PhoneSelectiveDns(SingBoxOptions options, RuleSet ruleSet, bool haveServers) =>
+        options.Platform == SingBoxPlatform.Android
+        && options.Scope != TunnelScope.ProxyOnly
+        && ruleSet.Operating == OperatingMode.Selective
+        && !(haveServers && ruleSet.DefaultMode == RoutingMode.Proxy);
 
     /// <summary>
     /// Доменные правила DNS в очереди маршрутов: VPN — fakeip, а правило выше,
@@ -2606,6 +2661,10 @@ public sealed class SingBoxConfigCompiler
 
         var finalEffective = desyncByDefault ? SingBoxOptions.DesyncTag : final;
 
+        // Перечни телефона без root — набором правил движка, а не списком в правиле:
+        // суженные (NarrowBulk) и оставленные целиком.
+        var bulkSets = new HashSet<RoutingRule>(ReferenceEqualityComparer.Instance);
+
         IReadOnlyList<RoutingRule> applicable = ruleSet.Operating switch
         {
             // Большой перечень (реестр блокировок, ServicePart.Bulk, 15.10),
@@ -2617,10 +2676,20 @@ public sealed class SingBoxConfigCompiler
             // Сравнивается путь на деле, а не исходящий (27.10): на телефоне
             // без root реестр «десинком» идёт в ByeDPI, а умолчание — может
             // и напрямую; тогда перечень нужен в конфиге.
-            OperatingMode.Selective => ruleSet.Rules
+            OperatingMode.Selective when way == DesyncWay.Direct => ruleSet.Rules
                 .Where(r => !(Core.Services.ServiceCatalog.IsBulk(r.Value)
                     && Effective(r) == finalEffective))
                 .ToList(),
+
+            // Телефон без root: выбросить перечень целиком нельзя. Реестр стоит
+            // ровно затем, чтобы быть выше российских зон «напрямую» (RuZones,
+            // нижний слой, 15.10): выброшенный, он отдал бы 37 085 своих
+            // российских имён правилу «.ru — напрямую», и tvrain.ru ушёл бы мимо
+            // ByeDPI, хотя умолчание и сам реестр — «десинк» (разбор 27.10).
+            // На Windows это покрывают дыры щита winws2 (desync-keep.txt); здесь
+            // их нет. Поэтому — как в «Туннеле» (ForProxyAll): остаются имена,
+            // которые ниже перехватило бы правило с другим путём.
+            OperatingMode.Selective => NarrowBulk(ruleSet.Rules, Effective, finalEffective, bulkSets),
 
             OperatingMode.ProxyAll => ForProxyAll(ruleSet.Rules),
 
@@ -2668,9 +2737,35 @@ public sealed class SingBoxConfigCompiler
             }
         }
 
+        // Щит пинов на телефоне без root (SingBoxOptions.DesyncShieldNames):
+        // после правила пинов «через VPN» и раньше правил человека — как щит
+        // winws2, первым профилем раньше пресета.
+        if (way != DesyncWay.Direct && ruleSet.Operating == OperatingMode.Selective
+            && options.DesyncShieldNames.Count > 0)
+        {
+            rules.Add(new JsonObject { ["domain"] = Strings(options.DesyncShieldNames), ["outbound"] = "direct" });
+        }
+
+        // Телефон с полным перехватом: «напрямую» по имени соединяется сам движок.
+        // Без адреса у соединения (имя пришло с fakeip, правило по пакету или
+        // программе выше правила VPN) direct разрешал бы имя резолвером по
+        // умолчанию мимо правил DNS — при «авто» и «через туннель» это bootstrap,
+        // DNS оператора, подменяющего закрытые имена (замер 03.10). resolve
+        // спрашивает по правилам DNS: пины, подставленные адреса, ступени
+        // «авто», fakeip не выдаётся. Только вплотную к своему правилу: ранний
+        // общий resolve дал бы адрес и именам VPN, и в туннель ушёл бы адрес
+        // вместо имени. Только в «Гибриде»: на Windows «напрямую» там мимо TUN,
+        // а в «Туннеле» «напрямую» — российские зоны и исключения, которые
+        // оператор не подменяет, и там остаётся как на Windows (27.10).
+        bool phoneResolves = options.Platform == SingBoxPlatform.Android && options.Scope != TunnelScope.ProxyOnly
+            && ruleSet.Operating == OperatingMode.Selective;
+        var inlineSets = new JsonArray();
+
         foreach (var rule in applicable)
         {
-            var node = BuildRule(rule, tags, options, haveServers);
+            var node = bulkSets.Contains(rule)
+                ? InlineListRule(rule, tags, options, haveServers, inlineSets)
+                : BuildRule(rule, tags, options, haveServers);
 
             if (node is null)
                 continue;
@@ -2682,6 +2777,9 @@ public sealed class SingBoxConfigCompiler
             }
             else
             {
+                if (phoneResolves && (string?)node["outbound"] == "direct" && Named(node))
+                    rules.Add(ResolveFor(node));
+
                 rules.Add(node);
             }
         }
@@ -2691,8 +2789,14 @@ public sealed class SingBoxConfigCompiler
             foreach (var desync in DesyncDefaultRules(options, way))
                 rules.Add(desync);
         }
+        else if (phoneResolves && final == "direct")
+        {
+            // Невыведенное уходит в final — direct; правил после нет, так что
+            // общий resolve здесь ничьего маршрута не меняет.
+            rules.Add(new JsonObject { ["action"] = "resolve", ["strategy"] = "prefer_ipv4" });
+        }
 
-        return new JsonObject
+        var route = new JsonObject
         {
             ["rules"] = rules,
             ["final"] = final,
@@ -2715,6 +2819,142 @@ public sealed class SingBoxConfigCompiler
                 ["strategy"] = "prefer_ipv4",
             },
         };
+
+        // Наборы правил — только у суженных перечней телефона (NarrowBulk):
+        // на Windows их нет, и конфиг остаётся прежним до байта.
+        if (inlineSets.Count > 0)
+            route["rule_set"] = inlineSets;
+
+        return route;
+    }
+
+    /// <summary>
+    /// Перечни, ведущие туда же, куда умолчание, — только именами, которые ниже
+    /// перехватило бы правило с другим путём (телефон без root).
+    /// </summary>
+    /// <remarks>
+    /// Тот же отбор, что у «Туннеля» (<see cref="ForProxyAll"/>), только «другой
+    /// путь» — не «напрямую», а любой, кроме пути умолчания: на телефоне «десинк»
+    /// и «напрямую» для движка разные. На деле это реестр блокировок над
+    /// российскими зонами: из 117 157 имён остаются 37 085 в .ru, .su и .рф
+    /// (подсчёт 27.10). Перечень с другим путём, чем умолчание, остаётся целиком,
+    /// как и прежде. Правила по адресам ниже не учтены: имя к ним не приходит
+    /// ни с подставным адресом, ни до разрешения. Перечни по именам — и суженные,
+    /// и целые — отмечаются в <paramref name="asSets"/>: их пишет <see cref="InlineListRule"/>.
+    /// </remarks>
+    private static List<RoutingRule> NarrowBulk(
+        IReadOnlyList<RoutingRule> rules,
+        Func<RoutingRule, string> effective,
+        string finalEffective,
+        ISet<RoutingRule> asSets)
+    {
+        var otherBelow = ZonesBelow(rules, rule => effective(rule) != finalEffective);
+        var applicable = new List<RoutingRule>();
+
+        for (int i = 0; i < rules.Count; i++)
+        {
+            var rule = rules[i];
+            bool bulk = Core.Services.ServiceCatalog.IsBulk(rule.Value);
+
+            if (!(bulk && effective(rule) == finalEffective))
+            {
+                // Перечень с другим путём остаётся целиком — и тоже набором:
+                // реестр «десинком» при умолчании «напрямую» — это 117 тысяч
+                // имён, и каждое из трёх-четырёх правил «десинка» несло бы их
+                // заново (до 27.10 так и было). Адреса в наборе не пишутся —
+                // такой перечень остаётся списком в правиле.
+                if (bulk && rule.Match == MatchKind.HostList
+                    && rule.HostListDomains.Count > 0 && rule.HostListCidrs.Count == 0)
+                {
+                    asSets.Add(rule);
+                }
+
+                applicable.Add(rule);
+                continue;
+            }
+
+            if (rule.Match is not (MatchKind.Domain or MatchKind.HostList))
+                continue;
+
+            var kept = NameZones(rule).Where(zone => otherBelow(zone, i)).ToList();
+
+            if (kept.Count == 0)
+                continue;
+
+            var copy = new RoutingRule
+            {
+                Match = MatchKind.HostList,
+                Value = rule.Value,
+                Mode = rule.Mode,
+                Server = rule.Server,
+                Recipe = rule.Recipe,
+                Source = rule.Source,
+                Ordinal = rule.Ordinal,
+            };
+
+            copy.LoadHostList(kept);
+            asSets.Add(copy);
+            applicable.Add(copy);
+        }
+
+        return applicable;
+    }
+
+    /// <summary>
+    /// Перечень телефона одним набором правил движка (<c>rule_set</c>, inline)
+    /// и правилом, которое на него ссылается.
+    /// </summary>
+    /// <remarks>
+    /// Не списком в самом правиле: правило «десинк» на телефоне — это три-четыре
+    /// правила подряд с тем же условием (<see cref="DesyncRules"/>), и 37 тысяч
+    /// суженного реестра легли бы в конфиг четырежды — около 2,4 МБ на разбор
+    /// движку в телефоне, а целый реестр (117 тысяч) — втрое больше. Набор
+    /// пишется один раз, правила ссылаются на него тегом. Наборы inline sing-box
+    /// знает с 1.10; на телефоне не проверено, <c>sing-box check</c> не гонялся.
+    /// </remarks>
+    private static JsonObject InlineListRule(
+        RoutingRule rule,
+        IReadOnlyDictionary<ProxyServer, string> tags,
+        SingBoxOptions options,
+        bool haveServers,
+        JsonArray inlineSets)
+    {
+        var tag = $"nz-list-{inlineSets.Count + 1}";
+
+        inlineSets.Add(new JsonObject
+        {
+            ["type"] = "inline",
+            ["tag"] = tag,
+            ["rules"] = new JsonArray
+            {
+                // Записи списков — зоны, как в BuildRule: «*.» не нужно, domain_suffix берёт и поддомены.
+                new JsonObject
+                {
+                    ["domain_suffix"] = Strings(rule.HostListDomains
+                        .Select(name => name.StartsWith("*.", StringComparison.Ordinal) ? name[2..] : name)),
+                },
+            },
+        });
+
+        return new JsonObject
+        {
+            ["rule_set"] = new JsonArray { tag },
+            ["outbound"] = ResolveOutbound(rule.Mode, rule.Server, tags, options, haveServers),
+        };
+    }
+
+    /// <summary>Есть ли у правила условие кроме адреса: ему приходят и соединения с именем.</summary>
+    private static bool Named(JsonObject node) =>
+        node.Any(item => item.Key is not ("ip_cidr" or "outbound"));
+
+    /// <summary>Разрешение имени тем же условием, что у правила, — ставится вплотную перед ним.</summary>
+    private static JsonObject ResolveFor(JsonObject node)
+    {
+        var resolve = (JsonObject)node.DeepClone();
+        resolve.Remove("outbound");
+        resolve["action"] = "resolve";
+        resolve["strategy"] = "prefer_ipv4";
+        return resolve;
     }
 
     /// <summary>
@@ -2816,18 +3056,32 @@ public sealed class SingBoxConfigCompiler
             yield return quic;
         }
 
+        // Правилу только по адресам разрешать нечего: ip_cidr совпадает лишь
+        // с соединением, у которого уже адрес. Правило по имени или по пакету
+        // ловит и соединения с именем (fakeip, sniff) — им разрешение нужно.
+        bool named = Named(node);
+
         if (way == DesyncWay.Fragment)
         {
+            // Нарезка — direct самого движка, и имя без адреса он разрешал бы
+            // резолвером по умолчанию мимо правил DNS: при «авто» это DNS
+            // оператора, и нарезанное приветствие ушло бы на его заглушку
+            // (разбор 27.10). Поэтому и здесь resolve, как перед ByeDPI.
+            if (named)
+            {
+                var resolve = Match();
+                resolve["action"] = "resolve";
+                resolve["strategy"] = "prefer_ipv4";
+                yield return resolve;
+            }
+
             // Нарезка действует только на TLS поверх TCP — UDP её не заметит,
             // так что второе правило ни к чему: одно на всё.
             yield return WithFragment(node, options);
             yield break;
         }
 
-        // Правилу только по адресам разрешать нечего: ip_cidr совпадает лишь
-        // с соединением, у которого уже адрес. Правило по имени или по пакету
-        // ловит и соединения с именем (fakeip, sniff) — им разрешение нужно.
-        if (node.Any(item => item.Key is not ("ip_cidr" or "outbound")))
+        if (named)
         {
             var resolve = Match();
             resolve["network"] = new JsonArray { "tcp" };
@@ -2868,7 +3122,9 @@ public sealed class SingBoxConfigCompiler
         if (way == DesyncWay.Fragment)
         {
             // Без условий и без выхода: опции ложатся на соединение, а выход
-            // даёт final — direct.
+            // даёт final — direct. Имя без адреса — сперва правилами DNS,
+            // а не резолвером по умолчанию (см. DesyncRules).
+            yield return new JsonObject { ["action"] = "resolve", ["strategy"] = "prefer_ipv4" };
             yield return WithFragment(new JsonObject { ["action"] = "route-options" }, options);
             yield break;
         }
@@ -3083,41 +3339,7 @@ public sealed class SingBoxConfigCompiler
     /// </remarks>
     private static List<RoutingRule> ForProxyAll(IReadOnlyList<RoutingRule> rules)
     {
-        // Последнее «напрямую» на зону — и на каждую зону, внутри которой
-        // оно лежит: по ним видно, есть ли «напрямую» ниже данного места.
-        var coversLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var insideLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-        for (int i = 0; i < rules.Count; i++)
-        {
-            if (rules[i].Mode != RoutingMode.Direct)
-                continue;
-
-            foreach (var zone in NameZones(rules[i]))
-            {
-                coversLast[zone] = i;
-
-                for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
-                    insideLast[zone[(dot + 1)..]] = i;
-            }
-        }
-
-        bool DirectBelow(string zone, int at)
-        {
-            if (coversLast.TryGetValue(zone, out var same) && same > at)
-                return true;
-
-            if (insideLast.TryGetValue(zone, out var inner) && inner > at)
-                return true;
-
-            for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
-            {
-                if (coversLast.TryGetValue(zone[(dot + 1)..], out var outer) && outer > at)
-                    return true;
-            }
-
-            return false;
-        }
+        var directBelow = ZonesBelow(rules, rule => rule.Mode == RoutingMode.Direct);
 
         var applicable = new List<RoutingRule>();
 
@@ -3134,7 +3356,7 @@ public sealed class SingBoxConfigCompiler
             if (rule.Match is not (MatchKind.Domain or MatchKind.HostList))
                 continue;
 
-            var kept = NameZones(rule).Where(zone => DirectBelow(zone, i)).ToList();
+            var kept = NameZones(rule).Where(zone => directBelow(zone, i)).ToList();
 
             if (kept.Count == 0)
                 continue;
@@ -3156,6 +3378,53 @@ public sealed class SingBoxConfigCompiler
         }
 
         return applicable;
+    }
+
+    /// <summary>
+    /// Есть ли ниже данного места правило по имени из отобранных, перехватывающее
+    /// зону: покрывающее её (zone «ru» над amdm.ru) или лежащее внутри неё.
+    /// </summary>
+    /// <remarks>
+    /// Вынесено из <see cref="ForProxyAll"/> (27.10), чтобы тем же отбором
+    /// сужать перечни телефона (<see cref="NarrowBulk"/>); для «Туннеля» отбор прежний.
+    /// </remarks>
+    private static Func<string, int, bool> ZonesBelow(IReadOnlyList<RoutingRule> rules, Func<RoutingRule, bool> counts)
+    {
+        // Последнее отобранное правило на зону — и на каждую зону, внутри
+        // которой оно лежит: по ним видно, есть ли такое ниже данного места.
+        var coversLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var insideLast = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < rules.Count; i++)
+        {
+            if (!counts(rules[i]))
+                continue;
+
+            foreach (var zone in NameZones(rules[i]))
+            {
+                coversLast[zone] = i;
+
+                for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
+                    insideLast[zone[(dot + 1)..]] = i;
+            }
+        }
+
+        return (zone, at) =>
+        {
+            if (coversLast.TryGetValue(zone, out var same) && same > at)
+                return true;
+
+            if (insideLast.TryGetValue(zone, out var inner) && inner > at)
+                return true;
+
+            for (int dot = zone.IndexOf('.'); dot >= 0; dot = zone.IndexOf('.', dot + 1))
+            {
+                if (coversLast.TryGetValue(zone[(dot + 1)..], out var outer) && outer > at)
+                    return true;
+            }
+
+            return false;
+        };
     }
 
     /// <summary>Зоны правила по имени, без «*.»; с подстановкой внутри — мимо.</summary>

@@ -44,14 +44,18 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
 
     private static readonly DesyncSocks Socks = new(41234, "nz", "secret-for-test");
 
-    private JsonObject Compile(AndroidEngine engine, bool narrow = false, bool withServers = true, RuleSet? rules = null)
+    private JsonObject Compile(AndroidEngine engine, bool narrow = false, bool withServers = true, RuleSet? rules = null,
+        IReadOnlyList<string>? shieldPins = null)
     {
         var settings = Settings();
         var host = AndroidHost(_root, engine);
 
         var options = EngineConfigBuilder.TunnelOptions(settings, host, new TunnelInputs(
             RouterSelection(settings), narrow, false, ["91.108.4.0/22"], [], Pinned(), Overrides(),
-            [], Health(_root), null, ["https://panel.example.invalid/sub/token"]));
+            [], Health(_root), null, ["https://panel.example.invalid/sub/token"])
+        {
+            ShieldPins = shieldPins ?? [],
+        });
 
         var json = new SingBoxConfigCompiler().Compile(rules ?? RuleFixture(), withServers ? Servers() : [], options).Json;
 
@@ -188,6 +192,118 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
         Assert.Equal("pinned", rules[2]!["server"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// «Гибрид» на телефоне: fakeip только именам «через VPN», прочим — настоящий
+    /// адрес, иначе правила по адресам не совпадали ни с одним соединением по имени.
+    /// </summary>
+    [Fact]
+    public void Phone_hybrid_gives_fakeip_only_to_vpn_names()
+    {
+        var config = Compile(Engine(Socks));
+        var dns = config["dns"]!.AsObject();
+        var rules = dns["rules"]!.AsArray().Select(r => r!.AsObject()).ToList();
+
+        // Нет правила «fakeip каждому имени» — без условия по имени.
+        Assert.DoesNotContain(rules, r => r["server"]?.GetValue<string>() == "fake"
+            && r["domain"] is null && r["domain_suffix"] is null && r["domain_regex"] is null);
+
+        // Имена «через VPN» — fakeip, остальное — final remote.
+        Assert.Contains(rules, r => r["server"]?.GetValue<string>() == "fake" && Has(r, "domain", "chatgpt.com"));
+        Assert.Contains(rules, r => r["server"]?.GetValue<string>() == "fake" && Has(r, "domain_suffix", "discord.com"));
+        Assert.DoesNotContain(rules, r => Has(r, "domain", "rutracker.org") || Has(r, "domain_suffix", "gosuslugi.ru"));
+        Assert.Equal("remote", dns["final"]!.GetValue<string>());
+        Assert.True(dns["reverse_mapping"]!.GetValue<bool>());
+
+        // Умолчание «через VPN» — fakeip каждому, как прежде.
+        var proxyDefault = RuleFixture() with { DefaultMode = RoutingMode.Proxy };
+        var all = Compile(Engine(Socks), rules: proxyDefault)["dns"]!["rules"]!.AsArray();
+        Assert.Contains(all, r => r!["server"]?.GetValue<string>() == "fake" && r["domain_suffix"] is null && r["domain"] is null);
+    }
+
+    /// <summary>
+    /// «Напрямую» и нарезка соединяются самим движком: имя без адреса — правилами
+    /// DNS (resolve), а не резолвером по умолчанию, при «авто» — DNS оператора.
+    /// </summary>
+    [Fact]
+    public void Direct_and_fragmented_names_are_resolved_by_dns_rules()
+    {
+        var rules = RouteRules(Compile(Engine(socks: null))).ToList();
+
+        // Перед «напрямую» по имени — resolve с тем же условием, вплотную.
+        int direct = rules.FindIndex(r => Has(r, "domain_suffix", "gosuslugi.ru") && r["outbound"] is not null);
+        Assert.True(direct > 0);
+        Assert.Equal("resolve", rules[direct - 1]["action"]!.GetValue<string>());
+        Assert.True(Has(rules[direct - 1], "domain_suffix", "gosuslugi.ru"));
+
+        // Перед нарезкой — тоже.
+        int cut = rules.FindIndex(r => Has(r, "domain", "rutracker.org") && r["tls_record_fragment"] is not null);
+        Assert.True(cut > 0);
+        Assert.Equal("resolve", rules[cut - 1]["action"]!.GetValue<string>());
+        Assert.True(Has(rules[cut - 1], "domain", "rutracker.org"));
+
+        // Правилам VPN и по одним адресам — нет: в туннель уходит имя, а у адреса
+        // разрешать нечего.
+        Assert.DoesNotContain(rules, r => Has(r, "domain", "chatgpt.com") && r["action"]?.GetValue<string>() == "resolve");
+        Assert.DoesNotContain(rules, r => Has(r, "ip_cidr", "149.154.160.0/20") && r["action"]?.GetValue<string>() == "resolve");
+
+        // Невыведенное уходит в direct — последним правилом общий resolve.
+        Assert.Equal("resolve", rules[^1]["action"]!.GetValue<string>());
+        Assert.Equal(2, rules[^1].Count);
+    }
+
+    /// <summary>
+    /// Пин ведёт на посредника: на телефоне без root его имя — напрямую, мимо
+    /// ByeDPI и нарезки, как щитом winws2 (замер 06.10: со щитом 20 из 20, под рецептом 0 из 10).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Pinned_names_bypass_desync_inside_the_engine(bool byeDpi)
+    {
+        var engine = byeDpi ? Engine(Socks) : Engine(socks: null, fragmentDefault: true);
+        var rules = RouteRules(Compile(engine, shieldPins: ["notion.so", "rutracker.org"])).ToList();
+
+        int shield = rules.FindIndex(r => Has(r, "domain", "notion.so"));
+        Assert.True(shield >= 0);
+        Assert.Equal("direct", rules[shield]["outbound"]!.GetValue<string>());
+        Assert.True(Has(rules[shield], "domain", "rutracker.org"));
+
+        // Раньше правил человека («десинк» rutracker.org) и после правила пинов «через VPN».
+        int desync = rules.FindIndex(r => Has(r, "domain", "rutracker.org") && r["action"] is not null);
+        int pinnedVpn = rules.FindIndex(r => r["type"]?.GetValue<string>() == "logical" && r["outbound"]?.GetValue<string>() == "auto");
+        Assert.True(pinnedVpn >= 0 && pinnedVpn < shield && shield < desync, $"VPN {pinnedVpn}, щит {shield}, десинк {desync}");
+
+        // С root щит делает nfqws2 — в движке правила нет.
+        var rooted = RouteRules(Compile(Engine(Socks, root: true), narrow: true, shieldPins: ["notion.so"])).ToList();
+        Assert.DoesNotContain(rooted, r => Has(r, "domain", "notion.so"));
+    }
+
+    [Fact]
+    public void Pins_off_desync_skip_vpn_names_and_marked_pins()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(HostsPath)!);
+        File.WriteAllText(HostsPath,
+            HostsEditor.BlockBegin + "\n"
+            + $"157.240.0.35 instagram.com # {HostsEditor.DesyncMark}\n"
+            + "193.233.112.67 notion.so\n"
+            + HostsEditor.BlockEnd + "\n"
+            + "87.228.47.200 chatgpt.com\n"
+            + "0.0.0.0 ads.example\n");
+
+        var pins = HostsFile.PinsOffDesync(RuleFixture(), HostsPath);
+
+        // chatgpt.com — «через VPN»: его ведёт правило пинов в туннель.
+        Assert.DoesNotContain("chatgpt.com", pins);
+
+        // Пин на адрес самого сервиса десинку открыт (замер 06.10).
+        Assert.DoesNotContain("instagram.com", pins);
+
+        Assert.Contains("notion.so", pins);
+        Assert.Contains("ads.example", pins);
+
+        Assert.Empty(HostsFile.PinsOffDesync(RuleFixture(), Path.Combine(_root, "нет-файла")));
+    }
+
     [Fact]
     public void Router_dns_on_the_phone_has_no_adapter_binding()
     {
@@ -267,17 +383,69 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
         Assert.Equal("desync", tail[2]["outbound"]!.GetValue<string>());
         Assert.Equal("direct", config["route"]!["final"]!.GetValue<string>());
 
-        // Реестр ведёт туда же, куда умолчание, — в конфиге он лишний, как
-        // и на Windows.
-        Assert.DoesNotContain(rules, r => Has(r, "domain_suffix", "kinozal.tv"));
+        // Имена реестра, которых ниже никто не перехватит, ведёт туда же
+        // умолчание — в конфиге они лишние, как и на Windows.
+        Assert.DoesNotContain("kinozal.tv", config.ToJsonString());
+    }
+
+    /// <summary>
+    /// Реестр над российскими зонами: его имена в .ru не отдаются «*.ru — напрямую»
+    /// (разбор 27.10: tvrain.ru шёл бы мимо ByeDPI).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Registry_names_a_lower_direct_zone_would_take_stay_in_desync(bool byeDpi)
+    {
+        var engine = byeDpi ? Engine(Socks) : Engine(socks: null, fragmentDefault: true);
+        var config = Compile(engine);
+        var rules = RouteRules(config).ToList();
+
+        // Один набор правил, и в нём — только имена, которые ниже забрала бы зона.
+        var set = Assert.Single(config["route"]!["rule_set"]!.AsArray())!.AsObject();
+        Assert.Equal("inline", set["type"]!.GetValue<string>());
+
+        var names = set["rules"]![0]!["domain_suffix"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+        Assert.Equal(new[] { "tvrain.ru" }, names);
+
+        var tag = set["tag"]!.GetValue<string>();
+        int zone = rules.FindIndex(r => Has(r, "domain_suffix", "ru") && r["outbound"]?.GetValue<string>() == "direct");
+
+        int desync = byeDpi
+            ? rules.FindIndex(r => Has(r, "rule_set", tag) && r["outbound"]?.GetValue<string>() == "desync")
+            : rules.FindIndex(r => Has(r, "rule_set", tag) && r["tls_record_fragment"] is not null);
+
+        Assert.True(desync >= 0 && zone > desync, $"десинк {desync}, зона {zone}");
+
+        // Перед ByeDPI и нарезкой — разрешение по правилам DNS.
+        Assert.Contains(rules.Take(desync), r => Has(r, "rule_set", tag) && r["action"]?.GetValue<string>() == "resolve");
+    }
+
+    /// <summary>С root реестр, как на Windows, держат дыры щита nfqws2, и в конфиге он лишний.</summary>
+    [Fact]
+    public void Root_still_drops_the_registry_whole()
+    {
+        var root = Compile(Engine(Socks, root: true), narrow: true);
+
+        Assert.Null(root["route"]!["rule_set"]);
+        Assert.DoesNotContain("tvrain.ru", root["route"]!.ToJsonString());
     }
 
     [Fact]
     public void Without_default_desync_the_registry_is_written_out()
     {
-        var rules = RouteRules(Compile(Engine(Socks, socksDefault: false))).ToList();
+        var config = Compile(Engine(Socks, socksDefault: false));
+        var rules = RouteRules(config).ToList();
 
-        Assert.Contains(rules, r => Has(r, "domain_suffix", "kinozal.tv") && r["outbound"]?.GetValue<string>() == "desync");
+        // Целиком, одним набором правил: четыре правила «десинка» ссылаются
+        // на него, а не несут 117 тысяч имён каждое.
+        var set = Assert.Single(config["route"]!["rule_set"]!.AsArray())!.AsObject();
+        var names = set["rules"]![0]!["domain_suffix"]!.AsArray().Select(n => n!.GetValue<string>()).ToList();
+        Assert.Equal(new[] { "rutracker.org", "kinozal.tv", "linkedin.com", "nnmclub.to", "tvrain.ru" }, names);
+
+        var tag = set["tag"]!.GetValue<string>();
+        Assert.Contains(rules, r => Has(r, "rule_set", tag) && r["outbound"]?.GetValue<string>() == "desync");
+        Assert.DoesNotContain(rules, r => Has(r, "domain_suffix", "kinozal.tv"));
         Assert.DoesNotContain(rules, r => r["action"] is null && r["outbound"]?.GetValue<string>() == "desync"
             && r.Count == 2 && Has(r, "network", "tcp"));
     }
@@ -445,6 +613,35 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
         Assert.Equal(new EnginePlan(false, false, false), windows);
     }
 
+    /// <summary>
+    /// С root и без туннеля движок ради DNS поднимается при любом пути DNS: иначе
+    /// nfqws2 не запускался вовсе — «запускать нечего» (разбор 27.10).
+    /// </summary>
+    [Fact]
+    public void Plan_on_a_rooted_phone_raises_the_dns_engine_for_desync_alone()
+    {
+        var host = AndroidHost(_root, Engine(Socks, root: true));
+        var alone = Settings().With(new EngineChoice { Desync = true, Tunnel = false });
+
+        Assert.Equal(DnsRoute.Auto, alone.DnsVia);
+        Assert.Equal(new EnginePlan(false, true, false), EngineConfigBuilder.Plan(alone, host));
+        Assert.Equal(new EnginePlan(false, true, false), EngineConfigBuilder.Plan(alone with { DnsVia = DnsRoute.Direct }, host));
+
+        // «Гибрид» без подписки — выхода нет, туннель не нужен.
+        var noExit = Settings() with { SubscriptionUrl = null };
+        Assert.False(noExit.NeedsProxy);
+        Assert.Equal(new EnginePlan(false, true, false), EngineConfigBuilder.Plan(noExit, host));
+
+        // С выходом — туннель, как и прежде; без десинка — ничего.
+        Assert.Equal(new EnginePlan(true, false, false), EngineConfigBuilder.Plan(Settings(), host));
+
+        var nothing = Settings().With(new EngineChoice { Desync = false, Tunnel = false });
+        Assert.Equal(new EnginePlan(false, false, false), EngineConfigBuilder.Plan(nothing, host));
+
+        // На Windows при одном десинке и «авто» движок ради DNS не нужен — как было.
+        Assert.Equal(new EnginePlan(false, false, false), EngineConfigBuilder.Plan(alone, WindowsHost(true, [])));
+    }
+
     [Fact]
     public void Phone_host_without_its_part_is_refused()
     {
@@ -470,8 +667,10 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
         var config = JsonNode.Parse(File.ReadAllText(settings.ProxyConfigPath))!.AsObject();
         var rules = RouteRules(config).ToList();
 
-        // «Через VPN» без выхода — напрямую; «десинк» — в ByeDPI.
-        Assert.Equal("direct", rules.Single(r => Has(r, "domain", "chatgpt.com"))["outbound"]!.GetValue<string>());
+        // «Через VPN» без выхода — напрямую (перед ним — разрешение по правилам
+        // DNS, а не резолвером по умолчанию); «десинк» — в ByeDPI.
+        Assert.Equal("direct", rules.Single(r => Has(r, "domain", "chatgpt.com") && r["outbound"] is not null)["outbound"]!.GetValue<string>());
+        Assert.Contains(rules, r => Has(r, "domain", "chatgpt.com") && r["action"]?.GetValue<string>() == "resolve");
         Assert.Contains(rules, r => Has(r, "domain", "rutracker.org") && r["outbound"]?.GetValue<string>() == "desync");
         Assert.DoesNotContain("secret-for-test", built.Message);
     }
@@ -488,6 +687,41 @@ public sealed class EngineConfigBuilderAndroidTests : IDisposable
         Assert.Null(config["experimental"]!["clash_api"]);
         Assert.Contains(config["dns"]!["servers"]!.AsArray(), s => s!["tag"]!.GetValue<string>() == "nz-hosts");
         Assert.Single(config["inbounds"]!.AsArray());
+    }
+
+    /// <summary>
+    /// Каждый вид конфига телефона принимает сам движок — <c>sing-box check</c>
+    /// того же форка, Windows-сборкой.
+    /// </summary>
+    /// <remarks>
+    /// Утверждения выше проверяют, что конфиг таков, каким задуман, но не то,
+    /// что его примет sing-box: 27.10 в него добавились resolve перед каждым
+    /// «напрямую», reverse_mapping и выборочный fakeip — всё это до проверки
+    /// движком было только прочитано в исходниках форка.
+    /// </remarks>
+    [Theory]
+    [InlineData("byedpi")]
+    [InlineData("byedpi-no-default")]
+    [InlineData("records")]
+    [InlineData("packets")]
+    [InlineData("root")]
+    [InlineData("narrow-root")]
+    public void Every_phone_config_passes_sing_box_check(string kind)
+    {
+        var engine = kind switch
+        {
+            "byedpi" => Engine(Socks, pass: ["riotgames.com"]),
+            "byedpi-no-default" => Engine(Socks, socksDefault: false),
+            "records" => Engine(fragmentDefault: true),
+            "packets" => Engine(fragment: TlsFragment.Packets),
+            "root" or "narrow-root" => Engine(root: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+
+        var config = Compile(engine, narrow: kind == "narrow-root", shieldPins: kind == "root" ? [] : ["pinned.example"]);
+        var (ok, said) = SingBoxCheck.Run(config.ToJsonString());
+
+        Assert.True(ok, said);
     }
 
     [Fact]

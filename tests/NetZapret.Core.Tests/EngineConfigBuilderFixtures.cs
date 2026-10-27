@@ -73,7 +73,9 @@ internal static class EngineConfigBuilderFixtures
             }
             else if (rule.Value == Core.Services.ServiceCatalog.RegistryList)
             {
-                rule.LoadHostList(["rutracker.org", "kinozal.tv", "linkedin.com", "*.nnmclub.to"]);
+                // tvrain.ru — имя реестра в российской зоне: ниже его забрало бы
+                // «*.ru — напрямую» (у реестра таких 37 085 из 117 157, 27.10).
+                rule.LoadHostList(["rutracker.org", "kinozal.tv", "linkedin.com", "*.nnmclub.to", "tvrain.ru"]);
             }
             else if (rule.Value == "config/lists/ipset-games.txt")
             {
