@@ -11,6 +11,14 @@
 # имени команды.
 *.sh text eol=lf
 
+# Правки чужих исходников (android/patches/) ложатся на файлы из git archive
+# с LF (engines.ps1). При core.autocrlf=true — умолчании Git для Windows —
+# свежая выписка отдала бы правку с CRLF, и git apply отказал бы на каждом
+# куске (проверено 27.10 на byedpi-nz-auth.patch: conev.c, conev.h, main.c,
+# proxy.c, proxy.h — «patch does not apply»). Рабочая копия, где правку
+# писал инструмент с LF, этого не видит.
+*.patch text eol=lf
+
 # Двоичное — не трогать.
 *.png binary
 *.ico binary

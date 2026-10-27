@@ -1,5 +1,22 @@
+diff --git a/conev.c b/conev.c
+index f9218cb..476ec33 100644
+--- a/conev.c
++++ b/conev.c
+@@ -114,6 +114,12 @@ void del_event(struct poolhd *pool, struct eval *val)
+     val->fd = -1;
+     val->mod_iter = pool->iters;
+     remove_timer(pool, val);
++    /* NetZapret: закрытое до пароля не должно числиться в лимите ожидающих
++       (proxy.c, NZ_PREAUTH_MAX) — иначе лимит со временем забился бы мёртвыми. */
++    if (val->nz_preauth) {
++        val->nz_preauth = 0;
++        pool->nz_preauth--;
++    }
+     pool->count--;
+     
+     struct eval *ev = pool->links[pool->count];
 diff --git a/conev.h b/conev.h
-index 02f2597..8fb8254 100644
+index 02f2597..6d16b57 100644
 --- a/conev.h
 +++ b/conev.h
 @@ -53,6 +53,8 @@ typedef int (*evcb_t)(struct poolhd *, struct eval *, int);
@@ -11,6 +28,24 @@ index 02f2597..8fb8254 100644
  
  struct buffer {
      size_t size;
+@@ -102,6 +104,8 @@ struct eval {
+     const char *restore_orig;
+     size_t restore_orig_len;
+     unsigned int part_sent;
++    /* NetZapret: принят, но ещё не назвал имя и пароль (proxy.c, nz_preauth_*). */
++    bool nz_preauth;
+ };
+ 
+ struct poolhd {
+@@ -121,6 +125,8 @@ struct poolhd {
+     struct eval *tv_start, *tv_end;
+     struct buffer *root_buff;
+     int buff_count;
++    /* NetZapret: сколько соединений с nz_preauth — del_event убавляет сам. */
++    int nz_preauth;
+ };
+ 
+ struct poolhd *init_pool(int count);
 diff --git a/main.c b/main.c
 index 8e4860b..cdf4e2c 100644
 --- a/main.c
@@ -27,7 +62,7 @@ index 8e4860b..cdf4e2c 100644
      
      params.dp_n++;
 diff --git a/proxy.c b/proxy.c
-index 5b96d3c..58eb95e 100644
+index 5b96d3c..306a0a7 100644
 --- a/proxy.c
 +++ b/proxy.c
 @@ -151,11 +151,65 @@ static int resolve(const char *chost, int len,
@@ -96,7 +131,7 @@ index 5b96d3c..58eb95e 100644
      uint8_t c = S_AUTH_BAD;
      for (long i = 2; i < n; i++)
          if (buffer[i] == S_AUTH_NONE) {
-@@ -170,6 +224,30 @@ static int auth_socks5(int fd, const char *buffer, ssize_t n)
+@@ -170,6 +224,112 @@ static int auth_socks5(int fd, const char *buffer, ssize_t n)
      return c != S_AUTH_BAD ? 0 : -1;
  }
  
@@ -124,10 +159,123 @@ index 5b96d3c..58eb95e 100644
 +    return ok ? 0 : -1;
 +}
 +
++/*
++ * NetZapret: срок и лимит соединениям, ещё не назвавшим пароль.
++ *
++ * ByeDPI не закрывает клиента, который молчит: таймеры у него ставятся
++ * только исходящим соединениям (desync.c, extend.c), а -T — это
++ * TCP_USER_TIMEOUT того же исходящего сокета. Пул постоянный: при -c 1024
++ * в нём 2049 мест (init_pool(max_open * 2 + 1)), и при полном пуле
++ * on_accept закрывает каждое новое соединение, а процесс живёт — NzByeDpi
++ * его не перезапустит. Приложению с правом INTERNET хватило бы найти порт
++ * перебором 127.0.0.1 и занять все места молчащими соединениями, пароль
++ * для этого не нужен: «десинк» и весь невыведенный TCP телефона
++ * (DesyncSocksDefault) стояли бы до перезапуска NetZapret. Прочитано
++ * в коде 27.10, на телефоне не проверено.
++ *
++ * Поэтому, только когда задан пароль (без него ByeDPI работает как был):
++ *  - NZ_PREAUTH_MS на приветствие и пароль. sing-box на 127.0.0.1
++ *    проходит их за доли миллисекунды; 3 с — с запасом телефону под нагрузкой;
++ *  - не больше NZ_PREAUTH_MAX ожидающих пароля разом, и лишнее вытесняет
++ *    самое старое из них, а не отказывает новому. Срока одного мало: 2048
++ *    мест по 3 с держит и тот, кто открывает ~700 соединений в секунду.
++ *    Отказ новому отдал бы лимит тому, кто стучит чаще sing-box, а при
++ *    вытеснении старейшего соединению sing-box нужно лишь успеть пройти
++ *    пароль, пока не придут NZ_PREAUTH_MAX чужих. Аутентифицированным
++ *    остаётся весь прочий пул;
++ *  - не больше NZ_ACCEPT_BURST приёмов за проход цикла. on_accept принимает,
++ *    пока очередь не опустеет, и поток соединений вытеснил бы ожидающее
++ *    sing-box в том же проходе, раньше, чем цикл дочитает его приветствие.
++ *    Так у него не меньше NZ_PREAUTH_MAX / NZ_ACCEPT_BURST = 16 проходов.
++ *    Слушатель в epoll без EPOLLET: оставшиеся в очереди он отдаст снова.
++ */
++#define NZ_PREAUTH_MS 3000
++#define NZ_PREAUTH_MAX 128
++#define NZ_ACCEPT_BURST 8
++
++/* Место новому ожидающему: при полном лимите закрыть самое старое. */
++static void nz_preauth_make_room(struct poolhd *pool)
++{
++    if (pool->nz_preauth < NZ_PREAUTH_MAX) {
++        return;
++    }
++    /* Срок у всех ожидающих один, а set_timer держит таймеры по возрастанию
++       срока — первое ожидающее в списке и есть старейшее. Таймеры исходящих
++       соединений перед ним просто пропускаются. */
++    for (struct eval *v = pool->tv_start; v; v = v->tv_next) {
++        if (!v->nz_preauth) {
++            continue;
++        }
++        /* Каждое 1024-е — в журнал: виден сам натиск, а не тысячи строк. */
++        static unsigned long evicted;
++        if (evicted++ % 1024 == 0) {
++            LOG(LOG_E, "nz: over %d connections without password, "
++                "closing oldest (%lu so far)\n", NZ_PREAUTH_MAX, evicted);
++        }
++        del_event(pool, v);
++        return;
++    }
++}
++
++/* Срок на пароль — только соединению, которое ждёт запроса SOCKS. */
++static void nz_preauth_start(struct poolhd *pool, struct eval *val)
++{
++    if (!nz_auth_enabled() || val->cb != &on_request) {
++        return;
++    }
++    val->nz_preauth = 1;
++    pool->nz_preauth++;
++    set_timer(pool, val, NZ_PREAUTH_MS);
++}
++
++/* Пароль принят — это sing-box: срок и место в лимите снимаются сразу.
++   Оставленный таймер сработал бы позже в on_tunnel как POLLTIMEOUT,
++   и тот принял бы его за таймер десинка (on_timeout). */
++static void nz_preauth_done(struct poolhd *pool, struct eval *val)
++{
++    if (!val->nz_preauth) {
++        return;
++    }
++    val->nz_preauth = 0;
++    pool->nz_preauth--;
++    remove_timer(pool, val);
++}
++
  
  static int resp_s5_error(int fd, int e)
  {
-@@ -856,10 +934,11 @@ static int handle_s5(struct poolhd *pool, struct eval *val,
+@@ -606,8 +766,13 @@ static int on_accept(struct poolhd *pool, struct eval *val, int et)
+ {
+     union sockaddr_u client;
+     struct eval *rval;
++    int taken = 0;
+     
+     while (1) {
++        /* NetZapret: см. NZ_ACCEPT_BURST. */
++        if (nz_auth_enabled() && taken++ == NZ_ACCEPT_BURST) {
++            break;
++        }
+         socklen_t len = sizeof(client);
+         #ifdef __linux__
+         int c = accept4(val->fd, &client.sa, &len, SOCK_NONBLOCK);
+@@ -643,6 +808,8 @@ static int on_accept(struct poolhd *pool, struct eval *val, int et)
+             close(c);
+             continue;
+         }
++        /* NetZapret: до add_event — вытесненное освобождает место и в пуле. */
++        nz_preauth_make_room(pool);
+         if (!(rval = add_event(pool, &on_request, c, POLLIN))) {
+             close(c);
+             continue;
+@@ -655,6 +822,7 @@ static int on_accept(struct poolhd *pool, struct eval *val, int et)
+             continue;
+         }
+         #endif
++        nz_preauth_start(pool, rval);
+     }
+     return 0;
+ }
+@@ -856,10 +1024,11 @@ static int handle_s5(struct poolhd *pool, struct eval *val,
              struct buffer *buff, ssize_t n, union sockaddr_u *dst)
  {
      if (val->flag != FLAG_S5) {
@@ -141,7 +289,20 @@ index 5b96d3c..58eb95e 100644
          return 0;
      }
      if (n < S_SIZE_MIN) {
-@@ -908,7 +987,15 @@ int on_request(struct poolhd *pool, struct eval *val, int et)
+@@ -896,6 +1065,12 @@ static int handle_s5(struct poolhd *pool, struct eval *val,
+ 
+ int on_request(struct poolhd *pool, struct eval *val, int et)
+ {
++    /* NetZapret: вышел срок на пароль (nz_preauth_start) — закрыть не читая:
++       recv отдал бы лишь EAGAIN. Других таймеров у on_request нет. */
++    if (et == POLLTIMEOUT) {
++        LOG(LOG_S, "nz: no password in %d ms: fd=%d\n", NZ_PREAUTH_MS, val->fd);
++        return -1;
++    }
+     union sockaddr_u dst = { 0 };
+     struct buffer *buff = buff_ppop(pool, params.bfsize);
+     if (!buff) {
+@@ -908,7 +1083,16 @@ int on_request(struct poolhd *pool, struct eval *val, int et)
      }
      int error = 0;
      bool skip_conn = 0;
@@ -152,6 +313,7 @@ index 5b96d3c..58eb95e 100644
 +        if (auth_socks5_pass(val->fd, buff->data, n)) {
 +            return -1;
 +        }
++        nz_preauth_done(pool, val);
 +        val->flag = FLAG_S5;
 +        return 0;
 +    }
