@@ -254,7 +254,7 @@ public partial class RecipeWindow : Window
         Say(_rows.Count == 0
             ? "Ни одного рецепта не нашлось — ни в пресете, ни в каталоге."
             : $"Рецептов: {_rows.Count} — из пресета «{preset.Name}» и из каталога. "
-              + "Проверка подбирает рабочий сама, но требует остановленных движков.");
+              + "Проверка подбирает рабочий сама — движки останавливать не нужно.");
 
         TestButton.IsEnabled = _rows.Count > 0;
 
@@ -317,8 +317,8 @@ public partial class RecipeWindow : Window
     /// Полосой, а не строкой под заголовком. Прежде окно отвечало подписью,
     /// и её не замечали: нажал «Проверить все», ничего видимого не случилось,
     /// и человек приходил с «проверка не начинается». Чаще всего она и не
-    /// должна была начаться — имя открывается без десинка либо движки
-    /// работают, — но сказано это было так, что не читалось.
+    /// должна была начаться — имя открывается без десинка (до 27.10 — и при
+    /// работающих движках), — но сказано это было так, что не читалось.
     /// </remarks>
     private void Say(string text, string colour = "Muted", string mark = "•")
     {
@@ -357,34 +357,38 @@ public partial class RecipeWindow : Window
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Движки обязаны быть остановлены, и это не перестраховка. Работающий
-    /// winws2 уже держит свой набор фильтров, а второй экземпляр поверх него
-    /// правил бы те же пакеты дважды — вышел бы замер не рецепта, а их суммы.
-    /// Туннель тем более: через него имя откроется любым рецептом, включая
-    /// пустой, и проверка ответит «работает всё».
+    /// С 27.10 — не останавливая движки (владелец: «сделай подбор рецепта
+    /// не выключая движки, раз мы уже научились»). Прежде они были обязаны
+    /// стоять: второй winws2 правил бы те же пакеты поверх работающего, и вышел
+    /// бы замер не рецепта, а их суммы. Теперь рецепт поднимается пробным winws2
+    /// (<see cref="RecipeTrial"/>), который перехватывает только порты пробы,
+    /// основной их не трогает (<see cref="TunnelCapture.KeepProbesOut"/>), и окно
+    /// ходит строго с них (<see cref="ProbePorts"/>). Остановленные движки тоже
+    /// годятся — тогда пробный winws2 просто один.
     /// </para>
     /// <para>
-    /// Останавливать их сами не беремся: это весь трафик машины, и человек
-    /// должен решить это сам, а не обнаружить постфактум.
+    /// Нельзя только рядом с десинком сборки до 27.10: он порты пробы
+    /// перехватывает, и замер снова вышел бы суммой. Туннелю имя не достаётся:
+    /// подменный адрес заменяется честным (<see cref="AddressForAsync"/>).
     /// </para>
     /// </remarks>
     private async void OnTest(object sender, RoutedEventArgs e)
     {
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
 
-        if (state is not null && state.IsSupervisorAlive())
+        if (state is not null && state.IsSupervisorAlive()
+            && state.Services.FirstOrDefault(s => s.Name == "winws2") is { KeepsProbesOut: false })
         {
-            Say("Сначала остановите движки на «Главной». Работающий десинк правил бы "
-                + "те же пакеты вторым слоем, а туннель открыл бы имя любым рецептом — "
-                + "проверять было бы нечего.", "Warn", "⏸");
+            Say("Десинк запущен сборкой, которая перехватывает порты пробы: рецепт проверялся бы "
+                + "поверх него. Перезапустите движки на «Главной» — и проверка пойдёт, не останавливая их.",
+                "Warn", "⏸");
 
             return;
         }
 
         var paths = ZapretPaths.Discover();
-        var winws = paths is null ? null : Path.Combine(paths.Root, "exe", "winws2.exe");
 
-        if (winws is null || !File.Exists(winws))
+        if (paths is null || !File.Exists(paths.ExecutablePath))
         {
             Say("winws2 не найден рядом с программой — проверять нечем.", "Danger", "✕");
             return;
@@ -399,6 +403,10 @@ public partial class RecipeWindow : Window
 
         int worked = 0;
         int tried = 0;
+
+        // Все соединения проверки — с портов пробы: их видит только пробный
+        // winws2, основной десинк их не трогает.
+        using var ports = ProbePorts.Use();
 
         try
         {
@@ -442,7 +450,7 @@ public partial class RecipeWindow : Window
                 row.Took = null;
 
                 var clock = Stopwatch.StartNew();
-                var flow = await TryAsync(winws, paths!.Root, row, _work.Token);
+                var flow = await TryAsync(paths, row, _work.Token);
                 clock.Stop();
 
                 // Открывшим считается тот, кто довёл до страницы, а не тот,
@@ -514,141 +522,46 @@ public partial class RecipeWindow : Window
     }
 
     /// <summary>
-    /// Поднимает winws2 с одним профилем и пробует открыть имя.
+    /// Поднимает пробный winws2 с одним рецептом и пробует открыть имя.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Профиль ровно один, без остального пресета: иначе имя могла бы забрать
     /// чужая секция, и замер сказал бы о ней, а не о выбранном рецепте.
+    /// </para>
+    /// <para>
+    /// Строку собирает библиотека (<see cref="WinwsCommandLine.ProbeLine"/>) тем же
+    /// кодом, что свой профиль в работе: глобальные ключи пресета (без них —
+    /// ни приёмов Lua, ни образцов пакетов, и «не помогает» каждый рецепт),
+    /// порты секции, которая забирает это имя, тот же <c>--out-range</c>.
+    /// Прежде окно собирало её само, и разойтись с работой было легко.
+    /// </para>
     /// </remarks>
-    private async Task<Flow> TryAsync(
-        string winws,
-        string zapretRoot,
-        RecipeRow row,
-        CancellationToken cancellationToken)
+    private async Task<Flow> TryAsync(ZapretPaths paths, RecipeRow row, CancellationToken cancellationToken)
     {
         if (row.Steps.Count == 0)
             return Flow.Nothing("рецепт без шагов");
 
-        var list = Path.GetFullPath(Path.Combine(
-            WinwsCommandLine.OwnListsDirectory, "probe.txt"));
+        Directory.CreateDirectory(Path.GetDirectoryName(RecipeTrial.ListPath)!);
+        await File.WriteAllTextAsync(RecipeTrial.ListPath, _domain + Environment.NewLine, cancellationToken);
 
-        Directory.CreateDirectory(Path.GetDirectoryName(list)!);
-        await File.WriteAllTextAsync(list, _domain + Environment.NewLine, cancellationToken);
-
-        var start = new ProcessStartInfo(winws)
+        var profile = new OwnDesyncProfile
         {
-            WorkingDirectory = zapretRoot,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            Name = "проба",
+            Steps = row.Steps,
+            HostListPath = RecipeTrial.ListPath,
+            Ports = PresetPorts.ForDomains(_preset, paths.Root, [_domain]),
         };
 
-        // Глобальные ключи пресета обязательны, и это выяснилось дорого:
-        // без них проверка отвечала «не помогает» на каждый рецепт подряд,
-        // включая заведомо рабочие. В них три вещи, без которых рецепт —
-        // пустой звук:
-        //
-        //   --lua-init   загружает библиотеку, где эти самые fake,
-        //                multidisorder и hostfakesplit_multi определены;
-        //                без неё имя в --lua-desync не значит ничего;
-        //   --wf-*       фильтр WinDivert, то есть какой трафик вообще
-        //                перехватывать; без него не перехватывается ничего;
-        //   --blob       заготовки поддельных пакетов, на которые рецепты
-        //                ссылаются по имени (blob=tls_google).
-        foreach (var argument in _preset.GlobalArguments)
-            start.ArgumentList.Add(argument);
+        var (trial, failure) = await RecipeTrial.StartAsync(paths, _preset, profile, cancellationToken);
 
-        // Профиль собирается теми же ключами, что уйдут в работу. Разойдись
-        // они — проверка мерила бы не то, что потом применится, и это
-        // не теория: без --out-range рецепт открывал домен для curl,
-        // а sing-box получал от того же сервера отказ в рукопожатии.
-        start.ArgumentList.Add("--new");
-        start.ArgumentList.Add("--name=NetZapret: проба");
-        // Порты те же, что у секции, которая это имя забирает. Зашитое
-        // 80,443 мерило бы не то, что применится: у обложек Spotify секция
-        // объявлена на одном 443, а у Discord - на восьми портах.
-        start.ArgumentList.Add("--filter-tcp="
-            + PresetPorts.ForDomains(_preset, zapretRoot, [_domain]));
-        start.ArgumentList.Add($"--hostlist={WinwsCommandLine.Forward(list)}");
-        start.ArgumentList.Add(WinwsCommandLine.ProbeOutRange);
+        // Не поднялся — например, отказался от кривого рецепта. Это и есть
+        // его отрицательный результат.
+        if (trial is null)
+            return Flow.Nothing(failure ?? "winws2 не поднялся");
 
-        foreach (var step in row.Steps)
-            start.ArgumentList.Add($"--lua-desync={step}");
-
-        Process? process = null;
-
-        try
-        {
-            process = Process.Start(start);
-
-            if (process is null)
-                return Flow.Nothing("winws2 не запустился");
-
-            // Ждём, пока драйвер встанет в разрыв, — но по его же словам,
-            // а не по часам. Раньше здесь стояли глухие две секунды на каждый
-            // рецепт: на десятке это двадцать секунд чистого ожидания, и почти
-            // всё оно лишнее — winws2 обычно готов за треть секунды.
-            await ReadyAsync(process, cancellationToken);
-
+        await using (trial)
             return await OpensAsync(_domain, cancellationToken);
-        }
-        finally
-        {
-            try
-            {
-                if (process is { HasExited: false })
-                {
-                    process.Kill(entireProcessTree: true);
-                    process.WaitForExit(Leaves);
-                }
-            }
-            catch (Exception)
-            {
-                // Процесс мог уйти сам — например, отказавшись от кривого
-                // рецепта. Это и есть его отрицательный результат.
-            }
-
-            process?.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// Ждёт, пока winws2 доложит о готовности.
-    /// </summary>
-    /// <remarks>
-    /// Ждём ровно ту строку, которой он сообщает о поставленном фильтре:
-    /// раньше неё пакеты не перехватываются вовсе, и проба мерила бы
-    /// незащищённое соединение. Прежде здесь ждали строку про число профилей —
-    /// она печатается при разборе настроек, то есть до того, как драйвер
-    /// встал в разрыв.
-    /// </remarks>
-    private static async Task ReadyAsync(Process process, CancellationToken cancellationToken)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(6);
-
-        var line = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
-
-        while (DateTime.UtcNow < deadline)
-        {
-            var finished = await Task.WhenAny(line, Task.Delay(300, cancellationToken));
-
-            if (finished != line)
-                continue;
-
-            if (line.Result is null)
-                break;
-
-            // «windivert initialized. capture is started.» — драйвер в разрыве.
-            if (line.Result.Contains("capture is started", StringComparison.OrdinalIgnoreCase))
-                break;
-
-            line = process.StandardOutput.ReadLineAsync(cancellationToken).AsTask();
-        }
-
-        // Небольшая доводка всё же нужна: между разбором настроек и первым
-        // перехваченным пакетом драйвер успевает не всегда.
-        await Task.Delay(Settle, cancellationToken);
     }
 
     /// <summary>
@@ -741,7 +654,7 @@ public partial class RecipeWindow : Window
             if (address is null)
                 return Flow.Nothing("адрес не известен");
 
-            using var client = new TcpClient();
+            using var client = ProbePorts.Client(address.AddressFamily);
 
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             deadline.CancelAfter(Reach);
@@ -802,29 +715,6 @@ public partial class RecipeWindow : Window
     /// </para>
     /// </remarks>
     private static readonly TimeSpan Reach = TimeSpan.FromSeconds(2.5);
-
-    /// <summary>
-    /// Выдержка после того, как драйвер доложил о готовности.
-    /// </summary>
-    /// <remarks>
-    /// Между разбором настроек и первым перехваченным пакетом winws2
-    /// успевает не всегда, и совсем без выдержки проба мерила бы
-    /// незащищённое соединение. Но четыреста миллисекунд брались с запасом
-    /// на глаз; двухсот пятидесяти хватает, а на одиннадцати рецептах
-    /// это ещё полторы секунды.
-    /// </remarks>
-    private static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(250);
-
-    /// <summary>
-    /// Сколько ждать, пока снятый процесс уйдёт.
-    /// </summary>
-    /// <remarks>
-    /// Ждём не ухода как такового, а освобождения WinDivert: не дождавшись,
-    /// следующий рецепт не поднимется. Четыре секунды здесь были запасом
-    /// на случай, которого не случалось ни разу, — winws2 уходит за
-    /// сотни миллисекунд.
-    /// </remarks>
-    private const int Leaves = 1500;
 
     /// <summary>
     /// Что написать в строке рецепта по итогам замера.
@@ -1111,6 +1001,17 @@ public partial class RecipeWindow : Window
 
                 var address = found.FirstOrDefault(a =>
                     a.AddressFamily == AddressFamily.InterNetwork) ?? found.FirstOrDefault();
+
+                // Движки теперь работают во время пробы, и имени «через VPN»
+                // система отдаёт подставной адрес: соединение по нему ушло бы
+                // в туннель, и рецепт мерил бы VPN. Настоящий — у DoH.
+                if (address is not null && TunnelHealth.IsFakeIp(address))
+                {
+                    using var lookup = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(4) };
+
+                    address = await DohResolver.ResolveAsync(name, lookup, cancellationToken) is { } honest
+                        && IPAddress.TryParse(honest, out var parsed) ? parsed : null;
+                }
 
                 if (address is not null)
                     return address;
