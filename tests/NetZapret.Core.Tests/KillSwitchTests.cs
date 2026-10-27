@@ -106,19 +106,25 @@ public sealed class KillSwitchTests
     public void Windows_accepts_the_rules_in_a_transaction_that_is_then_aborted()
     {
         var self = Environment.ProcessPath!;
+        var rules = KillSwitch.Plan([self], TunV4, TunV6);
 
-        try
+        // С правами администратора отказ — поломка правил: тест обязан пройти
+        // без исключения. Без них WFP отказывает на начале транзакции (код 5,
+        // замер 27.10), и проверять нечем.
+        if (IsAdministrator())
         {
-            KillSwitch.DryRun(KillSwitch.Plan([self], TunV4, TunV6));
+            KillSwitch.DryRun(rules);
+            return;
         }
-        catch (InvalidOperationException ex) when (IsAccessDenied(ex.Message))
-        {
-            // Нет прав администратора: WFP отказал до проверки правил.
-        }
+
+        var denied = Assert.Throws<InvalidOperationException>(() => KillSwitch.DryRun(rules));
+        Assert.Contains("0x00000005", denied.Message);
     }
 
-    private static bool IsAccessDenied(string message) =>
-        message.Contains("0x00000005", StringComparison.Ordinal)
-        || message.Contains("0x80070005", StringComparison.Ordinal)
-        || message.Contains("0x80320009", StringComparison.Ordinal);
+    private static bool IsAdministrator()
+    {
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        return new System.Security.Principal.WindowsPrincipal(identity)
+            .IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+    }
 }
