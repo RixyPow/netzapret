@@ -307,22 +307,55 @@ public sealed class Nfqws2CommandLineTests : IDisposable
         Assert.Contains("'--name=it'\\''s'", script);
         Assert.Contains("APP=4321", script);
         Assert.Contains("'org.netzapret'*)", script);
-        Assert.Contains("NZ_PID", script);
         Assert.EndsWith(">>'/data/user/0/org.netzapret/files/runtime/nfqws2.log' 2>&1\n", script);
+
+        // Готовность — номер nfqws2 в pid-файле, а не строка перед exec (разбор 27.10).
+        int ready = script.IndexOf("[ \"$(cat \"$PIDF\" 2>/dev/null)\" = \"$NFQ\" ] && { echo \"NZ_PID $NFQ\"", StringComparison.Ordinal);
+        Assert.True(ready > up && ready < exec, script);
+        Assert.Equal(ready + "[ \"$(cat \"$PIDF\" 2>/dev/null)\" = \"$NFQ\" ] && { echo ".Length,
+            script.IndexOf("\"NZ_PID", StringComparison.Ordinal));
+        Assert.Contains("PIDF='/data/user/0/org.netzapret/files/runtime/nfqws2.pid'", script);
+        Assert.Contains("NZ_FAIL nfqws2 завершился при запуске", script);
+        Assert.Contains("NZ_FAIL nfqws2 не занял очередь", script);
+
+        // Прежний запуск гасится до правил: сторож по файлу владельца, затем nfqws2.
+        Assert.Contains("OWNER='/data/user/0/org.netzapret/files/runtime/nfqws2.owner'", script);
+        int oldSentinel = script.IndexOf("kill -TERM $O_SENT", StringComparison.Ordinal);
+        int oldNfqws2 = script.IndexOf("kill -TERM $P", StringComparison.Ordinal);
+        Assert.True(oldSentinel >= 0 && oldSentinel < oldNfqws2 && oldNfqws2 < down, script);
+
+        // Сторож снимает правила, только пока перехват его, и ищет приложение и по пакету.
+        Assert.Contains("if [ \"$O_NFQ\" = \"$NFQ\" ]; then", script);
+        Assert.Contains("pidof 'org.netzapret'", script);
+        Assert.Contains("echo \"$NFQ $SENT\" > \"$OWNER\"", script);
+
+        // Свой nfqws2 — по файлу и папке пакета, чужой (модуль zapret) не задевается.
+        Assert.Contains("'/data/app/~~x/org.netzapret-1/lib/arm64/libnfqws2.so'*|*/'org.netzapret-'*/libnfqws2.so*", script);
     }
 
     [Fact]
     public void StopScriptRemovesRulesThenKillsOnlyOurProcess()
     {
-        var script = Nfqws2CommandLine.StopScript(Host, "/f/runtime/nfqws2-fw-down.sh");
+        var script = Nfqws2CommandLine.StopScript(Host, "/f/runtime/nfqws2-fw-down.sh", "org.netzapret");
 
         int down = script.IndexOf("sh '/f/runtime/nfqws2-fw-down.sh'", StringComparison.Ordinal);
         int term = script.IndexOf("kill -TERM", StringComparison.Ordinal);
         int kill = script.IndexOf("kill -KILL", StringComparison.Ordinal);
 
         Assert.True(down >= 0 && down < term && term < kill, script);
-        Assert.Contains("cat '/data/user/0/org.netzapret/files/runtime/nfqws2.pid'", script);
-        Assert.Contains("*libnfqws2.so*", script);
+
+        // Номер — из файла владельца и pid-файла: в pid-файле его нет, пока
+        // nfqws2 не занял очередь, а застрявший на lua тоже надо остановить.
+        Assert.Contains("read O_NFQ O_SENT < \"$OWNER\"", script);
+        Assert.Contains("$O_NFQ $(cat \"$PIDF\" 2>/dev/null)", script);
+        Assert.Contains("PIDF='/data/user/0/org.netzapret/files/runtime/nfqws2.pid'", script);
+
+        // Владение снимается раньше правил — сторож второй раз их не снимает.
+        Assert.True(script.IndexOf(": > \"$OWNER\"", StringComparison.Ordinal) < down, script);
+
+        Assert.Contains("*/'org.netzapret-'*/libnfqws2.so*", script);
+        Assert.DoesNotContain("*nfqws2*)", script);
+        Assert.Equal("/data/user/0/org.netzapret/files/runtime/nfqws2.owner", Host.OwnerFile);
     }
 
     [Fact]

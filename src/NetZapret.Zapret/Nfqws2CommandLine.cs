@@ -24,6 +24,20 @@ public sealed record Nfqws2Host
     /// <summary><c>&lt;files&gt;/runtime/nfqws2.log</c>, создан приложением заранее.</summary>
     public required string LogFile { get; init; }
 
+    /// <summary>
+    /// Чей сейчас перехват: номер nfqws2 и его сторожа — рядом с pid-файлом
+    /// (<c>nfqws2.owner</c>). Пишет и читает только root.
+    /// </summary>
+    /// <remarks>
+    /// Не pid-файл: его опустошают и хозяин перед запуском, и сам nfqws2
+    /// (<c>fopen("w")</c> в начале <c>nfq_main</c>), а номер в нём появляется
+    /// только после того, как очередь занята, — при застрявшем на lua или
+    /// очереди nfqws2 остановке нечего было бы прочесть (разбор 27.10).
+    /// </remarks>
+    public string OwnerFile => PidFile.EndsWith(".pid", StringComparison.Ordinal)
+        ? PidFile[..^".pid".Length] + ".owner"
+        : PidFile + ".owner";
+
     public ushort QueueNumber { get; init; } = Nfqws2CommandLine.DefaultQueue;
 
     public uint DesyncMark { get; init; } = Nfqws2CommandLine.DefaultMark;
@@ -540,18 +554,38 @@ public static class Nfqws2CommandLine
     /// очередь никто не слушает, пакеты идут мимо.
     /// </para>
     /// <para>
-    /// <c>exec</c>, а не фон: номер процесса оболочки становится номером nfqws2
-    /// (он и печатается строкой <c>NZ_PID</c>), а сама команда <c>su</c> живёт,
-    /// пока живёт nfqws2, — хозяину есть за чем следить. Готовность — непустой
-    /// pid-файл: nfqws2 пишет его только после того, как занял очередь.
-    /// Нужен фон (общая долгоживущая оболочка root) — <c>sh файл &amp;</c>.
+    /// <c>exec</c>, а не фон: номер процесса оболочки становится номером nfqws2,
+    /// а сама команда <c>su</c> живёт, пока живёт nfqws2, — хозяину есть за чем
+    /// следить. Нужен фон (общая долгоживущая оболочка root) — <c>sh файл &amp;</c>.
+    /// </para>
+    /// <para>
+    /// Готовность — строка <c>NZ_PID n</c>, и печатает её не оболочка до
+    /// <c>exec</c>, а ждущий в фоне, когда в pid-файле появится номер nfqws2:
+    /// nfqws2 пишет его только после разбора ключей, сброса прав, проверки
+    /// списков и lua и захвата очереди (<c>nfq_main</c>, nfqws.c v1.0.6). До 27.10
+    /// строка печаталась перед <c>exec</c>, и nfqws2, упавший на любом из этих
+    /// шагов (очередь занята прежним, ошибка lua пресета, список не читается
+    /// после <c>--uid</c>), считался запущенным: <c>NzRoot</c> ставит «работает»
+    /// по этой строке и больше не смотрит. Упал или не занял очередь за 12 с —
+    /// <c>NZ_FAIL</c> с причиной, как отказ правил.
+    /// </para>
+    /// <para>
+    /// Прежний запуск гасится первым: его сторож (по файлу владельца,
+    /// <see cref="Nfqws2Host.OwnerFile"/>), затем его nfqws2 — по тому же файлу
+    /// и поиском своих процессов (<see cref="OursFunction"/>). Очередь у ядра
+    /// одна на номер, и второй nfqws2 её не занял бы; а сторож прежнего, увидев,
+    /// что его приложения нет, снимал правила общим сценарием — уже новые.
+    /// Сторож теперь снимает правила, только пока перехват его (файл владельца).
     /// </para>
     /// <para>
     /// Сторож в фоне — аналог задания Windows (<c>ProcessJob</c>), с которым
-    /// winws2 умирает вместе с надзором: процесс приложения пропал — снять
-    /// правила и остановить nfqws2. Перенос в корневую группу cgroup — чтобы
+    /// winws2 умирает вместе с надзором: процесс приложения пропал или nfqws2
+    /// упал — снять правила и остановить nfqws2. Приложение ищется и по имени
+    /// пакета (<c>pidof</c>): сценарий с диска запускает и сама служба после
+    /// перезапуска системой, без пересборки, и номер <paramref name="appPid"/>
+    /// в нём тогда уже чужой. Перенос в корневую группу cgroup — чтобы
     /// заморозка кэшированных приложений не остановила очередь. Ни сторож,
-    /// ни перенос на телефоне не проверены.
+    /// ни ожидание, ни перенос на телефоне не проверены.
     /// </para>
     /// </remarks>
     public static string StartScript(
@@ -566,33 +600,80 @@ public static class Nfqws2CommandLine
         ArgumentNullException.ThrowIfNull(arguments);
 
         var log = Quote(host.LogFile);
+        var down = Quote(firewallDownScriptPath);
+        var package = Quote(packageName);
         var script = new StringBuilder();
 
         script.Append("#!/system/bin/sh\n");
         script.Append("# NetZapret: запуск nfqws2, пишется заново перед каждым запуском.\n");
         script.Append($"cd {Quote(host.ZapretRoot)} || exit 90\n");
-        script.Append($"sh {Quote(firewallDownScriptPath)} >/dev/null 2>&1\n");
+        script.Append($"OWNER={Quote(host.OwnerFile)}\n");
+        script.Append($"PIDF={Quote(host.PidFile)}\n");
+        script.Append(OursFunction(host, packageName));
+
+        // Прежний запуск: сторож — первым, иначе он снял бы наши новые правила;
+        // секунда — на снятие, если он его уже начал.
+        script.Append("O_NFQ=; O_SENT=\n");
+        script.Append("[ -f \"$OWNER\" ] && read O_NFQ O_SENT < \"$OWNER\"\n");
+        script.Append("case \"$O_SENT\" in ''|*[!0-9]*) ;; *)\n");
+        script.Append("  if [ \"$(readlink /proc/$O_SENT/exe 2>/dev/null)\" = \"$(readlink /proc/$$/exe 2>/dev/null)\" ]; then\n");
+        script.Append("    kill -TERM $O_SENT 2>/dev/null; sleep 1\n");
+        script.Append("  fi ;;\n");
+        script.Append("esac\n");
+        script.Append("echo \"$$\" > \"$OWNER\"\n");
+        script.Append(KillOurs("$O_NFQ"));
+
+        script.Append($"sh {down} >/dev/null 2>&1\n");
 
         if (firewallUpScriptPath is not null)
         {
             script.Append($"if ! sh {Quote(firewallUpScriptPath)} >>{log} 2>&1; then\n");
-            script.Append($"  echo 'NZ_FAIL firewall' ; sh {Quote(firewallDownScriptPath)} >/dev/null 2>&1; exit 91\n");
+            script.Append($"  echo 'NZ_FAIL firewall' ; sh {down} >/dev/null 2>&1; : > \"$OWNER\"; exit 91\n");
             script.Append("fi\n");
         }
 
         script.Append($"echo \"=== NetZapret nfqws2 start $(date '+%Y-%m-%d %H:%M:%S') ===\" >>{log}\n");
         script.Append("NFQ=$$\n");
-        script.Append("echo \"NZ_PID $NFQ\"\n");
-        script.Append("echo $NFQ > /sys/fs/cgroup/cgroup.procs 2>/dev/null || echo $NFQ > /acct/cgroup.procs 2>/dev/null\n");
+
+        // Пустой — чтобы ждущий не принял за готовность номер прошлого запуска.
+        // Только существующий: созданный root приложение потом не перепишет.
+        script.Append("[ -f \"$PIDF\" ] && : > \"$PIDF\"\n");
+        // Ошибки — в никуда всем блоком: «2>/dev/null» после «>» не глушит отказ
+        // самого перенаправления, и строка «cannot create» уходила в журнал root.
+        script.Append("{ echo $NFQ > /sys/fs/cgroup/cgroup.procs || echo $NFQ > /acct/cgroup.procs; } 2>/dev/null\n");
+
+        // Сторож.
         script.Append($"( APP={appPid.ToString(CultureInfo.InvariantCulture)}\n");
-        script.Append("  while [ -d /proc/$NFQ ]; do\n");
-        script.Append($"    case \"$(cat /proc/$APP/cmdline 2>/dev/null)\" in {Quote(packageName)}*) sleep 3 ;; *) break ;; esac\n");
-        script.Append("  done\n");
-        script.Append("  if [ -d /proc/$NFQ ]; then\n");
-        script.Append($"    sh {Quote(firewallDownScriptPath)} >/dev/null 2>&1\n");
-        script.Append("    kill -TERM $NFQ 2>/dev/null; sleep 2; kill -KILL $NFQ 2>/dev/null\n");
+        script.Append("  nz_app() {\n");
+        script.Append($"    case \"$(cat /proc/$APP/cmdline 2>/dev/null)\" in {package}*) return 0 ;; esac\n");
+        script.Append($"    APP=$(pidof {package} 2>/dev/null) || return 1\n");
+        script.Append("    APP=${APP%% *}\n");
+        script.Append("    [ -n \"$APP\" ]\n");
+        script.Append("  }\n");
+        script.Append("  while [ -d /proc/$NFQ ] && nz_app; do sleep 3; done\n");
+        script.Append("  O_NFQ=\n");
+        script.Append("  [ -f \"$OWNER\" ] && read O_NFQ O_REST < \"$OWNER\"\n");
+        script.Append("  if [ \"$O_NFQ\" = \"$NFQ\" ]; then\n");
+        script.Append($"    sh {down} >/dev/null 2>&1\n");
+        script.Append("    : > \"$OWNER\"\n");
+        script.Append("  fi\n");
+        script.Append("  if nz_ours $NFQ; then\n");
+        script.Append("    kill -TERM $NFQ 2>/dev/null; sleep 2; nz_ours $NFQ && kill -KILL $NFQ 2>/dev/null\n");
         script.Append("  fi ) </dev/null >/dev/null 2>&1 &\n");
-        script.Append("echo \"NZ_SENTINEL $!\"\n");
+        script.Append("SENT=$!\n");
+        script.Append("echo \"$NFQ $SENT\" > \"$OWNER\"\n");
+        script.Append("echo \"NZ_SENTINEL $SENT\"\n");
+
+        // Ждущий готовности: его вывод — вывод su, который читает NzRoot.
+        script.Append("( i=0\n");
+        script.Append("  while [ $i -lt 60 ]; do\n");
+        script.Append("    [ -d /proc/$NFQ ] || { echo 'NZ_FAIL nfqws2 завершился при запуске, причина в nfqws2.log'; exit 0; }\n");
+        script.Append("    [ \"$(cat \"$PIDF\" 2>/dev/null)\" = \"$NFQ\" ] && { echo \"NZ_PID $NFQ\"; exit 0; }\n");
+        script.Append("    sleep 0.2; i=$((i+1))\n");
+        script.Append("  done\n");
+        script.Append("  echo 'NZ_FAIL nfqws2 не занял очередь за 12 с, причина в nfqws2.log'\n");
+        script.Append("  nz_ours $NFQ && kill -TERM $NFQ 2>/dev/null ) </dev/null 2>/dev/null &\n");
+
         script.Append("exec ").Append(Quote(host.Executable));
 
         foreach (var argument in arguments)
@@ -603,39 +684,90 @@ public static class Nfqws2CommandLine
     }
 
     /// <summary>
-    /// Сценарий остановки: сначала правила, потом процесс по pid-файлу.
+    /// Сценарий остановки: правила, потом nfqws2 — по файлу владельца, pid-файлу
+    /// и поиском своих процессов, — потом сторож.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Порядок zapret (<c>zapret_unapply_firewall</c>, затем <c>do_nfqws 0</c>).
     /// <c>SIGTERM</c> — nfqws2 отвязывает очередь и выходит с 0; через 3 с —
-    /// <c>SIGKILL</c>. Убивается только наш процесс: номер из pid-файла
-    /// сверяется с исполняемым файлом — после перезагрузки номер мог достаться
-    /// чужому. Приложение само послать сигнал не может (другой домен SELinux,
-    /// <c>hidepid</c>) — только через root.
+    /// <c>SIGKILL</c>. Убивается только наш процесс: номер сверяется с исполняемым
+    /// файлом (<see cref="OursFunction"/>) — после перезагрузки номер мог
+    /// достаться чужому. Приложение само послать сигнал не может (другой домен
+    /// SELinux, <c>hidepid</c>) — только через root.
+    /// </para>
+    /// <para>
+    /// Не по одному pid-файлу (до 27.10): номер в нём появляется, только когда
+    /// nfqws2 занял очередь, и nfqws2, застрявший на lua или очереди, остановка
+    /// не находила — он оставался держать очередь со старым пресетом.
+    /// Владение перехватом снимается первым: сторож, увидев смерть nfqws2,
+    /// правил второй раз не снимает.
+    /// </para>
     /// </remarks>
-    public static string StopScript(Nfqws2Host host, string firewallDownScriptPath)
+    /// <param name="packageName">Имя пакета — узнать свой nfqws2 и после обновления приложения (путь библиотеки меняется).</param>
+    public static string StopScript(Nfqws2Host host, string firewallDownScriptPath, string? packageName = null)
     {
         ArgumentNullException.ThrowIfNull(host);
 
-        var pid = Quote(host.PidFile);
         var script = new StringBuilder();
 
         script.Append("#!/system/bin/sh\n");
         script.Append("# NetZapret: остановка nfqws2 — правила, затем процесс.\n");
+        script.Append($"OWNER={Quote(host.OwnerFile)}\n");
+        script.Append($"PIDF={Quote(host.PidFile)}\n");
+        script.Append(OursFunction(host, packageName));
+        script.Append("O_NFQ=; O_SENT=\n");
+        script.Append("[ -f \"$OWNER\" ] && read O_NFQ O_SENT < \"$OWNER\"\n");
+        script.Append("[ -f \"$OWNER\" ] && : > \"$OWNER\"\n");
         script.Append($"sh {Quote(firewallDownScriptPath)} >/dev/null 2>&1\n");
-        script.Append($"P=$(cat {pid} 2>/dev/null)\n");
-        script.Append("case \"$P\" in ''|*[!0-9]*) P= ;; esac\n");
-        script.Append("if [ -n \"$P\" ]; then\n");
-        script.Append("  case \"$(readlink /proc/$P/exe 2>/dev/null)\" in *libnfqws2.so*|*nfqws2*) kill -TERM $P 2>/dev/null ;; *) P= ;; esac\n");
-        script.Append("fi\n");
-        script.Append("if [ -n \"$P\" ]; then\n");
-        script.Append("  for i in 1 2 3 4 5 6; do [ -d /proc/$P ] || break; sleep 0.5; done\n");
-        script.Append("  [ -d /proc/$P ] && kill -KILL $P 2>/dev/null\n");
-        script.Append("fi\n");
-        script.Append($": > {pid}\n");
+        script.Append(KillOurs("$O_NFQ $(cat \"$PIDF\" 2>/dev/null)"));
+        script.Append("case \"$O_SENT\" in ''|*[!0-9]*) ;; *)\n");
+        script.Append("  [ \"$(readlink /proc/$O_SENT/exe 2>/dev/null)\" = \"$(readlink /proc/$$/exe 2>/dev/null)\" ] && kill -TERM $O_SENT 2>/dev/null ;;\n");
+        script.Append("esac\n");
+        script.Append("[ -f \"$PIDF\" ] && : > \"$PIDF\"\n");
         script.Append("exit 0\n");
         return script.ToString();
     }
+
+    /// <summary>
+    /// Функция оболочки <c>nz_ours N</c>: наш ли nfqws2 процесс N — по исполняемому файлу.
+    /// </summary>
+    /// <remarks>
+    /// Свой файл или файл из папки своего пакета: после обновления приложения
+    /// путь библиотеки другой (<c>/data/app/~~…/&lt;пакет&gt;-…/lib/…</c>), а прежний
+    /// nfqws2 смотрит на удалённый — «… (deleted)». Чужой nfqws2 (модуль zapret
+    /// для Magisk) так не задевается: прежде остановка брала любой «*nfqws2*».
+    /// </remarks>
+    private static string OursFunction(Nfqws2Host host, string? packageName)
+    {
+        var patterns = Quote(host.Executable) + "*";
+
+        if (!string.IsNullOrWhiteSpace(packageName))
+            patterns += "|*/" + Quote(packageName + "-") + "*/libnfqws2.so*";
+
+        return "nz_ours() {\n"
+            + $"  case \"$(readlink /proc/$1/exe 2>/dev/null)\" in {patterns}) return 0 ;; esac\n"
+            + "  return 1\n"
+            + "}\n";
+    }
+
+    /// <summary>
+    /// Гасит свои nfqws2: из перечня номеров и найденные по имени (<c>pidof</c>),
+    /// <c>SIGTERM</c>, до 3 с ожидания, <c>SIGKILL</c>.
+    /// </summary>
+    private static string KillOurs(string candidates) =>
+        "NZ_OLD=\n"
+        + $"for P in {candidates} $(pidof libnfqws2.so 2>/dev/null); do\n"
+        + "  case \"$P\" in ''|*[!0-9]*) continue ;; esac\n"
+        + "  nz_ours $P && { kill -TERM $P 2>/dev/null; NZ_OLD=\"$NZ_OLD $P\"; }\n"
+        + "done\n"
+        + "if [ -n \"$NZ_OLD\" ]; then\n"
+        + "  for i in 1 2 3 4 5 6; do\n"
+        + "    NZ_LIVE=; for P in $NZ_OLD; do [ -d /proc/$P ] && NZ_LIVE=\"$NZ_LIVE $P\"; done\n"
+        + "    [ -z \"$NZ_LIVE\" ] && break; sleep 0.5\n"
+        + "  done\n"
+        + "  for P in $NZ_OLD; do nz_ours $P && kill -KILL $P 2>/dev/null; done\n"
+        + "fi\n";
 
     /// <summary>
     /// Все файлы запуска с root: правила, их снятие и постановка, запуск и остановка.
@@ -692,7 +824,7 @@ public static class Nfqws2CommandLine
             rules6 is null ? null : rules6Path, rules6,
             kernel.RestoreWait);
         files[Nfqws2Scripts.StartName] = StartScript(host, launch.Arguments, appPid, packageName, downPath, upPath);
-        files[Nfqws2Scripts.StopName] = StopScript(host, downPath);
+        files[Nfqws2Scripts.StopName] = StopScript(host, downPath, packageName);
 
         return new Nfqws2Scripts(
             files,
