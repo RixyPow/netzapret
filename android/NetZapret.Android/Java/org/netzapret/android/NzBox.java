@@ -65,9 +65,10 @@ public final class NzBox {
     // ================= публичный договор =================
 
     /**
-     * Записать запрос в files/runtime/nz-request.json и поднять службу VPN
-     * на переднем плане. Если движок уже работает — служба перечитает запрос
-     * и перезагрузит конфиг (ByeDPI и root — только если их запрос сменился).
+     * Записать запрос в files/runtime/nz-request.json (со снимком конфига и
+     * списков ByeDPI в runtime/nz-session — NzRequest.snapshotAndSave) и поднять
+     * службу VPN на переднем плане. Если движок уже работает — служба перечитает
+     * запрос и перезагрузит конфиг (ByeDPI и root — только если их запрос сменился).
      * Разрешение на VPN (VpnService.prepare) должно быть выдано заранее,
      * из активности: из службы окно разрешения не показать.
      */
@@ -85,7 +86,9 @@ public final class NzBox {
                 NzSecrets.register(request.byedpi.auth);
             }
             try {
-                NzRequest.save(context, requestJson);
+                // Со снимком конфига и списков ByeDPI: служба не должна читать файлы,
+                // которые хозяин перепишет следующей, может быть неудачной, попыткой.
+                NzRequest.snapshotAndSave(context, requestJson);
             } catch (Exception e) {
                 fail("запрос на запуск не записан: " + NzSecrets.describe(e));
                 return;

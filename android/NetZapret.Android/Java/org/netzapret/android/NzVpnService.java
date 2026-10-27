@@ -15,8 +15,10 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 
 import java.io.File;
+import java.io.IOException;
 
 import io.nekohasekai.libbox.CommandServer;
 import io.nekohasekai.libbox.CommandServerHandler;
@@ -28,9 +30,11 @@ import io.nekohasekai.libbox.SystemProxyStatus;
  * Служба VPN — на телефоне то же, что надзор на Windows: поднимает движки
  * по порядку, держит их и гасит в обратном (libbox.md §4.2, DESIGN.md).
  *
- * Порядок запуска: команда root (nfqws2) → ByeDPI и ожидание его готовности
- * (до establish: ребёнок не унаследует TUN) → Libbox.setup → сервер команд →
- * startOrReloadService. Остановка — наоборот. Всё это идёт в очереди
+ * Порядок запуска: прежний libbox докрылся → команда root (nfqws2) → ByeDPI
+ * на своих порту и пароле и ожидание его готовности (до establish: ребёнок не
+ * унаследует TUN) → Libbox.setup → сервер команд → startOrReloadService с
+ * конфигом, исходящий SOCKS которого переписан на этот порт и пароль.
+ * Остановка — наоборот. Всё это идёт в очереди
  * {@link NzBox#GATE}; поля движков трогает только она, status() читает
  * volatile-ссылки.
  *
@@ -46,9 +50,26 @@ public final class NzVpnService extends VpnService {
     private static final String CHANNEL_ID = "nz-engine";
     // Сколько ждать закрытия libbox: зависшая остановка не должна держать очередь вечно (как у VPNRouter).
     private static final long CLOSE_WAIT_MS = 4000;
+    // Сколько новый запуск ждёт, пока докроется прежний libbox (всё равно в очереди, а не в Go).
+    private static final long PREVIOUS_CLOSE_WAIT_MS = 30_000;
     private static final long BYEDPI_READY_MS = 5000;
+    // Переездов ByeDPI с занятого порта за один запуск; больше — это не случайность, гасим.
+    private static final int MAX_BYEDPI_MOVES = 3;
+    private static final String STILL_CLOSING = "движок ещё закрывается";
 
     static volatile NzVpnService instance;
+
+    /**
+     * Поток закрытия последнего libbox. Статический: служба могла смениться,
+     * а Go закрывает экземпляр дальше и после того, как очередь перестала
+     * его ждать (CLOSE_WAIT_MS). Пока он жив, новый сервер команд не
+     * поднимается, а «остановлен» не пишется: прежний движок ещё держит
+     * command.sock, cache.db и свою копию дескриптора TUN — VPN жив.
+     */
+    private static volatile Thread closer;
+    // Только из очереди: вместо «stopped» выставлено «ещё закрывается» — снять по окончании, с этой причиной.
+    private static boolean closeNotice;
+    private static String closeReason;
 
     private volatile NzByeDpi byedpi;
     private volatile NzRoot root;
@@ -65,6 +86,9 @@ public final class NzVpnService extends VpnService {
     // Ниже — только из очереди NzBox.GATE.
     private NzRequest request;
     private String configDigest;
+    /** ByeDPI этого запуска: свои порт и пароль, не из запроса (NzRequest.ByeDpi.withSession). */
+    private NzRequest.ByeDpi dpi;
+    private int dpiMoves;
     private NzNetworkMonitor monitor;
     private NzPlatform platform;
     private volatile CommandServer server;
@@ -129,7 +153,7 @@ public final class NzVpnService extends VpnService {
                 if (engineUp || server != null || byedpi != null || root != null) {
                     NzBox.LOG.add(NzLog.NZ, "служба уничтожена системой — гашу движки");
                     teardown();
-                    NzBox.setState(NzBox.STOPPED, NzBox.error());
+                    markStopped(NzBox.error());
                 }
             }
         });
@@ -166,10 +190,22 @@ public final class NzVpnService extends VpnService {
     // ================= очередь: запуск, перезагрузка, остановка =================
 
     private void startEngine(int startId) {
+        try {
+            startOrReload(startId);
+        } finally {
+            try {
+                // Снимки прежних запросов (NzRequest.snapshotAndSave) больше никому не нужны.
+                NzRequest.prune(this, request != null ? request.session : null);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void startOrReload(int startId) {
         if (!NzBox.desired()) {
             // «Остановить» пришло раньше, чем служба успела начать.
             if (!engineUp) {
-                finish(NzBox.STOPPED, null, startId);
+                finishStopped(null, startId);
             }
             return;
         }
@@ -197,23 +233,40 @@ public final class NzVpnService extends VpnService {
 
     private void fullStart(NzRequest req, int startId) {
         NzBox.setState(NzBox.STARTING, null);
+        closeNotice = false;
         NzBox.LOG.add(NzLog.NZ, "запуск движков");
         try {
-            String config = NzRequest.readText(new File(req.configPath));
+            if (!awaitPreviousClose()) {
+                if (!NzBox.desired()) {
+                    NzBox.LOG.add(NzLog.NZ, "запуск прерван остановкой");
+                    finishStopped(null, startId);
+                    return;
+                }
+                // Второй сервер команд встал бы на тот же command.sock, а поздний close()
+                // прежнего стёр бы его; cache.db держит замок прежнего экземпляра.
+                throw new IllegalStateException("прежний движок не закрылся за "
+                        + (PREVIOUS_CLOSE_WAIT_MS / 1000) + " с — новый не поднимаю. "
+                        + "Закройте NetZapret из недавних приложений и запустите снова");
+            }
+            // Хэш — от конфига хозяина: по нему перезагрузка узнаёт «тот же запрос».
+            String original = NzRequest.readText(new File(req.configPath));
+            String config = original;
 
             if (req.root != null) {
                 NzRoot r = new NzRoot(req.root);
                 root = r;
                 r.start();
             }
+            dpiMoves = 0;
             if (req.byedpi != null) {
                 startByeDpi(req.byedpi);
+                config = NzRequest.pointDesync(original, req.byedpi.port, dpi);
             }
             NzLibbox.ensure(this, req.workingPath);
             if (!NzBox.desired()) {
                 NzBox.LOG.add(NzLog.NZ, "запуск прерван остановкой");
                 teardown();
-                finish(NzBox.STOPPED, null, startId);
+                finishStopped(null, startId);
                 return;
             }
 
@@ -226,15 +279,11 @@ public final class NzVpnService extends VpnService {
             CommandServer s = Libbox.newCommandServer(new ServerHandler(), platform);
             server = s;
             s.start();
-            // OverrideOptions — никогда не null (Go разыменует его, command_server.go:216).
-            // AutoRedirect=false: true включил бы auto_redirect, которому нужен root и iptables nfqws2.
-            OverrideOptions overrides = new OverrideOptions();
-            overrides.setAutoRedirect(false);
-            s.startOrReloadService(config, overrides);
+            s.startOrReloadService(config, overrides());
 
             engineUp = true;
             request = req;
-            configDigest = NzRequest.digest(config);
+            configDigest = NzRequest.digest(original);
             NzCommands c = new NzCommands();
             c.open();
             commands = c;
@@ -256,8 +305,8 @@ public final class NzVpnService extends VpnService {
      */
     private void reload(NzRequest req, int startId) {
         try {
-            String config = NzRequest.readText(new File(req.configPath));
-            String digest = NzRequest.digest(config);
+            String original = NzRequest.readText(new File(req.configPath));
+            String digest = NzRequest.digest(original);
             NzRequest old = request;
 
             String oldRoot = old != null && old.root != null ? old.root.key : null;
@@ -289,17 +338,21 @@ public final class NzVpnService extends VpnService {
             if (!same(oldDpi, newDpi)) {
                 NzByeDpi b = byedpi;
                 byedpi = null;
+                dpi = null;
                 if (b != null) {
                     b.stop();
                 }
+                dpiMoves = 0;
                 if (req.byedpi != null) {
                     startByeDpi(req.byedpi);
                 }
             }
+            // ByeDPI тот же — конфиг ведётся на его нынешние порт и пароль: ключ запроса
+            // совпал, значит, и порт запроса, по которому ищется исходящий, тот же.
+            String config = req.byedpi != null && dpi != null
+                    ? NzRequest.pointDesync(original, req.byedpi.port, dpi) : original;
 
-            OverrideOptions overrides = new OverrideOptions();
-            overrides.setAutoRedirect(false);
-            server.startOrReloadService(config, overrides);
+            server.startOrReloadService(config, overrides());
             request = req;
             configDigest = digest;
             NzBox.setRunning();
@@ -313,18 +366,87 @@ public final class NzVpnService extends VpnService {
         }
     }
 
-    private void startByeDpi(NzRequest.ByeDpi spec) {
-        NzByeDpi b = new NzByeDpi(this, spec);
+    /**
+     * ByeDPI на новых порту и пароле — на каждый подъём, не из сохранённого
+     * запроса (NzRequest.ByeDpi.withSession): тот же порт после выключения
+     * VPN мог занять чужой слушатель. Свободного порта нет — исключение:
+     * указать sing-box безопасный порт тогда нечем.
+     */
+    private void startByeDpi(NzRequest.ByeDpi requested) throws IOException {
+        int port = NzByeDpi.freePort();
+        if (port == 0) {
+            throw new IOException("на 127.0.0.1 не нашлось свободного порта для ByeDPI (50 попыток)");
+        }
+        NzRequest.ByeDpi session = requested.withSession(port, NzByeDpi.newPassword());
+        NzByeDpi b = new NzByeDpi(this, session, portLoss);
         byedpi = b;
+        dpi = session;
         b.start();
         if (b.waitReady(BYEDPI_READY_MS)) {
-            NzBox.LOG.add(NzLog.NZ, "ByeDPI готов на 127.0.0.1:" + spec.port);
+            NzBox.LOG.add(NzLog.NZ, "ByeDPI готов на 127.0.0.1:" + session.port);
         } else {
             // Не роняем VPN: туннель и «напрямую» работают и без десинка, а надзор
             // ByeDPI продолжит перезапуски — как winws2 на Windows («движок не работает»).
             NzBox.LOG.add(NzLog.NZ, "ByeDPI не ответил за " + (BYEDPI_READY_MS / 1000)
                     + " с — VPN поднимается без десинка, надзор перезапустит ByeDPI");
         }
+    }
+
+    /** Надзор ByeDPI нашёл его порт за чужим слушателем — переезд в очереди. */
+    private final NzByeDpi.PortLoss portLoss = new NzByeDpi.PortLoss() {
+        @Override
+        public void portLost(final NzByeDpi which) {
+            NzBox.GATE.execute(new Runnable() {
+                @Override
+                public void run() {
+                    moveByeDpi(which);
+                }
+            });
+        }
+    };
+
+    /**
+     * ByeDPI на другой порт и перезагрузка конфига: до неё sing-box ведёт
+     * «десинк» (и всё без правила — DesyncSocksDefault) на порт, который слушает
+     * чужая программа, вместе с паролем. VPN при перезагрузке переоткрывается.
+     */
+    private void moveByeDpi(NzByeDpi from) {
+        NzRequest req = request;
+        CommandServer s = server;
+        if (!engineUp || byedpi != from || req == null || req.byedpi == null || s == null) {
+            // Устарело: движок с тех пор остановлен или ByeDPI уже сменён.
+            return;
+        }
+        dpiMoves++;
+        try {
+            byedpi = null;
+            dpi = null;
+            from.stop();
+            if (dpiMoves > MAX_BYEDPI_MOVES) {
+                // Каждый раз новый случайный порт — значит, его занимают нарочно или ByeDPI
+                // уходит в фон сам (-D в своей строке). Держать VPN, ведущий «десинк» неведомо куда, нельзя.
+                throw new IOException("порт ByeDPI в " + dpiMoves
+                        + "-й раз за запуск занят другой программой — движки остановлены");
+            }
+            String original = NzRequest.readText(new File(req.configPath));
+            startByeDpi(req.byedpi);
+            s.startOrReloadService(NzRequest.pointDesync(original, req.byedpi.port, dpi), overrides());
+            NzBox.LOG.add(NzLog.NZ, "ByeDPI переехал на 127.0.0.1:" + dpi.port + ", конфиг перезагружен");
+            NzBox.setRunning();
+        } catch (Throwable t) {
+            String why = NzSecrets.describe(t);
+            NzBox.LOG.add(NzLog.NZ, "переезд ByeDPI не удался: " + why);
+            teardown();
+            finish(NzBox.FAILED, why, lastStartId);
+        }
+    }
+
+    /** OverrideOptions — никогда не null (Go разыменует его, command_server.go:216). */
+    private static OverrideOptions overrides() {
+        OverrideOptions overrides = new OverrideOptions();
+        // false: true включил бы auto_redirect, которому нужен root и iptables nfqws2.
+        overrides.setAutoRedirect(false);
+        return overrides;
     }
 
     private void stopEngine(String reason, int startId) {
@@ -335,7 +457,7 @@ public final class NzVpnService extends VpnService {
             teardown();
             NzBox.LOG.add(NzLog.NZ, "движки остановлены");
         }
-        finish(NzBox.STOPPED, reason, startId);
+        finishStopped(reason, startId);
     }
 
     /** Погасить всё, что поднято, в обратном порядке. Не бросает. */
@@ -365,6 +487,7 @@ public final class NzVpnService extends VpnService {
         platform = null;
         NzByeDpi b = byedpi;
         byedpi = null;
+        dpi = null;
         if (b != null) {
             try {
                 b.stop();
@@ -390,33 +513,117 @@ public final class NzVpnService extends VpnService {
         if (s == null) {
             return;
         }
-        Thread closer = new Thread(new Runnable() {
+        Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
-                    s.closeService();
-                } catch (Throwable e) {
-                    try {
-                        s.setError("android: close service: " + NzSecrets.describe(e));
-                    } catch (Throwable ignored) {
-                    }
-                }
+                // Сперва сервер команд (grpcServer.Stop и слушатель), потом экземпляр. Закрывая
+                // UnixListener, Go стирает command.sock по имени, не сверяя, чей там сокет
+                // (net/unixsock_posix.go, unlink), а имя у всех сеансов одно: поздний close()
+                // после долгого closeService стёр бы сокет следующего сеанса (разбор 27.10).
+                // CloseService флага closed не смотрит и экземпляр закроет и после close()
+                // (daemon/started_service.go); подписчики после Close молча глотают события.
                 try {
                     s.close();
                 } catch (Throwable ignored) {
                 }
+                try {
+                    s.closeService();
+                } catch (Throwable e) {
+                    NzBox.LOG.add(NzLog.NZ, "libbox: закрытие: " + NzSecrets.describe(e));
+                }
+                closed(Thread.currentThread());
             }
         }, "nz-libbox-close");
-        closer.setDaemon(true);
-        closer.start();
+        t.setDaemon(true);
+        closer = t;
+        t.start();
         try {
-            closer.join(CLOSE_WAIT_MS);
+            t.join(CLOSE_WAIT_MS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        if (closer.isAlive()) {
-            NzBox.LOG.add(NzLog.NZ, "libbox не закрылся за " + (CLOSE_WAIT_MS / 1000) + " с — продолжаю без него");
+        if (t.isAlive()) {
+            // Компонент sing-box закрывается без срока (adapter/lifecycle.go: после 5 с только предупреждение).
+            NzBox.LOG.add(NzLog.NZ, "libbox не закрылся за " + (CLOSE_WAIT_MS / 1000)
+                    + " с — очередь идёт дальше, новый запуск подождёт его");
         }
+    }
+
+    /** Поток закрытия кончил: в очереди снять «ещё закрывается» и записать «остановлен». */
+    private static void closed(final Thread which) {
+        NzBox.GATE.execute(new Runnable() {
+            @Override
+            public void run() {
+                if (closer == which) {
+                    closer = null;
+                }
+                if (!closeNotice) {
+                    return;
+                }
+                closeNotice = false;
+                String reason = closeReason;
+                closeReason = null;
+                if (NzBox.STOPPING.equals(NzBox.state())) {
+                    NzBox.LOG.add(NzLog.NZ, "прежний движок закрылся");
+                    NzBox.setState(NzBox.STOPPED, reason);
+                }
+            }
+        });
+    }
+
+    private static boolean closing() {
+        Thread t = closer;
+        return t != null && t.isAlive();
+    }
+
+    /**
+     * Ждать, пока докроется прежний libbox; false — не дождались за
+     * PREVIOUS_CLOSE_WAIT_MS или остановку попросили раньше. Опрос по 250 мс,
+     * чтобы «Остановить» не ждало все 30 с.
+     */
+    private static boolean awaitPreviousClose() {
+        Thread t = closer;
+        if (t == null || !t.isAlive()) {
+            return true;
+        }
+        NzBox.LOG.add(NzLog.NZ, "жду, пока закроется прежний движок");
+        long deadline = SystemClock.elapsedRealtime() + PREVIOUS_CLOSE_WAIT_MS;
+        while (t.isAlive() && NzBox.desired()) {
+            long left = deadline - SystemClock.elapsedRealtime();
+            if (left <= 0) {
+                break;
+            }
+            try {
+                t.join(Math.min(left, 250));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return !t.isAlive();
+    }
+
+    /**
+     * «Остановлен» — только когда libbox правда закрылся. Пока поток закрытия
+     * жив, Go держит свою копию TUN и сервер команд: «stopped» соврал бы, и
+     * C# (StopAsync, затем StartAsync при перезапуске) поднимал бы новый
+     * движок поверх. Тогда — «stopping» с объяснением, а «stopped» с причиной
+     * пишет {@link #closed}.
+     */
+    private static void markStopped(String reason) {
+        if (closing()) {
+            closeNotice = true;
+            closeReason = reason;
+            NzBox.LOG.add(NzLog.NZ, "libbox ещё закрывается — «остановлен» будет, когда закроется");
+            NzBox.setState(NzBox.STOPPING, reason != null ? STILL_CLOSING + ": " + reason : STILL_CLOSING);
+        } else {
+            NzBox.setState(NzBox.STOPPED, reason);
+        }
+    }
+
+    private void finishStopped(String reason, int startId) {
+        markStopped(reason);
+        release(startId);
     }
 
     /**
@@ -426,6 +633,10 @@ public final class NzVpnService extends VpnService {
      */
     private void finish(String state, String error, final int startId) {
         NzBox.setState(state, error);
+        release(startId);
+    }
+
+    private void release(final int startId) {
         main.post(new Runnable() {
             @Override
             public void run() {

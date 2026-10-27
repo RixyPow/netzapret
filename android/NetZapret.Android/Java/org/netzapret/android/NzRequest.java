@@ -22,11 +22,25 @@ import java.util.List;
  * Запрос на запуск от C# (DESIGN.md §4). Лежит файлом
  * {@code <files>/runtime/nz-request.json}: службу поднимают и без C# —
  * постоянный VPN системы и плитка в шторке, — и тогда она берёт последний
- * запрос отсюда. В файле пароль ByeDPI этой сессии; он в папке приложения
- * рядом с конфигом, где и так лежат ключи серверов, и наружу не уходит.
+ * запрос отсюда.
+ *
+ * Сохраняется запрос не как пришёл, а со снимком того, на что он ссылается
+ * ({@link #snapshot}): конфиг и списки групп ByeDPI копируются в папку сеанса
+ * {@code runtime/nz-session/<имя>}. Хозяин переписывает singbox.json и
+ * runtime/byedpi ещё до NzBox.start, и попытка, оборвавшаяся после записи
+ * (отказ checkConfig, ошибка root, сборка без серверов), оставляла бы старый
+ * запрос рядом с новыми файлами — плитка и постоянный VPN подняли бы их
+ * вперемешку (разбор 27.10).
+ *
+ * Порт и пароль ByeDPI из запроса служба не берёт: на каждый подъём — свои
+ * ({@link ByeDpi#withSession}). В файле они остаются от хозяина, но больше
+ * нигде не действуют.
  */
 final class NzRequest {
     static final Charset UTF8 = Charset.forName("UTF-8");
+
+    /** Снимки сеансов создаются и чистятся под этим замком — чистка не снесёт ещё не сохранённый. */
+    private static final Object SESSIONS = new Object();
 
     static final class ByeDpi {
         final List<String> args;
@@ -42,6 +56,33 @@ final class NzRequest {
             this.port = port;
             this.workDir = workDir;
             this.key = key;
+        }
+
+        /**
+         * Тот же ByeDPI на другом порту и с другим паролем. Сохранённый
+         * запрос живёт между сеансами VPN, и его порт знает любой, кто
+         * просканировал 127.0.0.1, пока ByeDPI работал: занял его, пока VPN
+         * выключен, — и при подъёме с плитки ByeDPI не встал бы, а sing-box
+         * отдал бы чужому слушателю пароль и все соединения «десинка».
+         * Ключ сравнения остаётся от запроса: «тот же ли запрос» решает он.
+         */
+        ByeDpi withSession(int newPort, String password) {
+            String newAuth = null;
+            if (auth != null) {
+                int colon = auth.indexOf(':');
+                newAuth = auth.substring(0, colon + 1) + password;
+            }
+            return new ByeDpi(withPort(args, newPort), newAuth, newPort, workDir, key);
+        }
+
+        /** Имя SOCKS5 (не секрет); null — без пароля. */
+        String user() {
+            return auth == null ? null : auth.substring(0, auth.indexOf(':'));
+        }
+
+        /** Пароль SOCKS5; null — без пароля. */
+        String password() {
+            return auth == null ? null : auth.substring(auth.indexOf(':') + 1);
         }
     }
 
@@ -62,17 +103,25 @@ final class NzRequest {
     final ByeDpi byedpi;
     final Root root;
     final String notificationTitle;
+    /** Имя папки снимка в runtime/nz-session; null — запрос без снимка. */
+    final String session;
 
-    private NzRequest(String configPath, String workingPath, ByeDpi byedpi, Root root, String notificationTitle) {
+    private NzRequest(String configPath, String workingPath, ByeDpi byedpi, Root root, String notificationTitle,
+            String session) {
         this.configPath = configPath;
         this.workingPath = workingPath;
         this.byedpi = byedpi;
         this.root = root;
         this.notificationTitle = notificationTitle;
+        this.session = session;
     }
 
     static File file(Context context) {
         return new File(new File(context.getFilesDir(), "runtime"), "nz-request.json");
+    }
+
+    private static File sessions(Context context) {
+        return new File(new File(context.getFilesDir(), "runtime"), "nz-session");
     }
 
     static NzRequest parse(String json) throws JSONException {
@@ -110,7 +159,99 @@ final class NzRequest {
             }
             root = new Root(start, strings(r.optJSONArray("stop")), r.toString());
         }
-        return new NzRequest(configPath, workingPath, byedpi, root, title);
+        return new NzRequest(configPath, workingPath, byedpi, root, title, text(o, "session"));
+    }
+
+    /**
+     * Снять снимок запроса и сохранить его. Конфиг — в {@code nz-session/<имя>/config.json},
+     * папка ByeDPI ({@code byedpi.workDir}) — в {@code nz-session/<имя>/byedpi}; в
+     * сохранённом запросе пути заменены на снимок, в аргументах ByeDPI — тоже
+     * (списки групп ByeDpiCommandLine передаёт полными путями от workDir).
+     * Служба читает только снимок, и всё, что хозяин перепишет до следующего
+     * успешного start, его не трогает. Запрос уже разобран {@link #parse}.
+     */
+    static void snapshotAndSave(Context context, String json) throws IOException, JSONException {
+        synchronized (SESSIONS) {
+            JSONObject o = new JSONObject(json);
+            File root = sessions(context);
+            if (!root.isDirectory() && !root.mkdirs()) {
+                throw new IOException("не создать папку " + root);
+            }
+            File dir = null;
+            for (int attempt = 0; attempt < 10 && dir == null; attempt++) {
+                File candidate = new File(root, Long.toString(System.currentTimeMillis(), 36) + "-" + attempt);
+                if (candidate.mkdir()) {
+                    dir = candidate;
+                }
+            }
+            if (dir == null) {
+                throw new IOException("не создать папку снимка в " + root);
+            }
+            boolean saved = false;
+            try {
+                File config = new File(dir, "config.json");
+                copyFile(new File(o.getString("configPath")), config);
+                o.put("configPath", config.getAbsolutePath());
+                o.put("session", dir.getName());
+
+                JSONObject b = o.optJSONObject("byedpi");
+                String workDir = b != null ? text(b, "workDir") : null;
+                if (workDir != null) {
+                    File from = new File(workDir);
+                    File to = new File(dir, "byedpi");
+                    if (from.isDirectory()) {
+                        copyTree(from, to);
+                    } else if (!to.mkdirs()) {
+                        throw new IOException("не создать папку " + to);
+                    }
+                    // Строкой как пришла: хозяин склеивает пути списков из неё же (InWork).
+                    String oldPrefix = trimSlash(workDir) + "/";
+                    String newPrefix = to.getAbsolutePath() + "/";
+                    JSONArray args = b.optJSONArray("args");
+                    if (args != null) {
+                        JSONArray moved = new JSONArray();
+                        for (int i = 0; i < args.length(); i++) {
+                            moved.put(args.getString(i).replace(oldPrefix, newPrefix));
+                        }
+                        b.put("args", moved);
+                    }
+                    b.put("workDir", to.getAbsolutePath());
+                }
+                save(context, o.toString());
+                saved = true;
+            } finally {
+                if (!saved) {
+                    deleteTree(dir);
+                }
+            }
+        }
+    }
+
+    /**
+     * Стереть снимки, на которые больше ничто не ссылается: оставить снимок
+     * сохранённого запроса и снимок работающего движка ({@code live}). Не
+     * прочитался сохранённый запрос — не трогать ничего: стереть его снимок
+     * из-за сбоя чтения значило бы сломать плитку.
+     */
+    static void prune(Context context, String live) {
+        synchronized (SESSIONS) {
+            String saved;
+            try {
+                saved = saved(context) ? load(context).session : null;
+            } catch (Exception e) {
+                return;
+            }
+            File[] dirs = sessions(context).listFiles();
+            if (dirs == null) {
+                return;
+            }
+            for (File d : dirs) {
+                String name = d.getName();
+                if (!name.equals(saved) && !name.equals(live)) {
+                    deleteTree(d);
+                }
+            }
+        }
     }
 
     /** Записать запрос: сперва во временный файл, потом подменой — чтобы служба не прочла половину. */
@@ -164,6 +305,74 @@ final class NzRequest {
         }
     }
 
+    /**
+     * Конфиг, в котором исходящий SOCKS на ByeDPI ({@code type: socks},
+     * сервер на петле, порт запроса {@code fromPort}) смотрит на порт и
+     * пароль этой сессии. Остальное не трогается; разбор и запись — org.json
+     * (порядок ключей тот же, «/» пишется как «\/» — для JSON это то же).
+     * Такого исходящего нет — конфиг как был.
+     */
+    static String pointDesync(String config, int fromPort, ByeDpi session) throws JSONException {
+        // Дёшево отсеять конфиг без SOCKS: разбирать мегабайт «Туннеля» зря незачем.
+        if (!config.contains("\"socks\"")) {
+            return config;
+        }
+        JSONObject root = new JSONObject(config);
+        JSONArray outbounds = root.optJSONArray("outbounds");
+        if (outbounds == null) {
+            return config;
+        }
+        int changed = 0;
+        for (int i = 0; i < outbounds.length(); i++) {
+            JSONObject outbound = outbounds.optJSONObject(i);
+            if (outbound == null || !"socks".equals(outbound.optString("type"))
+                    || !loopback(outbound.optString("server")) || outbound.optInt("server_port", -1) != fromPort) {
+                continue;
+            }
+            outbound.put("server_port", session.port);
+            if (session.auth != null) {
+                outbound.put("username", session.user());
+                outbound.put("password", session.password());
+            }
+            changed++;
+        }
+        if (changed == 0) {
+            NzBox.LOG.add(NzLog.NZ, "в конфиге нет исходящего SOCKS на ByeDPI (порт запроса " + fromPort
+                    + ") — «десинк» через ByeDPI не пойдёт");
+            return config;
+        }
+        return root.toString();
+    }
+
+    /** Значение -p/--port заменено на {@code port}; ключа нет — дописан в начало (как WithListener у хозяина). */
+    static List<String> withPort(List<String> args, int port) {
+        String value = Integer.toString(port);
+        ArrayList<String> out = new ArrayList<>(args.size() + 2);
+        boolean found = false;
+        for (int i = 0; i < args.size(); i++) {
+            String a = args.get(i);
+            if (("-p".equals(a) || "--port".equals(a)) && i + 1 < args.size()) {
+                out.add(a);
+                out.add(value);
+                i++;
+                found = true;
+            } else if (a.startsWith("--port=")) {
+                out.add("--port=" + value);
+                found = true;
+            } else if (a.length() > 2 && a.startsWith("-p") && digits(a.substring(2))) {
+                out.add("-p" + value);
+                found = true;
+            } else {
+                out.add(a);
+            }
+        }
+        if (!found) {
+            out.add(0, "-p");
+            out.add(1, value);
+        }
+        return Collections.unmodifiableList(out);
+    }
+
     /** SHA-256 текста — узнать, сменился ли конфиг, не держа мегабайт в памяти. */
     static String digest(String text) {
         try {
@@ -197,6 +406,78 @@ final class NzRequest {
             m = m.substring(0, 200) + "…";
         }
         return NzSecrets.scrub(m);
+    }
+
+    private static boolean loopback(String host) {
+        return "127.0.0.1".equals(host) || "localhost".equals(host) || "::1".equals(host);
+    }
+
+    private static boolean digits(String s) {
+        if (s.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) < '0' || s.charAt(i) > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String trimSlash(String path) {
+        String p = path;
+        while (p.length() > 1 && p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        return p;
+    }
+
+    private static void copyFile(File from, File to) throws IOException {
+        InputStream in = new FileInputStream(from);
+        try {
+            FileOutputStream out = new FileOutputStream(to);
+            try {
+                byte[] chunk = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(chunk)) > 0) {
+                    out.write(chunk, 0, n);
+                }
+                // Запрос, сохранённый следом, ссылается на этот файл — он должен лечь на диск раньше.
+                out.getFD().sync();
+            } finally {
+                out.close();
+            }
+        } finally {
+            in.close();
+        }
+    }
+
+    private static void copyTree(File from, File to) throws IOException {
+        if (!to.isDirectory() && !to.mkdirs()) {
+            throw new IOException("не создать папку " + to);
+        }
+        File[] children = from.listFiles();
+        if (children == null) {
+            throw new IOException("не прочитать папку " + from);
+        }
+        for (File child : children) {
+            File target = new File(to, child.getName());
+            if (child.isDirectory()) {
+                copyTree(child, target);
+            } else {
+                copyFile(child, target);
+            }
+        }
+    }
+
+    private static void deleteTree(File f) {
+        File[] children = f.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteTree(child);
+            }
+        }
+        f.delete();
     }
 
     private static String text(JSONObject o, String name) {

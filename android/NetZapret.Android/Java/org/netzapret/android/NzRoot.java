@@ -69,7 +69,9 @@ final class NzRoot {
                     Thread.currentThread().interrupt();
                     break;
                 }
-                if (!p.isAlive()) {
+                // Не p.isAlive(): он с API 26, а minSdk 24 — на Android 7 вызов падал
+                // NoSuchMethodError, и с root не поднимался весь VPN (разбор 27.10).
+                if (NzProc.exited(p)) {
                     break;
                 }
             }
@@ -106,6 +108,12 @@ final class NzRoot {
             running = false;
             // «su» не найден — root нет; текст ошибки Java называет только файл.
             lastError = "root недоступен: " + NzSecrets.describe(e);
+            NzBox.LOG.add(NzLog.NZ, lastError);
+        } catch (RuntimeException | LinkageError e) {
+            // Обещание «исключений нет» — и для непредвиденного: сбой root не должен
+            // ронять подъём VPN (fullStart ловит Throwable и гасит всё).
+            running = false;
+            lastError = "root: сбой запуска — " + NzSecrets.describe(e);
             NzBox.LOG.add(NzLog.NZ, lastError);
         }
     }
