@@ -227,4 +227,18 @@ public sealed class SignaturesTests
         Assert.Contains("Что делать: " + Signatures.Freeze.Remedy, text);
         Assert.Contains("Почерк известен: " + Signatures.Freeze.Origin, text);
     }
+
+    /// <summary>Новые вердикты по рукопожатию — тоже закрытые имена на узле.</summary>
+    [Fact]
+    public void AnAddressCutHandshakeCountsTowardsASharedNode()
+    {
+        var found = Signatures.Find(
+        [
+            Report("a.example", BlockKind.TlsByAddress, answered: "65.109.41.220"),
+            Report("b.example", BlockKind.TlsByAddress, answered: "65.109.41.220"),
+            Report("c.example", BlockKind.TlsWhiteOnly, answered: "65.109.41.220"),
+        ]);
+
+        Assert.Single(found, f => f.Signature == Signatures.SharedNode);
+    }
 }

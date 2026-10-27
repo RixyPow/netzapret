@@ -548,4 +548,62 @@ public class BlockCheckTests
         Assert.DoesNotContain("VPN-клиент", remedy);
         Assert.True(Report(BlockKind.RouterFakeIp).Actionable);
     }
+
+    private static HelloResult Hello(HelloAnswer answer, string detail = "") => new(answer, detail, TimeSpan.FromMilliseconds(50));
+
+    /// <summary>
+    /// «DPI по TLS» делится пробой с чужим именем на тот же адрес (вики zapret.moe,
+    /// «Инспекторы ТСПУ», 27.10): режут имя, пропускают только разрешённые или режут адрес.
+    /// </summary>
+    [Fact]
+    public void A_foreign_name_tells_a_name_block_from_an_address_block()
+    {
+        // С чужим именем ответил ServerHello или alert — дошло: режут своё имя.
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.ByNames(Hello(HelloAnswer.Accepted), null).Kind);
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.ByNames(Hello(HelloAnswer.Refused, "unrecognized_name"), null).Kind);
+
+        // С нейтральным молчит, с разрешённым отвечает — белый список подсети.
+        Assert.Equal(BlockKind.TlsWhiteOnly,
+            BlockCheck.ByNames(Hello(HelloAnswer.Silence, "ответа нет"), Hello(HelloAnswer.Accepted)).Kind);
+
+        // Ни с каким — режут адрес.
+        Assert.Equal(BlockKind.TlsByAddress,
+            BlockCheck.ByNames(Hello(HelloAnswer.Silence, "ответа нет"), Hello(HelloAnswer.Reset, "сброшено")).Kind);
+    }
+
+    /// <summary>
+    /// Закрытие без слова по адресу не судит: так закрывает и сервер, не знающий
+    /// имени (вики: «сервер сам отвергает чужое имя»).
+    /// </summary>
+    [Fact]
+    public void A_silent_close_is_not_taken_for_an_address_block()
+    {
+        var (kind, said) = BlockCheck.ByNames(
+            Hello(HelloAnswer.Silence, BrowserHello.ClosedSilently), Hello(HelloAnswer.Silence, BrowserHello.ClosedSilently));
+
+        Assert.Equal(BlockKind.TlsDpi, kind);
+        Assert.Contains("закрывает молча", said);
+    }
+
+    [Fact]
+    public void The_new_tls_verdicts_say_what_heals_them()
+    {
+        Assert.Contains("4pda", Report(BlockKind.TlsWhiteOnly).Remedy());
+        Assert.Contains("десинк по имени не поможет", Report(BlockKind.TlsByAddress).Remedy());
+        Assert.NotEqual("нет адреса у имени", Report(BlockKind.TlsWhiteOnly).Describe());
+        Assert.NotEqual("нет адреса у имени", Report(BlockKind.TlsByAddress).Describe());
+
+        // Оба ставятся по неполученному ответу — в тесноте их перепроверяют.
+        Assert.True(Report(BlockKind.TlsWhiteOnly).MayBeCrowding);
+        Assert.True(Report(BlockKind.TlsByAddress).MayBeCrowding);
+    }
+
+    /// <summary>Блок адреса из тесноты уступает тихому блоку имени, но не наоборот.</summary>
+    [Fact]
+    public void A_quiet_name_block_beats_a_crowded_address_block()
+    {
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Reconcile(Report(BlockKind.TlsByAddress), Report(BlockKind.TlsDpi)).Kind);
+        Assert.Equal(BlockKind.TlsWhiteOnly, BlockCheck.Reconcile(Report(BlockKind.TlsByAddress), Report(BlockKind.TlsWhiteOnly)).Kind);
+        Assert.Equal(BlockKind.TlsDpi, BlockCheck.Reconcile(Report(BlockKind.TlsDpi), Report(BlockKind.TlsByAddress)).Kind);
+    }
 }

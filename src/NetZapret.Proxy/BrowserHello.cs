@@ -359,6 +359,16 @@ public static class BrowserHello
     }
 
     /// <summary>
+    /// Сторона закрыла соединение, не прислав ни байта, — а не промолчала до срока.
+    /// </summary>
+    /// <remarks>
+    /// Отдельным словом, потому что по нему судят дальше: так закрывает и сервер,
+    /// не знающий имени, и по такому ответу блок адреса не объявляется
+    /// (<see cref="BlockCheck.ByNames"/>).
+    /// </remarks>
+    internal const string ClosedSilently = "закрыто без ответа";
+
+    /// <summary>
     /// Читает первую запись ответа и больше ничего.
     /// </summary>
     /// <remarks>
@@ -390,7 +400,7 @@ public static class BrowserHello
                     return new HelloResult(
                         got == 0 ? HelloAnswer.Silence : HelloAnswer.Reset,
                         got == 0
-                            ? "закрыто без ответа"
+                            ? ClosedSilently
                             : $"закрыто на {got} Б заголовка записи",
                         stopwatch.Elapsed);
                 }

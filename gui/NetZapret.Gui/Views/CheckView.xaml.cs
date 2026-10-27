@@ -940,6 +940,10 @@ public partial class CheckView : UserControl
             // а выходом в другой стране.
             BlockKind.TlsDpi or BlockKind.Stall or BlockKind.GeoBlock => "Warn",
 
+            // Белый список лечится рецептом — жёлтым, как DPI. Блок адреса
+            // рецептом не лечится — красным, как закрытое наглухо (27.10).
+            BlockKind.TlsWhiteOnly => "Warn",
+
             // Отказ согласования — не поломка вовсе: сторона сама не даёт
             // тех версий, что мы пробуем, а браузер умеет больше.
             BlockKind.Handshake => "Faint",

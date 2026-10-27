@@ -204,6 +204,39 @@ public enum BlockKind
     /// VPN-клиент» ему был не по адресу: на ПК клиента не было (01.10).
     /// </remarks>
     RouterFakeIp,
+
+    /// <summary>
+    /// Рукопожатие тот же адрес пропускает только с разрешённым именем.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Уточнение <see cref="TlsDpi"/> пробой с чужим именем (<see cref="BlockCheck.NameProbeNeutral"/>,
+    /// <see cref="BlockCheck.NameProbeAllowed"/>): с нейтральным адрес молчит, с разрешённым — отвечает.
+    /// Так выглядит подсеть облака под «белым списком»: пропускают только имена
+    /// из перечня, остальные рубят «ковром» (вики zapret.moe, 27.10: «16к-блок»
+    /// Cloudflare 23.06, Hetzner у 7tv; у нас 7tv 19.10 — с приветствием 4pda
+    /// ответ целиком, с example.com и vk.com замерзает).
+    /// </para>
+    /// <para>
+    /// Лечится не обычным рецептом, а подделкой разрешённого имени — наложением
+    /// приветствия 4pda («Hetzner TCP» в V12): прятать своё имя мало, нужно
+    /// показать чужое из белого списка.
+    /// </para>
+    /// </remarks>
+    TlsWhiteOnly,
+
+    /// <summary>
+    /// Рукопожатие с этим адресом не проходит ни с каким именем.
+    /// </summary>
+    /// <remarks>
+    /// Уточнение <see cref="TlsDpi"/>: ни нейтральное, ни разрешённое имя тот же
+    /// адрес не пропускает, хотя TCP встаёт. Режут адрес на уровне TLS, а не имя
+    /// (вики zapret.moe, «Инспекторы ТСПУ»: «рукопожатие рвётся с любым именем —
+    /// блок по адресу или подсети»; 7tv 65.109.41.220 — «рабочий белый SNI
+    /// подобрать не удалось»). Десинку, прячущему имя, тут прятать нечего:
+    /// нужен другой адрес того же CDN или туннель.
+    /// </remarks>
+    TlsByAddress,
 }
 
 /// <summary>Исход одной пробы.</summary>
@@ -460,6 +493,8 @@ public sealed record TargetReport
         // приветствие Chrome принимается там же, где наше отвергают.
         // Значит дело в нашем приветствии, а не в TLS у стороны.
         BlockKind.Handshake => "наше приветствие TLS отвергнуто",
+        BlockKind.TlsWhiteOnly => "пропускают только разрешённые имена",
+        BlockKind.TlsByAddress => "рукопожатие режут по адресу",
         _ => "нет адреса у имени",
     };
 
@@ -494,7 +529,7 @@ public sealed record TargetReport
             {
                 BlockKind.None => null,
                 BlockKind.GeoBlock or BlockKind.Stall => Data,
-                BlockKind.TlsDpi or BlockKind.Handshake => Tls,
+                BlockKind.TlsDpi or BlockKind.Handshake or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
                 BlockKind.TunnelFailed or BlockKind.ForeignFakeIp or BlockKind.RouterFakeIp
@@ -537,7 +572,8 @@ public sealed record TargetReport
     /// </para>
     /// </remarks>
     public bool MayBeCrowding => Kind is BlockKind.Full or BlockKind.HttpsPort
-        or BlockKind.TlsDpi or BlockKind.Stall or BlockKind.TunnelFailed;
+        or BlockKind.TlsDpi or BlockKind.Stall or BlockKind.TunnelFailed
+        or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress;
 
     /// <summary>
     /// Чем лечится.
@@ -567,6 +603,8 @@ public sealed record TargetReport
         // по составу — с GREASE, с расширениями, которых SChannel не шлёт
         // вовсе. Замерено 2026-09-16 на speedtest.net и i.scdn.co.
         BlockKind.Handshake => "ничего не нужно — в браузере откроется",
+        BlockKind.TlsWhiteOnly => "рецепт с подделкой разрешённого имени (наложение 4pda), иначе VPN",
+        BlockKind.TlsByAddress => "другой адрес того же CDN или VPN — десинк по имени не поможет",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -629,6 +667,24 @@ public static class BlockCheck
     /// справочнику, и тянуть страницы целиком было бы расточительно.
     /// </remarks>
     private const int EnoughBytes = 256 * 1024;
+
+    /// <summary>Нейтральное чужое имя — для пробы «режут имя или адрес».</summary>
+    /// <remarks>
+    /// Ни у кого не заблокировано и в белые списки облаков не входит: у 7tv
+    /// с ним приветствие замерзало там же, где со своим (замер 19.10). dpi-ch
+    /// берёт cf.com и google.com (вики zapret.moe, «Инспекторы ТСПУ»), но
+    /// популярное имя само может стоять в белом списке, и проба спутала бы
+    /// «режут это имя» с «пропускают только разрешённые».
+    /// </remarks>
+    public const string NameProbeNeutral = "example.com";
+
+    /// <summary>Разрешённое имя — им же подделывает приветствие наш рецепт для белых списков.</summary>
+    /// <remarks>
+    /// У 7tv на Hetzner с приветствием 4pda.to ответ шёл целиком (замер 19.10),
+    /// и это же имя в рецепте «Наложение приветствием 4pda» и секции «Hetzner TCP»:
+    /// прошло с ним — у рецепта есть шанс.
+    /// </remarks>
+    public const string NameProbeAllowed = "4pda.to";
 
     /// <summary>
     /// Выясняет, что доступно в принципе.
@@ -717,7 +773,7 @@ public static class BlockCheck
         // а вот обвинять с одного раза нельзя.
         var second = await ProbeAsync(host, service, cancellationToken, throughTunnel);
 
-        return second.Kind == BlockKind.None ? second : Worse(first, second);
+        return second.Kind == BlockKind.None ? second : await NamesAsync(Worse(first, second), cancellationToken);
     }
 
     /// <summary>
@@ -739,12 +795,99 @@ public static class BlockCheck
     /// зовёт этот метод, сам и есть повтор. Двойная проба удвоила бы ожидание
     /// ровно там, где его и так больше всего — на именах, которые молчат.
     /// </remarks>
-    public static Task<TargetReport> ProbeOnceAsync(
+    public static async Task<TargetReport> ProbeOnceAsync(
         string host,
         string? service,
         CancellationToken cancellationToken,
         bool throughTunnel = false) =>
-        ProbeAsync(host, service, cancellationToken, throughTunnel);
+        await NamesAsync(await ProbeAsync(host, service, cancellationToken, throughTunnel), cancellationToken);
+
+    /// <summary>
+    /// Уточняет «DPI по TLS» пробой с чужим именем на тот же адрес.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// «Рукопожатие рвётся» лечится тремя разными способами, и выбор решает
+    /// одна проба (вики zapret.moe, «Инспекторы ТСПУ», 27.10): с чужим именем
+    /// проходит — режут имя, это десинк; рвётся с любым — режут адрес, это
+    /// другой адрес или туннель; проходит только с разрешённым — подсеть под
+    /// белым списком, это подделка разрешённого имени. dpi-ch делает так же:
+    /// при отказе повторяет рукопожатие с чужими именами.
+    /// </para>
+    /// <para>
+    /// Тем же браузерным приветствием, каким уже спрошено своё имя
+    /// (<see cref="AskBrowserHelloAsync"/>), — сравнение отличается только именем.
+    /// Только по окончательному вердикту: у закрытого имени две пробы, и чужие
+    /// имена в каждой стоили бы до восьми секунд вдвое.
+    /// </para>
+    /// </remarks>
+    private static async Task<TargetReport> NamesAsync(TargetReport report, CancellationToken cancellationToken)
+    {
+        // С общим именем ECH тот же адрес уже ответил — это и была проба
+        // с чужим именем, и ответ известен: режут своё.
+        if (report.Kind != BlockKind.TlsDpi || report.Tunnelled || report.EchHelloAccepted
+            || !IPAddress.TryParse(report.Answered, out var via))
+        {
+            return report;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var neutral = await BrowserHello.AskAsync(via, NameProbeNeutral, Timeout, cancellationToken);
+
+        HelloResult? allowed = Reached(neutral)
+            ? null
+            : await BrowserHello.AskAsync(via, NameProbeAllowed, Timeout, cancellationToken);
+
+        var (kind, said) = ByNames(neutral, allowed);
+
+        return report with
+        {
+            Kind = kind,
+            Tls = report.Tls with { Detail = report.Tls.Detail is { Length: > 0 } before ? $"{before}; {said}" : said },
+        };
+    }
+
+    /// <summary>Дошло ли приветствие до стороны: ответ словами — тоже ответ.</summary>
+    /// <remarks>
+    /// Отказ alert'ом засчитывается как дошедший, как в «ТСПУ Probe» (вики):
+    /// сервер, не знающий имени, отвечает alert'ом, а фильтр — молчанием
+    /// или обрывом.
+    /// </remarks>
+    internal static bool Reached(HelloResult answer) => answer.Answer is HelloAnswer.Accepted or HelloAnswer.Refused;
+
+    /// <summary>
+    /// Вердикт по ответам на приветствия с чужими именами; <paramref name="allowed"/>
+    /// не спрашивали, если нейтральное дошло.
+    /// </summary>
+    /// <remarks>
+    /// Закрытие без единого слова по адресу не судит: так закрывает и сервер,
+    /// не знающий имени (вики: «сервер сам отвергает чужое имя»). Тогда вердикт
+    /// остаётся прежним — неизвестное не выдаётся за блок по адресу.
+    /// </remarks>
+    internal static (BlockKind Kind, string Said) ByNames(HelloResult neutral, HelloResult? allowed)
+    {
+        if (Reached(neutral))
+        {
+            return (BlockKind.TlsDpi,
+                $"с чужим именем {NameProbeNeutral} тот же адрес отвечает — режут именно это имя");
+        }
+
+        if (allowed is { } white && Reached(white))
+        {
+            return (BlockKind.TlsWhiteOnly,
+                $"с {NameProbeNeutral} адрес молчит, с {NameProbeAllowed} отвечает — пропускают только разрешённые имена");
+        }
+
+        if (neutral.Detail == BrowserHello.ClosedSilently || allowed?.Detail == BrowserHello.ClosedSilently)
+        {
+            return (BlockKind.TlsDpi,
+                "чужие имена тоже не прошли, но сторона закрывает молча — режут ли адрес, отсюда не видно");
+        }
+
+        return (BlockKind.TlsByAddress,
+            $"ни с {NameProbeNeutral}, ни с {NameProbeAllowed} адрес не отвечает — режут адрес, а не имя");
+    }
 
     /// <summary>
     /// Сводит вердикт из общего прогона с вердиктом из одиночного.
@@ -753,9 +896,13 @@ public static class BlockCheck
     /// Одиночному верим больше, но только когда он говорит о лучшем.
     /// Ухудшение при повторе — это разовая неудача второй пробы, и повышать
     /// по ней приговор значило бы обвинять по слабейшему из двух замеров.
+    /// Блок адреса, оказавшийся в тишине блоком имени или белым списком, —
+    /// тоже лучшее: чужое имя в тесноте могло промолчать так же, как своё.
     /// </remarks>
     public static TargetReport Reconcile(TargetReport crowded, TargetReport alone) =>
-        alone.Kind == BlockKind.None || (crowded.Kind == BlockKind.Full && alone.Kind != BlockKind.Full)
+        alone.Kind == BlockKind.None
+        || (crowded.Kind == BlockKind.Full && alone.Kind != BlockKind.Full)
+        || (crowded.Kind == BlockKind.TlsByAddress && alone.Kind is BlockKind.TlsDpi or BlockKind.TlsWhiteOnly)
             ? alone
             : crowded;
 
