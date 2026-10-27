@@ -1,9 +1,14 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using NetZapret.Core;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
@@ -15,26 +20,48 @@ using NetZapret.Zapret;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Строка одной проверенной цели.</summary>
-public sealed record CheckRow(
-    string Host,
-    string Mark,
-    Visibility MarkShown,
-    string Tcp,
+/// <summary>
+/// Строка одной проверенной цели — и всё, что панель справа о ней покажет.
+/// </summary>
+/// <remarks>
+/// Классом, а не записью: значок сайта, ход подбора маршрута и пробы другим
+/// путём приходят после того, как строка уже на экране.
+/// </remarks>
+public sealed class CheckRow : INotifyPropertyChanged
+{
+    public required TargetReport Report { get; init; }
+
+    public required string Host { get; init; }
+
+    /// <summary>Сервис из справочника; у своего имени — само имя.</summary>
+    public required string Title { get; init; }
+
+    public string Letter => Title.Length > 0 ? char.ToUpperInvariant(Title[0]).ToString() : "?";
+
+    /// <summary>Пометка «чз» — замер шёл через туннель; для файла отчёта.</summary>
+    public required string Mark { get; init; }
+
+    public required Visibility MarkShown { get; init; }
+
+    public required string Tcp { get; init; }
 
     /// <summary>Версия, на которой сошлись, либо причина отказа.</summary>
-    string Tls,
+    public required string Tls { get; init; }
 
-    string Http,
-    string Data,
-    string Verdict,
-    Brush Color,
-    string Why,
-    Visibility WhyShown,
+    public required string Http { get; init; }
 
-    /// <summary>Чем имя выведено из-под десинка; пусто — ничем.</summary>
-    string Bypass,
-    Visibility BypassShown,
+    public required string Data { get; init; }
+
+    public required string Verdict { get; init; }
+
+    public required string Why { get; init; }
+
+    public required Visibility WhyShown { get; init; }
+
+    /// <summary>Чем имя выведено из-под десинка, какая секция его берёт; пусто — ничего.</summary>
+    public required string Bypass { get; init; }
+
+    public required Visibility BypassShown { get; init; }
 
     /// <summary>
     /// Есть ли по этой строке что делать.
@@ -47,9 +74,106 @@ public sealed record CheckRow(
     /// TLS» и оказалось среди дел: браузер умеет больше версий, чем наша
     /// проба, и человеку там делать нечего.
     /// </remarks>
-    bool Actionable);
+    public required bool Actionable { get; init; }
 
-/// <summary>Раздел итога под таблицей.</summary>
+    public Visibility ActionShown => Actionable ? Visibility.Visible : Visibility.Collapsed;
+
+    public Reach Reach => Report.Reach;
+
+    public required string Status { get; init; }
+
+    /// <summary>Цвет точки ступени.</summary>
+    public required Brush StatusInk { get; init; }
+
+    /// <summary>Цвет слова: у «доступен» — обычный текст, иначе 98 зелёных строк из 124 — шум.</summary>
+    public required Brush StatusWordInk { get; init; }
+
+    /// <summary>Подложка полосы статуса в панели — цвет ступени, прозрачный.</summary>
+    public required Brush StatusTint { get; init; }
+
+    public string Headline => Brief is { Length: > 0 } brief && brief != "—" ? $"{Status} · {brief}" : Status;
+
+    public required string Latency { get; init; }
+
+    public required Brush LatencyInk { get; init; }
+
+    public required string Route { get; init; }
+
+    public required string RouteGlyph { get; init; }
+
+    public required Brush RouteInk { get; init; }
+
+    public required string RouteTip { get; init; }
+
+    public required string Network { get; init; }
+
+    public required string Brief { get; init; }
+
+    /// <summary>Что выяснилось — фразой для панели.</summary>
+    public required string Explain { get; init; }
+
+    public required IReadOnlyList<DotLine> Stages { get; init; }
+
+    public DateTime Checked { get; init; } = DateTime.Now;
+
+    private BitmapImage? _icon;
+
+    public BitmapImage? Icon
+    {
+        get => _icon;
+        set { _icon = value; Changed(); }
+    }
+
+    /// <summary>Пробы другим путём — пережидают уход с вкладки вместе со строкой.</summary>
+    public ObservableCollection<DotLine> Paths { get; init; } = [];
+
+    /// <summary>Ход подбора маршрута.</summary>
+    public ObservableCollection<DotLine> FixLines { get; init; } = [];
+
+    private string? _fixSummary;
+    private Brush? _fixInk;
+    private bool _revealShown;
+
+    public string? FixSummary
+    {
+        get => _fixSummary;
+        set { _fixSummary = value; Changed(); Changed(nameof(FixShown)); }
+    }
+
+    public Brush? FixInk
+    {
+        get => _fixInk;
+        set { _fixInk = value; Changed(); }
+    }
+
+    public Visibility FixShown => FixLines.Count > 0 || FixSummary is not null ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility RevealShown => _revealShown ? Visibility.Visible : Visibility.Collapsed;
+
+    public void ShowReveal()
+    {
+        _revealShown = true;
+        Changed(nameof(RevealShown));
+    }
+
+    public void FixMoved() => Changed(nameof(FixShown));
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Changed([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+
+/// <summary>Точка, слово и пояснение: стадия замера, проба другим путём, шаг подбора.</summary>
+public sealed record DotLine(string Name, string Value, Brush Ink)
+{
+    public Visibility NameShown => Name.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+}
+
+/// <summary>Строка «Подробностей» в панели.</summary>
+public sealed record DetailLine(string Label, string Value);
+
+/// <summary>Раздел итога в панели.</summary>
 public sealed record SectionRow(string Title, string Body, Brush Color);
 
 /// <summary>
@@ -175,32 +299,32 @@ public partial class CheckView : UserControl
     /// <summary>Полная глубина: по два имени с каждой части вместо одного.</summary>
     private static bool _deep;
 
-    private const string QuickScope = "Быстрая";
-    private const string FullScope = "Полная";
-    private const string SpotScope = "Точечная";
+    /// <summary>Отбор плиткой; <c>null</c> — все.</summary>
+    private static Reach? _filter;
 
-    /// <summary>Пока список заполняется, выбор в нём не считается выбором человека.</summary>
-    private bool _filling;
+    /// <summary>Отбор поиском.</summary>
+    private static string _query = string.Empty;
 
-    /// <summary>Щелчок по имени — «Маршруты» на его части (RoutesView.Reveal).</summary>
-    private void OnHostClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (sender is not TextBlock { Text: { Length: > 0 } host })
-            return;
+    /// <summary>Строка, что открыта в панели; переживает уход с вкладки.</summary>
+    private static CheckRow? _selected;
 
-        // Имя из строки вида «instagram.com [чз]» — без пометки в скобках.
-        var name = host.Split(' ', 2)[0];
+    /// <summary>Настройки на начало прогона — путь имени по правилам.</summary>
+    private static AppSettings? _settings;
 
-        RoutesView.PendingReveal = name;
-        (Window.GetWindow(this) as MainWindow)?.Open("routes");
-        e.Handled = true;
-    }
+    /// <summary>Чья сеть у адреса (колонка «Сеть»); читается раз на прогон.</summary>
+    private static AddressOwners _owners = AddressOwners.None;
+
+    /// <summary>Почерки поломок прогона — в «Подробностях» имени, которого касаются.</summary>
+    private static IReadOnlyList<SignatureFinding> _findings = [];
+
+    /// <summary>Правила прогона — для проверки одного имени вне его.</summary>
+    private static RuleEngine? _engine;
+
+    private ICollectionView? _view;
 
     public CheckView()
     {
         InitializeComponent();
-
-        Rows.ItemsSource = Collected;
 
         Unloaded += (_, _) =>
         {
@@ -212,6 +336,11 @@ public partial class CheckView : UserControl
         {
             _shown = this;
 
+            // Отбор — представлением над общими строками: прогон дописывает их,
+            // а представление само решает, видна ли новая.
+            _view = new ListCollectionView(Collected) { Filter = Passes };
+            Rows.ItemsSource = _view;
+
             ShowSetup(Collected.Count > 0 ? _measuredWithEngines : null);
             ShowScopes();
 
@@ -219,60 +348,67 @@ public partial class CheckView : UserControl
             // кнопок: уйти и вернуться не должно выглядеть как «ничего не было».
             Status.Text = _status;
             Sections.ItemsSource = _sections;
-            Header.Visibility = Collected.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            Search.Text = _query;
+            Recount();
+            ShowTiles();
 
             RunButton.IsEnabled = !_running;
             StopButton.IsEnabled = _running;
+
+            if (_selected is not null && Collected.Contains(_selected))
+                Rows.SelectedItem = _selected;
+            else
+                ShowPanel(null);
         };
+
+        Collected.CollectionChanged += OnCollected;
+        Unloaded += (_, _) => Collected.CollectionChanged -= OnCollected;
     }
 
-    /// <summary>Заполняет список сервисов и восстанавливает выбранный.</summary>
+    private void OnCollected(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (_shown == this)
+            Recount();
+    }
+
+    /// <summary>Открывает «Маршруты» на части, чьё правило решает это имя (RoutesView.Reveal).</summary>
+    private void Reveal(string host)
+    {
+        RoutesView.PendingReveal = host;
+        (Window.GetWindow(this) as MainWindow)?.Open("routes");
+    }
+
+    /// <summary>Выставляет выбор глубины и подпись кнопки.</summary>
     private void ShowScopes()
     {
-        _filling = true;
+        ScopeQuick.IsChecked = _target is null && !_deep;
+        ScopeFull.IsChecked = _target is null && _deep;
+        ScopeSpot.IsChecked = _target is not null;
 
-        try
-        {
-            // Только глубина: быстрая — по имени с каждой части, полная —
-            // по два, точечная — одна цель целиком. Прежде под этими двумя
-            // лежали ещё и два десятка сервисов одной лентой, и список
-            // отвечал сразу на два разных вопроса — насколько подробно
-            // и что именно, — заставляя пролистывать чужое ради своего.
-            Scope.ItemsSource = new List<string> { QuickScope, FullScope, SpotScope };
-            Scope.SelectedIndex = Selected();
-
-            RunButton.Content = ChooseLabel();
-        }
-        finally
-        {
-            _filling = false;
-        }
+        RunButton.Content = ChooseLabel();
     }
 
-    private void OnScope(object sender, SelectionChangedEventArgs e)
+    private void OnScope(object sender, RoutedEventArgs e)
     {
-        if (_filling)
-            return;
-
-        if (Scope.SelectedIndex == 2)
+        if (sender == ScopeSpot)
         {
             AskTarget();
             return;
         }
 
-        _deep = Scope.SelectedIndex == 1;
+        _deep = sender == ScopeFull;
         _target = null;
 
-        RunButton.Content = ChooseLabel();
+        ShowScopes();
     }
 
     /// <summary>
     /// Спрашивает, что проверять точечно.
     /// </summary>
     /// <remarks>
-    /// Отказ возвращает список к прежнему выбору: «точечная» без цели
-    /// не значит ничего, и оставить её выбранной означало бы кнопку,
-    /// которой нечего проверять.
+    /// Отказ возвращает выбор к прежнему: «точечная» без цели не значит
+    /// ничего, и оставить её выбранной означало бы кнопку, которой нечего
+    /// проверять.
     /// </remarks>
     private void AskTarget()
     {
@@ -281,26 +417,13 @@ public partial class CheckView : UserControl
         if (picker.ShowDialog() == true && picker.Chosen is { } chosen)
             _target = chosen;
 
-        _filling = true;
-
-        try
-        {
-            Scope.SelectedIndex = Selected();
-        }
-        finally
-        {
-            _filling = false;
-        }
-
-        RunButton.Content = ChooseLabel();
+        ShowScopes();
     }
-
-    private static int Selected() => _target is not null ? 2 : _deep ? 1 : 0;
 
     private string ChooseLabel()
     {
         if (_target is null)
-            return _deep ? "Проверить полностью" : "Проверить";
+            return _deep ? "Проверить полностью" : "Проверить всё";
 
         var what = _target.Describe;
 
@@ -332,18 +455,22 @@ public partial class CheckView : UserControl
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         bool running = measured ?? (state is not null && state.IsSupervisorAlive());
 
-        SetupCard.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        SetupDot.Fill = (Brush)FindResource(running ? "Accent" : "Faint");
 
-        if (running)
-        {
-            SetupTitle.Text = "Движки работают — видно сеть уже с обходом";
-            SetupBody.Text = "Чтобы увидеть, что закрыто на самом деле, остановите их в разделе "
-                + "«Состояние» и повторите. Доступное сейчас может быть доступно как раз "
-                + "благодаря обходу.";
-        }
+        SetupLine.Text = _setupLine ?? (running
+            ? "Движки подняты — видно сеть уже с обходом"
+            : "Движки остановлены — видно, что закрыто на самом деле");
+
+        SetupLine.ToolTip = running
+            ? "Доступное сейчас может быть доступно как раз благодаря обходу. Чтобы увидеть сеть "
+              + "без него, остановите движки на «Главной» и повторите."
+            : null;
 
         return running;
     }
+
+    /// <summary>Обстановка замера одной строкой — для полосы под шапкой.</summary>
+    private static string? _setupLine;
 
     private async void OnRun(object sender, RoutedEventArgs e)
     {
@@ -360,7 +487,11 @@ public partial class CheckView : UserControl
         // к прошлым запускам и к делу не относится.
         _logMark = EngineLog.Position();
         View.Sections.ItemsSource = null;
-        View.Header.Visibility = Visibility.Visible;
+        _findings = [];
+        _setupLine = null;
+        _selected = null;
+        View.ShowPanel(null);
+        View.ShowSetup(running);
 
         _work?.Cancel();
         _work = new CancellationTokenSource();
@@ -390,6 +521,12 @@ public partial class CheckView : UserControl
                 // а не настройку. Пометок «через туннель» просто не будет.
             }
 
+            _settings = settings;
+            _engine = engine;
+
+            // Списки адресов — в фоне: Amazon один на восемь тысяч строк.
+            _owners = await Task.Run(() => AddressOwners.Load(zapretRoot));
+
             _zones = null;
 
             try
@@ -412,7 +549,6 @@ public partial class CheckView : UserControl
                     : $"У «{_target.Describe}» нет доменных частей — проверять нечего. "
                       + "Такой сервис задан подсетями, и стучаться в подсеть наугад не проверка.");
 
-                View.Header.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -833,7 +969,9 @@ public partial class CheckView : UserControl
 
                     _reports.Add(report);
 
-                    Collected.Add(Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host, holes)));
+                    var added = Row(report, tunnelled, HostsFile.BypassFor(bypassed, target.Host, holes));
+                    Collected.Add(added);
+                    LoadIcon(added);
                     Say($"Проверено {Collected.Count} из {targets.Count}…");
                 });
             }
@@ -913,7 +1051,7 @@ public partial class CheckView : UserControl
             int row = Collected.ToList().FindIndex(r => r.Host == crowded.Host);
 
             if (row >= 0)
-                Collected[row] = Row(settled, tunnelled, DesyncBypass.None);
+                Collected[row] = Replace(Collected[row], Row(settled, tunnelled, DesyncBypass.None));
         }
     }
 
@@ -929,27 +1067,6 @@ public partial class CheckView : UserControl
 
     private CheckRow Row(TargetReport report, bool tunnelled, DesyncBypass bypass)
     {
-        var key = report.Kind switch
-        {
-            BlockKind.None => "Accent",
-            BlockKind.NoAddress => "Faint",
-
-            // Жёлтый, а не красный. Гео-отказ — это работающая связь: ответ
-            // пришёл, и пришёл от самого сайта. Красный ставил его в один ряд
-            // с закрытым наглухо, а лечится он совсем иначе — не рецептом,
-            // а выходом в другой стране.
-            BlockKind.TlsDpi or BlockKind.Stall or BlockKind.GeoBlock or BlockKind.Forbidden => "Warn",
-
-            // Белый список лечится рецептом — жёлтым, как DPI. Блок адреса
-            // рецептом не лечится — красным, как закрытое наглухо (27.10).
-            BlockKind.TlsWhiteOnly => "Warn",
-
-            // Отказ согласования — не поломка вовсе: сторона сама не даёт
-            // тех версий, что мы пробуем, а браузер умеет больше.
-            BlockKind.Handshake => "Faint",
-            _ => "Danger",
-        };
-
         // Причину выбирает сам отчёт — по той стадии, что решила вердикт.
         // Прежде здесь бралась первая непустая, и у имени с убитым
         // рукопожатием в строке оказывался рассказ про удавшийся TCP.
@@ -1022,24 +1139,162 @@ public partial class CheckView : UserControl
                 + (note.Length == 0 ? string.Empty : "; " + note);
         }
 
-        return new CheckRow(
-            report.Host,
+        var (status, ink) = report.Reach switch
+        {
+            Reach.Open => ("Доступен", "Accent"),
+            Reach.Limited => ("С ограничениями", "Warn"),
+            Reach.Closed => ("Недоступен", "Danger"),
+            _ => ("Не проверить", "Faint"),
+        };
+
+        var dot = (Brush)FindResource(ink);
+        var (route, glyph, routeInk, routeTip) = RouteOf(report, bypass);
+
+        // Время рукопожатия: TCP до подставного адреса туннеля встаёт мгновенно
+        // и не говорит ни о чём, а рукопожатие идёт до самого сайта.
+        var latency = report.Tls.Ok ? report.Tls.Elapsed : (TimeSpan?)null;
+
+        return new CheckRow
+        {
+            Report = report,
+            Host = report.Host,
+            Title = TitleOf(report),
 
             // Пометка ставится по замеру, а не по правилу: у имени, ушедшего
             // мимо туннеля, прежде всё равно стояло «чз».
-            report.Tunnelled ? "чз" : string.Empty,
-            report.Tunnelled ? Visibility.Visible : Visibility.Collapsed,
-            report.Tcp.Describe(),
-            report.DescribeTls(),
-            report.Http.Describe(),
-            report.DescribeData(),
-            report.Describe(),
-            (Brush)FindResource(key),
-            why ?? string.Empty,
-            report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
-            note,
-            note.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
-            report.Actionable);
+            Mark = report.Tunnelled ? "чз" : string.Empty,
+            MarkShown = report.Tunnelled ? Visibility.Visible : Visibility.Collapsed,
+            Tcp = report.Tcp.Describe(),
+            Tls = report.DescribeTls(),
+            Http = report.Http.Describe(),
+            Data = report.DescribeData(),
+            Verdict = report.Describe(),
+            Why = why ?? string.Empty,
+            WhyShown = report.Actionable && why is not null ? Visibility.Visible : Visibility.Collapsed,
+            Bypass = note,
+            BypassShown = note.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
+            Actionable = report.Actionable,
+            Status = status,
+            StatusInk = dot,
+            StatusWordInk = report.Reach == Reach.Open ? (Brush)FindResource("Text") : dot,
+            StatusTint = Tint(dot),
+            Latency = latency is { } t ? Ms(t) : "—",
+            LatencyInk = (Brush)FindResource(latency is { TotalSeconds: >= 1 } ? "Warn" : "Text"),
+            Route = route,
+            RouteGlyph = glyph,
+            RouteInk = (Brush)FindResource(routeInk),
+            RouteTip = routeTip,
+            Network = report.Tunnelled ? "—" : _owners.Of(report.Answered ?? report.Addresses.FirstOrDefault()) ?? "—",
+            Brief = report.Brief() ?? "—",
+            Explain = Sentence(report),
+            Stages = Stages(report),
+        };
+    }
+
+    /// <summary>Время словами: «41 мс», «1,3 с».</summary>
+    private static string Ms(TimeSpan t) =>
+        t.TotalSeconds >= 1 ? $"{t.TotalSeconds:0.0} с" : $"{t.TotalMilliseconds:0} мс";
+
+    /// <summary>Подложка полосы статуса: цвет ступени на 14 %.</summary>
+    private static Brush Tint(Brush ink)
+    {
+        var color = ink is SolidColorBrush solid ? solid.Color : Colors.Gray;
+        var brush = new SolidColorBrush(Color.FromArgb(36, color.R, color.G, color.B));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>Сервис из справочника — до « · », иначе само имя.</summary>
+    private static string TitleOf(TargetReport report) =>
+        report.Service is { Length: > 0 } service && !OwnLists.IsOwnTarget(service)
+            ? service.Split(" · ", 2)[0]
+            : report.Host;
+
+    /// <summary>
+    /// Каким путём шёл замер — словом, значком и цветом.
+    /// </summary>
+    /// <remarks>
+    /// По замеру, а не по правилу: правило «через VPN» у имени, прибитого в hosts,
+    /// ничего не значит, и подписать такой замер «через VPN» значило бы соврать.
+    /// Разошлись правило и замер — жёлтым и с объяснением.
+    /// </remarks>
+    private (string Word, string Glyph, string Ink, string Tip) RouteOf(TargetReport report, DesyncBypass bypass)
+    {
+        if (!_measuredWithEngines)
+            return ("без обхода", "", "Muted", "Движки были остановлены: замер без десинка и туннеля.");
+
+        if (report.Tunnelled)
+            return ("через VPN", "", "Text", "Замер ушёл в туннель: имя получило подставной адрес движка.");
+
+        if (report.TunnelMissed)
+        {
+            return ("мимо VPN", "", "Warn",
+                "Правило ведёт в VPN, а замер пошёл напрямую — например, имя прибито в hosts. "
+                + "Вердикт описывает прямой путь, а не туннель.");
+        }
+
+        var mode = _engine is { } engine
+            ? engine.Evaluate(ConnectionEvent.Describe(report.Host)).Mode
+            : RoutingMode.Desync;
+
+        if (_settings is { } settings)
+            mode = settings.Engines.Effective(mode, settings.NeedsProxy);
+
+        if (mode == RoutingMode.Desync && bypass == DesyncBypass.None)
+            return ("десинк", "", "Text", "Мимо VPN; пакеты обрабатывает десинк — секцией пресета по имени или адресу.");
+
+        return ("напрямую", "", "Text", bypass == DesyncBypass.None
+            ? "Мимо VPN и без десинка: имя в щите."
+            : HostsFile.DescribeBypass(bypass));
+    }
+
+    /// <summary>Что выяснилось — фразой для панели.</summary>
+    private static string Sentence(TargetReport report)
+    {
+        if (report.Reach == Reach.Open)
+        {
+            return report.Quic is { Ok: true }
+                ? "Сайт открывается, по QUIC тоже."
+                : "Сайт открывается, блокировок не видно.";
+        }
+
+        var said = report.Describe();
+        var why = report.Why;
+
+        return char.ToUpperInvariant(said[0]) + said[1..]
+            + (why is { Length: > 0 } ? ": " + why.TrimEnd('.') : string.Empty) + "."
+            + (report.Actionable ? " Лечится: " + report.Remedy().TrimEnd('.') + "." : string.Empty);
+    }
+
+    /// <summary>Стадии замера — точкой и словами.</summary>
+    private List<DotLine> Stages(TargetReport report)
+    {
+        var lines = new List<DotLine>
+        {
+            Stage("TCP", report.Tcp, report.Tcp.Describe()),
+            Stage("TLS", report.Tls, report.DescribeTls()),
+        };
+
+        // Порт 80 спрашивается, только когда не встал 443 (BlockCheck.HttpAsync).
+        if (report.Http.Detail is not null || report.Http.Ok)
+            lines.Add(Stage("Порт 80", report.Http, report.Http.Describe()));
+
+        lines.Add(Stage("Данные", report.Data, report.DescribeData()));
+
+        if (report.Quic is { } quic)
+            lines.Add(Stage("QUIC", quic, quic.Ok ? "ок" : "молчит"));
+
+        return lines;
+    }
+
+    private DotLine Stage(string name, ProbeOutcome outcome, string word)
+    {
+        var ink = outcome.Ok ? "Accent" : outcome.Detail is null && !outcome.Started ? "Faint" : "Danger";
+        var value = outcome.Ok
+            ? (outcome.Elapsed > TimeSpan.Zero ? $"{word} · {Ms(outcome.Elapsed)}" : word)
+            : outcome.Detail is { Length: > 0 } detail ? $"{word} — {detail}" : word;
+
+        return new DotLine(name, value, (Brush)FindResource(ink));
     }
 
     /// <summary>Строка с пометкой про путь и про десинк — для сохраняемого отчёта.</summary>
@@ -1106,7 +1361,9 @@ public partial class CheckView : UserControl
         // из hosts, общий узел у нескольких имён (Signatures, 14.10). Сразу
         // за итогом: при массовом отказе находка одна, и она отменяет
         // всё, что ниже.
-        foreach (var finding in Signatures.Find(_reports, ReadHosts()))
+        _findings = Signatures.Find(_reports, ReadHosts());
+
+        foreach (var finding in _findings)
         {
             sections.Add(new SectionRow(
                 finding.Headline,
@@ -1262,6 +1519,9 @@ public partial class CheckView : UserControl
         Say(_target is null
             ? $"Готово: проверено {Collected.Count}."
             : $"Готово: «{_target.Describe}», проверено {Collected.Count}.");
+
+        // Почерки посчитаны — у открытого в панели имени их видно в «Подробностях».
+        View.ShowPanel(_selected);
     }
 
     /// <summary>
@@ -1524,6 +1784,18 @@ public partial class CheckView : UserControl
             }
 
             _setupRow = new SectionRow("Обстановка замера", string.Join("\n", lines), (Brush)FindResource(key));
+
+            // Одной строкой — в полосу под шапкой; подробно — в итоге.
+            _setupLine = string.Join(" · ", new[]
+            {
+                "Движки подняты",
+                settings.DescribeMode(),
+                exit.Country is { Length: > 0 } country ? $"выход: {country}" : null,
+                _tunnel == TunnelState.Dead ? "туннель не пропускает" : null,
+            }.Where(s => s is not null));
+
+            View.ShowSetup(true);
+            View.SetupDot.Fill = (Brush)FindResource(key == "Muted" ? "Accent" : key);
         }
         catch (OperationCanceledException)
         {
@@ -1654,4 +1926,572 @@ public partial class CheckView : UserControl
         RoutingMode.Desync => "десинк",
         _ => "VPN",
     };
+
+    // ── Отбор, панель, меню строки ────────────────────────────────────────
+
+    private bool Passes(object item)
+    {
+        if (item is not CheckRow row)
+            return false;
+
+        if (_filter is { } reach && row.Reach != reach)
+            return false;
+
+        return _query.Length == 0
+            || row.Host.Contains(_query, StringComparison.OrdinalIgnoreCase)
+            || row.Title.Contains(_query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Счёт по ступеням на плитках и подсказка в пустой таблице.</summary>
+    private void Recount()
+    {
+        int all = Collected.Count;
+        int open = Collected.Count(r => r.Reach == Reach.Open);
+        int limited = Collected.Count(r => r.Reach == Reach.Limited);
+        int closed = Collected.Count(r => r.Reach == Reach.Closed);
+
+        CountAll.Text = all.ToString();
+        CountOpen.Text = open.ToString();
+        CountLimited.Text = limited.ToString();
+        CountClosed.Text = closed.ToString();
+
+        string Share(int part) => all == 0 ? string.Empty : $"{Math.Round(100.0 * part / all):0} %";
+
+        ShareOpen.Text = Share(open);
+        ShareLimited.Text = Share(limited);
+        ShareClosed.Text = Share(closed);
+
+        bool empty = _view is null || _view.IsEmpty;
+
+        EmptyHint.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        EmptyHint.Text = all == 0
+            ? _running
+                ? "Первые ответы появятся через несколько секунд…"
+                : "Здесь появятся проверенные имена: нажмите «Проверить всё». Проверка идёт минуты — "
+                  + "по каждому имени соединение, и каждое ждёт ответа."
+            : "Под этот отбор ничего не подходит."
+              + (_query.Length > 0 ? " Enter — проверить «" + _query + "» отдельно." : string.Empty);
+
+        SummaryHint.Text = all == 0
+            ? "Выберите строку — здесь будет всё о ней: стадии замера, адреса, почерк поломки и что с этим делать. "
+              + "Пока строка не выбрана — итог проверки."
+            : _running ? "Проверка идёт — итог появится, когда она закончится." : string.Empty;
+
+        SummaryHint.Visibility = SummaryHint.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Выбранная плитка — обводкой цветом текста.</summary>
+    private void ShowTiles()
+    {
+        foreach (var tile in new[] { TileAll, TileOpen, TileLimited, TileClosed })
+        {
+            bool chosen = (tile.Tag as string) == (_filter?.ToString() ?? string.Empty);
+            tile.SetResourceReference(BorderBrushProperty, chosen ? "Text" : "CardEdge");
+        }
+    }
+
+    private void OnTile(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string tag })
+            return;
+
+        _filter = Enum.TryParse<Reach>(tag, out var reach) ? reach : null;
+
+        ShowTiles();
+        _view?.Refresh();
+        Recount();
+    }
+
+    private void OnSearch(object sender, TextChangedEventArgs e)
+    {
+        _query = Search.Text.Trim();
+        _view?.Refresh();
+        Recount();
+    }
+
+    /// <summary>Enter: первое найденное — в панель; не нашлось — проверить имя отдельно.</summary>
+    private void OnSearchKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+            return;
+
+        e.Handled = true;
+
+        if (_view is { IsEmpty: false })
+        {
+            Rows.SelectedIndex = 0;
+            return;
+        }
+
+        if (SiteFixer.HostOf(Search.Text) is { } host && !_running)
+            _ = CheckOneAsync(host);
+    }
+
+    private void OnRowSelected(object sender, SelectionChangedEventArgs e)
+    {
+        _selected = Rows.SelectedItem as CheckRow;
+        ShowPanel(_selected);
+
+        if (_selected is not null)
+            Rows.ScrollIntoView(_selected);
+    }
+
+    private void OnPanelClose(object sender, RoutedEventArgs e) => Rows.SelectedItem = null;
+
+    /// <summary>Панель: выбранное имя целиком, а без выбора — итог прогона.</summary>
+    internal void ShowPanel(CheckRow? row)
+    {
+        SummaryPane.Visibility = row is null ? Visibility.Visible : Visibility.Collapsed;
+        DetailPane.Visibility = row is null ? Visibility.Collapsed : Visibility.Visible;
+        DetailPane.DataContext = row;
+        Details.ItemsSource = row is null ? null : DetailsOf(row);
+
+        PanelScroll.ScrollToTop();
+        Recount();
+    }
+
+    /// <summary>«Подробности» — то, чему в таблице места нет.</summary>
+    private static List<DetailLine> DetailsOf(CheckRow row)
+    {
+        var report = row.Report;
+        var lines = new List<DetailLine>();
+
+        if (report.Tunnelled)
+        {
+            lines.Add(new("Адреса", "подставной адрес движка — имя разрешает туннель на своей стороне"));
+        }
+        else if (report.Addresses.Count > 0)
+        {
+            lines.Add(new("Адреса", string.Join("\n", report.Addresses.Select(a =>
+                a == report.Answered ? $"{a} (ответил)"
+                : report.Answered is null || report.Tcp.Silent.Contains(a) ? $"{a} (молчит)"
+                : a))));
+        }
+
+        if (row.Network != "—")
+            lines.Add(new("Сеть", row.Network));
+
+        lines.Add(new("DNS", report.Spoof.Spoofed
+            ? "подменён — " + report.Spoof.Advice
+            : report.Spoof.Verdict == DnsVerdict.Unknown ? "не проверялся" : "не подменён"));
+
+        lines.Add(new("ECH", report.EchName is not { } ech
+            ? "нет или не спрашивали"
+            : report.EchHelloAccepted ? $"{ech} — приветствие с ним принято" : ech));
+
+        lines.Add(new("QUIC", report.Quic is not { } quic
+            ? "не проверялся"
+            : quic.Ok ? "отвечает" : "молчит — браузер ждёт его и подвисает"));
+
+        lines.Add(new("Маршрут", row.Bypass.Length > 0 ? $"{row.Route} · {row.Bypass}" : row.Route));
+
+        foreach (var finding in _findings.Where(f => f.Hosts.Contains(report.Host, StringComparer.OrdinalIgnoreCase)))
+            lines.Add(new("Почерк", $"{finding.Signature.Title}. {finding.Signature.Remedy}"));
+
+        lines.Add(new("Проверено", row.Checked.ToString("dd.MM.yyyy HH:mm")));
+
+        return lines;
+    }
+
+    private void OnRowMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: CheckRow row } button)
+            return;
+
+        Rows.SelectedItem = row;
+
+        var menu = new ContextMenu
+        {
+            PlacementTarget = button,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom,
+        };
+
+        MenuItem Entry(string glyph, string text, Action act, bool busy = false)
+        {
+            var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+            icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+            var item = new MenuItem { Header = text, Icon = icon, IsEnabled = !busy };
+            item.Click += (_, _) => act();
+            return item;
+        }
+
+        menu.Items.Add(Entry("", "Проверить ещё раз", () => _ = CheckOneAsync(row.Host), busy: _running));
+
+        if (row.Actionable)
+            menu.Items.Add(Entry("", "Подобрать маршрут", () => _ = FixAsync(row), busy: _running));
+
+        menu.Items.Add(Entry("", "Открыть маршрут", () => Reveal(row.Host)));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(Entry("", "Скопировать имя", () => CopyText(row.Host)));
+
+        if (!row.Report.Tunnelled && (row.Report.Answered ?? row.Report.Addresses.FirstOrDefault()) is { } address)
+            menu.Items.Add(Entry("", "Скопировать адрес", () => CopyText(address)));
+
+        menu.IsOpen = true;
+    }
+
+    private static void CopyText(string text)
+    {
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch (Exception)
+        {
+            // Буфер обмена держит другая программа — бывает, и не наша беда.
+        }
+    }
+
+    // ── Одно имя: перепроверка, подбор маршрута, пробы другим путём ───────
+
+    private void OnRecheck(object sender, RoutedEventArgs e)
+    {
+        if (_selected is { } row && !_running)
+            _ = CheckOneAsync(row.Host);
+    }
+
+    /// <summary>
+    /// Проверяет одно имя и ставит его строку на место прежней — или первой.
+    /// </summary>
+    /// <remarks>
+    /// Той же пробой, что и прогон, и тем же путём по правилам. Без перепроверки
+    /// в тишине: одно имя тесноты не создаёт.
+    /// </remarks>
+    private async Task CheckOneAsync(string host)
+    {
+        View.RecheckButton.IsEnabled = false;
+        Say($"Проверяю {host}…");
+
+        try
+        {
+            if (Collected.Count == 0)
+                _measuredWithEngines = ShowSetup();
+
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var zapretRoot = ZapretPaths.Discover()?.Root;
+
+            if (_engine is null)
+            {
+                _settings = settings;
+
+                try
+                {
+                    _engine = RuleSetLoader.LoadFor(settings);
+                    RuleSetExpander.Expand(_engine.RuleSet, zapretRoot);
+                }
+                catch (Exception)
+                {
+                    // Без правил проверка всё равно мерит сеть.
+                }
+            }
+
+            if (ReferenceEquals(_owners, AddressOwners.None))
+                _owners = await Task.Run(() => AddressOwners.Load(zapretRoot));
+
+            bool tunnelUp = _measuredWithEngines && settings.NeedsProxy;
+            bool tunnelled = tunnelUp && _engine is not null && Proxied(_engine, host);
+            var service = Collected.FirstOrDefault(r => r.Host == host)?.Report.Service ?? OwnLists.NameLabel;
+
+            var report = await BlockCheck.CheckAsync(host, service, CancellationToken.None, tunnelled);
+
+            var bypass = DesyncBypass.None;
+
+            if (_engine is not null)
+            {
+                var bypassed = HostsFile.DescribeDesyncExclusions(_engine.RuleSet, tunnelUp: tunnelUp);
+                var holes = HostsFile.ShieldHoleSet(HostsFile.CollectShieldHoles(_engine.RuleSet, bypassed));
+                bypass = HostsFile.BypassFor(bypassed, host, holes);
+            }
+
+            var fresh = Row(report, tunnelled, bypass);
+            int at = Collected.ToList().FindIndex(r => r.Host == host);
+
+            _reports.RemoveAll(r => r.Host == host);
+            _reports.Add(report);
+
+            if (at >= 0)
+            {
+                Collected[at] = Replace(Collected[at], fresh);
+            }
+            else
+            {
+                Collected.Insert(0, fresh);
+                LoadIcon(fresh);
+            }
+
+            var shown = Collected.First(r => r.Host == host);
+            View.Rows.SelectedItem = shown;
+            View.Rows.ScrollIntoView(shown);
+            View.ShowPanel(shown);
+
+            Say($"{host}: {report.Describe()}.");
+        }
+        catch (Exception ex)
+        {
+            Say($"{host}: проверка не удалась — " + ex.GetBaseException().Message);
+        }
+        finally
+        {
+            View.RecheckButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>Новая строка вместо старой — со значком, пробами и выбором прежней.</summary>
+    private static CheckRow Replace(CheckRow old, CheckRow fresh)
+    {
+        fresh.Icon = old.Icon;
+
+        foreach (var line in old.Paths)
+            fresh.Paths.Add(line);
+
+        if (_selected == old)
+            _selected = fresh;
+
+        return fresh;
+    }
+
+    /// <summary>Значок сайта: из памяти сразу, с диска или сети — когда придёт.</summary>
+    private static void LoadIcon(CheckRow row)
+    {
+        if (SiteIcons.Cached(row.Host) is { } cached)
+        {
+            row.Icon = cached;
+            return;
+        }
+
+        if (SiteIcons.Known(row.Host))
+            return;
+
+        var dispatcher = Application.Current?.Dispatcher;
+
+        _ = Task.Run(async () =>
+        {
+            await IconSlots.WaitAsync();
+
+            try
+            {
+                var icon = await SiteIcons.ForAsync(row.Host, CancellationToken.None);
+
+                if (icon is not null)
+                    dispatcher?.BeginInvoke(() => row.Icon = icon);
+            }
+            finally
+            {
+                IconSlots.Release();
+            }
+        });
+    }
+
+    /// <summary>Значки качаются по четыре: прогон добавляет сотню строк за минуту.</summary>
+    private static readonly SemaphoreSlim IconSlots = new(4);
+
+    private void OnFix(object sender, RoutedEventArgs e)
+    {
+        if (_selected is { } row)
+            _ = FixAsync(row);
+    }
+
+    /// <summary>
+    /// Подбор маршрута — тот же, что «Сайт не открывается?» в «Ещё» (SiteFixer):
+    /// пути по симптому, первый открывший записывается в правила.
+    /// </summary>
+    private async Task FixAsync(CheckRow row)
+    {
+        View.FixButton.IsEnabled = false;
+
+        row.FixLines.Clear();
+        row.FixSummary = "Подбираю маршрут…";
+        row.FixInk = (Brush)FindResource("Muted");
+
+        var progress = new Progress<string>(text => row.FixSummary = text);
+        var stepDone = new Progress<SiteFixStep>(step =>
+        {
+            bool skipped = step.Detail.StartsWith("не пробовал", StringComparison.Ordinal);
+
+            row.FixLines.Add(new DotLine(
+                step.Recipe ?? step.Path,
+                step.Detail,
+                (Brush)FindResource(step.Works ? "Accent" : skipped ? "Warn" : "Danger")));
+            row.FixMoved();
+        });
+
+        try
+        {
+            var result = await Task.Run(() => SiteFixer.FixAsync(row.Host, progress, CancellationToken.None, stepDone));
+
+            row.FixSummary = result.Summary;
+            row.FixInk = (Brush)FindResource(result.Applied is null ? "Muted" : "Accent");
+
+            Journal.Write("починка сайта", $"{result.Host}: "
+                + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
+                + (result.Applied is { } mode ? $" → записан маршрут {mode}" : " → маршрут не менялся"));
+
+            if (result.Applied is { } applied)
+            {
+                row.ShowReveal();
+
+                if (result.NeedsRestart)
+                {
+                    View.Offer($"Маршрут для {result.Host}: " + (applied == RoutingMode.Proxy
+                        ? "через VPN"
+                        : result.Recipe is { } recipe ? $"десинк, {recipe}" : "десинк"));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            row.FixSummary = "Подбор не удался: " + ex.GetBaseException().Message;
+            row.FixInk = (Brush)FindResource("Warn");
+        }
+        finally
+        {
+            View.FixButton.IsEnabled = true;
+        }
+    }
+
+    private void OnReveal(object sender, RoutedEventArgs e)
+    {
+        if (_selected is { } row)
+            Reveal(SiteFixer.RuleValue(row.Host));
+    }
+
+    /// <summary>
+    /// Тот же замер другим путём: через VPN, десинком мимо туннеля или вовсе без обхода.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 27.10: «Через VPN, Десинк, Напрямую». Отвечает на вопрос, который
+    /// прогон задать не может: прогон идёт тем путём, каким имя ведут правила,
+    /// и про имя «через VPN» не скажет, открылось бы оно без VPN.
+    /// </remarks>
+    private async void OnPath(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string path } || _selected is not { } row)
+            return;
+
+        var buttons = new[] { PathVpn, PathDesync, PathDirect };
+
+        foreach (var button in buttons)
+            button.IsEnabled = false;
+
+        var name = path switch
+        {
+            "vpn" => "Через VPN",
+            "desync" => "Десинк",
+            _ => "Напрямую",
+        };
+
+        var pending = new DotLine(name, "проверяю…", (Brush)FindResource("Faint"));
+        row.Paths.Insert(0, pending);
+
+        void Settle(DotLine line)
+        {
+            int at = row.Paths.IndexOf(pending);
+
+            if (at >= 0)
+                row.Paths[at] = line;
+        }
+
+        try
+        {
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+            bool engines = state is not null && state.IsSupervisorAlive();
+            var winws = engines ? state!.Services.FirstOrDefault(s => s.Name == "winws2") : null;
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            TargetReport report;
+            string? note = null;
+
+            if (path == "vpn")
+            {
+                if (!await TunnelProbe.IsUpAsync(SingBoxOptions.DefaultHealthPort, CancellationToken.None))
+                {
+                    Settle(new DotLine(name,
+                        "не проверить: служебный вход туннеля не поднят — движки остановлены или туннеля нет в этом режиме",
+                        (Brush)FindResource("Faint")));
+                    return;
+                }
+
+                report = await BlockCheck.ProbeThroughTunnelAsync(row.Host, null, SingBoxOptions.DefaultHealthPort, CancellationToken.None);
+            }
+            else
+            {
+                bool desync = path == "desync";
+
+                // Оговорки — до замера: по ним видно, что именно мерилось.
+                note = PhysicalNetwork.Interface() is null
+                    ? "адаптер с маршрутом по умолчанию не найден — проба шла обычным путём"
+                    : settings.KillSwitchActive && engines
+                        ? "аварийный выключатель закрывает всё мимо туннеля — эта проба не пройдёт"
+                        : desync && winws is null
+                            ? "десинк не запущен — это замер без обхода"
+                            : desync && row.Route == "напрямую"
+                                ? "имя в щите — десинк его пропускает"
+                                : !desync && winws is { KeepsProbesOut: false }
+                                    ? "десинк этой сборки перехватывает и порты пробы — перезапустите движки"
+                                    : null;
+
+                report = await BlockCheck.ProbeAroundTunnelAsync(row.Host, null, desync, CancellationToken.None);
+            }
+
+            var (word, ink) = report.Reach switch
+            {
+                Reach.Open => ("открывается", "Accent"),
+                Reach.Limited => ("с ограничениями", "Warn"),
+                Reach.Closed => ("не открывается", "Danger"),
+                _ => ("не проверить", "Faint"),
+            };
+
+            var value = word
+                + (report.Tls.Ok ? $" · {Ms(report.Tls.Elapsed)}" : string.Empty)
+                + (report.Reach == Reach.Open ? string.Empty : $" — {report.Describe()}")
+                + (path != "vpn" && report.Answered is { } address ? $", {address}" : string.Empty)
+                + (note is null ? string.Empty : $". {char.ToUpperInvariant(note[0])}{note[1..]}");
+
+            Settle(new DotLine(name, value, (Brush)FindResource(ink)));
+
+            Journal.Write("проверка блокировок", $"{row.Host}, {name.ToLowerInvariant()}: {value}");
+        }
+        catch (Exception ex)
+        {
+            Settle(new DotLine(name, "не удалась: " + ex.GetBaseException().Message, (Brush)FindResource("Warn")));
+        }
+        finally
+        {
+            foreach (var button in buttons)
+                button.IsEnabled = true;
+        }
+    }
+
+    // ── Раскладка ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Колонки и панель — по ширине страницы.
+    /// </summary>
+    /// <remarks>
+    /// У владельца страница ~1230 (окно 1536 при 125 %): таблица и панель рядом.
+    /// Уже — сначала уходит «Сеть», потом «Ответ» и «Почему», а у самого узкого
+    /// окна (880) панель встаёт под таблицу.
+    /// </remarks>
+    private void OnPageSize(object sender, SizeChangedEventArgs e)
+    {
+        double width = e.NewSize.Width;
+        bool stacked = width < 900;
+
+        Resources["NetColumn"] = new GridLength(width < 1180 ? 0 : 100);
+        Resources["LatencyColumn"] = new GridLength(width < 1000 ? 0 : 68);
+        Resources["WhyColumn"] = new GridLength(width < 1000 ? 0 : 132);
+
+        // Плитки всегда в один ряд: в два они съедали высоту, и на окне 1080×720
+        // таблице оставалось две строки. На узком — без значков.
+        Resources["TileIconShown"] = width < 1000 ? Visibility.Collapsed : Visibility.Visible;
+
+        PanelColumn.Width = stacked ? new GridLength(0) : new GridLength(width < 1180 ? 300 : 360);
+        GapColumn.Width = stacked ? new GridLength(0) : new GridLength(16);
+        GapRow.Height = stacked ? new GridLength(12) : new GridLength(0);
+        PanelRow.Height = stacked ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        Grid.SetColumn(PanelCard, stacked ? 0 : 2);
+        Grid.SetRow(PanelCard, stacked ? 2 : 0);
+    }
 }
