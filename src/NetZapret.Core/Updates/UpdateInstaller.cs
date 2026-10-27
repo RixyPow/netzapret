@@ -259,7 +259,10 @@ public static class UpdateInstaller
                 ZipFile.ExtractToDirectory(archive, unpacked);
                 break;
             }
-            catch (IOException) when (DateTime.UtcNow < deadline && IsHeld(archive))
+            // Сам отказ «занят» — уже повод ждать: держатель мог отпустить файл
+            // между ним и IsHeld, и тогда обновление падало на ровном месте
+            // (тест «держат полторы секунды» дважды упал так в CI 27.10).
+            catch (IOException busy) when (DateTime.UtcNow < deadline && (IsSharingViolation(busy) || IsHeld(archive)))
             {
                 // Частично распакованное — убрать: следующая попытка пишет туда же.
                 try
@@ -292,6 +295,10 @@ public static class UpdateInstaller
                 ? Directory.GetDirectories(unpacked)[0]
                 : unpacked;
     }
+
+    /// <summary>ERROR_SHARING_VIOLATION и ERROR_LOCK_VIOLATION: файл занят другим процессом.</summary>
+    private static bool IsSharingViolation(IOException ex) =>
+        (ex.HResult & 0xFFFF) is 32 or 33;
 
     /// <summary>Держит ли архив кто-то: открыть на чтение не выходит.</summary>
     private static bool IsHeld(string path)
