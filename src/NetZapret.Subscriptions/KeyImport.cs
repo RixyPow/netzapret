@@ -22,7 +22,8 @@ public sealed record ImportFound(IReadOnlyList<string> Keys, string? Subscriptio
 /// <para>
 /// Файл .conf превращается в ссылку <c>wireguard://</c>
 /// (<see cref="WireGuardConf.ToLink"/>) и дальше живёт обычным ключом:
-/// хранится, показывается и убирается так же.
+/// хранится, показывается и убирается так же. Ключ AmneziaVPN <c>vpn://</c>
+/// (<see cref="AmneziaKey"/>) — тоже.
 /// </para>
 /// </remarks>
 public static class KeyImport
@@ -39,6 +40,28 @@ public static class KeyImport
             return WireGuardConf.TryParse(text, name, out var server, out var error)
                 ? new([WireGuardConf.ToLink(server!)], null, null)
                 : new([], null, "файл WireGuard не разбирается: " + error);
+        }
+
+        // Ключ AmneziaVPN живёт дальше так же, как файл .conf, — ссылкой
+        // wireguard:// (обсуждение №40). Обычные ключи рядом с ним не теряются.
+        if (AmneziaKey.Looks(text))
+        {
+            var links = new List<string>();
+            string? problem = null;
+
+            foreach (var key in AmneziaKey.Find(text))
+            {
+                if (AmneziaKey.TryParse(key, name, out var servers, out var error))
+                    links.AddRange(servers.Select(WireGuardConf.ToLink));
+                else
+                    problem ??= error;
+            }
+
+            links.AddRange(KeyRing.Split(text));
+
+            return links.Count > 0
+                ? new(links, null, null)
+                : new([], null, "ключ AmneziaVPN не разбирается: " + (problem ?? "ключа vpn:// не нашлось"));
         }
 
         var keys = KeyRing.Split(text);

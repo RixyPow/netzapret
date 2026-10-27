@@ -323,10 +323,17 @@ public partial class SubscriptionAddWindow : Window
             return;
         }
 
+        // Ключ Amnezia узнан, но не разобран — причина его, а не общий список схем.
+        if (AmneziaKey.Looks(input) && found.Problem is { } amnezia)
+        {
+            Say(char.ToUpperInvariant(amnezia[0]) + amnezia[1..] + ".");
+            return;
+        }
+
         if (KeysChosen)
         {
             Say("Ключей не нашлось: нужны строки вида vless://, trojan://, hysteria2://, tuic://, socks5://, "
-                + "http://адрес:порт, wireguard:// и подобные.");
+                + "http://адрес:порт, wireguard://, vpn:// из AmneziaVPN и подобные.");
             return;
         }
 
