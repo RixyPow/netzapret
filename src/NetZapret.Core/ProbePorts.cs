@@ -35,6 +35,8 @@ public static class ProbePorts
 
     private static readonly AsyncLocal<bool> InUse = new();
 
+    private static readonly AsyncLocal<int?> Adapter = new();
+
     private static int _next = First - 1;
 
     /// <summary>Идёт ли сейчас проба с портов пробы — в этом потоке исполнения.</summary>
@@ -57,12 +59,36 @@ public static class ProbePorts
     }
 
     /// <summary>
+    /// Пока жив возвращённый объект, соединения проб в этом потоке исполнения
+    /// уходят через этот адаптер — мимо TUN, куда бы ни вели маршруты.
+    /// </summary>
+    /// <remarks>
+    /// Для проб «Десинк» и «Напрямую» в проверке блокировок (27.10): имя,
+    /// которое правила ведут в VPN, иначе ушло бы в туннель и через него.
+    /// Тем же способом обзор резолверов спрашивает DNS мимо туннеля (DnsSurvey,
+    /// замер 19.10 рядом с нашим TUN). <c>null</c> — адаптер не нашли, и
+    /// соединения идут как обычно.
+    /// </remarks>
+    public static IDisposable Through(int? adapter)
+    {
+        var before = Adapter.Value;
+        Adapter.Value = adapter;
+        return new AdapterScope(before);
+    }
+
+    /// <summary>Адаптер, через который сейчас идут пробы; <c>null</c> — как обычно.</summary>
+    public static int? BoundAdapter => Adapter.Value;
+
+    /// <summary>
     /// TCP-клиент для пробы: под <see cref="Use"/> — привязанный к свободному
     /// порту пробы и закрываемый сбросом; иначе — обычный.
     /// </summary>
     public static TcpClient Client(AddressFamily family)
     {
         var client = new TcpClient(family);
+
+        if (Adapter.Value is { } adapter)
+            Bind(client.Client, family, adapter);
 
         if (!Active)
             return client;
@@ -92,8 +118,23 @@ public static class ProbePorts
         throw new SocketException((int)SocketError.AddressAlreadyInUse);
     }
 
+    /// <summary>Привязывает сокет к адаптеру по индексу: исходящие пойдут через него.</summary>
+    private static void Bind(Socket socket, AddressFamily family, int adapter)
+    {
+        // IP_UNICAST_IF и IPV6_UNICAST_IF — 31; у IPv4 индекс в сетевом порядке байт.
+        if (family == AddressFamily.InterNetworkV6)
+            socket.SetSocketOption(SocketOptionLevel.IPv6, (SocketOptionName)31, adapter);
+        else
+            socket.SetSocketOption(SocketOptionLevel.IP, (SocketOptionName)31, IPAddress.HostToNetworkOrder(adapter));
+    }
+
     private sealed class Scope(bool before) : IDisposable
     {
         public void Dispose() => InUse.Value = before;
+    }
+
+    private sealed class AdapterScope(int? before) : IDisposable
+    {
+        public void Dispose() => Adapter.Value = before;
     }
 }

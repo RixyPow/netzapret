@@ -260,6 +260,20 @@ public enum BlockKind
     Forbidden,
 }
 
+/// <summary>Открывается ли имя — ступенью, без вида блокировки (<see cref="TargetReport.Reach"/>).</summary>
+public enum Reach
+{
+    Open,
+
+    /// <summary>Откроется, но не целиком или не сразу.</summary>
+    Limited,
+
+    Closed,
+
+    /// <summary>Судить не о чем: адреса нет у имени или отвергнуто наше приветствие.</summary>
+    Unknown,
+}
+
 /// <summary>Исход одной пробы.</summary>
 public sealed record ProbeOutcome
 {
@@ -537,6 +551,63 @@ public sealed record TargetReport
         BlockKind.Forbidden => "сайт отказал, причину не назвал",
         _ => "нет адреса у имени",
     };
+
+    /// <summary>
+    /// Ступень для плиток и таблицы проверки: открывается, с ограничениями, нет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Редизайн 27.10 по макету владельца: человеку нужен ответ «открывается ли»,
+    /// а вид блокировки — уже в панели. Здесь, а не в окне: ступень показывают
+    /// и плитки, и отбор, и файл отчёта.
+    /// </para>
+    /// <para>
+    /// С ограничениями — то, что в браузере, скорее всего, откроется, но не целиком
+    /// или не сразу: заморозка после рукопожатия (страница грузится не вся), отказ
+    /// одной пробе без названной страны, закрытое имя с ECH, которое браузер с DoH
+    /// откроет, и открытый по TCP сайт с молчащим QUIC — браузер ждёт его
+    /// и подвисает (YouTube, 15.10).
+    /// </para>
+    /// </remarks>
+    public Reach Reach => Kind switch
+    {
+        BlockKind.None => Quic is { Ok: false } ? Reach.Limited : Reach.Open,
+        BlockKind.NoAddress or BlockKind.Handshake => Reach.Unknown,
+        BlockKind.Stall or BlockKind.Forbidden => Reach.Limited,
+        BlockKind.TlsDpi when EchHelloAccepted => Reach.Limited,
+        _ => Reach.Closed,
+    };
+
+    /// <summary>
+    /// Вердикт двумя-тремя словами — для колонки «Почему»; <c>null</c> — сказать нечего.
+    /// </summary>
+    /// <remarks>
+    /// Полный вердикт (<see cref="Describe"/>) в колонку не влезал: «обрыв после
+    /// рукопожатия» переносился, и строка таблицы выходила выше соседних.
+    /// </remarks>
+    public string? Brief() =>
+        Spoof.Spoofed ? "подмена DNS"
+        : Kind == BlockKind.TlsDpi && EchHelloAccepted ? "откроется с ECH"
+        : Kind switch
+        {
+            BlockKind.None => Quic is { Ok: false } ? "QUIC молчит" : null,
+            BlockKind.TlsDpi => "DPI по TLS",
+            BlockKind.TunnelFailed => "туннель не довёз",
+            BlockKind.ForeignFakeIp => "чужой VPN",
+            BlockKind.RouterFakeIp => "подмена роутера",
+            BlockKind.Stall => "заморозка",
+            BlockKind.HttpsPort => "порт 443 закрыт",
+            BlockKind.Full => "закрыт полностью",
+            BlockKind.Sinkhole => "заглушка",
+            BlockKind.Dns => "резолвер",
+            BlockKind.GeoBlock => "отказ по стране",
+            BlockKind.BrokenCname => "оборван CNAME",
+            BlockKind.Handshake => "не наш TLS",
+            BlockKind.TlsWhiteOnly => "белый список",
+            BlockKind.TlsByAddress => "режут по адресу",
+            BlockKind.Forbidden => "отказ пробе",
+            _ => "нет адреса",
+        };
 
     /// <summary>Нужно ли вообще о нём говорить в итоге.</summary>
     /// <remarks>
@@ -867,6 +938,41 @@ public static class BlockCheck
     }
 
     /// <summary>
+    /// Проба мимо туннеля — через физический адаптер и по настоящему адресу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Кнопки «Десинк» и «Напрямую» в панели проверки блокировок (владелец 27.10):
+    /// обычная проба идёт тем путём, каким имя ведут правила, и про имя «через VPN»
+    /// не скажет, открылось бы оно без VPN. Здесь соединения привязаны к адаптеру
+    /// с маршрутом по умолчанию (<see cref="ProbePorts.Through"/>), а подставной
+    /// адрес движка заменён ответом DoH.
+    /// </para>
+    /// <para>
+    /// <paramref name="desync"/> — с обычных портов: десинк обрабатывает соединение,
+    /// как любое прямое, — секцией пресета по имени, а щит пропускает имена
+    /// «напрямую». Без него — с портов пробы, которые основной winws2 не перехватывает
+    /// (<see cref="ProbePorts"/>): видно то, что режет сама сеть. Десинк старой сборки
+    /// порты пробы перехватывает — это проверяет вызывающий.
+    /// </para>
+    /// <para>
+    /// Стадии те же, что у пробы рецепта (<see cref="TrialAsync"/>), без переспросов:
+    /// они открывают соединения мимо общего конструктора и ушли бы в туннель.
+    /// </para>
+    /// </remarks>
+    public static async Task<TargetReport> ProbeAroundTunnelAsync(
+        string host,
+        string? service,
+        bool desync,
+        CancellationToken cancellationToken)
+    {
+        using var adapter = ProbePorts.Through(PhysicalNetwork.Interface());
+        using var ports = desync ? null : ProbePorts.Use();
+
+        return await ProbeAsync(host, service, cancellationToken, throughTunnel: false, trial: true, honestDns: true);
+    }
+
+    /// <summary>
     /// Уточняет «DPI по TLS» пробой с чужим именем на тот же адрес.
     /// </summary>
     /// <remarks>
@@ -1063,13 +1169,15 @@ public static class BlockCheck
 
     /// <param name="followed">Это уже имя из переадресации — дальше не идти.</param>
     /// <param name="trial">Проба рецепта (<see cref="TrialAsync"/>): только стадии, без лишних вопросов.</param>
+    /// <param name="honestDns">Подставной адрес движка заменить ответом DoH (<see cref="ProbeAroundTunnelAsync"/>).</param>
     private static async Task<TargetReport> ProbeAsync(
         string host,
         string? service,
         CancellationToken cancellationToken,
         bool throughTunnel,
         bool followed = false,
-        bool trial = false)
+        bool trial = false,
+        bool honestDns = false)
     {
         IPAddress[] addresses;
 
@@ -1080,6 +1188,16 @@ public static class BlockCheck
         catch (Exception)
         {
             addresses = [];
+        }
+
+        // Имени «через VPN» система отдаёт подставной адрес движка: соединение
+        // по нему ушло бы в туннель, какой бы адаптер ни выбрали. Настоящий — у DoH,
+        // как в окне рецептов (3064bee).
+        if (honestDns && addresses.Any(a => TunnelHealth.IsFakeIp(a)))
+        {
+            addresses = (await DohResolveAsync(host, cancellationToken))
+                .Select(IPAddress.Parse)
+                .ToArray();
         }
 
         if (addresses.All(a => a.AddressFamily != AddressFamily.InterNetwork))
@@ -1340,7 +1458,7 @@ public static class BlockCheck
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var there = await ProbeAsync(next, service, cancellationToken, throughTunnel, followed: true, trial: trial);
+            var there = await ProbeAsync(next, service, cancellationToken, throughTunnel, followed: true, trial: trial, honestDns: honestDns);
 
             return there with
             {
