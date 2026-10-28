@@ -1975,7 +1975,7 @@ public sealed class SingBoxConfigCompiler
         // ALPN по умолчанию у протоколов на QUIC: серверы TUIC ждут h3,
         // Hysteria первой версии — «hysteria», и без него рукопожатие
         // не сходится. В ссылках его часто не пишут.
-        IReadOnlyList<string> alpnValues = server.Alpn.Count > 0 ? server.Alpn
+        IReadOnlyList<string> alpnValues = server.Alpn.Count > 0 ? WebSocketPath.Alpn(server.Transport, server.Alpn)
             : server.Protocol == ProxyProtocol.Tuic ? ["h3"]
             : server.Protocol == ProxyProtocol.Hysteria ? ["hysteria"]
             : [];
@@ -2051,9 +2051,16 @@ public sealed class SingBoxConfigCompiler
             case "ws":
             {
                 var transport = new JsonObject { ["type"] = "ws" };
+                var (path, earlyData) = WebSocketPath.Split(server.Path);
 
-                if (!string.IsNullOrEmpty(server.Path))
-                    transport["path"] = server.Path;
+                if (!string.IsNullOrEmpty(path))
+                    transport["path"] = path;
+
+                if (earlyData > 0)
+                {
+                    transport["max_early_data"] = earlyData;
+                    transport["early_data_header_name"] = WebSocketPath.EarlyDataHeader;
+                }
 
                 if (!string.IsNullOrEmpty(server.HostHeader))
                     transport["headers"] = new JsonObject { ["Host"] = server.HostHeader };
@@ -2072,8 +2079,9 @@ public sealed class SingBoxConfigCompiler
             {
                 var transport = new JsonObject { ["type"] = "httpupgrade" };
 
-                if (!string.IsNullOrEmpty(server.Path))
-                    transport["path"] = server.Path;
+                // Ранних данных у httpupgrade в sing-box нет — хвост «?ed=» только снять.
+                if (WebSocketPath.Split(server.Path).Path is { Length: > 0 } path)
+                    transport["path"] = path;
 
                 if (!string.IsNullOrEmpty(server.HostHeader))
                     transport["host"] = server.HostHeader;

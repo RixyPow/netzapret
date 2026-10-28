@@ -225,6 +225,66 @@ public sealed class SingBoxSubscriptionTests
         }
     }
 
+    /// <summary>
+    /// WebSocket по ссылке Xray: без h2 в ALPN и с ранними данными вместо «?ed=» в пути
+    /// (Zapret KVN 0.8.49, 28.10; <see cref="WebSocketPath"/>). Ключи выдуманы.
+    /// </summary>
+    [Fact]
+    public void WebSocket_link_gets_http11_and_early_data_and_passes_sing_box_check()
+    {
+        var body = string.Join('\n',
+            "trojan://secret@1.2.3.4:443?security=tls&type=ws&sni=example.com&alpn=h2%2Chttp%2F1.1&path=%2Fws%3Fed%3D2048&host=example.com#ws",
+            "vmess://" + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(
+                "{\"v\":\"2\",\"ps\":\"hu\",\"add\":\"1.2.3.5\",\"port\":\"443\",\"id\":\"11111111-2222-3333-4444-555555555555\",\"aid\":\"0\",\"net\":\"httpupgrade\",\"path\":\"/up?ed=2560&x=1\",\"host\":\"example.com\",\"tls\":\"tls\",\"sni\":\"example.com\",\"alpn\":\"h2\"}")));
+
+        var servers = SubscriptionParser.ParseBody(body).Servers;
+        Assert.Equal(2, servers.Count);
+
+        var result = new SingBoxConfigCompiler().Compile(
+            RuleSetLoader.Load("mode: selective\nrules: []\n").RuleSet, servers, new SingBoxOptions());
+
+        var outbounds = System.Text.Json.Nodes.JsonNode.Parse(result.Json)!["outbounds"]!.AsArray();
+        var ws = outbounds.First(o => (string?)o!["tag"] == "ws")!;
+        var hu = outbounds.First(o => (string?)o!["tag"] == "hu")!;
+
+        Assert.Equal("/ws", (string?)ws["transport"]!["path"]);
+        Assert.Equal(2048, (int?)ws["transport"]!["max_early_data"]);
+        Assert.Equal("Sec-WebSocket-Protocol", (string?)ws["transport"]!["early_data_header_name"]);
+        Assert.Equal(["http/1.1"], ws["tls"]!["alpn"]!.AsArray().Select(a => (string?)a));
+
+        Assert.Equal("/up?x=1", (string?)hu["transport"]!["path"]);
+        Assert.Equal(["http/1.1"], hu["tls"]!["alpn"]!.AsArray().Select(a => (string?)a));
+
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, result.Json);
+
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var said = process.StandardError.ReadToEnd() + process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, said);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string? FindSingBox()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
