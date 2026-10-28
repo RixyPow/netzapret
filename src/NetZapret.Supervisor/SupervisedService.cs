@@ -179,14 +179,44 @@ public abstract class SupervisedService
     {
     }
 
+    /// <summary>
+    /// Движок вышел на старте — можно ли поправить так, чтобы сразу поднять снова.
+    /// </summary>
+    /// <param name="fatal">Строка отказа движка; <c>null</c> — он ничего не сказал.</param>
+    /// <returns><c>true</c> — поправлено, пробовать снова.</returns>
+    protected virtual bool RepairAfterFailedStart(string? fatal) => false;
+
+    /// <summary>Сколько раз за один старт чинить и пробовать снова.</summary>
+    /// <remarks>
+    /// В публичной подписке кривых ключей бывает несколько, и каждый — свой
+    /// запуск движка; бесконечная починка спрятала бы поломку самого конфига.
+    /// </remarks>
+    private const int MaxStartRepairs = 20;
+
     public async Task<bool> StartAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
+    {
+        for (int repairs = 0; ; repairs++)
+        {
+            var (started, died) = await StartOnceAsync(readinessTimeout, cancellationToken);
+
+            if (started || !died || repairs >= MaxStartRepairs || !RepairAfterFailedStart(_fatal))
+                return started;
+
+            Process?.Dispose();
+            Process = null;
+            StartedAt = null;
+        }
+    }
+
+    /// <returns>Поднялся ли; <c>died</c> — процесс вышел сам, а не не успел.</returns>
+    private async Task<(bool Started, bool Died)> StartOnceAsync(TimeSpan readinessTimeout, CancellationToken cancellationToken)
     {
         var problem = ValidatePrerequisites();
 
         if (problem is not null)
         {
             LastError = problem;
-            return false;
+            return (false, false);
         }
 
         // Новый процесс — новое положение. Всё, что служба помнит о прежнем
@@ -204,13 +234,13 @@ public abstract class SupervisedService
         catch (Exception ex)
         {
             LastError = ex.GetBaseException().Message;
-            return false;
+            return (false, false);
         }
 
         if (Process is null)
         {
             LastError = "процесс не запустился";
-            return false;
+            return (false, false);
         }
 
         // Включаем в задание сразу после запуска: если супервизор умрёт
@@ -247,7 +277,7 @@ public abstract class SupervisedService
 
                 LastError = ExitReason(Process.ExitCode, _fatal)
                     + (Advice(Process.ExitCode) is { } advice ? " — " + advice : string.Empty);
-                return false;
+                return (false, true);
             }
 
             // На старте годится и мёртвый выход: движок поднялся, а чинить
@@ -257,14 +287,14 @@ public abstract class SupervisedService
             {
                 LastError = null;
                 await OnReadyAsync(cancellationToken);
-                return true;
+                return (true, false);
             }
 
             await Task.Delay(300, cancellationToken);
         }
 
         LastError = "функциональная проверка не прошла за отведённое время";
-        return false;
+        return (false, false);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -345,8 +375,14 @@ public abstract class SupervisedService
     {
         var reason = $"процесс завершился с кодом {code}";
 
+        return Said(fatal) is { } said ? $"{reason}: {said}" : reason;
+    }
+
+    /// <summary>Строка отказа движка без уровня и времени, вычищенная; <c>null</c> — пусто.</summary>
+    protected static string? Said(string? fatal)
+    {
         if (fatal is null)
-            return reason;
+            return null;
 
         var said = SupportReport.Redact(fatal, []).Trim();
 
@@ -354,12 +390,9 @@ public abstract class SupervisedService
         said = System.Text.RegularExpressions.Regex.Replace(said, @"^.*?FATAL\s*(\[\d+\])?\s*", string.Empty);
 
         if (said.Length == 0)
-            return reason;
+            return null;
 
-        if (said.Length > 300)
-            said = said[..300] + "…";
-
-        return $"{reason}: {said}";
+        return said.Length > 300 ? said[..300] + "…" : said;
     }
 
     /// <summary>
@@ -1015,6 +1048,32 @@ public sealed class SingBoxService : SupervisedService
     {
         if (RealityRefusal.In(line))
             Volatile.Write(ref _realityRefusedTicks, DateTimeOffset.UtcNow.UtcTicks);
+    }
+
+    /// <summary>
+    /// Сервер, на котором движок отказался подняться, убирается из конфига, и старт
+    /// повторяется (обсуждение №38, 28.10 — см. <see cref="BrokenOutbound"/>).
+    /// </summary>
+    /// <remarks>
+    /// Правится файл этого запуска: окно пересобирает его при каждом старте,
+    /// так что сервер не пропадает навсегда — следующий старт уберёт его снова,
+    /// если ключ так и не починили. В журнал — какой сервер и почему.
+    /// </remarks>
+    protected override bool RepairAfterFailedStart(string? fatal)
+    {
+        try
+        {
+            if (BrokenOutbound.Remove(File.ReadAllText(_configPath), fatal) is not var (config, tag))
+                return false;
+
+            SingBoxConfigCompiler.WriteToFile(_configPath, config);
+            Note($"сервер «{tag}» убран из конфига: движок отказался его поднять — {Said(fatal)}");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Отказ REALITY объясняет нынешнюю неудачу туннеля.</summary>
