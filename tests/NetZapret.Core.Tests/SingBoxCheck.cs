@@ -14,6 +14,14 @@ namespace NetZapret.Core.Tests;
 /// </remarks>
 internal static class SingBoxCheck
 {
+    /// <summary>Есть ли движок, чтобы ждать от него отказа.</summary>
+    /// <remarks>
+    /// Тест, которому нужен именно отказ, без движка проверить нечего: «пройдено»
+    /// здесь значит «пропущено». 28.10 CI (там tools\ нет) уронил на этом
+    /// BrokenOutboundTests — локально оба проходили.
+    /// </remarks>
+    public static bool Available => Find() is not null;
+
     public static (bool Ok, string Said) Run(string json)
     {
         var singBox = Find();

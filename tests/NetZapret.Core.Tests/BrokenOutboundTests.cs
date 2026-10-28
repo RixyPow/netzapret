@@ -39,6 +39,10 @@ public sealed class BrokenOutboundTests
     [Fact]
     public void The_refused_server_leaves_and_the_engine_comes_up()
     {
+        // Без движка отказа не будет — проверять нечего (SingBoxCheck.Available).
+        if (!SingBoxCheck.Available)
+            return;
+
         var config = Spoiled("Битый", "Годный");
 
         var refused = SingBoxCheck.Run(config);
@@ -60,6 +64,9 @@ public sealed class BrokenOutboundTests
     [Fact]
     public void The_only_server_is_not_removed()
     {
+        if (!SingBoxCheck.Available)
+            return;
+
         var config = Spoiled("Единственный");
 
         var refused = SingBoxCheck.Run(config);
