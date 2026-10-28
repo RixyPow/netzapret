@@ -1,3 +1,4 @@
+using System.Text;
 using NetZapret.Core.Rules;
 using NetZapret.Proxy;
 using NetZapret.Subscriptions;
@@ -55,5 +56,24 @@ public sealed class BrokenLinkTests
 
         var check = SingBoxCheck.Run(result.Json);
         Assert.True(check.Ok, check.Said);
+    }
+
+    /// <summary>Ключ Outline — с косой чертой перед query (№41: «порт '45907/' не разбирается»).</summary>
+    [Theory]
+    [InlineData("/?outline=1#Outline")]
+    [InlineData("/#Outline")]
+    [InlineData("#Outline")]
+    public void An_outline_key_with_a_slash_before_the_query_is_read(string tail)
+    {
+        var user = Convert.ToBase64String(Encoding.UTF8.GetBytes("chacha20-ietf-poly1305:secret"));
+
+        var server = Parse("ss://" + user + "@203.0.113.5:45907" + tail);
+
+        Assert.Equal(ProxyProtocol.Shadowsocks, server.Protocol);
+        Assert.Equal("203.0.113.5", server.Host);
+        Assert.Equal(45907, server.Port);
+        Assert.Equal("secret", server.Credential);
+        Assert.Equal("Outline", server.Tag);
+        Assert.True(server.IsUsableOutbound);
     }
 }

@@ -551,6 +551,13 @@ public static class ProxyUriParser
             hostPort = decoded[(decodedAt + 1)..];
         }
 
+        // Ключи Outline пишут косую черту перед query: «…@адрес:45907/?outline=1».
+        // Путь у Shadowsocks ничего не значит, а с ним порт не разбирался вовсе
+        // (обсуждение №41, 28.10: «порт '45907/' не разбирается»).
+        int slash = hostPort.IndexOf('/');
+        if (slash >= 0)
+            hostPort = hostPort[..slash];
+
         var (host, port) = UriParts.SplitHostPort(hostPort);
 
         return new ProxyServer
