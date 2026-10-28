@@ -300,11 +300,22 @@ public sealed record ProxyServer
     /// без ключа, падала на «unsupported flow: xtls-rprx-vision-udp443» —
     /// <see cref="VlessFlows"/>.
     /// </para>
+    /// <para>
+    /// И путь транспорта с битым %-кодом: №38, 28.10, подписка на 8 028 серверов —
+    /// «create client transport: xhttp: invalid URL escape "%2" parse path».
+    /// ws, httpupgrade и http движок роняет так же, и даже на <c>sing-box check</c>
+    /// (замер 28.10, 2.7.3: «/a%2», «/a%zz», «/a%» — отказ, «/a%2Fb» — нет).
+    /// </para>
     /// </remarks>
     public bool IsSupportedBySingBox =>
         (Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null)
         && (Protocol != ProxyProtocol.Vless || VlessFlows.ForSingBox(Flow) is not null)
-        && (!Security.Equals("reality", StringComparison.OrdinalIgnoreCase) || IsRealityKey(RealityPublicKey));
+        && (!Security.Equals("reality", StringComparison.OrdinalIgnoreCase) || IsRealityKey(RealityPublicKey))
+        && !HasBrokenEscape(Path);
+
+    /// <summary>«%», за которым не две шестнадцатеричные цифры: такой путь движок не разбирает.</summary>
+    internal static bool HasBrokenEscape(string? path) =>
+        path is not null && System.Text.RegularExpressions.Regex.IsMatch(path, "%(?![0-9A-Fa-f]{2})");
 
     /// <summary>Открытый ключ REALITY: base64 (обычный или url) от 32 байт.</summary>
     internal static bool IsRealityKey(string? key)
