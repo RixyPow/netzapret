@@ -255,6 +255,62 @@ public sealed class AmneziaKeyTests
         Assert.DoesNotContain("j1", server!.AmneziaOptions);
     }
 
+    /// <summary>
+    /// AmneziaWG 3: защита заголовков обязана совпадать с сервером — без неё
+    /// «не ответит»; односторонние параметры едут в ссылке молча.
+    /// </summary>
+    /// <remarks>
+    /// Вики zapret.moe (amnezia-3-0, 29.10): HeaderProtectionKey и включённый
+    /// RandomTrailers — на обеих сторонах, ContentPaddingAddition, DisableCookies
+    /// и таймеры — на своей. Прежде все они пропадали без слова: регулярка
+    /// ловила только «буква и цифры».
+    /// </remarks>
+    [Fact]
+    public void Header_protection_of_AmneziaWG_3_is_kept_and_named()
+    {
+        var conf = Conf.Replace(
+            "Jc = 4",
+            "Jc = 4\nHeaderProtectionKey = 9Jq3kQp1Zq0sS3m0hYkL3Qe8q1b7m2dQyM0rT4uV5w8=\nRandomTrailers = on\nContentPaddingAddition = 0-64\nRekeyAfterTime = 100-140",
+            StringComparison.Ordinal);
+
+        var found = KeyImport.FromText(conf, "AWG 3");
+
+        var link = Assert.Single(found.Keys);
+        Assert.Contains("headerprotectionkey=", link);
+        Assert.Contains("contentpaddingaddition=", link);
+        Assert.Equal("это AmneziaWG 3 (HeaderProtectionKey, RandomTrailers), а движок говорит только на 2.0 — сервер не ответит", found.Note);
+        Assert.Equal(found.Note, KeyImport.FromText(link).Note);
+
+        Assert.True(ProxyUriParser.TryParse(link, out var server, out _));
+        Assert.DoesNotContain("header", server!.AmneziaOptions, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void One_sided_AmneziaWG_3_parameters_give_no_note()
+    {
+        var conf = Conf.Replace(
+            "Jc = 4",
+            "Jc = 4\nContentPaddingAddition = 0-64\nDisableCookies = on\nRandomTrailers = off\nKeepaliveTimeout = 10",
+            StringComparison.Ordinal);
+
+        var found = KeyImport.FromText(conf, "AWG 3");
+
+        Assert.Null(found.Note);
+        Assert.Contains("disablecookies=on", Assert.Single(found.Keys));
+    }
+
+    [Fact]
+    public void Old_and_new_unknown_parameters_are_both_named()
+    {
+        var note = AmneziaSettings.Note(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["header_protection_key"] = "x", ["j1"] = "<r 2>", ["publickey"] = "k",
+        });
+
+        Assert.Equal("это AmneziaWG 3 (HeaderProtectionKey), а движок говорит только на 2.0 — сервер не ответит; "
+            + "параметров AmneziaWG J1 движок не знает — сервер может не ответить", note);
+    }
+
     [Fact]
     public void Known_masking_gives_no_note()
     {

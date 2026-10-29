@@ -93,15 +93,15 @@ public static class KeyImport
     /// </remarks>
     private static ImportFound Found(IReadOnlyList<string> keys)
     {
-        var unknown = keys
-            .SelectMany(k => ProxyUriParser.TryParse(k, out var server, out _) && server!.IsEndpoint
-                ? AmneziaSettings.Unsupported(server.Extra.Keys)
-                : [])
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var notes = keys
+            .Select(k => ProxyUriParser.TryParse(k, out var server, out _) && server!.IsEndpoint
+                ? AmneziaSettings.Note(server.Extra)
+                : null)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        return new(keys, null, null, unknown.Count == 0 ? null
-            : $"параметров AmneziaWG {string.Join(", ", unknown)} движок не знает — сервер может не ответить");
+        return new(keys, null, null, notes.Count == 0 ? null : string.Join("; ", notes));
     }
 
     /// <summary>
