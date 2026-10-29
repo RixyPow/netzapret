@@ -72,6 +72,24 @@ public sealed class EngineExitReasonTests
     }
 
     /// <summary>
+    /// Код из обсуждения №47 (29.10) — так его и показывает «Главная»: FWP_E_IN_USE
+    /// знаковым числом.
+    /// </summary>
+    [Fact]
+    public void FilterInUseIsExplained()
+    {
+        const int shown = -2144206838;
+
+        Assert.Equal(NetZapret.Zapret.WinDivertDriver.FilterInUse, shown);
+
+        var text = NetZapret.Zapret.WinDivertDriver.Explain(shown);
+
+        Assert.NotNull(text);
+        Assert.Contains("WinDivert", text);
+        Assert.Contains("перезагрузите", text);
+    }
+
+    /// <summary>
     /// Найденный рядом обход назван по имени и с процессом, а служба с автозапуском —
     /// отдельно (владелец 24.10; случай знакомого 22.10: goodbyedpi.exe и служба GoodbyeDPI).
     /// </summary>
