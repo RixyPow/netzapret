@@ -251,6 +251,38 @@ public static class Doctor
             : Warn(said + " Вернётся сам, когда резолвер ответит; чтобы не зависеть от него — другой на вкладке DNS.");
     }
 
+    /// <summary>
+    /// Подменяет ли DNS провайдера ответы — в «Десинке», где имена спрашивает
+    /// Windows (<see cref="SystemDnsCheck"/>); <c>null</c> — резолвера системы нет.
+    /// </summary>
+    /// <remarks>
+    /// Три пакета UDP к резолверу системы, до 3 с на каждый: «Диагностика»
+    /// и отчёт и так идут в фоне, а без этой строки причина «сайт не найден»
+    /// в «Десинке» не видна ни человеку, ни разбору отчёта.
+    /// </remarks>
+    public static DoctorCheck? SystemDns()
+    {
+        SystemDnsVerdict verdict;
+
+        try
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            verdict = Task.Run(() => SystemDnsCheck.CheckAsync(limit.Token)).GetAwaiter().GetResult();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+
+        return verdict.Kind switch
+        {
+            SystemDnsKind.Forged => Bad(SystemDnsCheck.Advice(verdict)),
+            SystemDnsKind.Honest => Ok($"Резолвер системы {verdict.Resolver} отдаёт адреса закрытых имён — DNS не подменён."),
+            _ when verdict.Resolver is null => null,
+            _ => Warn($"Резолвер системы {verdict.Resolver} на проверку подмены не ответил — проверить DNS не вышло."),
+        };
+    }
+
     /// <summary>Служба прокси у живого держателя; <c>null</c> — держателя нет или прокси у него нет.</summary>
     private static ServiceState? Held(SupervisorState? holder) =>
         holder is not null && holder.IsSupervisorAlive()
@@ -530,6 +562,9 @@ public static class Doctor
         {
             lines.Add(Warn("Резолверы системы не читаются: " + ex.GetBaseException().Message));
         }
+
+        if (SystemDnsCheck.Applies(settings) && SystemDns() is { } system)
+            lines.Add(system);
 
         try
         {

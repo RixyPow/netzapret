@@ -654,7 +654,7 @@ public partial class StatusView : UserControl
 
         SetDnsWarning(services.FirstOrDefault(s => s.DnsNotice is { Length: > 0 }) is { } dns
             ? DnsWarning(dns)
-            : null);
+            : SystemDnsWarning(settings, state!));
 
         // Три состояния, а не два. «Оговорки» бывают разной тяжести: движок,
         // которому не удалась глубокая проверка, ещё несёт трафик, а умерший
@@ -1882,6 +1882,52 @@ public partial class StatusView : UserControl
             : new WarningRow("Резолвер движка не отвечает — работает запасной путь",
                 char.ToUpper(notice[0]) + notice[1..] + ". Сайты открываются; вернётся сам, как только резолвер ответит. "
                 + "Чтобы не зависеть от него, выберите другой на вкладке DNS.");
+    }
+
+    private SystemDnsVerdict? _systemDns;
+    private DateTimeOffset _systemDnsAt;
+    private DateTimeOffset? _systemDnsRun;
+    private bool _systemDnsBusy;
+
+    /// <summary>
+    /// Карточка о подмене DNS провайдера — в «Десинке», где имена спрашивает
+    /// Windows (<see cref="SystemDnsCheck"/>); проверка в фоне при каждом запуске
+    /// движков и раз в 10 минут, три пакета UDP.
+    /// </summary>
+    private WarningRow? SystemDnsWarning(AppSettings settings, SupervisorState state)
+    {
+        if (!SystemDnsCheck.Applies(settings))
+            return null;
+
+        bool stale = _systemDnsRun != state.StartedAt || DateTimeOffset.Now - _systemDnsAt > TimeSpan.FromMinutes(10);
+
+        if (stale && !_systemDnsBusy)
+            _ = CheckSystemDnsAsync(state.StartedAt);
+
+        return _systemDns is { Kind: SystemDnsKind.Forged } forged && _systemDnsRun == state.StartedAt
+            ? new WarningRow("DNS провайдера подменяет ответы", SystemDnsCheck.Advice(forged))
+            : null;
+    }
+
+    private async Task CheckSystemDnsAsync(DateTimeOffset? run)
+    {
+        _systemDnsBusy = true;
+
+        try
+        {
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            _systemDns = await Task.Run(() => SystemDnsCheck.CheckAsync(limit.Token));
+        }
+        catch (Exception)
+        {
+            _systemDns = null;
+        }
+        finally
+        {
+            _systemDnsAt = DateTimeOffset.Now;
+            _systemDnsRun = run;
+            _systemDnsBusy = false;
+        }
     }
 
     private static IReadOnlyList<WarningRow> CollectWarnings(bool needsDesync)
