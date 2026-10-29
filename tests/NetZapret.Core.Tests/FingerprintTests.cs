@@ -59,7 +59,7 @@ public sealed class FingerprintTests
         var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions());
 
         Assert.Null(Outbound(result.Json, "tls-unsafe")["tls"]!["utls"]);
-        Assert.Equal("chrome", Outbound(result.Json, "reality-unsafe")["tls"]!["utls"]!["fingerprint"]!.GetValue<string>());
+        Assert.Equal("firefox", Outbound(result.Json, "reality-unsafe")["tls"]!["utls"]!["fingerprint"]!.GetValue<string>());
         Assert.Equal("chrome", Outbound(result.Json, "trojan-upper")["tls"]!["utls"]!["fingerprint"]!.GetValue<string>());
 
         var check = SingBoxCheck.Run(result.Json);

@@ -1990,14 +1990,21 @@ public sealed class SingBoxConfigCompiler
         }
 
         // uTLS подделывает отпечаток клиента. Для REALITY он обязателен:
-        // без него сервер не отвечает.
+        // без него сервер не отвечает. Ссылке без отпечатка — firefox, не
+        // chrome: замер 29.10 (наш sing-box на loopback, ClientHello снят)
+        // дал у REALITY «chrome» JA4 t13d1516h1_8daaf6152771_d8a2da3f94cd —
+        // те же хэши, что у отпечатка, который ТСПУ режет к дата-центрам
+        // (вики zapret.moe, DPI/browser-ja4-fingerprint-block; разница только
+        // в ALPN), и без ключа ML-KEM, которым шлёт настоящий Chrome.
+        // REALITY отпечаток клиента не сверяет; у владельца 27 серверов
+        // REALITY с firefox из подписки работают.
         string? fingerprint = Fingerprint(server.Fingerprint);
         if (fingerprint is not null || reality)
         {
             block["utls"] = new JsonObject
             {
                 ["enabled"] = true,
-                ["fingerprint"] = fingerprint ?? "chrome",
+                ["fingerprint"] = fingerprint ?? "firefox",
             };
         }
 
