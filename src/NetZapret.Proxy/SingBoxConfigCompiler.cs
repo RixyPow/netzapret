@@ -1786,6 +1786,9 @@ public sealed class SingBoxConfigCompiler
                 // Клиентский вариант Vision из Xray — обычным: sing-box его не знает (№38).
                 if (VlessFlows.ForSingBox(server.Flow) is { Length: > 0 } flow)
                     outbound["flow"] = flow;
+                // VLESS Encryption: без него сервер, который его требует, рвёт рукопожатие.
+                if (VlessEncryption.ForSingBox(server.Encryption) is { Length: > 0 } encryption)
+                    outbound["encryption"] = encryption;
                 break;
 
             case ProxyProtocol.Vmess:

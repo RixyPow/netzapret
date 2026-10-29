@@ -94,6 +94,7 @@ public static class ProxyUriParser
             Fingerprint = Get(q, "fp"),
             Alpn = SplitAlpn(Get(q, "alpn")),
             Flow = Get(q, "flow"),
+            Encryption = Get(q, "encryption"),
             RealityPublicKey = Get(q, "pbk"),
             RealityShortId = Get(q, "sid"),
             Path = Get(q, "path"),

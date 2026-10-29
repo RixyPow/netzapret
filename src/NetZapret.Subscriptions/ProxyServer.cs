@@ -115,6 +115,9 @@ public sealed record ProxyServer
     /// <summary>xtls-rprx-vision для vless.</summary>
     public string? Flow { get; init; }
 
+    /// <summary>Шифрование VLESS (<c>encryption</c>); пусто или «none» — без него. См. <see cref="VlessEncryption"/>.</summary>
+    public string? Encryption { get; init; }
+
     /// <summary>Публичный ключ REALITY (<c>pbk</c>).</summary>
     public string? RealityPublicKey { get; init; }
 
@@ -310,6 +313,7 @@ public sealed record ProxyServer
     public bool IsSupportedBySingBox =>
         (Protocol != ProxyProtocol.Shadowsocks || ShadowsocksMethods.ForSingBox(Method) is not null)
         && (Protocol != ProxyProtocol.Vless || VlessFlows.ForSingBox(Flow) is not null)
+        && (Protocol != ProxyProtocol.Vless || VlessEncryption.ForSingBox(Encryption) is not null)
         && (!Security.Equals("reality", StringComparison.OrdinalIgnoreCase) || IsRealityKey(RealityPublicKey))
         && !HasBrokenEscape(Path);
 
@@ -405,6 +409,7 @@ public sealed record ProxyServer
         !HasDialableAddress ? "адреса нет — разделитель или заглушка"
         : Protocol == ProxyProtocol.Shadowsocks && ShadowsocksMethods.ForSingBox(Method) is null ? $"незнакомый шифр Shadowsocks «{Method}»"
         : Protocol == ProxyProtocol.Vless && VlessFlows.ForSingBox(Flow) is null ? $"незнакомый flow «{Flow}»"
+        : Protocol == ProxyProtocol.Vless && VlessEncryption.ForSingBox(Encryption) is null ? "шифрование VLESS в виде, которого движок не разбирает"
         : Security.Equals("reality", StringComparison.OrdinalIgnoreCase) && !IsRealityKey(RealityPublicKey) ? "у REALITY нет годного открытого ключа"
         : null;
 

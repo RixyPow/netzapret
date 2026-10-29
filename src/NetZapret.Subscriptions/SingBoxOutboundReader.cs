@@ -134,6 +134,7 @@ internal static class SingBoxOutboundReader
             Alpn = Strings(tls, "alpn"),
             AllowInsecure = Flag(tls, "insecure"),
             Flow = Empty(Text(outbound, "flow")),
+            Encryption = Empty(Text(outbound, "encryption")),
             RealityPublicKey = Empty(Text(reality, "public_key")),
             RealityShortId = Empty(Text(reality, "short_id")),
             Path = Empty(Text(transportSection, "path")),

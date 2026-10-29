@@ -153,6 +153,7 @@ public static class XrayConfigParser
         ushort port = 0;
         string? credential = null;
         string? flow = null;
+        string? encryption = null;
         string? method = null;
 
         // vless и vmess держат узлы в vnext, trojan и shadowsocks — в servers.
@@ -168,6 +169,7 @@ public static class XrayConfigParser
             {
                 credential = Text(user, "id");
                 flow = Empty(Text(user, "flow"));
+                encryption = Empty(Text(user, "encryption"));
             }
         }
         else if (settings.TryGetProperty("servers", out var list) && list.ValueKind == JsonValueKind.Array
@@ -243,6 +245,7 @@ public static class XrayConfigParser
             Fingerprint = fingerprint,
             Alpn = alpn,
             Flow = flow,
+            Encryption = encryption,
             AllowInsecure = Flag(tls, "allowInsecure") || Flag(tls, "insecure"),
             RealityPublicKey = publicKey,
             RealityShortId = shortId,
