@@ -160,6 +160,15 @@ public static class UpdateInstaller
                 $"Скачано {actual} Б вместо обещанных {release.ArchiveSize} Б — закачка оборвалась.");
         }
 
+        // Размер подделке не помеха; хэш, который GitHub посчитал сам, — помеха.
+        // Распаковываем в папку под исключением Defender, так что подменённый
+        // архив дальше никто бы не остановил.
+        if (release.ArchiveSha256 is { } expected && !Matches(archive, expected))
+        {
+            throw new InvalidOperationException(
+                "Скачанный архив не совпал с отпечатком выпуска на GitHub (SHA-256): он испорчен в дороге или подменён. Обновление отменено.");
+        }
+
         var root = await UnpackAsync(archive, staging, cancellationToken);
 
         // Дописанное человеком в наши списки — в списки новой версии, пока
@@ -183,6 +192,15 @@ public static class UpdateInstaller
             Kept = Preserved.Where(File.Exists).ToList(),
             CarriedLists = carried,
         };
+    }
+
+    /// <summary>Совпадает ли SHA-256 файла с ожидаемым (строчные шестнадцатеричные).</summary>
+    internal static bool Matches(string path, string sha256)
+    {
+        using var stream = File.OpenRead(path);
+
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(stream))
+            .Equals(sha256, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Сколько ждать, пока чужой процесс отпустит скачанный архив.</summary>

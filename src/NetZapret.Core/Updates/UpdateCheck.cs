@@ -14,6 +14,9 @@ public sealed record ReleaseInfo
 
     public long ArchiveSize { get; init; }
 
+    /// <summary>SHA-256 архива по GitHub (поле <c>digest</c> файла), строчными; нет — null.</summary>
+    public string? ArchiveSha256 { get; init; }
+
     /// <summary>Описание изменений — то, ради чего человек и решает, обновляться ли.</summary>
     public string? Notes { get; init; }
 
@@ -148,6 +151,7 @@ public static class UpdateCheck
 
         string url = string.Empty;
         long size = 0;
+        string? sha256 = null;
 
         if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
         {
@@ -160,6 +164,7 @@ public static class UpdateCheck
 
                 url = asset.TryGetProperty("browser_download_url", out var u) ? u.GetString() ?? string.Empty : string.Empty;
                 size = asset.TryGetProperty("size", out var s) ? s.GetInt64() : 0;
+                sha256 = Sha256(asset.TryGetProperty("digest", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null);
                 break;
             }
         }
@@ -170,11 +175,34 @@ public static class UpdateCheck
             Tag = tag,
             ArchiveUrl = url,
             ArchiveSize = size,
+            ArchiveSha256 = sha256,
             Notes = root.TryGetProperty("body", out var b) ? b.GetString() : null,
             Published = root.TryGetProperty("published_at", out var p) && p.TryGetDateTimeOffset(out var when)
                 ? when
                 : null,
         };
+    }
+
+    /// <summary>
+    /// Хэш из поля <c>digest</c> GitHub («sha256:…») — 64 шестнадцатеричных знака
+    /// строчными; другой алгоритм или порча — null, тогда сверяется только размер.
+    /// </summary>
+    /// <remarks>
+    /// GitHub считает хэш файла при загрузке сам (у 1.2.0–1.2.2 поле есть, сверено
+    /// 29.10 с <c>distNetZapret-1.2.2.zip</c>). Вики zapret.moe (раздел «virus»,
+    /// август 2026) — о поддельных сборках обходов: контрольные суммы спасают,
+    /// только если их сверять, а мы сверяли один размер.
+    /// </remarks>
+    internal static string? Sha256(string? digest)
+    {
+        const string Prefix = "sha256:";
+
+        if (digest is null || !digest.StartsWith(Prefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var hex = digest[Prefix.Length..].Trim().ToLowerInvariant();
+
+        return hex.Length == 64 && hex.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f') ? hex : null;
     }
 
     /// <summary>
