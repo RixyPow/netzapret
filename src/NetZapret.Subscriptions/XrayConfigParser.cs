@@ -191,9 +191,11 @@ public static class XrayConfigParser
 
         // Xray переименовал tcp в raw. У sing-box такого транспорта нет:
         // отсутствие секции и есть обычный TCP.
-        var transport = Empty(Text(stream, "network")) ?? "tcp";
-        if (transport.Equals("raw", StringComparison.OrdinalIgnoreCase))
-            transport = "tcp";
+        var transport = StreamTransports.Normalize(Empty(Text(stream, "network")));
+        var kcp = transport == "mkcp" ? MkcpSettings.FromXray(stream) : null;
+
+        var tcpHeader = Text(Section(Section(stream, "rawSettings"), "header"), "type")
+            ?? Text(Section(Section(stream, "tcpSettings"), "header"), "type");
 
         var security = (Empty(Text(stream, "security")) ?? "none").ToLowerInvariant();
 
@@ -226,7 +228,7 @@ public static class XrayConfigParser
 
         var (path, hostHeader, serviceName) = Stream(stream, transport);
 
-        var xhttp = transport == "xhttp" ? Section(stream, "xhttpSettings") : default;
+        var xhttp = transport == "xhttp" ? XhttpSection(stream) : default;
 
         server = new ProxyServer
         {
@@ -240,6 +242,8 @@ public static class XrayConfigParser
             Port = port,
             Credential = credential!,
             Transport = transport,
+            KcpOptions = kcp?.Options,
+            TransportRefusal = kcp?.Refusal ?? StreamTransports.Problem(transport, tcpHeader),
             Security = security,
             Sni = sni,
             Fingerprint = fingerprint,
@@ -425,7 +429,7 @@ public static class XrayConfigParser
 
             case "xhttp":
             {
-                var section = Section(stream, "xhttpSettings");
+                var section = XhttpSection(stream);
                 return (Empty(Text(section, "path")), Empty(Text(section, "host")), null);
             }
 
@@ -453,6 +457,12 @@ public static class XrayConfigParser
             && headers.ValueKind == JsonValueKind.Object
                 ? Empty(Text(headers, "Host"))
                 : null;
+
+    /// <summary>Настройки XHTTP; у конфигов под старым именем splithttp — своя секция.</summary>
+    private static JsonElement XhttpSection(JsonElement stream) =>
+        Section(stream, "xhttpSettings") is { ValueKind: JsonValueKind.Object } section
+            ? section
+            : Section(stream, "splithttpSettings");
 
     private static JsonElement Section(JsonElement parent, string name) =>
         parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var section)

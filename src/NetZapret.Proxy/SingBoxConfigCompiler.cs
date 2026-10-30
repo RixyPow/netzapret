@@ -2143,7 +2143,22 @@ public sealed class SingBoxConfigCompiler
                 return transport;
             }
 
-            // tcp, udp и прочее транспортной секции не требуют.
+            // Настройки уже в именах сборки и в её пределах — см. MkcpSettings.
+            case "mkcp":
+            {
+                var transport = new JsonObject { ["type"] = "mkcp" };
+
+                if (server.KcpOptions is { } options && JsonNode.Parse(options) is JsonObject kcp)
+                {
+                    foreach (var (key, value) in kcp)
+                        transport[key] = value?.DeepClone();
+                }
+
+                return transport;
+            }
+
+            // tcp и udp транспортной секции не требуют, а незнакомое сюда не
+            // доходит — такой сервер отсеян (ProxyServer.TransportProblem).
             default:
                 return null;
         }
