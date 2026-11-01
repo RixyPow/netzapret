@@ -20,8 +20,8 @@
 Прокси Telegram с 07.10 — [valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs/releases),
 порт программы [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) на Rust, MIT.
 Сборка `tg-ws-proxy-x86_64-pc-windows-gnu.zip`, распакованная с файлом `LICENSE`
-в `tools\tg-ws-proxy-rs-<версия>\`; сейчас — 2.5.8 (29.10, архив сверен с их
-`SHA256SUMS` и описанием выпуска: `cc19d278…d3a06ba`, сам exe — `57eeb5d0…6e8a016`).
+в `tools\tg-ws-proxy-rs-<версия>\`; сейчас — 2.5.10 (01.11, архив сверен с их
+`SHA256SUMS` и описанием выпуска: `a046d8f3…a2ecd3086`, сам exe — `ff93f01e…537292ac`).
 `tg-ws-proxy.exe` под `tools\` должен быть один: прежние лежат в своих папках
 как `tg-ws-proxy-<версия>.exe.bak`. Порт, а не оригинал: у оригинала
 под Windows есть только программа с треем и окнами, а этот консольный и встаёт
