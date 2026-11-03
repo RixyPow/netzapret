@@ -20,6 +20,7 @@ public sealed class FakeChoiceTests
         Assert.Equal("quic_google", voice.Blob);
         Assert.True(voice.Udp);
         Assert.Equal(0, voice.Slot);
+        Assert.Contains("discord", voice.Hints, StringComparison.Ordinal);
 
         // discord.com — hostfakesplit без образца, места подделки там нет.
         Assert.DoesNotContain(slots, s => s.Section == "discord.com");

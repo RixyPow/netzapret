@@ -537,11 +537,15 @@ public partial class DesyncView : UserControl
 
         foreach (var slot in slots)
             FakesList.Children.Add(FakeRow(key, slot, available, mine));
+
+        NarrowFakes();
     }
 
     private Grid FakeRow(string preset, FakeSlot slot, IReadOnlyList<FakeBlob> available, IReadOnlyList<FakeSwap> mine)
     {
-        var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        // По чему ищет поле над списком: имя секции, шаг, её списки и фильтры, выбранная подделка.
+        var chosen = mine.FirstOrDefault(s => s.Section == slot.Section && s.Slot == slot.Slot)?.Blob;
+        var row = new Grid { Margin = new Thickness(0, 10, 0, 0), Tag = $"{slot.Section} {slot.Step} {slot.Hints} {chosen}" };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -557,7 +561,6 @@ public partial class DesyncView : UserControl
         });
         row.Children.Add(words);
 
-        var chosen = mine.FirstOrDefault(s => s.Section == slot.Section && s.Slot == slot.Slot)?.Blob;
         var offer = FakeChoice.Fitting(slot, available).ToList();
 
         // Выбранное раньше показывается, даже если файла больше нет или он другого рода.
@@ -623,6 +626,24 @@ public partial class DesyncView : UserControl
             FakesStatus.Text = "Выбор не сохранился: " + ex.GetBaseException().Message;
             FakesStatus.Visibility = Visibility.Visible;
         }
+    }
+
+    private void OnFakesSearch(object sender, TextChangedEventArgs e) => NarrowFakes();
+
+    /// <summary>Прячет строки, где нет искомого: мест в V12 Lite — 25, листать их долго.</summary>
+    private void NarrowFakes()
+    {
+        var text = FakesSearch.Text.Trim();
+        int shown = 0;
+
+        foreach (var row in FakesList.Children.OfType<FrameworkElement>())
+        {
+            bool fits = text.Length == 0 || (row.Tag as string ?? string.Empty).Contains(text, StringComparison.OrdinalIgnoreCase);
+            row.Visibility = fits ? Visibility.Visible : Visibility.Collapsed;
+            shown += fits ? 1 : 0;
+        }
+
+        FakesNothing.Visibility = shown == 0 && FakesList.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnFakesToggle(object sender, RoutedEventArgs e)

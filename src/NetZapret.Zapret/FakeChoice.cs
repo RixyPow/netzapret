@@ -24,7 +24,9 @@ public sealed record FakeBlob(string Id, FakeKind Kind, bool BuiltIn)
 /// <param name="Step">Шаг <c>--lua-desync</c> целиком — показать, что именно меняется.</param>
 /// <param name="Blob">Образец по пресету: имя из <c>blob=</c>.</param>
 /// <param name="BlobFile">Файл, которым пресет объявил этот образец; <c>null</c> — встроенный.</param>
-public sealed record FakeSlot(string Section, int Slot, string Step, string Blob, string? BlobFile, bool Udp);
+/// <param name="Hints">Списки и фильтры секции — для поиска: у «Голосовых звонков/чатов» слова
+/// «discord» нет в имени, а есть в <c>--filter-l7=stun,discord</c>.</param>
+public sealed record FakeSlot(string Section, int Slot, string Step, string Blob, string? BlobFile, bool Udp, string Hints = "");
 
 /// <summary>
 /// Выбор подделки у секции пресета — без правки файла пресета.
@@ -117,6 +119,10 @@ public static class FakeChoice
                 continue;
 
             bool udp = IsUdp(section.RawArguments);
+            var hints = string.Join(' ', section.RawArguments
+                .Where(a => a.StartsWith("--hostlist", StringComparison.Ordinal) || a.StartsWith("--ipset", StringComparison.Ordinal)
+                            || a.StartsWith("--filter-l7=", StringComparison.Ordinal))
+                .Select(a => a.Split('=', 2).Last()));
             int slot = 0;
 
             foreach (var step in section.DesyncRecipes)
@@ -124,7 +130,7 @@ public static class FakeChoice
                 if (BlobOf(step) is not { } blob)
                     continue;
 
-                result.Add(new FakeSlot(section.Name, slot++, step, blob, declared.GetValueOrDefault(blob), udp));
+                result.Add(new FakeSlot(section.Name, slot++, step, blob, declared.GetValueOrDefault(blob), udp, hints));
             }
         }
 
