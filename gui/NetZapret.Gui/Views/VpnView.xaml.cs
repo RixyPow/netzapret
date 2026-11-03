@@ -143,7 +143,7 @@ public sealed record QuickTile(
     public required Brush Soft { get; init; }
 }
 
-/// <summary>Строка «Недавних серверов»: флаг, а нет его — знак (буквы страны, у WARP — облачко).</summary>
+/// <summary>Строка «Недавних серверов»: флаг, а нет его — буквы страны; у WARP — логотип Cloudflare.</summary>
 public sealed record RecentRow(
     string Name,
     string Mark,
@@ -155,7 +155,9 @@ public sealed record RecentRow(
     Visibility FlagShown,
     string Latency,
     Brush Color,
-    FontWeight Weight);
+    FontWeight Weight,
+    ImageSource? Logo,
+    Visibility LogoShown);
 
 /// <summary>Папка одной подписки.</summary>
 public sealed class SubRow : System.ComponentModel.INotifyPropertyChanged
@@ -721,16 +723,7 @@ public partial class VpnView : UserControl
         return text.Length > 0 ? text : "—";
     }
 
-    /// <summary>Цвет облачка Cloudflare — его знак.</summary>
-    private static readonly Brush Cloud = Frozen(new SolidColorBrush(Color.FromRgb(0xF3, 0x80, 0x20)));
-
-    private static Brush Frozen(Brush brush)
-    {
-        brush.Freeze();
-        return brush;
-    }
-
-    /// <summary>У WARP вместо флага облачко (владелец, 01.10: на месте флага стояла точка).</summary>
+    /// <summary>У WARP вместо флага логотип Cloudflare (01.10 — облачко: на месте флага стояла точка).</summary>
     private void ShowCloud()
     {
         CurrentFlag.SetResourceReference(Border.BackgroundProperty, "Raised");
@@ -3141,30 +3134,32 @@ public partial class VpnView : UserControl
 
         _recentShown = shown;
 
-        var icons = (FontFamily)FindResource("IconFont");
         var text = (FontFamily)FindResource("UiFont");
         var muted = (Brush)FindResource("Muted");
+        var logo = (ImageSource)FindResource("CloudflareLogo");
 
         RecentList.ItemsSource = recent.Select(seen =>
         {
             var (country, name) = CountryTag.Split(seen.Tag);
 
-            // У WARP флага нет — облачко (владелец, 01.10).
+            // У WARP флага нет — логотип Cloudflare (до 03.11 — облачко шрифта).
             bool warp = seen.Tag == Warp.MasqueTag;
             var flag = !warp && country.Length == 2 ? FlagImages.For(country) : null;
 
             return new RecentRow(
                 Short(name.Length > 0 ? name : seen.Tag),
-                warp ? "\uE753" : country.Length == 2 ? country : "•",
-                warp ? icons : text,
-                warp ? 15 : 11,
-                warp ? Cloud : muted,
-                flag is null ? Visibility.Visible : Visibility.Collapsed,
+                country.Length == 2 ? country : "•",
+                text,
+                11,
+                muted,
+                flag is null && !warp ? Visibility.Visible : Visibility.Collapsed,
                 flag,
                 flag is null ? Visibility.Collapsed : Visibility.Visible,
                 Seen(seen.Tag) is { Success: true, LatencyMs: { } ms } ? $"{ms:0} мс" : "—",
                 (Brush)FindResource(Key(seen.Tag)),
-                seen.Tag == current ? FontWeights.SemiBold : FontWeights.Normal);
+                seen.Tag == current ? FontWeights.SemiBold : FontWeights.Normal,
+                warp ? logo : null,
+                warp ? Visibility.Visible : Visibility.Collapsed);
         }).ToList();
 
         RecentEmpty.Visibility = recent.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

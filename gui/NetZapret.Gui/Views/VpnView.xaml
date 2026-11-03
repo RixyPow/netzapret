@@ -465,9 +465,9 @@
                                     <Grid>
                                         <TextBlock x:Name="CurrentCountry" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                    FontWeight="SemiBold" FontSize="17" Foreground="{DynamicResource Muted}" />
-                                        <!-- У WARP флага нет — облачко (владелец, 01.10). -->
-                                        <TextBlock x:Name="CurrentCloud" Style="{StaticResource TileGlyph}" Text="&#xE753;"
-                                                   FontSize="28" Foreground="#F38020" Visibility="Collapsed" />
+                                        <!-- У WARP флага нет — логотип Cloudflare (до 03.11 — облачко шрифта). -->
+                                        <Image x:Name="CurrentCloud" Source="{StaticResource CloudflareLogo}" Width="46"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
                                     </Grid>
                                 </Border>
 
@@ -585,6 +585,8 @@
                                                            FontWeight="SemiBold" Foreground="{Binding MarkBrush}" Width="24"
                                                            TextAlignment="Center" VerticalAlignment="Center"
                                                            Visibility="{Binding MarkShown}" />
+                                                <Image Source="{Binding Logo}" Width="24" VerticalAlignment="Center"
+                                                       Visibility="{Binding LogoShown}" />
                                             </Grid>
 
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
@@ -727,7 +729,8 @@
                         </Grid.ColumnDefinitions>
 
                         <Border Grid.Column="0" Style="{StaticResource IconTile}" VerticalAlignment="Center" Margin="0,0,14,0">
-                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE753;" Foreground="#F38020" />
+                            <Image Source="{StaticResource CloudflareLogo}" Width="28"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
