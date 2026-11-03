@@ -1409,7 +1409,7 @@ public partial class RoutesView : UserControl
     /// Папки программ: «Домены» и «Адреса» (<see cref="ProgramRoutes"/>, 13.10).
     /// </summary>
     /// <summary>Ключ места пустой папки в порядке.</summary>
-    private static string FolderPlace(string folder) => "folder|" + folder;
+    private static string FolderPlace(string folder) => RouteFolders.Place(folder);
 
     private IEnumerable<(string? Folder, string Key, PartRow Part)> ProgramParts(AppSettings settings, UserRulesFile userRules)
     {
@@ -2398,6 +2398,10 @@ public partial class RoutesView : UserControl
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(MenuEntry("", "Программа из запущенных…", PickRunningProgram));
         menu.Items.Add(MenuEntry("", "Программа файлом…", PickProgramFile));
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+
+        // Маршрут или папка, которые отдали «Экспортом…» (RouteBundles, 03.11).
+        menu.Items.Add(MenuEntry("", "Из файла…", ImportFromFile));
         menu.IsOpen = true;
     }
 
@@ -2567,6 +2571,9 @@ public partial class RoutesView : UserControl
             menu.Items.Add(MenuEntry("", part.HomeFolder is { } home ? $"Вернуть в «{home}»" : "Вернуть на место",
                 () => MoveRoute(part, part.HomeFolder ?? string.Empty)));
         }
+
+        menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
+        menu.Items.Add(MenuEntry(string.Empty, "Экспорт…", () => ExportRoute(part)));
 
         // «убрать» стоял кнопкой в строке; по макету 13.10 строка несёт только путь, пин и «⋯».
         if (part.Own)

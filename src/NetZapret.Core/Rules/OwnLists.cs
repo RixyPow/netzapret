@@ -95,12 +95,7 @@ public static class OwnLists
 
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
 
-        var body = new StringBuilder()
-            .Append($"# Свой список: {name}.\r\n")
-            .Append("#\r\n")
-            .Append("# Имена по одному в строке, поддомены покрываются сами.\r\n")
-            .Append("# Правка действует со следующего запуска движков. Уберёте\r\n")
-            .Append("# его в «Маршрутах» — удалится и этот файл.\r\n");
+        var body = new StringBuilder(Header(name));
 
         foreach (var domain in domains)
             body.Append(domain.Trim().TrimStart('*', '.')).Append("\r\n");
@@ -108,6 +103,14 @@ public static class OwnLists
         File.WriteAllText(full, body.ToString(), new UTF8Encoding(false));
         return value;
     }
+
+    /// <summary>Шапка своего списка — одна и у заведённого здесь, и у привезённого пакетом (<see cref="RouteBundles"/>).</summary>
+    internal static string Header(string name) =>
+        $"# Свой список: {name}.\r\n"
+        + "#\r\n"
+        + "# Имена по одному в строке, поддомены покрываются сами.\r\n"
+        + "# Правка действует со следующего запуска движков. Уберёте\r\n"
+        + "# его в «Маршрутах» — удалится и этот файл.\r\n";
 
     /// <summary>
     /// Имена из своего списка — строки без комментариев и звёздочек.

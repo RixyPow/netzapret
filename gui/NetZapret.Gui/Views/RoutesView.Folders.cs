@@ -92,8 +92,11 @@ public partial class RoutesView
 
         var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
 
+        // Файлом — чтобы отдать другому человеку (RouteBundles, 03.11); загрузка — «Добавить правило».
         if (folder.Program is { } program)
         {
+            menu.Items.Add(MenuEntry("", "Экспорт…", () => ExportFolder(folder)));
+            menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
             menu.Items.Add(MenuEntry("", "Убрать программу…", () => RemoveProgram(program)));
             menu.IsOpen = true;
             return;
@@ -101,6 +104,7 @@ public partial class RoutesView
 
         menu.Items.Add(MenuEntry("", "Переименовать…", () => Rename(folder)));
         menu.Items.Add(MenuEntry("", "Добавить маршрут…", () => OnAddIntoFolder(anchor, e)));
+        menu.Items.Add(MenuEntry("", "Экспорт…", () => ExportFolder(folder)));
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(MenuEntry("", folder.Made ? "Удалить папку" : "Распустить папку", () => Dissolve(folder)));
 

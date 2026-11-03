@@ -117,6 +117,14 @@ public partial class RoutesView
         if (dialog.ShowDialog() != true)
             return;
 
+        // Файл одного маршрута или папки (RouteBundles, 03.11) — загружается
+        // как он есть, а не заменяет собой все маршруты.
+        if (RouteBundles.Looks(dialog.FileName))
+        {
+            ImportBundle(dialog.FileName);
+            return;
+        }
+
         IReadOnlyList<UserRuleEntry> incoming;
 
         try

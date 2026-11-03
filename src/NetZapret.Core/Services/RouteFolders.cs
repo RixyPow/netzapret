@@ -1,3 +1,5 @@
+using NetZapret.Core.Rules;
+
 namespace NetZapret.Core.Services;
 
 /// <summary>
@@ -19,6 +21,58 @@ namespace NetZapret.Core.Services;
 /// </remarks>
 public static class RouteFolders
 {
+    /// <summary>
+    /// Ключ строки «Маршрутов» для правила — тот, под которым перекладка
+    /// и порядок лежат в настройках.
+    /// </summary>
+    /// <remarks>
+    /// Тот же, что строит окно (<c>RouteKeys</c>): свой домен и свой список —
+    /// <c>own|</c>, список программы и часть каталога — <c>hostlist|</c>,
+    /// адресная часть — <c>ipset|</c>, своя подсеть — <c>net|</c>. Здесь — для
+    /// загрузки маршрутов файлом (<see cref="Rules.RouteBundles"/>): папку
+    /// привезённым маршрутам надо записать теми же ключами, иначе они
+    /// легли бы мимо неё. Согласие с окном сторожит тест окна.
+    /// </remarks>
+    public static string KeyOf(MatchKind match, string value) => match switch
+    {
+        MatchKind.Domain => "own|" + value,
+        MatchKind.HostList when OwnLists.IsOwn(value) && !ProgramRoutes.IsProgramList(value) => "own|" + value,
+        MatchKind.HostList => "hostlist|" + value,
+        MatchKind.IpSet => "ipset|" + value,
+        MatchKind.Ip => "net|" + value,
+        _ => "prog|" + value,
+    };
+
+    /// <summary>Ключ места пустой папки в порядке: у заведённой папки без маршрутов место всё равно есть.</summary>
+    public static string Place(string folder) => "folder|" + folder;
+
+    /// <summary>
+    /// Папка каталога, в которой часть лежит без перекладки; <c>null</c> — сама по себе.
+    /// </summary>
+    /// <remarks>
+    /// Как раскладывает окно: часть полки с разными сервисами
+    /// (<see cref="ServiceDefinition.Grouping"/>) и единственная часть сервиса
+    /// стоят отдельно, прочие — в папке сервиса. Свои маршруты — вне папок.
+    /// </remarks>
+    public static string? HomeOf(MatchKind match, string value)
+    {
+        if (match is not (MatchKind.HostList or MatchKind.IpSet))
+            return null;
+
+        var list = value.Replace('\\', '/').Trim();
+
+        foreach (var service in ServiceCatalog.All)
+        {
+            if (service.Parts.Any(p => p.ByAddress == (match == MatchKind.IpSet)
+                && string.Equals(p.List, list, StringComparison.OrdinalIgnoreCase)))
+            {
+                return service.Grouping || service.Parts.Count == 1 ? null : service.Name;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Раскладывает маршруты по папкам.
     /// </summary>

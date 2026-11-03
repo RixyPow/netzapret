@@ -177,15 +177,17 @@ public static class ProgramRoutes
 
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);
 
-        var body = new StringBuilder()
-            .Append($"# Маршрут программы {program}: {what}.\r\n")
-            .Append("#\r\n")
-            .Append("# Пополняется сам, пока у программы включено автопополнение и идёт\r\n")
-            .Append("# «Наблюдение». Дописывать можно и руками, по одному в строке.\r\n")
-            .Append("# Правка действует со следующего запуска движков.\r\n");
-
-        File.WriteAllText(full, body.ToString(), new UTF8Encoding(false));
+        File.WriteAllText(full, Header(program, what), new UTF8Encoding(false));
     }
+
+    /// <summary>Шапка списка программы — одна и у заведённого здесь, и у привезённого пакетом (<see cref="RouteBundles"/>).</summary>
+    /// <param name="what">«домены» или «адреса».</param>
+    internal static string Header(string program, string what) =>
+        $"# Маршрут программы {program}: {what}.\r\n"
+        + "#\r\n"
+        + "# Пополняется сам, пока у программы включено автопополнение и идёт\r\n"
+        + "# «Наблюдение». Дописывать можно и руками, по одному в строке.\r\n"
+        + "# Правка действует со следующего запуска движков.\r\n";
 
     private static string Full(string value, string? root) =>
         Path.GetFullPath(Path.Combine(root ?? Directory.GetCurrentDirectory(), value));
