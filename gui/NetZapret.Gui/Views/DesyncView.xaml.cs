@@ -492,16 +492,6 @@ public partial class DesyncView : UserControl
     }
 
     /// <summary>
-    /// Разворачивает каталог рецептов.
-    /// </summary>
-    /// <remarks>
-    /// Тем же приёмом, что «Свой домен» и «Порядок вычисления» в маршрутах:
-    /// два разных способа свернуть на одном экране читались бы как два
-    /// разных вида карточек.
-    /// </remarks>
-    private bool _fillingFakes;
-
-    /// <summary>
     /// Подделки секций выбранного пресета: где стоят и что выбрано вместо них.
     /// </summary>
     /// <remarks>
@@ -545,17 +535,8 @@ public partial class DesyncView : UserControl
                 ? $"Мест с подделкой: {slots.Count}. Все — как в пресете."
                 : $"Мест с подделкой: {slots.Count}, изменено: {changed}.";
 
-        _fillingFakes = true;
-
-        try
-        {
-            foreach (var slot in slots)
-                FakesList.Children.Add(FakeRow(key, slot, available, mine));
-        }
-        finally
-        {
-            _fillingFakes = false;
-        }
+        foreach (var slot in slots)
+            FakesList.Children.Add(FakeRow(key, slot, available, mine));
     }
 
     private Grid FakeRow(string preset, FakeSlot slot, IReadOnlyList<FakeBlob> available, IReadOnlyList<FakeSwap> mine)
@@ -576,9 +557,6 @@ public partial class DesyncView : UserControl
         });
         row.Children.Add(words);
 
-        var box = new ComboBox { Width = 260, VerticalAlignment = VerticalAlignment.Center };
-        box.Items.Add(new ComboBoxItem { Content = $"Как в пресете — {slot.Blob}", Tag = null });
-
         var chosen = mine.FirstOrDefault(s => s.Section == slot.Section && s.Slot == slot.Slot)?.Blob;
         var offer = FakeChoice.Fitting(slot, available).ToList();
 
@@ -586,24 +564,36 @@ public partial class DesyncView : UserControl
         if (chosen is not null && offer.All(b => b.Id != chosen))
             offer.Insert(0, new FakeBlob(chosen, FakeChoice.KindOf(chosen), false));
 
-        foreach (var blob in offer)
-            box.Items.Add(new ComboBoxItem { Content = blob.Title, Tag = blob.Id });
+        // Выбор — окном (FakePickerWindow), а не выпадающим списком: на прозрачном
+        // фоне темы список сливался со строками под ним (владелец 03.11).
+        var side = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        side.Children.Add(new TextBlock
+        {
+            Text = chosen is null ? $"как в пресете — {slot.Blob}" : $"{Path.GetFileNameWithoutExtension(chosen)} вместо {slot.Blob}",
+            Style = (Style)FindResource("Caption"),
+            Foreground = chosen is null ? (Brush)FindResource("Muted") : (Brush)FindResource("Accent"),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 12, 0),
+        });
 
-        box.SelectedIndex = chosen is null ? 0 : 1 + offer.FindIndex(b => b.Id == chosen);
-        box.SelectionChanged += (_, _) => OnFakeChosen(preset, slot, box);
+        var change = new Button { Content = "Сменить…", Style = (Style)FindResource("Ghost"), Padding = new Thickness(14, 7, 14, 7) };
+        change.Click += (_, _) =>
+        {
+            var picker = new FakePickerWindow(slot, offer, chosen, ZapretPaths.Discover()?.Root) { Owner = Window.GetWindow(this) };
 
-        Grid.SetColumn(box, 1);
-        row.Children.Add(box);
+            if (picker.ShowDialog() == true && picker.Picked != chosen)
+                SaveFake(preset, slot, picker.Picked);
+        };
+        side.Children.Add(change);
+
+        Grid.SetColumn(side, 1);
+        row.Children.Add(side);
 
         return row;
     }
 
-    private void OnFakeChosen(string preset, FakeSlot slot, ComboBox box)
+    private void SaveFake(string preset, FakeSlot slot, string? blob)
     {
-        if (_fillingFakes || box.SelectedItem is not ComboBoxItem item)
-            return;
-
-        var blob = item.Tag as string;
 
         try
         {
@@ -643,6 +633,14 @@ public partial class DesyncView : UserControl
         Chevrons.Turn(FakesChevron, open);
     }
 
+    /// <summary>
+    /// Разворачивает каталог рецептов.
+    /// </summary>
+    /// <remarks>
+    /// Тем же приёмом, что «Свой домен» и «Порядок вычисления» в маршрутах:
+    /// два разных способа свернуть на одном экране читались бы как два
+    /// разных вида карточек.
+    /// </remarks>
     private void OnCatalogToggle(object sender, RoutedEventArgs e)
     {
         var open = Catalog.Visibility != Visibility.Visible;
