@@ -133,6 +133,12 @@ public static class TgWsProxy
                 arguments.AddRange(["--dc-ip", target]);
         }
 
+        // Рабочие домены Cloudflare по замеру автонастройки — первыми: прокси
+        // ставит --cf-domain перед общим списком --default-domains (2.6.0, 03.11),
+        // и мёртвые 503 из его начала дальше не перебираются первыми.
+        if (routes.CfDomains is { Count: > 0 } domains)
+            arguments.AddRange(["--cf-domain", string.Join(",", domains)]);
+
         int timeout = CfTimeout(routes.CfConnectTimeout);
 
         if (timeout != DefaultCfConnectTimeout)
@@ -227,11 +233,13 @@ public static class TgWsProxy
 /// <param name="DirectOther">Прямой путь к DC1, DC3 и DC5 (<see cref="TgWsProxy.DirectOther"/>).</param>
 /// <param name="CfConnectTimeout">Сколько ждать один домен Cloudflare, секунды.</param>
 /// <param name="WorkerDomains">Свои воркеры Cloudflare через запятую (<see cref="TgWsProxy.WorkerDomains"/>); пусто — нет.</param>
+/// <param name="CfDomains">Домены Cloudflare первыми, перед общим списком, — по замеру автонастройки.</param>
 public sealed record TgWsProxyRoutes(
     bool DirectMain = false,
     bool DirectOther = false,
     int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout,
-    string? WorkerDomains = null)
+    string? WorkerDomains = null,
+    IReadOnlyList<string>? CfDomains = null)
 {
     public static TgWsProxyRoutes From(AppSettings settings) => new(
         settings.TelegramProxyDirect,

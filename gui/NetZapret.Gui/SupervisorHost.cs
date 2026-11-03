@@ -742,6 +742,9 @@ internal static class SupervisorHost
             TgWsProxyRoutes.From(settings))
         {
             OutputLogPath = Path.Combine("runtime", "tg-ws-proxy.log"),
+            // Пути — замером перед каждым запуском (автонастройка, 03.11): настройки
+            // читаются заново, живые домены меняются за минуты (TgProxyTune).
+            Routes = ct => NetZapret.Proxy.TgProxyTune.RoutesAsync(AppSettings.Load(AppSettings.DefaultPath), ct),
         });
     }
 

@@ -409,6 +409,17 @@ public sealed record AppSettings
     /// </remarks>
     public bool TelegramProxyDirect { get; init; }
 
+    /// <summary>
+    /// Автонастройка прокси Telegram (<c>TgProxyTune</c>): прямой путь к DC2 и DC4
+    /// и порядок доменов Cloudflare решает замер, а не <see cref="TelegramProxyDirect"/>.
+    /// </summary>
+    /// <remarks>
+    /// Владелец 03.11 («давай сделаем», по образцу Zapret-Zen). Включена по умолчанию:
+    /// прямой путь она включает, только если он ответил, — опасение 21.10 («у кого
+    /// закрыт адрес, первое соединение ждало бы таймаут») замер снимает.
+    /// </remarks>
+    public bool TelegramProxyAuto { get; init; } = true;
+
     /// <summary>Прокси Telegram ходит к DC1, DC3 и DC5 напрямую (<see cref="TgWsProxy.DirectOther"/>).</summary>
     /// <remarks>Выключено по умолчанию: адреса отвечают по TLS, а настоящие соединения через них не проверены (21.10).</remarks>
     public bool TelegramProxyDirectOther { get; init; }

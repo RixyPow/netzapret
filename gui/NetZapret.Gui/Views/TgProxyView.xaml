@@ -338,6 +338,42 @@
 
                     <Border Style="{StaticResource RowLine}" Margin="0,14,0,12" />
 
+                    <!--
+                        Автонастройка (03.11, по образцу Zapret-Zen): прямой путь и
+                        порядок доменов Cloudflare решает замер переходом на WebSocket
+                        (TgProxyTune). Пока она включена, выключатель DC2 и DC4 только
+                        показывает, что решил замер.
+                    -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Style="{StaticResource RowTile}">
+                            <TextBlock Style="{StaticResource RowGlyph}" Text="&#xE895;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <TextBlock Text="Автонастройка" FontWeight="SemiBold" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Перед каждым запуском прокси проверяет, отвечает ли прямой путь к DC2 и DC4 и какие домены Cloudflare сейчас живы, и ставит живые первыми. Мёртвые домены общего списка отвечают 503 и только задерживают соединение, а живые меняются за минуты." />
+                            <TextBlock x:Name="TuneState" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" />
+                            <Button x:Name="TuneButton" Style="{StaticResource Ghost}" Padding="14,7" Margin="0,8,0,0"
+                                    HorizontalAlignment="Left" Content="Проверить сейчас" Click="OnTuneNow" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="2" x:Name="AutoWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="3" x:Name="AutoTune" Style="{StaticResource Switch}"
+                                      Click="OnAutoTune" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,12,0,12" />
+
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />

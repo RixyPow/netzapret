@@ -174,6 +174,9 @@ public abstract class SupervisedService
     /// </remarks>
     protected virtual Task OnReadyAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+    /// <summary>Перед каждым запуском процесса — то, что нужно узнать заранее (замеры для ключей).</summary>
+    protected virtual Task PrepareAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>Движок остановлен — прибрать то, что после него осталось снаружи.</summary>
     protected virtual void OnStopped()
     {
@@ -226,6 +229,16 @@ public abstract class SupervisedService
         // её на место ставит OnReadyAsync.
         ForgetRunState();
         _fatal = null;
+
+        try
+        {
+            await PrepareAsync(cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Подготовка — не запуск: не вышла, и служба поднимется с прежними ключами.
+            Note("подготовка к запуску не удалась: " + ex.GetBaseException().Message);
+        }
 
         try
         {

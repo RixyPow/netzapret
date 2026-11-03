@@ -55,6 +55,21 @@ public partial class TgProxyView : UserControl
         DirectOther.IsChecked = settings.TelegramProxyDirectOther;
         DirectOtherWord.Text = settings.TelegramProxyDirectOther ? "вкл." : "выкл.";
 
+        // Автонастройка решает за выключатель DC2 и DC4 — он только показывает её итог.
+        var tuning = NetZapret.Proxy.TgProxyTune.Load();
+        AutoTune.IsChecked = settings.TelegramProxyAuto;
+        AutoWord.Text = settings.TelegramProxyAuto ? "вкл." : "выкл.";
+        DirectMain.IsEnabled = !settings.TelegramProxyAuto;
+
+        if (!_tuning)
+            TuneState.Text = NetZapret.Proxy.TgProxyTune.Describe(tuning);
+
+        if (settings.TelegramProxyAuto && tuning is not null)
+        {
+            DirectMain.IsChecked = tuning.Direct;
+            DirectMainWord.Text = tuning.Direct ? "вкл. по замеру" : "выкл. по замеру";
+        }
+
         _showingRoutes = true;
         var timeout = TgWsProxy.CfTimeout(settings.TelegramProxyCfTimeout).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var items = CfTimeoutChoice.Items.OfType<ComboBoxItem>().ToList();
@@ -312,6 +327,46 @@ public partial class TgProxyView : UserControl
         bool on = DirectMain.IsChecked == true;
         SaveRoutes(s => s with { TelegramProxyDirect = on },
             on ? "DC2 и DC4 — напрямую." : "DC2 и DC4 — только через Cloudflare.");
+    }
+
+    private bool _tuning;
+
+    private void OnAutoTune(object sender, RoutedEventArgs e)
+    {
+        bool on = AutoTune.IsChecked == true;
+        SaveRoutes(s => s with { TelegramProxyAuto = on },
+            on ? "Автонастройка включена: пути решает замер." : "Автонастройка выключена: пути — по выключателям ниже.");
+    }
+
+    /// <summary>Проверка путей сейчас, не дожидаясь запуска прокси; при автонастройке прокси перезапускается.</summary>
+    private async void OnTuneNow(object sender, RoutedEventArgs e)
+    {
+        _tuning = true;
+        TuneButton.IsEnabled = false;
+        TuneState.Text = "Проверяю прямой путь и домены Cloudflare…";
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            await Task.Run(() => NetZapret.Proxy.TgProxyTune.RoutesAsync(settings with { TelegramProxyAuto = true }, CancellationToken.None));
+
+            var tuning = NetZapret.Proxy.TgProxyTune.Load();
+            TuneState.Text = NetZapret.Proxy.TgProxyTune.Describe(tuning);
+            Journal.Write("TG Proxy", "автонастройка (кнопкой): " + TuneState.Text);
+
+            // Ключи прокси читает при запуске — тем же путём, что смена выключателя.
+            if (settings.TelegramProxyAuto)
+                SaveRoutes(s => s, "Пути обновлены по замеру.");
+        }
+        catch (Exception ex)
+        {
+            TuneState.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            _tuning = false;
+            TuneButton.IsEnabled = true;
+        }
     }
 
     private void OnDirectOther(object sender, RoutedEventArgs e)

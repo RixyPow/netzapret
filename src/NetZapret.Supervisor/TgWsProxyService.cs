@@ -19,7 +19,7 @@ public sealed class TgWsProxyService : SupervisedService
     private readonly int _port;
     private readonly string _secret;
     private readonly string _workingDirectory;
-    private readonly TgWsProxyRoutes _routes;
+    private TgWsProxyRoutes _routes;
 
     /// <param name="routes">Пути к Telegram — настройки вкладки; <c>null</c> — по умолчанию.</param>
     public TgWsProxyService(string executablePath, int port, string secret, string workingDirectory,
@@ -30,6 +30,25 @@ public sealed class TgWsProxyService : SupervisedService
         _secret = secret;
         _workingDirectory = workingDirectory;
         _routes = routes ?? new TgWsProxyRoutes();
+    }
+
+    /// <summary>
+    /// Пути, узнаваемые перед каждым запуском (автонастройка, <c>TgProxyTune.RoutesAsync</c>);
+    /// <c>null</c> — пути из конструктора.
+    /// </summary>
+    public Func<CancellationToken, Task<TgWsProxyRoutes>>? Routes { get; init; }
+
+    protected override async Task PrepareAsync(CancellationToken cancellationToken)
+    {
+        if (Routes is null)
+            return;
+
+        _routes = await Routes(cancellationToken);
+
+        Note($"пути: прямой к DC2 и DC4 — {(_routes.DirectMain ? "да" : "нет")}"
+            + (_routes.CfDomains is { Count: > 0 } first
+                ? $", домены Cloudflare первыми: {string.Join(", ", first)}"
+                : ", домены Cloudflare — общий список"));
     }
 
     /// <summary>Имя службы — по нему её узнаёт EngineHealth как необязательную.</summary>
