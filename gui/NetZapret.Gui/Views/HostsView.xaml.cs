@@ -773,7 +773,7 @@ public partial class HostsView : UserControl
     {
         _narrow = Body.ActualWidth < NarrowBelow;
 
-        SideColumn.Width = new GridLength(_narrow ? 0 : 320);
+        SideColumn.Width = new GridLength(_narrow ? 0 : 338);
         SideRow.Height = _narrow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
 
         Grid.SetColumn(SideHost, _narrow ? 0 : 1);
