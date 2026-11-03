@@ -30,6 +30,16 @@ LIMIT = 4096
 
 FOOTER = "## Чем это собрано"
 
+# Картинка выпуска (с 1.3.0, 03.11): docs/release-cards/<версия>.png в
+# репозитории. Над текстом — крупным превью ссылки, а не фото с подписью:
+# подпись к фото у Bot API — до 1024 знаков, а пост 1.3.0 — около 1500.
+# Ссылка — на raw.githubusercontent: там картинка отдаётся как image/png,
+# а вложение выпуска — как application/octet-stream, и превью из него
+# не вышло бы. Вложением выпуска её не кладём ещё и потому, что
+# DownloadStats считает скачивания всех вложений.
+CARDS = "docs/release-cards"
+RAW = "https://raw.githubusercontent.com/RixyPow/netzapret/master/"
+
 # Кнопка под постом (владелец 15.10: «добавь кнопку поддержать в чейнджлоги
 # на гитхабе и в тг»). Та же ссылка, что About.Support в программе: сменится
 # донат — менять и здесь.
@@ -123,15 +133,31 @@ def compose(body: str, tag: str, url: str) -> str:
     return "\n\n".join([head, ending])
 
 
-def send(text: str) -> None:
+def card(tag: str) -> str | None:
+    """Адрес картинки выпуска, если она лежит в репозитории; иначе None."""
+    path = f"{CARDS}/{tag.lstrip('v')}.png"
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+
+    return RAW + path if os.path.isfile(os.path.join(root, path)) else None
+
+
+def send(text: str, picture: str | None) -> None:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat = os.environ["TELEGRAM_CHAT_ID"]
+
+    # Без картинки превью выключено, как прежде: иначе Telegram развернул бы
+    # ссылку на выпуск карточкой GitHub под текстом.
+    preview = (
+        {"url": picture, "prefer_large_media": True, "show_above_text": True}
+        if picture
+        else {"is_disabled": True}
+    )
 
     data = urllib.parse.urlencode({
         "chat_id": chat,
         "text": text,
         "parse_mode": "HTML",
-        "disable_web_page_preview": "true",
+        "link_preview_options": json.dumps(preview),
         # Кнопка под сообщением, а не ссылка в тексте: так её видно сразу,
         # и пост не удлиняется.
         "reply_markup": json.dumps({"inline_keyboard": [[{"text": "💛 Поддержать", "url": DONATE_URL}]]}),
@@ -164,14 +190,16 @@ def main() -> None:
         sys.exit("Нет текста выпуска или тега — отправлять нечего.")
 
     text = compose(body, tag, url)
+    picture = card(tag)
 
     if "--dry-run" in sys.argv:
+        print(f"[картинка над текстом: {picture or 'нет'}]\n")
         print(text)
         print(f"\n[кнопка под постом: 💛 Поддержать → {DONATE_URL}]")
         print(f"[{len(text)} символов из {LIMIT}]")
         return
 
-    send(text)
+    send(text, picture)
 
 
 if __name__ == "__main__":

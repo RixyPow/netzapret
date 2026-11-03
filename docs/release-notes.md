@@ -1,3 +1,5 @@
+[![NetZapret 1.3.0](https://raw.githubusercontent.com/RixyPow/netzapret/master/docs/release-cards/1.3.0.png)](https://github.com/RixyPow/netzapret/releases/tag/v1.3.0)
+
 # Что нового в 1.3.0
 
 ## DNS
