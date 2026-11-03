@@ -1608,7 +1608,8 @@ public partial class RoutesView : UserControl
 
     /// <summary>
     /// Значок своей программы, как в Happ: из файла, если вписан путь, иначе —
-    /// из запущенного процесса с тем же именем. Не запущена — буква.
+    /// из запущенного процесса с тем же именем. Не запущена — сохранённый
+    /// с прошлого раза (<see cref="ProgramIcons.Saved"/>), а не видели ни разу — буква.
     /// </summary>
     /// <remarks>
     /// Список процессов запоминается на полминуты: раздел пересобирается
@@ -1628,7 +1629,7 @@ public partial class RoutesView : UserControl
             _programPathsAt = DateTime.UtcNow;
         }
 
-        return _programPaths.TryGetValue(value, out var path) ? ProgramIcons.Of(path) : null;
+        return _programPaths.TryGetValue(value, out var path) ? ProgramIcons.Remember(value, path) : ProgramIcons.Saved(value);
     }
 
     /// <summary>
@@ -2416,7 +2417,10 @@ public partial class RoutesView : UserControl
         var window = new ProgramPickerWindow { Owner = Window.GetWindow(this) };
 
         if (window.ShowDialog() == true && window.Chosen is { } chosen)
+        {
+            ProgramIcons.Remember(chosen.Name, chosen.Path);
             AddProgram(chosen.Name);
+        }
     }
 
     private void PickProgramFile()
@@ -2428,7 +2432,10 @@ public partial class RoutesView : UserControl
         };
 
         if (dialog.ShowDialog(Window.GetWindow(this)) == true)
+        {
+            ProgramIcons.Remember(System.IO.Path.GetFileName(dialog.FileName), dialog.FileName);
             AddProgram(System.IO.Path.GetFileName(dialog.FileName));
+        }
     }
 
     /// <summary>
