@@ -645,7 +645,15 @@ internal static class SupervisorHost
         // это расшифрованная игра на их адаптере (LocalNetworks.VirtualLans, 14.10).
         var lans = NetZapret.Core.Rules.LocalNetworks.VirtualLans;
 
-        var arguments = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture, keep, lans);
+        var built = WinwsCommandLine.Build(preset, exclude, own, gameFilter, servers, fakeRange, udpOff, tun, settings.Capture, keep, lans).ToList();
+
+        // Подделки, выбранные у секций в «Десинке» (FakeChoice, №51): пресет по имени
+        // файла — так же его называет выбор пресета (ZapretPaths.FindPreset).
+        int swapped = FakeChoice.Apply(built, Path.GetFileNameWithoutExtension(presetPath), settings.FakeSwaps);
+        IReadOnlyList<string> arguments = built;
+
+        if (swapped > 0)
+            Console.WriteLine($"Подделки секций заменены выбором из «Десинка»: мест — {swapped}.");
 
         // Ширина перехвата (PresetCapture): в журнал — что вышло на деле,
         // а не что выбрано: пресет с полным фильтром уровню не поддаётся.

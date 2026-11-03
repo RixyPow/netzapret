@@ -238,6 +238,15 @@ public sealed record AppSettings
     /// </remarks>
     public bool AutoRepin { get; init; } = true;
 
+    /// <summary>
+    /// Подделки, выбранные у секций пресета в «Десинке» (<c>FakeChoice</c>).
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №51 (03.11): выбор фейков в окне, без правки файлов пресета.
+    /// Пусто — всё как в пресете.
+    /// </remarks>
+    public IReadOnlyList<FakeSwap> FakeSwaps { get; init; } = [];
+
     /// <summary>Для PBR роутер должен получить реальные DNS-запросы, а не только прямой трафик сайта.</summary>
     public bool UseRouterDns { get; init; }
     public string RouterDnsAddress { get; init; } = "192.168.1.1";

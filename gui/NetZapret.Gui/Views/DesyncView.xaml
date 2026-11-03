@@ -353,6 +353,49 @@
                 </gui:Card>
 
                 <!--
+                    Подделки секций выбранного пресета (обсуждение №51, 03.11):
+                    какой пакет десинк шлёт перед настоящим. Свёрнуты, как
+                    каталог: меняют их те, кому не помог пресет как есть.
+                    Строки собирает код (ShowFakes) — у каждой свой список
+                    подходящих образцов.
+                -->
+                <Button Style="{StaticResource Choice}" Margin="0,12,0,0" Padding="16,14" Click="OnFakesToggle">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0"
+                                VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE8AB;"
+                                       Foreground="{DynamicResource Accent}" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Text="Подделки секций" FontWeight="SemiBold" />
+                            <TextBlock x:Name="FakesNote" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <Path x:Name="FakesChevron" Grid.Column="2"
+                              Style="{StaticResource Chevron}" Margin="0,0,8,0" />
+                    </Grid>
+                </Button>
+
+                <gui:Card x:Name="FakesCard" Style="{StaticResource Card}" Margin="0,10,0,0"
+                          Padding="16,14,16,16" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                   Text="Подделка — пакет, который десинк шлёт перед настоящим, чтобы фильтр провайдера принял соединение за другое. Если сервис работает плохо, попробуйте другую — например, для голоса Discord stun2 или ACTIVE_DISCORD_UDP вместо quic_google. Файл пресета не меняется; выбор действует со следующего запуска движков." />
+                        <StackPanel x:Name="FakesList" Margin="0,6,0,0" />
+                        <TextBlock x:Name="FakesStatus" Style="{StaticResource Caption}" Margin="0,10,0,0"
+                                   TextWrapping="Wrap" Visibility="Collapsed" />
+                    </StackPanel>
+                </gui:Card>
+
+                <!--
                     Каталог стоит здесь, а не в конце вкладки, потому что
                     отвечает на вопрос о выбранном пресете: что он умеет.
                     Уехав под списки пресетов, он читался бы как перечень

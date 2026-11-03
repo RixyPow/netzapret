@@ -189,6 +189,7 @@ public partial class DesyncView : UserControl
         // следом, в этих случаях не собирался бы вовсе. А он осмыслен
         // и без пресетов: это перечень того, что бывает.
         ShowCatalog(settings);
+        ShowFakes(settings);
 
         try
         {
@@ -498,6 +499,150 @@ public partial class DesyncView : UserControl
     /// два разных способа свернуть на одном экране читались бы как два
     /// разных вида карточек.
     /// </remarks>
+    private bool _fillingFakes;
+
+    /// <summary>
+    /// Подделки секций выбранного пресета: где стоят и что выбрано вместо них.
+    /// </summary>
+    /// <remarks>
+    /// Строки — кодом, а не шаблоном: у каждой свой список образцов, по протоколу
+    /// секции (FakeChoice.Fitting), и свой выбор из настроек.
+    /// </remarks>
+    private void ShowFakes(AppSettings settings)
+    {
+        FakesList.Children.Clear();
+
+        var path = settings.PresetName is { } name ? ZapretPaths.FindPreset(name) : null;
+
+        if (path is null)
+        {
+            FakesNote.Text = "Пресет не выбран или не найден.";
+            return;
+        }
+
+        ZapretPreset preset;
+
+        try
+        {
+            preset = new PresetReader().Load(path);
+        }
+        catch (Exception ex)
+        {
+            FakesNote.Text = "Пресет не читается: " + ex.GetBaseException().Message;
+            return;
+        }
+
+        var key = Path.GetFileNameWithoutExtension(path);
+        var slots = FakeChoice.Slots(preset);
+        var available = FakeChoice.Available(ZapretPaths.Discover()?.Root);
+        var mine = settings.FakeSwaps.Where(s => string.Equals(s.Preset, key, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        int changed = slots.Count(slot => mine.Any(s => s.Section == slot.Section && s.Slot == slot.Slot));
+
+        FakesNote.Text = slots.Count == 0
+            ? $"В пресете «{key}» подделок нет."
+            : changed == 0
+                ? $"Мест с подделкой: {slots.Count}. Все — как в пресете."
+                : $"Мест с подделкой: {slots.Count}, изменено: {changed}.";
+
+        _fillingFakes = true;
+
+        try
+        {
+            foreach (var slot in slots)
+                FakesList.Children.Add(FakeRow(key, slot, available, mine));
+        }
+        finally
+        {
+            _fillingFakes = false;
+        }
+    }
+
+    private Grid FakeRow(string preset, FakeSlot slot, IReadOnlyList<FakeBlob> available, IReadOnlyList<FakeSwap> mine)
+    {
+        var row = new Grid { Margin = new Thickness(0, 10, 0, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        words.Children.Add(new TextBlock { Text = slot.Section, FontWeight = FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+        words.Children.Add(new TextBlock
+        {
+            Text = (slot.Udp ? "UDP · " : "TCP · ") + slot.Step,
+            Style = (Style)FindResource("Caption"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            ToolTip = slot.Step,
+            Margin = new Thickness(0, 2, 0, 0),
+        });
+        row.Children.Add(words);
+
+        var box = new ComboBox { Width = 260, VerticalAlignment = VerticalAlignment.Center };
+        box.Items.Add(new ComboBoxItem { Content = $"Как в пресете — {slot.Blob}", Tag = null });
+
+        var chosen = mine.FirstOrDefault(s => s.Section == slot.Section && s.Slot == slot.Slot)?.Blob;
+        var offer = FakeChoice.Fitting(slot, available).ToList();
+
+        // Выбранное раньше показывается, даже если файла больше нет или он другого рода.
+        if (chosen is not null && offer.All(b => b.Id != chosen))
+            offer.Insert(0, new FakeBlob(chosen, FakeChoice.KindOf(chosen), false));
+
+        foreach (var blob in offer)
+            box.Items.Add(new ComboBoxItem { Content = blob.Title, Tag = blob.Id });
+
+        box.SelectedIndex = chosen is null ? 0 : 1 + offer.FindIndex(b => b.Id == chosen);
+        box.SelectionChanged += (_, _) => OnFakeChosen(preset, slot, box);
+
+        Grid.SetColumn(box, 1);
+        row.Children.Add(box);
+
+        return row;
+    }
+
+    private void OnFakeChosen(string preset, FakeSlot slot, ComboBox box)
+    {
+        if (_fillingFakes || box.SelectedItem is not ComboBoxItem item)
+            return;
+
+        var blob = item.Tag as string;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            var swaps = settings.FakeSwaps
+                .Where(s => !(string.Equals(s.Preset, preset, StringComparison.OrdinalIgnoreCase)
+                              && s.Section == slot.Section && s.Slot == slot.Slot))
+                .ToList();
+
+            if (blob is not null)
+                swaps.Add(new FakeSwap(preset, slot.Section, slot.Slot, blob));
+
+            settings = settings with { FakeSwaps = swaps };
+            settings.Save(AppSettings.DefaultPath);
+
+            FakesStatus.Text = blob is null
+                ? $"«{slot.Section}»: снова как в пресете ({slot.Blob}). Действует со следующего запуска движков."
+                : $"«{slot.Section}»: {Path.GetFileNameWithoutExtension(blob)} вместо {slot.Blob}. Действует со следующего запуска движков.";
+            FakesStatus.Visibility = Visibility.Visible;
+
+            Journal.Write("десинк", $"подделка секции «{slot.Section}» ({preset}): {(blob ?? "как в пресете")}");
+
+            ShowFakes(settings);
+        }
+        catch (Exception ex)
+        {
+            FakesStatus.Text = "Выбор не сохранился: " + ex.GetBaseException().Message;
+            FakesStatus.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void OnFakesToggle(object sender, RoutedEventArgs e)
+    {
+        var open = FakesCard.Visibility != Visibility.Visible;
+
+        FakesCard.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        Chevrons.Turn(FakesChevron, open);
+    }
+
     private void OnCatalogToggle(object sender, RoutedEventArgs e)
     {
         var open = Catalog.Visibility != Visibility.Visible;
@@ -965,6 +1110,7 @@ public partial class DesyncView : UserControl
 
             // Каталог говорит о выбранном пресете — сменился он, сменился и счёт.
             ShowCatalog(settings);
+            ShowFakes(settings);
 
             foreach (var row in _rows)
                 row.Chosen = string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase);
