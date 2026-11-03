@@ -246,35 +246,79 @@ public static class AmneziaKey
             throw new FormatException("ключ vpn:// не читается: внутри не base64");
         }
 
+        // Ни ключа, ни его кусков в причине нет: только размеры, место сбоя и
+        // служебные байты формата (длина qCompress, заголовок zlib).
+        var size = $"ключ из {body.Length} знаков, после base64 {bytes.Length} байт";
+        var unpacked = Unpack(bytes, out var whyNotPacked);
+
+        if (unpacked is not null)
+        {
+            return Json(unpacked, out var at) ?? throw new FormatException(
+                $"ключ vpn:// не читается: {size}, распаковано {unpacked.Length} байт, но это не объект JSON{at}");
+        }
+
+        return Json(bytes, out var plainAt) ?? throw new FormatException(
+            $"ключ vpn:// не читается: {size}. Как сжатый — {whyNotPacked}; как простой JSON — "
+            + (bytes[0] == (byte)'{' ? $"сбой{plainAt}" : $"первый байт {bytes[0]:X2}, а не «{{»"));
+    }
+
+    /// <summary>Объект JSON из байтов; не JSON — <c>null</c> и место сбоя для причины.</summary>
+    private static JsonObject? Json(byte[] bytes, out string at)
+    {
+        at = string.Empty;
+
         try
         {
-            return JsonNode.Parse(Unpack(bytes) ?? bytes) as JsonObject
-                ?? throw new FormatException("ключ vpn:// не читается: внутри не объект JSON");
+            return JsonNode.Parse(bytes) as JsonObject;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            throw new FormatException("ключ vpn:// не читается: внутри ни сжатого, ни простого JSON");
+            at = ex.BytePositionInLine is { } position
+                ? $" (сбой на {(ex.LineNumber ?? 0) + 1}-й строке, {position + 1}-м байте)"
+                : string.Empty;
+
+            return null;
         }
     }
 
     /// <summary>
-    /// <c>qUncompress</c> Qt: длина big-endian и поток zlib; <c>null</c> — не сжато.
+    /// <c>qUncompress</c> Qt: длина big-endian и поток zlib; <c>null</c> — не сжато, и почему.
     /// </summary>
-    private static byte[]? Unpack(byte[] bytes)
+    /// <remarks>
+    /// Почему — словами для человека (обсуждение №48, 31.10): его ключ не прочёлся
+    /// с общим «ни сжатого, ни простого JSON», а сам ключ — пароль, и просить
+    /// его нельзя. Разный сбой — разная беда: длина в заголовке не та — это не
+    /// qCompress; распаковалось меньше заявленного — ключ обрезан при копировании
+    /// (вставка разбивает его по переносам строк).
+    /// </remarks>
+    private static byte[]? Unpack(byte[] bytes, out string why)
     {
         if (bytes.Length < 6)
+        {
+            why = "для сжатого слишком короткий";
             return null;
+        }
 
         long length = (long)bytes[0] << 24 | (long)bytes[1] << 16 | (long)bytes[2] << 8 | bytes[3];
 
         if (length is 0 or > MaxUnpacked)
+        {
+            why = $"в заголовке длина {length}, так qCompress не пишет";
             return null;
+        }
+
+        if (bytes[4] != 0x78)
+        {
+            why = $"заявлено {length} байт, но после длины {bytes[4]:X2} {bytes[5]:X2}, а поток zlib начинается с 78";
+            return null;
+        }
+
+        var output = new byte[length];
+        int read = 0;
 
         try
         {
             using var zlib = new ZLibStream(new MemoryStream(bytes, 4, bytes.Length - 4), CompressionMode.Decompress);
-            var output = new byte[length];
-            int read = 0;
 
             while (read < output.Length)
             {
@@ -285,13 +329,21 @@ public static class AmneziaKey
 
                 read += got;
             }
-
-            return read == output.Length ? output : null;
         }
         catch (InvalidDataException)
         {
+            why = $"заявлено {length} байт, поток zlib битый после {read}";
             return null;
         }
+
+        if (read < output.Length)
+        {
+            why = $"распаковано {read} из заявленных {length} байт — ключ, похоже, обрезан";
+            return null;
+        }
+
+        why = string.Empty;
+        return output;
     }
 
     /// <summary>Строка или число поля как текст; пустое — <c>null</c>.</summary>

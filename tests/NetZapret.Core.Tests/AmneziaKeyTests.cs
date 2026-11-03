@@ -197,6 +197,57 @@ public sealed class AmneziaKeyTests
         Assert.DoesNotContain("секрет", found.Problem);
     }
 
+    /// <summary>
+    /// Обсуждение №48: «ни сжатого, ни простого JSON» человеку ничего не говорило,
+    /// а ключ прислать нельзя. Причина называет шаг, но не содержимое ключа.
+    /// </summary>
+    [Fact]
+    public void A_cut_key_says_it_is_cut()
+    {
+        var whole = Key(Awg(new JsonObject { ["config"] = Conf }));
+        var cut = whole[..(whole.Length - 40)];
+
+        if ((cut.Length - "vpn://".Length) % 4 == 1)
+            cut = cut[..^1];
+
+        var found = KeyImport.FromText(cut);
+
+        Assert.Empty(found.Keys);
+        Assert.Contains("обрезан", found.Problem);
+        Assert.DoesNotContain(cut["vpn://".Length..][..12], found.Problem);
+    }
+
+    [Fact]
+    public void A_key_that_is_not_qcompress_names_the_bytes_it_found()
+    {
+        byte[] bytes = [0, 0, 1, 0, 0x1F, 0x8B, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+        var key = "vpn://" + Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        var found = KeyImport.FromText(key);
+
+        Assert.Contains("1F 8B", found.Problem);
+        Assert.Contains("zlib начинается с 78", found.Problem);
+        Assert.Contains("первый байт 00", found.Problem);
+    }
+
+    [Fact]
+    public void Unpacked_text_that_is_not_json_is_named()
+    {
+        var text = Encoding.UTF8.GetBytes("[Interface]\nPrivateKey = x\n");
+        using var packed = new MemoryStream();
+        packed.Write([0, 0, 0, (byte)text.Length]);
+
+        using (var zlib = new ZLibStream(packed, CompressionLevel.Optimal, leaveOpen: true))
+            zlib.Write(text);
+
+        var key = "vpn://" + Convert.ToBase64String(packed.ToArray()).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        var found = KeyImport.FromText(key);
+
+        Assert.Contains($"распаковано {text.Length} байт, но это не объект JSON", found.Problem);
+        Assert.DoesNotContain("PrivateKey", found.Problem);
+    }
+
     [Fact]
     public void Ordinary_keys_next_to_an_amnezia_key_are_kept()
     {
