@@ -1,0 +1,33 @@
+<Window x:Class="NetZapret.Gui.Views.PresetNameWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
+        Title="Пресет" Width="500" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Backdrop}"
+        ResizeMode="NoResize">
+
+    <!--
+        Имя копии или нового названия пресета (03.11). Окно постоянного размера,
+        как «Папка» и «Имя списка»: в нём одно поле.
+    -->
+    <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
+        <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
+
+        <TextBlock x:Name="Note" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" />
+
+        <TextBlock Text="Название пресета" FontWeight="SemiBold" Margin="0,18,0,6" />
+
+        <TextBox x:Name="NameBox" KeyDown="OnKey" gui:Hint.Text="например, Мой V12 Lite" />
+
+        <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                   TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
+            <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
+                    Margin="0,0,8,0" Click="OnCancel" />
+            <Button x:Name="Confirm" Style="{StaticResource Primary}" IsDefault="True"
+                    Click="OnConfirm" />
+        </StackPanel>
+    </StackPanel>
+</Window>
