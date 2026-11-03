@@ -528,9 +528,14 @@
         на снимке владельца 19.10 не было видно; Surface остался подсветкой
         под курсором.
 
-        Подпись невыбранного — цветом текста на 85 %, а не Muted (13 пт
-        приглушённым читалось тускло рядом с макетом); 14 пт, обычным
-        начертанием и у выбранного. Строка 36, между строками 4.
+        Подпись — цветом текста, а не Muted (приглушённым читалось тускло
+        рядом с макетом), 13 пт, обычным начертанием и у выбранного.
+        Сплошным цветом, без прозрачности: с 1c1045a подпись была цветом
+        текста на 85 % через Opacity, а WPF у полупрозрачного текста
+        отключает ClearType — буквы на экране владельца шли жирными
+        и размытыми. Значок приглушён прозрачностью колонки (знак шрифта
+        и фигура разом) и светлеет под курсором и у выбранного.
+        Строка 36, между строками 4.
     -->
     <Style x:Key="RailItem" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand" />
@@ -547,7 +552,7 @@
                                     и столбец текста шёл бы лесенкой.
                                 -->
                                 <!-- Знак шрифта или фигура (MenuIcon.Shape) — цветом знака. -->
-                                <Grid Width="18" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Grid x:Name="Icon" Width="18" Margin="0,0,12,0" VerticalAlignment="Center" Opacity="0.75">
                                     <TextBlock x:Name="Glyph"
                                                Text="{Binding (local:MenuIcon.Glyph), RelativeSource={RelativeSource TemplatedParent}}"
                                                FontFamily="{DynamicResource IconFont}" FontSize="16"
@@ -561,8 +566,8 @@
 
                                 <TextBlock x:Name="Label"
                                            Text="{TemplateBinding Content}"
-                                           Foreground="{DynamicResource Text}" Opacity="0.85"
-                                           FontSize="14" VerticalAlignment="Center" />
+                                           Foreground="{DynamicResource Text}"
+                                           FontSize="13" VerticalAlignment="Center" />
 
                                 <!-- Точка «есть новое» (RailBadge.cs). -->
                                 <Ellipse x:Name="Badge" Width="7" Height="7" Margin="8,1,0,0"
@@ -582,13 +587,13 @@
                             <Setter TargetName="Badge" Property="Visibility" Value="Visible" />
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Label" Property="Opacity" Value="1" />
+                            <Setter TargetName="Icon" Property="Opacity" Value="1" />
                             <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource Text}" />
                             <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Mark" Property="Background" Value="{DynamicResource Muted}" />
-                            <Setter TargetName="Label" Property="Opacity" Value="1" />
+                            <Setter TargetName="Icon" Property="Opacity" Value="1" />
                             <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource Text}" />
                             <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Raised}" />
                         </Trigger>
@@ -842,17 +847,14 @@
 
 
     <!--
-        Подпись группы в боковом меню. Цвет Muted, а не Faint: подпись
-        называет, что ниже, и не читаться не имеет права.
-    -->
-    <!--
-        Подпись группы меню — строчными, 12 пт, приглушённым, без черты
-        (макет 03.11). Прописные с разрядкой и чертой стояли с 23.09, чтобы
-        «Разбор» не читался ещё одной вкладкой; теперь его отличает цвет:
-        пункты — цветом текста, подпись — Muted и мельче.
+        Подпись группы меню — строчными, 12 пт, без черты (макет 03.11).
+        Прописные с разрядкой и чертой стояли с 23.09, чтобы «Разбор» не
+        читался ещё одной вкладкой; теперь его отличает цвет: пункты —
+        цветом текста, подпись — Faint и мельче. Muted рядом с пунктами
+        цветом текста спорил с ними (владелец 03.11 попросил темнее).
     -->
     <Style x:Key="RailGroup" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource Muted}" />
+        <Setter Property="Foreground" Value="{DynamicResource Faint}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Margin" Value="20,20,20,4" />
     </Style>
