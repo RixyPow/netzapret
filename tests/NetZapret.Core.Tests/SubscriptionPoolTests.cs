@@ -65,6 +65,40 @@ public sealed class SubscriptionPoolTests
         Assert.Equal("DE-1", tags[1][0]);
     }
 
+    /// <summary>
+    /// TRUST 03.11: «Авто-подбор локации», «Германия», «Индонезия»… — одно
+    /// подключение до байта. Копии называют, кого повторяют.
+    /// </summary>
+    [Fact]
+    public void A_node_under_other_names_in_one_subscription_is_a_copy()
+    {
+        var copies = SubscriptionPool.Copies(
+        [
+            ("TRUST",
+            [
+                Server("🇪🇺 Авто-подбор локации 👑", "entry.example"),
+                Server("🇩🇪 Германия", "de.example"),
+                Server("🇮🇩 Индонезия", "entry.example"),
+                Server("🇦🇪 ОАЭ", "entry.example"),
+            ]),
+        ]);
+
+        Assert.Equal([null, null, "🇪🇺 Авто-подбор локации 👑", "🇪🇺 Авто-подбор локации 👑"], copies[0]);
+    }
+
+    [Fact]
+    public void A_node_from_two_sellers_or_under_its_own_name_is_not_a_copy()
+    {
+        var copies = SubscriptionPool.Copies(
+        [
+            ("Основная", [Server("DE-1", "same.example"), Server("DE-1", "same.example")]),
+            ("SecureWay", [Server("Германия", "same.example")]),
+        ]);
+
+        Assert.Equal([null, null], copies[0]);
+        Assert.Equal([null], copies[1]);
+    }
+
     [Fact]
     public void Same_names_inside_one_subscription_are_numbered_like_the_engine_does()
     {

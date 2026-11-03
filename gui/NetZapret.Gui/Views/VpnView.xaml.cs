@@ -89,17 +89,27 @@ public sealed record ServerRow(
 
     public Visibility ChooseShown => CanChoose ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>Описание от панели под именем: «Для WiFi (не тратит ГБ)» — из подписки.</summary>
+    public string? Description { get; init; }
+
+    public Visibility DescriptionShown => string.IsNullOrEmpty(Description) ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
+    /// Чью копию эта запись повторяет под другим именем (<see cref="SubscriptionPool.Copies"/>);
+    /// <c>null</c> — своя.
+    /// </summary>
+    public string? CopyOf { get; init; }
+
+    public Visibility CopyShown => CopyOf is null ? Visibility.Collapsed : Visibility.Visible;
+
+    public string CopyTip => $"Тот же сервер, что «{CopyOf}»: подключение то же до байта, другое только имя — страна в нём ничего не значит";
+
     /// <summary>
     /// Строка в папке пула (<see cref="ServerPool.Id"/>); <c>null</c> — в папке подписки.
     /// </summary>
     /// <remarks>
     /// В пуле «Выбрать» закрепляет сервер в этом пуле, а не в пуле по умолчанию.
     /// </remarks>
-    /// <summary>Описание от панели под именем: «Для WiFi (не тратит ГБ)» — из подписки.</summary>
-    public string? Description { get; init; }
-
-    public Visibility DescriptionShown => string.IsNullOrEmpty(Description) ? Visibility.Collapsed : Visibility.Visible;
-
     public string? PoolId { get; init; }
 }
 
@@ -1068,6 +1078,7 @@ public partial class VpnView : UserControl
     {
         var working = _rows.Where(r => r.Active && r.Raw.Count > 0).ToList();
         var tags = SubscriptionPool.Tag(working.Select(r => (r.Entry.Name, r.Raw)).ToList());
+        var copies = SubscriptionPool.Copies(working.Select(r => (r.Entry.Name, r.Raw)).ToList());
 
         foreach (var row in _rows)
         {
@@ -1085,6 +1096,14 @@ public partial class VpnView : UserControl
             // в папке стояли бы две строки с одним и тем же чужим именем.
             var own = row.Raw.Where(s => s.IsUsableOutbound).ToList();
 
+            // Чью копию повторяет годная запись — по её месту в подписке.
+            var copyOf = index < 0
+                ? own.Select(_ => (string?)null).ToList()
+                : row.Raw.Select((server, j) => (server, j))
+                    .Where(x => x.server.IsUsableOutbound)
+                    .Select(x => copies[index][x.j])
+                    .ToList();
+
             if (own.Count == row.AsGiven.Count)
             {
                 row.AsGiven = row.AsGiven
@@ -1100,6 +1119,7 @@ public partial class VpnView : UserControl
                             Flag = flag,
                             CountryShown = country.Length == 0 || flag is not null ? Visibility.Collapsed : Visibility.Visible,
                             FlagShown = flag is null ? Visibility.Collapsed : Visibility.Visible,
+                            CopyOf = copyOf[j],
                         };
                     })
                     .ToList();

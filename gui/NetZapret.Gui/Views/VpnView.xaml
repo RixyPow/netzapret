@@ -317,6 +317,14 @@
                                                 ToolTip="Автоподбор его не берёт; выбрать руками можно. Вернуть — в «⋯»">
                                             <TextBlock Text="вне подбора" FontSize="12" Foreground="{DynamicResource Muted}" />
                                         </Border>
+
+                                        <!-- Копия другой записи под чужим именем (TRUST, 03.11: восемь «стран» — один узел). -->
+                                        <Border CornerRadius="8" Padding="8,1" Margin="8,0,0,0" VerticalAlignment="Center"
+                                                BorderBrush="{DynamicResource Danger}" BorderThickness="1.5"
+                                                Visibility="{Binding CopyShown}"
+                                                ToolTip="{Binding CopyTip}">
+                                            <TextBlock Text="fake server" FontSize="12" Foreground="{DynamicResource Danger}" />
+                                        </Border>
                                     </StackPanel>
                                 </Grid>
 

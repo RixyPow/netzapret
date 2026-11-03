@@ -350,6 +350,42 @@ public static class SubscriptionPool
     public static IReadOnlyList<IReadOnlyList<string>> Tag(
         IReadOnlyList<(string Source, IReadOnlyList<ProxyServer> Servers)> parts) => Tags(parts);
 
+    /// <summary>
+    /// Копии: для каждого сервера — имя того, кого он повторяет под другим
+    /// именем, иначе <c>null</c>. Тот же порядок, что у <see cref="Tag"/>.
+    /// </summary>
+    /// <remarks>
+    /// Подписка TRUST 03.11: восемь записей — «Авто-подбор локации»,
+    /// «Германия», «Польша» дважды, «Индонезия», «ОАЭ», «Россия», «Финляндия» —
+    /// одно подключение до байта (адрес, ключ, SNI, REALITY), то есть один
+    /// узел. 28.10 такой же узел выходил в Нидерландах пять раз из пяти,
+    /// какую из его «стран» ни выбери. Считается только внутри одной подписки:
+    /// один узел у двух продавцов под разными именами — перепродажа, а не
+    /// выдуманная страна. Которая из записей настоящая, по подписке не узнать —
+    /// копией считается всякая после первой.
+    /// </remarks>
+    public static IReadOnlyList<IReadOnlyList<string?>> Copies(
+        IReadOnlyList<(string Source, IReadOnlyList<ProxyServer> Servers)> parts) =>
+        parts
+            .Select(part =>
+            {
+                var first = new Dictionary<string, string>(StringComparer.Ordinal);
+
+                return (IReadOnlyList<string?>)part.Servers
+                    .Select(server =>
+                    {
+                        var name = Name(server);
+
+                        if (first.TryAdd(Identity(server), name))
+                            return null;
+
+                        var original = first[Identity(server)];
+                        return original.Equals(name, StringComparison.OrdinalIgnoreCase) ? null : original;
+                    })
+                    .ToList();
+            })
+            .ToList();
+
     private static List<List<string>> Tags(IReadOnlyList<(string Source, IReadOnlyList<ProxyServer> Servers)> parts)
     {
         // Первое появление каждого узла: кто он и откуда.
