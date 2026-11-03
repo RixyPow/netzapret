@@ -665,28 +665,6 @@ public sealed record TargetReport
     }
 
     /// <summary>
-    /// Мог ли этот вердикт возникнуть от тесноты, а не от блокировки.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Различие измеримое, и оно измерено: <c>whatsapp.net</c> в прогоне
-    /// на семьдесят одну цель выходил «закрыт полностью», а он же в прогоне
-    /// на четыре — «доступен». Сеть та же, имя то же, разница только
-    /// в том, сколько проб шло рядом.
-    /// </para>
-    /// <para>
-    /// Сюда попадают вердикты, которые ставятся по неполученному ответу:
-    /// не встало соединение, не прошло рукопожатие, замер поток. Все они
-    /// неотличимы от «нам не хватило полосы». А вот заглушка в DNS,
-    /// оборванный CNAME и отказ по стране получены по ответу, который пришёл,
-    /// — теснота такого не подделает, и перепроверять их незачем.
-    /// </para>
-    /// </remarks>
-    public bool MayBeCrowding => Kind is BlockKind.Full or BlockKind.HttpsPort
-        or BlockKind.TlsDpi or BlockKind.Stall or BlockKind.TunnelFailed
-        or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress;
-
-    /// <summary>
     /// Чем лечится.
     /// </summary>
     /// <remarks>
@@ -854,15 +832,22 @@ public static class BlockCheck
     }
 
     /// <summary>
-    /// Проверяет цель, перепроверяя неудачу.
+    /// Проверяет цель одной пробой.
     /// </summary>
     /// <remarks>
-    /// Одиночная проба выносит приговор по одному соединению, а разовый
-    /// таймаут случается и на исправной сети. Проверено на себе:
-    /// <c>updates.discord.com</c> был объявлен закрытым полностью, а при
-    /// повторе оказался доступен по всем протоколам — оба порта открыты,
-    /// имя резолвится. Средству, по которому правят пресет, такое
-    /// непозволительно.
+    /// <para>
+    /// До 03.11 неудача пробовалась трижды: второй заход здесь же и третий —
+    /// «в тишине», по одному, после всего прогона. Повторы ловили разовый
+    /// таймаут и тесноту: <c>updates.discord.com</c> однажды вышел закрытым
+    /// полностью и при повторе — доступным, <c>whatsapp.net</c> в прогоне
+    /// на 71 имя — закрытым, а на четыре — доступным. Но платили за них
+    /// закрытые, и дорого: замер 19.10 на 166 именах — 74 с перепроверки
+    /// из 178, вердикт сменился у одного имени из восьми. С тех пор пробы
+    /// идут по восемь, а не по семьдесят, и решено мерить один раз.
+    /// </para>
+    /// <para>
+    /// Цена решения: разовый таймаут теперь сразу становится вердиктом.
+    /// </para>
     /// </remarks>
     /// <param name="throughTunnel">
     /// Имя заведено в туннель — тогда вердикты про DPI к нему неприменимы.
@@ -873,49 +858,10 @@ public static class BlockCheck
         CancellationToken cancellationToken,
         bool throughTunnel = false)
     {
-        var first = await ProbeAsync(host, service, cancellationToken, throughTunnel);
+        var report = await ProbeAsync(host, service, cancellationToken, throughTunnel);
 
-        if (first.Kind == BlockKind.None)
-            return first;
-
-        // Прерывание проверяется здесь, а не только внутри проб. Первый заход
-        // уже провалился, значит второй пойдёт по всем стадиям с их таймаутами,
-        // и прерывание, поданное между заходами, ждало бы их все. В окне это
-        // выглядело так, будто «Прервать» не работает вовсе.
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // Второй заход только для неудач: подтверждать успех незачем,
-        // а вот обвинять с одного раза нельзя.
-        var second = await ProbeAsync(host, service, cancellationToken, throughTunnel);
-
-        return second.Kind == BlockKind.None ? second : await NamesAsync(Worse(first, second), cancellationToken);
+        return report.Kind == BlockKind.None ? report : await NamesAsync(report, cancellationToken);
     }
-
-    /// <summary>
-    /// Из двух неудачных проб берёт ту, что говорит о меньшем.
-    /// </summary>
-    /// <remarks>
-    /// Если один заход показал живой TCP, а другой нет, верить надо первому:
-    /// достучаться до закрытого маршрута нельзя, а не достучаться до живого —
-    /// запросто.
-    /// </remarks>
-    private static TargetReport Worse(TargetReport a, TargetReport b) =>
-        a.Kind == BlockKind.Full && b.Kind != BlockKind.Full ? b : a;
-
-    /// <summary>
-    /// Одна проба без повтора — для перепроверки в тишине.
-    /// </summary>
-    /// <remarks>
-    /// Повтор внутри <see cref="CheckAsync"/> здесь был бы лишним: тот, кто
-    /// зовёт этот метод, сам и есть повтор. Двойная проба удвоила бы ожидание
-    /// ровно там, где его и так больше всего — на именах, которые молчат.
-    /// </remarks>
-    public static async Task<TargetReport> ProbeOnceAsync(
-        string host,
-        string? service,
-        CancellationToken cancellationToken,
-        bool throughTunnel = false) =>
-        await NamesAsync(await ProbeAsync(host, service, cancellationToken, throughTunnel), cancellationToken);
 
     /// <summary>
     /// Одна проба с портов пробы (<see cref="ProbePorts"/>) — для пробного winws2 с рецептом.
@@ -1090,23 +1036,6 @@ public static class BlockCheck
         return (BlockKind.TlsByAddress,
             $"ни с {NameProbeNeutral}, ни с {NameProbeAllowed} адрес не отвечает — режут адрес, а не имя");
     }
-
-    /// <summary>
-    /// Сводит вердикт из общего прогона с вердиктом из одиночного.
-    /// </summary>
-    /// <remarks>
-    /// Одиночному верим больше, но только когда он говорит о лучшем.
-    /// Ухудшение при повторе — это разовая неудача второй пробы, и повышать
-    /// по ней приговор значило бы обвинять по слабейшему из двух замеров.
-    /// Блок адреса, оказавшийся в тишине блоком имени или белым списком, —
-    /// тоже лучшее: чужое имя в тесноте могло промолчать так же, как своё.
-    /// </remarks>
-    public static TargetReport Reconcile(TargetReport crowded, TargetReport alone) =>
-        alone.Kind == BlockKind.None
-        || (crowded.Kind == BlockKind.Full && alone.Kind != BlockKind.Full)
-        || (crowded.Kind == BlockKind.TlsByAddress && alone.Kind is BlockKind.TlsDpi or BlockKind.TlsWhiteOnly)
-            ? alone
-            : crowded;
 
     /// <summary>
     /// Меряет имя нарочно через туннель, чем бы его ни вели правила.
