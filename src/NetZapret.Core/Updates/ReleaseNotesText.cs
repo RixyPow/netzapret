@@ -129,10 +129,14 @@ public static class ReleaseNotesText
             }
 
             // Значок-картинка со ссылкой — кнопка «Поддержать» для страницы
-            // выпуска на GitHub (подвал, 15.10). Картинок окно не рисует,
-            // и строка вышла бы сырой разметкой; в программе «Поддержать» —
-            // на «Главной» и в «Ещё».
-            if (line.StartsWith("[![", StringComparison.Ordinal))
+            // выпуска на GitHub (подвал, 15.10), и картинка выпуска над
+            // чейнджлогом (с 1.3.0). Картинок окно не рисует, и строка вышла
+            // бы сырой разметкой; в программе «Поддержать» — на «Главной»
+            // и в «Ещё». Голая картинка и тег <img>, который GitHub вставляет,
+            // когда картинку перетаскивают в описание выпуска, — так же.
+            if (line.StartsWith("[![", StringComparison.Ordinal)
+                || line.StartsWith("![", StringComparison.Ordinal)
+                || line.StartsWith("<img", StringComparison.OrdinalIgnoreCase))
             {
                 Flush();
                 continue;

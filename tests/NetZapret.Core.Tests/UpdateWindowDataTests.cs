@@ -165,6 +165,23 @@ public sealed class UpdateWindowDataTests
         Assert.Equal(2, blocks.Count);
     }
 
+    /// <summary>
+    /// Картинка выпуска над чейнджлогом (с 1.3.0) — в любом виде, в каком её
+    /// кладут на GitHub: ссылкой, голой картинкой и тегом, который GitHub
+    /// вставляет при перетаскивании файла.
+    /// </summary>
+    [Theory]
+    [InlineData("[![NetZapret 1.3.0](https://raw.githubusercontent.com/x/y/master/1.3.0.png)](https://github.com/x/y)")]
+    [InlineData("![NetZapret 1.3.0](https://raw.githubusercontent.com/x/y/master/1.3.0.png)")]
+    [InlineData("<img width=\"2560\" height=\"1440\" alt=\"image\" src=\"https://github.com/user-attachments/assets/1\" />")]
+    public void ReleaseCardIsNotShownAsRawMarkup(string line)
+    {
+        var blocks = ReleaseNotesText.Parse(line + "\n\n# Что нового в 1.3.0\n\n**Пункт.** Текст.");
+
+        Assert.DoesNotContain(blocks, b => b.Spans.Any(s => s.Text.Contains(".png") || s.Text.Contains("<img")));
+        Assert.Single(blocks);
+    }
+
     /// <summary>Ссылка доната одна на программу, подвал выпуска и пост в Telegram.</summary>
     [Fact]
     public void DonateLinkIsTheSameEverywhere()
