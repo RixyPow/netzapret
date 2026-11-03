@@ -425,6 +425,9 @@ internal static class TunnelConfig
             // Игровой UDP Riot — из перехвата winws2, если его часть не на «десинке».
             UdpOffDesync.Write(UdpOffDesync.Choose(new RuleEngine(ruleSet), zapretRoot));
 
+            // Секции пресета по адресам, чья часть в «Маршрутах» выключена (№52, 03.11).
+            AddressSectionsOff.Write(AddressSectionsOff.Choose(UserRulesFile.Load()));
+
             return new BuildOutcome(true, $"Десинк не тронет имён: {excluded.Count}.");
         }
         catch (Exception ex)

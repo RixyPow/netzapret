@@ -601,7 +601,12 @@ internal static class SupervisorHost
             return;
         }
 
-        var preset = new PresetReader().Load(presetPath);
+        // Секции только по спискам адресов, выключенным в «Маршрутах» (AddressSectionsOff, №52):
+        // выключатель части гасит и секцию, а не одно правило движка.
+        var preset = AddressSectionsOff.Strip(new PresetReader().Load(presetPath), AddressSectionsOff.Read(), out var sectionsOff);
+
+        foreach (var name in sectionsOff)
+            Console.WriteLine($"Секция «{name}» не запущена: её список адресов выключен в «Маршрутах».");
 
         // Список исключений пишется при сборке конфига; если его нет —
         // исключать нечего, и командная строка остаётся нетронутой.
