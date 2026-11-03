@@ -470,6 +470,21 @@ internal static class SupervisorHost
         {
             using var process = Process.GetProcessById(processId);
 
+            // Сперва по-хорошему: супервизор гасит службы сам, sing-box — штатно,
+            // с файлом кэша (SupervisorStop). Срок — с запасом на три секунды
+            // sing-box и остановку остальных.
+            if (SupervisorStop.Ask(processId))
+            {
+                try
+                {
+                    await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+                    return;
+                }
+                catch (TimeoutException)
+                {
+                }
+            }
+
             process.Kill(entireProcessTree: true);
             await process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
         }

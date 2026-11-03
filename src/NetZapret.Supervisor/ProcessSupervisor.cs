@@ -134,13 +134,15 @@ public sealed class ProcessSupervisor
         foreach (var service in _services)
             service.Job = job;
 
-        foreach (var service in _services)
-            await StartServiceAsync(service, cancellationToken);
-
-        SaveState();
-
         try
         {
+            // Подъём — внутри try: остановку могут попросить и посреди него
+            // (SupervisorStop), и поднятое к тому мигу гасится тем же порядком.
+            foreach (var service in _services)
+                await StartServiceAsync(service, cancellationToken);
+
+            SaveState();
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 await Task.Delay(_options.CheckInterval, cancellationToken);
