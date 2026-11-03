@@ -101,6 +101,15 @@ public partial class PathWindow : Window
     {
         InitializeComponent();
 
+        // Окно растёт по содержимому вниз от места, где открылось: ход
+        // автоподбора добавляет строки, и 03.11 у владельца (экран 1080
+        // при 125 % — 832 точки по высоте) низ окна с «Готово» ушёл за
+        // панель задач — 860 по высоте больше экрана. Высота — не больше
+        // рабочей области, а выросшее окно поднимается, чтобы низ остался
+        // на экране; лишнее прокручивается внутри.
+        MaxHeight = Math.Min(MaxHeight, SystemParameters.WorkArea.Height - 40);
+        SizeChanged += (_, _) => KeepOnScreen();
+
         _pools = pools ?? [];
         _poolsOn = pools is not null;
 
@@ -336,6 +345,16 @@ public partial class PathWindow : Window
                 PickButton.Content = "Автоподбор";
             }
         }
+    }
+
+    /// <summary>Поднимает окно, если его низ ушёл за рабочую область.</summary>
+    private void KeepOnScreen()
+    {
+        var area = SystemParameters.WorkArea;
+        double bottom = area.Bottom - 20;
+
+        if (Top + ActualHeight > bottom)
+            Top = Math.Max(area.Top + 20, bottom - ActualHeight);
     }
 
     /// <summary>Итог автоподбора: открывший путь отмечается, записывает его «Готово».</summary>
