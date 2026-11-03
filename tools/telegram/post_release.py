@@ -31,14 +31,16 @@ LIMIT = 4096
 FOOTER = "## Чем это собрано"
 
 # Картинка выпуска (с 1.3.0, 03.11): docs/release-cards/<версия>.png в
-# репозитории. Над текстом — крупным превью ссылки, а не фото с подписью:
-# подпись к фото у Bot API — до 1024 знаков, а пост 1.3.0 — около 1500.
-# Ссылка — на raw.githubusercontent: там картинка отдаётся как image/png,
-# а вложение выпуска — как application/octet-stream, и превью из него
-# не вышло бы. Вложением выпуска её не кладём ещё и потому, что
-# DownloadStats считает скачивания всех вложений.
+# репозитории, над текстом поста. Фото с подписью, если текст влезает
+# в подпись (у Bot API — до 1024 видимых знаков; пост 1.3.0 — 924), иначе
+# сообщение с крупным превью картинки над текстом: подпись длиннее Telegram
+# отвергает. Ссылка — на raw.githubusercontent: там картинка отдаётся как
+# image/png, а вложение выпуска — как application/octet-stream. Вложением
+# выпуска её не кладём ещё и потому, что DownloadStats считает скачивания
+# всех вложений.
 CARDS = "docs/release-cards"
 RAW = "https://raw.githubusercontent.com/RixyPow/netzapret/master/"
+CAPTION = 1024
 
 # Кнопка под постом (владелец 15.10: «добавь кнопку поддержать в чейнджлоги
 # на гитхабе и в тг»). Та же ссылка, что About.Support в программе: сменится
@@ -141,29 +143,45 @@ def card(tag: str) -> str | None:
     return RAW + path if os.path.isfile(os.path.join(root, path)) else None
 
 
+def visible(text: str) -> int:
+    """Длина текста так, как её считает Telegram: без тегов разметки."""
+    return len(html.unescape(re.sub(r"<[^>]+>", "", text)))
+
+
+def as_photo(text: str, picture: str | None) -> bool:
+    """Идёт ли пост фото с подписью, а не сообщением."""
+    return picture is not None and visible(text) <= CAPTION
+
+
 def send(text: str, picture: str | None) -> None:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat = os.environ["TELEGRAM_CHAT_ID"]
 
-    # Без картинки превью выключено, как прежде: иначе Telegram развернул бы
-    # ссылку на выпуск карточкой GitHub под текстом.
-    preview = (
-        {"url": picture, "prefer_large_media": True, "show_above_text": True}
-        if picture
-        else {"is_disabled": True}
-    )
-
-    data = urllib.parse.urlencode({
+    fields = {
         "chat_id": chat,
-        "text": text,
         "parse_mode": "HTML",
-        "link_preview_options": json.dumps(preview),
         # Кнопка под сообщением, а не ссылка в тексте: так её видно сразу,
         # и пост не удлиняется.
         "reply_markup": json.dumps({"inline_keyboard": [[{"text": "💛 Поддержать", "url": DONATE_URL}]]}),
-    }).encode()
+    }
 
-    request = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+    if as_photo(text, picture):
+        method = "sendPhoto"
+        fields |= {"photo": picture, "caption": text}
+    else:
+        # Без картинки превью выключено, как прежде: иначе Telegram развернул
+        # бы ссылку на выпуск карточкой GitHub под текстом.
+        method = "sendMessage"
+        fields |= {
+            "text": text,
+            "link_preview_options": json.dumps(
+                {"url": picture, "prefer_large_media": True, "show_above_text": True}
+                if picture
+                else {"is_disabled": True}),
+        }
+
+    data = urllib.parse.urlencode(fields).encode()
+    request = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}", data=data)
 
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -193,10 +211,11 @@ def main() -> None:
     picture = card(tag)
 
     if "--dry-run" in sys.argv:
-        print(f"[картинка над текстом: {picture or 'нет'}]\n")
+        way = "фото с подписью" if as_photo(text, picture) else "превью над текстом" if picture else "нет"
+        print(f"[картинка: {picture or 'нет'} — {way}]\n")
         print(text)
         print(f"\n[кнопка под постом: 💛 Поддержать → {DONATE_URL}]")
-        print(f"[{len(text)} символов из {LIMIT}]")
+        print(f"[{len(text)} символов из {LIMIT}, видимых {visible(text)}, подпись — до {CAPTION}]")
         return
 
     send(text, picture)
