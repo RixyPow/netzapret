@@ -486,6 +486,45 @@ public static class DnsSurvey
         return (best, string.Empty);
     }
 
+    /// <summary>
+    /// Один вопрос по DoH к названному адресу сервера; ответ или <c>null</c>,
+    /// если сервер не ответил или ответил не DNS.
+    /// </summary>
+    /// <remarks>
+    /// По HTTP/2, как <see cref="DohAsync"/>: DNS-AI и dns.malw.link на HTTP/1.1
+    /// отвечают кодом 505 (замер 03.11).
+    /// </remarks>
+    public static async Task<DnsWire.Answer?> DohQueryAsync(
+        string address, string tlsName, string path, string name, ushort type, int? nic, CancellationToken cancellationToken)
+    {
+        using var http = DohClient(address, nic);
+
+        try
+        {
+            using var content = new ByteArrayContent(DnsWire.Query(name, type));
+            content.Headers.ContentType = new("application/dns-message");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"https://{tlsName}{path}")
+            {
+                Content = content,
+                Version = HttpVersion.Version20,
+                VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            };
+            request.Headers.Accept.Add(new("application/dns-message"));
+
+            using var response = await http.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            return DnsWire.Parse(await response.Content.ReadAsByteArrayAsync(cancellationToken));
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Отказ словами таблицы: соединение, рукопожатие или молчание.</summary>
     private static string Classify(Exception ex)
     {

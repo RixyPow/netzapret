@@ -10,7 +10,11 @@ public sealed record PinRefreshResult(
     IReadOnlyList<string> Dead,
     string? Backup,
     string? Error,
-    int Checked = 0);
+    int Checked = 0)
+{
+    /// <summary>Посредники, не ответившие по DoH ни по одному адресу.</summary>
+    public IReadOnlyList<string> Silent { get; init; } = [];
+}
 
 /// <summary>
 /// Сам меняет умерший адрес пина на живой, который посредник отдаёт сейчас.
@@ -33,15 +37,74 @@ public sealed record PinRefreshResult(
 /// только с десинком (.195 28.09). Без движков живой адрес выглядел бы мёртвым.
 /// </para>
 /// <para>
-/// Запускается кнопкой на вкладке DNS, и только ею (владелец, 30.09: «даже
-/// не всегда при запуске нужен»). Прежде окно звало её само — при открытии
-/// и раз в сутки; обещанное «после запуска движков» из-за ошибки в времени
-/// начала надзора не случалось ни разу.
+/// С 30.09 по 03.11 — только кнопкой на вкладке DNS (владелец: «даже не всегда
+/// при запуске нужен»). С 03.11 ещё и сама, раз в сутки при поднятых движках
+/// (владелец: «их банят только так… стоит внедрить автозамену», «каждый час —
+/// перебор, лучше раз в сутки», «добавь возможность вкл выкл автозамену»):
+/// выключатель <see cref="AppSettings.AutoRepin"/>, срок — <see cref="IsDue"/>.
+/// В тот день у владельца 25 имён Google AI стояли на мёртвом GeoHide
+/// 193.233.112.67 — с ноября его прокси не отвечают.
 /// </para>
 /// </remarks>
 public static class PinRefresh
 {
+    /// <summary>Как часто проверять самой.</summary>
+    public static readonly TimeSpan Every = TimeSpan.FromDays(1);
+
+    /// <summary>Когда проверка прошла в последний раз — кнопкой или сама.</summary>
+    public static string StampPath => Path.Combine("runtime", "pin-refresh.txt");
+
+    /// <summary>Кнопка и суточная проверка не идут разом: обе пишут hosts.</summary>
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
+    /// <summary>Пора ли проверять самой: с прошлой проверки прошли сутки или её не было.</summary>
+    public static bool IsDue(DateTimeOffset now, string? stampPath = null)
+    {
+        try
+        {
+            var text = File.ReadAllText(stampPath ?? StampPath).Trim();
+
+            return !DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                       System.Globalization.DateTimeStyles.AssumeUniversal, out var last)
+                   || now - last >= Every
+                   || last > now;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Отметить проверку: следующая сама — через сутки.</summary>
+    public static void Mark(DateTimeOffset now, string? stampPath = null)
+    {
+        var target = stampPath ?? StampPath;
+
+        if (Path.GetDirectoryName(target) is { Length: > 0 } dir)
+            Directory.CreateDirectory(dir);
+
+        File.WriteAllText(target, now.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     public static async Task<PinRefreshResult> RunAsync(CancellationToken cancellationToken, string? path = null)
+    {
+        await Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            return await CheckAsync(cancellationToken, path);
+        }
+        finally
+        {
+            Gate.Release();
+        }
+    }
+
+    private static async Task<PinRefreshResult> CheckAsync(CancellationToken cancellationToken, string? path)
     {
         IReadOnlyDictionary<string, IReadOnlyList<string>> pins;
 
@@ -96,7 +159,9 @@ public static class PinRefresh
             return new([], [], null, null, alive.Count);
 
         // Для каждого имени без живого адреса — что посредники отдают сейчас.
-        var live = await IntermediaryDns.AskManyAsync(plan, cancellationToken);
+        var reached = await IntermediaryDns.ReachAsync(plan, cancellationToken);
+        var live = reached.Answers;
+        var silent = reached.Silent;
 
         // Новый адрес проверяется один раз — тем именем, которому он нужен первым.
         var checkedNew = new Dictionary<string, bool>(StringComparer.Ordinal);
@@ -129,7 +194,7 @@ public static class PinRefresh
         var dead = plan.Where(n => !entries.ContainsKey(n)).ToList();
 
         if (entries.Count == 0)
-            return new([], dead, null, null, alive.Count);
+            return new([], dead, null, null, alive.Count) { Silent = silent };
 
         var changes = entries
             .GroupBy(e => $"{string.Join(", ", pins[e.Key].Order(StringComparer.Ordinal))} → {string.Join(", ", e.Value.Order(StringComparer.Ordinal))}")
@@ -144,12 +209,12 @@ public static class PinRefresh
                 HostsEditor.FlushDns();
 
             return result.RevertedBy is { } by
-                ? new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count)
-                : new(changes, dead, result.Backup, null, alive.Count);
+                ? new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count) { Silent = silent }
+                : new(changes, dead, result.Backup, null, alive.Count) { Silent = silent };
         }
         catch (Exception ex)
         {
-            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message, alive.Count);
+            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message, alive.Count) { Silent = silent };
         }
     }
 

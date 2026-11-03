@@ -220,6 +220,9 @@ public partial class App : Application
         DiscordVoiceWatch.Start(Dispatcher);
         RobloxServerWatch.Start();
 
+        // Мёртвые пины к посредникам — на живые, раз в сутки (03.11).
+        PinRefreshWatch.Start();
+
         // «Маршруты» читаются заранее: первый заход иначе стоял пустым секунды (13.10).
         Views.RoutesView.Prepare();
 

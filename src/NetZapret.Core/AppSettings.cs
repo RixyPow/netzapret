@@ -228,6 +228,16 @@ public sealed record AppSettings
     /// </remarks>
     public string DnsServer { get; init; } = GoogleDns;
 
+    /// <summary>
+    /// Сама раз в сутки менять мёртвые пины к посредникам на живые (<c>PinRefresh</c>).
+    /// </summary>
+    /// <remarks>
+    /// Владелец 03.11: «их банят только так… стоит внедрить автозамену серверов»,
+    /// «добавь возможность вкл выкл автозамену». Включено по умолчанию: выбрано
+    /// «сама, с проверкой». Кнопка «Проверить» на вкладке DNS работает и при выключенной.
+    /// </remarks>
+    public bool AutoRepin { get; init; } = true;
+
     /// <summary>Для PBR роутер должен получить реальные DNS-запросы, а не только прямой трафик сайта.</summary>
     public bool UseRouterDns { get; init; }
     public string RouterDnsAddress { get; init; } = "192.168.1.1";

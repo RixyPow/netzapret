@@ -265,6 +265,7 @@ public partial class DnsView : UserControl
 
         ShowChosen(settings);
         ShowSystem();
+        ShowAutoRepin(settings);
 
         // Те же провайдеры, что в обзоре, — все, кого sing-box может
         // спрашивать по DoH. Прежде список был своим, из шести, и мерился
@@ -901,16 +902,9 @@ public partial class DnsView : UserControl
         {
             var result = await Task.Run(() => PinRefresh.RunAsync(CancellationToken.None));
 
-            if (result.Changes.Count > 0)
-                Journal.Write("пин", "адрес умер, заменён живым: " + string.Join("; ", result.Changes)
-                    + (result.Backup is null ? string.Empty : $"; копия hosts: {result.Backup}"));
-
-            if (result.Dead.Count > 0)
-                Journal.Write("пин", $"мёртвые без живой замены: {string.Join(", ", result.Dead.Take(8))}"
-                    + (result.Dead.Count > 8 ? $" и ещё {result.Dead.Count - 8}" : string.Empty));
-
-            if (result.Error is { } error)
-                Journal.Write("пин", "проверка адресов: " + error);
+            // Кнопка — тоже проверка: суточная после неё начнёт отсчёт заново.
+            PinRefresh.Mark(DateTimeOffset.Now);
+            PinRefreshWatch.Write("кнопкой", result);
 
             PinsStatus.Text = Describe(result)
                 + (engines ? string.Empty : " Движки не подняты — часть посредников без десинка не отвечает, и мёртвыми могли показаться живые.");
@@ -923,6 +917,34 @@ public partial class DnsView : UserControl
         finally
         {
             PinsButton.IsEnabled = true;
+        }
+    }
+
+    private void ShowAutoRepin(AppSettings settings)
+    {
+        AutoRepinSwitch.IsChecked = settings.AutoRepin;
+        AutoRepinWord.Text = settings.AutoRepin ? "вкл." : "выкл.";
+    }
+
+    /// <summary>Выключатель суточной автозамены; сторож читает его на каждом круге.</summary>
+    private void OnAutoRepin(object sender, RoutedEventArgs e)
+    {
+        bool on = AutoRepinSwitch.IsChecked == true;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { AutoRepin = on };
+            settings.Save(AppSettings.DefaultPath);
+            ShowAutoRepin(settings);
+
+            PinsStatus.Text = on
+                ? "Мёртвые пины будут меняться сами раз в сутки, пока движки работают."
+                : "Сама программа пины больше не меняет — только кнопкой «Проверить».";
+        }
+        catch (Exception ex)
+        {
+            ShowAutoRepin(AppSettings.Load(AppSettings.DefaultPath));
+            PinsStatus.Text = "Настройка не сохранилась: " + ex.GetBaseException().Message;
         }
     }
 
@@ -944,7 +966,10 @@ public partial class DnsView : UserControl
             parts.Add($"Живой замены не нашлось: {string.Join(", ", result.Dead.Take(6))}"
                 + (result.Dead.Count > 6 ? $" и ещё {result.Dead.Count - 6}." : "."));
 
-        if (parts.Count == 0)
+        if (result.Silent.Count > 0)
+            parts.Add($"Не ответили: {string.Join(", ", result.Silent)}.");
+
+        if (result.Changes.Count == 0 && result.Dead.Count == 0 && result.Error is null)
             parts.Add($"Проверено адресов: {result.Checked}, все отвечают — менять нечего.");
 
         return string.Join(" ", parts);
