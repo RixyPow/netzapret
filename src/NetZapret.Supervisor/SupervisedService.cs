@@ -308,8 +308,11 @@ public abstract class SupervisedService
 
         try
         {
-            Process.Kill(entireProcessTree: true);
-            await Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            if (!await StopGentlyAsync(Process, cancellationToken))
+            {
+                Process.Kill(entireProcessTree: true);
+                await Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+            }
         }
         catch (Exception)
         {
@@ -323,6 +326,16 @@ public abstract class SupervisedService
             OnStopped();
         }
     }
+
+    /// <summary>
+    /// Штатная остановка до <c>Kill</c>; <c>true</c> — процесс вышел сам.
+    /// </summary>
+    /// <remarks>
+    /// По умолчанию её нет: winws2 и прокси Telegram на диск при выходе ничего
+    /// не дописывают, и ждать их незачем.
+    /// </remarks>
+    protected virtual Task<bool> StopGentlyAsync(Process process, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
 
     internal void NoteRestart() => RestartCount++;
 
@@ -949,6 +962,14 @@ public sealed class SingBoxService : SupervisedService
     private static readonly HttpClient Talk = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     protected override void OnStopped() => ForgetFakeAddresses();
+
+    /// <summary>
+    /// Ctrl+C и до трёх секунд на выход: при штатном выходе движок дописывает
+    /// файл кэша, и память подставных адресов переживает перезапуск
+    /// (<see cref="ConsoleInterrupt"/>). Не вышел — <c>Kill</c>, как раньше.
+    /// </summary>
+    protected override Task<bool> StopGentlyAsync(Process process, CancellationToken cancellationToken) =>
+        ConsoleInterrupt.StopAsync(process, TimeSpan.FromSeconds(3), cancellationToken);
 
     /// <summary>
     /// Сбрасывает кэш DNS Windows — после подъёма движка и после остановки.
