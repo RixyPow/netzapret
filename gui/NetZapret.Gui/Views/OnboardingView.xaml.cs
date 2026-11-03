@@ -42,9 +42,12 @@ namespace NetZapret.Gui.Views;
 /// 21.10 (владелец: «3 вкладку есть ли впн перенеси на 4 вкладку, а 5 вкладку
 /// удали») — четыре: режим третьим, подписка последней, «Запуск и проверка»
 /// убрана вместе с карточкой телеграм-канала. Движки поднимаются на «Главной».
-/// Режим теперь выбирают до подписки, поэтому «Туннель» без неё доступен:
-/// до подписки стоит «Десинк», а подключили её — встаёт «Туннель»
-/// (<see cref="_wantsTunnel"/>).
+/// Режим тогда выбирали до подписки, и «Туннель» без неё был доступен.
+/// </para>
+/// <para>
+/// 03.11 (решение владельца) — три: подписка и режим на одном шаге,
+/// подписка сверху. Без выхода «Туннель» и «Гибрид» погашены и оживают,
+/// как только подписка загрузилась.
 /// </para>
 /// <para>
 /// Шага «что у вас не работает» здесь нет — он был первым в исходном
@@ -59,7 +62,7 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class OnboardingView : UserControl
 {
-    private const int LastStep = 4;
+    private const int LastStep = 3;
 
     /// <summary>Мастер закрыт — завершением или пропуском.</summary>
     public event EventHandler? Completed;
@@ -85,8 +88,7 @@ public partial class OnboardingView : UserControl
     {
         1 => Step1,
         2 => Step2,
-        3 => StepMode,
-        _ => StepVpn,
+        _ => StepMode,
     };
 
     /// <summary>Кнопки шага — внизу, вне прокрутки, чтобы не уходили под край.</summary>
@@ -94,8 +96,7 @@ public partial class OnboardingView : UserControl
     {
         1 => Step1Buttons,
         2 => Step2Buttons,
-        3 => StepModeButtons,
-        _ => StepVpnButtons,
+        _ => StepModeButtons,
     };
 
     private void Show(int step)
@@ -132,9 +133,6 @@ public partial class OnboardingView : UserControl
 
         if (step == 3)
             ShowModeStep();
-
-        if (step == 4)
-            ShowVpnStep();
     }
 
     /// <summary>
@@ -142,13 +140,13 @@ public partial class OnboardingView : UserControl
     /// </summary>
     /// <remarks>
     /// Раньше эта кнопка закрывала мастер целиком с любого шага — человек,
-    /// нажавший её случайно, терял следующие шаги. На последнем, подписке,
-    /// она «Готово» — то же, что «Нет подписки».
+    /// нажавший её случайно, терял следующие шаги. На последнем она
+    /// «Готово» — то же, что кнопка внизу.
     /// </remarks>
     private void OnHeaderSkip(object sender, RoutedEventArgs e)
     {
         if (_step == LastStep)
-            Finish();
+            OnModeDone(sender, e);
         else
             Show(_step + 1);
     }
@@ -725,25 +723,16 @@ public partial class OnboardingView : UserControl
 
     private void OnThemeNext(object sender, RoutedEventArgs e) => Show(3);
 
-    // --- Шаг 3: режим работы -------------------------------------------------
+    // --- Шаг 3: режим работы и подписка ---------------------------------------
 
     /// <summary>
-    /// «Туннель» выбран без выхода — подписку спросит следующий шаг.
+    /// Подписка сверху, под ней три режима; выбран тот, что стоит сейчас.
     /// </summary>
     /// <remarks>
-    /// Записать его сразу нельзя (<see cref="WorkModes.CanChoose"/>): у движков
-    /// не было бы ни одного движка. До подписки пишется «Десинк» — ушёл
-    /// человек из мастера, не подключив её, у него работает хотя бы он, — а
-    /// загрузилась подписка — «Туннель» (<see cref="ChooseWantedTunnel"/>).
-    /// </remarks>
-    private bool _wantsTunnel;
-
-    /// <summary>
-    /// Три режима с объяснением; выбран тот, что стоит сейчас.
-    /// </summary>
-    /// <remarks>
-    /// «Туннель» доступен и без подписки и WARP: подписка — следующий шаг.
-    /// Выхода нет — под карточкой сказано, что без подписки останется «Десинк».
+    /// Выхода нет (ни подписки, ни WARP) — «Туннель» и «Гибрид» погашены:
+    /// <see cref="WorkModes.CanChoose"/> их всё равно не записал бы, и выбор
+    /// молча стал бы «Десинком». Загрузилась подписка — карточки оживают
+    /// (<see cref="ShowLocks"/>).
     /// </remarks>
     private void ShowModeStep()
     {
@@ -753,13 +742,14 @@ public partial class OnboardingView : UserControl
         PickTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
         PickRouteName.Text = WorkModes.Name(WorkMode.Route);
 
-        PickTunnelNote.Visibility = settings.HasTunnelExit ? Visibility.Collapsed : Visibility.Visible;
+        _hasExit = settings.HasTunnelExit;
+        VpnStatus.Text = string.Empty;
 
-        var current = _wantsTunnel ? WorkMode.Tunnel
-            : WorkModes.Of(settings.Engines) is { } mode && WorkModes.CanChoose(settings, mode) ? mode
+        var current = WorkModes.Of(settings.Engines) is { } mode && WorkModes.CanChoose(settings, mode)
+            ? mode
             : WorkMode.Desync;
 
-        // Путь DNS — какой стоит сейчас; выбор списка не пишется до «Дальше».
+        // Путь DNS — какой стоит сейчас; выбор списка не пишется до «Готово».
         DnsPick.SelectedIndex = settings.DnsVia switch
         {
             DnsRoute.Direct => 1,
@@ -779,6 +769,7 @@ public partial class OnboardingView : UserControl
         if (!TgPick.IsEnabled)
             TgPick.ToolTip = "Прокси Telegram нет в этой сборке.";
 
+        ShowLocks();
         ShowTgState();
         ShowDnsHint();
     }
@@ -835,6 +826,23 @@ public partial class OnboardingView : UserControl
         TgInfo.Content = TgWsProxy.Explain(PickedMode() ?? WorkMode.Desync);
     }
 
+    /// <summary>Выход есть — подписка или WARP; после «Загрузить» — тоже.</summary>
+    private bool _hasExit;
+
+    /// <summary>
+    /// Без выхода «Туннель» и «Гибрид» погашены, а выбранный из них уступает
+    /// «Десинку»: записать его всё равно нельзя.
+    /// </summary>
+    private void ShowLocks()
+    {
+        PickTunnel.IsEnabled = _hasExit;
+        PickRoute.IsEnabled = _hasExit;
+        ModesLocked.Visibility = _hasExit ? Visibility.Collapsed : Visibility.Visible;
+
+        if (!_hasExit && (PickTunnel.IsChecked == true || PickRoute.IsChecked == true))
+            PickDesync.IsChecked = true;
+    }
+
     // Список и карточки поднимают события, пока ShowModeStep их заполняет, —
     // и при разборе разметки, когда соседних элементов ещё нет.
     private void OnModePicked(object sender, RoutedEventArgs e)
@@ -849,20 +857,24 @@ public partial class OnboardingView : UserControl
             ShowDnsHint();
     }
 
-    private void OnModeNext(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Записывает режим, DNS и прокси; вставленная и ещё не загруженная
+    /// ссылка грузится тут же, и мастер закрывается, только если она подключилась.
+    /// </summary>
+    /// <remarks>
+    /// Не загрузилась — человек остаётся на шаге с причиной под полем:
+    /// уйти молча значило бы потерять вставленную подписку. Без ссылки — сразу
+    /// на «Главную», режим уже записан.
+    /// </remarks>
+    private async void OnModeDone(object sender, RoutedEventArgs e)
     {
         try
         {
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             var next = settings;
 
-            var mode = PickedMode();
-            _wantsTunnel = mode == WorkMode.Tunnel && !WorkModes.CanChoose(next, WorkMode.Tunnel);
-
-            if (_wantsTunnel)
-                next = WorkModes.Choose(next, WorkMode.Desync);
-            else if (mode is { } picked)
-                next = WorkModes.Choose(next, picked);
+            if (PickedMode() is { } mode && WorkModes.CanChoose(next, mode))
+                next = WorkModes.Choose(next, mode);
 
             if (PickedDns() is { } route)
                 next = next with { DnsVia = route };
@@ -875,57 +887,40 @@ public partial class OnboardingView : UserControl
         }
         catch (Exception)
         {
-            // Не записалось — мастер идёт дальше со старым режимом, DNS и прокси;
+            // Не записалось — мастер закрывается со старым режимом, DNS и прокси;
             // они видны на «Главной» и вкладках DNS и «TG Proxy».
         }
 
-        Show(4);
-    }
-
-    // --- Шаг 4: подписка на VPN ----------------------------------------------
-
-    /// <summary>
-    /// Что подписка значит для режима, выбранного шагом раньше, — и кнопки
-    /// в исходном виде: вернулись сюда снова — можно загрузить ещё одну.
-    /// </summary>
-    private void ShowVpnStep()
-    {
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
-        var mode = _wantsTunnel ? WorkMode.Tunnel : WorkModes.Of(settings.Engines) ?? WorkMode.Desync;
-
-        VpnForMode.Text = mode switch
+        if (SubLink.Password.Trim().Length > 0)
         {
-            WorkMode.Tunnel when !settings.HasTunnelExit =>
-                $"Режиму «{WorkModes.Name(WorkMode.Tunnel)}» подписка нужна: без неё поднимать нечего, и останется «{WorkModes.Name(WorkMode.Desync)}».",
+            ModeDone.IsEnabled = false;
 
-            WorkMode.Route when !settings.HasTunnelExit =>
-                $"«{WorkModes.Name(WorkMode.Route)}» без подписки работает как «{WorkModes.Name(WorkMode.Desync)}»: вести в туннель нечего.",
+            try
+            {
+                if (!await LoadSubscriptionAsync())
+                    return;
+            }
+            finally
+            {
+                ModeDone.IsEnabled = true;
+            }
+        }
 
-            WorkMode.Desync =>
-                $"Режиму «{WorkModes.Name(WorkMode.Desync)}» подписка не нужна. Подключённая пригодится, если режим потом сменить на «Главной».",
-
-            _ => string.Empty,
-        };
-
-        VpnForMode.Visibility = VpnForMode.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-        VpnStatus.Text = string.Empty;
-
-        ShowVpnButtons(subscribed: false);
+        Finish();
     }
 
     /// <summary>
-    /// Подписка загрузилась — остаётся «Готово»: число серверов видно
-    /// до ухода на «Главную».
+    /// «Загрузить» у поля: подписка подключается сразу, мастер остаётся —
+    /// число серверов видно, и «Туннель» с «Гибридом» оживают.
     /// </summary>
-    private void ShowVpnButtons(bool subscribed)
+    private async void OnAddSubscription(object sender, RoutedEventArgs e)
     {
-        NoSubscription.Visibility = subscribed ? Visibility.Collapsed : Visibility.Visible;
-        VpnLoad.Visibility = subscribed ? Visibility.Collapsed : Visibility.Visible;
-        VpnDone.Visibility = subscribed ? Visibility.Visible : Visibility.Collapsed;
+        if (await LoadSubscriptionAsync())
+        {
+            _hasExit = true;
+            ShowLocks();
+        }
     }
-
-    /// <summary>Без подписки мастер заканчивается: режим уже выбран шагом раньше.</summary>
-    private void OnNoSubscription(object sender, RoutedEventArgs e) => Finish();
 
     /// <summary>
     /// Проверяет ссылку и подключает подписку — тот же путь, что в разделе VPN.
@@ -935,20 +930,20 @@ public partial class OnboardingView : UserControl
     /// значение нигде не печатается и не остаётся в журнале, а после
     /// использования очищается.
     /// </remarks>
-    private async void OnAddSubscription(object sender, RoutedEventArgs e)
+    private async Task<bool> LoadSubscriptionAsync()
     {
         var raw = SubLink.Password.Trim();
 
         if (raw.Length == 0)
         {
-            VpnStatus.Text = "Ссылку никто не вставил — нажмите «Нет подписки», если её нет.";
-            return;
+            VpnStatus.Text = "Ссылку никто не вставил. Нет подписки — оставьте поле пустым и нажмите «Готово».";
+            return false;
         }
 
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
         {
             VpnStatus.Text = "Это не похоже на ссылку.";
-            return;
+            return false;
         }
 
         parsed = SubscriptionClient.Unwrap(parsed);
@@ -958,7 +953,7 @@ public partial class OnboardingView : UserControl
             VpnStatus.Text = "Это не похоже на ссылку подписки: нужна http, https "
                 + "либо обёртка happ, clash или sn.";
 
-            return;
+            return false;
         }
 
         VpnLoad.IsEnabled = false;
@@ -981,15 +976,12 @@ public partial class OnboardingView : UserControl
 
             int usable = info.Servers.Count(s => s.IsUsableOutbound);
             VpnStatus.Text = $"Подписка подключена: серверов {usable}.";
-
-            if (_wantsTunnel)
-                ChooseWantedTunnel();
-
-            ShowVpnButtons(subscribed: true);
+            return true;
         }
         catch (Exception ex)
         {
             VpnStatus.Text = "Не удалось загрузить: " + ex.GetBaseException().Message;
+            return false;
         }
         finally
         {
@@ -997,29 +989,7 @@ public partial class OnboardingView : UserControl
         }
     }
 
-    /// <summary>Выход появился — ставит «Туннель», выбранный шагом раньше.</summary>
-    private void ChooseWantedTunnel()
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            if (WorkModes.CanChoose(settings, WorkMode.Tunnel))
-            {
-                WorkModes.Choose(settings, WorkMode.Tunnel).Save(AppSettings.DefaultPath);
-                _wantsTunnel = false;
-                VpnStatus.Text += $" Режим — «{WorkModes.Name(WorkMode.Tunnel)}».";
-            }
-        }
-        catch (Exception)
-        {
-            // Не записалось — остаётся «Десинк»; режим меняется на «Главной».
-        }
-    }
-
     // --- Завершение -----------------------------------------------------------
-
-    private void OnFinish(object sender, RoutedEventArgs e) => Finish();
 
     /// <summary>
     /// Отмечает мастер закрытым и уступает место «Главной».

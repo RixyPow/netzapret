@@ -199,19 +199,46 @@
                 </StackPanel>
 
                 <!--
-                    Шаг 3: режим работы (владелец, 05.10: «шаг с режимом работы НЗ,
-                    который объясняет, как работает каждый»). До 21.10 стоял после
-                    подписки; владелец 21.10: «3 вкладку есть ли впн перенеси на
-                    4 вкладку». Поэтому «Туннель» выбирается и без подписки: её
-                    спросит следующий шаг, а не подключат — останется «Десинк».
-                    Выбор пишется при «Дальше» (WorkModes.Choose).
+                    Шаг 3, последний: подписка и режим работы (владелец, 05.10: «шаг
+                    с режимом работы НЗ, который объясняет, как работает каждый»).
+                    С 21.10 режим стоял перед подпиской отдельным шагом, с 03.11 оба
+                    на одном (решение владельца): подписка сверху, а «Туннель»
+                    и «Гибрид» без выхода погашены — поднимать их нечем, и выбирать
+                    то, что молча станет «Десинком», незачем. Загрузилась — карточки
+                    оживают. Выбор пишется при «Готово» (WorkModes.Choose).
                 -->
                 <StackPanel x:Name="StepMode" Visibility="Collapsed">
-                    <TextBlock Text="Режим работы NZ" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Text="Есть подписка на VPN?" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
+                               Text="Своя подписка — та же ссылка, что вставляют в Happ или другой клиент. Программа её не выдаёт: десинк работает и без неё, но открывает не всё — то, что ТСПУ банит по IP (например Telegram), лечится только через VPN. Нет подписки — оставьте поле пустым." />
+
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!--
+                            Пароль, не текст: ссылка на подписку равносильна
+                            паролю, выдаёт весь список серверов с ключами.
+                        -->
+                        <PasswordBox x:Name="SubLink" VerticalAlignment="Center"
+                                     ToolTip="Ссылка на подписку" />
+                        <Button Grid.Column="1" x:Name="VpnLoad" Style="{StaticResource Ghost}" Content="Загрузить"
+                                Margin="8,0,0,0" VerticalAlignment="Stretch" Click="OnAddSubscription" />
+                    </Grid>
+
+                    <TextBlock x:Name="VpnStatus" Style="{StaticResource Caption}"
+                               Margin="4,8,0,0" TextWrapping="Wrap" />
+
+                    <TextBlock Text="Режим работы NZ" FontSize="17" FontWeight="SemiBold" Margin="0,8,0,0" />
                     <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
                                Text="Как программа обходит блокировки. Режим меняется в любой момент — на «Главной» и в меню значка в трее." />
+                    <TextBlock x:Name="ModesLocked" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Warn}" Visibility="Collapsed"
+                               Text="«Туннель» и «Гибрид» станут доступны, когда подписка загрузится." />
 
-                    <StackPanel Margin="0,18,0,0">
+                    <StackPanel Margin="0,14,0,0">
                         <RadioButton x:Name="PickDesync" Style="{StaticResource ModeCard}" GroupName="OnboardingMode" Tag="Desync" Checked="OnModePicked">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -242,9 +269,6 @@
                                     <TextBlock x:Name="PickTunnelName" FontWeight="SemiBold" FontSize="15" />
                                     <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
                                                Text="Весь трафик — через VPN, кроме поставленного «напрямую». Как обычный VPN-клиент: адрес зарубежный, открывается всё, что открывается через ваш сервер. Российские сайты тоже увидят зарубежный адрес. Нужна подписка или WARP." />
-                                    <TextBlock x:Name="PickTunnelNote" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                               TextWrapping="Wrap" Foreground="{DynamicResource Warn}" Visibility="Collapsed"
-                                               Text="Подписки пока нет — её спросит следующий шаг. Без неё этот режим поднимать нечем, и останется «Десинк»." />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
@@ -261,7 +285,7 @@
                                 <StackPanel Grid.Column="1">
                                     <TextBlock x:Name="PickRouteName" FontWeight="SemiBold" FontSize="15" />
                                     <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                               Text="Оба сразу. Что в «Маршрутах» стоит «через VPN», уходит в туннель — с зарубежным адресом; остальное идёт напрямую, и закрытое по имени чинит десинк. Российские сервисы видят домашний адрес. Без подписки работает как «Десинк»." />
+                                               Text="Оба сразу. Что в «Маршрутах» стоит «через VPN», уходит в туннель — с зарубежным адресом; остальное идёт напрямую, и закрытое по имени чинит десинк. Российские сервисы видят домашний адрес. Нужна подписка или WARP." />
                                 </StackPanel>
                             </Grid>
                         </RadioButton>
@@ -273,7 +297,7 @@
                         зависит от режима — без туннеля «через туннель» значит «через
                         движок», — и пояснение меняется вместе с выбранной карточкой.
                         Те же три пункта и те же слова, что на вкладке DNS
-                        (DnsRoutes.Explain); пишется при «Дальше» вместе с режимом.
+                        (DnsRoutes.Explain); пишется при «Готово» вместе с режимом.
                         Строкой, цена пути — под «i»: карточкой шаг выходил выше окна
                         (снимок владельца 06.10, сборка 7: окно 1330×890 при масштабе
                         125 %), а с кнопками внизу строка короче и не спорит с режимами.
@@ -281,7 +305,7 @@
                     <!--
                         Прокси Telegram (владелец, 07.10: «по аналогии с настройкой днс
                         так же и включение тг вс прокси на вкладке с выбором режима»).
-                        Стоит то, что в настройках; пишется при «Дальше» вместе с режимом
+                        Стоит то, что в настройках; пишется при «Готово» вместе с режимом
                         и DNS (TgWsProxy.Switch). Под «i» — нужен ли он при выбранном режиме.
                         Выключатель на подложке той же ширины и вида, что список DNS
                         (владелец 07.10: «сделай фон для прокси телеграм» — голый
@@ -329,31 +353,6 @@
                     </Grid>
                 </StackPanel>
 
-                <!--
-                    Шаг 4, последний: подписка на VPN. Шага «Запуск и проверка»
-                    после него больше нет (владелец 21.10: «5 вкладку удали») —
-                    движки поднимаются на «Главной».
-                -->
-                <StackPanel x:Name="StepVpn" Visibility="Collapsed">
-                    <TextBlock Text="Есть подписка на VPN?" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                               Text="Своя подписка — та же ссылка, что вставляют в Happ или другой клиент. Программа её не выдаёт: десинк работает и без неё, но открывает не всё — то, что ТСПУ банит по IP (например Telegram), лечится только через VPN." />
-
-                    <!-- Что подписка значит для режима, выбранного шагом раньше. -->
-                    <TextBlock x:Name="VpnForMode" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" />
-
-                    <TextBlock Text="Ссылка на подписку" Style="{StaticResource Caption}" Margin="4,18,0,4" />
-
-                    <!--
-                        Пароль, не текст: ссылка на подписку равносильна
-                        паролю, выдаёт весь список серверов с ключами.
-                    -->
-                    <PasswordBox x:Name="SubLink" Padding="10,8" />
-
-                    <TextBlock x:Name="VpnStatus" Style="{StaticResource Caption}"
-                               Margin="4,10,0,0" TextWrapping="Wrap" />
-                </StackPanel>
-
             </Grid>
         </Grid>
     </ScrollViewer>
@@ -371,19 +370,7 @@
 
         <StackPanel x:Name="StepModeButtons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
             <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
-            <Button Style="{StaticResource Primary}" Content="Дальше" Click="OnModeNext" />
-        </StackPanel>
-
-        <!--
-            Подписка загрузилась — «Нет подписки» и «Загрузить» уходят,
-            остаётся «Готово» (ShowVpnButtons): число серверов видно до ухода
-            на «Главную».
-        -->
-        <StackPanel x:Name="StepVpnButtons" Orientation="Horizontal" HorizontalAlignment="Right" Visibility="Collapsed">
-            <Button Style="{StaticResource Ghost}" Content="Назад" Margin="0,0,8,0" Click="OnBack" />
-            <Button x:Name="NoSubscription" Style="{StaticResource Ghost}" Content="Нет подписки" Margin="0,0,8,0" Click="OnNoSubscription" />
-            <Button x:Name="VpnLoad" Style="{StaticResource Primary}" Content="Загрузить" Click="OnAddSubscription" />
-            <Button x:Name="VpnDone" Style="{StaticResource Primary}" Content="Готово" Click="OnFinish" Visibility="Collapsed" />
+            <Button x:Name="ModeDone" Style="{StaticResource Primary}" Content="Готово" Click="OnModeDone" />
         </StackPanel>
     </Grid>
     </Grid>
