@@ -43,6 +43,26 @@ public sealed class HostsFilterTests
     ];
 
     [Fact]
+    public void Service_marks_are_not_shown_as_a_note()
+    {
+        // nz:desync и nz:via=… — пометки для программы (05.11), человеку в столбце
+        // подписи они ни к чему; свой текст подписи остаётся.
+        static HostsLine With(string note) => new(new HostsRow
+        {
+            Line = 0,
+            Name = "claude.ai",
+            Address = "206.223.251.18",
+            Enabled = true,
+            Note = note,
+            Ours = true,
+            Kind = HostsPinKind.Proxy,
+        });
+
+        Assert.Equal(string.Empty, With("nz:desync nz:via=comss").Note);
+        Assert.Equal("мой пин", With("мой пин nz:via=geohide-eu").Note);
+    }
+
+    [Fact]
     public void An_empty_query_hides_nothing()
     {
         // Пустой запрос — это «не ищем», а не «ничего не найдено».

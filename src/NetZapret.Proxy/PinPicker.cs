@@ -415,8 +415,19 @@ public static class PinPicker
         _ => probe.Detail,
     };
 
-    private static IReadOnlyList<PinCandidate> Distinct(IEnumerable<PinCandidate> candidates) =>
-        candidates.GroupBy(c => c.Address).Select(g => g.OrderBy(c => c.Source).First()).ToList();
+    /// <remarks>
+    /// Посредник (<see cref="PinCandidate.Via"/>) переживает схлопывание: тот же
+    /// адрес из своего каталога выигрывает по источнику, но отдал его сейчас
+    /// посредник — и профиль пина должен это помнить.
+    /// </remarks>
+    internal static IReadOnlyList<PinCandidate> Distinct(IEnumerable<PinCandidate> candidates) =>
+        candidates
+            .GroupBy(c => c.Address)
+            .Select(g => g.OrderBy(c => c.Source).First() is var best && best.Via is null
+                         && g.FirstOrDefault(c => c.Via is not null) is { } given
+                ? best with { Via = given.Via }
+                : g.OrderBy(c => c.Source).First())
+            .ToList();
 
     private static async Task<PinProbe[]> ProbeAllAsync(
         string host,

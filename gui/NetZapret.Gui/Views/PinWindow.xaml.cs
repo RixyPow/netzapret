@@ -29,6 +29,10 @@ public sealed class CheckLine(string host, string? address, string source, strin
     public string? Address { get; } = address;
     public string Shown => Address ?? "—";
     public string Source { get; } = source;
+
+    /// <summary>Ключ посредника, отдавшего адрес сейчас (<see cref="PinCandidate.Via"/>); <c>null</c> — не посредник.</summary>
+    public string? Via { get; init; }
+
     public string Detail { get; set; } = detail;
     public string Time { get; } = time;
     public Brush Brush { get; } = brush;
@@ -516,6 +520,13 @@ public partial class PinWindow : Window
             .Where(l => l?.Address is not null)
             .ToDictionary(l => l!.Host, l => l!.Address!, StringComparer.OrdinalIgnoreCase);
 
+        // Профиль пина — посредник, отдавший выбранный адрес: по нему автозамена
+        // спрашивает о пине того, кто его отдал (HostsEditor.ViaMark).
+        var via = _blocks
+            .Select(b => b.Lines.FirstOrDefault(l => l.IsSelected))
+            .Where(l => l?.Address is not null && l.Via is not null)
+            .ToDictionary(l => l!.Host, l => l!.Via!, StringComparer.OrdinalIgnoreCase);
+
         if (answers.Count == 0)
         {
             Status.Text = "Ни для одного имени не выбран адрес — прибивать нечего.";
@@ -524,7 +535,7 @@ public partial class PinWindow : Window
 
         try
         {
-            Pin(answers, "автоподбор");
+            Pin(answers, "автоподбор", via);
             PinChosenButton.Visibility = Visibility.Collapsed;
             OnBack(sender, e);
         }
@@ -553,9 +564,9 @@ public partial class PinWindow : Window
     }
 
     /// <summary>Пишет пин и уводит маршрут части напрямую.</summary>
-    private void Pin(Dictionary<string, string> answers, string source)
+    private void Pin(Dictionary<string, string> answers, string source, IReadOnlyDictionary<string, string>? via = null)
     {
-        var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {source}");
+        var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {source}", via: via);
 
         // Маршрут уводится напрямую тем же движением. Это не довесок,
         // а условие работы пина: доменное правило срабатывает поверх
@@ -699,7 +710,7 @@ public partial class PinWindow : Window
         // 240 запросов.
         var main = zones.FirstOrDefault() ?? names[0];
 
-        Status.Text = "Спрашиваю у XBOX DNS, Comss, AstraCat и GeoHide, какие адреса они отдают сейчас…";
+        Status.Text = "Спрашиваю у посредников (Comss, Zapret DNS, GeoHide, DNS-AI, AstraCat), какие адреса они отдают сейчас…";
         var live = await IntermediaryDns.AskManyAsync([main], CancellationToken.None);
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
@@ -799,7 +810,10 @@ public partial class PinWindow : Window
             PinVerdict.Refused => "Danger",
             _ => "Muted",
         }),
-        selectable: true);
+        selectable: true)
+    {
+        Via = probe.Candidate.Via,
+    };
 
     /// <summary>
     /// Спрашивает адрес у честного резолвера и проверяет каждый ответ.

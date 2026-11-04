@@ -1045,14 +1045,14 @@ public partial class DnsView : UserControl
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         bool engines = state is not null && state.IsSupervisorAlive();
 
-        PinsStatus.Text = "Проверяю: по одному соединению на каждый прибитый адрес…";
+        PinsStatus.Text = "Проверяю: по одному соединению на первый адрес каждого имени и вопрос посредникам…";
 
         try
         {
-            var result = await Task.Run(() => PinRefresh.RunAsync(CancellationToken.None));
+            // Кнопка — тоже проверка: плановая после неё начнёт отсчёт заново
+            // (отметку ставит сама проверка, под своим замком).
+            var result = await Task.Run(() => PinRefresh.RunAsync(CancellationToken.None, byHand: true));
 
-            // Кнопка — тоже проверка: суточная после неё начнёт отсчёт заново.
-            PinRefresh.Mark(DateTimeOffset.Now);
             PinRefreshWatch.Write("кнопкой", result);
 
             PinsStatus.Text = Describe(result)
@@ -1075,7 +1075,7 @@ public partial class DnsView : UserControl
         AutoRepinWord.Text = settings.AutoRepin ? "вкл." : "выкл.";
     }
 
-    /// <summary>Выключатель суточной автозамены; сторож читает его на каждом круге.</summary>
+    /// <summary>Выключатель автозамены раз в 6 часов; сторож читает его на каждом круге.</summary>
     private void OnAutoRepin(object sender, RoutedEventArgs e)
     {
         bool on = AutoRepinSwitch.IsChecked == true;
@@ -1087,7 +1087,7 @@ public partial class DnsView : UserControl
             ShowAutoRepin(settings);
 
             PinsStatus.Text = on
-                ? "Мёртвые пины будут меняться сами раз в сутки, пока движки работают."
+                ? "Мёртвые пины будут меняться сами раз в 6 часов, пока движки работают."
                 : "Сама программа пины больше не меняет — только кнопкой «Проверить».";
         }
         catch (Exception ex)
@@ -1111,6 +1111,12 @@ public partial class DnsView : UserControl
         if (result.Changes.Count > 0)
             parts.Add($"Заменено: {string.Join("; ", result.Changes)}.");
 
+        if (result.Moved.Count > 0)
+            parts.Add($"Посредник переехал: {string.Join("; ", result.Moved)}.");
+
+        if (result.Reordered.Count > 0)
+            parts.Add($"Живой адрес поставлен первым: {string.Join("; ", result.Reordered)}.");
+
         if (result.Dead.Count > 0)
             parts.Add($"Живой замены не нашлось: {string.Join(", ", result.Dead.Take(6))}"
                 + (result.Dead.Count > 6 ? $" и ещё {result.Dead.Count - 6}." : "."));
@@ -1118,8 +1124,11 @@ public partial class DnsView : UserControl
         if (result.Silent.Count > 0)
             parts.Add($"Не ответили: {string.Join(", ", result.Silent)}.");
 
-        if (result.Changes.Count == 0 && result.Dead.Count == 0 && result.Error is null)
+        if (result.Changes.Count == 0 && result.Moved.Count == 0 && result.Reordered.Count == 0
+            && result.Dead.Count == 0 && result.Error is null)
+        {
             parts.Add($"Проверено адресов: {result.Checked}, все отвечают — менять нечего.");
+        }
 
         return string.Join(" ", parts);
     }

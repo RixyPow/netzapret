@@ -229,7 +229,7 @@ public sealed record AppSettings
     public string DnsServer { get; init; } = GoogleDns;
 
     /// <summary>
-    /// Сама раз в сутки менять мёртвые пины к посредникам на живые (<c>PinRefresh</c>).
+    /// Сама раз в 6 часов (до 05.11 — раз в сутки) менять мёртвые пины к посредникам на живые (<c>PinRefresh</c>).
     /// </summary>
     /// <remarks>
     /// Владелец 03.11: «их банят только так… стоит внедрить автозамену серверов»,

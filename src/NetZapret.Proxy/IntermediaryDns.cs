@@ -4,7 +4,27 @@ using NetZapret.Core;
 namespace NetZapret.Proxy;
 
 /// <summary>Посредник: как назвать, имя его DoH и адреса на случай, когда имя не узналось.</summary>
-public sealed record Intermediary(string Name, string DohName, IReadOnlyList<string> Fallback, string Path = "/dns-query");
+/// <param name="Key">
+/// Ключ профиля в пометке пина <see cref="HostsEditor.ViaMark"/>: латиницей и без
+/// пробелов, не меняется вместе с <paramref name="Name"/>.
+/// </param>
+/// <param name="RelayName">
+/// Служебное имя, на которое сервер отвечает адресом своего посредника; <c>null</c> — нет такого.
+/// </param>
+public sealed record Intermediary(
+    string Name,
+    string Key,
+    string DohName,
+    IReadOnlyList<string> Fallback,
+    string Path = "/dns-query",
+    string? RelayName = null);
+
+/// <summary>Ответ одного сервера посредника на опрос автозамены.</summary>
+/// <param name="Names">Имя → адреса (вместе с контрольными именами).</param>
+/// <param name="RelayCheck">Ответ на <see cref="Intermediary.RelayName"/>; пусто — не спрашивали или нет.</param>
+public sealed record ServerAnswers(
+    IReadOnlyDictionary<string, IReadOnlyList<IPAddress>> Names,
+    IReadOnlyList<IPAddress> RelayCheck);
 
 /// <summary>Что ответили посредники: адреса по именам и кто не ответил вовсе.</summary>
 public sealed record IntermediaryAnswers(
@@ -50,13 +70,155 @@ public static class IntermediaryDns
     /// <summary>Посредники в порядке доверия: кандидаты первого пробуются первыми.</summary>
     public static IReadOnlyList<Intermediary> Servers { get; } =
     [
-        new("Comss DNS", "dns.comss.one", ["212.109.221.20", "195.133.25.16", "212.109.195.93"]),
-        new("Zapret DNS", "dns.zapret.moe", ["188.114.96.1", "188.114.97.1"]),
-        new("GeoHide EU", "eu.geohide.ru", ["5.175.161.3", "5.175.161.40", "143.20.64.192"]),
-        new("GeoHide US", "us.geohide.ru", ["192.255.159.240", "192.255.159.241"]),
-        new("DNS-AI", "dns.dns-ai.ru", ["194.87.196.13", "45.151.102.219"]),
-        new("AstraCat", "dns.astracat.network", ["135.106.217.200", "135.106.197.22"]),
+        new("Comss DNS", "comss", "dns.comss.one", ["212.109.221.20", "195.133.25.16", "212.109.195.93"]),
+
+        // relay.check — служебное имя Zapret DNS: сервер отвечает на него адресом
+        // своего посредника (так узнаёт посредника Zapret GUI, config/zapret_dns.py).
+        new("Zapret DNS", "zapret", "dns.zapret.moe", ["188.114.96.1", "188.114.97.1"], RelayName: "relay.check.dns.zapret.moe"),
+        new("GeoHide EU", "geohide-eu", "eu.geohide.ru", ["5.175.161.3", "5.175.161.40", "143.20.64.192"]),
+        new("GeoHide US", "geohide-us", "us.geohide.ru", ["192.255.159.240", "192.255.159.241"]),
+        new("DNS-AI", "dns-ai", "dns.dns-ai.ru", ["194.87.196.13", "45.151.102.219"]),
+        new("AstraCat", "astracat", "dns.astracat.network", ["135.106.217.200", "135.106.197.22"]),
     ];
+
+    /// <summary>Посредник по ключу профиля; <c>null</c> — ключ незнакомый.</summary>
+    public static Intermediary? ByKey(string? key) =>
+        key is null ? null : Servers.FirstOrDefault(s => string.Equals(s.Key, key, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Скольким разным именам своего профиля сервер должен отдать адрес, чтобы тот
+    /// считался его посредником, — как <c>RELAY_MIN_NAMES</c> у Zapret GUI.
+    /// </summary>
+    internal const int RelayMinNames = 3;
+
+    /// <summary>
+    /// Спрашивает один сервер о названных именах, контрольных (<see cref="Controls"/>)
+    /// и служебном (<see cref="Intermediary.RelayName"/>); <c>null</c> — сервер не ответил.
+    /// </summary>
+    public static async Task<ServerAnswers?> AskServerAsync(
+        Intermediary server,
+        IReadOnlyCollection<string> names,
+        CancellationToken cancellationToken)
+    {
+        var nic = DnsSurvey.PhysicalInterface();
+
+        if (await RouteAsync(server, nic, cancellationToken) is not { } address)
+            return null;
+
+        var asked = names.Concat(Controls).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var result = new Dictionary<string, IReadOnlyList<IPAddress>>(StringComparer.OrdinalIgnoreCase);
+        using var slots = new SemaphoreSlim(6);
+
+        // Один клиент на весь опрос сервера: вопросы идут одним соединением HTTP/2.
+        // Автозамена спрашивает о каждом имени блока (имена без профиля — у всех
+        // посредников), и по соединению на вопрос это были бы сотни рукопожатий
+        // за секунды к одному имени DoH (см. DnsSurvey.DohQueryAsync).
+        using var http = DnsSurvey.DohClient(address, nic);
+
+        await Task.WhenAll(asked.Select(async host =>
+        {
+            await slots.WaitAsync(cancellationToken);
+
+            try
+            {
+                var answer = await DnsSurvey.DohQueryAsync(
+                    http, server.DohName, server.Path, host, DnsWire.TypeA, cancellationToken);
+
+                lock (result)
+                    result[host] = answer is { Code: 0 } ? answer.Addresses : [];
+            }
+            finally
+            {
+                slots.Release();
+            }
+        }));
+
+        IReadOnlyList<IPAddress> relay = [];
+
+        if (server.RelayName is { } relayName
+            && await DnsSurvey.DohQueryAsync(http, server.DohName, server.Path, relayName, DnsWire.TypeA, cancellationToken)
+                is { Code: 0 } answered)
+        {
+            relay = answered.Addresses;
+        }
+
+        return new(result, relay);
+    }
+
+    /// <summary>
+    /// Посредники сервера по его ответу: адреса, отданные двум контрольным именам
+    /// (<see cref="Proxies"/>), трём разным именам его профиля (<see cref="RelayMinNames"/>)
+    /// и ответ на служебное имя.
+    /// </summary>
+    /// <param name="own">
+    /// Имена с профилем этого сервера. Правило трёх имён — только по ним, а не по
+    /// всем спрошенным: имена без профиля спрашиваются у всех посредников ради
+    /// присвоения, и Comss на три имени Google AI отдаёт настоящий адрес Google
+    /// (03.11, см. <see cref="Proxies"/>) — он посредником бы и стал.
+    /// </param>
+    internal static IReadOnlySet<string> Relays(ServerAnswers answers, IReadOnlyCollection<string> own)
+    {
+        var result = new HashSet<string>(StrongRelays(answers), StringComparer.Ordinal);
+        var mine = own.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in answers.Names
+                     .Where(p => mine.Contains(p.Key))
+                     .SelectMany(p => p.Value.Select(a => (Address: a.ToString(), Name: p.Key)))
+                     .GroupBy(x => x.Address, StringComparer.Ordinal))
+        {
+            if (group.Select(x => x.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() >= RelayMinNames)
+                result.Add(group.Key);
+        }
+
+        result.RemoveWhere(a => !Usable(a));
+
+        return result;
+    }
+
+    /// <summary>
+    /// Посредники без правила трёх имён: отданные двум контрольным именам разных
+    /// владельцев (<see cref="Proxies"/>) и ответ на служебное имя.
+    /// </summary>
+    /// <remarks>
+    /// Настоящим адресом сервиса такой адрес не бывает: адрес Google на claude.ai
+    /// не придёт. А правило трёх имён настоящий адрес пропускает и среди имён
+    /// своего профиля — бросит посредник проксировать Google, как Comss 03.11, и
+    /// трём его именам Google AI придёт один адрес Google. Поэтому пин с живым
+    /// первым адресом переезжает только на такие посредники (<see cref="PinRefresh"/>).
+    /// </remarks>
+    internal static IReadOnlySet<string> StrongRelays(ServerAnswers answers)
+    {
+        var result = new HashSet<string>(Proxies(answers.Names), StringComparer.Ordinal);
+
+        foreach (var address in answers.RelayCheck)
+            result.Add(address.ToString());
+
+        result.RemoveWhere(a => !Usable(a));
+
+        return result;
+    }
+
+    private static bool Usable(string address) =>
+        IPAddress.TryParse(address, out var ip)
+        && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+        && !BlockCheck.IsStub(ip);
+
+    /// <summary>
+    /// Посредники, которых сервер отдаёт имени сейчас, — отсортированные строкой
+    /// адреса, а не в порядке ответа, без заглушек.
+    /// </summary>
+    /// <remarks>
+    /// Сортировка нарочно, как в <see cref="ReachAsync"/>: GeoHide и Comss каждый раз
+    /// перемешивают узлы, и в порядке ответа имена одного сайта получали бы разные
+    /// пары и разный первый адрес (решение 10.10: одному сайту — одни пины).
+    /// </remarks>
+    internal static IReadOnlyList<string> RelaysFor(ServerAnswers answers, IReadOnlySet<string> relays, string name) =>
+        (answers.Names.TryGetValue(name, out var given) ? given : [])
+            .Select(a => a.ToString())
+            .Where(relays.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
     /// <summary>Имя, на котором проверяется, что сервер вообще отвечает.</summary>
     private const string Probe = "example.com";
@@ -185,7 +347,8 @@ public static class IntermediaryDns
                     continue;
                 }
 
-                result.Add(new PinCandidate(address.ToString(), PinSource.Catalog, $"{name}, сейчас"));
+                result.Add(new PinCandidate(address.ToString(), PinSource.Catalog, $"{name}, сейчас",
+                    Servers.FirstOrDefault(s => s.Name == name)?.Key));
             }
         }
 

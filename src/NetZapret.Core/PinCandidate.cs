@@ -31,4 +31,10 @@ public enum PinSource
 
 /// <summary>Кандидат: адрес и откуда он.</summary>
 /// <param name="Label">Как назвать источник человеку: «XBOX DNS», «честный резолвер».</param>
-public sealed record PinCandidate(string Address, PinSource Source, string Label);
+/// <param name="Via">
+/// Ключ посредника, отдавшего адрес сейчас (<c>comss</c>, <c>zapret</c>…), — профиль
+/// пина, который пишется в hosts пометкой <c>nz:via=</c>; <c>null</c> — адрес не от
+/// посредника. Отдельно от <paramref name="Label"/>: подпись для человека, ключ — для
+/// автозамены, которая по нему знает, у кого спрашивать о пине.
+/// </param>
+public sealed record PinCandidate(string Address, PinSource Source, string Label, string? Via = null);

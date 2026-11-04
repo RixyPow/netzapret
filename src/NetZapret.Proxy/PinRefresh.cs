@@ -3,8 +3,8 @@ using NetZapret.Core;
 namespace NetZapret.Proxy;
 
 /// <summary>Что сделало обновление пинов.</summary>
-/// <param name="Changes">По строке на заменённый адрес: «87.228.47.204 → 87.228.47.201 (23 имени)».</param>
-/// <param name="Dead">Мёртвые адреса, замены которым не нашлось.</param>
+/// <param name="Changes">По строке на замену мёртвого: «87.228.47.204 → 87.228.47.201 (23 имени)».</param>
+/// <param name="Dead">Имена с мёртвым первым адресом, замены которым не нашлось.</param>
 public sealed record PinRefreshResult(
     IReadOnlyList<string> Changes,
     IReadOnlyList<string> Dead,
@@ -14,6 +14,68 @@ public sealed record PinRefreshResult(
 {
     /// <summary>Посредники, не ответившие по DoH ни по одному адресу.</summary>
     public IReadOnlyList<string> Silent { get; init; } = [];
+
+    /// <summary>Посредник переехал при живом старом: «Comss DNS: a → b (3 имени)».</summary>
+    public IReadOnlyList<string> Moved { get; init; } = [];
+
+    /// <summary>Первый адрес молчит, живой из записанных встал первым.</summary>
+    public IReadOnlyList<string> Reordered { get; init; } = [];
+
+    /// <summary>Первых адресов, не ответивших сейчас: меняться будут, если промолчат и в следующий раз.</summary>
+    public int Suspects { get; init; }
+
+    /// <summary>Скольким старым пинам записан профиль посредника.</summary>
+    public int Assigned { get; init; }
+}
+
+/// <summary>
+/// Сеть автозамены: проба адреса, опрос сервера посредника, контроль связи.
+/// Отдельно — чтобы ход проверки покрывался тестами без сети.
+/// </summary>
+internal sealed class PinNet
+{
+    /// <summary>Проба адреса именем: TLS с проверкой сертификата и ответ сайта.</summary>
+    public required Func<string, string, CancellationToken, Task<PinVerdict>> Probe { get; init; }
+
+    /// <summary>Ответ сервера посредника на имена; <c>null</c> — не ответил.</summary>
+    public required Func<Intermediary, IReadOnlyCollection<string>, CancellationToken, Task<ServerAnswers?>> Ask { get; init; }
+
+    /// <summary>Есть ли связь вообще: соединение с контрольными адресами.</summary>
+    public required Func<CancellationToken, Task<bool>> Online { get; init; }
+
+    /// <summary>
+    /// Контрольные адреса — Яндекс DNS и ya.ru, как у Zapret GUI (relay_check.py):
+    /// российские, их не режут, и молчат оба только без сети.
+    /// </summary>
+    internal static readonly string[] Controls = ["77.88.8.8", "87.250.250.242"];
+
+    public static PinNet Real { get; } = new()
+    {
+        Probe = async (address, name, ct) =>
+            (await PinPicker.ProbeAsync(new PinCandidate(address, PinSource.Pool, "пин"), name, ct)).Verdict,
+        Ask = IntermediaryDns.AskServerAsync,
+        Online = async ct =>
+        {
+            var tries = Controls.Select(async address =>
+            {
+                try
+                {
+                    using var client = new System.Net.Sockets.TcpClient();
+                    using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeout.CancelAfter(TimeSpan.FromSeconds(3));
+
+                    await client.ConnectAsync(System.Net.IPAddress.Parse(address), 443, timeout.Token);
+                    return true;
+                }
+                catch (Exception)
+                {
+                    return false;
+                }
+            });
+
+            return (await Task.WhenAll(tries)).Any(ok => ok);
+        },
+    };
 }
 
 /// <summary>
@@ -45,19 +107,35 @@ public sealed record PinRefreshResult(
 /// В тот день у владельца 25 имён Google AI стояли на мёртвом GeoHide
 /// 193.233.112.67 — с ноября его прокси не отвечают.
 /// </para>
+/// <para>
+/// С 05.11 — по образцу Zapret GUI 21.1.7.228 (address_engine.py), решением
+/// владельца. Срок — 6 часов, как <c>HOSTS_ADDRESSES</c> у них. У пина есть
+/// профиль — посредник, который его отдал (<see cref="HostsEditor.ViaMark"/>),
+/// и каждая проверка спрашивает сервер профиля о его именах: отдаёт он других
+/// посредников, а первого адреса пина среди них нет — посредник переехал, и пин
+/// переходит на новых, проверенных той же пробой, не дожидаясь смерти старого.
+/// Живость — только первого адреса имени, одной пробой; не ответил — подозреваемый
+/// (<see cref="SuspectsPath"/>), меняется со второго промаха подряд или сразу,
+/// если проверка запущена кнопкой. Перед заменой мёртвого — контроль сети
+/// (<see cref="PinNet.Controls"/>): молчат оба — не меняется ничего.
+/// </para>
+/// <para>
+/// Живой адрес ставится первым. По замеру Zapret GUI 13.10 Chrome из нескольких
+/// строк hosts одного имени берёт только первую — у нас это не проверено.
+/// Прежде здесь стояло «жив хоть один из двух — Windows дойдёт до второго»,
+/// и имя с мёртвым первым адресом не трогалось вовсе: если Chrome и правда
+/// берёт одну строку, такой пин в браузере был мёртв.
+/// </para>
 /// </remarks>
 public static class PinRefresh
 {
     /// <summary>Как часто проверять самой.</summary>
-    public static readonly TimeSpan Every = TimeSpan.FromDays(1);
+    public static readonly TimeSpan Every = TimeSpan.FromHours(6);
 
     /// <summary>Когда проверка прошла в последний раз — кнопкой или сама.</summary>
     public static string StampPath => Path.Combine("runtime", "pin-refresh.txt");
 
-    /// <summary>Кнопка и суточная проверка не идут разом: обе пишут hosts.</summary>
-    private static readonly SemaphoreSlim Gate = new(1, 1);
-
-    /// <summary>Пора ли проверять самой: с прошлой проверки прошли сутки или её не было.</summary>
+    /// <summary>Пора ли проверять самой: с прошлой проверки прошёл срок <see cref="Every"/> или её не было.</summary>
     public static bool IsDue(DateTimeOffset now, string? stampPath = null)
     {
         try
@@ -79,7 +157,7 @@ public static class PinRefresh
         }
     }
 
-    /// <summary>Отметить проверку: следующая сама — через сутки.</summary>
+    /// <summary>Отметить проверку: следующая сама — через <see cref="Every"/>.</summary>
     public static void Mark(DateTimeOffset now, string? stampPath = null)
     {
         var target = stampPath ?? StampPath;
@@ -90,13 +168,62 @@ public static class PinRefresh
         File.WriteAllText(target, now.ToUniversalTime().ToString("O", System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    public static async Task<PinRefreshResult> RunAsync(CancellationToken cancellationToken, string? path = null)
+    /// <summary>Кнопка и плановая проверка не идут разом: обе пишут hosts.</summary>
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
+    /// <summary>Адреса, не ответившие в прошлой проверке: второй промах подряд — уже смерть.</summary>
+    public static string SuspectsPath => Path.Combine("runtime", "pin-suspects.json");
+
+    /// <summary>Проверка и замена пинов.</summary>
+    /// <param name="byHand">
+    /// Кнопкой: человек ждёт итога, и мёртвый первый адрес меняется сразу, а не со
+    /// второго промаха подряд.
+    /// </param>
+    /// <remarks>
+    /// На настоящем hosts ставит отметку срока (<see cref="Mark"/>) под тем же замком,
+    /// что и сама проверка: плановая, ждавшая кнопку на замке, увидит отметку и не
+    /// пойдёт следом вторым залпом соединений, засчитав только что записанных
+    /// подозреваемых вторым промахом за секунды, а не за 6 часов.
+    /// </remarks>
+    public static async Task<PinRefreshResult> RunAsync(CancellationToken cancellationToken, string? path = null, bool byHand = false)
     {
         await Gate.WaitAsync(cancellationToken);
 
         try
         {
-            return await CheckAsync(cancellationToken, path);
+            return await CheckAsync(PinNet.Real, path, path is null ? SuspectsPath : path + ".nz-suspects.json", byHand, cancellationToken);
+        }
+        finally
+        {
+            if (path is null)
+                TryMark();
+
+            Gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Плановая проверка: срок смотрится уже под замком; <c>null</c> — не пора
+    /// (кнопка успела проверить, пока проверка ждала замка).
+    /// </summary>
+    public static async Task<PinRefreshResult?> RunIfDueAsync(CancellationToken cancellationToken)
+    {
+        await Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            if (!IsDue(DateTimeOffset.Now))
+                return null;
+
+            try
+            {
+                return await CheckAsync(PinNet.Real, null, SuspectsPath, byHand: false, cancellationToken);
+            }
+            finally
+            {
+                // Отметка и после неудачи: иначе молчащая сеть повторяла бы проверку каждые пять минут.
+                TryMark();
+            }
         }
         finally
         {
@@ -104,9 +231,50 @@ public static class PinRefresh
         }
     }
 
-    private static async Task<PinRefreshResult> CheckAsync(CancellationToken cancellationToken, string? path)
+    private static void TryMark()
+    {
+        try
+        {
+            Mark(DateTimeOffset.Now);
+        }
+        catch (IOException)
+        {
+            // Не записалась — следующий круг сторожа проверит снова; это не поломка.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>Ответ сервера посредника и его посредники: все и без правила трёх имён.</summary>
+    private sealed record Heard(ServerAnswers Answers, IReadOnlySet<string> Relays, IReadOnlySet<string> Strong);
+
+    private static async Task<ServerAnswers?> AskAsync(
+        PinNet net, Intermediary server, IReadOnlyCollection<string> names, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await net.Ask(server, names, cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Весь ход проверки; сеть — через <paramref name="net"/>, чтобы алгоритм
+    /// проверялся тестами без сети.
+    /// </summary>
+    internal static async Task<PinRefreshResult> CheckAsync(
+        PinNet net,
+        string? path,
+        string suspectsPath,
+        bool byHand,
+        CancellationToken cancellationToken)
     {
         IReadOnlyDictionary<string, IReadOnlyList<string>> pins;
+        IReadOnlyDictionary<string, string> profiles;
 
         try
         {
@@ -117,8 +285,13 @@ public static class PinRefresh
             var own = HostsEditor.DesyncPins(path);
 
             pins = HostsEditor.PinsAll(path)
-                .Where(p => !own.Contains(p.Key))
+                .Where(p => !own.Contains(p.Key) && p.Value.Count > 0)
                 .ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase);
+
+            // Незнакомый ключ (посредника убрали из списка) — как без профиля.
+            profiles = HostsEditor.PinsVia(path)
+                .Where(p => pins.ContainsKey(p.Key) && IntermediaryDns.ByKey(p.Value) is not null)
+                .ToDictionary(p => p.Key, p => IntermediaryDns.ByKey(p.Value)!.Key, StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {
@@ -128,18 +301,97 @@ public static class PinRefresh
         if (pins.Count == 0)
             return new([], [], null, null);
 
-        // Живость адреса — по одному его имени: для SNI-прокси имя нужно,
-        // а одного хватает, чтобы понять, отвечает ли адрес вообще.
-        var byAddress = pins
-            .SelectMany(p => p.Value.Select(a => (Address: a, Name: p.Key)))
-            .Where(x => System.Net.IPAddress.TryParse(x.Address, out var ip) && !BlockCheck.IsStub(ip))
-            .GroupBy(x => x.Address, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Name).First(), StringComparer.Ordinal);
+        var names = pins.Keys.Order(StringComparer.Ordinal).ToList();
 
+        // 1. Сервер профиля — о его именах, имена без профиля — у всех: так
+        // старый пин узнаёт своего посредника (присвоение профиля). Вопросы к одному
+        // серверу идут одним соединением (IntermediaryDns.AskServerAsync).
+        var asked = new List<(Intermediary Server, List<string> Own, List<string> Names)>();
+
+        foreach (var server in IntermediaryDns.Servers)
+        {
+            var mine = names.Where(n => profiles.TryGetValue(n, out var key) && key == server.Key).ToList();
+            var all = mine.Concat(names.Where(n => !profiles.ContainsKey(n))).ToList();
+
+            if (all.Count > 0)
+                asked.Add((server, mine, all));
+        }
+
+        var replies = await Task.WhenAll(asked.Select(a => AskAsync(net, a.Server, a.Names, cancellationToken)));
+        var silent = asked.Zip(replies).Where(p => p.Second is null).Select(p => p.First.Server.Name).ToList();
+
+        // Ключ → ответ и его посредники. Молчащего сервера здесь нет: по нему ничего не меняется.
+        var heard = asked.Zip(replies)
+            .Where(p => p.Second is not null)
+            .ToDictionary(
+                p => p.First.Server.Key,
+                p => new Heard(p.Second!, IntermediaryDns.Relays(p.Second!, p.First.Own), IntermediaryDns.StrongRelays(p.Second!)));
+
+        IReadOnlyList<string> Given(string key, string name, bool strong = false) =>
+            heard.TryGetValue(key, out var h) ? IntermediaryDns.RelaysFor(h.Answers, strong ? h.Strong : h.Relays, name) : [];
+
+        // 2. Присвоение: пин без профиля, чей адрес посредник отдаёт этому имени
+        // как своего посредника, — его. Первый по порядку доверия.
+        var assigned = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in names.Where(n => !profiles.ContainsKey(n)))
+        {
+            if (IntermediaryDns.Servers.FirstOrDefault(s => Given(s.Key, name).Intersect(pins[name], StringComparer.Ordinal).Any())
+                is { } owner)
+            {
+                assigned[name] = owner.Key;
+            }
+        }
+
+        string? Profile(string name) =>
+            profiles.TryGetValue(name, out var key) ? key : assigned.GetValueOrDefault(name);
+
+        // 3. Живость — только первого адреса каждого имени, одной пробой на адрес:
+        // плановая проверка дешёвая, второй адрес спрашивается, лишь когда первый молчит.
+        var verdicts = new Dictionary<string, (PinVerdict Verdict, string Name)>(StringComparer.Ordinal);
+
+        async Task<PinVerdict> ProbeAsync(string address, string name)
+        {
+            // Отказ (403) зависит от имени: корень API отвечает им и через живого
+            // посредника. Вердикт чужого имени тут не годится — адрес пробуется
+            // этим. Прочие вердикты от имени не зависят: адрес — одна проба.
+            if (verdicts.TryGetValue(address, out var first)
+                && (first.Verdict != PinVerdict.Refused || string.Equals(first.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return first.Verdict;
+            }
+
+            var key = verdicts.ContainsKey(address) ? address + " " + name.ToLowerInvariant() : address;
+
+            if (verdicts.TryGetValue(key, out var again))
+                return again.Verdict;
+
+            PinVerdict verdict;
+
+            try
+            {
+                verdict = await net.Probe(address, name, cancellationToken);
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                verdict = PinVerdict.Dead;
+            }
+
+            verdicts[key] = (verdict, name);
+
+            return verdict;
+        }
+
+        var heads = names.ToDictionary(n => n, n => pins[n].FirstOrDefault(Checkable), StringComparer.OrdinalIgnoreCase);
         var alive = new Dictionary<string, bool>(StringComparer.Ordinal);
 
-        foreach (var (address, name) in byAddress)
-            alive[address] = await AnswersAsync(address, name, cancellationToken);
+        foreach (var name in names)
+        {
+            if (heads[name] is { } head && !alive.ContainsKey(head))
+                alive[head] = await ProbeAsync(head, name) != PinVerdict.Dead;
+        }
+
+        var before = LoadSuspects(suspectsPath);
 
         // Не отвечает больше половины адресов разом — это сбой сети, а не смерть
         // адресов. 29.09 в 14:58 проверка сочла мёртвыми 68 имён сразу, среди
@@ -149,97 +401,358 @@ public static class PinRefresh
 
         if (alive.Count >= 4 && deadCount * 2 > alive.Count)
         {
+            // Сбой — не свидетельство: новых подозреваемых он не прибавляет, но
+            // ответившие сейчас подозрение снимают. Иначе адрес из позапрошлой
+            // проверки, ответивший в этой, при следующем моргании сошёл бы за
+            // второй промах подряд.
+            SaveSuspects(suspectsPath, before.Where(a => alive.TryGetValue(a, out var ok) && !ok).ToList());
+
             return new([], [], null,
-                $"не ответили {deadCount} адресов из {alive.Count} — похоже на сбой сети, пины не тронуты", alive.Count);
+                $"не ответили {deadCount} адресов из {alive.Count} — похоже на сбой сети, пины не тронуты", alive.Count)
+            { Silent = silent };
         }
 
-        var plan = Plan(pins, alive);
+        // 4а. Посредник переехал: сервер профиля отдаёт имени других посредников,
+        // а первого адреса пина среди них нет. Ждать смерти старого незачем —
+        // посредник уже ведёт туда, куда сказал.
+        //
+        // При живом старом — осторожнее, чем при мёртвом: переезжать только на
+        // посредников без правила трёх имён (IntermediaryDns.StrongRelays: настоящий
+        // адрес сервиса трём именам профиля посредником не станет), только если
+        // старого сервер не отдаёт больше ни одному имени и если второй вопрос
+        // говорит то же. GeoHide и Comss перемешивают узлы; отдают ли они имени
+        // каждый раз часть узлов, не замерено, — без этого живой пин скакал бы
+        // с пары на пару на каждой проверке.
+        var moves = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var confirm = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
-        if (plan.Count == 0)
-            return new([], [], null, null, alive.Count);
-
-        // Для каждого имени без живого адреса — что посредники отдают сейчас.
-        var reached = await IntermediaryDns.ReachAsync(plan, cancellationToken);
-        var live = reached.Answers;
-        var silent = reached.Silent;
-
-        // Новый адрес проверяется один раз — тем именем, которому он нужен первым.
-        var checkedNew = new Dictionary<string, bool>(StringComparer.Ordinal);
-        var entries = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var name in plan)
+        foreach (var name in names)
         {
-            var fresh = new List<string>();
+            if (heads[name] is not { } head || Profile(name) is not { } profile || !heard.TryGetValue(profile, out var h))
+                continue;
 
-            foreach (var candidate in live.TryGetValue(name, out var c) ? c : [])
+            bool live = alive[head];
+            var given = Given(profile, name, strong: live);
+
+            if (given.Count == 0 || given.Contains(head, StringComparer.Ordinal))
+                continue;
+
+            if (live && h.Relays.Contains(head))
+                continue;
+
+            moves[name] = given;
+
+            if (live)
             {
-                if (alive.TryGetValue(candidate.Address, out var known) && !known)
+                if (!confirm.TryGetValue(profile, out var list))
+                    confirm[profile] = list = [];
+
+                list.Add(name);
+            }
+        }
+
+        var again = await Task.WhenAll(confirm.Select(async c =>
+            (Names: c.Value, Reply: await AskAsync(net, IntermediaryDns.ByKey(c.Key)!, c.Value, cancellationToken))));
+
+        foreach (var (list, reply) in again)
+        {
+            foreach (var name in list)
+            {
+                var head = heads[name]!;
+
+                if (reply is null
+                    || reply.Names.Values.Any(a => a.Any(x => x.ToString() == head))
+                    || IntermediaryDns.RelaysFor(reply, IntermediaryDns.StrongRelays(reply), name).Count == 0)
+                {
+                    moves.Remove(name);
+                }
+            }
+        }
+
+        var entries = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var via = new Dictionary<string, string>(assigned, StringComparer.OrdinalIgnoreCase);
+        var replaced = new List<(string Name, string Line)>();
+        var moved = new List<(string Name, string Line)>();
+        var reordered = new List<(string Name, string Line)>();
+        var pending = new List<string>();
+        var dead = new List<string>();
+        bool? online = null;
+
+        // Живые из набора посредников, не больше двух, — одной пробой на адрес.
+        async Task<List<string>> LiveAsync(IEnumerable<string> addresses, string name)
+        {
+            var live = new List<string>();
+
+            foreach (var address in addresses)
+            {
+                if (alive.TryGetValue(address, out var known) && !known)
                     continue;
 
-                if (!checkedNew.TryGetValue(candidate.Address, out var ok))
-                    checkedNew[candidate.Address] = ok = await AnswersAsync(candidate.Address, name, cancellationToken);
+                // Новый адрес — только с ответом самого сайта: отказ по стране
+                // (настоящий адрес, а не посредник) замены не стоит.
+                if (await ProbeAsync(address, name) is PinVerdict.Works or PinVerdict.Challenge)
+                    live.Add(address);
 
-                if (ok)
-                    fresh.Add(candidate.Address);
-
-                // Два адреса, как у посредника: Windows возьмёт второй, если первый молчит.
-                if (fresh.Count == 2)
+                if (live.Count == 2)
                     break;
             }
 
-            if (fresh.Count > 0)
-                entries[name] = fresh;
+            return live;
         }
 
-        var dead = plan.Where(n => !entries.ContainsKey(n)).ToList();
+        foreach (var name in names)
+        {
+            var current = pins[name];
+            var head = heads[name];
+            var profile = Profile(name);
+
+            if (moves.TryGetValue(name, out var given))
+            {
+                var live = await LiveAsync(given, name);
+
+                if (live.Count > 0)
+                {
+                    entries[name] = live;
+                    via[name] = profile!;
+                    moved.Add((name, $"{IntermediaryDns.ByKey(profile)!.Name}: {Join(current)} → {Join(live)}"));
+                    continue;
+                }
+            }
+
+            if (head is null || alive[head])
+                continue;
+
+            // 4б. Первый адрес молчит. Одна неудача — только подозрение: адрес
+            // мог моргнуть. Меняем со второй подряд или когда человек нажал кнопку.
+            if (!byHand && !before.Contains(head))
+                continue;
+
+            // 5. Прежде чем верить смерти — есть ли сеть вообще. Нет — замены по
+            // смерти не делаются, но переезды, уже проверенные пробой, остаются.
+            online ??= await OnlineAsync(net, cancellationToken);
+
+            if (online == false)
+                continue;
+
+            if (profile is not null)
+            {
+                var live = await LiveAsync(Given(profile, name).Where(a => a != head), name);
+
+                if (live.Count > 0)
+                {
+                    entries[name] = live;
+                    via[name] = profile;
+                    replaced.Add((name, $"{Join(current)} → {Join(live)}"));
+                    continue;
+                }
+            }
+
+            // Живой из уже записанных — первым. Остальные остаются за ним: имя
+            // не теряет адресов, а мёртвый, если оживёт, ещё пригодится. Сперва —
+            // ответивший сам; отказавший (403) — лишь когда такого нет: он может
+            // быть настоящим адресом сервиса, но и он лучше молчащего.
+            string? spare = null;
+
+            foreach (bool strict in new[] { true, false })
+            {
+                foreach (var address in current.Where(a => a != head && Checkable(a)))
+                {
+                    var verdict = await ProbeAsync(address, name);
+
+                    if (strict ? verdict is PinVerdict.Works or PinVerdict.Challenge : verdict != PinVerdict.Dead)
+                    {
+                        spare = address;
+                        break;
+                    }
+                }
+
+                if (spare is not null)
+                    break;
+            }
+
+            if (spare is not null)
+            {
+                entries[name] = [spare, .. current.Where(a => a != spare)];
+
+                if (profile is not null)
+                    via[name] = profile;
+
+                reordered.Add((name, $"{head} → первым {spare}"));
+                continue;
+            }
+
+            pending.Add(name);
+        }
+
+        // 6. Свой посредник не помог — живой у любого другого, по порядку доверия.
+        // Имя с профилем спрашивалось только у своего сервера, и чужие о нём
+        // сейчас спрашиваются отдельно — лишь о таких именах, это редкость.
+        // Посредники здесь — без правила трёх имён: имя чужому профилю не своё.
+        var foreign = new Dictionary<string, Heard>(StringComparer.Ordinal);
+
+        if (pending.Any(profiles.ContainsKey))
+        {
+            var ask = IntermediaryDns.Servers
+                .Select(s => (Server: s, Names: pending.Where(n => profiles.TryGetValue(n, out var k) && k != s.Key).ToList()))
+                .Where(a => a.Names.Count > 0)
+                .ToList();
+
+            var answers = await Task.WhenAll(ask.Select(a => AskAsync(net, a.Server, a.Names, cancellationToken)));
+
+            foreach (var (a, reply) in ask.Zip(answers))
+            {
+                if (reply is not null)
+                    foreach (var name in a.Names)
+                        foreign[a.Server.Key + " " + name.ToLowerInvariant()] = new Heard(reply, IntermediaryDns.Relays(reply, []), IntermediaryDns.StrongRelays(reply));
+            }
+        }
+
+        foreach (var name in pending)
+        {
+            var head = heads[name];
+            var profile = Profile(name);
+            bool found = false;
+
+            foreach (var server in IntermediaryDns.Servers.Where(s => s.Key != profile))
+            {
+                var given = profiles.ContainsKey(name)
+                    ? foreign.TryGetValue(server.Key + " " + name.ToLowerInvariant(), out var f)
+                        ? IntermediaryDns.RelaysFor(f.Answers, f.Relays, name)
+                        : []
+                    : Given(server.Key, name);
+
+                var live = await LiveAsync(given.Where(a => a != head), name);
+
+                if (live.Count == 0)
+                    continue;
+
+                entries[name] = live;
+                via[name] = server.Key;
+                replaced.Add((name, $"{Join(pins[name])} → {Join(live)}"));
+                found = true;
+                break;
+            }
+
+            if (!found)
+                dead.Add(name);
+        }
+
+        // Подозреваемые — и когда сеть молчала: в следующей проверке промах
+        // засчитается вторым, только если сеть тогда будет.
+        var suspects = alive.Where(p => !p.Value).Select(p => p.Key).ToList();
+        SaveSuspects(suspectsPath, suspects);
+
+        string? offline = online == false
+            ? "контрольные адреса (Яндекс) не отвечают — похоже, нет сети; мёртвые пины не тронуты"
+            : null;
 
         if (entries.Count == 0)
-            return new([], dead, null, null, alive.Count) { Silent = silent };
-
-        var changes = entries
-            .GroupBy(e => $"{string.Join(", ", pins[e.Key].Order(StringComparer.Ordinal))} → {string.Join(", ", e.Value.Order(StringComparer.Ordinal))}")
-            .Select(g => $"{g.Key} ({g.Count()} {Names(g.Count())})")
-            .ToList();
+        {
+            return new([], dead, null, offline, alive.Count)
+            {
+                Silent = silent,
+                Suspects = suspects.Count,
+            };
+        }
 
         try
         {
-            var result = HostsEditor.Repin(entries, path);
+            // Профиль пишется и тем, чьи адреса не менялись (присвоение), — но только
+            // вместе с настоящей заменой: ради одной пометки hosts не переписывается.
+            // Присвоенным — лишь если их адреса в блоке те же, что были на начале проверки.
+            var result = HostsEditor.Repin(entries, path, via: via,
+                assignedAt: assigned.Keys.ToDictionary(n => n, n => pins[n], StringComparer.OrdinalIgnoreCase));
 
             if (path is null)
                 HostsEditor.FlushDns();
 
-            return result.RevertedBy is { } by
-                ? new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count) { Silent = silent }
-                : new(changes, dead, result.Backup, null, alive.Count) { Silent = silent };
+            if (result.RevertedBy is { } by)
+            {
+                return new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count)
+                {
+                    Silent = silent,
+                    Suspects = suspects.Count,
+                };
+            }
+
+            return new(Grouped(replaced), dead, result.Backup, offline, alive.Count)
+            {
+                Silent = silent,
+                Moved = Grouped(moved),
+                Reordered = Grouped(reordered),
+                Suspects = suspects.Count,
+                Assigned = assigned.Count,
+            };
         }
         catch (Exception ex)
         {
-            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message, alive.Count) { Silent = silent };
+            return new([], dead, null, "hosts не записался: " + ex.GetBaseException().Message, alive.Count)
+            {
+                Silent = silent,
+                Suspects = suspects.Count,
+            };
         }
     }
 
-    /// <summary>Имена, у которых не осталось ни одного живого адреса.</summary>
-    /// <remarks>Имя, у которого жив хоть один адрес из двух, не трогаем: Windows до него дойдёт.</remarks>
-    internal static IReadOnlyList<string> Plan(
-        IReadOnlyDictionary<string, IReadOnlyList<string>> pins,
-        IReadOnlyDictionary<string, bool> alive) =>
-        pins
-            .Where(p => p.Value.Count > 0 && p.Value.All(a => alive.TryGetValue(a, out var ok) && !ok))
-            .Select(p => p.Key)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToList();
-
-    /// <summary>Отвечает ли адрес этим именем: соединение и хоть какой-то ответ сайта.</summary>
-    /// <remarks>
-    /// Отказ сайта (403) — тоже ответ: соединение прошло, посредник жив.
-    /// Мёртвый — только тот, где не прошло ничего.
-    /// </remarks>
-    private static async Task<bool> AnswersAsync(string address, string name, CancellationToken cancellationToken)
+    /// <summary>Есть ли сеть: соединение на 443 хоть с одним контрольным адресом Яндекса.</summary>
+    private static async Task<bool> OnlineAsync(PinNet net, CancellationToken cancellationToken)
     {
-        var probe = await PinPicker.ProbeAsync(new PinCandidate(address, PinSource.Pool, "пин"), name, cancellationToken);
-        return probe.Verdict != PinVerdict.Dead;
+        try
+        {
+            return await net.Online(cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
+    /// <summary>Адрес, который имеет смысл проверять: разбирается и не заглушка.</summary>
+    private static bool Checkable(string address) =>
+        System.Net.IPAddress.TryParse(address, out var ip) && !BlockCheck.IsStub(ip);
+
+    private static string Join(IEnumerable<string> addresses) => string.Join(", ", addresses);
+
+    private static IReadOnlyList<string> Grouped(IEnumerable<(string Name, string Line)> lines) =>
+        lines
+            .GroupBy(x => x.Line, StringComparer.Ordinal)
+            .Select(g => $"{g.Key} ({g.Count()} {Names(g.Count())})")
+            .ToList();
+
+    internal static IReadOnlySet<string> LoadSuspects(string path)
+    {
+        try
+        {
+            if (!File.Exists(path))
+                return new HashSet<string>(StringComparer.Ordinal);
+
+            return (System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(path)) ?? [])
+                .ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception)
+        {
+            // Испорченный файл — как первая проверка: подозреваемых нет, менять рано.
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+    }
+
+    private static void SaveSuspects(string path, IReadOnlyCollection<string> addresses)
+    {
+        try
+        {
+            if (Path.GetDirectoryName(path) is { Length: > 0 } dir)
+                Directory.CreateDirectory(dir);
+
+            File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(addresses.Order(StringComparer.Ordinal).ToArray()));
+        }
+        catch (IOException)
+        {
+            // Не записалось — следующая проверка сочтёт промах первым; это осторожная сторона.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
     private static string Names(int count) => (count % 10, count % 100) switch
     {
         (1, not 11) => "имя",

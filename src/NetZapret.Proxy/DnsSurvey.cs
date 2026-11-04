@@ -451,7 +451,7 @@ public static class DnsSurvey
     /// HTTP/2 — Quad9 отвечал на HTTP/1.1 кодом 505, Mullvad и Alibaba рвали
     /// рукопожатие, не найдя h2 в ALPN.
     /// </remarks>
-    private static HttpClient DohClient(string address, int? nic) =>
+    internal static HttpClient DohClient(string address, int? nic) =>
         new(new SocketsHttpHandler
         {
             ConnectTimeout = Timeout,
@@ -542,6 +542,22 @@ public static class DnsSurvey
     {
         using var http = DohClient(address, nic);
 
+        return await DohQueryAsync(http, tlsName, path, name, type, cancellationToken);
+    }
+
+    /// <summary>
+    /// Тот же вопрос через готовый клиент (<see cref="DohClient"/>): многие вопросы
+    /// к одному серверу идут одним соединением HTTP/2, а не рукопожатием на каждый.
+    /// </summary>
+    /// <remarks>
+    /// Ради автозамены пинов (05.11): она спрашивает сервер посредника о каждом
+    /// имени блока, и по клиенту на вопрос это были бы сотни соединений TLS к одному
+    /// имени за секунды — по «июньской» схеме ТСПУ (больше трёх сессий к имени за
+    /// 60 с) это повод заморозить само имя DoH.
+    /// </remarks>
+    internal static async Task<DnsWire.Answer?> DohQueryAsync(
+        HttpClient http, string tlsName, string path, string name, ushort type, CancellationToken cancellationToken)
+    {
         try
         {
             using var content = new ByteArrayContent(DnsWire.Query(name, type));

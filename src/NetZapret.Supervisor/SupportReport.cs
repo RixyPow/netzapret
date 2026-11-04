@@ -443,7 +443,8 @@ public static class SupportReport
         int pins = kept.Count(line => !line.TrimStart().StartsWith('#'));
 
         return $"Строк с адресами: {pins}. Блок NetZapret — между отметками {HostsEditor.BlockBegin} и {HostsEditor.BlockEnd}; "
-            + $"«# {HostsEditor.DesyncMark}» — пин на адрес самого сервиса, десинк к нему применяется.\n\n"
+            + $"«# {HostsEditor.DesyncMark}» — пин на адрес самого сервиса, десинк к нему применяется; "
+            + $"«{HostsEditor.ViaMark}…» — каким посредником отдан адрес, у него автозамена о пине и спрашивает.\n\n"
             + string.Join('\n', kept) + "\n";
     }
 

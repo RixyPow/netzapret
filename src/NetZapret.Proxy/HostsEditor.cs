@@ -499,6 +499,99 @@ public static class HostsEditor
         string? note = null) => PinMany(entries, path, note, desync: true);
 
     /// <summary>
+    /// Пометка профиля пина в строке нашего блока: <c>nz:via=comss</c> — адрес
+    /// отдал посредник с этим ключом (<see cref="Intermediary.Key"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Автозамена (<see cref="PinRefresh"/>) по ней знает, у какого посредника
+    /// спрашивать о пине: Zapret GUI так и ведёт пины — по профилю, а не наугад
+    /// у всех. Без профиля посредник, переехавший на новый прокси при живом
+    /// старом, оставался бы незамеченным, пока старый не умрёт.
+    /// </para>
+    /// <para>
+    /// В файле, а не в настройках, — по той же причине, что и <see cref="DesyncMark"/>:
+    /// пометка не расходится с записью. Ключ без пробелов, чтобы читаться одним
+    /// словом рядом с <see cref="DesyncMark"/> в одном комментарии.
+    /// </para>
+    /// </remarks>
+    public const string ViaMark = "nz:via=";
+
+    /// <summary>
+    /// Имена нашего блока с пометкой <see cref="ViaMark"/> → ключ посредника.
+    /// </summary>
+    /// <remarks>Только из нашего блока: чужим пометкам не верим, как и <see cref="DesyncMark"/>.</remarks>
+    public static IReadOnlyDictionary<string, string> PinsVia(string? path = null)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var target = path ?? HostsFile.DefaultPath;
+
+        try
+        {
+            if (!File.Exists(target))
+                return result;
+
+            var lines = File.ReadAllLines(target);
+            var (start, end) = FindBlock(lines);
+
+            if (start < 0)
+                return result;
+
+            foreach (var line in Own(lines, start, end))
+            {
+                if (Split(line) is { } pair && Via(line) is { } via)
+                    result.TryAdd(pair.Name, via);
+            }
+        }
+        catch (IOException)
+        {
+            // Не прочитался — профилей не видно, автозамена спросит всех посредников.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+
+        return result;
+    }
+
+    /// <summary>Ключ посредника из пометки <see cref="ViaMark"/>; <c>null</c> — пометки нет.</summary>
+    internal static string? Via(string line)
+    {
+        int hash = line.IndexOf('#');
+
+        if (hash < 0)
+            return null;
+
+        var comment = line[(hash + 1)..];
+        int at = comment.IndexOf(ViaMark, StringComparison.OrdinalIgnoreCase);
+
+        if (at < 0)
+            return null;
+
+        var rest = comment[(at + ViaMark.Length)..];
+        int stop = 0;
+
+        while (stop < rest.Length && !char.IsWhiteSpace(rest[stop]) && rest[stop] != '#')
+            stop++;
+
+        return stop > 0 ? rest[..stop].ToLowerInvariant() : null;
+    }
+
+    /// <summary>Комментарий строки нашего блока из двух пометок; пусто — без комментария.</summary>
+    private static string Marks(bool desync, string? via)
+    {
+        var parts = new List<string>(2);
+
+        if (desync)
+            parts.Add(DesyncMark);
+
+        if (!string.IsNullOrWhiteSpace(via))
+            parts.Add(ViaMark + via);
+
+        return parts.Count == 0 ? string.Empty : " # " + string.Join(' ', parts);
+    }
+
+    /// <summary>
     /// Имена нашего блока с пометкой <see cref="DesyncMark"/> — их пины десинку открыты.
     /// </summary>
     /// <remarks>
@@ -566,24 +659,42 @@ public static class HostsEditor
     /// </para>
     /// </remarks>
     /// <param name="entries">Имя и адрес; имена, что уже в блоке, заменяются.</param>
+    /// <param name="via">
+    /// Профиль имён (<see cref="ViaMark"/>): имя из <paramref name="entries"/> без
+    /// ключа здесь пометку теряет — человек прибил его не к посреднику.
+    /// </param>
     public static PinResult Pin(
         IReadOnlyDictionary<string, string> entries,
         string? path = null,
-        string? note = null)
+        string? note = null,
+        IReadOnlyDictionary<string, string>? via = null)
     {
         var many = entries.ToDictionary(
             p => p.Key,
             p => (IReadOnlyList<string>)[p.Value],
             StringComparer.OrdinalIgnoreCase);
 
-        return PinMany(many, path, note);
+        return PinMany(many, path, note, via: via);
     }
 
     /// <summary>Прибивает имена сразу к нескольким адресам: Windows пробует их по очереди.</summary>
+    /// <param name="via">
+    /// Профиль имён (<see cref="ViaMark"/>). Имя из <paramref name="entries"/> без ключа
+    /// пометку теряет; имя блока, которого нет в <paramref name="entries"/>, но есть
+    /// здесь, получает пометку, не меняя адресов (присвоение профиля старому пину).
+    /// </param>
+    /// <param name="assignedAt">
+    /// Адреса, по которым профиль присвоен (снимок блока на начало проверки). Имя, чьи
+    /// адреса в блоке с тех пор стали другими, пометку не получает: проверка идёт
+    /// минуты, и человек мог за это время прибить имя к своему адресу.
+    /// </param>
     public static PinResult Repin(
         IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
         string? path = null,
-        string? note = null) => PinMany(entries, path, note);
+        string? note = null,
+        IReadOnlyDictionary<string, string>? via = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? assignedAt = null) =>
+        PinMany(entries, path, note, via: via, assignedAt: assignedAt);
 
     /// <summary>Наши имена со всеми их адресами; пусто, если блока нет.</summary>
     /// <remarks>
@@ -629,7 +740,9 @@ public static class HostsEditor
         IReadOnlyDictionary<string, IReadOnlyList<string>> entries,
         string? path,
         string? note,
-        bool desync = false)
+        bool desync = false,
+        IReadOnlyDictionary<string, string>? via = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? assignedAt = null)
     {
         var target = path ?? HostsFile.DefaultPath;
         var backup = File.Exists(target) ? Backup(target) : null;
@@ -638,6 +751,10 @@ public static class HostsEditor
         var (start, end) = FindBlock(lines);
         var kept = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var marked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Профиль пина (ViaMark) живёт при перезаписи блока другим сервисом,
+        // как и DesyncMark: иначе первое же закрепление стирало бы его у всех.
+        var profiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         // Выключенные в окне строки блока (SetEnabled) переживают перезапись
         // как есть: без этого первое же закрепление стирало бы их молча.
@@ -679,6 +796,9 @@ public static class HostsEditor
 
                 if (Marked(line))
                     marked.Add(pair.Name);
+
+                if (Via(line) is { } key)
+                    profiles.TryAdd(pair.Name, key);
             }
 
             // Чужой блок внутри нашего — не наш: см. Nested.
@@ -701,10 +821,41 @@ public static class HostsEditor
             else
                 marked.Remove(name);
 
+            // Профиль — только тот, что прислан с новым адресом: ручной пин
+            // поверх посредника его терять обязан.
+            if (via is not null
+                && (via.TryGetValue(rawName, out var key) || via.TryGetValue(name, out key))
+                && !string.IsNullOrWhiteSpace(key))
+            {
+                profiles[name] = key;
+            }
+            else
+            {
+                profiles.Remove(name);
+            }
+
             foreach (var address in addresses)
             {
                 if (!list.Contains(address, StringComparer.OrdinalIgnoreCase))
                     list.Add(address);
+            }
+        }
+
+        // Присвоение профиля имени, чьи адреса не меняются.
+        if (via is not null)
+        {
+            foreach (var (rawName, key) in via)
+            {
+                var name = rawName.TrimStart('*', '.');
+
+                if (kept.TryGetValue(name, out var now) && !string.IsNullOrWhiteSpace(key)
+                    && !entries.Keys.Any(n => string.Equals(n.TrimStart('*', '.'), name, StringComparison.OrdinalIgnoreCase))
+                    && (assignedAt is null
+                        || (assignedAt.TryGetValue(rawName, out var then) || assignedAt.TryGetValue(name, out then))
+                           && now.ToHashSet(StringComparer.OrdinalIgnoreCase).SetEquals(then)))
+                {
+                    profiles[name] = key;
+                }
             }
         }
 
@@ -718,7 +869,7 @@ public static class HostsEditor
 
         foreach (var (name, addresses) in kept.OrderBy(p => p.Key, StringComparer.Ordinal))
         {
-            var mark = marked.Contains(name) ? " # " + DesyncMark : string.Empty;
+            var mark = Marks(marked.Contains(name), profiles.GetValueOrDefault(name));
 
             foreach (var address in addresses)
                 block.Add($"{address} {name}{mark}");

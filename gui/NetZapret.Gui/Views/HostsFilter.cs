@@ -79,7 +79,14 @@ public sealed class HostsLine(HostsRow row) : INotifyPropertyChanged
         : string.Empty;
 
     /// <summary>Подпись строки без нашей служебной пометки — та видна колонкой «Вид».</summary>
-    public string? Note => Row.Note?.Replace(HostsEditor.DesyncMark, string.Empty, StringComparison.OrdinalIgnoreCase).Trim(' ', ',', ';');
+    public string? Note => Row.Note is null
+        ? null
+        : System.Text.RegularExpressions.Regex.Replace(
+                Row.Note.Replace(HostsEditor.DesyncMark, string.Empty, StringComparison.OrdinalIgnoreCase),
+                System.Text.RegularExpressions.Regex.Escape(HostsEditor.ViaMark) + @"\S*",
+                string.Empty,
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+            .Trim(' ', ',', ';');
 
     public bool HasSub => Sub.Length > 0;
 

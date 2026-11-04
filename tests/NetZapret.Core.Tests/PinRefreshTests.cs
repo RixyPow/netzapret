@@ -4,42 +4,11 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Обновление пинов (28.09): меняется только то, что умерло целиком.
+/// Обновление пинов (28.09): запись блока, срок, ответы посредников.
+/// Ход самой проверки — <see cref="PinRefreshFlowTests"/>.
 /// </summary>
 public sealed class PinRefreshTests
 {
-    [Fact]
-    public void Only_names_with_every_address_dead_are_replaced()
-    {
-        // Имя на двух адресах посредника живо, пока жив хоть один: Windows
-        // дойдёт до второго. Менять его — трогать работающее.
-        var pins = new Dictionary<string, IReadOnlyList<string>>
-        {
-            ["claude.ai"] = ["87.228.47.201", "87.228.47.203"],
-            ["chatgpt.com"] = ["87.228.47.204"],
-            ["grok.com"] = ["87.228.47.204", "87.228.47.195"],
-        };
-
-        var alive = new Dictionary<string, bool>
-        {
-            ["87.228.47.201"] = false,
-            ["87.228.47.203"] = true,
-            ["87.228.47.204"] = false,
-            ["87.228.47.195"] = false,
-        };
-
-        Assert.Equal(["chatgpt.com", "grok.com"], PinRefresh.Plan(pins, alive));
-    }
-
-    [Fact]
-    public void Unchecked_address_is_not_called_dead()
-    {
-        // Заглушки (127.0.0.1) не проверяются вовсе — и не должны считаться мёртвыми.
-        var pins = new Dictionary<string, IReadOnlyList<string>> { ["image.tmdb.org"] = ["127.0.0.1"] };
-
-        Assert.Empty(PinRefresh.Plan(pins, new Dictionary<string, bool>()));
-    }
-
     [Fact]
     public void Repin_keeps_the_block_note_and_other_names()
     {
@@ -85,7 +54,7 @@ public sealed class PinRefreshTests
     }
 
     [Fact]
-    public void A_day_passes_before_the_next_check_by_itself()
+    public void Six_hours_pass_before_the_next_check_by_itself()
     {
         var stamp = Path.Combine(Path.GetTempPath(), $"nz-pin-refresh-{Guid.NewGuid():N}.txt");
         var now = new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.FromHours(3));
@@ -97,10 +66,11 @@ public sealed class PinRefreshTests
 
             PinRefresh.Mark(now, stamp);
 
-            Assert.False(PinRefresh.IsDue(now.AddHours(23), stamp));
-            Assert.True(PinRefresh.IsDue(now.AddHours(24), stamp));
+            // С 05.11 — раз в 6 часов, как у Zapret GUI (HOSTS_ADDRESSES).
+            Assert.False(PinRefresh.IsDue(now.AddHours(5), stamp));
+            Assert.True(PinRefresh.IsDue(now.AddHours(6), stamp));
 
-            // Часы ушли назад (отметка из будущего) — не ждать сутки лишнего.
+            // Часы ушли назад (отметка из будущего) — не ждать срок лишнего.
             Assert.True(PinRefresh.IsDue(now.AddHours(-2), stamp));
 
             File.WriteAllText(stamp, "испорчено");
@@ -126,6 +96,9 @@ public sealed class PinRefreshTests
 
         Assert.Equal(["206.223.251.18", "157.22.181.209", "45.13.237.213"], found.Select(c => c.Address));
         Assert.Equal("GeoHide EU, сейчас", found[2].Label);
+
+        // Ключ посредника — профиль пина (nz:via); у незнакомого посредника его нет.
+        Assert.Equal(["comss", "comss", "geohide-eu"], found.Select(c => c.Via));
     }
 
     [Fact]
@@ -138,7 +111,10 @@ public sealed class PinRefreshTests
             Assert.Contains('.', s.DohName);
             Assert.NotEmpty(s.Fallback);
             Assert.StartsWith("/", s.Path);
+            Assert.Matches("^[a-z0-9-]+$", s.Key);
         });
+
+        Assert.Equal(IntermediaryDns.Servers.Count, IntermediaryDns.Servers.Select(s => s.Key).Distinct().Count());
 
         Assert.DoesNotContain(IntermediaryDns.Servers, s => s.Name.Contains("XBOX", StringComparison.Ordinal));
         Assert.True(new AppSettings().AutoRepin);
