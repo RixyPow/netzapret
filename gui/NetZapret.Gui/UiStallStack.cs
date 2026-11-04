@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Diagnostics.Runtime;
 
@@ -51,10 +52,21 @@ internal static class UiStallStack
     /// <summary>Снимок без паузы между снимками — для <see cref="Capture"/> и тестов.</summary>
     internal static string Snapshot(int managedThreadId)
     {
+        // Библиотека чтения стеков (DAC) — только та, что лежит рядом с .NET. Не нашла
+        // своей — ClrMD сама качает её с сервера символов Microsoft, а запроса в сеть
+        // на подвисании никто не ждёт. В выпуске (единый файл) её нет: проверено
+        // по архиву 1.3.1 — в NetZapret.exe mscordaccore.dll не вложен. Стек там
+        // не снимется, и сторож так и скажет; у сборки build.cmd DAC лежит рядом.
+        var dac = Path.Combine(System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), "mscordaccore.dll");
+
+        if (!File.Exists(dac))
+            return "стек не снят: нет библиотеки чтения стеков рядом с .NET";
+
         try
         {
             using var target = DataTarget.CreateSnapshotAndAttach(Environment.ProcessId);
-            using var runtime = target.ClrVersions[0].CreateRuntime();
+            target.FileLocator = null;
+            using var runtime = target.ClrVersions[0].CreateRuntime(dac);
 
             var thread = runtime.Threads.FirstOrDefault(t => t.ManagedThreadId == managedThreadId);
 
