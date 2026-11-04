@@ -489,6 +489,16 @@ public sealed record TargetReport
     public bool TunnelMissed => ExpectedTunnel && !Tunnelled;
 
     /// <summary>
+    /// Нейросеть, закрытая по стране (<see cref="CountryClosed"/>), шла мимо туннеля
+    /// и не прибита в hosts: первым советом — пин на посредника, VPN — вторым.
+    /// </summary>
+    /// <remarks>
+    /// Пин дешевле VPN: ни трафика подписки, ни подписки вовсе, а посредник
+    /// отвечает из-за границы. Порядок — решение владельца 05.11.
+    /// </remarks>
+    public bool PinFirst { get; init; }
+
+    /// <summary>
     /// Общее имя ECH из записи HTTPS; <c>null</c> — ECH у имени нет или не спрашивали.
     /// </summary>
     /// <remarks>
@@ -715,6 +725,8 @@ public sealed record TargetReport
         // не поможет: в отчёте 27.10 оба таких имени (notion.so, elevenlabs.io)
         // были прибиты.
         BlockKind.Dns => "свой DNS, а прибитое в hosts — снять пин",
+        BlockKind.GeoBlock when PinFirst => "пин на посредника («Маршруты» → сервис → кнопка-булавка), "
+            + "не нашёлся рабочий — VPN с выходом не в России; десинк не поможет",
         BlockKind.GeoBlock => "только VPN — десинк не поможет",
         BlockKind.BrokenCname => "подставить адрес",
         // Браузеру этот сайт открывается: у него приветствие TLS другое
@@ -1549,6 +1561,12 @@ public static class BlockCheck
         // он там же.
         (kind, tcp) = WithSpoof(kind, tcp, spoof);
 
+        // Нейросеть, закрытая по стране, мимо туннеля и без пина: страница
+        // могла и открыться (Gemini), но отказ придёт на запрос — вердикт по
+        // списку. С пином имя отвечает посредник из-за границы — его не трогаем.
+        var pinFirst = !viaTunnel && !trial && CountryClosed.Covers(host) && PinnedTo(host, real) is null;
+        (kind, data) = ClosedByCountry(kind, data, pinFirst);
+
         return new TargetReport
         {
             Host = host,
@@ -1568,8 +1586,19 @@ public static class BlockCheck
             Answered = answered?.ToString(),
             Tunnelled = viaTunnel,
             ExpectedTunnel = throughTunnel,
+            PinFirst = pinFirst,
         };
     }
+
+    /// <summary>«Доступен» у закрытой по стране нейросети без пина — это отказ по стране, по списку.</summary>
+    internal static (BlockKind Kind, ProbeOutcome Data) ClosedByCountry(BlockKind kind, ProbeOutcome data, bool pinFirst) =>
+        pinFirst && kind == BlockKind.None
+            ? (BlockKind.GeoBlock, data with
+            {
+                Detail = "закрыт для России по стране (по списку): страница может открыться, "
+                    + "а отказ придёт на запрос",
+            })
+            : (kind, data);
 
     /// <summary>«Доступен» с чужим сертификатом — это «резолвер даёт нерабочий адрес», с подменой в причине.</summary>
     internal static (BlockKind Kind, ProbeOutcome Tcp) WithSpoof(BlockKind kind, ProbeOutcome tcp, DnsSpoofResult spoof) =>
