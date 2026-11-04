@@ -991,23 +991,22 @@ public static class BlockCheck
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Длинное браузерное приветствие уже не прошло (AskBrowserHelloAsync).
-        // Короткое со своим же именем прошло — режут не имя и не адрес, а длину:
-        // чужие имена ниже спросились бы тем же длинным и назвали бы это блоком
-        // адреса, а совет вышел бы «только VPN».
-        if (CloudflareNet.Contains(via)
-            && await BrowserHello.AskAsync(via, report.Host, Timeout, cancellationToken, compact: true) is var brief
+        var (kind, said) = await AskNamesAsync(
+            name => BrowserHello.AskAsync(via, name, Timeout, cancellationToken));
+
+        // Чужие имена спрошены длинным приветствием и не прошли — «режут адрес».
+        // Но если короткое с тем же чужим именем проходит, режут не адрес, а длину
+        // (BlockKind.LongHello), и совет «только VPN» был бы неверен.
+        if (kind == BlockKind.TlsByAddress && CloudflareNet.Contains(via)
+            && await BrowserHello.AskAsync(via, NameProbeNeutral, Timeout, cancellationToken, compact: true) is var brief
             && Reached(brief))
         {
             return report with
             {
                 Kind = BlockKind.LongHello,
-                Tls = report.Tls with { Detail = Join(report.Tls.Detail, ShortPassed) },
+                Tls = report.Tls with { Detail = Join(report.Tls.Detail, $"{said}; {ShortPassed}") },
             };
         }
-
-        var (kind, said) = await AskNamesAsync(
-            name => BrowserHello.AskAsync(via, name, Timeout, cancellationToken));
 
         return report with
         {
@@ -1017,15 +1016,25 @@ public static class BlockCheck
     }
 
     private const string ShortPassed =
-        "то же приветствие без постквантового ключа, одним пакетом, принято — режут длинное";
+        "с " + NameProbeNeutral + " приветствие без постквантового ключа, одним пакетом, принято, "
+        + "а с ключом, двумя пакетами, — нет: режут длину, а не имя";
 
     private static string Join(string? before, string said) =>
         before is { Length: > 0 } ? $"{before}; {said}" : said;
 
     /// <summary>
-    /// Пройдёт ли браузерное приветствие там, где прошло системное; не пройдёт,
-    /// а короткое пройдёт — что сказать. <c>null</c> — длинное прошло или не прошло никакое.
+    /// Пройдёт ли браузерное приветствие там, где прошло системное; режут длину — что сказать.
+    /// <c>null</c> — длинное прошло, или режут не длину.
     /// </summary>
+    /// <remarks>
+    /// Длину судит чужое имя, а не своё. Своё под десинком проходит через раз:
+    /// 05.11 obsidian.md на 104.26.1.147 через десинк — длинное 1 из 4, короткое
+    /// 2 из 4, а мимо десинка 0 из 4 оба (режут имя; example.com там же — 4 из 4
+    /// любой длины). Первая версия судила своим именем и по одной удаче короткого
+    /// назвала obsidian.md «режут длинное» — ложно. Блок 29.10 резал длинное
+    /// на подсети с любым именем, значит, его почерк — чужое имя: длинное
+    /// не проходит, короткое проходит.
+    /// </remarks>
     private static async Task<string?> LongHelloCutAsync(IPAddress via, string host, CancellationToken cancellationToken)
     {
         var full = await BrowserHello.AskAsync(via, host, Timeout, cancellationToken);
@@ -1033,10 +1042,15 @@ public static class BlockCheck
         if (Reached(full))
             return null;
 
-        var brief = await BrowserHello.AskAsync(via, host, Timeout, cancellationToken, compact: true);
+        var neutral = await BrowserHello.AskAsync(via, NameProbeNeutral, Timeout, cancellationToken);
+
+        if (Reached(neutral))
+            return null;
+
+        var brief = await BrowserHello.AskAsync(via, NameProbeNeutral, Timeout, cancellationToken, compact: true);
 
         return Reached(brief)
-            ? $"браузерное приветствие с постквантовым ключом не прошло ({full.Detail}), {ShortPassed}"
+            ? $"браузерное приветствие с постквантовым ключом не прошло ({full.Detail}); {ShortPassed}"
             : null;
     }
 
