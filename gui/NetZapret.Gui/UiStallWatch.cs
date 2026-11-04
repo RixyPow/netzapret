@@ -86,6 +86,7 @@ internal static class UiStallWatch
             // сам сторож. Его поток окном не занят, и опоздать он может, только
             // если стояла вся машина.
             var tick = Stopwatch.StartNew();
+            string? stack = null;
 
             while (!answered.Wait(TimeSpan.FromSeconds(1)))
             {
@@ -93,6 +94,10 @@ internal static class UiStallWatch
 
                 if (over > ownLate)
                     ownLate = over;
+
+                // Секунда прошла, а окно всё стоит — снять, где оно стоит, пока
+                // стоит (UiStallStack). Время снимка — не опоздание сторожа.
+                stack ??= UiStallStack.Capture(dispatcher.Thread.ManagedThreadId);
 
                 tick.Restart();
 
@@ -127,7 +132,8 @@ internal static class UiStallWatch
                 : string.Empty;
 
             Journal.Write("окно", $"поток окна был занят {late.TotalMilliseconds:0} мс, {where}; "
-                + $"процессора окна за это время {cpu.TotalMilliseconds:0} мс{why}");
+                + $"процессора окна за это время {cpu.TotalMilliseconds:0} мс{why}"
+                + (stack is null ? string.Empty : "; " + stack));
         }
     }
 }

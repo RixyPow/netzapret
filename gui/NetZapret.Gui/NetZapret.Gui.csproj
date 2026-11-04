@@ -140,4 +140,15 @@
     <ProjectReference Include="..\..\src\NetZapret.Supervisor\NetZapret.Supervisor.csproj" />
   </ItemGroup>
 
+  <!--
+    Сторож подвисаний снимает стек потока окна в момент подвисания (UiStallStack):
+    журнал 05.11 — 414 подвисаний, больше всего «окно ждало — не процессор», а где
+    оно ждёт, по одной длительности не узнать. ClrMD — библиотека Microsoft для
+    чтения стеков .NET, MIT. 3.1, а не 4.x: в четвёртой тянется Azure.Identity
+    ради сервера символов, нам ненужного.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
+  </ItemGroup>
+
 </Project>
