@@ -32,9 +32,7 @@ public partial class AppearanceView : UserControl
         var loads = ThemeLoader.LoadAll();
         var current = Themes.Current;
 
-        ThemeList.ItemsSource = loads
-            .Select(load => ThemeTile.From(load, load.Id == current, key => (Brush)FindResource(key)))
-            .ToList();
+        ShowTiles(loads, current);
 
         var bad = loads.Where(l => !l.Ok).ToList();
 
@@ -64,6 +62,50 @@ public partial class AppearanceView : UserControl
         ShowTray(settings);
         ShowAnimations(settings);
         HomeWidthSwitch.IsChecked = settings.HomeWide(Themes.Current, Themes.WideHome);
+    }
+
+    /// <summary>Какой показ плиток последний — опоздавшие картинки старого не кладут.</summary>
+    private int _tilesShown;
+
+    /// <summary>
+    /// Плитки тем; картинок, ещё не раскодированных, не ждать — они встанут следом.
+    /// </summary>
+    /// <remarks>
+    /// Раскодирование картинок тем держало поток окна 390–405 мс на заходе
+    /// (симуляция 05.11, стек — в <see cref="ThemeTile"/>). Теперь картинки
+    /// раскодируются один раз за запуск и не в потоке окна: в первый заход
+    /// плитки на долю секунды без картинки, дальше — сразу с ней.
+    /// </remarks>
+    private void ShowTiles(IReadOnlyList<ThemeLoad> loads, string current)
+    {
+        int shown = ++_tilesShown;
+        bool ready = ThemeTile.Ready(loads);
+
+        ThemeList.ItemsSource = Tiles(loads, current, decode: false);
+
+        if (!ready)
+            _ = ShowPicturesAsync(loads, current, shown);
+    }
+
+    private List<ThemeTile> Tiles(IReadOnlyList<ThemeLoad> loads, string current, bool decode) =>
+        loads.Select(load => ThemeTile.From(load, load.Id == current, key => (Brush)FindResource(key), decode)).ToList();
+
+    private async Task ShowPicturesAsync(IReadOnlyList<ThemeLoad> loads, string current, int shown)
+    {
+        try
+        {
+            await ThemeTile.PrepareAsync(loads);
+        }
+        catch (Exception ex)
+        {
+            // Плитки останутся цветом подложки — тема от этого не хуже.
+            Journal.Write("окно", "картинки тем не раскодировались: " + ex.GetBaseException().Message);
+            return;
+        }
+
+        // Пока раскодировалось, плитки могли показать заново — другой темой.
+        if (shown == _tilesShown)
+            ThemeList.ItemsSource = Tiles(loads, current, decode: false);
     }
 
     private void ShowAnimations(AppSettings settings)
