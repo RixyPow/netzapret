@@ -268,6 +268,30 @@ if defined TGWS_DIR (
     echo tg-ws-proxy not found in tools\ - the TG Proxy tab will have no proxy.
 )
 
+rem dnscrypt-proxy (Frank Denis, ISC) for the "Encrypted" resolvers on the DNS
+rem tab - DNSCrypt, anonymized DNSCrypt and ODoH, which sing-box cannot speak.
+rem The official release from tools\, plus the signed server lists from
+rem config\dnscrypt: from Russia GitHub does not always answer, and without a
+rem list the proxy will not start. Optional - without it those three do nothing.
+set "DNSCRYPT_DIR="
+for /f "delims=" %%F in ('dir /s /b "%ROOT%tools\dnscrypt-proxy.exe" 2^>nul') do set "DNSCRYPT_DIR=%%~dpF"
+
+if defined DNSCRYPT_DIR (
+    echo Bundling dnscrypt-proxy
+    robocopy "%DNSCRYPT_DIR%." "%ENGINES%\dnscrypt" /E /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 (
+        echo Failed to bundle dnscrypt-proxy
+        exit /b 1
+    )
+    robocopy "%ROOT%config\dnscrypt" "%ENGINES%\dnscrypt" /R:2 /W:1 /NJH /NJS /NP /NDL /NFL >nul
+    if errorlevel 8 (
+        echo Failed to bundle the dnscrypt-proxy server lists
+        exit /b 1
+    )
+) else (
+    echo dnscrypt-proxy not found in tools\ - the encrypted DNS choices will not start.
+)
+
 rem xray is deliberately left out: it is not wired up yet, and its geoip and
 rem geosite databases alone are 27 MB of dead weight.
 

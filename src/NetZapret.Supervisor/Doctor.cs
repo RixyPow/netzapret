@@ -544,7 +544,9 @@ public static class Doctor
         var lines = new List<DoctorCheck>
         {
             Ok(settings.UseRouterDns ? $"DNS роутера: {settings.RouterDnsAddress}:53, UDP напрямую через LAN."
-                : $"Апстрим туннеля: {settings.DnsServer}, путь — {DnsRoutes.Word(settings.DnsVia)}."),
+                : settings.DnsCryptActive is { } crypt
+                    ? $"Апстрим туннеля: {DnsCrypt.Describe(crypt).Title} через dnscrypt-proxy, {DnsCrypt.Address}:{DnsCrypt.Port}."
+                    : $"Апстрим туннеля: {settings.DnsServer}, путь — {DnsRoutes.Word(settings.DnsVia)}."),
         };
 
         if (EngineDns(SupervisorState.Load(SupervisorState.DefaultPath)) is { } dns)

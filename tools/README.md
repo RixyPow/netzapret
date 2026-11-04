@@ -15,6 +15,7 @@
 | `engines\zapret\` | `exe`, `lists`, `lua`, `bin`, `windivert.filter`, `system` из `vendor\zapret-gui` | ~13 МБ |
 | `engines\zapret\exe\winws2.exe` | `winws2.exe` из `tools\` (любая подпапка); нет его — нет и десинка, а `pack.cmd` не соберёт | ~1 МБ |
 | `engines\tg-ws-proxy\` | каталог с `tg-ws-proxy.exe` из `tools\` — прокси вкладки «TG Proxy»; `build.cmd` без него соберёт, `pack.cmd` — нет | ~4 МБ |
+| `engines\dnscrypt\` | каталог с `dnscrypt-proxy.exe` из `tools\` и списки серверов из `config\dnscrypt\` — раздел «Шифрованные» вкладки DNS; `build.cmd` без него соберёт, `pack.cmd` — нет | ~13 МБ |
 | `presets\` | `presets\` этого репозитория | 40 КБ |
 
 Прокси Telegram с 07.10 — [valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs/releases),
@@ -26,6 +27,12 @@
 как `tg-ws-proxy-<версия>.exe.bak`. Порт, а не оригинал: у оригинала
 под Windows есть только программа с треем и окнами, а этот консольный и встаёт
 под надзор, как winws2 и sing-box.
+
+dnscrypt-proxy с 04.11 — [DNSCrypt/dnscrypt-proxy](https://github.com/DNSCrypt/dnscrypt-proxy/releases),
+ISC. Из `dnscrypt-proxy-win64-<версия>.zip` в `tools\dnscrypt-proxy-<версия>\` —
+только `dnscrypt-proxy.exe` и `LICENSE`; сейчас — 2.1.20 (архив сверен с `digest`
+выпуска: `9e498cb9…c489abc3`). Списки серверов к нему — в `config\dnscrypt\`,
+без перевода концов строк (`.gitattributes`): их подпись проверяется побайтно.
 
 Свой `winws2.exe` с 03.10: Zapret GUI везёт 1.0.3, а в ней каждый поиск профиля
 проверял время изменения всех файлов списков у всех профилей ещё до порта —

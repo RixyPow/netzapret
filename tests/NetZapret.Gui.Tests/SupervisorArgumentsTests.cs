@@ -245,6 +245,49 @@ public sealed class SupervisorArgumentsTests
         Assert.Equal(expected, RoundTrip(settings).DnsViaAuto);
     }
 
+    /// <summary>
+    /// Шифрованный DNS (04.11): режим доезжает до надзора, а «авто» снимается —
+    /// до dnscrypt-proxy на петле через туннель не добраться.
+    /// </summary>
+    [Fact]
+    public void Encrypted_DNS_reaches_the_supervisor_and_drops_auto()
+    {
+        var settings = new AppSettings
+        {
+            SubscriptionUrl = "https://example.invalid/sub",
+            PresetName = "Universal V10",
+            DnsVia = DnsRoute.Auto,
+            DnsCrypt = "anonymized",
+        }.With(new EngineChoice { Desync = true, Tunnel = true });
+
+        var read = RoundTrip(settings);
+
+        Assert.Equal(DnsCryptMode.Anonymized, read.DnsCrypt);
+        Assert.False(read.DnsViaAuto);
+    }
+
+    /// <summary>Без туннеля шифрованный DNS поднимает движок ради DNS и сам прокси.</summary>
+    [Fact]
+    public void Encrypted_DNS_without_a_tunnel_runs_the_DNS_engine()
+    {
+        var settings = new AppSettings { PresetName = "Universal V10", DnsVia = DnsRoute.Direct, DnsCrypt = "dnscrypt" }
+            .With(new EngineChoice { Desync = true, Tunnel = false });
+
+        var read = RoundTrip(settings);
+
+        Assert.True(read.DnsOnly);
+        Assert.Equal(DnsCryptMode.DnsCrypt, read.DnsCrypt);
+    }
+
+    [Fact]
+    public void No_encrypted_DNS_no_proxy_for_it()
+    {
+        var settings = new AppSettings { PresetName = "Universal V10", DnsVia = DnsRoute.Direct }
+            .With(new EngineChoice { Desync = true, Tunnel = false });
+
+        Assert.Null(RoundTrip(settings).DnsCrypt);
+    }
+
     [Fact]
     public void Auto_DNS_without_a_tunnel_has_no_switch()
     {

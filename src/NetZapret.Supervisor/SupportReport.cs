@@ -219,6 +219,7 @@ public static class SupportReport
         text.AppendLine($"Пресет: {settings.PresetName ?? "не выбран"}");
         text.AppendLine($"Перехват: {NetZapret.Zapret.PresetCapture.Word(settings.Capture)}; game filter: {YesNo(settings.GameFilter)}");
         text.AppendLine((settings.UseRouterDns ? $"DNS: роутер {settings.RouterDnsAddress}:53, UDP/LAN"
+            : settings.DnsCryptActive is { } crypt ? $"DNS: {DnsCrypt.Describe(crypt).Title} (dnscrypt-proxy)"
             : $"DNS: {settings.DnsServer}, {DnsRoutes.Word(settings.DnsVia)}")
             + (settings.NeedsDnsEngine ? " (туннеля нет — отвечает движок без выхода)" : string.Empty));
         text.AppendLine($"WARP: {YesNo(settings.WarpEnabled)}");

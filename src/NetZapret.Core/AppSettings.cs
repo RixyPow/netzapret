@@ -251,6 +251,16 @@ public sealed record AppSettings
     public bool UseRouterDns { get; init; }
     public string RouterDnsAddress { get; init; } = "192.168.1.1";
 
+    /// <summary>
+    /// Шифрованный DNS через dnscrypt-proxy (<see cref="NetZapret.Core.DnsCrypt"/>): ключ режима;
+    /// <c>null</c> — резолвер по DoH из <see cref="DnsServer"/>. DNS роутера сильнее.
+    /// </summary>
+    public string? DnsCrypt { get; init; }
+
+    /// <summary>Режим dnscrypt-proxy, если он действует: выбран и не перебит DNS роутера.</summary>
+    [JsonIgnore]
+    public DnsCryptMode? DnsCryptActive => UseRouterDns ? null : NetZapret.Core.DnsCrypt.Parse(DnsCrypt);
+
     /// <summary>Адрес Google, который работает по DoH и там, где 8.8.8.8 закрыт.</summary>
     public const string GoogleDns = "8.8.4.4";
 
@@ -1398,7 +1408,7 @@ public sealed record AppSettings
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    public bool NeedsDnsEngine => !NeedsProxy && NeedsDesync && (UseRouterDns || DnsVia == DnsRoute.Tunnel);
+    public bool NeedsDnsEngine => !NeedsProxy && NeedsDesync && (UseRouterDns || DnsCryptActive is not null || DnsVia == DnsRoute.Tunnel);
 
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 

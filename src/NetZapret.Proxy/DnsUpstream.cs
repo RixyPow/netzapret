@@ -83,6 +83,11 @@ public sealed record DnsUpstream(string Type, string Server, string? Name, strin
     /// </remarks>
     public async Task<bool> AnswersDirectlyAsync(CancellationToken cancellationToken)
     {
+        // dnscrypt-proxy на петле (DnsCrypt): через адаптер до него не достать,
+        // а живые серверы он выбирает сам; упадёт сам процесс — поднимет надзор.
+        if (System.Net.IPAddress.TryParse(Server, out var address) && System.Net.IPAddress.IsLoopback(address))
+            return true;
+
         var nic = DnsSurvey.PhysicalInterface();
         var provider = new DnsProvider("движок", [Server], Server, Name ?? Server, Path ?? "/dns-query");
 

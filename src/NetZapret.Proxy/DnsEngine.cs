@@ -59,8 +59,11 @@ public static class DnsEngine
         {
             Scope = TunnelScope.ProxyOnly,
             DnsServerAddresses = systemResolvers,
-            DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
-            DnsServerType = settings.UseRouterDns ? "udp" : "https",
+            DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress
+                : settings.DnsCryptActive is not null ? DnsCrypt.Address : settings.DnsServer,
+            DnsServerType = settings.UseRouterDns || settings.DnsCryptActive is not null ? "udp" : "https",
+            DnsServerPort = settings.DnsCryptActive is not null ? DnsCrypt.Port : null,
+            DnsCrypt = settings.DnsCryptActive is not null,
             RouterDns = settings.UseRouterDns,
             RouterDnsInterface = settings.UseRouterDns
                 ? routerInterface ?? RouterDnsConnection.Find(settings.RouterDnsAddress).Name : null,

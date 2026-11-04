@@ -19,6 +19,11 @@ namespace NetZapret.Proxy;
 /// выход и так за границей, такой ответ только вредит.
 /// </param>
 /// <param name="Own">Добавлен человеком (<see cref="CustomDns"/>), а не вписан в код.</param>
+/// <param name="Group">Раздел списка на вкладке DNS.</param>
+/// <param name="Services">
+/// Сайты сервисов, которые посредник открывает своим прокси, — их значки
+/// на карточке; у прочих пусто.
+/// </param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
@@ -27,12 +32,31 @@ public sealed record DnsProvider(
     string? DohPath = "/dns-query",
     string? Note = null,
     bool ForTunnel = true,
-    bool Own = false)
+    bool Own = false,
+    DnsGroup Group = DnsGroup.Popular,
+    IReadOnlyList<string>? Services = null)
 {
     /// <summary>
     /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
     /// </summary>
     public bool Choosable => ForTunnel && TlsAddress is not null && TlsName is not null && DohPath is not null;
+}
+
+/// <summary>
+/// Раздел списка резолверов — как у Zapret GUI (04.11): посредники наверху,
+/// дальше популярные, без фильтрации, с фильтрацией, шифрованные и свои.
+/// </summary>
+public enum DnsGroup
+{
+    /// <summary>Отдают на закрытые по стране сервисы адреса своих прокси.</summary>
+    Intermediary,
+    Popular,
+    Open,
+    Filtering,
+
+    /// <summary>DNSCrypt и ODoH через <c>dnscrypt-proxy</c>.</summary>
+    Encrypted,
+    Own,
 }
 
 /// <summary>Что выяснилось про одного провайдера.</summary>
@@ -121,22 +145,22 @@ public static class DnsSurvey
         new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com",
             Note: "быстрый, без фильтрации"),
         new("Quad9", ["9.9.9.9", "149.112.112.112"], "9.9.9.9", "dns.quad9.net",
-            Note: "отсекает вредоносные домены"),
+            Note: "отсекает вредоносные домены", Group: DnsGroup.Filtering),
         new("AdGuard", ["94.140.14.14", "94.140.15.15"], "94.140.14.14", "dns.adguard-dns.com",
-            Note: "отсекает рекламу и слежку"),
+            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering),
         new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com",
-            Note: "китайский, без фильтрации"),
+            Note: "китайский, без фильтрации", Group: DnsGroup.Open),
         new("CleanBrowsing", ["185.228.168.9", "185.228.169.9"], "185.228.168.9",
             "security-filter-dns.cleanbrowsing.org", "/doh/security-filter/",
-            Note: "отсекает вредоносные и фишинговые"),
+            Note: "отсекает вредоносные и фишинговые", Group: DnsGroup.Filtering),
         new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "dns.sb",
-            Note: "без цензуры"),
+            Note: "без цензуры", Group: DnsGroup.Open),
         new("OpenDNS", ["208.67.222.222", "208.67.220.220"], "208.67.222.222", "doh.opendns.com",
-            Note: "фильтрация по категориям"),
+            Note: "фильтрация по категориям", Group: DnsGroup.Filtering),
         new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
             Note: "российский, быстрый"),
         new("Comss.one", ["83.220.169.155", "212.109.195.93"], "83.220.169.155", "dns.comss.one",
-            Note: "российский, отвечает честно — для обхода подмены"),
+            Note: "российский, отвечает честно — для обхода подмены", Group: DnsGroup.Intermediary),
         // Mullvad (194.242.2.2) убран 10.10 по слову владельца: DoH не ответил
         // (TIMEOUT), UDP у него нет, а туннелю нужен именно DoH. Выбравших его
         // настройки переводят на Google (AppSettings, MullvadDns).
@@ -146,20 +170,39 @@ public static class DnsSurvey
         // Cloudflare Security — DoT 5, DoH 14; XBOX DNS — DoT 3, DoH 9.
         // AdGuard без фильтра (94.140.14.140) не ответил ничем — не взят.
         new("NextDNS", ["45.90.28.0", "45.90.30.0"], "45.90.28.0", "dns.nextdns.io",
-            Note: "без фильтрации, пока не заведён свой профиль"),
+            Note: "без фильтрации, пока не заведён свой профиль", Group: DnsGroup.Open),
         new("ControlD", ["76.76.2.0", "76.76.10.0"], "76.76.2.0", "freedns.controld.com", "/p0",
-            Note: "без фильтрации"),
+            Note: "без фильтрации", Group: DnsGroup.Open),
         new("Quad9 без фильтра", ["9.9.9.10", "149.112.112.10"], "9.9.9.10", "dns10.quad9.net",
-            Note: "как Quad9, но ничего не отсекает"),
+            Note: "как Quad9, но ничего не отсекает", Group: DnsGroup.Open),
         new("Cloudflare Security", ["1.1.1.2", "1.0.0.2"], "1.1.1.2", "security.cloudflare-dns.com",
-            Note: "как Cloudflare, отсекает вредоносные"),
+            Note: "как Cloudflare, отсекает вредоносные", Group: DnsGroup.Filtering),
         // Адреса — как на xbox-dns.ru 08.10 (основной .54, дополнительный .55);
         // прежние .50 и .51 на сайте больше не названы, хотя ещё отвечают.
         // Замер 08.10 по одному запросу: отвечают все четыре и «XBOX v2»
         // 87.228.47.200, и все уже отдают новые прокси 188.68.214.x.
         new("XBOX DNS", ["111.88.96.54", "111.88.96.55"], "111.88.96.54", "xbox-dns.ru",
             Note: "российский посредник: закрытые сайты — через свои прокси",
-            ForTunnel: false),
+            ForTunnel: false, Group: DnsGroup.Intermediary),
+        // Добавлены 04.11 по образцу раздела DNS Zapret GUI 21.1.7.228. Замер
+        // DoH с этой машины мимо туннеля: Zapret DNS (dns.zapret.moe за
+        // Cloudflare, 104.21.15.208 и 172.67.164.60) — 0,25–1,3 с, на своём
+        // 5.129.221.64 DoH не отвечает; claude.ai, chatgpt.com, gemini и
+        // open.spotify.com он отдаёт на свой прокси 5.129.221.64, прочие имена —
+        // настоящими адресами. AdGuard Семейный — 0,17 с, Control D без рекламы —
+        // 0,09 с. Не взяты: Яндекс Безопасный и Семейный (DoH пустым ответом,
+        // как и у нашего Яндекса), DNS4EU 86.54.11.1 (TLS не сошёлся),
+        // BI.ZONE 185.191.32.7 (сертификат не на dns.bi.zone, имени нет).
+        // Адрес Zapret DNS — Cloudflare: сменит его — карточка покажет
+        // «блокируется», адрес поправить здесь.
+        new("Zapret DNS", [], "104.21.15.208", "dns.zapret.moe",
+            Note: "посредник проекта Zapret, ИИ и Spotify — через его прокси, действует на имена мимо VPN",
+            Group: DnsGroup.Intermediary,
+            Services: ["chatgpt.com", "claude.ai", "gemini.google.com", "open.spotify.com"]),
+        new("AdGuard Семейный", ["94.140.14.15", "94.140.15.16"], "94.140.14.15", "family.adguard-dns.com",
+            Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering),
+        new("Control D без рекламы", ["76.76.2.2", "76.76.10.2"], "76.76.2.2", "freedns.controld.com", "/p2",
+            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering),
         new("MSK-IX", ["62.76.76.62", "62.76.62.76"]),
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];
@@ -839,11 +882,12 @@ public static class DnsSurvey
     /// здесь ничего не говорит, а у части операторов UDP к тому же подменяют.
     /// Берутся только те, что годятся в туннель (<see cref="DnsProvider.Choosable"/>):
     /// посредники вроде XBOX DNS отдают адреса своих прокси, и быстрота их
-    /// ответа — не достоинство.
+    /// ответа — не достоинство. Поэтому и годные в туннель посредники
+    /// (Comss, Zapret DNS) автовыбор не берёт — только выбор человека.
     /// </remarks>
     public static DnsProvider? Fastest(IEnumerable<DnsSurveyRow> rows) =>
         rows
-            .Where(r => r.Provider.Choosable && r.DohMs is not null)
+            .Where(r => r.Provider.Choosable && r.Provider.Group != DnsGroup.Intermediary && r.DohMs is not null)
             .OrderBy(r => r.DohMs)
             .Select(r => r.Provider)
             .FirstOrDefault();

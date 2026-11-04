@@ -70,8 +70,14 @@ internal static class SupervisorHost
         /// <summary>Поднять прокси Telegram (<see cref="TgWsProxyService"/>).</summary>
         public bool TelegramProxy { get; init; }
 
+        /// <summary>Поднять dnscrypt-proxy в этом режиме (<see cref="DnsCryptService"/>).</summary>
+        public DnsCryptMode? DnsCrypt { get; init; }
+
         public string? LogPath { get; init; }
     }
+
+    /// <summary>Ключ: поднять dnscrypt-proxy (режим — следующим словом, <see cref="NetZapret.Core.DnsCrypt.Key"/>).</summary>
+    public const string DnsCryptSwitch = "--dnscrypt";
 
     /// <summary>Ключ: поднять прокси Telegram. Порт и секрет надзор берёт из настроек.</summary>
     /// <remarks>
@@ -111,8 +117,12 @@ internal static class SupervisorHost
         if (settings.NeedsDesync)
             arguments += $" --preset \"{settings.PresetName}\"";
 
-        if (settings.NeedsProxy && !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto)
+        if (settings.NeedsProxy && !settings.UseRouterDns && settings.DnsCryptActive is null && settings.DnsVia == DnsRoute.Auto)
             arguments += " --dns-via-auto";
+
+        // Резолвер движка — dnscrypt-proxy на петле: без движка он не нужен никому.
+        if (settings.DnsCryptActive is { } crypt && (settings.NeedsProxy || (dnsEngine ?? settings.NeedsDnsEngine)))
+            arguments += $" {DnsCryptSwitch} {DnsCrypt.Key(crypt)}";
 
         if (settings.VerifyTraffic)
             arguments += " --verify-traffic";
@@ -255,6 +265,11 @@ internal static class SupervisorHost
             // под десинком. Прежде sing-box шёл первым, и первое соединение
             // WARP уходило мимо десинка и замерзало (01.10).
             AddWinws(options, services);
+
+            // dnscrypt-proxy — до sing-box: его резолвер на первом же запросе
+            // спросит 127.0.0.1, и до готовности прокси имена не разрешались бы.
+            if (options.DnsCrypt is { } crypt)
+                AddDnsCrypt(services, crypt);
 
             if (!options.NoProxy && !TryAddSingBox(options, services))
                 return 2;
@@ -732,6 +747,18 @@ internal static class SupervisorHost
     }
 
     /// <summary>Прокси Telegram — с портом и секретом из настроек.</summary>
+    private static void AddDnsCrypt(List<SupervisedService> services, DnsCryptMode mode)
+    {
+        var executable = DnsCrypt.Executable();
+
+        Console.WriteLine($"dnscrypt-proxy: {DnsCrypt.Describe(mode).Title}, {DnsCrypt.Address}:{DnsCrypt.Port}, {executable}");
+
+        services.Add(new DnsCryptService(executable, mode, DnsCrypt.ShippedDirectory(), DnsCrypt.RuntimeDirectory)
+        {
+            OutputLogPath = Path.Combine("runtime", "dnscrypt-proxy.log"),
+        });
+    }
+
     private static void AddTelegramProxy(List<SupervisedService> services)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
@@ -782,6 +809,11 @@ internal static class SupervisorHost
 
                 case TelegramProxySwitch:
                     options = options with { TelegramProxy = true };
+                    break;
+
+                case DnsCryptSwitch when next is not null:
+                    options = options with { DnsCrypt = DnsCrypt.Parse(next) };
+                    i++;
                     break;
 
                 case "--proxy-config" when next is not null:

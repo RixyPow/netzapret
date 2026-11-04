@@ -529,6 +529,7 @@ public partial class StatusView : UserControl
             ? RouterDnsConnection.ConfigWarning(settings) is not null
                 ? $"Запасной DoH · {settings.DnsServer} (DNS роутера недоступен)"
                 : $"Роутер · {settings.RouterDnsAddress}:53 · UDP"
+            : settings.DnsCryptActive is { } crypt ? $"{DnsCrypt.Describe(crypt).Title} · dnscrypt-proxy"
             : settings.DnsServer;
         SubscriptionValue.Text = seen.Subscriptions;
 

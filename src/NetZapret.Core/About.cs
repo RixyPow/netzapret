@@ -87,6 +87,11 @@ public static class About
             "https://github.com/valnesfjord/tg-ws-proxy-rs",
             "https://github.com/Flowseal/tg-ws-proxy"),
 
+        new("dnscrypt-proxy",
+            "Шифрованные резолверы вкладки DNS: DNSCrypt и ODoH — автор Frank Denis",
+            "ISC",
+            "https://github.com/DNSCrypt/dnscrypt-proxy"),
+
         new("WinDivert",
             "Перехват пакетов для winws2",
             "LGPL v3 / GPL v3",

@@ -48,6 +48,10 @@ public static class DnsRoutes
             return $"DNS роутера: {settings.RouterDnsAddress}:53 по UDP напрямую в локальную сеть. "
                 + "DoH-автовыбор и путь через VPN не используются. Прямым доменам выдаются реальные IP; "
                 + "для явно проксируемых доменов сохраняется FakeIP. Браузерный DoH и DNS-кэш могут обходить этот путь.";
+        if (settings.DnsCryptActive is { } crypt)
+            return $"{DnsCrypt.Describe(crypt).Title}: резолвер движка спрашивает dnscrypt-proxy на {DnsCrypt.Address}:{DnsCrypt.Port}, "
+                + "а тот — серверы DNSCrypt шифрованным запросом напрямую, мимо VPN. Подменить или закрыть ответ по имени "
+                + "по дороге нельзя. Путь через туннель и автовыбор при этом не действуют.";
         if (!settings.NeedsProxy && settings.NeedsDesync)
         {
             return settings.DnsVia == DnsRoute.Tunnel

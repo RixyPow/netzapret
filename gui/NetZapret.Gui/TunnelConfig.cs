@@ -209,8 +209,11 @@ internal static class TunnelConfig
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
-                DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress : settings.DnsServer,
-                DnsServerType = settings.UseRouterDns ? "udp" : "https",
+                DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress
+                    : settings.DnsCryptActive is not null ? DnsCrypt.Address : settings.DnsServer,
+                DnsServerType = settings.UseRouterDns || settings.DnsCryptActive is not null ? "udp" : "https",
+                DnsServerPort = settings.DnsCryptActive is not null ? DnsCrypt.Port : null,
+                DnsCrypt = settings.DnsCryptActive is not null,
                 RouterDns = settings.UseRouterDns,
                 RouterDnsInterface = routerDns.Interface?.Name,
 
@@ -218,8 +221,8 @@ internal static class TunnelConfig
                 // Адрес, вписанный руками, идёт как прежде: без имени.
                 DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
                 DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
-                DnsThroughTunnel = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Tunnel,
-                DnsViaAuto = !settings.UseRouterDns && settings.DnsVia == DnsRoute.Auto,
+                DnsThroughTunnel = !settings.UseRouterDns && settings.DnsCryptActive is null && settings.DnsVia == DnsRoute.Tunnel,
+                DnsViaAuto = !settings.UseRouterDns && settings.DnsCryptActive is null && settings.DnsVia == DnsRoute.Auto,
 
                 // Выбранный резолвер замолчит — надзор переведёт имена на запасной
                 // (25.10: умер Comss DNS, и при «напрямую» висело всё).

@@ -15,6 +15,7 @@ NetZapret не работает сам по себе: он управляет д
 | Zapret GUI (сценарии lua, списки, пресеты, каталог адресов) | MIT, © 2025–2026 censorliber; автор — loop-uh | `engines/zapret/LICENSE-ZapretGUI.txt` |
 | zapret-discord-youtube (game filter, список ipset-all) | MIT, © 2024–2026 Flowseal, © 2016–2026 bol-van | `engines/zapret/LICENSE-Flowseal.txt` |
 | tg-ws-proxy-rs (прокси вкладки «TG Proxy», с 07.10) — порт tg-ws-proxy Flowseal | MIT, © 2026 valnesfjord; MIT, © 2026 Flowseal | `engines/tg-ws-proxy/LICENSE`, `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt` |
+| dnscrypt-proxy (шифрованные резолверы вкладки DNS, с 04.11) | ISC, © 2018–2026 Frank Denis | `engines/dnscrypt/LICENSE` |
 | WinDivert | LGPL v3 либо GPL v2 | `engines/zapret/LICENSE-WinDivert.txt` |
 | ZXing.Net (чтение QR-кодов с ключами, с 01.10) | Apache-2.0, Michael Jahn | `LICENSE-ZXing.Net.txt` |
 | Шрифт Manrope (встроен в `NetZapret.exe`, с 20.10) | SIL OFL 1.1, © 2018 The Manrope Project Authors; автор — Михаил Шаранда | `LICENSE-Manrope.txt` |
@@ -300,6 +301,22 @@ Flowseal** — обе строки стоят в его
 **MIT License, Copyright (c) 2026 valnesfjord** и **MIT License, Copyright (c)
 2026 Flowseal** — строки из их файлов LICENSE, приводятся как есть. Тексты
 целиком — `engines/tg-ws-proxy/LICENSE` и `engines/tg-ws-proxy/LICENSE-Flowseal-tg-ws-proxy.txt`.
+
+## dnscrypt-proxy
+
+Раздел «Шифрованные» вкладки DNS (с 04.11) — DNSCrypt, анонимный DNSCrypt и ODoH —
+держит **dnscrypt-proxy**, автор — **Frank Denis**:
+[github.com/DNSCrypt/dnscrypt-proxy](https://github.com/DNSCrypt/dnscrypt-proxy).
+Едет как есть, исполняемым файлом выпуска 2.1.20 (`engines/dnscrypt/dnscrypt-proxy.exe`,
+архив `dnscrypt-proxy-win64-2.1.20.zip` сверен с `digest` выпуска на GitHub:
+`9e498cb9…c489abc3`); запускает его наш надзор, конфиг собирает программа.
+Рядом — снимок списков серверов и релеев проекта
+[DNSCrypt/dnscrypt-resolvers](https://github.com/DNSCrypt/dnscrypt-resolvers)
+(`v3`, с подписями minisign): прокси стартует с них и обновляет сам. Файла лицензии
+у списков нет — их публикуют для того, чтобы dnscrypt-proxy их скачивал.
+
+**ISC License, Copyright (c) 2018-2026, Frank Denis** — строка из файла LICENSE,
+приводится как есть. Текст целиком — `engines/dnscrypt/LICENSE`.
 
 ## Manrope
 

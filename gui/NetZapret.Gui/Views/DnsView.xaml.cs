@@ -11,7 +11,15 @@ namespace NetZapret.Gui.Views;
 public sealed class ResolverRow
 {
     public required string Name { get; init; }
+
+    /// <summary>Ключ выбора: адрес DoH либо <c>dnscrypt:режим</c> (<see cref="DnsView.CryptTag"/>).</summary>
     public required string Address { get; init; }
+
+    /// <summary>Что написать под именем; <c>null</c> — сам адрес.</summary>
+    public string? Display { get; init; }
+
+    public string Shown => Display ?? Address;
+
     public required string Note { get; init; }
 
     /// <summary>Отклик либо причина молчания; до замера — прочерк.</summary>
@@ -57,6 +65,56 @@ public sealed class ResolverRow
     public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
 
     public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// Пометка по обзору у этого человека: «блокируется» — DoH не прошёл,
+    /// «UDP подменяют» — открытый DNS перехвачен; <c>null</c> — нечего сказать.
+    /// </summary>
+    /// <remarks>
+    /// Zapret GUI ставит такие пометки списком (04.11: Cloudflare и Google —
+    /// «блокируется»), а у владельца 20.10 те же 8.8.4.4 и 1.1.1.1 по DoH
+    /// отвечали честно, подменялся только UDP. Поэтому — по замеру, а не
+    /// заранее: туннелю важен DoH, системе Windows с этим адресом — UDP.
+    /// </remarks>
+    public string? Badge { get; set; }
+
+    public string BadgeKey { get; set; } = "Danger";
+
+    public string? BadgeTip { get; set; }
+
+    public Brush BadgeBrush => (Brush)Application.Current.FindResource(BadgeKey);
+
+    public Visibility BadgeShown => Badge is null ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>Сайты сервисов посредника (<see cref="DnsProvider.Services"/>).</summary>
+    public IReadOnlyList<string> ServiceSites { get; init; } = [];
+
+    /// <summary>Значки этих сервисов — из кэша значков сайтов, по мере загрузки.</summary>
+    public IReadOnlyList<System.Windows.Media.Imaging.BitmapImage> ServiceIcons { get; set; } = [];
+}
+
+/// <summary>Раздел списка резолверов (<see cref="DnsGroup"/>).</summary>
+public sealed class ResolverGroup
+{
+    public required string Title { get; init; }
+
+    public string Caption { get; init; } = string.Empty;
+
+    public required IReadOnlyList<ResolverRow> Rows { get; init; }
+
+    public string Count => Rows.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    public Visibility CaptionShown => Caption.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public static (string Title, string Caption) Describe(DnsGroup group) => group switch
+    {
+        DnsGroup.Intermediary => ("Посредники", "закрытые по стране сервисы отдают на свои прокси; автовыбор их не берёт"),
+        DnsGroup.Popular => ("Популярные", string.Empty),
+        DnsGroup.Open => ("Без фильтрации", string.Empty),
+        DnsGroup.Filtering => ("С фильтрацией", "отсекают рекламу, вредоносное или сайты 18+"),
+        DnsGroup.Encrypted => ("Шифрованные", "DNSCrypt и ODoH: запрос не подменить и не закрыть по имени"),
+        _ => ("Свои", string.Empty),
+    };
 }
 
 /// <summary>Строка обзора резолверов.</summary>
@@ -156,7 +214,7 @@ public partial class DnsView : UserControl
         if (_last is not { } last)
             return;
 
-        var choices = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+        var choices = _rows;
 
         foreach (var row in last.Rows)
             Fill(choices, row);
@@ -170,6 +228,12 @@ public partial class DnsView : UserControl
     }
 
     private CancellationTokenSource? _logos;
+
+    /// <summary>Приставка ключа выбора у шифрованных (<see cref="DnsCrypt"/>).</summary>
+    public const string CryptTag = "dnscrypt:";
+
+    /// <summary>Все карточки резолверов подряд — разделы только для показа.</summary>
+    private IReadOnlyList<ResolverRow> _rows = [];
 
     /// <summary>
     /// Сайт, чей значок — логотип резолвера.
@@ -213,10 +277,13 @@ public partial class DnsView : UserControl
         _logos = new CancellationTokenSource();
 
         var token = _logos.Token;
-        var rows = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+        var rows = _rows;
 
         foreach (var row in rows)
+        {
             row.Icon = row.Site is { } site ? SiteIcons.Cached(site) : null;
+            row.ServiceIcons = ServiceIconsOf(row);
+        }
 
         Redraw();
 
@@ -226,6 +293,24 @@ public partial class DnsView : UserControl
             {
                 if (token.IsCancellationRequested)
                     return;
+
+                foreach (var service in row.ServiceSites)
+                {
+                    if (token.IsCancellationRequested || SiteIcons.Known(service))
+                        continue;
+
+                    if (await SiteIcons.ForAsync(service, token) is null || token.IsCancellationRequested)
+                        continue;
+
+                    _ = Dispatcher.BeginInvoke(() =>
+                    {
+                        if (token.IsCancellationRequested)
+                            return;
+
+                        row.ServiceIcons = ServiceIconsOf(row);
+                        Redraw();
+                    });
+                }
 
                 if (row.Site is not { } site || SiteIcons.Known(site))
                     continue;
@@ -246,6 +331,9 @@ public partial class DnsView : UserControl
             }
         }, token);
     }
+
+    private static IReadOnlyList<System.Windows.Media.Imaging.BitmapImage> ServiceIconsOf(ResolverRow row) =>
+        row.ServiceSites.Select(SiteIcons.Cached).OfType<System.Windows.Media.Imaging.BitmapImage>().ToList();
 
     public DnsView()
     {
@@ -274,18 +362,58 @@ public partial class DnsView : UserControl
         //
         // Свои — и без DoH тоже: выбрать такой туннелю нельзя, но убрать
         // надо где-то уметь, а спрятанный он остался бы в файле навсегда.
-        Resolvers.ItemsSource = DnsSurvey.All
+        var shown = DnsSurvey.All
             .Where(p => p.Choosable || p.Own)
-            .Select(p => new ResolverRow
+            .Select(p => (Group: p.Own ? DnsGroup.Own : p.Group, Row: new ResolverRow
             {
                 Name = p.Name,
                 Address = p.TlsAddress ?? p.Udp[0],
                 Note = p.Note ?? string.Empty,
-                Chosen = !settings.UseRouterDns && p.Choosable && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
+                Chosen = !settings.UseRouterDns && settings.DnsCryptActive is null && p.Choosable
+                    && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
                 Own = p.Own,
                 Choosable = p.Choosable,
                 Udp = p.Udp.Count > 0 ? p.Udp[0] : string.Empty,
                 Site = LogoSite(p),
+                ServiceSites = p.Services ?? [],
+            }))
+            .ToList();
+
+        // Шифрованные — dnscrypt-proxy на петле (DnsCrypt): обзор их не меряет,
+        // это не адрес DoH, а свой движок рядом с sing-box.
+        var crypt = settings.DnsCryptActive;
+
+        shown.AddRange(DnsCrypt.Modes.Select(mode =>
+        {
+            var (title, note) = DnsCrypt.Describe(mode);
+
+            return (Group: DnsGroup.Encrypted, Row: new ResolverRow
+            {
+                Name = title,
+                Address = CryptTag + DnsCrypt.Key(mode),
+                Display = $"{DnsCrypt.Address}:{DnsCrypt.Port}",
+                Note = note,
+                Chosen = crypt == mode,
+                Latency = "своим движком",
+            });
+        }));
+
+        _rows = shown.Select(x => x.Row).ToList();
+
+        // Разделами, как у Zapret GUI: посредники наверху, свои внизу.
+        Resolvers.ItemsSource = shown
+            .GroupBy(x => x.Group)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var (title, caption) = ResolverGroup.Describe(g.Key);
+                // Посредник со своими сервисами (Zapret DNS) — первым, как «сервер проекта» у Zapret GUI.
+                return new ResolverGroup
+                {
+                    Title = title,
+                    Caption = caption,
+                    Rows = g.OrderBy(x => x.Row.ServiceSites.Count == 0).Select(x => x.Row).ToList(),
+                };
             })
             .ToList();
 
@@ -306,6 +434,8 @@ public partial class DnsView : UserControl
 
         if (settings.UseRouterDns)
             ChosenName.Text = $"Роутер · {settings.RouterDnsAddress}:53 · UDP/LAN";
+        else if (settings.DnsCryptActive is { } crypt)
+            ChosenName.Text = $"{DnsCrypt.Describe(crypt).Title} · dnscrypt-proxy {DnsCrypt.Address}:{DnsCrypt.Port}";
         else if (settings.DnsAuto)
             ChosenName.Text += " · автовыбор";
         var fallback = RouterDnsConnection.ConfigWarning(settings);
@@ -509,6 +639,16 @@ public partial class DnsView : UserControl
         if (row is null)
             return;
 
+        (row.Badge, row.BadgeKey, row.BadgeTip) = result switch
+        {
+            { DohMs: null, DohFailure.Length: > 0 } => ("блокируется", "Danger",
+                $"DoH к нему у вас не проходит ({result.DohFailure}): туннель через него имён не узнает."),
+            { Intercepted: true } or { Spoofed: > 0 } => ("UDP подменяют", "Warn",
+                "Открытый DNS к нему у вас перехватывают по дороге. Туннель спрашивает по DoH — ему это не мешает; "
+                + "Windows, у которой этот адрес записан резолвером, получает подменённые ответы."),
+            _ => ((string?)null, "Danger", (string?)null),
+        };
+
         if (result.DohMs is { } ms)
         {
             row.Latency = $"{ms:0} мс";
@@ -546,21 +686,26 @@ public partial class DnsView : UserControl
 
         try
         {
-            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsServer = address, DnsAuto = false, UseRouterDns = false };
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            // Шифрованный — режим dnscrypt-proxy, адрес DoH при этом хранится:
+            // выбор обычного резолвера вернёт DoH.
+            settings = address.StartsWith(CryptTag, StringComparison.Ordinal)
+                ? settings with { DnsCrypt = address[CryptTag.Length..], DnsAuto = false, UseRouterDns = false }
+                : settings with { DnsServer = address, DnsCrypt = null, DnsAuto = false, UseRouterDns = false };
             settings.Save(AppSettings.DefaultPath);
 
             ShowChosen(settings);
 
-            if (Resolvers.ItemsSource is IEnumerable<ResolverRow> rows)
-            {
-                foreach (var row in rows)
-                    row.Chosen = row.Address == address;
+            foreach (var row in _rows)
+                row.Chosen = row.Address == address;
 
-                Redraw();
-            }
+            Redraw();
 
-            Status.Text = $"Апстрим: {address}. Применится при следующем запуске движков.";
-            this.Offer($"Резолвер сменён на {address}");
+            var name = _rows.FirstOrDefault(r => r.Address == address)?.Name ?? address;
+
+            Status.Text = $"Апстрим: {name}. Применится при следующем запуске движков.";
+            this.Offer($"Резолвер сменён на {name}");
         }
         catch (Exception ex)
         {
@@ -696,6 +841,10 @@ public partial class DnsView : UserControl
             // переворот сохранённого.
             var next = settings with { DnsAuto = settings.UseRouterDns || !settings.DnsAuto, UseRouterDns = false };
 
+            // Автовыбор меряет только DoH — шифрованный режим он снимает.
+            if (next.DnsAuto)
+                next = next with { DnsCrypt = null };
+
             next.Save(AppSettings.DefaultPath);
             ShowChosen(next);
 
@@ -828,7 +977,7 @@ public partial class DnsView : UserControl
         Survey.ItemsSource = rows;
         SurveyStatus.Text = "Проверяю… Запросы идут мимо туннеля, через адаптер.";
 
-        var choices = Resolvers.ItemsSource as IReadOnlyList<ResolverRow> ?? [];
+        var choices = _rows;
 
         foreach (var choice in choices)
         {
