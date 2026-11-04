@@ -82,7 +82,7 @@ public partial class RoutesSettingsWindow : Window
                 result = PinSolutions.Enable(solution, _ipV6 ?? false);
             }
 
-            HostsEditor.FlushDns();
+            _ = HostsEditor.FlushDnsAsync();
 
             var settings = AppSettings.Load(AppSettings.DefaultPath);
 

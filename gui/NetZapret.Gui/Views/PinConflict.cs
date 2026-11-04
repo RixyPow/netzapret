@@ -62,7 +62,7 @@ internal static class PinConflict
         try
         {
             var result = HostsEditor.Unpin(pinned);
-            HostsEditor.FlushDns();
+            _ = HostsEditor.FlushDnsAsync();
 
             return result.Reverted ?? $"Пин снят с {pinned.Count} имён — теперь они пойдут через VPN.";
         }

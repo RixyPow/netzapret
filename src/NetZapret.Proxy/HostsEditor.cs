@@ -1474,4 +1474,14 @@ public static class HostsEditor
             return false;
         }
     }
+
+    /// <summary><see cref="FlushDns"/> не в своём потоке — для окна.</summary>
+    /// <remarks>
+    /// Окно звало его прямо из обработчиков кнопок, и поток окна стоял
+    /// в <c>WaitForExit</c>, пока ipconfig не выйдет: замер 05.11 — 21–96 мс
+    /// на тёплой машине, срок — до 10 с. Это и есть «окно ждало — не процессор»
+    /// в журнале сторожа. Итог сброса окну не нужен: пин уже записан, а кэш
+    /// Windows сбросится чуть позже.
+    /// </remarks>
+    public static Task<bool> FlushDnsAsync() => Task.Run(FlushDns);
 }

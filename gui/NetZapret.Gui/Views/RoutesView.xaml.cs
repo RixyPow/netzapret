@@ -1796,7 +1796,7 @@ public partial class RoutesView : UserControl
                 return;
 
             var result = HostsEditor.Unpin(ours);
-            HostsEditor.FlushDns();
+            _ = HostsEditor.FlushDnsAsync();
 
             Reload();
 

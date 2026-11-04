@@ -813,7 +813,7 @@ public partial class PinWindow : Window
         var file = UserRulesFile.Load();
         file.Set(_target.Match, _target.Value, RoutingMode.Direct);
         file.Save();
-        HostsEditor.FlushDns();
+        _ = HostsEditor.FlushDnsAsync();
 
         Changed = true;
         ShowPins();
@@ -1187,7 +1187,7 @@ public partial class PinWindow : Window
                 return;
 
             var result = HostsEditor.Unpin(ours);
-            HostsEditor.FlushDns();
+            _ = HostsEditor.FlushDnsAsync();
 
             Changed = true;
             ShowPins();
