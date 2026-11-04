@@ -266,7 +266,6 @@ public partial class StatusView : UserControl
     public StatusView()
     {
         InitializeComponent();
-        BuildPulse();
 
         // Опрос по времени, а не подписка на события: супервизор — отдельный
         // процесс и пишет своё состояние в файл. Две секунды достаточно,
@@ -293,11 +292,6 @@ public partial class StatusView : UserControl
             UpdateNotice.Changed += OnUpdateChanged;
             ShowUpdate();
 
-            // Возврат на вкладку посреди запуска: сам запуск никуда не делся,
-            // а анимация была снята при уходе — заводим её обратно.
-            if (_startingSince is not null)
-                StartAnimations();
-
             _refresh.Start();
         };
 
@@ -305,12 +299,6 @@ public partial class StatusView : UserControl
         {
             UpdateNotice.Changed -= OnUpdateChanged;
             _refresh.Stop();
-
-            // Анимация на скрытом виде продолжала бы будить композитор
-            // впустую. Само состояние запуска при этом сохраняется.
-            StopAnimations();
-            MoveRoutes(false);
-            MovePulse(false);
         };
     }
 
@@ -542,7 +530,6 @@ public partial class StatusView : UserControl
         {
             _startingSince = DateTimeOffset.Now;
             _refresh.Interval = StartingInterval;
-            StartAnimations();
         }
 
         ShowState(settings, state, running, seen.SingBoxUp, seen.Coming);
@@ -622,12 +609,12 @@ public partial class StatusView : UserControl
 
         StartButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
         StopButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+        ShowEngineButtons(running);
 
         if (!running)
         {
             ShowDot("Faint");
-            ShowRoutes("Faint");
-            ShowPulse("Faint", moving: false);
+            ShowWave("Faint", idle: true);
 
             StateLine.Text = "Остановлено";
 
@@ -667,8 +654,7 @@ public partial class StatusView : UserControl
         var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
 
         ShowDot(colour);
-        ShowRoutes(colour);
-        ShowPulse(colour, moving: true);
+        ShowWave(colour);
 
         StateLine.Text = healthy
             ? "Работает"
@@ -722,15 +708,16 @@ public partial class StatusView : UserControl
         StartButton.Visibility = Visibility.Collapsed;
         StopButton.Visibility = Visibility.Visible;
         StopButton.IsEnabled = true;
+        ShowEngineButtons(true);
 
         ShowDot("Warn");
-        ShowRoutes("Warn");
-        ShowPulse("Warn", moving: false);
+        ShowWave("Warn", starting: true);
 
         StateLine.Text = "Запускается…";
 
         var seconds = (int)(DateTimeOffset.Now - since).TotalSeconds;
-        StateHint.Text = $"{DescribePhase(settings, running, singBoxUp, services)} — {seconds} с";
+        // Неразрывный пробел: в узкой колонке над волной «с» уезжала на свою строку.
+        StateHint.Text = $"{DescribePhase(settings, running, singBoxUp, services)} — {seconds}\u00A0с";
 
         // Пока супервизор не дописал состояние, движки показываются жёлтыми
         // и «запускается». Прежде список опустошался, и они пропадали ровно
@@ -799,7 +786,6 @@ public partial class StatusView : UserControl
         _startingSince = DateTimeOffset.Now;
         _refresh.Interval = StartingInterval;
 
-        StartAnimations();
         Update();
     }
 
@@ -807,336 +793,53 @@ public partial class StatusView : UserControl
     {
         _startingSince = null;
         _refresh.Interval = CalmInterval;
-
-        StopAnimations();
     }
 
-    private void StartAnimations()
-    {
-        // Анимации выключены — запуск видно цветом кольца и линий, без мигания.
-        if (!Motion.Enabled)
-        {
-            ShowRoutes("Warn");
-            return;
-        }
-
-        RingBox.BeginAnimation(OpacityProperty, new DoubleAnimation
-        {
-            From = 1,
-            To = 0.2,
-            Duration = new Duration(TimeSpan.FromSeconds(0.8)),
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever,
-        });
-    }
-
-    private void StopAnimations()
-    {
-        // Снятие анимации передачей null обязательно: остановленная анимация
-        // продолжает удерживать своё последнее значение, и кольцо осталось бы
-        // навсегда полупрозрачным, а «работает» выглядело бы приглушённым.
-        RingBox.BeginAnimation(OpacityProperty, null);
-        RingBox.Opacity = 1;
-    }
-
-    // --- Линии на фоне карточки состояния (владелец 20.10) ----------------------
-
-    /// <summary>Ключ цвета, которым линии нарисованы сейчас; при повторе на тике ничего не делаем.</summary>
-    private string? _routeColour;
-
-    /// <summary>Ключ цвета, который просили последним, — им красится заново разложенное.</summary>
-    private string _routeKey = "Faint";
-
-    /// <summary>Идёт ли сейчас движение линий и огоньков.</summary>
-    private bool _routesMoving;
-
-    /// <summary>Мгновение такта, в котором линии нарисованы сейчас; с него же такт продолжается.</summary>
-    private double _routeTime;
-
-    /// <summary>Мгновение такта, с которого огоньки начали путь: от него отсчитываются их выходы.</summary>
-    private double _cometsFrom;
-
-    /// <summary>Слой и просвет, под которые разложены линии: такт берёт их отсюда, а не из раскладки.</summary>
-    private (double Width, double Height, double GapLeft, double GapRight, double Strip) _routeFrame;
-
-    private readonly List<(System.Windows.Shapes.Path Path, double Strength)> _routeLines = [];
-    private readonly List<System.Windows.Shapes.Ellipse> _routeForks = [];
-    private readonly List<RouteComet> _comets = [];
-
-    /// <summary>Огонёк: хвост, ореол и голова, которые едут вместе; круг пути — <see cref="Lap"/> секунд.</summary>
-    private sealed record RouteComet(
-        Canvas Body,
-        System.Windows.Shapes.Path Tail,
-        System.Windows.Shapes.Path Halo,
-        System.Windows.Shapes.Path Head)
-    {
-        public double Lap { get; set; } = 1;
-    }
-
-    /// <summary>Длина хвоста огонька.</summary>
-    private const double CometTail = 30;
-
-    /// <summary>Скорость огоньков, точек в секунду: спокойно, без мельтешения.</summary>
-    private const double CometSpeed = 110;
+    // --- Волна туннельного эффекта (владелец 05.11) --------------------------------
 
     /// <summary>
-    /// Темп и выход огоньков по путям: разные, чтобы они не ходили строем.
-    /// Порядок — как пути в RouteShape: крест сверху и снизу, параболы, развилка.
-    /// </summary>
-    private static readonly (double Pace, double Delay)[] CometRuns =
-        [(1.0, 0), (0.9, 2.6), (1.15, 5.1), (0.95, 1.3), (1.1, 3.9), (1.05, 7.2)];
-
-    /// <summary>Огонёк до своего выхода и пока движение стоит — за краем, а не в углу слоя.</summary>
-    private static readonly Matrix Offstage = new(1, 0, 0, 1, -1000, -1000);
-
-    private static readonly Geometry CometTailShape = Frozen(new RectangleGeometry(new Rect(-CometTail, -0.75, CometTail, 1.5), 0.75, 0.75));
-    private static readonly Geometry CometHaloShape = Frozen(new EllipseGeometry(new Point(0, 0), 6, 6));
-    private static readonly Geometry CometHeadShape = Frozen(new EllipseGeometry(new Point(0, 0), 1.8, 1.8));
-
-    private static Geometry Frozen(Geometry geometry)
-    {
-        geometry.Freeze();
-        return geometry;
-    }
-
-    /// <summary>
-    /// Такт линий: секунды, которые идут анимацией, пока линии движутся.
+    /// Состояние волны на карточке: цвет, доля прохода сквозь барьер, мерцание.
     /// </summary>
     /// <remarks>
-    /// Линии изгибаются, а огоньки обязаны ехать по ним же — поэтому у них один
-    /// такт, и на каждом его шаге пересчитывается всё сразу (DrawRoutes).
-    /// Анимацией, а не таймером: её шаги идут в лад с отрисовкой и ровно
-    /// 30 раз в секунду (FrameRate), а таймер Windows шагает по 15,6 мс
-    /// и давал бы рывки. CompositionTarget.Rendering не годится тоже: подписка
-    /// на него заставляет окно рисовать каждый кадр, даже когда менять нечего.
+    /// Цвет — тот же ключ, что у точки внизу (ShowDot): разойдясь, они дали бы
+    /// зелёную волну при красной точке. Проход — смысл картинки: работает —
+    /// заметная часть волны проходит, с оговорками — меньше, упал — ничего;
+    /// стоит — волн нет вовсе, ровная линия у барьера.
     /// </remarks>
-    private static readonly DependencyProperty RouteClockProperty = DependencyProperty.Register(
-        nameof(RouteClockProperty), typeof(double), typeof(StatusView),
-        new PropertyMetadata(0.0, (d, e) => ((StatusView)d).OnRouteClock((double)e.NewValue)));
-
-    private void OnRouteClock(double time)
+    private void ShowWave(string colourKey, bool idle = false, bool starting = false)
     {
-        // Снятая анимация возвращает такт к нулю — линии остаются, где стояли.
-        if (!_routesMoving)
-            return;
-
-        _routeTime = time;
-        DrawRoutes();
-    }
-
-    /// <summary>Слой поменял размер — линии раскладываются заново.</summary>
-    /// <remarks>
-    /// Плашка «Работает» постоянной ширины, колонка с кнопкой тоже: просвет
-    /// меняется только с размером самого слоя.
-    /// </remarks>
-    private void OnRouteSize(object sender, SizeChangedEventArgs e) => BuildRoutes();
-
-    private void BuildRoutes()
-    {
-        double w = RouteLayer.ActualWidth, h = RouteLayer.ActualHeight;
-
-        if (w <= 0 || h <= 0 || StatePlate.ActualWidth <= 0 || ActionColumn.ActualWidth <= 0)
-            return;
-
-        // Такт — стоп, пока старое разбирается; пустить ли снова, решит ShowRoutes ниже.
-        MoveRoutes(false);
-
-        var plate = StatePlate.TranslatePoint(new Point(StatePlate.ActualWidth, 0), RouteLayer);
-        var column = ActionColumn.TranslatePoint(new Point(0, 0), RouteLayer);
-        _routeFrame = (w, h, plate.X, column.X, column.Y);
-
-        FrameRoutes(w, h,
-            StatePlate.TranslatePoint(new Point(0, 0), RouteLayer).X,
-            ActionColumn.TranslatePoint(new Point(ActionColumn.ActualWidth, 0), RouteLayer).X);
-
-        var layout = Layout(_routeTime);
-
-        RouteLines.Children.Clear();
-        RouteComets.Children.Clear();
-        _routeLines.Clear();
-        _routeForks.Clear();
-        _comets.Clear();
-
-        foreach (var line in layout.Lines)
+        double pass = colourKey switch
         {
-            var path = new System.Windows.Shapes.Path { StrokeThickness = 1.2 };
-
-            if (line.Dashed)
-                path.StrokeDashArray = [3, 3];
-
-            _routeLines.Add((path, line.Strength));
-            RouteLines.Children.Add(path);
-        }
-
-        foreach (var _ in layout.Forks)
-        {
-            var dot = new System.Windows.Shapes.Ellipse { Width = 5, Height = 5 };
-
-            _routeForks.Add(dot);
-            RouteLines.Children.Add(dot);
-        }
-
-        for (int i = 0; i < layout.Tracks.Count; i++)
-        {
-            var (pace, _) = CometRuns[i % CometRuns.Length];
-
-            // Круг огонька считается по длине пути при раскладке: дальше линии
-            // гуляют на считанные проценты, и скорость с ними — тоже.
-            var comet = new RouteComet(
-                new Canvas { RenderTransform = new MatrixTransform(Offstage) },
-                new System.Windows.Shapes.Path { Data = CometTailShape },
-                new System.Windows.Shapes.Path { Data = CometHaloShape },
-                new System.Windows.Shapes.Path { Data = CometHeadShape })
-            {
-                Lap = RouteShape.Length(layout.Tracks[i]) / (CometSpeed * pace),
-            };
-
-            comet.Body.Children.Add(comet.Tail);
-            comet.Body.Children.Add(comet.Halo);
-            comet.Body.Children.Add(comet.Head);
-
-            _comets.Add(comet);
-            RouteComets.Children.Add(comet.Body);
-        }
-
-        DrawRoutes(layout);
-
-        // Новые линии ещё не крашены, и такт снова в путь, если движки работают.
-        _routeColour = null;
-        ShowRoutes(_routeKey);
-    }
-
-    /// <summary>Сколько линия гаснет у края плашки и кнопки.</summary>
-    private const double RouteFade = 28;
-
-    /// <summary>
-    /// Линии — только между левым краем плашки «Работает» и правым краем кнопки,
-    /// и в скруглённых углах карточки.
-    /// </summary>
-    /// <remarks>
-    /// Владелец 22.10: «полоски выезжают за пределы тайла, с правой стороны тоже».
-    /// Маска в долях (до 22.10, 6 % по краям) мерилась не слоем, а тем, что
-    /// в нём нарисовано: линии нарочно длиннее слоя (RouteShape.RunOut), и
-    /// затухание уезжало за обрезку — у края карточки линии шли в полную силу
-    /// и в скруглённых углах — поверх рамки (слой — прямоугольник). Теперь маска
-    /// в точках слоя: до плашки и после кнопки линий нет, у их краёв линии
-    /// гаснут на <see cref="RouteFade"/>; обрезка скруглена, как углы карточки.
-    /// </remarks>
-    private void FrameRoutes(double w, double h, double left, double right)
-    {
-        Color Ink(byte alpha) => Color.FromArgb(alpha, 0, 0, 0);
-
-        var mask = new LinearGradientBrush
-        {
-            MappingMode = BrushMappingMode.Absolute,
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(w, 0),
-            GradientStops =
-            {
-                new GradientStop(Ink(0), Math.Clamp(left / w, 0, 1)),
-                new GradientStop(Ink(255), Math.Clamp((left + RouteFade) / w, 0, 1)),
-                new GradientStop(Ink(255), Math.Clamp((right - RouteFade) / w, 0, 1)),
-                new GradientStop(Ink(0), Math.Clamp(right / w, 0, 1)),
-            },
+            "Accent" => 0.42,
+            "Warn" => starting ? 0.3 : 0.22,
+            _ => 0,
         };
 
-        mask.Freeze();
-        RouteLayer.OpacityMask = mask;
-
-        // Карточка: скругление 14 за рамкой 2.
-        var clip = new RectangleGeometry(new Rect(0, 0, w, h), 12, 12);
-        clip.Freeze();
-        RouteLayer.Clip = clip;
-    }
-
-    private RouteShape.Layout Layout(double time)
-    {
-        var (w, h, gapLeft, gapRight, strip) = _routeFrame;
-        return RouteShape.Build(w, h, gapLeft, gapRight, strip, time);
-    }
-
-    /// <summary>Рисует линии, развилки и огоньки в мгновение такта <see cref="_routeTime"/>.</summary>
-    private void DrawRoutes(RouteShape.Layout? layout = null)
-    {
-        if (_routeLines.Count == 0)
-            return;
-
-        layout ??= Layout(_routeTime);
-
-        for (int i = 0; i < _routeLines.Count && i < layout.Lines.Count; i++)
-            _routeLines[i].Path.Data = layout.Lines[i].Geometry;
-
-        for (int i = 0; i < _routeForks.Count && i < layout.Forks.Count; i++)
-        {
-            Canvas.SetLeft(_routeForks[i], layout.Forks[i].X - 2.5);
-            Canvas.SetTop(_routeForks[i], layout.Forks[i].Y - 2.5);
-        }
-
-        for (int i = 0; i < _comets.Count && i < layout.Tracks.Count; i++)
-        {
-            var comet = _comets[i];
-            var transform = (MatrixTransform)comet.Body.RenderTransform;
-            double run = _routeTime - _cometsFrom - CometRuns[i % CometRuns.Length].Delay;
-
-            if (!_routesMoving || run < 0)
-            {
-                transform.Matrix = Offstage;
-                continue;
-            }
-
-            double lap = run / comet.Lap;
-            layout.Tracks[i].GetPointAtFractionLength(lap - Math.Floor(lap), out var point, out var tangent);
-
-            var place = Matrix.Identity;
-            place.Rotate(Math.Atan2(tangent.Y, tangent.X) * 180 / Math.PI);
-            place.Translate(point.X, point.Y);
-            transform.Matrix = place;
-        }
+        Wave.Show(
+            StateColour(colourKey),
+            StateColour("Muted"),
+            pass,
+            idle,
+            flicker: starting,
+            broken: colourKey == "Danger");
     }
 
     /// <summary>
-    /// Красит линии цветом состояния и пускает движение, пока движки работают.
+    /// «Запустить» — залитая кнопка, «Остановить» — рамкой (05.11): у работающего
+    /// обхода главное на карточке — волна, а остановку жмут редко.
     /// </summary>
-    /// <remarks>
-    /// Тот же цвет, что у кольца: серая «стоит», жёлтая «поднимается», зелёная
-    /// «работает», красная «беда». Линии и огоньки стоят, пока стоят движки:
-    /// движение без работы читалось бы как работа.
-    /// </remarks>
-    private void ShowRoutes(string colourKey)
+    private void ShowEngineButtons(bool running)
     {
-        _routeKey = colourKey;
+        EngineButtons.SetResourceReference(Border.BackgroundProperty, running ? "Raised" : "AccentFill");
+        EngineButtons.SetResourceReference(Border.BorderBrushProperty, running ? "Border" : "AccentFill");
 
-        if (colourKey != _routeColour)
-        {
-            _routeColour = colourKey;
+        var ink = running ? "Text" : "OnAccent";
 
-            var colour = StateColour(colourKey);
-            bool idle = colourKey == "Faint";
+        foreach (var part in new Control[] { StartButton, StopButton, EngineMenuButton })
+            part.SetResourceReference(ForegroundProperty, ink);
 
-            foreach (var (path, strength) in _routeLines)
-                path.Stroke = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? strength * 0.6 : strength)));
-
-            var fork = Frozen(new SolidColorBrush(RouteShape.Fade(colour, idle ? 0.35 : 0.8)));
-
-            foreach (var dot in _routeForks)
-                dot.Fill = fork;
-
-            var tail = Frozen(new LinearGradientBrush(RouteShape.Fade(colour, 0), RouteShape.Fade(colour, 0.85), new Point(-CometTail, 0), new Point(0, 0))
-            {
-                MappingMode = BrushMappingMode.Absolute,
-            });
-            var halo = Frozen(new RadialGradientBrush(RouteShape.Fade(colour, 0.45), RouteShape.Fade(colour, 0)));
-            var head = Frozen(new SolidColorBrush(colour));
-
-            foreach (var comet in _comets)
-            {
-                comet.Tail.Fill = tail;
-                comet.Halo.Fill = halo;
-                comet.Head.Fill = head;
-            }
-        }
-
-        MoveRoutes(colourKey != "Faint" && IsLoaded && Motion.Enabled);
+        EngineButtonsSeam.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, running ? "Border" : "OnAccent");
+        EngineButtonsSeam.Opacity = running ? 1 : 0.35;
     }
 
     /// <summary>
@@ -1146,253 +849,40 @@ public partial class StatusView : UserControl
     private Color StateColour(string colourKey) =>
         (FindResource(colourKey == "Warn" ? "WarnFill" : colourKey) as SolidColorBrush)?.Color ?? Colors.Gray;
 
-    private static Brush Frozen(Brush brush)
-    {
-        brush.Freeze();
-        return brush;
-    }
+    /// <summary>Прошлый замер трафика: из разницы — скорость, от неё — сила волны.</summary>
+    private (long Total, DateTime At)? _moved;
 
     /// <summary>
-    /// Пускает или снимает такт линий и огоньков.
+    /// Сила волны по скорости трафика туннеля: 1 КБ/с — тихо, 10 МБ/с — во всю.
     /// </summary>
     /// <remarks>
-    /// Такт продолжается с того мгновения, где линии стоят, — пуск их не
-    /// дёргает; огоньки при каждом пуске выходят заново, по своим задержкам.
-    /// Путь огонька уходит за правый край дальше, чем виден
-    /// (RouteShape.RunOut): там он «отдыхает», и на карточке их одновременно
-    /// три-четыре, а не все шесть. Останавливается при уходе с «Главной»
-    /// (Unloaded): анимация на скрытом виде будила бы окно впустую — так уже
-    /// было с «Замером скорости».
+    /// Шкала логарифмическая: между фоновым шумом и закачкой три порядка,
+    /// и в прямой шкале волна почти всё время стояла бы у нуля. В «Десинке»
+    /// туннеля нет и считать нечем — средняя сила, чтобы волна не замирала.
     /// </remarks>
-    private void MoveRoutes(bool on)
+    private void ShowTraffic((long Up, long Down)? totals)
     {
-        if (on == _routesMoving || (on && _routeLines.Count == 0))
-            return;
-
-        _routesMoving = on;
-
-        if (!on)
+        if (totals is not { } moved)
         {
-            BeginAnimation(RouteClockProperty, null);
-            DrawRoutes();
+            _moved = null;
+            Wave.Traffic = 0.4;
             return;
         }
 
-        _cometsFrom = _routeTime;
+        long total = moved.Up + moved.Down;
+        var now = DateTime.UtcNow;
 
-        // Час такта за час времени, и повторы копятся (IsCumulative): такт идёт
-        // дальше, а не прыгает назад, — иначе раз в час линии дёргались бы,
-        // их периоды (11–19 с) в час целиком не укладываются.
-        const double hour = 3600;
-        var clock = new DoubleAnimation(_routeTime, _routeTime + hour, TimeSpan.FromSeconds(hour))
+        if (_moved is { } before && now > before.At && total >= before.Total)
         {
-            RepeatBehavior = RepeatBehavior.Forever,
-            IsCumulative = true,
-        };
-
-        Timeline.SetDesiredFrameRate(clock, FrameRate);
-        BeginAnimation(RouteClockProperty, clock);
-    }
-
-    /// <summary>
-    /// Кадров в секунду у движения на карточке состояния — линий, огоньков и шестиугольников.
-    /// </summary>
-    /// <remarks>
-    /// 30, как было у волны 19.10 (замер тогда: прибавка около 3 % ядра,
-    /// при 60 кадрах в шуме не отличалась). Огоньки медленные, около
-    /// 4 точек за кадр, и хвост прячет шаг.
-    /// </remarks>
-    private const int FrameRate = 30;
-
-    // --- Шестиугольные волны вокруг кольца (владелец 20.10) ----------------------
-
-    /// <summary>Сторона поля под волны; кольцо (68) — посередине.</summary>
-    private const double PulseBox = 100;
-
-    /// <summary>Радиус, где волна рождается: сразу за кольцом (его край — 34) с зазором под свечение.</summary>
-    private const double PulseRadius = 37;
-
-    /// <summary>Во сколько раз волна вырастает за жизнь: от 37 до 47 — на 3 точки не доходя края поля (47 / 37).</summary>
-    private const double PulseReach = 1.27;
-
-    /// <summary>На сколько градусов волна поворачивается за жизнь — полшага фигуры.</summary>
-    private const double PulseTwist = 30;
-
-    /// <summary>Жизнь одной волны; волн три, и выходят они через треть жизни друг за другом.</summary>
-    private static readonly TimeSpan PulseLife = TimeSpan.FromSeconds(3.6);
-
-    private readonly List<System.Windows.Shapes.Path> _ripples = [];
-
-    /// <summary>Цвет волн сейчас и идут ли они — повтор на тике опроса ничего не делает.</summary>
-    private string? _pulseColour;
-    private bool _pulseMoving;
-
-    /// <summary>
-    /// Три волны-шестиугольника вокруг кольца.
-    /// </summary>
-    /// <remarks>
-    /// Шестиугольник, а не круг, расходящийся кругами, и не дуга по кольцу:
-    /// дуга, бегущая по кругу, — это «загрузка», а «Работает» значит «готово».
-    /// Волна рождается у самого кольца — её середины сторон ещё под ним, —
-    /// растёт почти до края плашки, поворачиваясь на полшага, и гаснет;
-    /// три волны вразбег дают закрученный узор. Шести узлов в вершинах с 22.10
-    /// нет (владелец: «убери точки вокруг круга»): без движения стоит одно кольцо.
-    /// </remarks>
-    private void BuildPulse()
-    {
-        var centre = new Point(PulseBox / 2, PulseBox / 2);
-        var hexagon = PulseShape.Hexagon(centre, PulseRadius);
-
-        for (int i = 0; i < 3; i++)
-        {
-            var ripple = new System.Windows.Shapes.Path
-            {
-                Data = hexagon,
-                StrokeThickness = 1.2,
-                StrokeLineJoin = PenLineJoin.Round,
-                Opacity = 0,
-                RenderTransform = new TransformGroup
-                {
-                    Children =
-                    {
-                        new ScaleTransform(1, 1, centre.X, centre.Y),
-                        new RotateTransform(0, centre.X, centre.Y),
-                    },
-                },
-            };
-
-            _ripples.Add(ripple);
-            PulseLayer.Children.Add(ripple);
+            double rate = (total - before.Total) / (now - before.At).TotalSeconds;
+            Wave.Traffic = Math.Clamp((Math.Log10(Math.Max(rate, 1)) - 3) / 4, 0.1, 1);
         }
 
-        // Серыми до первого опроса — как кольцо в разметке.
-        ShowPulse("Faint", moving: false);
+        _moved = (total, now);
     }
 
-    /// <summary>
-    /// Красит волны цветом состояния и пускает их, пока движки работают.
-    /// </summary>
-    /// <remarks>
-    /// Цвет — тот же ключ, что у кольца и линий на фоне (ShowDot, ShowRoutes).
-    /// Пока движки поднимаются, волн нет: тогда мигает само кольцо
-    /// (StartAnimations), и два движения разом спорили бы, что из них значит
-    /// «запускается».
-    /// </remarks>
-    private void ShowPulse(string colourKey, bool moving)
-    {
-        if (_ripples.Count == 0)
-            return;
-
-        if (colourKey != _pulseColour)
-        {
-            _pulseColour = colourKey;
-
-            var wave = Frozen(new SolidColorBrush(StateColour(colourKey)));
-
-            foreach (var ripple in _ripples)
-            {
-                ripple.Stroke = wave;
-            }
-        }
-
-        MovePulse(moving && IsLoaded && Motion.Enabled);
-    }
-
-    /// <summary>Пускает или снимает волны.</summary>
-    /// <remarks>
-    /// Двигаются только перенос, поворот и прозрачность готовой фигуры — геометрия
-    /// не перестраивается. Кадров столько же, сколько у огоньков на фоне
-    /// (FrameRate): карточка и так перерисовывается 30 раз в секунду, и лишних
-    /// кадров волны не добавляют. Снятая анимация возвращает
-    /// прозрачность к 0 из разметки — волны исчезают, а не замирают на полпути.
-    /// </remarks>
-    private void MovePulse(bool on)
-    {
-        if (on == _pulseMoving)
-            return;
-
-        _pulseMoving = on;
-
-        for (int i = 0; i < _ripples.Count; i++)
-        {
-            var ripple = _ripples[i];
-            var transforms = ((TransformGroup)ripple.RenderTransform).Children;
-            var scale = (ScaleTransform)transforms[0];
-            var turn = (RotateTransform)transforms[1];
-
-            if (!on)
-            {
-                ripple.BeginAnimation(OpacityProperty, null);
-                scale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                scale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-                turn.BeginAnimation(RotateTransform.AngleProperty, null);
-                continue;
-            }
-
-            // Вразбег: вторая выходит через треть жизни, третья — через две.
-            // Задержка только первая — повторы идут вплотную.
-            var begin = TimeSpan.FromTicks(PulseLife.Ticks * i / _ripples.Count);
-
-            var grow = Repeat(new DoubleAnimation(1, PulseReach, PulseLife) { EasingFunction = PulseEase }, begin);
-            var twist = Repeat(new DoubleAnimation(0, PulseTwist, PulseLife) { EasingFunction = PulseEase }, begin);
-
-            // Проявляется быстро, пока выходит из-под кольца, и гаснет, не дойдя
-            // до края: к 80 % жизни её уже нет — иначе большие волны толпились
-            // у краёв плашки и налезали на слова (первый снимок кадрами 20.10).
-            var fade = Repeat(new DoubleAnimationUsingKeyFrames
-            {
-                Duration = PulseLife,
-                KeyFrames =
-                {
-                    new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0)),
-                    new LinearDoubleKeyFrame(0.75, KeyTime.FromPercent(0.08)),
-                    new LinearDoubleKeyFrame(0.3, KeyTime.FromPercent(0.5)),
-                    new LinearDoubleKeyFrame(0, KeyTime.FromPercent(0.8)),
-                },
-            }, begin);
-
-            ripple.BeginAnimation(OpacityProperty, fade);
-            scale.BeginAnimation(ScaleTransform.ScaleXProperty, grow);
-            scale.BeginAnimation(ScaleTransform.ScaleYProperty, grow);
-            turn.BeginAnimation(RotateTransform.AngleProperty, twist);
-        }
-
-        static AnimationTimeline Repeat(AnimationTimeline animation, TimeSpan begin)
-        {
-            animation.BeginTime = begin;
-            animation.RepeatBehavior = RepeatBehavior.Forever;
-            Timeline.SetDesiredFrameRate(animation, FrameRate);
-            return animation;
-        }
-    }
-
-    /// <summary>Волна быстрее отходит от кольца и замедляется к краю.</summary>
-    private static readonly IEasingFunction PulseEase = Freeze(new SineEase { EasingMode = EasingMode.EaseOut });
-
-    private static IEasingFunction Freeze(EasingFunctionBase ease)
-    {
-        ease.Freeze();
-        return ease;
-    }
-
-    /// <summary>
-    /// Красит кольцо состояния, его знак и свечение и точку в строке внизу — одним цветом.
-    /// </summary>
-    /// <remarks>
-    /// Серое «стоит» — без свечения: светящееся серое кольцо выглядит
-    /// включённой лампочкой, а обход в это время не идёт. Линии фона берут тот же
-    /// ключ цвета (ShowRoutes): разойдясь, они дали бы зелёное кольцо над
-    /// красными линиями — и человеку пришлось бы решать, чему верить.
-    /// </remarks>
-    private void ShowDot(string colourKey)
-    {
-        var brush = (Brush)FindResource(colourKey);
-
-        Ring.Stroke = brush;
-        RingGlyph.Foreground = brush;
-        FooterDot.Fill = brush;
-        DotGlow.Color = colourKey != "Faint" && brush is SolidColorBrush solid ? solid.Color : Colors.Transparent;
-    }
+    /// <summary>Красит точку в строке внизу «Главной» — тем же ключом, что волну (ShowWave).</summary>
+    private void ShowDot(string colourKey) => FooterDot.Fill = (Brush)FindResource(colourKey);
 
     /// <summary>Флаг выхода у строки «Сервер» — картинкой (FlagImages); нет картинки — без флага.</summary>
     private void ShowServerFlag(string? tag)
@@ -1443,6 +933,8 @@ public partial class StatusView : UserControl
             // блок постоянной ширины (владелец 19.10), и колонки в нём не прыгают.
             UpValue.Text = totals is { } moved ? NetZapret.Subscriptions.SubscriptionUsage.Size(moved.Up) : "—";
             DownValue.Text = totals is { } back ? NetZapret.Subscriptions.SubscriptionUsage.Size(back.Down) : "—";
+
+            ShowTraffic(totals);
 
             CpuValue.Text = EngineLoad.Cores(engines);
             RamValue.Text = engines.Count > 0 ? NetZapret.Subscriptions.SubscriptionUsage.Size(engines.Sum(e => e.Memory)) : "—";

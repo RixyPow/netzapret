@@ -352,148 +352,77 @@
                 </local:Card>
 
                 <!--
-                    Карточка состояния. Крупный знак и одна строка словами:
-                    первое, зачем окно открывают, — понять, идёт ли обход.
-                    С 19.10 по макету владельца — кольцо с кнопкой питания
-                    вместо точки: его видно и с другого конца комнаты. Кольцо,
-                    знак и свечение красятся вместе, в ShowDot, и разойтись
-                    им нечем.
+                    Карточка состояния: первое, зачем окно открывают, — понять,
+                    идёт ли обход. С 05.11 по выбору владельца — волны туннельного
+                    эффекта (TunnelWave) вместо кольца с шестиугольниками и огоньков
+                    на линиях (19–22.10): волна идёт слева и проходит сквозь барьер
+                    той долей, какую обход сейчас пропускает. Анимации отдана почти
+                    вся карточка; кнопка и счётчики — узкой колонкой справа.
+                    Надпись лежит поверх левой части, где волна только проявляется
+                    (TunnelShape.Fade). Цвет волны и точки внизу — один ключ (ShowDot).
                 -->
                 <local:Card Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
-                    <Grid>
-                        <!--
-                            Линии на фоне карточки (владелец 20.10: «параболы, перегибы,
-                            разделения линий, пересечения») — вместо волны 19.10. Плашки
-                            непрозрачные, и линии лежат там, где фон виден: в полосках
-                            над и под плашками и в просвете между ними (RouteShape).
-                            По линиям бегут огоньки, пока движки работают и анимации
-                            включены, и только пока раздел на экране (MoveRoutes). Цвет —
-                            состояния, как у кольца (ShowRoutes). Маска и скруглённая
-                            обрезка — в коде, по размеру слоя (FrameRoutes): линии не
-                            выходят за плашку слева и за кнопку справа.
-                        -->
-                        <Canvas x:Name="RouteLayer" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="OnRouteSize">
+                    <Grid Height="140">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                            <!--
-                                Без BitmapCache: с 20.10 линии гнутся каждый кадр, и картинку
-                                пришлось бы перерисовывать столько же раз — лишний проход.
-                            -->
-                            <Canvas x:Name="RouteLines" />
-                            <Canvas x:Name="RouteComets" />
-                        </Canvas>
+                        <local:TunnelWave x:Name="Wave" Grid.Column="0" ClipToBounds="True" />
+
+                        <!-- Не больше двух строк и трёх строк подсказки: карточка постоянной высоты. -->
+                        <StackPanel Grid.Column="0" Margin="24,16,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" MaxWidth="340">
+                            <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
+                                       FontFamily="{DynamicResource DisplayFont}" TextWrapping="Wrap"
+                                       TextTrimming="CharacterEllipsis" MaxHeight="58" />
+                            <TextBlock x:Name="StateHint" Foreground="{DynamicResource Muted}" FontSize="13.5"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" Text=""
+                                       TextTrimming="CharacterEllipsis" MaxHeight="56" />
+                        </StackPanel>
 
                         <!--
-                            Поля 11, а не 18: высоту карточки задаёт правая колонка, и отступ
-                            счётчиков от кнопки (14 вместо 10) с их подложкой (+10) взяты
-                            из полей — владелец 19.10: «отодвинь чуток, но не меняй высоту
-                            плитки». Карточка осталась 128 точек.
+                            Колонка постоянной ширины (владелец 19.10): счётчики растут
+                            с трафиком, и без неё карточка дышала бы от «390.4 КБ»
+                            к «1.2 ГБ». С 05.11 — узкая: место отдано волне.
                         -->
-                        <Grid Margin="22,11,22,11">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <!--
-                                Кольцо и строка состояния — на одной подложке, как счётчики
-                                (владелец 19.10: «тут тоже подложка нужна», «я про кружочек
-                                тоже»): фон карточки идёт прямо под ними.
-
-                                Постоянного размера, 340×102 (владелец 20.10: «чтобы подложка
-                                работает всегда была одного размера, текст можно поделить на
-                                несколько строчек»): прежде она шла по ширине текста и дышала
-                                от «Работает» к «Запускается… — 12 с». Колонка слов — 220:
-                                замер Manrope 20.10, самое высокое сочетание — «Работает
-                                с оговорками» в две строки и подсказка в две, 99 из 100; при
-                                200 «Движок не работает» уходит в две строки, и с подсказкой
-                                в три выходит 118.
-                            -->
-                            <Border x:Name="StatePlate" Grid.Column="0" Grid.ColumnSpan="2" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                    Width="340" Height="102" SizeChanged="OnRouteSize"
-                                    Padding="0,0,18,0" CornerRadius="12" BorderThickness="1.5"
-                                    Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <!--
-                                        Кольцо посреди поля 100×100 под волны (владелец 20.10:
-                                        «крутую красивую анимацию геометрическую на плитке
-                                        работает»). Поле вместо прежних полей плашки (10) и
-                                        отступа до слов (16): плашка выросла на 12 и стала
-                                        вровень с кнопкой и счётчиками справа — высоту
-                                        карточки по-прежнему задают они. Волны рисуются
-                                        в коде (BuildPulse).
-                                    -->
-                                    <Grid Grid.Column="0" Width="100" Height="100" VerticalAlignment="Center">
-                                        <Canvas x:Name="PulseLayer" IsHitTestVisible="False" />
-
-                                        <Grid x:Name="RingBox" Width="68" Height="68">
-                                            <Ellipse x:Name="Ring" StrokeThickness="4" Stroke="{DynamicResource Faint}">
-                                                <Ellipse.Effect>
-                                                    <DropShadowEffect x:Name="DotGlow" ShadowDepth="0" BlurRadius="22"
-                                                                      Opacity="0.7" Color="Transparent" />
-                                                </Ellipse.Effect>
-                                            </Ellipse>
-                                            <TextBlock x:Name="RingGlyph" Style="{StaticResource LineGlyph}" Text="&#xE7E8;"
-                                                       FontSize="28" HorizontalAlignment="Center" Foreground="{DynamicResource Faint}" />
-                                        </Grid>
-                                    </Grid>
-
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <!-- Не больше двух строк и трёх строк подсказки: плашка постоянной высоты. -->
-                                        <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
-                                                   FontFamily="{DynamicResource DisplayFont}" TextWrapping="Wrap"
-                                                   TextTrimming="CharacterEllipsis" MaxHeight="58" />
-                                        <TextBlock x:Name="StateHint" Foreground="{DynamicResource Muted}" FontSize="13.5"
-                                                   Margin="0,5,0,0" TextWrapping="Wrap" Text=""
-                                                   TextTrimming="CharacterEllipsis" MaxHeight="56" />
-                                    </StackPanel>
-                                </Grid>
-                            </Border>
-
-                            <!--
-                                Кнопка и счётчики — постоянной ширины (владелец 19.10):
-                                счётчики растут с трафиком, и без неё блок дышал бы
-                                от «390.4 КБ» к «1.2 ГБ».
-                            -->
-                            <StackPanel x:Name="ActionColumn" Grid.Column="2" Width="300" VerticalAlignment="Center" Margin="16,0,0,0">
+                        <Border Grid.Column="1" Margin="0,16" BorderThickness="1.5,0,0,0" BorderBrush="{DynamicResource Border}">
+                            <StackPanel x:Name="ActionColumn" Width="232" Margin="16,0,16,0" VerticalAlignment="Center">
                                 <!--
                                     Одна плашка с чертой (владелец 19.10: «склей две кнопки»):
-                                    слева «Запустить» или «Остановить» — главное действие
-                                    карточки, справа ▾ — перезапуск и оба выхода, как в трее.
-                                    Залита цветом кнопки, а не «Остановить» красной рамкой:
-                                    остановленный обход поднимается той же кнопкой через секунду.
+                                    слева «Запустить» или «Остановить», справа ▾ — перезапуск
+                                    и оба выхода, как в трее. «Запустить» залита цветом кнопки —
+                                    это главное действие остановленного обхода; «Остановить»
+                                    с 05.11 — рамкой (ShowEngineButtons): у работающего
+                                    главное — волна, а не кнопка, которую жмут редко.
                                 -->
-                                <Border Height="50" CornerRadius="12" Background="{DynamicResource AccentFill}">
+                                <Border x:Name="EngineButtons" Height="36" CornerRadius="10" BorderThickness="1.5"
+                                        Background="{DynamicResource AccentFill}" BorderBrush="Transparent">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="50" />
+                                            <ColumnDefinition Width="36" />
                                         </Grid.ColumnDefinitions>
 
                                         <Button x:Name="StartButton" Style="{StaticResource SplitLeft}" Click="OnStart" Visibility="Collapsed">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,12,0" FontSize="16"
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,10,0" FontSize="14"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                <TextBlock Text="Запустить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                <TextBlock Text="Запустить" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                             </StackPanel>
                                         </Button>
                                         <Button x:Name="StopButton" Style="{StaticResource SplitLeft}" Click="OnStop" Visibility="Collapsed">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,12,0" FontSize="16"
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,10,0" FontSize="14"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                <TextBlock Text="Остановить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                <TextBlock Text="Остановить" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <Rectangle Grid.Column="1" Width="1" Margin="0,12" Fill="{DynamicResource OnAccent}" Opacity="0.35" />
+                                        <Rectangle x:Name="EngineButtonsSeam" Grid.Column="1" Width="1" Margin="0,10"
+                                                   Fill="{DynamicResource OnAccent}" Opacity="0.35" />
 
                                         <Button Grid.Column="2" x:Name="EngineMenuButton" Style="{StaticResource SplitRight}"
                                                 Click="OnEngineMenu" ToolTip="Перезапуск и выход">
@@ -508,46 +437,42 @@
                                 </Border>
 
                                 <!--
-                                    Счётчики под кнопкой — всегда, а не только при работе
-                                    (владелец 19.10): при остановленных движках — прочерки.
-                                    Отдано и получено — движком туннеля с его запуска;
-                                    процессор — в долях одного ядра: winws2 однопоточный
-                                    (EngineLoad). Колонки равные: числа растут, а блок нет.
-                                    На подложке (владелец 19.10): поверх волны подписи
-                                    без неё терялись.
+                                    Счётчики — всегда, а не только при работе (владелец 19.10):
+                                    при остановленных движках — прочерки. Получено и отдано —
+                                    движком туннеля с его запуска; процессор — в долях одного
+                                    ядра: winws2 однопоточный (EngineLoad). С 05.11 — сеткой
+                                    2×2, каждый в строку, без подписи над числом: колонка
+                                    стала узкой, а карточка не выше 140 — иначе «Главная»
+                                    в не развёрнутом окне владельца уходит под прокрутку
+                                    (HomeFitTests: на 156 страница 666 при видимых 651).
                                 -->
-                                <Border Margin="0,14,0,0" Padding="0,4" CornerRadius="10" BorderThickness="1.5"
-                                        Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
-                                <Grid x:Name="Meters">
+                                <Grid x:Name="Meters" Margin="4,12,4,0">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                                    <StackPanel x:Name="UpMeter" Grid.Column="0" Background="Transparent"
-                                                ToolTip="Отдано через движок туннеля с его запуска. В «Гибриде» — то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
-                                        <TextBlock Text="↑ Отдано" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
-                                        <TextBlock x:Name="UpValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                    <StackPanel x:Name="DownMeter" Grid.Column="1" Background="Transparent"
-                                                ToolTip="Получено через движок туннеля с его запуска. В «Гибриде» — то, что пришло из туннеля; в «Туннеле» — всё, включая «напрямую».">
-                                        <TextBlock Text="↓ Получено" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
-                                        <TextBlock x:Name="DownValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                    <StackPanel x:Name="CpuMeter" Grid.Column="2" Background="Transparent">
-                                        <TextBlock Text="ЦП" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
-                                        <TextBlock x:Name="CpuValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
-                                    </StackPanel>
-                                    <StackPanel x:Name="RamMeter" Grid.Column="3" Background="Transparent">
-                                        <TextBlock Text="Память" Style="{StaticResource Caption}" FontSize="11" HorizontalAlignment="Center" />
-                                        <TextBlock x:Name="RamValue" Text="—" FontSize="12.5" HorizontalAlignment="Center" />
-                                    </StackPanel>
+                                    <TextBlock x:Name="DownMeter" Grid.Row="0" Grid.Column="0" FontSize="13" Background="Transparent"
+                                               ToolTip="Получено через движок туннеля с его запуска. В «Гибриде» — то, что пришло из туннеля; в «Туннеле» — всё, включая «напрямую».">
+                                        <Run Text="↓ " Foreground="{DynamicResource Muted}" /><Run x:Name="DownValue" Text="—" />
+                                    </TextBlock>
+                                    <TextBlock x:Name="UpMeter" Grid.Row="0" Grid.Column="1" FontSize="13" Background="Transparent"
+                                               ToolTip="Отдано через движок туннеля с его запуска. В «Гибриде» — то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
+                                        <Run Text="↑ " Foreground="{DynamicResource Muted}" /><Run x:Name="UpValue" Text="—" />
+                                    </TextBlock>
+                                    <TextBlock x:Name="CpuMeter" Grid.Row="1" Grid.Column="0" Margin="0,8,0,0" FontSize="13" Background="Transparent">
+                                        <Run Text="ЦП " Foreground="{DynamicResource Muted}" /><Run x:Name="CpuValue" Text="—" />
+                                    </TextBlock>
+                                    <TextBlock x:Name="RamMeter" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" FontSize="13" Background="Transparent">
+                                        <Run Text="Память " Foreground="{DynamicResource Muted}" /><Run x:Name="RamValue" Text="—" />
+                                    </TextBlock>
                                 </Grid>
-                                </Border>
                             </StackPanel>
-                        </Grid>
+                        </Border>
                     </Grid>
                 </local:Card>
 
