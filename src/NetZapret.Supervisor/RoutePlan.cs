@@ -17,6 +17,22 @@ public enum RouteTry
 
     /// <summary>Через VPN — вход проверки движка.</summary>
     Vpn,
+
+    /// <summary>
+    /// Запасной адрес Cloudflare (<see cref="CloudflareNet.Spares"/>) — пином в hosts, если на нём откроется.
+    /// </summary>
+    /// <remarks>
+    /// Любой сайт Cloudflare отвечает на любом его адресе (замер 05.11: 20 сайтов
+    /// на 8.47.69.6 и 8.6.112.6 — тот же ответ до байта), а режут — по адресу или
+    /// подсети. Дешевле VPN: ни трафика подписки, ни выхода в другой стране.
+    /// </remarks>
+    CloudflareSpare,
+
+    /// <summary>
+    /// Мимо десинка — с портов пробы, которые основной winws2 не перехватывает.
+    /// </summary>
+    /// <remarks>Не шаг плана: так подбор узнаёт, не закрыл ли имя сам десинк (<see cref="SiteFixer"/>).</remarks>
+    Around,
 }
 
 /// <summary>Один шаг плана: что пробовать и почему.</summary>
@@ -72,7 +88,8 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
     /// <param name="route">Каким маршрутом имя идёт сейчас.</param>
     /// <param name="desync">Десинк работает: рецептам и щиту есть где действовать.</param>
     /// <param name="tunnel">Туннель работает: VPN есть чем проверить.</param>
-    public static RoutePlan For(TargetReport report, RoutingMode route, bool desync, bool tunnel)
+    /// <param name="cloudflare">Имя на адресе Cloudflare (<see cref="CloudflareNet"/>): есть запасные адреса.</param>
+    public static RoutePlan For(TargetReport report, RoutingMode route, bool desync, bool tunnel, bool cloudflare = false)
     {
         var steps = new List<RoutePlanStep>();
         bool vpn = tunnel && route != RoutingMode.Proxy;
@@ -81,6 +98,14 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
         {
             if (vpn)
                 steps.Add(new(RouteTry.Vpn, [], why));
+        }
+
+        // Мимо туннеля — пин уводит имя на другой адрес, но идёт оно по-прежнему
+        // своим маршрутом; у имени «через VPN» адрес решает выход.
+        void Spare(string why)
+        {
+            if (cloudflare && route != RoutingMode.Proxy)
+                steps.Add(new(RouteTry.CloudflareSpare, [], why));
         }
 
         switch (report.Kind)
@@ -111,9 +136,22 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
                 return new(steps, null);
 
             case BlockKind.TlsByAddress or BlockKind.Full or BlockKind.HttpsPort:
+                Spare("режут адрес, а сайт на Cloudflare — он отвечает и на запасном");
                 Vpn("режут адрес — десинку тут нечего прятать");
                 return new(steps, "Без VPN — только другой адрес того же сервиса, если он на CDN вроде Cloudflare: "
                     + "подстановкой адреса.");
+
+            // Режут длину приветствия, а не имя: десинк пресета, разбивающий
+            // приветствие по-своему, мог бы помочь (на ntc.party с запущенным
+            // zapret2 открывалось всё); рецептов под это у нас не подобрано.
+            case BlockKind.LongHello:
+                if (desync && route == RoutingMode.Direct)
+                    steps.Add(new(RouteTry.Preset, [], "десинк пресета"));
+
+                Spare("на ntc.party 8.6.112.x и 8.47.69.x этот блок не трогал");
+                Vpn("короткое приветствие проходит, браузерное — нет");
+                return new(steps, "Режут длинное приветствие браузера — с постквантовым ключом, двумя пакетами; "
+                    + "короткое проходит. Так резали сайты Cloudflare 29.10–02.11.");
 
             case BlockKind.GeoBlock:
                 Vpn("сайт отказывает по стране — нужен выход в другой стране");

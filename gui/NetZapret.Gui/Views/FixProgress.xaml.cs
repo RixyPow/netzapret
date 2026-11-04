@@ -132,6 +132,10 @@ public partial class FixProgress : UserControl
         RouteTry.Preset => "Десинк пресета",
         RouteTry.Recipes => "Рецепты десинка",
         RouteTry.Vpn => "Через VPN",
+        RouteTry.Around => "Мимо десинка",
+        RouteTry.CloudflareSpare => step.Path.StartsWith("запасной", StringComparison.Ordinal)
+            ? "Запасной адрес Cloudflare " + step.Path[(step.Path.LastIndexOf(' ') + 1)..]
+            : "Пин в hosts",
         _ => step.Path,
     };
 

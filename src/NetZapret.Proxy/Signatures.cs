@@ -366,7 +366,7 @@ public static class Signatures
     {
         var groups = reports
             .Where(r => r.Kind is BlockKind.Full or BlockKind.HttpsPort or BlockKind.TlsDpi or BlockKind.Stall
-                    or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress
+                    or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress or BlockKind.LongHello
                 && !taken.Contains(r.Host))
             .Select(r => (Node: r.Answered ?? r.Addresses.FirstOrDefault(), Report: r))
             .Where(x => x.Node is not null)

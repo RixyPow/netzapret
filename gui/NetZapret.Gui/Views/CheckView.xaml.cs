@@ -2305,11 +2305,11 @@ public partial class CheckView : UserControl
             var result = await Task.Run(() => SiteFixer.FixAsync(row.Host, progress, CancellationToken.None, stepDone));
 
             row.FixSummary = result.Summary;
-            row.FixInk = (Brush)FindResource(result.Applied is null ? "Muted" : "Accent");
+            row.FixInk = (Brush)FindResource(result.Applied is null && result.Pinned is null ? "Muted" : "Accent");
 
             Journal.Write("починка сайта", $"{result.Host}: "
                 + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
-                + (result.Applied is { } mode ? $" → записан маршрут {mode}" : " → маршрут не менялся"));
+                + result.Outcome());
 
             if (result.Applied is { } applied)
             {

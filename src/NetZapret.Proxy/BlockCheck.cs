@@ -258,6 +258,29 @@ public enum BlockKind
     /// </para>
     /// </remarks>
     Forbidden,
+
+    /// <summary>
+    /// Короткое приветствие проходит, длинное — браузерное, с постквантовым ключом, — нет.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// С ключом ML-KEM приветствие браузера под две тысячи байт и уходит двумя
+    /// пакетами TCP. На ntc.party (тема 17013, 29.10–02.11) у сайтов Cloudflare
+    /// на 188.114.96.0/22, 104.16.0.0/12 и 172.64.0.0/13 такое приветствие резали:
+    /// Chrome 124+, Firefox 132+ и свежий curl не открывали сайт, curl без ключа
+    /// и Chrome 123 открывали. 02.11 блок сняли, но ECH там же снимали и
+    /// возвращали кругами — ждём и этот.
+    /// </para>
+    /// <para>
+    /// Проба без него звала такое «доступен»: системное приветствие короткое
+    /// и проходит, а браузер стоит. Или «режут адрес», если короткое не дошло
+    /// по другой причине, — и советовала VPN. Различие ставится пробой
+    /// <see cref="BrowserHello"/> с ключом и без, только на адресах Cloudflare
+    /// (<see cref="CloudflareNet"/>): там это видели, а лишнее соединение
+    /// к каждому открытому имени дорого. Вживую не пойман — блок сняли до правки.
+    /// </para>
+    /// </remarks>
+    LongHello,
 }
 
 /// <summary>Открывается ли имя — ступенью, без вида блокировки (<see cref="TargetReport.Reach"/>).</summary>
@@ -549,6 +572,7 @@ public sealed record TargetReport
         BlockKind.TlsWhiteOnly => "пропускают только разрешённые имена",
         BlockKind.TlsByAddress => "рукопожатие режут по адресу",
         BlockKind.Forbidden => "сайт отказал, причину не назвал",
+        BlockKind.LongHello => "режут длинное приветствие браузера",
         _ => "нет адреса у имени",
     };
 
@@ -606,6 +630,7 @@ public sealed record TargetReport
             BlockKind.TlsWhiteOnly => "белый список",
             BlockKind.TlsByAddress => "режут по адресу",
             BlockKind.Forbidden => "отказ пробе",
+            BlockKind.LongHello => "режут длинное",
             _ => "нет адреса",
         };
 
@@ -640,7 +665,8 @@ public sealed record TargetReport
             {
                 BlockKind.None => null,
                 BlockKind.GeoBlock or BlockKind.Forbidden or BlockKind.Stall => Data,
-                BlockKind.TlsDpi or BlockKind.Handshake or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress => Tls,
+                BlockKind.TlsDpi or BlockKind.Handshake or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress
+                    or BlockKind.LongHello => Tls,
                 BlockKind.HttpsPort or BlockKind.Full or BlockKind.Dns
                     or BlockKind.Sinkhole or BlockKind.BrokenCname => Tcp,
                 BlockKind.TunnelFailed or BlockKind.ForeignFakeIp or BlockKind.RouterFakeIp
@@ -698,6 +724,7 @@ public sealed record TargetReport
         BlockKind.TlsWhiteOnly => "рецепт с подделкой разрешённого имени (наложение 4pda), иначе VPN",
         BlockKind.TlsByAddress => "другой адрес того же CDN или VPN — десинк по имени не поможет",
         BlockKind.Forbidden => "открыть в браузере: открывается — ничего не нужно, отказ и там — VPN",
+        BlockKind.LongHello => "запасной адрес Cloudflare в hosts («Сайт не открывается?» пробует его сам) или десинк, иначе VPN",
         _ => "ничего — у имени нет адреса",
     };
 }
@@ -952,6 +979,21 @@ public static class BlockCheck
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // Длинное браузерное приветствие уже не прошло (AskBrowserHelloAsync).
+        // Короткое со своим же именем прошло — режут не имя и не адрес, а длину:
+        // чужие имена ниже спросились бы тем же длинным и назвали бы это блоком
+        // адреса, а совет вышел бы «только VPN».
+        if (CloudflareNet.Contains(via)
+            && await BrowserHello.AskAsync(via, report.Host, Timeout, cancellationToken, compact: true) is var brief
+            && Reached(brief))
+        {
+            return report with
+            {
+                Kind = BlockKind.LongHello,
+                Tls = report.Tls with { Detail = Join(report.Tls.Detail, ShortPassed) },
+            };
+        }
+
         var (kind, said) = await AskNamesAsync(
             name => BrowserHello.AskAsync(via, name, Timeout, cancellationToken));
 
@@ -959,6 +1001,67 @@ public static class BlockCheck
         {
             Kind = kind,
             Tls = report.Tls with { Detail = report.Tls.Detail is { Length: > 0 } before ? $"{before}; {said}" : said },
+        };
+    }
+
+    private const string ShortPassed =
+        "то же приветствие без постквантового ключа, одним пакетом, принято — режут длинное";
+
+    private static string Join(string? before, string said) =>
+        before is { Length: > 0 } ? $"{before}; {said}" : said;
+
+    /// <summary>
+    /// Пройдёт ли браузерное приветствие там, где прошло системное; не пройдёт,
+    /// а короткое пройдёт — что сказать. <c>null</c> — длинное прошло или не прошло никакое.
+    /// </summary>
+    private static async Task<string?> LongHelloCutAsync(IPAddress via, string host, CancellationToken cancellationToken)
+    {
+        var full = await BrowserHello.AskAsync(via, host, Timeout, cancellationToken);
+
+        if (Reached(full))
+            return null;
+
+        var brief = await BrowserHello.AskAsync(via, host, Timeout, cancellationToken, compact: true);
+
+        return Reached(brief)
+            ? $"браузерное приветствие с постквантовым ключом не прошло ({full.Detail}), {ShortPassed}"
+            : null;
+    }
+
+    /// <summary>
+    /// Проба имени на заданном адресе — для подбора запасного адреса Cloudflare.
+    /// </summary>
+    /// <remarks>
+    /// Те же стадии, что у обычной пробы (одно соединение: TCP, рукопожатие, ответ),
+    /// и та же сверка длинного приветствия: запасной адрес годится, только если
+    /// откроется и в браузере. Восьмидесятый порт не спрашивается — закрыт ли
+    /// маршрут, здесь неважно, адрес либо годится, либо нет.
+    /// </remarks>
+    public static async Task<TargetReport> CheckAtAsync(string host, IPAddress address, CancellationToken cancellationToken)
+    {
+        var walk = await WalkAsync(host, [address], cancellationToken);
+        var tls = walk.Tls;
+        var kind = Classify(walk.Tcp, tls, Failed(null), walk.Data);
+
+        if (kind == BlockKind.None && CloudflareNet.Contains(address)
+            && await LongHelloCutAsync(address, host, cancellationToken) is { } cut)
+        {
+            kind = BlockKind.LongHello;
+            tls = tls with { Detail = cut };
+        }
+
+        return new TargetReport
+        {
+            Host = host,
+            Tcp = walk.Tcp,
+            Tls = tls,
+            Version = walk.Version,
+            Http = Failed(null),
+            Data = walk.Data,
+            Kind = kind,
+            Spoof = walk.Spoof,
+            Addresses = [address.ToString()],
+            Answered = address.ToString(),
         };
     }
 
@@ -1270,6 +1373,16 @@ public static class BlockCheck
         // и судить по такому замеру ни о туннеле, ни о сайте нельзя.
         if (viaTunnel && kind != BlockKind.None && !TunnelHealth.OwnTunnelUp())
             kind = FakeIpSource(NetZapret.Core.Diagnostics.OtherVpnScan.Tunnels(new SingBoxOptions().TunInterfaceName));
+
+        // Системное приветствие прошло — а браузерное, длинное, пройдёт ли?
+        // Только у Cloudflare: там его и резали (BlockKind.LongHello).
+        if (kind == BlockKind.None && !viaTunnel && !trial && answered is not null && CloudflareNet.Contains(answered)
+            && await LongHelloCutAsync(answered, host, cancellationToken) is { } cut)
+        {
+            kind = BlockKind.LongHello;
+            tls = tls with { Detail = cut };
+        }
+
         var shown = real.Select(a => a.ToString()).Take(3).ToList();
 
         // Маркер зоны, спрятанный за fakeip.

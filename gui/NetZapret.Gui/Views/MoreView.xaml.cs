@@ -569,7 +569,7 @@ public partial class MoreView : UserControl
 
             Journal.Write("починка сайта", $"{result.Host}: "
                 + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
-                + (result.Applied is { } mode ? $" → записан маршрут {mode}" : " → маршрут не менялся"));
+                + result.Outcome());
 
             if (result.Applied is { } applied && result.NeedsRestart)
             {
@@ -624,6 +624,16 @@ public partial class MoreView : UserControl
                     "Заработает после перезапуска движков."
                     + (recipes > 0 ? $" Рецептов десинка опробовано {recipes} — ни один не открыл." : string.Empty),
                     reveal);
+                break;
+
+            case null when result.Pinned is { } spare:
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"{result.Host} прибит к запасному адресу Cloudflare {spare}",
+                    "На своём адресе сайт режут, на запасном открывается. Действует уже сейчас; снять — на вкладке «Файл hosts».");
+                break;
+
+            case null when result.Ours is { } section:
+                Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", $"{result.Host} закрывает наш десинк — секция «{section}»",
+                    result.Advice);
                 break;
 
             default:

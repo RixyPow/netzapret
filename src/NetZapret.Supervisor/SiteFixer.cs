@@ -19,6 +19,8 @@ public sealed record SiteFixStep(string Path, bool Works, string Detail, RouteTr
 /// <param name="Advice">Совет из таблицы «симптом — маршрут» (<see cref="RoutePlan.Advice"/>); <c>null</c> — нечего.</param>
 /// <param name="Found">Какой путь открыл имя — и при подборе без записи (<see cref="SiteFixer.PickAsync"/>).</param>
 /// <param name="RecipeId">Рецепт открывшего пути — идентификатор каталога, как его пишет правило.</param>
+/// <param name="Pinned">Имя прибито в hosts к этому запасному адресу Cloudflare (<see cref="RouteTry.CloudflareSpare"/>).</param>
+/// <param name="Ours">Закрывает не провайдер, а секция нашего пресета — её имя (или «секция по адресам», если не найдена).</param>
 public sealed record SiteFixResult(
     string? Host,
     IReadOnlyList<SiteFixStep> Steps,
@@ -28,7 +30,17 @@ public sealed record SiteFixResult(
     string? Recipe = null,
     string? Advice = null,
     RoutingMode? Found = null,
-    string? RecipeId = null);
+    string? RecipeId = null,
+    string? Pinned = null,
+    string? Ours = null)
+{
+    /// <summary>Чем кончилось — хвост строки журнала.</summary>
+    public string Outcome() =>
+        Applied is { } mode ? $" → записан маршрут {mode}"
+        : Pinned is { } spare ? $" → прибит к запасному адресу Cloudflare {spare}"
+        : Ours is { } section ? $" → закрывает наш десинк: {section}, маршрут не менялся"
+        : " → маршрут не менялся";
+}
 
 /// <summary>
 /// «Сайт не открывается»: подбирает маршрут по симптому и сам записывает сработавший.
@@ -154,7 +166,11 @@ public static class SiteFixer
         var now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
         steps.Add(new($"как есть ({Word(route)})", now.Kind == BlockKind.None, Said(now)));
 
-        var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy);
+        if (await OursAsync(host, now, route, state, settings, steps, progress, cancellationToken) is { } ours)
+            return ours;
+
+        bool cloudflare = CloudflareNet.Contains(now.Answered ?? now.Addresses.FirstOrDefault());
+        var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy, cloudflare);
 
         if (now.Kind == BlockKind.None)
         {
@@ -167,7 +183,10 @@ public static class SiteFixer
                 Advice: open);
         }
 
-        foreach (var step in plan.Steps.Where(s => recipes || s.Kind != RouteTry.Recipes))
+        // Пин — правка hosts для имени, а подбор без записи (окно пути маршрута)
+        // выбирает путь всему маршруту: пину там не место.
+        foreach (var step in plan.Steps.Where(s => (recipes || s.Kind != RouteTry.Recipes)
+            && (write || s.Kind != RouteTry.CloudflareSpare)))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -218,6 +237,24 @@ public static class SiteFixer
                         + (desync.Id is null ? string.Empty : $" с этим рецептом")
                         + $" для {RuleValue(host)} — заработает после перезапуска движков.",
                         title, Found: RoutingMode.Desync, RecipeId: desync.Id);
+                }
+
+                case RouteTry.CloudflareSpare:
+                {
+                    if (await TrySpareAsync(host, now.Answered, steps, progress, cancellationToken) is not { } spare)
+                        break;
+
+                    if (Pin(host, spare) is { } failed)
+                    {
+                        steps.Add(new("пин в hosts", false, failed, RouteTry.CloudflareSpare));
+                        break;
+                    }
+
+                    return new(host, steps, null, false,
+                        $"{host} на Cloudflare режут по адресу {now.Answered ?? "сайта"}, а на запасном адресе "
+                        + $"Cloudflare {spare} он открывается. Прибил {host} к {spare} в hosts — с десинком, "
+                        + "действует уже сейчас. Снять — на вкладке «Файл hosts».",
+                        Pinned: spare);
                 }
 
                 case RouteTry.Vpn:
@@ -508,6 +545,170 @@ public static class SiteFixer
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new("через VPN", false, ex.GetBaseException().Message, RouteTry.Vpn);
+        }
+    }
+
+    /// <summary>
+    /// Закрыто — кем: провайдером или нашим же десинком? Закрыл десинк — итог с секцией.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Обсуждение №52: на все имена Discord «порт 443 закрыт» и совет VPN, а порт
+    /// закрывала секция пресета «discord.com (IP fallback)» подделкой SYN. Проба
+    /// «как есть» идёт через весь пресет и не знает, кто закрыл. Здесь тот же
+    /// вопрос задаётся с портов пробы, которые основной winws2 не перехватывает
+    /// (<see cref="ProbePorts"/>), через Wi-Fi: это путь мимо десинка, и прав
+    /// администратора он не требует. Мимо десинка встало то, что через него
+    /// не встало (TCP при закрытом порте, рукопожатие при «режут адрес»), — закрыли мы.
+    /// </para>
+    /// <para>
+    /// Тогда ничего не пишется: «напрямую» не поможет (SYN имени не несёт,
+    /// щит его не узнаёт), а VPN «открыл» бы и записал бы лишнее. Говорится,
+    /// какая секция берёт адрес (<see cref="SynSections"/>) и какой частью
+    /// «Маршрутов» её выключить; выключать ли — решать человеку: на той же
+    /// секции держится голос Discord. Вживую не проверено — у владельца
+    /// с IP fallback всё открывается.
+    /// </para>
+    /// </remarks>
+    private static async Task<SiteFixResult?> OursAsync(
+        string host,
+        TargetReport now,
+        RoutingMode route,
+        SupervisorState state,
+        AppSettings settings,
+        StepLog steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (route == RoutingMode.Proxy || !settings.NeedsDesync
+            || now.Kind is not (BlockKind.Full or BlockKind.HttpsPort or BlockKind.TlsByAddress)
+            || state.Services.FirstOrDefault(s => s.Name == "winws2") is not { KeepsProbesOut: true })
+        {
+            return null;
+        }
+
+        progress?.Report($"Пробую {host} мимо десинка…");
+
+        var around = await BlockCheck.ProbeAroundTunnelAsync(host, null, desync: false, cancellationToken);
+
+        // Сравнивается та стадия, на которой закрыто «как есть». Не встал TCP —
+        // смотрим TCP: имя, которое провайдер режет по имени, мимо десинка рукопожатие
+        // не пройдёт и так (замер 05.11: discord.com мимо десинка — TCP есть, TLS
+        // молчит). Так и было в №52: TCP глушила наша секция, имя резал провайдер,
+        // а лечила его секция по имени — когда до неё доходило.
+        bool tcpStage = now.Kind is BlockKind.Full or BlockKind.HttpsPort;
+        bool opens = tcpStage ? around.Tcp.Ok : around.Tls.Ok;
+
+        steps.Add(new("мимо десинка", opens,
+            (opens ? (tcpStage ? "соединение встаёт" : "рукопожатие проходит") : "так же закрыто")
+                + $" — {Said(around)}",
+            RouteTry.Around));
+
+        if (!opens)
+            return null;
+
+        var address = now.Answered ?? now.Addresses.FirstOrDefault();
+        var section = address is null ? null : SectionAt(address, settings);
+
+        string who = section is null
+            ? "секция пресета по адресам (какая — не нашёл)"
+            : $"секция пресета «{section.Section}» по списку {section.List}";
+
+        string fix = section?.Part is { } part
+            ? $"Выключите в «Маршрутах» часть «{section.Service} — {part.Name}»: с ней гаснет и эта секция "
+                + "(после перезапуска движков)." + (part.Note is { } note ? $" Учтите: {note}." : string.Empty)
+            : "Части в «Маршрутах» с этим списком нет — секцию убирает только другой пресет.";
+
+        return new(host, steps, null, false,
+            $"{host} закрывает наш десинк, а не провайдер: мимо десинка "
+            + (tcpStage ? "соединение встаёт" : "рукопожатие проходит") + $", через него — {now.Describe()}. "
+            + $"Адрес {address ?? "имени"} забирает {who} ещё на SYN, до имени, — поэтому «напрямую» тут "
+            + "не поможет. Без неё имя поведёт секция пресета по имени, если она есть. "
+            + fix,
+            Advice: fix,
+            Ours: section?.Section ?? "секция по адресам");
+    }
+
+    /// <summary>Секция выбранного пресета, которая берёт SYN к адресу на 443; уже выключенные «Маршрутами» — не в счёт.</summary>
+    private static SynSection? SectionAt(string address, AppSettings settings)
+    {
+        try
+        {
+            if (!System.Net.IPAddress.TryParse(address, out var ip)
+                || ZapretPaths.Discover() is not { } paths
+                || settings.PresetName is not { } name
+                || ZapretPaths.FindPreset(name) is not { } presetPath)
+            {
+                return null;
+            }
+
+            var preset = AddressSectionsOff.Strip(new PresetReader().Load(presetPath), AddressSectionsOff.Read(), out _);
+
+            return SynSections.Find(preset, paths.Root, ip, 443);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Пробует имя на запасных адресах Cloudflare; первый открывший — ответ.</summary>
+    /// <remarks>
+    /// Открывший — рукопожатие и ответ сайта, и браузерное приветствие тоже
+    /// (<see cref="BlockCheck.CheckAtAsync"/>). 403 без страны засчитан: на своём
+    /// адресе связи не было вовсе, а отказ словами — уже ответ сайта
+    /// (www.patreon.com 05.11: свой адрес молчит 8 с, запасной — 403 самого сайта).
+    /// </remarks>
+    private static async Task<string?> TrySpareAsync(
+        string host,
+        string? own,
+        StepLog steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        foreach (var spare in CloudflareNet.Spares.Where(a => a != own))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report($"Пробую {host} на запасном адресе Cloudflare {spare}…");
+
+            var report = await BlockCheck.CheckAtAsync(host, System.Net.IPAddress.Parse(spare), cancellationToken);
+            bool works = report.Kind is BlockKind.None or BlockKind.Forbidden;
+
+            steps.Add(new($"запасной адрес {spare}", works, Said(report), RouteTry.CloudflareSpare));
+
+            if (works)
+                return spare;
+        }
+
+        return null;
+    }
+
+    /// <summary>Прибивает имя к адресу с десинком; не вышло — почему.</summary>
+    /// <remarks>
+    /// С пометкой десинка (<see cref="HostsEditor.PinWithDesync"/>): адрес — самого
+    /// Cloudflare, а не посредника, и щит такой пин брать не должен — рецепт
+    /// секции по имени имени по-прежнему нужен.
+    /// </remarks>
+    private static string? Pin(string host, string address)
+    {
+        try
+        {
+            var result = HostsEditor.PinWithDesync(
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) { [host] = [address] });
+
+            if (result.Reverted is { } reverted)
+                return reverted;
+
+            HostsEditor.FlushDns();
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "hosts не записался: нужны права администратора";
+        }
+        catch (IOException ex)
+        {
+            return "hosts не записался: " + ex.Message;
         }
     }
 

@@ -112,7 +112,13 @@ public static class BrowserHello
     /// не зависит: он сортирует расширения.
     /// </para>
     /// </remarks>
-    public static byte[] Build(string host)
+    /// <param name="compact">
+    /// Без постквантового ключа — как Chrome до 124: приветствие около 600 Б,
+    /// одним пакетом. Для пробы «режут длинное приветствие» (<see cref="BlockCheck"/>):
+    /// с ключом ML-KEM приветствие под две тысячи байт и уходит двумя пакетами,
+    /// а такие на части сетей Cloudflare резали (ntc.party, 29.10–02.11).
+    /// </param>
+    public static byte[] Build(string host, bool compact = false)
     {
         var body = new List<byte>();
 
@@ -135,7 +141,7 @@ public static class BrowserHello
         // Сжатия нет — в TLS 1.3 оно запрещено, в 1.2 не используется никем.
         body.AddRange([0x01, 0x00]);
 
-        body.AddRange(Block16(Extensions(host)));
+        body.AddRange(Block16(Extensions(host, compact)));
 
         var handshake = new List<byte> { 0x01 };
         handshake.AddRange(Block24(body));
@@ -167,7 +173,7 @@ public static class BrowserHello
         return list;
     }
 
-    private static List<byte> Extensions(string host)
+    private static List<byte> Extensions(string host, bool compact)
     {
         // Пустышек-расширений две — в начале и в конце, как у Chrome, — и они
         // обязаны различаться. Дважды одно и то же расширение в приветствии
@@ -187,7 +193,10 @@ public static class BrowserHello
 
         var groups = new List<byte>();
         Add16(groups, group);
-        Add16(groups, 0x11EC);
+
+        if (!compact)
+            Add16(groups, 0x11EC);
+
         Add16(groups, 0x001D);
         Add16(groups, 0x0017);
         Add16(groups, 0x0018);
@@ -211,8 +220,13 @@ public static class BrowserHello
         var shares = new List<byte>();
         Add16(shares, group);
         shares.AddRange(Block16(new byte[] { 0x00 }));
-        Add16(shares, 0x11EC);
-        shares.AddRange(Block16([.. MlKemKey(), .. RandomNumberGenerator.GetBytes(32)]));
+
+        if (!compact)
+        {
+            Add16(shares, 0x11EC);
+            shares.AddRange(Block16([.. MlKemKey(), .. RandomNumberGenerator.GetBytes(32)]));
+        }
+
         Add16(shares, 0x001D);
         shares.AddRange(Block16(RandomNumberGenerator.GetBytes(32)));
 
@@ -326,7 +340,8 @@ public static class BrowserHello
         IPAddress via,
         string host,
         TimeSpan connect,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool compact = false)
     {
         var stopwatch = Stopwatch.StartNew();
 
@@ -340,7 +355,7 @@ public static class BrowserHello
 
             var stream = client.GetStream();
 
-            await stream.WriteAsync(Build(host), limit.Token);
+            await stream.WriteAsync(Build(host, compact), limit.Token);
 
             return await ReadAnswerAsync(stream, stopwatch, cancellationToken);
         }
