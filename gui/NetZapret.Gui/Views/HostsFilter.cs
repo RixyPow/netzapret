@@ -90,6 +90,42 @@ public sealed class HostsLine(HostsRow row) : INotifyPropertyChanged
 
     public bool HasSub => Sub.Length > 0;
 
+    /// <summary>
+    /// Посредник, отдавший пин (пометка <see cref="HostsEditor.ViaMark"/>), — плашкой у имени;
+    /// <c>null</c> — пометки нет или строка не наша.
+    /// </summary>
+    /// <remarks>
+    /// Автозамена спрашивает о пине именно этого посредника, и без плашки не видно,
+    /// за какими пинами она следит. Чужим пометкам не верим, как и сама автозамена.
+    /// Незнакомый ключ (посредника убрали из списка) показывается как записан.
+    /// </remarks>
+    public string? Via
+    {
+        get
+        {
+            // Разбор — тот же, что у автозамены (HostsEditor.Via): разойдись они, плашка
+            // назвала бы не того, у кого автозамена спрашивает. Один раз на строку — к нему
+            // обращаются три привязки.
+            if (!_viaRead)
+            {
+                _via = Row.Ours && Row.Note is { } note && HostsEditor.Via("#" + note) is { } key
+                    ? IntermediaryDns.ByKey(key)?.Name ?? key
+                    : null;
+                _viaRead = true;
+            }
+
+            return _via;
+        }
+    }
+
+    private string? _via;
+    private bool _viaRead;
+
+    public bool HasVia => Via is not null;
+
+    public string ViaHint =>
+        $"Адрес отдал посредник {Via}: автозамена спрашивает о пине его и, если он переехал на новые адреса, переводит пин следом.";
+
     private bool _selected;
 
     public bool Selected

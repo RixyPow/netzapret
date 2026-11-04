@@ -73,7 +73,8 @@
                                                 Content="Задержка по DoH, DoT и обычному UDP — лучшая из трёх.&#x0a;&#x0a;«Кто отвечает» — адрес, с которого на самом деле ходит наружу тот, кто ответил на UDP, и его сеть. Если спрашивали 8.8.8.8, а ответил резолвер российской сети, запрос перехвачен по дороге.&#x0a;&#x0a;«Подмена» — сколько из пяти давно закрытых имён резолвер по UDP разрешил не туда: в заглушку, в пустоту или в один адрес на всех. Одно расхождение адресов подменой не считается — у сетей доставки узлов десятки.&#x0a;&#x0a;Мерится сеть провайдера: запросы идут через адаптер мимо нашего туннеля." />
                             </StackPanel>
                             <TextBlock x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="Wrap" TextTrimming="WordEllipsis"
+                                       LineHeight="17" LineStackingStrategy="BlockLineHeight" Height="51"
                                        Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
                         </StackPanel>
 
@@ -107,9 +108,29 @@
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
                                                 Content="Посредники — Comss DNS, Zapret DNS, GeoHide, DNS-AI, AstraCat — то и дело меняют адреса, и пин на умерший адрес кладёт сайт целиком: 28.09 так легли Claude и ChatGPT.&#x0a;&#x0a;Проверка стучится в первый адрес каждого имени одним соединением и спрашивает посредника, отдавшего пин, шифрованным запросом (DoH), который провайдер не подменит. Посредник отдаёт имени уже другие адреса — пин переходит на них, если они отвечают. Первый адрес молчит дважды подряд (или проверка запущена кнопкой) — он заменяется живым, а живой из записанных встаёт первым: браузер может брать только первую строку. Перед записью hosts сохраняется копия.&#x0a;&#x0a;Автозамена делает то же сама — раз в 6 часов, пока движки работают.&#x0a;&#x0a;Если не ответило больше половины адресов разом или не отвечают контрольные адреса Яндекса — это сбой сети, а не смерть адресов, и ничего не меняется.&#x0a;&#x0a;С поднятыми движками точнее: часть посредников без десинка не отвечает." />
                             </StackPanel>
+                            <!--
+                                Итогу — три строки ровно, длиннее — многоточие и
+                                полный текст в подсказке (он же в журнале). Прежде
+                                поле росло под итог: «Проверяю…» в одну строку,
+                                итог с заменами в пять-шесть — карточка, а с ней
+                                ряд и вся страница прыгали на каждое нажатие.
+                            -->
                             <TextBlock x:Name="PinsStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
-                                       TextWrapping="Wrap"
+                                       TextWrapping="Wrap" TextTrimming="WordEllipsis"
+                                       LineHeight="17" LineStackingStrategy="BlockLineHeight" Height="51"
                                        Text="Живы ли адреса, к которым прибиты имена, и что посредники отдают сейчас." />
+
+                            <!--
+                                Состояние автозамены постоянно на виду: без него
+                                не видно, работает ли она вообще, — проверка сама
+                                шла молча, и узнать о ней можно было только из журнала.
+                                По строке ровно, чтобы высота не зависела от числа
+                                подозреваемых.
+                            -->
+                            <TextBlock x:Name="PinsWhen" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="PinsWatched" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                       TextTrimming="CharacterEllipsis" />
 
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions>
@@ -362,7 +383,12 @@
                                                                TextTrimming="CharacterEllipsis" MaxWidth="190" />
                                                     <TextBlock Text="{Binding Shown}" Style="{StaticResource Mono}"
                                                                Foreground="{DynamicResource Muted}" Margin="0,2,0,0" />
-                                                    <!-- Пометка по обзору у этого человека, не списком (ResolverRow.Badge). -->
+                                                    <!--
+                                                        Пометка по обзору у этого человека, не списком (ResolverRow.Badge).
+                                                        Место под неё занято всегда (BadgeShown — Hidden, не Collapsed):
+                                                        пометка появляется посреди обзора, и плитка, вырастая на её
+                                                        строку, сдвигала всё ниже — страница прыгала на каждом ответе.
+                                                    -->
                                                     <Border CornerRadius="6" Padding="7,1,7,2" Margin="0,5,0,0"
                                                             HorizontalAlignment="Left" BorderThickness="1.5"
                                                             BorderBrush="{Binding BadgeBrush}" Visibility="{Binding BadgeShown}"
@@ -407,12 +433,14 @@
                                                 </ItemsControl>
                                                 </StackPanel>
 
-                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0" MinWidth="92">
+                                                <!-- Ширина постоянная: «…», «12 мс» и причина отказа иначе двигали колонку
+                                                     ярлыков, а та переносила их на другую строку — плитка меняла высоту. -->
+                                                <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="12,0,0,0" Width="124">
                                                     <TextBlock Text="Задержка" Style="{StaticResource Caption}" FontSize="11"
                                                                HorizontalAlignment="Right" />
                                                     <TextBlock Text="{Binding Latency}" Style="{StaticResource Mono}"
                                                                Foreground="{Binding Color}" HorizontalAlignment="Right"
-                                                               Margin="0,2,0,0" TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                                                               Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Latency}" />
                                                 </StackPanel>
 
                                                 <!-- Выбранный — заполненный кружок, как у переключателя. -->

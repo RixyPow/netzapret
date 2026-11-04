@@ -165,65 +165,22 @@ services:
       - 138.199.36.8
       - 143.244.56.56
 
-  # Claude и ChatGPT через посредников GeoHide и AstraCat. В каталоге Zapret
-  # GUI для Claude их записей нет (снимок 10.10: GeoHide — ни одной), а XBOX
-  # с 10.10 отдаёт на ИИ 0.0.0.0. Замер 10.10, по одному запросу мимо туннеля:
-  # claude.ai и chatgpt.com на всех адресах ниже — проверка Cloudflare на
-  # робота с узла FRA, браузер её проходит; GeoHide 193.233.112.x — 0,18–0,30 с,
-  # AstraCat — 0,23 с. Адреса — те, что посредники отдают этим именам сейчас;
-  # стареют, и тогда автоподбор спросит их заново (IntermediaryDns).
-  - name: Claude — GeoHide
-    names:
-      - claude.ai
-      - claude.com
-      - anthropic.com
-      - claudeusercontent.com
-    addresses:
-      - 193.233.112.88
-      - 193.233.112.67
-      - 193.233.112.68
-
-  - name: Claude — AstraCat
-    names:
-      - claude.ai
-      - claude.com
-      - anthropic.com
-      - claudeusercontent.com
-    addresses:
-      - 217.60.179.6
-
-  - name: ChatGPT — GeoHide
-    names:
-      - chatgpt.com
-      - openai.com
-      - oaistatic.com
-      - oaiusercontent.com
-    addresses:
-      - 193.233.112.88
-      - 193.233.112.67
-      - 193.233.112.68
-
-  - name: ChatGPT — AstraCat
-    names:
-      - chatgpt.com
-      - openai.com
-      - oaistatic.com
-      - oaiusercontent.com
-    addresses:
-      - 217.60.179.6
+  # Claude и ChatGPT через посредников здесь больше не записаны (05.11).
+  # Были записи «Claude/ChatGPT — GeoHide» (193.233.112.88, .67, .68) и
+  # «— AstraCat» (217.60.179.6) со своими адресами-посредниками ниже. Адреса
+  # GeoHide мертвы с ноября (TCP 0 из 1 на снимке 01.11, 25 пинов Google AI
+  # владельца стояли на мёртвом .67), а вписанный адрес посредника — то же
+  # число, что стареет быстрее всего: посредник меняет прокси, не спрашивая.
+  # Переводить их на `resolve: honest` нельзя — честный резолвер отдаёт
+  # настоящий адрес, а Claude по настоящему отказывает по стране. Живая замена
+  # им — пункты «<посредник> — сейчас» в окне пина: адрес спрашивается у самого
+  # посредника по DoH в момент закрепления (IntermediaryDns.NowAsync), у Zapret
+  # DNS — его посредник по relay.check. Тот же путь — у автоподбора и автозамены.
 
 # Посредники — адреса, которые автоподбор пробует для любого имени: они
 # смотрят на имя в приветствии TLS и сами идут к сайту. Снимок каталога
-# Zapret приносит свои; эти — сверх него, потому что их там нет или мало
-# (10.10: GeoHide ни одного, AstraCat один). Быстрые первыми: подбор при
-# равном исходе берёт быстрейшего. 159.194.200.33 GeoHide тоже отдаёт,
-# но отвечает за 1,4–1,8 с — не взят.
-intermediaries:
-  - address: 193.233.112.88
-    source: GeoHide
-  - address: 193.233.112.67
-    source: GeoHide
-  - address: 193.233.112.68
-    source: GeoHide
-  - address: 217.60.179.6
-    source: AstraCat
+# Zapret приносит свои. Свои вписанные (GeoHide 193.233.112.x, AstraCat
+# 217.60.179.6) убраны 05.11 по той же причине, что записи выше: GeoHide
+# мёртв, AstraCat есть в снимке, а живые адреса посредников автоподбор
+# спрашивает у них самих (IntermediaryDns).
+intermediaries: []

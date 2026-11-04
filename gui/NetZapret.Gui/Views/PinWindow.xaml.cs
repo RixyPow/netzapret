@@ -13,7 +13,36 @@ using NetZapret.Zapret;
 namespace NetZapret.Gui.Views;
 
 /// <summary>Откуда взять адрес для пина.</summary>
-public sealed record SourceRow(string Id, string Name, string Note);
+/// <remarks>
+/// Подпись и доступность меняются: пункт посредника появляется со «спрашиваю…»
+/// и получает ответ, когда тот придёт (<see cref="Live"/>).
+/// </remarks>
+public sealed class SourceRow(string id, string name, string note, bool live = false, bool enabled = true)
+    : INotifyPropertyChanged
+{
+    private string _note = note;
+    private bool _enabled = enabled;
+
+    public string Id { get; } = id;
+    public string Name { get; } = name;
+
+    /// <summary>Пункт живого посредника: подпись — ровно две строки, чтобы ответ не двигал список.</summary>
+    public bool Live { get; } = live;
+
+    public string Note
+    {
+        get => _note;
+        set { _note = value; PropertyChanged?.Invoke(this, new(nameof(Note))); }
+    }
+
+    public bool Enabled
+    {
+        get => _enabled;
+        set { _enabled = value; PropertyChanged?.Invoke(this, new(nameof(Enabled))); }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
 
 /// <summary>Одна проверка кандидата в таблице автоподбора — и выбор для пина.</summary>
 /// <remarks>
@@ -150,6 +179,11 @@ public partial class PinWindow : Window
     private IReadOnlyList<string> _catalogServices = [];
     private IReadOnlyList<OwnCatalogEntry> _mine = [];
 
+    /// <summary>Записи <see cref="_mine"/>, пришедшие из снимка каталога, — по ссылке, а не по имени.</summary>
+    private IReadOnlySet<OwnCatalogEntry> _fromSnapshot = new HashSet<OwnCatalogEntry>();
+
+    private string? _snapshotDate;
+
     /// <summary>Что-то изменилось — разделу «Маршруты» надо перечитать.</summary>
     public bool Changed { get; private set; }
 
@@ -212,7 +246,23 @@ public partial class PinWindow : Window
         ServiceName.Text = target.Title;
 
         Loaded += (_, _) => Fill();
+        Closed += (_, _) =>
+        {
+            _nowCancel?.Cancel();
+            _life.Cancel();
+        };
     }
+
+    /// <summary>
+    /// Жизнь окна: закрыли — пробы бросаются и ничего не пишется.
+    /// </summary>
+    /// <remarks>
+    /// Рамка у окна обычная, и крестик с Alt+F4 работают и посреди пробы, когда
+    /// само окно погашено. «Маршруты» читают <see cref="Changed"/> сразу после
+    /// закрытия; пин, записанный позже, остался бы в hosts без перечитки раздела
+    /// и без предложения перезапуска.
+    /// </remarks>
+    private readonly CancellationTokenSource _life = new();
 
     /// <summary>Куда идёт часть сервиса — теми же словами, что в списке маршрутов.</summary>
     private static string Describe(ServiceDefinition service, ServicePart part)
@@ -382,12 +432,28 @@ public partial class PinWindow : Window
             Status.Text = "Каталог NetZapret: " + problem;
 
         _mine = own.For(_target.Zones);
+        (_fromSnapshot, _snapshotDate) = Snapshot(own);
         _catalog = ZapretCatalog.Discover();
 
         _catalogServices = _catalog?.NamesByService()
             .Where(pair => pair.Value.Any(Covers))
             .Select(pair => pair.Key)
             .ToList() ?? [];
+
+        var main = _target.Zones.Select(z => z.TrimStart('*', '.')).FirstOrDefault(z => z.Length > 0);
+        var snapshotDate = _snapshotDate;
+
+        // Пункты посредников — сразу, со «спрашиваю…»: ответ приходит за секунды,
+        // а окно не должно их ждать. Ответ меняет только подпись, место под неё
+        // постоянное (SourceRow.Live) — список не скачет.
+        var now = main is null
+            ? []
+            : IntermediaryDns.Servers.Select(server => new SourceRow(
+                "now:" + server.Key,
+                server.Name + " — сейчас",
+                $"Спрашиваю по DoH, что он отдаёт {main}…",
+                live: true,
+                enabled: false)).ToList();
 
         var rows = new List<SourceRow>
         {
@@ -399,22 +465,31 @@ public partial class PinWindow : Window
                 "Проверяет настоящий адрес, свой каталог и посредников Zapret живым запросом "
                 + "и берёт для каждого имени того, кто отвечает сам и не отказывает по стране. "
                 + "Настоящий адрес — первым, если он работает."),
-
-            new("honest",
-                "Спросить честный резолвер сейчас",
-                "Настоящий адрес по DoH, взятый на этой машине в момент закрепления, "
-                + "а не в день сборки. Каждый найденный адрес проверяется рукопожатием — "
-                + "ответ-петля отбрасывается."),
         };
 
-        // Свой каталог идёт вперёд чужого: он для того и заведён, что нужного
-        // имени в чужом обычно нет вовсе.
-        rows.AddRange(_mine.Select((entry, index) => new SourceRow(
-            "own:" + index,
-            entry.Name,
-            entry.Resolve
-                ? "Каталог NetZapret, адрес спрашивается сейчас."
-                : $"Каталог NetZapret, адрес задан: {string.Join(", ", entry.Addresses)}.")));
+        // Живые ответы — выше всего, что записано заранее: снимок о посреднике
+        // врёт тем больше, чем он старше (у Zapret DNS в снимке 01.11 прежний
+        // адрес сервера, а сам он с того дня отдаёт другой).
+        rows.AddRange(now);
+
+        rows.Add(new("honest",
+            "Спросить честный резолвер сейчас",
+            "Настоящий адрес по DoH, взятый на этой машине в момент закрепления, "
+            + "а не в день сборки. Каждый найденный адрес проверяется рукопожатием — "
+            + "ответ-петля отбрасывается."));
+
+        var mine = _mine.Select((entry, index) => (entry, id: "own:" + index)).ToList();
+
+        // Свой каталог: сперва записи, чей адрес спрашивается сейчас, — они такие же
+        // живые, как честный резолвер; за ними — с адресом, вписанным в каталог.
+        rows.AddRange(mine
+            .Where(x => !_fromSnapshot.Contains(x.entry) && x.entry.Resolve)
+            .Select(x => new SourceRow(x.id, x.entry.Name, "Каталог NetZapret, адрес спрашивается сейчас.")));
+
+        rows.AddRange(mine
+            .Where(x => !_fromSnapshot.Contains(x.entry) && !x.entry.Resolve)
+            .Select(x => new SourceRow(x.id, x.entry.Name,
+                $"Каталог NetZapret, адрес задан в каталоге, не спрошен сейчас: {string.Join(", ", x.entry.Addresses)}.")));
 
         if (_catalog is not null && _catalogServices.Count > 0)
         {
@@ -425,10 +500,23 @@ public partial class PinWindow : Window
                 .Select(x => new SourceRow(
                     "set:" + x.profile.Id,
                     x.profile.Name,
-                    $"Чужой прокси из каталога Zapret, покрывает имён: {x.covered}. "
-                    + "Годится, когда сайт отказывает по стране, — но живёт ровно столько, "
-                    + "сколько живёт узел за ним.")));
+                    $"Каталог Zapret GUI: адреса зашиты в каталог, не спрошены сейчас; покрывает имён: {x.covered}. "
+                    + "Живёт ровно столько, сколько живёт узел за ним.")));
         }
+
+        // Снимок каталога Zapret (catalog.zapret.yaml) — последним и с датой. Записи
+        // посредников, которых окно спрашивает живьём, не показываются, когда живые
+        // пункты есть (у цели без зон их нет — тогда снимок остаётся): живой пункт
+        // выше говорит о том же посреднике правду на сегодня, а снимок — на день
+        // съёмки. «Claude — Zapret DNS» в снимке 01.11 — 83.217.211.149, прежний
+        // адрес сервера: прибитый из снимка, он вёл бы в никуда. Сам снимок руками
+        // не правится — его пересобирает «nz catalog» по слову владельца.
+        rows.AddRange(mine
+            .Where(x => _fromSnapshot.Contains(x.entry) && !(now.Count > 0 && AskedLive(x.entry.Name)))
+            .Select(x => new SourceRow(x.id, x.entry.Name,
+                (snapshotDate is null ? "Снимок каталога" : $"Снимок каталога, адреса от {snapshotDate}")
+                + $", не спрошены сейчас: {string.Join(", ", x.entry.Addresses.Take(4))}"
+                + (x.entry.Addresses.Count > 4 ? " и ещё…" : "."))));
 
         if (rows.Count == 1 && _catalog is null)
         {
@@ -441,10 +529,144 @@ public partial class PinWindow : Window
         Actions.Visibility = Visibility.Collapsed;
         Sources.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Visible;
+
+        _nowCancel?.Cancel();
+        _nowCancel = new CancellationTokenSource();
+        _now.Clear();
+
+        if (main is not null)
+            _ = FillNowAsync(now, main, _nowCancel.Token);
+    }
+
+    /// <summary>
+    /// Как спросить посредника о имени; тест окна подставляет сюда готовые ответы.
+    /// </summary>
+    internal Func<Intermediary, string, CancellationToken, Task<RelayNow>> AskNow { get; set; } = IntermediaryDns.NowAsync;
+
+    /// <summary>Ответы посредников последнего открытия шага — по ключу посредника.</summary>
+    private readonly Dictionary<string, RelayNow> _now = new(StringComparer.Ordinal);
+
+    private CancellationTokenSource? _nowCancel;
+
+    /// <summary>Спрашивает посредников разом и пишет ответ в подпись каждого пункта.</summary>
+    private async Task FillNowAsync(IReadOnlyList<SourceRow> rows, string main, CancellationToken cancellationToken)
+    {
+        await Task.WhenAll(rows.Select(async row =>
+        {
+            if (IntermediaryDns.ByKey(row.Id[4..]) is not { } server)
+                return;
+
+            RelayNow now;
+
+            try
+            {
+                now = await AskNow(server, main, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception)
+            {
+                now = new RelayNow(server, main, RelayVerdict.Silent, []);
+            }
+
+            // Человек ушёл назад или открыл шаг заново — ответ уже не к этому списку.
+            if (cancellationToken.IsCancellationRequested)
+                return;
+
+            _now[server.Key] = now;
+            row.Note = NowNote(now);
+            row.Enabled = Pinnable(now);
+        }));
+    }
+
+    /// <summary>
+    /// Можно ли прибить по этому ответу: посредник подтверждён или не опровергнут.
+    /// </summary>
+    /// <remarks>
+    /// «Не подтверждено» — тоже выбор: посредник держит часть сервисов на своих
+    /// узлах, не на тех, что отдаёт контрольным именам ИИ, и без этого пункта
+    /// у такого сервиса выбора не осталось бы вовсе — снимок о том же посреднике
+    /// скрыт. Решает проба на главном имени перед записью.
+    /// </remarks>
+    private static bool Pinnable(RelayNow now) => now.Verdict is RelayVerdict.Relays or RelayVerdict.Unconfirmed;
+
+    /// <summary>Подпись пункта посредника по его ответу — не длиннее двух строк.</summary>
+    internal static string NowNote(RelayNow now) => now.Verdict switch
+    {
+        RelayVerdict.Relays =>
+            $"Отдаёт {now.Name} сейчас: {string.Join(", ", now.Addresses)}"
+            + (now.ByRelayCheck ? " — посредник по relay.check" : " — посредник по контрольным именам")
+            + ". Имена сервиса встанут на этот адрес после пробы.",
+        RelayVerdict.Unconfirmed =>
+            $"Отдаёт {now.Name} сейчас: {string.Join(", ", now.Addresses)}. "
+            + "Посредник ли это, по ответу не понять — решит проба перед записью.",
+        RelayVerdict.NotProxied =>
+            $"Этот сервис не проксирует: на {now.Name} отдаёт настоящий адрес {now.Addresses[0]}.",
+        RelayVerdict.Refuses =>
+            $"Этот сервис не проксирует: на {now.Name} отдаёт пустой ответ или 0.0.0.0.",
+        RelayVerdict.Unanswered =>
+            $"Сервер отвечает, но ответ о {now.Name} не дошёл — откройте шаг заново позже.",
+        _ => $"Не отвечает по DoH — ни по имени {now.Server.DohName}, ни по запасным адресам.",
+    };
+
+    /// <summary>Запись снимка о посреднике, которого окно спрашивает живьём («… — Zapret DNS»).</summary>
+    private static bool AskedLive(string name) =>
+        IntermediaryDns.Servers.Any(s => name.EndsWith(" — " + s.Name, StringComparison.Ordinal));
+
+    /// <summary>Записи снимка каталога среди прочитанных и дата съёмки из его шапки.</summary>
+    /// <remarks>
+    /// Свой каталог и снимок читаются вместе (<see cref="OwnCatalog.Load"/>): сперва
+    /// свой файл, за ним снимок. Подписать их надо по-разному: записанное руками —
+    /// «задан в каталоге», снятое — с датой. По имени их не различить — человек
+    /// может вписать в свой файл запись с именем из снимка и новым адресом, и она
+    /// пряталась бы как снимочная. Поэтому — по месту: хвост длиной в снимок.
+    /// </remarks>
+    private static (IReadOnlySet<OwnCatalogEntry> Entries, string? Date) Snapshot(OwnCatalog own)
+    {
+        try
+        {
+            var count = OwnCatalog.Load(OwnCatalog.SnapshotPath).Services.Count;
+            var entries = own.Services
+                .Skip(Math.Max(0, own.Services.Count - count))
+                .ToHashSet(new ByReference());
+
+            string? date = null;
+
+            if (System.IO.File.Exists(OwnCatalog.SnapshotPath))
+            {
+                foreach (var line in System.IO.File.ReadLines(OwnCatalog.SnapshotPath).Take(40))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(line, @"Снят\s+(\d{2}\.\d{2}\.\d{4})");
+
+                    if (match.Success)
+                    {
+                        date = match.Groups[1].Value;
+                        break;
+                    }
+                }
+            }
+
+            return (entries, date);
+        }
+        catch (Exception)
+        {
+            return (new HashSet<OwnCatalogEntry>(), null);
+        }
+    }
+
+    /// <summary>Записи — по ссылке: у record равенство по полям-спискам — тоже по ссылке, но на списки.</summary>
+    private sealed class ByReference : IEqualityComparer<OwnCatalogEntry>
+    {
+        public bool Equals(OwnCatalogEntry? x, OwnCatalogEntry? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(OwnCatalogEntry obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     private void OnBack(object sender, RoutedEventArgs e)
     {
+        _nowCancel?.Cancel();
         Sources.Visibility = Visibility.Collapsed;
         Actions.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
@@ -480,6 +702,16 @@ public partial class PinWindow : Window
                 return;
             }
 
+            if (id.StartsWith("now:", StringComparison.Ordinal))
+            {
+                // Не вышло — шаг остаётся открытым: ответы посредников при нём, и
+                // можно выбрать другой пункт без нового залпа DoH ко всем шести.
+                if (await PinNowAsync(id[4..]))
+                    OnBack(sender, e);
+
+                return;
+            }
+
             var answers = await AnswersAsync(id);
 
             if (answers.Count == 0)
@@ -500,6 +732,10 @@ public partial class PinWindow : Window
 
             Pin(answers, Source(id));
             OnBack(sender, e);
+        }
+        catch (OperationCanceledException) when (_life.IsCancellationRequested)
+        {
+            // Окно закрыли посреди пробы — писать некуда и нечего.
         }
         catch (Exception ex)
         {
@@ -566,6 +802,9 @@ public partial class PinWindow : Window
     /// <summary>Пишет пин и уводит маршрут части напрямую.</summary>
     private void Pin(Dictionary<string, string> answers, string source, IReadOnlyDictionary<string, string>? via = null)
     {
+        if (_life.IsCancellationRequested)
+            return;
+
         var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {source}", via: via);
 
         // Маршрут уводится напрямую тем же движением. Это не довесок,
@@ -598,6 +837,7 @@ public partial class PinWindow : Window
         id == "auto" ? "автоподбор"
         : id == "honest" ? "честный резолвер"
         : id.StartsWith("own:", StringComparison.Ordinal) ? _mine[int.Parse(id[4..])].Name
+        : id.StartsWith("now:", StringComparison.Ordinal) ? (IntermediaryDns.ByKey(id[4..])?.Name ?? id[4..]) + ", сейчас"
         : "набор " + id[4..];
 
     private async Task<Dictionary<string, string>> AnswersAsync(string id)
@@ -623,11 +863,73 @@ public partial class PinWindow : Window
                 : names.ToDictionary(n => n, _ => entry.Addresses[0], StringComparer.OrdinalIgnoreCase);
         }
 
+        return await HonestAsync(ServiceNames());
+    }
+
+    /// <summary>Имена сервиса для пина: зоны и имена каталога Zapret внутри них.</summary>
+    private List<string> ServiceNames()
+    {
         var known = _catalog?.Answers(_catalogServices, null).Keys.Where(Covers).ToList() ?? [];
 
-        return await HonestAsync(known.Concat(_target.Zones)
+        return known.Concat(_target.Zones.Select(z => z.TrimStart('*', '.')))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList());
+            .ToList();
+    }
+
+    /// <summary>
+    /// Прибивает имена сервиса к посреднику, которого выбрали пунктом «— сейчас».
+    /// </summary>
+    /// <remarks>
+    /// Адрес сперва пробуется на главном имени (PinPicker.ProbeAsync: рукопожатие
+    /// с проверкой сертификата и главная страница), как любой кандидат автоподбора:
+    /// посредник отдаёт адрес и тогда, когда сам прокси за ним молчит, — так
+    /// стояли мёртвые .67 и .88 GeoHide. Всем именам — один адрес (решение 10.10:
+    /// одному сайту — одни пины), с профилем этого посредника: по нему автозамена
+    /// потом спрашивает о пине того, кто его отдал (HostsEditor.ViaMark).
+    /// </remarks>
+    private async Task<bool> PinNowAsync(string key)
+    {
+        if (!_now.TryGetValue(key, out var now) || !Pinnable(now))
+        {
+            Status.Text = "Ответ этого посредника ещё не пришёл либо адреса посредника в нём нет.";
+            return false;
+        }
+
+        string? chosen = null;
+        var failed = new List<string>();
+
+        foreach (var address in now.Addresses)
+        {
+            Status.Text = $"Пробую {address} на {now.Name}…";
+
+            var probe = await PinPicker.ProbeAsync(
+                new PinCandidate(address, PinSource.Catalog, $"{now.Server.Name}, сейчас", key),
+                now.Name,
+                _life.Token);
+
+            if (probe.Usable)
+            {
+                chosen = address;
+                break;
+            }
+
+            failed.Add($"{address} — {probe.Detail}");
+        }
+
+        if (chosen is null)
+        {
+            Status.Text = $"{now.Server.Name} отдаёт {now.Name} адрес посредника, но проба не прошла: "
+                + string.Join("; ", failed) + ". Пин не записан.";
+            return false;
+        }
+
+        var names = ServiceNames();
+
+        Pin(names.ToDictionary(n => n, _ => chosen, StringComparer.OrdinalIgnoreCase),
+            Source("now:" + key),
+            names.ToDictionary(n => n, _ => key, StringComparer.OrdinalIgnoreCase));
+
+        return true;
     }
 
     /// <summary>Что сказал последний автоподбор — дописывается к итогу закрепления.</summary>

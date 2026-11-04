@@ -84,7 +84,7 @@ public sealed class ResolverRow
 
     public Brush BadgeBrush => (Brush)Application.Current.FindResource(BadgeKey);
 
-    public Visibility BadgeShown => Badge is null ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility BadgeShown => Badge is null ? Visibility.Hidden : Visibility.Visible;
 
     /// <summary>Сайты сервисов посредника (<see cref="DnsProvider.Services"/>).</summary>
     public IReadOnlyList<string> ServiceSites { get; init; } = [];
@@ -124,20 +124,39 @@ public sealed class ResolverGroup
 /// </remarks>
 public sealed class SurveyRow
 {
-    private SurveyRow(DnsSurveyRow row) => Source = row;
+    private SurveyRow(DnsSurveyRow row, bool pending = false)
+    {
+        Source = row;
+        Pending = pending;
+    }
 
     public DnsSurveyRow Source { get; }
 
+    /// <summary>
+    /// Строка-заготовка: провайдер ещё не ответил.
+    /// </summary>
+    /// <remarks>
+    /// Таблица с первого мгновения обзора — во весь список провайдеров, ответ
+    /// меняет строку на месте. Прежде строки дописывались по мере ответов, и
+    /// таблица, а с ней всё ниже неё, росла на каждом ответе.
+    /// </remarks>
+    public bool Pending { get; }
+
+    public static SurveyRow Waiting(DnsProvider provider) => new(new DnsSurveyRow { Provider = provider }, pending: true);
+
     public string Name => Source.Provider.Name;
 
-    public string Doh => Ms(Source.DohMs, Source.DohFailure);
+    public string Doh => Pending ? "…" : Ms(Source.DohMs, Source.DohFailure);
 
-    public string Dot => Ms(Source.DotMs, Source.DotFailure);
+    public string Dot => Pending ? "…" : Ms(Source.DotMs, Source.DotFailure);
 
     public string Udp
     {
         get
         {
+            if (Pending)
+                return "…";
+
             var text = Ms(Source.UdpMs, Source.UdpFailure);
 
             return Source.UdpMs is not null && Source.UdpAnswered < Source.Provider.Udp.Count
@@ -146,11 +165,11 @@ public sealed class SurveyRow
         }
     }
 
-    public string Real => Source.RealResolver is null
+    public string Real => Pending ? "…" : Source.RealResolver is null
         ? "—"
         : $"{Source.RealResolver} → {Source.RealNetwork ?? "?"}";
 
-    public string Spoof => Source.SpoofChecked == 0 ? "—" : $"{Source.Spoofed}/{Source.SpoofChecked}";
+    public string Spoof => Pending ? "…" : Source.SpoofChecked == 0 ? "—" : $"{Source.Spoofed}/{Source.SpoofChecked}";
 
     public Brush DohColor => Paint(Source.DohMs, Source.DohFailure);
 
@@ -221,7 +240,7 @@ public partial class DnsView : UserControl
 
         Survey.ItemsSource = last.Rows.Select(SurveyRow.From).ToList();
         SurveyHead.Visibility = Visibility.Visible;
-        SurveyStatus.Text = $"{last.Status} Проверено в {last.At:HH:mm}.";
+        SaySurvey($"{last.Status} Проверено в {last.At:HH:mm}.");
         Status.Text = $"Задержка — из обзора в {last.At:HH:mm}.";
 
         Redraw();
@@ -354,6 +373,7 @@ public partial class DnsView : UserControl
         ShowChosen(settings);
         ShowSystem();
         ShowAutoRepin(settings);
+        ShowPinWatch(settings.AutoRepin, PinRefresh.Watch());
 
         // Те же провайдеры, что в обзоре, — все, кого sing-box может
         // спрашивать по DoH. Прежде список был своим, из шести, и мерился
@@ -972,10 +992,13 @@ public partial class DnsView : UserControl
         _work?.Cancel();
         _work = new CancellationTokenSource();
 
-        var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>();
+        // Один список и для заготовки, и для обзора: строки ищутся по провайдеру.
+        var providers = DnsSurvey.All;
+        var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>(providers.Select(SurveyRow.Waiting));
+        var place = providers.Select((p, i) => (p, i)).ToDictionary(x => (object)x.p, x => x.i, ReferenceEqualityComparer.Instance);
         var done = new List<DnsSurveyRow>();
         Survey.ItemsSource = rows;
-        SurveyStatus.Text = "Проверяю… Запросы идут мимо туннеля, через адаптер.";
+        SaySurvey("Проверяю… Запросы идут мимо туннеля, через адаптер.");
 
         var choices = _rows;
 
@@ -991,13 +1014,15 @@ public partial class DnsView : UserControl
         {
             var progress = new Progress<DnsSurveyRow>(row =>
             {
-                rows.Add(SurveyRow.From(row));
+                if (place.TryGetValue(row.Provider, out var at))
+                    rows[at] = SurveyRow.From(row);
+
                 done.Add(row);
                 Fill(choices, row);
                 Redraw();
             });
 
-            var all = await DnsSurvey.SurveyAllAsync(progress: progress, cancellationToken: _work.Token);
+            var all = await DnsSurvey.SurveyAllAsync(providers, progress, _work.Token);
 
             // Порядок — как в списке провайдеров, а не как пришли ответы.
             Survey.ItemsSource = all.Select(SurveyRow.From).ToList();
@@ -1006,16 +1031,16 @@ public partial class DnsView : UserControl
 
             var intercepted = all.Where(r => r.Spoofed > 0).Select(r => r.Provider.Name).ToList();
 
-            SurveyStatus.Text = intercepted.Count == 0
+            SaySurvey(intercepted.Count == 0
                 ? "Подмены по UDP не найдено."
                 : $"По UDP подменяют ответы: {string.Join(", ", intercepted)}. "
-                  + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.";
+                  + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.");
 
             _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now);
         }
         catch (OperationCanceledException)
         {
-            SurveyStatus.Text = "Обзор прерван.";
+            SaySurvey("Обзор прерван.");
 
             // Прерван уходом с вкладки — что успели, то и запомнили.
             if (done.Count > 0)
@@ -1023,7 +1048,10 @@ public partial class DnsView : UserControl
         }
         catch (Exception ex)
         {
-            SurveyStatus.Text = "Обзор не удался: " + ex.GetBaseException().Message;
+            SaySurvey("Обзор не удался: " + ex.GetBaseException().Message);
+
+            // В три строки карточки длинное сообщение исключения не влезает.
+            Journal.Write("DNS", "обзор резолверов не удался: " + ex.GetBaseException().Message);
         }
         finally
         {
@@ -1045,7 +1073,7 @@ public partial class DnsView : UserControl
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         bool engines = state is not null && state.IsSupervisorAlive();
 
-        PinsStatus.Text = "Проверяю: по одному соединению на первый адрес каждого имени и вопрос посредникам…";
+        SayPins("Проверяю: по одному соединению на первый адрес каждого имени и вопрос посредникам…");
 
         try
         {
@@ -1055,19 +1083,105 @@ public partial class DnsView : UserControl
 
             PinRefreshWatch.Write("кнопкой", result);
 
-            PinsStatus.Text = Describe(result)
-                + (engines ? string.Empty : " Движки не подняты — часть посредников без десинка не отвечает, и мёртвыми могли показаться живые.");
+            SayPins(Describe(result)
+                + (engines ? string.Empty : " Движки не подняты — часть посредников без десинка не отвечает, и мёртвыми могли показаться живые."));
         }
         catch (Exception ex)
         {
-            PinsStatus.Text = "Проверка не удалась: " + ex.GetBaseException().Message;
+            SayPins("Проверка не удалась: " + ex.GetBaseException().Message);
             Journal.Write("пин", "проверка адресов не удалась: " + ex.GetBaseException().Message);
         }
         finally
         {
             PinsButton.IsEnabled = true;
+            ShowPinWatch(AppSettings.Load(AppSettings.DefaultPath).AutoRepin, PinRefresh.Watch());
         }
     }
+
+    /// <summary>
+    /// Итог в поле постоянной высоты: не влезший в три строки виден подсказкой целиком
+    /// (и лежит в журнале — <see cref="PinRefreshWatch.Write"/>).
+    /// </summary>
+    private void SayPins(string text)
+    {
+        PinsStatus.Text = text;
+        PinsStatus.ToolTip = text;
+    }
+
+    /// <summary>
+    /// Итог обзора — в поле постоянной высоты, целиком — подсказкой.
+    /// </summary>
+    /// <remarks>
+    /// Поле прежде росло от строки «Проверяю…» до трёх строк итога, и карточку не
+    /// раздвигало лишь потому, что соседняя в том же ряду выше, — защита держалась
+    /// на чужой высоте.
+    /// </remarks>
+    private void SaySurvey(string text)
+    {
+        SurveyStatus.Text = text;
+        SurveyStatus.ToolTip = text;
+    }
+
+    /// <summary>Строки состояния автозамены: когда проверялось, кто под подозрением и под присмотром.</summary>
+    private void ShowPinWatch(bool auto, PinWatch watch)
+    {
+        PinsWhen.Text = WhenLine(watch, auto, DateTimeOffset.Now);
+        // Строка режется многоточием на узком окне — подсказка несёт её целиком.
+        PinsWhen.ToolTip = PinsWhen.Text + (watch.Suspects.Count > 0
+            ? "\n\nНе ответили в прошлой проверке: " + string.Join(", ", watch.Suspects)
+              + ". Промолчат и в следующей — пин заменится живым адресом."
+            : string.Empty);
+
+        PinsWatched.Text = WatchedLine(watch);
+        PinsWatched.ToolTip = PinsWatched.Text;
+    }
+
+    /// <summary>«Проверено в 14:05, следующая около 20:05 · под подозрением: 2 (…)».</summary>
+    internal static string WhenLine(PinWatch watch, bool auto, DateTimeOffset now)
+    {
+        string text;
+
+        if (watch.Last is not { } last)
+        {
+            text = auto
+                ? "Ещё не проверялось — первая проверка, когда движки проработают 10 минут"
+                : "Ещё не проверялось, автозамена выключена";
+        }
+        else
+        {
+            var local = last.ToLocalTime();
+            var today = now.ToLocalTime().Date;
+            string when = local.Date == today ? $"в {local:HH:mm}" : $"{local:dd.MM} в {local:HH:mm}";
+
+            if (!auto)
+            {
+                text = $"Проверено {when}, автозамена выключена";
+            }
+            else
+            {
+                // Сторож проверяет только при поднятых движках и раз в 5 минут: «около»,
+                // а просроченная ждёт движков, а не названного часа.
+                var next = (last + PinRefresh.Every).ToLocalTime();
+                text = next <= now
+                    ? $"Проверено {when}, следующая — как только движки поработают 10 минут"
+                    : $"Проверено {when}, следующая около {(next.Date == today ? string.Empty : $"{next:dd.MM} ")}{next:HH:mm}";
+            }
+        }
+
+        if (watch.Suspects.Count > 0)
+        {
+            text += $" · под подозрением: {watch.Suspects.Count} ({string.Join(", ", watch.Suspects.Take(3))}"
+                + (watch.Suspects.Count > 3 ? $" и ещё {watch.Suspects.Count - 3})" : ")");
+        }
+
+        return text;
+    }
+
+    /// <summary>«Под присмотром: Comss DNS 30, Zapret DNS 21, без посредника 1».</summary>
+    internal static string WatchedLine(PinWatch watch) =>
+        watch.Groups.Count == 0
+            ? "Пинов к посредникам в hosts нет — присматривать не за чем"
+            : "Под присмотром: " + string.Join(", ", watch.Groups.Select(g => $"{g.Intermediary ?? "без посредника"} {g.Count}"));
 
     private void ShowAutoRepin(AppSettings settings)
     {
@@ -1085,15 +1199,16 @@ public partial class DnsView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath) with { AutoRepin = on };
             settings.Save(AppSettings.DefaultPath);
             ShowAutoRepin(settings);
+            ShowPinWatch(on, PinRefresh.Watch());
 
-            PinsStatus.Text = on
+            SayPins(on
                 ? "Мёртвые пины будут меняться сами раз в 6 часов, пока движки работают."
-                : "Сама программа пины больше не меняет — только кнопкой «Проверить».";
+                : "Сама программа пины больше не меняет — только кнопкой «Проверить».");
         }
         catch (Exception ex)
         {
             ShowAutoRepin(AppSettings.Load(AppSettings.DefaultPath));
-            PinsStatus.Text = "Настройка не сохранилась: " + ex.GetBaseException().Message;
+            SayPins("Настройка не сохранилась: " + ex.GetBaseException().Message);
         }
     }
 

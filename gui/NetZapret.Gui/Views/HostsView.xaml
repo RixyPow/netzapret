@@ -330,7 +330,31 @@
                                             <Ellipse Grid.Column="1" Style="{StaticResource HealthDot}" ToolTip="{Binding StateHint}" />
 
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,10,0">
-                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                <!--
+                                                    Плашка посредника — справа от имени, а не в подписи:
+                                                    пометка nz:via в подписи скрыта, а без плашки не видно,
+                                                    у кого автозамена спрашивает о пине.
+                                                    Поля по вертикали отрицательные: плашка (11 пт, отступ и рамка)
+                                                    выше строки имени на пару точек, и строки с ней были бы
+                                                    выше строк без неё — шаг таблицы шёл бы неровно.
+                                                -->
+                                                <DockPanel LastChildFill="True">
+                                                    <Border DockPanel.Dock="Right" CornerRadius="8" Padding="7,1,7,2" Margin="8,-3,0,-3"
+                                                            Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}"
+                                                            BorderThickness="1.5" VerticalAlignment="Center" ToolTip="{Binding ViaHint}">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding HasVia}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding Via}" FontSize="11" Foreground="{DynamicResource Muted}" />
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" />
+                                                </DockPanel>
                                                 <TextBlock Text="{Binding Sub}" FontSize="11.5"
                                                            Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Sub}">
                                                     <TextBlock.Style>

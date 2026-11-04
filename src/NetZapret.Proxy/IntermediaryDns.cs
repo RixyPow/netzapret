@@ -24,12 +24,58 @@ public sealed record Intermediary(
 /// <param name="RelayCheck">Ответ на <see cref="Intermediary.RelayName"/>; пусто — не спрашивали или нет.</param>
 public sealed record ServerAnswers(
     IReadOnlyDictionary<string, IReadOnlyList<IPAddress>> Names,
-    IReadOnlyList<IPAddress> RelayCheck);
+    IReadOnlyList<IPAddress> RelayCheck)
+{
+    /// <summary>
+    /// Имена, ответ о которых не дошёл: таймаут, обрыв, SERVFAIL. В <see cref="Names"/>
+    /// у них пусто, но это не «пустой ответ» — посредник ничего о них не сказал.
+    /// </summary>
+    public IReadOnlySet<string> Unanswered { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+}
 
 /// <summary>Что ответили посредники: адреса по именам и кто не ответил вовсе.</summary>
 public sealed record IntermediaryAnswers(
     IReadOnlyDictionary<string, IReadOnlyList<PinCandidate>> Answers,
     IReadOnlyList<string> Silent);
+
+/// <summary>Что посредник делает с именем сейчас — для окна пина.</summary>
+public enum RelayVerdict
+{
+    /// <summary>Не ответил по DoH ни по имени сервера, ни по запасным адресам.</summary>
+    Silent,
+
+    /// <summary>Отдаёт имени адрес своего посредника.</summary>
+    Relays,
+
+    /// <summary>Отдаёт настоящий адрес сервиса — этот сервис он не проксирует.</summary>
+    NotProxied,
+
+    /// <summary>Пустой ответ или заглушка 0.0.0.0 — имя не обслуживает.</summary>
+    Refuses,
+
+    /// <summary>Сервер ответил на проверку, но ответ об этом имени не дошёл.</summary>
+    Unanswered,
+
+    /// <summary>
+    /// Отдаёт адрес, о котором по ответу не понять, посредник ли это: он не совпадает
+    /// ни с посредником контрольных имён, ни с настоящим адресом. Решает проба.
+    /// </summary>
+    Unconfirmed,
+}
+
+/// <summary>Ответ одного посредника о главном имени сервиса.</summary>
+/// <param name="Addresses">
+/// При <see cref="RelayVerdict.Relays"/> — адреса посредника, при
+/// <see cref="RelayVerdict.NotProxied"/> — настоящие адреса, при
+/// <see cref="RelayVerdict.Unconfirmed"/> — то, что отдал; иначе пусто.
+/// </param>
+/// <param name="ByRelayCheck">Посредник подтверждён ответом на служебное имя (<see cref="Intermediary.RelayName"/>).</param>
+public sealed record RelayNow(
+    Intermediary Server,
+    string Name,
+    RelayVerdict Verdict,
+    IReadOnlyList<string> Addresses,
+    bool ByRelayCheck = false);
 
 /// <summary>
 /// Спрашивает у DNS-посредников, какой адрес они отдают имени сейчас.
@@ -107,6 +153,7 @@ public static class IntermediaryDns
 
         var asked = names.Concat(Controls).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var result = new Dictionary<string, IReadOnlyList<IPAddress>>(StringComparer.OrdinalIgnoreCase);
+        var unanswered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         using var slots = new SemaphoreSlim(6);
 
         // Один клиент на весь опрос сервера: вопросы идут одним соединением HTTP/2.
@@ -125,7 +172,24 @@ public static class IntermediaryDns
                     http, server.DohName, server.Path, host, DnsWire.TypeA, cancellationToken);
 
                 lock (result)
+                {
                     result[host] = answer is { Code: 0 } ? answer.Addresses : [];
+
+                    // NXDOMAIN — тоже ответ: имени посредник не знает. А таймаут, обрыв
+                    // и SERVFAIL — нет, и окно пина не должно называть их отказом.
+                    if (answer is null || answer.Code is not (0 or NxDomain))
+                        unanswered.Add(host);
+                }
+            }
+            catch (Exception) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Один оборванный вопрос не роняет весь опрос: прочие ответы уже
+                // пришли, и сервер, до которого достучались, — не молчащий.
+                lock (result)
+                {
+                    result[host] = [];
+                    unanswered.Add(host);
+                }
             }
             finally
             {
@@ -135,14 +199,21 @@ public static class IntermediaryDns
 
         IReadOnlyList<IPAddress> relay = [];
 
-        if (server.RelayName is { } relayName
-            && await DnsSurvey.DohQueryAsync(http, server.DohName, server.Path, relayName, DnsWire.TypeA, cancellationToken)
-                is { Code: 0 } answered)
+        try
         {
-            relay = answered.Addresses;
+            if (server.RelayName is { } relayName
+                && await DnsSurvey.DohQueryAsync(http, server.DohName, server.Path, relayName, DnsWire.TypeA, cancellationToken)
+                    is { Code: 0 } answered)
+            {
+                relay = answered.Addresses;
+            }
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Без служебного имени посредник узнаётся по контрольным — не повод терять опрос.
         }
 
-        return new(result, relay);
+        return new(result, relay) { Unanswered = unanswered };
     }
 
     /// <summary>
@@ -219,6 +290,119 @@ public static class IntermediaryDns
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToList();
+
+    /// <summary>
+    /// Что посредник отдаёт имени прямо сейчас: адрес своего посредника,
+    /// настоящий адрес или ничего.
+    /// </summary>
+    /// <remarks>
+    /// Для окна пина, где каждый посредник — свой пункт. Снимок каталога о
+    /// посреднике врёт тем больше, чем он старше: у Zapret DNS в снимке 01.11 —
+    /// 83.217.211.149, прежний адрес, а с того же дня сервер за Cloudflare
+    /// и отдаёт 5.129.221.64. Один вопрос на сервер (имя, контрольные и
+    /// служебное — одним соединением, <see cref="AskServerAsync"/>), не залп.
+    /// </remarks>
+    public static async Task<RelayNow> NowAsync(Intermediary server, string name, CancellationToken cancellationToken)
+    {
+        // Настоящий адрес — у честного резолвера, тем же шагом: без него «отдаёт
+        // настоящий адрес» было бы догадкой (см. Judge).
+        var honest = HonestAsync(name, cancellationToken);
+        ServerAnswers? answers;
+
+        try
+        {
+            answers = await AskServerAsync(server, [name], cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // Оборванное соединение посередине опроса — для человека то же молчание.
+            answers = null;
+        }
+
+        return Judge(server, answers, name, await honest);
+    }
+
+    /// <summary>Настоящие адреса имени у честного резолвера; <c>null</c> — не узнали.</summary>
+    private static async Task<IReadOnlyList<IPAddress>?> HonestAsync(string name, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await DnsSurvey.HonestAsync(name, DnsWire.TypeA, DnsSurvey.PhysicalInterface(), cancellationToken))
+                is { Code: 0 } answer ? answer.Addresses : null;
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Приговор по ответу сервера: посредник — адрес, который проходит
+    /// <see cref="StrongRelays"/> (два контрольных сервиса или служебное имя).
+    /// </summary>
+    /// <param name="honest">Ответ честного резолвера о том же имени; <c>null</c> — не узнали.</param>
+    /// <remarks>
+    /// Правило трёх имён здесь не годится: спрашивается одно имя. А настоящий
+    /// адрес посредник отдаёт тем, кого не проксирует, — 03.11 Comss на имена
+    /// Google AI ответил адресом самого Google, и пункт «Comss — сейчас» с ним
+    /// прибил бы Gemini к Google, который из России его не открывает. Такой
+    /// ответ называется «этот сервис не проксирует», а не предлагается пином.
+    /// Но «настоящий» — только когда это подтверждает честный резолвер (та же
+    /// сеть /16: у Google и Cloudflare фронты меняются от запроса к запросу).
+    /// Адрес, не совпавший ни с посредником контрольных, ни с настоящим, —
+    /// «не подтверждено»: посредник может держать сервис на своём узле (в снимке
+    /// 01.11 у AstraCat Autodesk и Broadcom на 217.60.179.6) или перемешивать узлы,
+    /// как GeoHide и Comss. Такой пункт доступен, а решает проба на главном имени.
+    /// </remarks>
+    internal static RelayNow Judge(Intermediary server, ServerAnswers? answers, string name, IReadOnlyList<IPAddress>? honest = null)
+    {
+        if (answers is null)
+            return new(server, name, RelayVerdict.Silent, []);
+
+        var strong = StrongRelays(answers);
+        var relays = RelaysFor(answers, strong, name);
+
+        if (relays.Count > 0)
+        {
+            var checkedBy = answers.RelayCheck.Select(a => a.ToString()).ToHashSet(StringComparer.Ordinal);
+            return new(server, name, RelayVerdict.Relays, relays, relays.Any(checkedBy.Contains));
+        }
+
+        var given = (answers.Names.TryGetValue(name, out var list) ? list : [])
+            .Where(a => Usable(a.ToString()))
+            .ToList();
+
+        if (given.Count == 0)
+        {
+            return answers.Unanswered.Contains(name)
+                ? new(server, name, RelayVerdict.Unanswered, [])
+                : new(server, name, RelayVerdict.Refuses, []);
+        }
+
+        var shown = given
+            .Select(a => a.ToString())
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        return honest is not null && given.Any(a => honest.Any(h => SameNet16(a, h)))
+            ? new(server, name, RelayVerdict.NotProxied, shown)
+            : new(server, name, RelayVerdict.Unconfirmed, shown);
+    }
+
+    private static bool SameNet16(IPAddress a, IPAddress b)
+    {
+        if (a.AddressFamily != b.AddressFamily || a.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            return false;
+
+        var x = a.GetAddressBytes();
+        var y = b.GetAddressBytes();
+
+        return x[0] == y[0] && x[1] == y[1];
+    }
+
+    /// <summary>Код ответа DNS «нет такого имени».</summary>
+    private const int NxDomain = 3;
 
     /// <summary>Имя, на котором проверяется, что сервер вообще отвечает.</summary>
     private const string Probe = "example.com";

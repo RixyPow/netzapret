@@ -555,7 +555,7 @@ public static class HostsEditor
     }
 
     /// <summary>Ключ посредника из пометки <see cref="ViaMark"/>; <c>null</c> — пометки нет.</summary>
-    internal static string? Via(string line)
+    public static string? Via(string line)
     {
         int hash = line.IndexOf('#');
 

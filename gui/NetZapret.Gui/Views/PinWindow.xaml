@@ -197,11 +197,31 @@
                     <ItemsControl x:Name="SourceList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Style="{StaticResource Choice}" Tag="{Binding Id}" Click="OnSource">
+                                <Button Style="{StaticResource Choice}" Tag="{Binding Id}" Click="OnSource"
+                                        IsEnabled="{Binding Enabled}">
                                     <StackPanel>
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <TextBlock Text="{Binding Note}" Style="{StaticResource Caption}"
-                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+
+                                        <!--
+                                            У пунктов посредников подпись меняется, когда приходит
+                                            ответ («спрашиваю…» → адреса), — место под неё ровно
+                                            две строки высотой строки, а не по тексту: иначе каждый
+                                            ответ двигал бы всё, что ниже.
+                                        -->
+                                        <TextBlock Text="{Binding Note}" Margin="0,4,0,0" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Live}" Value="True">
+                                                            <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+                                                            <Setter Property="LineHeight" Value="16" />
+                                                            <Setter Property="Height" Value="32" />
+                                                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </StackPanel>
                                 </Button>
                             </DataTemplate>

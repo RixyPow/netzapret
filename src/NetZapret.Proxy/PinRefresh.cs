@@ -28,6 +28,22 @@ public sealed record PinRefreshResult(
     public int Assigned { get; init; }
 }
 
+/// <summary>Пины одного посредника под присмотром автозамены.</summary>
+/// <param name="Intermediary">Имя посредника; <c>null</c> — пины без профиля.</param>
+public sealed record PinWatchGroup(string? Intermediary, int Count);
+
+/// <summary>Состояние автозамены для показа: см. <see cref="PinRefresh.Watch"/>.</summary>
+/// <param name="Last">Последняя проверка; <c>null</c> — не было.</param>
+/// <param name="Suspects">Первые адреса, промолчавшие в прошлой проверке.</param>
+/// <param name="Groups">Пины под присмотром по посредникам.</param>
+public sealed record PinWatch(
+    DateTimeOffset? Last,
+    IReadOnlyList<string> Suspects,
+    IReadOnlyList<PinWatchGroup> Groups)
+{
+    public int Watched => Groups.Sum(g => g.Count);
+}
+
 /// <summary>
 /// Сеть автозамены: проба адреса, опрос сервера посредника, контроль связи.
 /// Отдельно — чтобы ход проверки покрывался тестами без сети.
@@ -155,6 +171,81 @@ public static class PinRefresh
         {
             return true;
         }
+    }
+
+    /// <summary>Когда была последняя проверка; <c>null</c> — не было или отметка не читается.</summary>
+    /// <remarks>
+    /// Только для показа: вкладка DNS называет время проверки и следующей. Срок
+    /// решает по-прежнему <see cref="IsDue"/>, чтобы чтение не меняло ход автозамены.
+    /// </remarks>
+    public static DateTimeOffset? LastChecked(string? stampPath = null)
+    {
+        try
+        {
+            var text = File.ReadAllText(stampPath ?? StampPath).Trim();
+
+            return DateTimeOffset.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var last)
+                ? last
+                : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Что видно об автозамене без проверки: время прошлой, подозреваемые адреса
+    /// и пины под присмотром по посредникам.
+    /// </summary>
+    /// <remarks>
+    /// Под присмотром — те же имена, что берёт проверка: наш блок без пинов на адрес
+    /// самого сервиса (<see cref="HostsEditor.DesyncMark"/>). Незнакомый ключ профиля
+    /// проверка считает пином без посредника — так и здесь, чтобы счёт не расходился.
+    /// </remarks>
+    public static PinWatch Watch(string? hostsPath = null, string? stampPath = null, string? suspectsPath = null)
+    {
+        var groups = new List<PinWatchGroup>();
+
+        try
+        {
+            var own = HostsEditor.DesyncPins(hostsPath);
+            var via = HostsEditor.PinsVia(hostsPath);
+
+            var names = HostsEditor.PinsAll(hostsPath)
+                .Where(p => !own.Contains(p.Key) && p.Value.Count > 0)
+                .Select(p => p.Key)
+                .ToList();
+
+            // Порядок посредников — как в списке доверия, без посредника — последним.
+            foreach (var server in IntermediaryDns.Servers)
+            {
+                int count = names.Count(n => via.TryGetValue(n, out var key)
+                    && string.Equals(IntermediaryDns.ByKey(key)?.Key, server.Key, StringComparison.OrdinalIgnoreCase));
+
+                if (count > 0)
+                    groups.Add(new(server.Name, count));
+            }
+
+            int bare = names.Count(n => !via.TryGetValue(n, out var key) || IntermediaryDns.ByKey(key) is null);
+
+            if (bare > 0)
+                groups.Add(new(null, bare));
+        }
+        catch (Exception)
+        {
+            // hosts не прочитался — присмотр не показывается; сама проверка скажет об этом своим итогом.
+        }
+
+        return new PinWatch(
+            LastChecked(stampPath),
+            LoadSuspects(suspectsPath ?? SuspectsPath).Order(StringComparer.Ordinal).ToList(),
+            groups);
     }
 
     /// <summary>Отметить проверку: следующая сама — через <see cref="Every"/>.</summary>
