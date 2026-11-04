@@ -32,6 +32,13 @@ public static class PartOrder
         .GroupBy(p => p.List, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.First().Within!, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Место части в каталоге — порядок узких частей одной широкой.</summary>
+    private static readonly Dictionary<string, int> CatalogPlace = ServiceCatalog.All
+        .SelectMany(s => s.Parts)
+        .Select((p, i) => (p.List, i))
+        .GroupBy(x => x.List, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => g.First().i, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Тот же список, где каждая узкая часть стоит раньше своей широкой.</summary>
     public static List<RoutingRule> Apply(List<RoutingRule> rules)
     {
@@ -53,6 +60,24 @@ public static class PartOrder
 
             result.RemoveAt(i);
             result.Insert(wide, narrow);
+        }
+
+        // Узкие части одной широкой — в порядке каталога. Они бывают вложены
+        // друг в друга: updates.discord.com («Обновления») лежит внутри
+        // discord.com («Квесты и API», 05.11). Без этого «API через VPN» и
+        // «Обновления напрямую» решались бы очерёдностью строк в файле.
+        // Непересекающимся частям их взаимный порядок безразличен.
+        foreach (var siblings in result
+            .Select((rule, at) => (rule, at))
+            .Where(x => x.rule.Match == MatchKind.HostList && WithinOf.ContainsKey(x.rule.Value))
+            .GroupBy(x => (Within: WithinOf[x.rule.Value].ToLowerInvariant(), x.rule.Source))
+            .ToList())
+        {
+            var places = siblings.Select(x => x.at).ToList();
+            var ordered = siblings.Select(x => x.rule).OrderBy(r => CatalogPlace[r.Value]).ToList();
+
+            for (int k = 0; k < places.Count; k++)
+                result[places[k]] = ordered[k];
         }
 
         return result;

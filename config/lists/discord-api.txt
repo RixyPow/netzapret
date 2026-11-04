@@ -1,0 +1,14 @@
+# Discord: API клиента — квесты, Orbs, отправка сообщений, настройки.
+#
+# Квесты и Orbs Discord выдаёт по стране того адреса, с которого пришёл
+# запрос к API. Замер 05.11 служебным /api/v9/auth/location-metadata:
+# напрямую и через пин каталога (23.227.38.74, другой узел Cloudflare) —
+# RU, через туннель — FI. Своего имени у квестов нет: /api/v9/quests лежит
+# на том же discord.com, что и весь API, а маршрут выбирается по имени.
+# Поэтому часть — весь discord.com; шлюз (discord.gg), картинки
+# (discordapp.com, discordapp.net) и голос (discord.media) идут своими.
+discord.com
+
+# Капча обязана идти тем же путём, что и API: 30.09 Orbs за видео через VPN
+# падали на капче, пока hcaptcha.com шёл напрямую (см. discord.txt).
+hcaptcha.com

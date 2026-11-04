@@ -305,6 +305,19 @@ public static class ServiceCatalog
                     Within = "config/lists/discord.txt",
                     Note = "обновления клиента; без них Discord зависает на запуске",
                 },
+
+                // Квесты и Orbs выдаются по стране запроса к API (05.11: напрямую
+                // и через пин — RU, через туннель — FI), а своего имени у них нет:
+                // это тот же discord.com. Отдельной частью — чтобы через VPN шёл
+                // только API, а шлюз, картинки и голос оставались на своём пути.
+                new ServicePart
+                {
+                    Name = "Квесты и API",
+                    List = "config/lists/discord-api.txt",
+                    Within = "config/lists/discord.txt",
+                    Note = "запросы клиента к discord.com: квесты и Orbs выдаются по стране этого пути — "
+                        + "через VPN будут квесты страны выхода; сюда же отправка сообщений и настройки",
+                },
                 new ServicePart
                 {
                     Name = "Vencord",
