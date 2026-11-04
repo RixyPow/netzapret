@@ -400,7 +400,8 @@ public partial class StatusView : UserControl
         bool Running,
         bool SingBoxUp,
         DateTime? ConfigBuilt,
-        bool Coming = false);
+        bool Coming = false,
+        string PresetNote = "");
 
     private static Seen Read(bool starting)
     {
@@ -448,7 +449,7 @@ public partial class StatusView : UserControl
         }
 
         return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built,
-            !running && EngineControl.Coming);
+            !running && EngineControl.Coming, PresetNoteOf(settings.PresetName));
     }
 
     private bool _updating;
@@ -510,7 +511,7 @@ public partial class StatusView : UserControl
         Problem.Visibility = Visibility.Collapsed;
 
         PresetValue.Text = settings.DescribePreset();
-        ShowPresetNote(settings.PresetName);
+        PresetNote.Text = seen.PresetNote;
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
         ShowServerFlag(_exit ?? NetZapret.Subscriptions.Warp.PreferredExit(settings));
         DnsValue.Text = settings.UseRouterDns
@@ -1045,42 +1046,45 @@ public partial class StatusView : UserControl
         };
     }
 
-    /// <summary>Пресет, описание которого уже показано, — чтобы не читать файл на каждом тике.</summary>
-    private string? _notedPreset = "\0";
+    /// <summary>Описание пресета, уже прочитанное: файл со временем записи и первая фраза.</summary>
+    private sealed record PresetNoteRead(string Key, string Note);
+
+    private static PresetNoteRead? _presetNote;
 
     /// <summary>
-    /// Первая фраза описания пресета — из его же файла.
+    /// Первая фраза описания пресета — из его же файла; зовётся в пуле (<see cref="Read"/>).
     /// </summary>
     /// <remarks>
-    /// Читается при смене пресета, а не каждые две секунды: разбор файла —
-    /// сотни строк, а меняется выбор раз в неделю.
+    /// Разбор файла — сотни строк, а меняется выбор раз в неделю: файл читается
+    /// один раз, пока не изменится. До 05.11 он читался в потоке окна при каждом
+    /// заходе на «Главную»: память о показанном жила в разделе, а раздел
+    /// создаётся заново на каждый заход. Симуляция 05.11 застала поток окна
+    /// в <c>PresetReader.Read</c> посреди подвисания.
     /// </remarks>
-    private void ShowPresetNote(string? preset)
+    private static string PresetNoteOf(string? preset)
     {
-        if (preset == _notedPreset)
-            return;
-
-        _notedPreset = preset;
-        PresetNote.Text = preset is null ? "Десинк без пресета не поднимается." : string.Empty;
-
         if (preset is null)
-            return;
+            return "Десинк без пресета не поднимается.";
 
         try
         {
             if (NetZapret.Zapret.ZapretPaths.FindPreset(preset) is not { } file)
-            {
-                PresetNote.Text = "Файла пресета нет в папке presets.";
-                return;
-            }
+                return "Файла пресета нет в папке presets.";
+
+            var key = $"{file}|{File.GetLastWriteTimeUtc(file).Ticks}";
+
+            if (_presetNote is { } known && known.Key == key)
+                return known.Note;
 
             var description = new NetZapret.Zapret.PresetReader().Read([file]).FirstOrDefault()?.Description;
+            var note = FirstSentence(description) ?? "Описания в файле пресета нет.";
 
-            PresetNote.Text = FirstSentence(description) ?? "Описания в файле пресета нет.";
+            _presetNote = new PresetNoteRead(key, note);
+            return note;
         }
         catch (Exception)
         {
-            PresetNote.Text = string.Empty;
+            return string.Empty;
         }
     }
 
