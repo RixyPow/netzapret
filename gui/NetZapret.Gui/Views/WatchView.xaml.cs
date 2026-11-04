@@ -269,7 +269,7 @@ public partial class WatchView : UserControl
         ButtonGlyph.SetLead(PowerButton, running ? Glyph.Stop : Glyph.Play);
     }
 
-    private void OnPower(object sender, RoutedEventArgs e)
+    private async void OnPower(object sender, RoutedEventArgs e)
     {
         // Нажатое человеком — его: остановка по выходу программы такой сеанс не тронет.
         _auto = null;
@@ -282,10 +282,27 @@ public partial class WatchView : UserControl
             return;
         }
 
+        if (_starting)
+            return;
+
         // Кисти — здесь, в потоке окна: строки собираются в фоне.
         _brushes = Palette();
 
-        if (!StartSession())
+        // Правила со всеми списками читаются в фоне: прямо из кнопки это стоило
+        // потоку окна те же 0,54–0,64 с, что при запуске окна (StartSessionAsync).
+        PowerButton.IsEnabled = false;
+        bool started;
+
+        try
+        {
+            started = await StartSessionAsync();
+        }
+        finally
+        {
+            PowerButton.IsEnabled = true;
+        }
+
+        if (!started || _watch is not { } watch)
         {
             Say(_note);
             return;
@@ -294,36 +311,7 @@ public partial class WatchView : UserControl
         ShowPower(true);
         // Строкой под кнопками это отъедало у таблицы высоту — в подсказку.
         Say(null);
-        ClockText.ToolTip = $"Правил {_watch!.RuleCount}, режим «{_watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
-    }
-
-    /// <summary>
-    /// Начинает наблюдение, если оно ещё не идёт, — и без открытого раздела.
-    /// </summary>
-    /// <remarks>
-    /// Нужно автопополнению маршрутов программ (13.10): оно видит соединения
-    /// только через наблюдение, и ждать, пока человек нажмёт «Начать»,
-    /// значило бы молча не пополнять. Зовётся при запуске окна, если у какой-то
-    /// программы пополнение включено, и при включении выключателя.
-    /// </remarks>
-    /// <returns><c>false</c> — не началось; причина в <see cref="_note"/>.</returns>
-    internal static bool StartSession()
-    {
-        // Начинается в фоне (StartSessionAsync) — второй сеанс ETW с тем же
-        // именем не создался бы, а этот вот-вот будет.
-        if (_watch is not null || _starting)
-            return true;
-
-        try
-        {
-            Begin(Create());
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Failed(ex);
-            return false;
-        }
+        ClockText.ToolTip = $"Правил {watch.RuleCount}, режим «{watch.Mode}». Журнал — {ConnectionWatch.DefaultJournal}.";
     }
 
     /// <summary>Наблюдение начинается в фоне.</summary>
@@ -392,14 +380,23 @@ public partial class WatchView : UserControl
     }
 
     /// <summary>
-    /// То же, что <see cref="StartSession"/>, но правила и сессия ETW — в фоне.
+    /// Начинает наблюдение, если оно ещё не идёт, — и без открытого раздела;
+    /// правила и сессия ETW — в фоне.
     /// </summary>
     /// <remarks>
-    /// Для запуска окна (автопополнение маршрутов программ): ConnectionWatch.Start
-    /// читает правила со всеми списками, и в потоке окна это стоило 0,54–0,64 с
-    /// замирания «Главной» на каждом запуске (журнал сторожа владельца 13.10,
-    /// секунда в секунду с «наблюдение начато»).
+    /// <para>
+    /// Нужно автопополнению маршрутов программ (13.10): оно видит соединения
+    /// только через наблюдение, и ждать, пока человек нажмёт «Начать»,
+    /// значило бы молча не пополнять.
+    /// </para>
+    /// <para>
+    /// В фоне — потому что ConnectionWatch.Start читает правила со всеми
+    /// списками, и в потоке окна это стоило 0,54–0,64 с замирания «Главной»
+    /// на каждом запуске (журнал сторожа владельца 13.10, секунда в секунду
+    /// с «наблюдение начато»).
+    /// </para>
     /// </remarks>
+    /// <returns><c>false</c> — не началось; причина в <see cref="_note"/>.</returns>
     internal static async Task<bool> StartSessionAsync()
     {
         if (_watch is not null || _starting)
@@ -409,7 +406,14 @@ public partial class WatchView : UserControl
 
         try
         {
-            var watch = await Task.Run(Create);
+            // Прежний сеанс гасится в фоне (StopSession) — имя сессии ETW одно
+            // на машину, и новый ждёт, пока старый уйдёт.
+            var stopping = _stopping;
+            var watch = await Task.Run(async () =>
+            {
+                await stopping;
+                return Create();
+            });
             Begin(watch);
             return true;
         }
@@ -460,12 +464,19 @@ public partial class WatchView : UserControl
         // остановить, раз раздел этого больше не делает.
         if (!_exitHooked && Application.Current is { } app)
         {
-            app.Exit += (_, _) => StopSession();
+            app.Exit += (_, _) => StopSession(wait: true);
             _exitHooked = true;
         }
 
         _work = new CancellationTokenSource();
-        _ = ReadAsync(_watch, _work.Token);
+
+        // Task.Run, а не прямой вызов: Begin идёт в потоке окна, и await внутри
+        // чтения возвращался бы туда же — на каждое соединение решение правил,
+        // строка журнала наблюдения (запись на диск) и пополнение списков
+        // программ шли в потоке окна (нашлось 05.11 по разбору подвисаний).
+        // Всё, что чтение трогает, — под замком Gate или через диспетчер.
+        var token = _work.Token;
+        _ = Task.Run(() => ReadAsync(watch, token));
 
         if (_open is { } open)
             open.Dispatcher.BeginInvoke(() => open.ShowPower(true));
@@ -1214,22 +1225,47 @@ public partial class WatchView : UserControl
         back.Start();
     }
 
-    /// <summary>Останавливает сеанс — кнопкой или с выходом из программы.</summary>
-    private static void StopSession()
+    /// <summary>Сеанс, который гасится в фоне; следующий ждёт его конца.</summary>
+    private static Task _stopping = Task.CompletedTask;
+
+    /// <summary>Останавливает сеанс — кнопкой, с выходом программы или из программы.</summary>
+    /// <remarks>
+    /// Остановка сессии ETW ждёт поток-насос до 3 с (EtwConnectionSource), и прежде
+    /// её ждал поток окна — на кнопке и на выходе игры с автопополнением
+    /// (AutoFillWatch зовёт это через окно). Теперь — в фоне, а до конца
+    /// ждёт только выход из программы (<paramref name="wait"/>).
+    /// </remarks>
+    private static void StopSession(bool wait = false)
     {
         _work?.Cancel();
         _work = null;
 
-        if (_watch is not null)
+        if (_watch is { } watch)
         {
-            // Синхронно и до конца: сессия ETW переживает процесс, и брошенная
-            // она останется в системе именем NetZapret до перезагрузки.
-            _watch.DisposeAsync().AsTask().GetAwaiter().GetResult();
             _watch = null;
+            var before = _stopping;
+
+            _stopping = Task.Run(async () =>
+            {
+                try
+                {
+                    await before;
+                    await watch.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Journal.Write("наблюдение", "сеанс не остановился чисто: " + ex.GetBaseException().Message);
+                }
+            });
         }
 
         lock (Gate)
             _pending.Clear();
+
+        // Синхронно и до конца: сессия ETW переживает процесс, и брошенная
+        // она останется в системе именем NetZapret до перезагрузки.
+        if (wait)
+            _stopping.Wait(TimeSpan.FromSeconds(5));
     }
 
     /// <summary>
