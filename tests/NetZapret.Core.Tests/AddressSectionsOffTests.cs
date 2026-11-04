@@ -5,9 +5,9 @@ using Xunit;
 namespace NetZapret.Core.Tests;
 
 /// <summary>
-/// Выключенная в «Маршрутах» часть по адресам гасит и секцию пресета (№52, 03.11):
-/// «Запасной путь по адресам» Discord выключен по умолчанию, а «discord.com
-/// (IP fallback)» по тому же списку прежде работала всегда.
+/// Выключенная в «Маршрутах» часть по адресам гасит и секцию пресета (№52, 03.11).
+/// «Запасной путь по адресам» Discord с 04.11 по умолчанию «десинк»: на «discord.com
+/// (IP fallback)» по его списку держится голос Discord, и гасит её только своё «выключено».
 /// </summary>
 public sealed class AddressSectionsOffTests : IDisposable
 {
@@ -41,17 +41,12 @@ public sealed class AddressSectionsOffTests : IDisposable
     }
 
     [Fact]
-    public void OutOfTheBoxTheDiscordFallbackIsOff()
-    {
-        Assert.Contains("ipset-discord.txt", AddressSectionsOff.Choose(Rules("")));
-    }
-
-    [Fact]
     public void PartsOnByDefaultKeepTheirSections()
     {
-        // Telegram, YouTube, Twitter по адресам включены по умолчанию — их секции не трогаются.
+        // Запасной путь Discord, Telegram, YouTube, Twitter по адресам — секции не трогаются.
         var off = AddressSectionsOff.Choose(Rules(""));
 
+        Assert.DoesNotContain("ipset-discord.txt", off);
         Assert.DoesNotContain("ipset-telegram.txt", off);
         Assert.DoesNotContain("ipset-youtube.txt", off);
         Assert.DoesNotContain("ipset-twitter.txt", off);
@@ -72,17 +67,30 @@ public sealed class AddressSectionsOffTests : IDisposable
         Assert.DoesNotContain("ipset-discord.txt", off);
     }
 
-    [Fact]
-    public void OwnOffTurnsAPartOff()
+    [Theory]
+    [InlineData("ipset-telegram.txt")]
+    [InlineData("ipset-discord.txt")]
+    public void OwnOffTurnsAPartOff(string list)
     {
-        var off = AddressSectionsOff.Choose(Rules("""
+        var off = AddressSectionsOff.Choose(Rules($"""
               - match: ipset
-                value: "config/lists/ipset-telegram.txt"
+                value: "config/lists/{list}"
                 mode: off
 
             """));
 
-        Assert.Contains("ipset-telegram.txt", off);
+        Assert.Contains(list, off);
+    }
+
+    [Fact]
+    public void PartsOffByDefaultStayOff()
+    {
+        // Photon и серверы ARC Raiders по адресам выключены по умолчанию — их
+        // список считается выключенным, как и прежде.
+        var off = AddressSectionsOff.Choose(Rules(""));
+
+        Assert.Contains("photon-network.txt", off);
+        Assert.Contains("arc-raiders-network.txt", off);
     }
 
     [Fact]

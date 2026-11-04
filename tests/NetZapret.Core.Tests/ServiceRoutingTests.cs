@@ -240,11 +240,54 @@ public sealed class ServiceRoutingTests : IDisposable
     }
 
     /// <summary>
-    /// У частей, выключенных по умолчанию, нет заводского правила.
+    /// Часть, чей список берёт секция пресета, показана «десинк», пока человек её не выключит.
+    /// </summary>
+    /// <remarks>
+    /// Запасной путь Discord (04.11): окно показывало «выключено», а секция
+    /// «discord.com (IP fallback)» работала у всех, и на ней держался голос.
+    /// Без winws2 («кроме РФ») — ответ движка, как у любой части.
+    /// </remarks>
+    [Fact]
+    public void APresetDesyncPartShowsDesyncUntilTurnedOff()
+    {
+        File.WriteAllLines(Path.Combine(_root, "config", "lists", "ipset-discord.txt"), ["34.0.48.0/24"]);
+
+        var service = new ServiceDefinition
+        {
+            Name = "Discord",
+            Parts = [new ServicePart { Name = "Запасной путь", List = "config/lists/ipset-discord.txt", ByAddress = true, PresetDesync = true }],
+        };
+
+        var plain = ServiceRouting.Describe(service, Load("mode: selective"), _root, EmptyUserRules());
+
+        Assert.False(plain[0].Off);
+        Assert.False(plain[0].Explicit);
+        Assert.Equal("десинк", plain[0].DescribeMode());
+        Assert.Equal("десинк", plain[0].DescribeDefault());
+
+        var users = Path.Combine(_root, "rules.user.yaml");
+        var file = UserRulesFile.Load(users);
+        file.SetOff(MatchKind.IpSet, "config/lists/ipset-discord.txt");
+        file.Save();
+
+        var off = ServiceRouting.Describe(service, Load("mode: selective"), _root, UserRulesFile.Load(users));
+
+        Assert.True(off[0].Off);
+        Assert.Equal("десинк", off[0].DescribeDefault());
+
+        var tunnel = ServiceRouting.Describe(service, Load("mode: proxy"), _root, EmptyUserRules());
+
+        Assert.Equal(RoutingMode.Proxy, tunnel[0].Mode);
+    }
+
+    /// <summary>
+    /// У частей, выключенных по умолчанию или отданных секции пресета, нет заводского правила.
     /// </summary>
     /// <remarks>
     /// Иначе «Маршруты» показывали бы «выключено», а правило действовало:
     /// заводское гасит только «выключено», выбранное человеком (mode: off).
+    /// Списку секции пресета правило движка и не нужно: запасной путь Discord —
+    /// 3,4 млн адресов, оно перебило бы голос Discord, YouTube QUIC и X.
     /// </remarks>
     [Fact]
     public void DefaultOffPartsHaveNoFactoryRule()
@@ -257,7 +300,7 @@ public sealed class ServiceRoutingTests : IDisposable
                 continue;
 
             var factory = RuleSetLoader.LoadRawRules(rules).Select(r => r.Value.Replace('\\', '/')).ToList();
-            var off = ServiceCatalog.All.SelectMany(s => s.Parts).Where(p => p.DefaultOff).ToList();
+            var off = ServiceCatalog.All.SelectMany(s => s.Parts).Where(p => p.DefaultOff || p.PresetDesync).ToList();
 
             Assert.NotEmpty(off);
             Assert.All(off, p => Assert.DoesNotContain(p.List, factory, StringComparer.OrdinalIgnoreCase));

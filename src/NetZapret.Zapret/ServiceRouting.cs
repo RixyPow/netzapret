@@ -129,12 +129,24 @@ public static class ServiceRouting
 
             var mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine);
             var plain = own is null ? engine : Without(engine, kind, part.List);
+            var byDefault = own is null ? mode : part.ByAddress ? AddressMode(entries[0], plain) : ModeFor(entries[0], plain);
+
+            // Список берёт секция пресета, а движок правил о нём не знает
+            // (ServicePart.PresetDesync): без своего правила часть ведёт десинк —
+            // там, где winws2 вообще работает.
+            if (part.PresetDesync && engine.RuleSet.Operating is OperatingMode.Selective or OperatingMode.DesyncOnly)
+            {
+                byDefault = RoutingMode.Desync;
+
+                if (own is null)
+                    mode = RoutingMode.Desync;
+            }
 
             result.Add(new PartStatus
             {
                 Part = part,
                 Mode = mode,
-                DefaultMode = own is null ? mode : part.ByAddress ? AddressMode(entries[0], plain) : ModeFor(entries[0], plain),
+                DefaultMode = byDefault,
                 DefaultOff = part.DefaultOff,
                 DomainCount = entries.Count,
                 Explicit = own is not null,
