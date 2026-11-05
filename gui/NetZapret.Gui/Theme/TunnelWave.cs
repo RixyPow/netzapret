@@ -43,6 +43,9 @@ public sealed class TunnelWave : FrameworkElement
     /// <summary>Откуда (долей ширины) волна в полную силу: левее — надпись «Работает».</summary>
     private const double TextZone = 0.38;
 
+    /// <summary>За сколько секунд стена вырастает из линии при запуске.</summary>
+    private const double WallRise = 0.8;
+
     private readonly List<TunnelShape.Packet> _packets = [];
     private readonly Random _random = new(5);
 
@@ -52,6 +55,12 @@ public sealed class TunnelWave : FrameworkElement
     private double _pass;
     private double _passTarget;
     private double _traffic = 0.4;
+
+    /// <summary>Сколько стены видно, 0–1: в покое её нет, при запуске растёт.</summary>
+    private double _wallShown;
+
+    /// <summary>Состояние уже показывалось: первое — без роста стены.</summary>
+    private bool _known;
 
     private bool _want;
     private bool _moving;
@@ -87,7 +96,7 @@ public sealed class TunnelWave : FrameworkElement
     /// <param name="colour">Цвет состояния — тот же, что у точки внизу «Главной».</param>
     /// <param name="wall">Цвет барьера в покое (приглушённый текст темы).</param>
     /// <param name="pass">Доля, проходящая сквозь барьер, 0–1.</param>
-    /// <param name="idle">Движки стоят: ровная линия у барьера, без волн.</param>
+    /// <param name="idle">Движки стоят: ровная линия, без волн и без барьера.</param>
     /// <param name="flicker">Запуск: барьер мерцает, проход то больше, то меньше.</param>
     /// <param name="broken">Движок упал: барьер цветом состояния, волны медленные.</param>
     public void Show(Color colour, Color wall, double pass, bool idle, bool flicker, bool broken)
@@ -108,6 +117,16 @@ public sealed class TunnelWave : FrameworkElement
             _idle = idle;
             _packets.Clear();
         }
+
+        // Стена — только у работающего обхода: одна у ровной линии «Остановлено»
+        // она стояла посреди карточки ни к чему (снимок владельца 05.11). Растёт
+        // из линии, когда обход запускают. Первое состояние раздела — сразу как
+        // есть: «Главная» пересоздаётся при каждом возврате, и стена росла бы
+        // всякий раз, будто движки только что подняли.
+        if (!_known || idle || !Motion.Enabled)
+            _wallShown = idle ? 0 : 1;
+
+        _known = true;
 
         // Неподвижный кадр — с готовым проходом, а не с тем, что был до смены.
         if (!Motion.Enabled || idle)
@@ -251,6 +270,9 @@ public sealed class TunnelWave : FrameworkElement
         double target = _flicker ? _passTarget * (0.5 + 0.5 * Math.Sin(_time * 2.5)) : _passTarget;
         _pass += (target - _pass) * Math.Min(1, dt * 3);
 
+        if (!_idle && _wallShown < 1)
+            _wallShown = Math.Min(1, _wallShown + dt / WallRise);
+
         for (int i = 0; i < _packets.Count; i++)
             _packets[i] = _packets[i] with { X = _packets[i].X + _packets[i].Speed * dt };
 
@@ -300,13 +322,18 @@ public sealed class TunnelWave : FrameworkElement
                 break;
         }
 
-        if (_flicker && _moving)
-            dc.PushOpacity(0.45 + 0.4 * Math.Sin(_time * 5));
+        if (_wallShown <= 0)
+            return;
 
-        dc.DrawRoundedRectangle(_wallFill, _wall, new Rect(barrier - 3, h * 0.12, 6, h * 0.78), 3, 3);
+        // Растёт из линии вверх и вниз разом, с замедлением к концу, и проявляется.
+        double rise = 1 - Math.Pow(1 - _wallShown, 3);
+        double top = baseline - (baseline - h * 0.12) * rise;
+        double bottom = baseline + (h * 0.90 - baseline) * rise;
+        double opacity = rise * (_flicker && _moving ? 0.45 + 0.4 * Math.Sin(_time * 5) : 1);
 
-        if (_flicker && _moving)
-            dc.Pop();
+        dc.PushOpacity(opacity);
+        dc.DrawRoundedRectangle(_wallFill, _wall, new Rect(barrier - 3, top, 6, Math.Max(bottom - top, 1)), 3, 3);
+        dc.Pop();
     }
 
     private static StreamGeometry Line(double width, Func<double, double> y)
