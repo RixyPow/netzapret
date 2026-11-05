@@ -42,6 +42,12 @@ public sealed class NewProtocolsTests
         + "?publickey=" + Uri.EscapeDataString(PublicKey)
         + "&address=10.8.1.2&mtu=1376&jc=4&jmin=40&jmax=70&s1=0&s2=0&h1=100-200&h2=2&h3=3&h4=4#AWG";
 
+    // AmneziaWG 3.1: ключ защиты заголовков, диапазоны и выключатели — движок знает их с 2.7.0.
+    private static readonly string Amnezia3 = Amnezia.Replace("#AWG", "", StringComparison.Ordinal)
+        + "&s3=20&s4=16&header_protection_key=" + Uri.EscapeDataString(PublicKey)
+        + "&content_padding_addition=50-100&rekey_after_time=100-140&max_handshake_attempts=20"
+        + "&random_trailers=true&disable_cookies=true#AWG3";
+
     private const string AmneziaConf = """
         [Interface]
         PrivateKey = K1mwfCsDrWYcuV34G7RXrAiJoatFKtI6/NPLfwCavVQ=
@@ -236,11 +242,12 @@ public sealed class NewProtocolsTests
     {
         Assert.True(WireGuardConf.TryParse(AmneziaConf, "AWG файлом", out var fromConf, out _));
 
-        var servers = new[] { Parse(Tuic), Parse(Hysteria), Parse(AnyTls), Parse(Amnezia), fromConf! };
+        var servers = new[] { Parse(Tuic), Parse(Hysteria), Parse(AnyTls), Parse(Amnezia), fromConf!, Parse(Amnezia3) };
         var engine = RuleSetLoader.Load("mode: selective\nrules: []\n");
         var result = new SingBoxConfigCompiler().Compile(engine.RuleSet, servers, new SingBoxOptions());
 
-        Assert.Equal(5, result.UsedServers.Count);
+        Assert.Equal(6, result.UsedServers.Count);
+        Assert.Contains("\"header_protection_key\"", result.Json);
 
         var check = SingBoxCheck.Run(result.Json);
         Assert.True(check.Ok, check.Said);

@@ -193,10 +193,11 @@ public static class AmneziaKey
         foreach (var key in AmneziaFields)
             Line(text, key, Field(key));
 
-        // Незнакомую движку маскировку — тоже: разбор файла её назовёт, а не потеряет.
+        // AmneziaWG 3 (в JSON — через «_») движок знает; незнакомую маскировку —
+        // тоже переносим: разбор файла её назовёт, а не потеряет.
         foreach (var (key, _) in fields)
         {
-            if (AmneziaSettings.Unsupported([key]).Count > 0)
+            if (AmneziaSettings.IsGeneration3(key) || AmneziaSettings.Unsupported([key]).Count > 0)
                 Line(text, key, Text(fields, key));
         }
 

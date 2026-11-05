@@ -307,60 +307,99 @@ public sealed class AmneziaKeyTests
     }
 
     /// <summary>
-    /// AmneziaWG 3: защита заголовков обязана совпадать с сервером — без неё
-    /// «не ответит»; односторонние параметры едут в ссылке молча.
+    /// AmneziaWG 3 доходит до движка: ключ защиты заголовков, диапазоны и выключатели —
+    /// в блок <c>amnezia</c>, без оговорки «не ответит».
     /// </summary>
     /// <remarks>
-    /// Вики zapret.moe (amnezia-3-0, 29.10): HeaderProtectionKey и включённый
-    /// RandomTrailers — на обеих сторонах, ContentPaddingAddition, DisableCookies
-    /// и таймеры — на своей. Прежде все они пропадали без слова: регулярка
-    /// ловила только «буква и цифры».
+    /// Сборка extended знает третье поколение с 2.7.0 (04.09); 29.10 я записал
+    /// обратное, и ключ защиты в конфиг не шёл — сервер с ним не ответил бы.
+    /// Вопрос в обсуждении 05.11: будет ли поддержка AmneziaWG 3.
     /// </remarks>
     [Fact]
-    public void Header_protection_of_AmneziaWG_3_is_kept_and_named()
+    public void AmneziaWG_3_reaches_the_engine()
     {
         var conf = Conf.Replace(
             "Jc = 4",
-            "Jc = 4\nHeaderProtectionKey = 9Jq3kQp1Zq0sS3m0hYkL3Qe8q1b7m2dQyM0rT4uV5w8=\nRandomTrailers = on\nContentPaddingAddition = 0-64\nRekeyAfterTime = 100-140",
+            "Jc = 4\nHeaderProtectionKey = 9Jq3kQp1Zq0sS3m0hYkL3Qe8q1b7m2dQyM0rT4uV5w8=\nRandomTrailers = on\n"
+                + "ContentPaddingAddition = 0-64\nRekeyAfterTime = 100-140\nMaxHandshakeAttempts = 20\nDisableCookies = off",
             StringComparison.Ordinal);
 
         var found = KeyImport.FromText(conf, "AWG 3");
 
+        // Ключ защиты идёт в конфиг, но рукопожатие с ним на нашей проверке не проходило — говорим.
+        Assert.Contains("HeaderProtectionKey", found.Note);
+        Assert.DoesNotContain("не знает", found.Note);
+
+        // Файл → ссылка → тот же блок: ссылка живёт ключом в книге подписок.
         var link = Assert.Single(found.Keys);
-        Assert.Contains("headerprotectionkey=", link);
-        Assert.Contains("contentpaddingaddition=", link);
-        Assert.Equal("это AmneziaWG 3 (HeaderProtectionKey, RandomTrailers), а движок говорит только на 2.0 — сервер не ответит", found.Note);
-        Assert.Equal(found.Note, KeyImport.FromText(link).Note);
-
         Assert.True(ProxyUriParser.TryParse(link, out var server, out _));
-        Assert.DoesNotContain("header", server!.AmneziaOptions, StringComparison.OrdinalIgnoreCase);
+
+        var block = System.Text.Json.Nodes.JsonNode.Parse(server!.AmneziaOptions!)!.AsObject();
+        Assert.Equal("9Jq3kQp1Zq0sS3m0hYkL3Qe8q1b7m2dQyM0rT4uV5w8=", (string?)block["header_protection_key"]);
+        Assert.Equal("0-64", (string?)block["content_padding_addition"]);
+        Assert.Equal("100-140", (string?)block["rekey_after_time"]);
+        Assert.Equal(20, (long?)block["max_handshake_attempts"]);
+        Assert.True((bool?)block["random_trailers"]);
+        Assert.False(block.ContainsKey("disable_cookies"));
+        Assert.Equal(4, (int?)block["jc"]);
     }
 
+    /// <summary>В JSON AmneziaVPN — через «_»; читается так же.</summary>
     [Fact]
-    public void One_sided_AmneziaWG_3_parameters_give_no_note()
+    public void Snake_case_names_are_read_too()
     {
-        var conf = Conf.Replace(
-            "Jc = 4",
-            "Jc = 4\nContentPaddingAddition = 0-64\nDisableCookies = on\nRandomTrailers = off\nKeepaliveTimeout = 10",
-            StringComparison.Ordinal);
+        var json = AmneziaSettings.From(key => key switch
+        {
+            "s3" => "20",
+            "s4" => "16",
+            "header_protection_key" => "k",
+            "keepalive_timeout" => " 8 - 12 ",
+            "disable_cookies" => "true",
+            _ => null,
+        });
 
-        var found = KeyImport.FromText(conf, "AWG 3");
-
-        Assert.Null(found.Note);
-        Assert.Contains("disablecookies=on", Assert.Single(found.Keys));
+        Assert.Equal("""{"s3":20,"s4":16,"header_protection_key":"k","keepalive_timeout":"8-12","disable_cookies":true}""", json);
     }
 
+    [Theory]
+    [InlineData("ContentPaddingAddition", "много")]
+    [InlineData("RandomTrailers", "maybe")]
+    public void A_bad_value_fails_this_server_not_the_whole_config(string key, string value) =>
+        Assert.Throws<FormatException>(() => AmneziaSettings.From(k => k == key ? value : null));
+
     [Fact]
-    public void Old_and_new_unknown_parameters_are_both_named()
+    public void Only_old_unknown_parameters_are_named()
     {
         var note = AmneziaSettings.Note(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["header_protection_key"] = "x", ["j1"] = "<r 2>", ["publickey"] = "k",
         });
 
-        Assert.Equal("это AmneziaWG 3 (HeaderProtectionKey), а движок говорит только на 2.0 — сервер не ответит; "
+        Assert.Equal("защиту заголовков AmneziaWG 3 (HeaderProtectionKey) движок принимает, но на нашей проверке "
+            + "рукопожатие с ней не проходило — сервер может не ответить; "
             + "параметров AmneziaWG J1 движок не знает — сервер может не ответить", note);
     }
+
+    /// <summary>Без S3 и S4 больше 12 движок с ключом защиты не поднимается вовсе (опыт 05.11).</summary>
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("12", "20")]
+    [InlineData("20", "4")]
+    public void Header_protection_needs_big_s3_and_s4(string? s3, string? s4) =>
+        Assert.Throws<FormatException>(() => AmneziaSettings.From(key => key switch
+        {
+            "s3" => s3,
+            "s4" => s4,
+            "header_protection_key" => "k",
+            _ => null,
+        }));
+
+    [Fact]
+    public void One_sided_parameters_alone_give_no_note() =>
+        Assert.Null(AmneziaSettings.Note(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["content_padding_addition"] = "50-100", ["random_trailers"] = "true", ["keepalive_timeout"] = "10",
+        }));
 
     [Fact]
     public void Known_masking_gives_no_note()
