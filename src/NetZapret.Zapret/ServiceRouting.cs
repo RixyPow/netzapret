@@ -127,9 +127,16 @@ public static class ServiceRouting
             var own = userRules.Entries.FirstOrDefault(e =>
                 e.Match == kind && e.Enabled && e.Matches(part.List));
 
-            var mode = part.ByAddress ? AddressMode(entries[0], engine) : ModeFor(entries[0], engine);
+            // Путь части — по имени, которое не забрала узкая часть внутри неё
+            // (ServicePart.Within): её правило проверяется раньше. 05.11 «Квесты
+            // и API» (discord.com) ушли через VPN, и «Сайт и переписка», чьё
+            // первое имя тоже discord.com, показывалась «через VPN» при своём
+            // правиле «десинк» — владелец принял это за зависимость маршрутов.
+            var probe = part.ByAddress ? entries[0] : OwnName(service, part, entries, zapretRoot);
+
+            var mode = part.ByAddress ? AddressMode(probe, engine) : ModeFor(probe, engine);
             var plain = own is null ? engine : Without(engine, kind, part.List);
-            var byDefault = own is null ? mode : part.ByAddress ? AddressMode(entries[0], plain) : ModeFor(entries[0], plain);
+            var byDefault = own is null ? mode : part.ByAddress ? AddressMode(probe, plain) : ModeFor(probe, plain);
 
             // Список берёт секция пресета, а движок правил о нём не знает
             // (ServicePart.PresetDesync): без своего правила часть ведёт десинк —
@@ -154,12 +161,33 @@ public static class ServiceRouting
                 // Своё «выключено» — либо ничего своего у части, выключенной
                 // по умолчанию (ServicePart.DefaultOff).
                 Off = own is { Off: true } || own is null && part.DefaultOff,
-                Example = entries[0],
+                Example = probe,
                 Domains = entries,
             });
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Первое имя списка, которого нет у узких частей этой же части; все забраны — первое.
+    /// </summary>
+    internal static string OwnName(
+        ServiceDefinition service,
+        ServicePart part,
+        IReadOnlyList<string> entries,
+        string? zapretRoot)
+    {
+        var narrow = service.Parts
+            .Where(p => !p.ByAddress && p.Within is { } within
+                && string.Equals(within, part.List, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(p => HostListReader.Read(p.List, zapretRoot, out _))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return narrow.Count == 0
+            ? entries[0]
+            : entries.FirstOrDefault(e => !narrow.Contains(e) && !narrow.Any(n => e.EndsWith("." + n, StringComparison.OrdinalIgnoreCase)))
+                ?? entries[0];
     }
 
     /// <summary>Тот же движок без своего правила на этот список.</summary>
