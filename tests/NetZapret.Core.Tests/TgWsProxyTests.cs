@@ -45,6 +45,10 @@ public sealed class TgWsProxyTests
         // Медиа (DC203) без доменов за Cloudflare не грузилось — тот же замер.
         Assert.Contains("--default-domains", arguments);
         Assert.DoesNotContain("--secret", arguments);
+
+        // Медиа через Cloudflare по HTTP/2 (2.7.0) висли, картинки не грузились
+        // (05.11) — только WebSocket.
+        Assert.Contains("--no-h2", arguments);
     }
 
     /// <summary>Все значения ключа: «--dc-ip 2:… --dc-ip 4:…» → [2:…, 4:…].</summary>

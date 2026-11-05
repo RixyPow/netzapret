@@ -108,6 +108,16 @@ public static class TgWsProxy
     /// явно (<see cref="TgWsProxyRoutes"/>), а Cloudflare остаётся запасным путём, —
     /// выключателями на вкладке «TG Proxy», по умолчанию выключенными (владелец 21.10).
     /// </para>
+    /// <para>
+    /// <c>--no-h2</c> — медиа через Cloudflare по WebSocket, как до 2.7.0. С 2.7.0
+    /// прокси по умолчанию шлёт их запросами HTTP/2 к <c>/api</c>, и у владельца
+    /// 05.11 картинки в Telegram перестали грузиться: прямой адрес ушёл
+    /// в «остывание», все 180 сеансов медиа по HTTP/2 (stopblocking, nebally,
+    /// sadnews…) повисли — ни одного закрытия, ни байта, Telegram открывал новые
+    /// каждые 0,25 с. На 2.6.0 те же домены по WebSocket отдали медиа 101 МБ.
+    /// Откат на WebSocket при неудаче HTTP/2 у прокси есть, но висящий сеанс
+    /// неудачей не считается.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<string> Arguments(int port, TgWsProxyRoutes? routes = null)
     {
@@ -119,6 +129,7 @@ public static class TgWsProxy
             "--link-ip", "127.0.0.1",
             "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--default-domains",
+            "--no-h2",
         };
 
         if (routes.DirectMain)
