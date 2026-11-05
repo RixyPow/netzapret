@@ -81,7 +81,10 @@ internal static class ProgramIcons
             var image = new BitmapImage();
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
-            image.UriSource = new Uri(Path.GetFullPath(file));
+
+            // Байтами, а не адресом: по адресу WPF спрашивает зону безопасности
+            // файла через COM — то же, что у флагов (FlagImages).
+            image.StreamSource = new MemoryStream(File.ReadAllBytes(file));
             image.EndInit();
             image.Freeze();
 
