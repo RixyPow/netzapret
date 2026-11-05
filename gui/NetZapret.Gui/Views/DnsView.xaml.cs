@@ -68,7 +68,8 @@ public sealed class ResolverRow
 
     /// <summary>
     /// Пометка по обзору у этого человека: «блокируется» — DoH не прошёл,
-    /// «UDP подменяют» — открытый DNS перехвачен; <c>null</c> — нечего сказать.
+    /// «UDP подменяют» — открытый DNS подменяет ответы, «не тронут» — ни того ни
+    /// другого; <c>null</c> — нечего сказать (<see cref="ResolverVerdicts.Judge"/>).
     /// </summary>
     /// <remarks>
     /// Zapret GUI ставит такие пометки списком (04.11: Cloudflare и Google —
@@ -260,10 +261,14 @@ public partial class DnsView : UserControl
 
         if (_last is not { } last)
         {
-            SurveyWhen.Text = "Обзора в этом запуске окна ещё не было.";
+            SurveyWhen.Text = _verdictsAt is { } verdictsAt
+                ? $"Обзора в этом запуске окна ещё не было; пометки у резолверов — с проверки {When(verdictsAt)}."
+                : "Обзора в этом запуске окна ещё не было.";
             SurveyBest.Text = auto
                 ? "Автовыбор поставит быстрейший по DoH после «Проверить»."
-                : "Задержки и пометки у резолверов ниже появятся после «Проверить».";
+                : _verdictsAt is null
+                    ? "Задержки и пометки у резолверов ниже появятся после «Проверить»."
+                    : "Задержки у резолверов ниже появятся после «Проверить».";
             SurveyWhen.ToolTip = SurveyBest.ToolTip = null;
             return;
         }
@@ -460,6 +465,11 @@ public partial class DnsView : UserControl
         }));
 
         _rows = shown.Select(x => x.Row).ToList();
+
+        // Пометки — с прошлых обзоров, и после перезапуска тоже (ResolverVerdicts);
+        // задержки — только из обзора в этом запуске (ShowLast). До привязки
+        // списка: строки об изменениях не извещают.
+        ShowVerdicts(ResolverVerdicts.Load());
 
         // Разделами, как у Zapret GUI: посредники наверху, свои внизу.
         Resolvers.ItemsSource = shown
@@ -721,16 +731,6 @@ public partial class DnsView : UserControl
         if (row is null)
             return;
 
-        (row.Badge, row.BadgeKey, row.BadgeTip) = result switch
-        {
-            { DohMs: null, DohFailure.Length: > 0 } => ("блокируется", "Danger",
-                $"DoH к нему у вас не проходит ({result.DohFailure}): туннель через него имён не узнает."),
-            { Intercepted: true } or { Spoofed: > 0 } => ("UDP подменяют", "Warn",
-                "Открытый DNS к нему у вас перехватывают по дороге. Туннель спрашивает по DoH — ему это не мешает; "
-                + "Windows, у которой этот адрес записан резолвером, получает подменённые ответы."),
-            _ => ((string?)null, "Danger", (string?)null),
-        };
-
         if (result.DohMs is { } ms)
         {
             row.Latency = $"{ms:0} мс";
@@ -746,6 +746,54 @@ public partial class DnsView : UserControl
         row.Latency = result.DohFailure.Length > 0 ? result.DohFailure : "не отвечает";
         row.Key = "Danger";
     }
+
+    /// <summary>Когда проверены пометки, которые сейчас видны; <c>null</c> — пометок нет.</summary>
+    private DateTime? _verdictsAt;
+
+    /// <summary>Пометки по обзору — в строки списка, по ключу резолвера.</summary>
+    private void ShowVerdicts(IReadOnlyDictionary<string, ResolverVerdict> verdicts)
+    {
+        foreach (var row in _rows)
+            ShowVerdict(row, verdicts.GetValueOrDefault(row.Address));
+
+        _verdictsAt = verdicts.Count == 0 ? null : verdicts.Values.Max(v => v.At);
+    }
+
+    /// <summary>
+    /// Пометка резолвера: «блокируется», «UDP подменяют» или «не тронут»;
+    /// <c>null</c> — снять.
+    /// </summary>
+    /// <remarks>
+    /// Судит библиотека (<see cref="ResolverVerdicts.Judge"/>) и она же их помнит
+    /// между запусками — в подсказке поэтому всегда сказано, когда проверено.
+    /// </remarks>
+    private static void ShowVerdict(ResolverRow row, ResolverVerdict? verdict)
+    {
+        var checkedAt = verdict is null ? string.Empty : $" Проверено {When(verdict.At)}.";
+
+        (row.Badge, row.BadgeKey, row.BadgeTip) = verdict?.Kind switch
+        {
+            ResolverVerdictKind.Blocked => ("блокируется", "Danger",
+                $"DoH к нему у вас не проходит ({verdict.Detail}): туннель через него имён не узнает.{checkedAt}"),
+            ResolverVerdictKind.UdpSpoofed => ("UDP подменяют", "Warn",
+                $"Открытый DNS к нему у вас отвечает на закрытые имена подменой ({verdict.Detail}). "
+                + "Обычно это перехват по дороге: туннелю, который спрашивает по DoH, он не мешает, "
+                + $"а Windows, у которой этот адрес записан резолвером, получает подменённые ответы.{checkedAt}"),
+            ResolverVerdictKind.Untouched => ("не тронут", "Accent",
+                (row.Udp.Length == 0
+                    ? "Провайдер его у вас не трогает: DoH проходит, открытого DNS у резолвера нет."
+                    : "Провайдер его у вас не трогает: DoH проходит, открытый DNS отвечает без подмены.")
+                + checkedAt),
+            _ => ((string?)null, "Danger", (string?)null),
+        };
+    }
+
+    /// <summary>«сегодня в 10:40», «вчера в 18:05», «03.11 в 21:13».</summary>
+    private static string When(DateTime at) =>
+        at.Date == DateTime.Today ? $"сегодня в {at:HH:mm}"
+        : at.Date == DateTime.Today.AddDays(-1) ? $"вчера в {at:HH:mm}"
+        : $"{at:dd.MM} в {at:HH:mm}";
+
     private void Redraw()
     {
         var shown = Resolvers.ItemsSource;
@@ -842,6 +890,7 @@ public partial class DnsView : UserControl
             }
 
             CustomDns.Save(provider);
+            ResolverVerdicts.Remember([row], DateTime.Now);
 
             var parts = new List<string>();
 
@@ -1095,6 +1144,10 @@ public partial class DnsView : UserControl
 
                 done.Add(row);
                 Fill(choices, row);
+
+                if (choices.FirstOrDefault(r => r.Address == ResolverVerdicts.Key(row.Provider)) is { } choice)
+                    ShowVerdict(choice, ResolverVerdicts.Judge(row, DateTime.Now));
+
                 Redraw();
             });
 
@@ -1115,6 +1168,8 @@ public partial class DnsView : UserControl
                   + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.");
 
             _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now) { Crypt = measured };
+            ShowVerdicts(ResolverVerdicts.Remember(all, _last.At));
+            Redraw();
         }
         catch (OperationCanceledException)
         {
@@ -1122,7 +1177,11 @@ public partial class DnsView : UserControl
 
             // Прерван уходом с вкладки — что успели, то и запомнили.
             if (done.Count > 0)
+            {
                 _last = new LastSurvey(done.ToList(), $"Обзор прерван: проверено {done.Count} из {DnsSurvey.All.Count}.", DateTime.Now);
+                ShowVerdicts(ResolverVerdicts.Remember(done, _last.At));
+                Redraw();
+            }
         }
         catch (Exception ex)
         {
