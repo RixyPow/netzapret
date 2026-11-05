@@ -58,6 +58,18 @@ public sealed class DnsCryptTests : IDisposable
         Assert.DoesNotContain("[anonymized_dns]", config);
     }
 
+    /// <summary>Замер шифрованных поднимает свой dnscrypt-proxy на свободном порту и без кэша.</summary>
+    [Fact]
+    public void TheProbeListensElsewhereWithoutCache()
+    {
+        var config = DnsCrypt.Config(DnsCryptMode.Odoh, _root, port: 61234, cache: false);
+
+        Assert.Contains("listen_addresses = ['127.0.0.1:61234']", config);
+        Assert.Contains("cache = false", config);
+        Assert.DoesNotContain($":{DnsCrypt.Port}'", config);
+        Assert.Contains("cache = true", DnsCrypt.Config(DnsCryptMode.Odoh, _root));
+    }
+
     [Fact]
     public void AnonymizedGoesThroughRelays()
     {

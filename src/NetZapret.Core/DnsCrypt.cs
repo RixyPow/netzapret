@@ -109,14 +109,16 @@ public static class DnsCrypt
     /// Бутстрап — Quad9 и Google по UDP: он нужен лишь для имён в адресах
     /// списков, сами серверы в списках заданы адресами.
     /// </remarks>
-    public static string Config(DnsCryptMode mode, string directory)
+    /// <param name="port">Порт на петле; замер (<c>DnsCryptProbe</c>) берёт свободный, чтобы не мешать работающему.</param>
+    /// <param name="cache">Кэш ответов; замеру он врал бы — второй вопрос отвечался бы из памяти.</param>
+    public static string Config(DnsCryptMode mode, string directory, int port = Port, bool cache = true)
     {
         var text = new StringBuilder();
 
         void Line(string line) => text.Append(line).Append('\n');
         string Quote(string value) => "'" + value.Replace("\\", "/", StringComparison.Ordinal) + "'";
 
-        Line($"listen_addresses = ['{Address}:{Port.ToString(CultureInfo.InvariantCulture)}']");
+        Line($"listen_addresses = ['{Address}:{port.ToString(CultureInfo.InvariantCulture)}']");
         Line("ipv6_servers = false");
         Line($"dnscrypt_servers = {(mode == DnsCryptMode.Odoh ? "false" : "true")}");
         Line("doh_servers = false");
@@ -126,7 +128,7 @@ public static class DnsCrypt
         Line("require_dnssec = false");
         Line("bootstrap_resolvers = ['9.9.9.11:53', '8.8.8.8:53']");
         Line("netprobe_timeout = 5");
-        Line("cache = true");
+        Line(cache ? "cache = true" : "cache = false");
         Line("log_level = 2");
 
         Line(string.Empty);

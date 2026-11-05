@@ -214,7 +214,11 @@ public partial class DnsView : UserControl
     private CancellationTokenSource? _work;
 
     /// <summary>Последний обзор за сеанс: строки, итог словами и время.</summary>
-    private sealed record LastSurvey(IReadOnlyList<DnsSurveyRow> Rows, string Status, DateTime At);
+    private sealed record LastSurvey(IReadOnlyList<DnsSurveyRow> Rows, string Status, DateTime At)
+    {
+        /// <summary>Замеры шифрованных (<see cref="DnsCryptProbe"/>) — свои, обзор их не знает.</summary>
+        public List<DnsCryptLatency> Crypt { get; init; } = [];
+    }
 
     /// <summary>
     /// Последний обзор — общий для всех заходов на вкладку.
@@ -237,6 +241,9 @@ public partial class DnsView : UserControl
 
         foreach (var row in last.Rows)
             Fill(choices, row);
+
+        foreach (var crypt in last.Crypt)
+            FillCrypt(choices, crypt);
 
         Survey.ItemsSource = last.Rows.Select(SurveyRow.From).ToList();
         SurveyHead.Visibility = Visibility.Visible;
@@ -651,6 +658,25 @@ public partial class DnsView : UserControl
         }
     }
 
+    /// <summary>Задержка шифрованного режима (<see cref="DnsCryptProbe"/>) — в его строку.</summary>
+    private static void FillCrypt(IReadOnlyList<ResolverRow> rows, DnsCryptLatency result)
+    {
+        var row = rows.FirstOrDefault(r => r.Address == CryptTag + DnsCrypt.Key(result.Mode));
+
+        if (row is null)
+            return;
+
+        if (result.Ms is { } ms)
+        {
+            row.Latency = $"{ms:0} мс";
+            row.Key = ms < 500 ? "Accent" : "Warn";
+            return;
+        }
+
+        row.Latency = result.Failure;
+        row.Key = "Danger";
+    }
+
     /// <summary>Задержка DoH из обзора — в строку списка выбора.</summary>
     private static void Fill(IReadOnlyList<ResolverRow> rows, DnsSurveyRow result)
     {
@@ -1010,6 +1036,19 @@ public partial class DnsView : UserControl
 
         Redraw();
 
+        // Шифрованные обзор не меряет — это dnscrypt-proxy, а не адрес DoH;
+        // их меряет свой замер, параллельно (DnsCryptProbe).
+        var active = AppSettings.Load(AppSettings.DefaultPath).DnsCryptActive;
+        var token = _work.Token;
+        var measured = new List<DnsCryptLatency>();
+        var crypt = Task.WhenAll(DnsCrypt.Modes.Select(async mode =>
+        {
+            var result = await Task.Run(() => DnsCryptProbe.MeasureAsync(mode, mode == active, token), token);
+            measured.Add(result);
+            FillCrypt(choices, result);
+            Redraw();
+        }));
+
         try
         {
             var progress = new Progress<DnsSurveyRow>(row =>
@@ -1029,6 +1068,8 @@ public partial class DnsView : UserControl
 
             PickFastest(all, choices);
 
+            await crypt;
+
             var intercepted = all.Where(r => r.Spoofed > 0).Select(r => r.Provider.Name).ToList();
 
             SaySurvey(intercepted.Count == 0
@@ -1036,7 +1077,7 @@ public partial class DnsView : UserControl
                 : $"По UDP подменяют ответы: {string.Join(", ", intercepted)}. "
                   + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.");
 
-            _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now);
+            _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now) { Crypt = measured };
         }
         catch (OperationCanceledException)
         {
