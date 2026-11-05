@@ -61,22 +61,69 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
                         <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
                             <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE9D9;" />
                         </Border>
 
-                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                        <Grid Grid.Column="1" Margin="0,0,12,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Обзор резолверов" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
                                                 Content="Задержка по DoH, DoT и обычному UDP — лучшая из трёх.&#x0a;&#x0a;«Кто отвечает» — адрес, с которого на самом деле ходит наружу тот, кто ответил на UDP, и его сеть. Если спрашивали 8.8.8.8, а ответил резолвер российской сети, запрос перехвачен по дороге.&#x0a;&#x0a;«Подмена» — сколько из пяти давно закрытых имён резолвер по UDP разрешил не туда: в заглушку, в пустоту или в один адрес на всех. Одно расхождение адресов подменой не считается — у сетей доставки узлов десятки.&#x0a;&#x0a;Мерится сеть провайдера: запросы идут через адаптер мимо нашего туннеля." />
                             </StackPanel>
-                            <TextBlock x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
+                            <TextBlock Grid.Row="1" x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
                                        TextWrapping="Wrap" TextTrimming="WordEllipsis"
                                        LineHeight="17" LineStackingStrategy="BlockLineHeight" Height="51"
                                        Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
-                        </StackPanel>
+
+                            <!--
+                                Когда был обзор и кто вышел быстрее — постоянно на виду,
+                                как состояние автозамены в соседней карточке: без них
+                                низ карточки пустовал, а узнать, мерилось ли вообще,
+                                можно было только по таблице ниже.
+                            -->
+                            <StackPanel Grid.Row="2">
+                                <TextBlock x:Name="SurveyWhen" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="SurveyBest" Style="{StaticResource Caption}" Margin="0,3,0,0"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                        </Grid>
+
+                        <!--
+                            Автовыбор — здесь, внизу карточки, вровень с автозаменой
+                            соседней: он и есть следствие обзора (ставит быстрейший
+                            по DoH после каждого), а отдельной строкой во всю ширину
+                            под таблицей занимал место (05.11, по просьбе владельца).
+                        -->
+                        <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="Автовыбор по задержке" VerticalAlignment="Center" TextWrapping="Wrap"
+                                       ToolTip="Программа сама замерит резолверы из вашего места и поставит самый быстрый по DoH. Замер повторяется при каждом обзоре; выбор резолвера строкой ниже автовыбор выключает." />
+
+                            <TextBlock Grid.Column="1" x:Name="AutoDnsWord" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" Margin="8,0,10,0" />
+
+                            <ToggleButton Grid.Column="2" x:Name="AutoDnsSwitch" Style="{StaticResource Switch}"
+                                          Click="OnAutoDns" VerticalAlignment="Center"
+                                          ToolTip="Сама ставить самый быстрый по DoH резолвер после каждого обзора" />
+                        </Grid>
 
                         <Button Grid.Column="2" x:Name="SurveyButton" Style="{StaticResource Primary}" Padding="18,9"
                                 Content="Проверить" Click="OnSurvey" VerticalAlignment="Top" />
@@ -97,6 +144,10 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
 
                         <Border Style="{StaticResource IconTile}" Margin="0,0,14,0">
                             <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE718;" />
@@ -132,23 +183,24 @@
                             <TextBlock x:Name="PinsWatched" Style="{StaticResource Caption}" Margin="0,3,0,0"
                                        TextTrimming="CharacterEllipsis" />
 
-                            <Grid Margin="0,10,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <TextBlock Text="Автозамена раз в 6 часов" VerticalAlignment="Center" TextWrapping="Wrap" />
-
-                                <TextBlock Grid.Column="1" x:Name="AutoRepinWord" Style="{StaticResource Caption}"
-                                           VerticalAlignment="Center" Margin="8,0,10,0" />
-
-                                <ToggleButton Grid.Column="2" x:Name="AutoRepinSwitch" Style="{StaticResource Switch}"
-                                              Click="OnAutoRepin" VerticalAlignment="Center"
-                                              ToolTip="Сама проверять пины раз в 6 часов и менять мёртвые на живые" />
-                            </Grid>
                         </StackPanel>
+
+                        <Grid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="Автозамена раз в 6 часов" VerticalAlignment="Center" TextWrapping="Wrap" />
+
+                            <TextBlock Grid.Column="1" x:Name="AutoRepinWord" Style="{StaticResource Caption}"
+                                       VerticalAlignment="Center" Margin="8,0,10,0" />
+
+                            <ToggleButton Grid.Column="2" x:Name="AutoRepinSwitch" Style="{StaticResource Switch}"
+                                          Click="OnAutoRepin" VerticalAlignment="Center"
+                                          ToolTip="Сама проверять пины раз в 6 часов и менять мёртвые на живые" />
+                        </Grid>
 
                         <Button Grid.Column="2" x:Name="PinsButton" Style="{StaticResource Ghost}" Padding="18,9"
                                 Content="Проверить" Click="OnPins" VerticalAlignment="Top"
@@ -280,35 +332,6 @@
                     </ItemsControl>
                 </StackPanel>
             </gui:Card>
-
-            <!--
-                Автовыбор (отзыв пользователя и решение владельца, 25.09):
-                программа сама ставит быстрейший по DoH из тех, что годятся
-                в туннель, — после каждого обзора. Выбор строкой ниже
-                автовыбор выключает.
-            -->
-            <Button Style="{StaticResource Choice}" Margin="0,14,0,0" Click="OnAutoDns">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <Border Style="{StaticResource IconTile}" Margin="0,0,14,0" VerticalAlignment="Center">
-                        <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE916;" />
-                    </Border>
-
-                    <StackPanel Grid.Column="1" Margin="0,0,16,0" VerticalAlignment="Center">
-                        <TextBlock Text="Автовыбор по задержке" FontWeight="SemiBold" />
-                        <TextBlock x:Name="AutoDnsLine" Style="{StaticResource Caption}" Margin="0,3,0,0"
-                                   TextWrapping="Wrap"
-                                   Text="Программа сама замерит резолверы из вашего места и поставит самый быстрый по DoH. Замер повторяется при каждой проверке выше; выбор строкой ниже автовыбор выключает." />
-                    </StackPanel>
-                    <ToggleButton Grid.Column="2" x:Name="AutoDnsSwitch" Style="{StaticResource Switch}"
-                                  IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
-                </Grid>
-            </Button>
 
             <gui:Card Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>

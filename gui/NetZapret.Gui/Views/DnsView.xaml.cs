@@ -253,6 +253,40 @@ public partial class DnsView : UserControl
         Redraw();
     }
 
+    /// <summary>Две строки под итогом обзора: когда мерилось и кто быстрее всех по DoH.</summary>
+    private void ShowSurveyWhen()
+    {
+        bool auto = AppSettings.Load(AppSettings.DefaultPath) is { DnsAuto: true, UseRouterDns: false };
+
+        if (_last is not { } last)
+        {
+            SurveyWhen.Text = "Обзора в этом запуске окна ещё не было.";
+            SurveyBest.Text = auto
+                ? "Автовыбор поставит быстрейший по DoH после «Проверить»."
+                : "Задержки и пометки у резолверов ниже появятся после «Проверить».";
+            SurveyWhen.ToolTip = SurveyBest.ToolTip = null;
+            return;
+        }
+
+        int answered = last.Rows.Count(r => r.DohMs is not null);
+        int asked = last.Rows.Count(r => r.Provider.TlsAddress is not null);
+
+        SurveyWhen.Text = $"Последний обзор в {last.At:HH:mm}: по DoH ответили {answered} из {asked}.";
+
+        var best = last.Rows
+            .Where(r => r.Provider.Choosable && r.DohMs is not null)
+            .OrderBy(r => r.DohMs)
+            .FirstOrDefault();
+
+        SurveyBest.Text = best is null
+            ? "Ни один резолвер, годный туннелю, по DoH не ответил."
+            : $"Быстрее всех по DoH — {best.Provider.Name}, {best.DohMs:0} мс"
+              + (auto ? " · автовыбор ставит быстрейшего" : string.Empty) + ".";
+
+        SurveyWhen.ToolTip = SurveyWhen.Text;
+        SurveyBest.ToolTip = SurveyBest.Text;
+    }
+
     private CancellationTokenSource? _logos;
 
     /// <summary>Приставка ключа выбора у шифрованных (<see cref="DnsCrypt"/>).</summary>
@@ -447,6 +481,7 @@ public partial class DnsView : UserControl
         Status.Text = "Задержку покажет обзор выше.";
 
         ShowLast();
+        ShowSurveyWhen();
 
         StartLogos();
     }
@@ -497,6 +532,7 @@ public partial class DnsView : UserControl
 
         // Автовыбор при DNS роутера хранится, но не действует (RouterDnsSettings.Select).
         AutoDnsSwitch.IsChecked = settings.DnsAuto && !settings.UseRouterDns;
+        AutoDnsWord.Text = AutoDnsSwitch.IsChecked == true ? "вкл." : "выкл.";
 
         // Заполняем, не поднимая события выбора: иначе показ состояния
         // тут же записал бы его обратно в настройки и позвал уведомление
@@ -893,6 +929,7 @@ public partial class DnsView : UserControl
 
             next.Save(AppSettings.DefaultPath);
             ShowChosen(next);
+            ShowSurveyWhen();
 
             if (next.DnsAuto)
             {
@@ -1096,6 +1133,7 @@ public partial class DnsView : UserControl
         }
         finally
         {
+            ShowSurveyWhen();
             SurveyButton.IsEnabled = true;
         }
     }
