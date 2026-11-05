@@ -622,9 +622,17 @@ public static class SupportReport
         @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
         RegexOptions.Compiled);
 
-    /// <summary>Поля с ключами в JSON и YAML: значение прячется, имя поля остаётся.</summary>
+    /// <summary>Поля с ключами в JSON, YAML, .conf и дампе WireGuard: значение прячется, имя поля остаётся.</summary>
+    /// <remarks>
+    /// Не справился с настройкой WireGuard — sing-box печатает в журнал весь дамп
+    /// устройства строками «имя=значение» (опыт 05.11, AmneziaWG 3 с малым S3):
+    /// <c>private_key</c>, <c>public_key</c>, <c>preshared_key</c> (без второго «_»,
+    /// как в UAPI WireGuard) и <c>header_protection_key</c> — шестнадцатеричными.
+    /// Два последних правило не знало, и ключи уходили бы в отчёт. Структура дампа —
+    /// jc, s3, endpoint, allowed_ip — остаётся: по ней и разбирают.
+    /// </remarks>
     private static readonly Regex KeyField = new(
-        @"(""?(?:password|passwd|private_key|privateKey|public_key|publicKey|pre_shared_key|short_id|shortId|uuid|token|secret|auth_str|obfs_password)""?\s*[:=]\s*)(""[^""]*""|[^\s,}\]]+)",
+        @"(""?(?:password|passwd|private_?key|public_?key|pre_?shared_?key|header_?protection_?key|psk|short_id|shortId|uuid|token|secret|auth_str|obfs_password)""?\s*[:=]\s*)(""[^""]*""|[^\s,}\]]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>

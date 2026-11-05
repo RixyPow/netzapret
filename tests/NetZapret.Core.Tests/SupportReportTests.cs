@@ -355,6 +355,46 @@ public sealed class SupportReportTests : IDisposable
         Assert.Equal(3, redacted.Split("%USERPROFILE%").Length - 1);
     }
 
+    /// <summary>
+    /// Дамп WireGuard в журнале движка: ключи скрыты, структура для разбора — на месте.
+    /// </summary>
+    /// <remarks>
+    /// Вид — с настоящего отказа sing-box 2.7.3 (05.11, AmneziaWG 3 с малым S3);
+    /// ключи здесь выдуманные. preshared_key и header_protection_key прежде уходили в отчёт.
+    /// </remarks>
+    [Fact]
+    public void AWireGuardDumpKeepsItsShapeButNotItsKeys()
+    {
+        var keys = Enumerable.Range(1, 4).Select(i => new string((char)('a' + i), 64)).ToArray();
+        var log = string.Join('\n',
+            "FATAL[0000] start service: start outbound: start endpoint/wireguard[wg]: setup wireguard: ",
+            $"private_key={keys[0]}",
+            "jc=4",
+            "s3=5",
+            "h1=1",
+            "i1=<b 0xc700>",
+            $"header_protection_key={keys[1]}",
+            $"public_key={keys[2]}",
+            "endpoint=203.0.113.7:51820",
+            $"preshared_key={keys[3]}",
+            "allowed_ip=0.0.0.0/0: IPC error -22: failed to merge with device: S3 must be more then 12 to use headerProtection",
+            $"PresharedKey = {keys[3]}");
+
+        var redacted = SupportReport.Redact(log, []);
+
+        foreach (var key in keys)
+            Assert.DoesNotContain(key, redacted);
+
+        foreach (var shape in new[]
+        {
+            "private_key=", "header_protection_key=", "public_key=", "preshared_key=", "PresharedKey = ",
+            "jc=4", "s3=5", "i1=<b 0xc700>", "endpoint=203.0.113.7:51820", "S3 must be more then 12",
+        })
+        {
+            Assert.Contains(shape, redacted);
+        }
+    }
+
     [Fact]
     public void ALongLogKeepsItsBeginningAndEnd()
     {
