@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 
 namespace NetZapret.Gui;
 
@@ -17,22 +16,43 @@ namespace NetZapret.Gui;
 /// трафика (<see cref="Traffic"/>).
 /// </para>
 /// <para>
-/// Рисуется в <see cref="OnRender"/> ломаными по три точки, без эффектов:
-/// свечение — широкая бледная линия под верхней, а не DropShadowEffect, —
-/// текст «Работает» лежит поверх и под эффектом потерял бы ClearType.
-/// Такт — анимацией свойства 30 раз в секунду, как было у огоньков: таймер
-/// Windows шагает по 15,6 мс и дал бы рывки, а CompositionTarget.Rendering
-/// будит окно каждый кадр, даже когда двигать нечего. Только пока элемент
-/// на экране и анимации включены (<see cref="Motion.Enabled"/>); иначе — один
-/// неподвижный кадр.
+/// Рисуется в <see cref="OnRender"/> ломаными, без эффектов: свечение —
+/// широкая бледная линия под верхней, а не DropShadowEffect, — текст
+/// «Работает» лежит поверх и под эффектом потерял бы ClearType.
+/// </para>
+/// <para>
+/// Такт — от кадров отрисовки окна (<c>CompositionTarget.Rendering</c>), но кадр
+/// волны — не чаще <see cref="MinFrame"/>: на 144 Гц это каждый второй кадр
+/// экрана, 72 в секунду, на 60 Гц — каждый. До 05.11 такт шёл анимацией свойства
+/// с 30 кадрами в секунду: шаг движения — ровно 33,3 мс на кадр, а сами кадры
+/// приходили неровно — стенд волн 05.11 (окно размера карточки, 144 Гц):
+/// медиана 32 мс, но 10 % кадров быстрее 20,6 мс и 10 % медленнее 47,6.
+/// Одинаковый шаг в неровные моменты глаз видит рывками. Теперь шаг — само время
+/// кадра: на «Главной» с настройками владельца 13,9 мс, при пропущенном кадре
+/// экрана — 21, и движение от пропуска не дёргается.
+/// </para>
+/// <para>
+/// И прежний такт шёл, пока окно спрятано в трей (до закрытия через минуту):
+/// 11–22 % ядра на невидимую волну. Теперь при спрятанном окне её нет.
+/// </para>
+/// <para>
+/// Кадр за это подешевел: форма горба считается один раз на кадр, а не для
+/// каждой из девяти копий, шаг ломаной — 6 точек вместо 3 (отклонение на
+/// верхушке горба — треть точки), ровные куски — только концами. Тот же стенд:
+/// поток окна 0,33 мс на кадр вместо 2,0; отрисовка — около 4 мс вместо 7.
+/// Кадров при этом вдвое больше, и открытая «Главная» стоит дороже: 33–41 % ядра
+/// на весь процесс против 26–32 % (замер 05.11, два прогона).
+/// Только пока элемент на экране и анимации включены (<see cref="Motion.Enabled"/>);
+/// иначе — один неподвижный кадр.
 /// </para>
 /// </remarks>
 public sealed class TunnelWave : FrameworkElement
 {
-    private const int FrameRate = 30;
+    /// <summary>Кадр волны — не чаще: на 144 Гц выходит каждый второй кадр экрана, на 60 Гц — каждый.</summary>
+    private static readonly TimeSpan MinFrame = TimeSpan.FromMilliseconds(11);
 
-    /// <summary>Шаг ломаной по горизонтали: на 1000 точек ширины — 333 вершины на линию.</summary>
-    private const double Step = 3;
+    /// <summary>Шаг ломаной по горизонтали: на 1000 точек ширины — 167 вершин на линию.</summary>
+    private const double Step = 6;
 
     /// <summary>Копий горба в «веере».</summary>
     private const int Layers = 9;
@@ -49,7 +69,9 @@ public sealed class TunnelWave : FrameworkElement
     private readonly List<TunnelShape.Packet> _packets = [];
     private readonly Random _random = new(5);
 
-    private double _last;
+    /// <summary>Время кадра отрисовки, на котором волна рисовалась последний раз; <c>null</c> — ещё ни разу.</summary>
+    private TimeSpan? _drawnAt;
+
     private double _time;
     private double _spawn;
     private double _pass;
@@ -81,8 +103,11 @@ public sealed class TunnelWave : FrameworkElement
         IsHitTestVisible = false;
         SnapsToDevicePixels = false;
 
-        Loaded += (_, _) => Move(_want);
+        Loaded += (_, _) => Move(_want && IsVisible);
         Unloaded += (_, _) => Move(false, keepWish: true);
+
+        // Окно спрятано в трей — кадры отрисовки ему ни к чему.
+        IsVisibleChanged += (_, _) => Move(_want && IsVisible && IsLoaded, keepWish: true);
     }
 
     /// <summary>Сила трафика 0–1: частота, рост и скорость волн.</summary>
@@ -134,7 +159,7 @@ public sealed class TunnelWave : FrameworkElement
 
         bool move = !idle && Motion.Enabled;
         _want = move;
-        Move(move && IsLoaded);
+        Move(move && IsLoaded && IsVisible);
 
         if (!_moving)
         {
@@ -209,10 +234,6 @@ public sealed class TunnelWave : FrameworkElement
 
     // --- Такт ---------------------------------------------------------------------
 
-    private static readonly DependencyProperty ClockProperty = DependencyProperty.Register(
-        nameof(ClockProperty), typeof(double), typeof(TunnelWave),
-        new PropertyMetadata(0.0, (d, e) => ((TunnelWave)d).OnClock((double)e.NewValue)));
-
     private void Move(bool on, bool keepWish = false)
     {
         if (!keepWish && !on)
@@ -225,34 +246,31 @@ public sealed class TunnelWave : FrameworkElement
 
         if (!on)
         {
-            BeginAnimation(ClockProperty, null);
+            CompositionTarget.Rendering -= OnFrame;
             return;
         }
 
         if (_packets.Count == 0)
             Seed();
 
-        // Час такта за час времени, повторы копятся (IsCumulative) — как у огоньков 20.10.
-        const double hour = 3600;
-        _last = 0;
-
-        var clock = new DoubleAnimation(0, hour, TimeSpan.FromSeconds(hour))
-        {
-            RepeatBehavior = RepeatBehavior.Forever,
-            IsCumulative = true,
-        };
-
-        Timeline.SetDesiredFrameRate(clock, FrameRate);
-        BeginAnimation(ClockProperty, clock);
+        _drawnAt = null;
+        CompositionTarget.Rendering += OnFrame;
     }
 
-    private void OnClock(double time)
+    private void OnFrame(object? sender, EventArgs e)
     {
-        if (!_moving)
+        if (!_moving || e is not RenderingEventArgs frame)
             return;
 
-        double dt = Math.Clamp(time - _last, 0, 0.1);
-        _last = time;
+        // Время кадра, а не часы: по нему кадр и покажется. Кадр, вышедший раньше
+        // срока, пропускается — на 144 Гц так рисуется каждый второй.
+        var at = frame.RenderingTime;
+
+        if (_drawnAt is { } drawn && at - drawn < MinFrame)
+            return;
+
+        double dt = _drawnAt is { } last ? Math.Clamp((at - last).TotalSeconds, 0, 0.1) : 0;
+        _drawnAt = at;
         _time += dt;
 
         Advance(dt);
@@ -303,14 +321,19 @@ public sealed class TunnelWave : FrameworkElement
         double baseline = h * 0.70;
         double lane = baseline + h * 0.13;
 
+        var xs = Samples(w);
+
         if (!_idle)
-            dc.DrawGeometry(null, _echo, Line(w, x => lane - TunnelShape.Echo(_packets, x, barrier, _pass) * 0.55 * TunnelShape.Fade(x, w, TextZone)));
+            dc.DrawGeometry(null, _echo, Line(xs, lane, xs.Select(x => TunnelShape.Echo(_packets, x, barrier, _pass) * 0.55 * TunnelShape.Fade(x, w, TextZone)).ToArray(), 1));
+
+        // Форма горба одна на все копии — копия отличается только ростом.
+        var hump = xs.Select(x => TunnelShape.Wave(_packets, x, barrier, _pass) * TunnelShape.Fade(x, w, TextZone)).ToArray();
 
         // Верхняя копия — со свечением под собой; остальные — ниже ростом, сходятся к линии.
         for (int i = 1; i <= Layers; i++)
         {
             double scale = (double)i / Layers;
-            var line = Line(w, x => baseline - TunnelShape.Wave(_packets, x, barrier, _pass) * scale * TunnelShape.Fade(x, w, TextZone));
+            var line = Line(xs, baseline, hump, scale);
 
             if (i == Layers)
                 dc.DrawGeometry(null, _glow, line);
@@ -336,19 +359,46 @@ public sealed class TunnelWave : FrameworkElement
         dc.Pop();
     }
 
-    private static StreamGeometry Line(double width, Func<double, double> y)
+    /// <summary>Точки ломаной по горизонтали: через <see cref="Step"/>, последняя — у правого края.</summary>
+    private static double[] Samples(double width)
     {
+        int count = (int)Math.Ceiling(width / Step) + 1;
+        var xs = new double[count];
+
+        for (int i = 0; i < count; i++)
+            xs[i] = Math.Min(i * Step, width);
+
+        return xs;
+    }
+
+    /// <summary>
+    /// Ломаная на высоте <paramref name="baseline"/>, поднятая на <paramref name="rise"/>
+    /// с ростом <paramref name="scale"/>.
+    /// </summary>
+    /// <remarks>
+    /// Ровный кусок — только концами: точки посреди прямой ничего не рисуют, а
+    /// отрисовке стоят столько же, сколько точки горба.
+    /// </remarks>
+    private static StreamGeometry Line(double[] xs, double baseline, double[] rise, double scale)
+    {
+        const double Flat = 0.02;
+        var points = new List<Point>(xs.Length);
+
+        for (int i = 1; i < xs.Length; i++)
+        {
+            bool flat = i < xs.Length - 1
+                && Math.Abs(rise[i - 1] * scale) < Flat && Math.Abs(rise[i] * scale) < Flat && Math.Abs(rise[i + 1] * scale) < Flat;
+
+            if (!flat)
+                points.Add(new Point(xs[i], baseline - rise[i] * scale));
+        }
+
         var geometry = new StreamGeometry();
 
         using (var context = geometry.Open())
         {
-            context.BeginFigure(new Point(0, y(0)), false, false);
-
-            for (double x = Step; x < width + Step; x += Step)
-            {
-                double at = Math.Min(x, width);
-                context.LineTo(new Point(at, y(at)), true, true);
-            }
+            context.BeginFigure(new Point(xs[0], baseline - rise[0] * scale), false, false);
+            context.PolyLineTo(points, true, true);
         }
 
         geometry.Freeze();
