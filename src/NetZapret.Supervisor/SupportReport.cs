@@ -595,44 +595,9 @@ public static class SupportReport
 
     private static readonly Regex Ansi = new(@"\x1B\[[0-9;]*[A-Za-z]", RegexOptions.Compiled);
 
-    /// <summary>Ссылки прокси целиком: в них ключ стоит до адреса.</summary>
-    private static readonly Regex ProxyLink = new(
-        @"\b(?:vless|vmess|trojan|ss|ssr|hysteria2?|hy2|tuic|wireguard|wg|socks5?|anytls|naive\+https)://\S+",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
     /// <summary>Прочие ссылки: имя узла оставляем — по нему и разбирают, — путь и запрос нет.</summary>
-    /// <summary>
-    /// Секрет прокси Telegram: прокси печатает его при запуске («Secret: …»)
-    /// и в ссылке («secret=dd…», в том числе tg://proxy).
-    /// </summary>
-    /// <remarks>
-    /// Снаружи он бесполезен — прокси слушает только 127.0.0.1, — но чужой
-    /// секрет в присланном архиве незачем, а со сменой адреса прослушивания
-    /// он перестал бы быть безобидным.
-    /// </remarks>
-    private static readonly Regex TelegramSecret = new(
-        @"((?:Secret:\s+|secret=)(?:dd|ee)?)[0-9a-fA-F]{32}",
-        RegexOptions.Compiled);
-
     private static readonly Regex WebLink = new(
         @"\b(https?://[^/\s""'<>]+)[/?][^\s""'<>]*",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    private static readonly Regex Uuid = new(
-        @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
-        RegexOptions.Compiled);
-
-    /// <summary>Поля с ключами в JSON, YAML, .conf и дампе WireGuard: значение прячется, имя поля остаётся.</summary>
-    /// <remarks>
-    /// Не справился с настройкой WireGuard — sing-box печатает в журнал весь дамп
-    /// устройства строками «имя=значение» (опыт 05.11, AmneziaWG 3 с малым S3):
-    /// <c>private_key</c>, <c>public_key</c>, <c>preshared_key</c> (без второго «_»,
-    /// как в UAPI WireGuard) и <c>header_protection_key</c> — шестнадцатеричными.
-    /// Два последних правило не знало, и ключи уходили бы в отчёт. Структура дампа —
-    /// jc, s3, endpoint, allowed_ip — остаётся: по ней и разбирают.
-    /// </remarks>
-    private static readonly Regex KeyField = new(
-        @"(""?(?:password|passwd|private_?key|public_?key|pre_?shared_?key|header_?protection_?key|psk|short_id|shortId|uuid|token|secret|auth_str|obfs_password)""?\s*[:=]\s*)(""[^""]*""|[^\s,}\]]+)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -663,11 +628,10 @@ public static class SupportReport
         foreach (var secret in secrets.OrderByDescending(s => s.Length))
             result = result.Replace(secret, "<ссылка подписки скрыта>", StringComparison.OrdinalIgnoreCase);
 
-        result = ProxyLink.Replace(result, "<ссылка прокси скрыта>");
-        result = TelegramSecret.Replace(result, "$1<скрыт>");
+        // Ключи, ссылки прокси, секрет TG Proxy, UUID — те же правила, что при записи
+        // журнала (LogSecrets): старые журналы и чужие файлы чистятся и здесь.
+        result = LogSecrets.Scrub(result);
         result = WebLink.Replace(result, "$1/…");
-        result = KeyField.Replace(result, "$1\"<скрыто>\"");
-        result = Uuid.Replace(result, "<uuid>");
         result = ExitAddress.Replace(result, "$1<адрес скрыт>");
 
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);

@@ -41,6 +41,10 @@ public sealed class RollingLog : IDisposable
         if (_disposed)
             return;
 
+        // Ключ на диск не ложится вовсе: движок печатает их и сам (дамп WireGuard
+        // при отказе настройки, 05.11). Имя поля и строка остаются.
+        line = LogSecrets.Scrub(line);
+
         lock (_sync)
         {
             try

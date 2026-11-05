@@ -590,7 +590,8 @@ public partial class App : Application
             var log = Path.Combine("logs", "gui.log");
             Directory.CreateDirectory("logs");
 
-            File.AppendAllText(log, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {error}\n\n");
+            // Текст исключения бывает с куском конфига — ключи без значения, как во всех журналах.
+            File.AppendAllText(log, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}  {Supervisor.LogSecrets.Scrub(error.ToString())}\n\n");
             text += $"\n\nЗаписано в {Path.GetFullPath(log)}";
         }
         catch (Exception)

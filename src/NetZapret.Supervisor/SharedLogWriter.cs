@@ -87,6 +87,9 @@ public sealed class SharedLogWriter : TextWriter
         if (string.IsNullOrEmpty(value))
             return;
 
+        // Ключи — без значения, как в RollingLog: журнал окна тоже идёт в отчёт.
+        value = LogSecrets.Scrub(value);
+
         lock (_local)
         {
             bool held = false;
