@@ -106,10 +106,15 @@
             </ControlTemplate.Triggers>
         </ControlTemplate>
 
+        <!--
+            Скругление подсветки — внутренний край плашки: её 10 минус рамка 1,5.
+            С 05.11 до правки стояло 12 от прежней плашки в 50 точек без рамки,
+            и подсветка при наведении выходила круглее самой кнопки.
+        -->
         <Style x:Key="SplitLeft" TargetType="Button" BasedOn="{StaticResource SplitPart}">
             <Setter Property="Tag">
                 <Setter.Value>
-                    <CornerRadius>12,0,0,12</CornerRadius>
+                    <CornerRadius>8.5,0,0,8.5</CornerRadius>
                 </Setter.Value>
             </Setter>
             <Setter Property="Template" Value="{StaticResource SplitShape}" />
@@ -118,7 +123,7 @@
         <Style x:Key="SplitRight" TargetType="Button" BasedOn="{StaticResource SplitPart}">
             <Setter Property="Tag">
                 <Setter.Value>
-                    <CornerRadius>0,12,12,0</CornerRadius>
+                    <CornerRadius>0,8.5,8.5,0</CornerRadius>
                 </Setter.Value>
             </Setter>
             <Setter Property="Template" Value="{StaticResource SplitShape}" />
