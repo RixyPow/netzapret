@@ -270,7 +270,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Резолверы системы" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Кому Windows отдаёт запросы всего, что идёт мимо туннеля. Их выдаёт сеть или задаёт адаптер." />
+                                                Content="Кого спрашивает Windows. Их выдаёт сеть или задаёт адаптер. Пока работает туннель или DNS через движок, запросы к ним забирает движок и спрашивает выбранный резолвер; без движка Windows спрашивает их сама." />
                             </StackPanel>
 
                             <Border Margin="0,10,0,0" CornerRadius="9" Padding="10,7"

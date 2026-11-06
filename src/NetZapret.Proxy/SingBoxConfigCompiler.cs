@@ -1410,9 +1410,17 @@ public sealed class SingBoxConfigCompiler
                 : new JsonArray { options.TunAddress },
             ["mtu"] = options.TunMtu,
             ["auto_route"] = true,
-            // strict_route выключен намеренно: он добавляет фильтры WFP,
-            // блокирующие трафик мимо туннеля, а нам нужно, чтобы direct
-            // и desync спокойно уходили на реальный интерфейс к WinDivert.
+            // strict_route выключен. Прежде здесь стояло, что он закрывает весь
+            // трафик мимо туннеля, — неверно (чтение sing-tun tun_windows.go
+            // 05.11, обсуждение №55): общий запрет IPv4 там закомментирован.
+            // На Windows он ставит фильтры WFP: пропуск sing-box и адаптера TUN,
+            // запрет порта 53 по IPv4 и IPv6 всем прочим и, если у TUN нет
+            // IPv6-адреса, запрет всего IPv6. Нам это не годится: dnscrypt-proxy
+            // при запуске спрашивает 9.9.9.11:53 и 8.8.8.8:53 (DnsCrypt), наши
+            // проверки DNS ходят по UDP 53 мимо туннеля (SystemDnsCheck,
+            // DnsUpstream, проверка роутера), а без IPv6 в TUN пропал бы весь
+            // IPv6. Запрет DNS мимо туннеля, если понадобится, — своим фильтром
+            // с исключениями, как KillSwitch.
             ["strict_route"] = false,
             ["stack"] = "gvisor",
 
