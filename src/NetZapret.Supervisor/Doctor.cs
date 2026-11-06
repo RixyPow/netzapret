@@ -283,6 +283,106 @@ public static class Doctor
         };
     }
 
+    /// <summary>
+    /// Идут ли имена «через VPN» в туннель: резолверы Windows в TUN и подставной
+    /// адрес у имени, разрешённого самой Windows. Только в «Гибриде» при работающем туннеле.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Обсуждение №55 (05.11): с YogaDNS имена «через VPN» получали настоящий
+    /// адрес и шли мимо туннеля, а ни одна строка «Диагностики» этого не видела.
+    /// Замер у владельца в тот же день, движки подняты: 12 из 12 запросов
+    /// Windows ответил резолвер движка, тот же запрос мимо туннеля провайдер
+    /// подменяет за 3,6 мс — у него утечки нет.
+    /// </para>
+    /// <para>
+    /// Резолверы читаются при сборке конфига, и смену сети надзор не замечает:
+    /// резолвер нового роутера остаётся вне TUN до перезапуска движков.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<DoctorCheck> TunnelNames(AppSettings settings)
+    {
+        if (settings.Mode != OperatingMode.Selective || !settings.NeedsProxy)
+            return [];
+
+        var lines = new List<DoctorCheck>();
+
+        try
+        {
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            if (state is null || !state.IsSupervisorAlive() || !state.Services.Any(s => s.Name == "sing-box"))
+                return [];
+
+            var config = settings.ProxyConfigPath;
+            var fake = TunnelEndpoints.FakeRanges(config);
+            var (routes, _) = TunnelEndpoints.TunRoutes(config);
+
+            if (fake.Count == 0 || routes is null)
+                return [];
+
+            var resolvers = SystemResolvers.Discover();
+            var missed = TunnelNameCheck.Outside(resolvers, routes);
+            var linkLocal = resolvers.Where(TunnelNameCheck.IsLinkLocal).ToList();
+
+            if (missed.Count > 0)
+            {
+                lines.Add(Bad($"Резолвер системы {string.Join(", ", missed)} не заведён в туннель — "
+                    + "видимо, сеть сменилась после запуска движков. Его ответы приходят мимо движка, "
+                    + "и имена «через VPN» могут пойти мимо туннеля. Перезапустите движки."));
+            }
+
+            var engine = RuleSetLoader.LoadFor(settings);
+            RuleSetExpander.Expand(engine.RuleSet, ZapretPaths.Discover()?.Root);
+
+            var pinned = HostsEditor.Parse()
+                .Where(e => e.Enabled)
+                .SelectMany(e => e.Names)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var names = TunnelNameCheck.Candidates(engine, pinned);
+
+            if (names.Count == 0)
+                return lines;
+
+            using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            var verdict = Task.Run(() => TunnelNameCheck.CheckAsync(names, fake, limit.Token)).GetAwaiter().GetResult();
+
+            switch (verdict?.Kind)
+            {
+                case TunnelNameKind.Fake:
+                    lines.Add(Ok($"Имена «через VPN» получают подставной адрес движка: {verdict.Name} → {verdict.Addresses[0]}."));
+                    break;
+
+                case TunnelNameKind.Real:
+                    var cause = missed.Count > 0
+                        ? "Причина — резолвер вне туннеля, строка выше."
+                        : linkLocal.Count > 0
+                            ? $"Возможная причина — резолвер роутера по локальному IPv6 ({string.Join(", ", linkLocal)}): "
+                              + "запросы к такому адресу Windows шлёт прямо в адаптер, мимо туннеля."
+                            : "Частая причина — другая программа, перехватывающая DNS (YogaDNS, Simple DNSCrypt, "
+                              + "AdGuard, другой VPN): закройте её и перезапустите движки. Если всё то же — "
+                              + "ipconfig /flushdns и проверить снова: Windows могла запомнить адрес до запуска движков.";
+
+                    lines.Add(Bad($"{verdict.Name} по правилу «через VPN» получил настоящий адрес "
+                        + $"{string.Join(", ", verdict.Real.Take(3))}, а не подставной: DNS этого имени спрашивается "
+                        + "мимо движка, и соединение идёт мимо туннеля. " + cause));
+                    break;
+
+                case TunnelNameKind.Unresolved:
+                    lines.Add(Warn($"{verdict.Name} через Windows не разрешилось — проверить, что имена «через VPN» "
+                        + "идут в туннель, не вышло."));
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            lines.Add(Warn("Не проверилось, идут ли имена «через VPN» в туннель: " + ex.GetBaseException().Message));
+        }
+
+        return lines;
+    }
+
     /// <summary>Служба прокси у живого держателя; <c>null</c> — держателя нет или прокси у него нет.</summary>
     private static ServiceState? Held(SupervisorState? holder) =>
         holder is not null && holder.IsSupervisorAlive()
@@ -567,6 +667,8 @@ public static class Doctor
 
         if (SystemDnsCheck.Applies(settings) && SystemDns() is { } system)
             lines.Add(system);
+
+        lines.AddRange(TunnelNames(settings));
 
         try
         {

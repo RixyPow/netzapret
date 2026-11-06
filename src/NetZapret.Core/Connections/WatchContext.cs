@@ -48,22 +48,60 @@ public sealed class WatchContext
     private readonly IReadOnlyList<IpCidrRange> _fake;
     private readonly HashSet<IPAddress> _servers;
 
+    /// <summary>Сети, которые забирает TUN; <c>null</c> — неизвестно или всё.</summary>
+    private readonly IReadOnlyList<IpCidrRange>? _tunRoutes;
+
+    /// <summary>Сети, выведенные из TUN (<c>route_exclude_address</c>).</summary>
+    private readonly IReadOnlyList<IpCidrRange> _tunExcluded;
+
     /// <param name="fakeRanges">Диапазоны подставных адресов движка (<c>inet4_range</c>, <c>inet6_range</c>).</param>
     /// <param name="servers">Адреса серверов VPN из конфига движка.</param>
-    public WatchContext(IEnumerable<string> fakeRanges, IEnumerable<IPAddress> servers)
+    /// <param name="tunRoutes">
+    /// Что забирает выборочный TUN (<c>route_address</c>); <c>null</c> — не судить,
+    /// мимо ли туннеля соединение: перехват полный или о нём ничего не известно.
+    /// </param>
+    /// <param name="tunExcluded">Что из TUN выведено (<c>route_exclude_address</c>).</param>
+    public WatchContext(
+        IEnumerable<string> fakeRanges,
+        IEnumerable<IPAddress> servers,
+        IEnumerable<string>? tunRoutes = null,
+        IEnumerable<string>? tunExcluded = null)
     {
-        _fake = fakeRanges
-            .Select(r => { try { return IpCidrRange.Parse(r); } catch (RuleConfigurationException) { return null; } })
-            .OfType<IpCidrRange>()
-            .ToList();
-
+        _fake = Ranges(fakeRanges);
         _servers = servers.Select(Normal).ToHashSet();
+        _tunRoutes = tunRoutes is null ? null : Ranges(tunRoutes);
+        _tunExcluded = Ranges(tunExcluded ?? []);
     }
+
+    private static List<IpCidrRange> Ranges(IEnumerable<string> cidrs) => cidrs
+        .Select(r => { try { return IpCidrRange.Parse(r); } catch (RuleConfigurationException) { return null; } })
+        .OfType<IpCidrRange>()
+        .ToList();
 
     /// <summary>Без движка: ни подставных адресов, ни серверов.</summary>
     public static WatchContext None { get; } = new([], []);
 
     public bool IsFake(IPAddress address) => _fake.Any(r => r.Contains(Normal(address)));
+
+    /// <summary>
+    /// Уходит ли соединение с этим адресом мимо выборочного TUN.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №55 (05.11): при YogaDNS имя 2ip.io по правилу «через VPN»
+    /// получило настоящий 188.40.167.81, а не подставной, и наблюдение писало
+    /// «туннель» по ответу правил, хотя адрес в TUN не попадал вовсе. Подставной
+    /// адрес TUN забирает всегда; настоящий — только когда он в его сетях
+    /// (правила по адресу, пины, резолверы) и не выведен из них.
+    /// </remarks>
+    public bool BypassesTun(IPAddress address)
+    {
+        if (_tunRoutes is null || _fake.Count == 0)
+            return false;
+
+        address = Normal(address);
+
+        return !_tunRoutes.Any(r => r.Contains(address)) || _tunExcluded.Any(r => r.Contains(address));
+    }
 
     public bool IsServer(IPAddress address) => _servers.Contains(Normal(address));
 

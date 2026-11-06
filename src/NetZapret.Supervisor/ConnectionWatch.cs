@@ -88,9 +88,18 @@ public sealed class ConnectionWatch : IAsyncDisposable
             if (state is null || !state.IsSupervisorAlive() || !File.Exists(settings.ProxyConfigPath))
                 return WatchContext.None;
 
+            // Мимо ли туннеля — только в «Гибриде»: там TUN выборочный. Конфиг
+            // туннеля лежит и в «Десинке» от прошлого запуска, и его сети
+            // о нынешнем пути не говорят ничего.
+            var (routes, excluded) = settings.Mode == OperatingMode.Selective && settings.NeedsProxy
+                ? NetZapret.Proxy.TunnelEndpoints.TunRoutes(settings.ProxyConfigPath)
+                : (null, []);
+
             return new WatchContext(
                 NetZapret.Proxy.TunnelEndpoints.FakeRanges(settings.ProxyConfigPath),
-                NetZapret.Proxy.TunnelEndpoints.Read(settings.ProxyConfigPath));
+                NetZapret.Proxy.TunnelEndpoints.Read(settings.ProxyConfigPath),
+                routes,
+                excluded);
         }
         catch (Exception)
         {

@@ -63,6 +63,10 @@ public sealed record WatchEntry(
                 "мультикаст — поиск устройств в домашней сети"),
             not null when connection.IsLoopback || LocalNetworks.IsLocal(remote) => (WatchRoute.Local,
                 decision.Reason ?? "локальная сеть"),
+            not null when decision.Mode == RoutingMode.Proxy && context.BypassesTun(remote) => (WatchRoute.Direct,
+                BypassMark + (decision.Rule is null
+                    ? decision.Reason ?? "по умолчанию"
+                    : $"#{decision.Rule.Ordinal} {decision.Reason}")),
             _ => (Route(decision.Mode), decision.Rule is null
                 ? decision.Reason ?? "по умолчанию"
                 : $"#{decision.Rule.Ordinal} {decision.Reason}"),
@@ -90,6 +94,18 @@ public sealed record WatchEntry(
     public const string FakeRule = "подставной адрес движка — имя идёт через VPN";
 
     /// <summary>
+    /// Начало правила у соединения, которое правила ведут в VPN, а адрес в TUN не попадает.
+    /// </summary>
+    /// <remarks>
+    /// Так бывает, когда имя получило настоящий адрес, а не подставной: DNS
+    /// спросили мимо движка — сторонний DNS-клиент (YogaDNS, обсуждение №55),
+    /// DoH браузера, параллельный запрос Windows к резолверу, которого TUN
+    /// не забирает. Соединение тогда идёт мимо туннеля, и «туннель» по ответу
+    /// правил был бы неправдой.
+    /// </remarks>
+    public const string BypassMark = "мимо туннеля: имя получило настоящий адрес, а не подставной · ";
+
+    /// <summary>
     /// Известно ли «куда» точно, а не по ответу правил.
     /// </summary>
     /// <remarks>
@@ -98,7 +114,16 @@ public sealed record WatchEntry(
     /// правила: sing-box и winws2 наблюдение не спрашивает. Окно рисует это
     /// залитым и полым кружком (макет владельца 10.10).
     /// </remarks>
-    public bool Certain => Mode is WatchRoute.Local or WatchRoute.Engine || Rule == FakeRule;
+    public bool Certain => Mode is WatchRoute.Local or WatchRoute.Engine || Rule == FakeRule || Bypass;
+
+    /// <summary>
+    /// Правила ведут в VPN, а адрес в TUN не попадает (<see cref="BypassMark"/>).
+    /// </summary>
+    /// <remarks>
+    /// Точно известно одно — в туннель соединение не пошло. Напрямую оно
+    /// или под десинк, решают уже списки winws2.
+    /// </remarks>
+    public bool Bypass => Rule.StartsWith(BypassMark, StringComparison.Ordinal);
 
     /// <summary>
     /// Правило коротко — для таблицы и отбора: «#47 google», а не
@@ -114,6 +139,9 @@ public sealed record WatchEntry(
     {
         if (rule == "default")
             return "по умолчанию";
+
+        if (rule.StartsWith(BypassMark, StringComparison.Ordinal))
+            return "мимо туннеля · " + ShortRule(rule[BypassMark.Length..]);
 
         int space = rule.IndexOf(' ');
 
@@ -341,6 +369,14 @@ public sealed record WatchEntry(
         text.AppendLine($"Наблюдение: сеансов {sessions}, {first:dd.MM HH:mm:ss} — {last:dd.MM HH:mm:ss}, соединений {entries.Count}.");
         text.AppendLine("«Куда» — что сказали бы правила, а не что сделал движок; точно известны только «туннель»");
         text.AppendLine("по подставному адресу движка, «локально» и «движок». Имя на адресе CDN бывает чужим.");
+
+        int bypass = entries.Count(e => e.Bypass);
+
+        if (bypass > 0)
+        {
+            text.AppendLine($"Мимо туннеля по правилу «через VPN»: {bypass} — имя получило настоящий адрес, а не подставной;");
+            text.AppendLine("DNS этих имён спрашивали мимо движка (сторонний DNS-клиент, DoH браузера, резолвер вне TUN).");
+        }
         text.AppendLine();
         text.AppendLine($"{"программа",-32} {"всего",7} {"туннель",8} {"десинк",8} {"напрямую",9} {"локально",9} {"движок",7} {"udp",6}");
 

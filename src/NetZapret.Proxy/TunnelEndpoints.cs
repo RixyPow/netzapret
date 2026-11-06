@@ -141,6 +141,43 @@ public static class TunnelEndpoints
     }
 
     /// <summary>
+    /// Что забирает TUN: сети <c>route_address</c> и <c>route_exclude_address</c>
+    /// у входа <c>tun</c>.
+    /// </summary>
+    /// <returns>
+    /// <c>Routes</c> — <c>null</c>, когда сетей нет: тогда TUN забирает всё
+    /// (полный перехват) либо конфиг не прочёлся — о маршруте ничего не известно.
+    /// </returns>
+    /// <remarks>
+    /// Для наблюдения (обсуждение №55, 05.11): при выборочном перехвате в TUN
+    /// попадают только эти сети, и соединение по правилу «через VPN» с настоящим
+    /// адресом вне них уходит мимо туннеля — имя получило адрес не от движка.
+    /// </remarks>
+    public static (IReadOnlyList<string>? Routes, IReadOnlyList<string> Excluded) TunRoutes(string configPath)
+    {
+        try
+        {
+            var tun = (JsonNode.Parse(File.ReadAllText(configPath))?["inbounds"] as JsonArray ?? [])
+                .OfType<JsonObject>()
+                .FirstOrDefault(i => (string?)i["type"] == "tun");
+
+            static List<string> Cidrs(JsonNode? node) =>
+                [.. (node as JsonArray ?? []).Select(n => (string?)n).OfType<string>().Where(c => !string.IsNullOrWhiteSpace(c))];
+
+            if (tun is null)
+                return (null, []);
+
+            var routes = Cidrs(tun["route_address"]);
+
+            return (routes.Count > 0 ? routes : null, Cidrs(tun["route_exclude_address"]));
+        }
+        catch (Exception)
+        {
+            return (null, []);
+        }
+    }
+
+    /// <summary>
     /// Адреса нашего TUN (<c>address</c> у входа <c>tun</c>) — без длины префикса.
     /// </summary>
     /// <remarks>
