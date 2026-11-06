@@ -473,6 +473,22 @@ public partial class TunnelSettingsWindow : Window
                 ? $"Карточка на вкладке VPN. Прокси включён: {LocalProxy.Address(settings.LocalProxyPort)}."
                 : "Карточка на вкладке VPN. Прокси включается там.");
 
+        ShowProxyPool(settings);
+
+        Word(HybridProxyOnlyWord, settings.HybridProxyOnly);
+        HybridProxyOnlySwitch.IsChecked = settings.HybridProxyOnly;
+
+        // Сказать, когда включённое ничего не делает — как у прочих строк.
+        Line(HybridProxyOnlyLine, !settings.HybridProxyOnly
+            ? "Туннель только ради прокси: маршруты «через VPN» — мимо него."
+            : settings.HybridProxyOnlyActive
+                ? "Через VPN идут только программы с локальным прокси."
+                : !settings.LocalProxyActive
+                    ? "Сейчас не действует: локальный прокси выключен."
+                    : !settings.Engines.Tunnel
+                        ? "Сейчас не действует: туннель выключен."
+                        : "Сейчас не действует: туннель забирает всё.");
+
         bool warp = settings.WarpCardShown;
         Word(WarpCardWord, warp);
         WarpCardSwitch.IsChecked = warp;
@@ -516,6 +532,58 @@ public partial class TunnelSettingsWindow : Window
                 : wasOn
                     ? "Карточка WARP спрятана, WARP выключен: туннель вернётся к подпискам."
                     : "Карточка WARP спрятана.");
+    }
+
+    /// <summary>Выбор пула прокси — только при Selective Routing.</summary>
+    private void ShowProxyPool(AppSettings settings)
+    {
+        var pools = settings.EnginePools;
+        LocalProxyPoolRow.Visibility = pools.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        bool was = _showingChecks;
+        _showingChecks = true;
+
+        try
+        {
+            LocalProxyPool.Items.Clear();
+            LocalProxyPool.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = "Пул по умолчанию", Tag = string.Empty });
+
+            foreach (var pool in pools)
+                LocalProxyPool.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = pool.Name, Tag = pool.Id });
+
+            var current = ServerPools.IdOf(settings.LocalProxyServer) ?? string.Empty;
+            LocalProxyPool.SelectedItem = LocalProxyPool.Items
+                .OfType<System.Windows.Controls.ComboBoxItem>()
+                .FirstOrDefault(i => (string)i.Tag == current);
+        }
+        finally
+        {
+            _showingChecks = was;
+        }
+    }
+
+    private void OnLocalProxyPool(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_showingChecks || !IsLoaded
+            || LocalProxyPool.SelectedItem is not System.Windows.Controls.ComboBoxItem { Tag: string id, Content: string name })
+        {
+            return;
+        }
+
+        Save(s => s with { LocalProxyPool = id.Length == 0 ? null : id },
+            id.Length == 0
+                ? "Прокси пойдёт через пул по умолчанию."
+                : $"Прокси пойдёт через пул «{name}».");
+    }
+
+    private void OnHybridProxyOnly(object sender, RoutedEventArgs e)
+    {
+        bool on = HybridProxyOnlySwitch.IsChecked == true;
+
+        Save(s => s with { HybridProxyOnly = on },
+            on
+                ? "В «Гибриде» через VPN пойдёт только локальный прокси, маршруты «через VPN» — мимо туннеля."
+                : "Маршруты «через VPN» снова идут в туннель.");
     }
 
     private void OnLocalProxyPort(object sender, RoutedEventArgs e)

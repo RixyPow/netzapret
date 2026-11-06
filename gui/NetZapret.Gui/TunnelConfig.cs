@@ -56,6 +56,14 @@ internal static class TunnelConfig
             if (routerDns.Warning is not null) Journal.Write("DNS", routerDns.Warning);
             var (ruleSet, zapretRoot) = LoadRules(settings);
 
+            // «VPN только через прокси» (06.11): маршруты «через VPN» в конфиг
+            // не идут — им ни подставных адресов, ни места в TUN, — и движок
+            // заводит только резолверы Windows, как движок ради DNS. Через VPN
+            // идёт один локальный прокси. Прочие правила в «Гибриде» и так
+            // мимо туннеля, они остаются ради DNS.
+            if (settings.HybridProxyOnlyActive)
+                ruleSet = ruleSet with { Rules = [.. ruleSet.Rules.Where(r => r.Mode != RoutingMode.Proxy)] };
+
             // WARP и подписки — одно из двух (владелец, 01.10; Warp.TunnelExits).
             // При включённом WARP подписки на паузе, и ходить за ними незачем:
             // запуск не ждёт панелей, которые всё равно не понадобятся.
@@ -192,7 +200,7 @@ internal static class TunnelConfig
             // С 01.10 — только без десинка (ProgramCapture.ForcesFullCapture,
             // владелец): при десинке весь трафик через движок ломал голос Discord.
             bool byProgram = ProgramCapture.ForcesFullCapture(ruleSet, settings.NeedsDesync);
-            bool narrow = !settings.Engines.TunnelTakesAll && settings.ProxyOnly && !byProgram;
+            bool narrow = !settings.Engines.TunnelTakesAll && (settings.ProxyOnly || settings.HybridProxyOnlyActive) && !byProgram;
 
             // Полный перехват только ради программы — игры с маршрутом мимо VPN
             // выводятся из туннеля и идут так же, как без этого правила
@@ -256,6 +264,7 @@ internal static class TunnelConfig
 
                 // Локальный прокси для программ человека (обсуждение №42).
                 LocalProxyPort = settings.LocalProxyActive ? settings.LocalProxyPort : null,
+                LocalProxyServer = settings.LocalProxyServer,
 
                 // Новые пароли служебных входов на каждую сборку: окно, nz
                 // и сторож читают их из этого же конфига (EngineKeys.Current).
@@ -412,7 +421,11 @@ internal static class TunnelConfig
             // Туннель считается поднятым, только если он вправду поднимется:
             // выключатель без выхода TUN не даёт, и «через VPN» тогда тоже
             // идёт напрямую.
-            var described = HostsFile.DescribeDesyncExclusions(ruleSet, tunnelUp: settings.NeedsProxy);
+            //
+            // При «VPN только через прокси» маршруты «через VPN» в туннель не идут
+            // и для десинка — как при выключенном туннеле: напрямую, мимо него.
+            var described = HostsFile.DescribeDesyncExclusions(ruleSet,
+                tunnelUp: settings.TunnelCarriesRoutes);
             var excluded = described.Select(each => each.Name).ToList();
 
             WinwsCommandLine.WriteExcludeList(excluded);

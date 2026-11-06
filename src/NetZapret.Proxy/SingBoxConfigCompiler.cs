@@ -445,6 +445,23 @@ public sealed class SingBoxOptions
     /// </remarks>
     public int? LocalProxyPort { get; init; }
 
+    /// <summary>
+    /// Пул локального прокси — значением поля сервера правила (<c>pool:ключ</c>);
+    /// <c>null</c> — пул по умолчанию.
+    /// </summary>
+    public string? LocalProxyServer { get; init; }
+
+    /// <summary>Группа выбора локального прокси.</summary>
+    /// <remarks>
+    /// Своя, а не <see cref="SelectorTag"/>: в той есть прямой выход, и в обход
+    /// туннеля (<c>TunnelBypass</c>) надзор ставит её туда. Прокси прописывают
+    /// ради VPN, и уведённый в обход он отдавал бы программе домашний адрес
+    /// молча (06.11, найдено чтением кода). Здесь только серверы: выходы молчат —
+    /// прокси не соединит. Куда поставить, надзор берёт у группы-источника
+    /// (<c>SupervisedService</c>, зеркало выбора), кроме прямого выхода.
+    /// </remarks>
+    public const string ProxyExitTag = "proxy-exit";
+
     /// <summary>Что именно заводить в туннель.</summary>
     public TunnelScope Scope { get; init; } = TunnelScope.Everything;
 
@@ -1640,6 +1657,9 @@ public sealed class SingBoxConfigCompiler
         foreach (var pool in pools)
             AddPool(outbounds, pool, servers, tags, options);
 
+        if (options.LocalProxyPort is not null)
+            outbounds.Add(ProxyExit(servers, tags, options, pools, pinned));
+
         // «Авто» для DNS (владелец, 05.10): резолвер ходит через свой
         // переключатель — при запуске напрямую, пока туннель не прогрет,
         // дальше куда поставит надзор. Обрывать идущие соединения при
@@ -2267,10 +2287,12 @@ public sealed class SingBoxConfigCompiler
         if (options.Pools.Count == 0)
             return [];
 
+        // Пул локального прокси — тоже в деле: через него идёт прокси.
         var servers = ruleSet.Rules
             .Where(r => r.Enabled && !r.Off && r.Mode == RoutingMode.Proxy)
             .Select(r => r.Server)
-            .Append(ruleSet.DefaultMode == RoutingMode.Proxy ? ruleSet.DefaultServer : null);
+            .Append(ruleSet.DefaultMode == RoutingMode.Proxy ? ruleSet.DefaultServer : null)
+            .Append(options.LocalProxyPort is not null ? options.LocalProxyServer : null);
 
         var used = ServerPools.Referenced(servers, options.Pools);
 
@@ -2344,6 +2366,59 @@ public sealed class SingBoxConfigCompiler
             ["outbounds"] = selector,
             ["default"] = pinned ?? ServerPools.LatencyTag(pool.Id),
         });
+    }
+
+    /// <summary>
+    /// Группа выбора локального прокси (<see cref="SingBoxOptions.ProxyExitTag"/>):
+    /// те же участники, что у группы-источника — пула прокси или пула по умолчанию, —
+    /// без прямого выхода и без пула по умолчанию.
+    /// </summary>
+    private static JsonObject ProxyExit(
+        IReadOnlyList<ProxyServer> servers,
+        IReadOnlyDictionary<ProxyServer, string> tags,
+        SingBoxOptions options,
+        IReadOnlyList<ServerPool> pools,
+        string? pinned)
+    {
+        var members = new JsonArray();
+        string first;
+
+        if (ServerPools.Find(pools, ServerPools.IdOf(options.LocalProxyServer)) is { } pool
+            && PoolMembers(pool, servers, tags) is { Count: > 0 } inPool)
+        {
+            first = ServerPools.LatencyTag(pool.Id);
+            members.Add(first);
+
+            foreach (var server in inPool)
+                members.Add(tags[server]);
+
+            var wanted = pool.Preferred is { } p
+                ? inPool.Select(s => tags[s]).FirstOrDefault(t => t == p)
+                    ?? inPool.Where(s => s.Tag == p).Select(s => tags[s]).FirstOrDefault()
+                : null;
+
+            return new JsonObject
+            {
+                ["type"] = "selector",
+                ["tag"] = SingBoxOptions.ProxyExitTag,
+                ["outbounds"] = members,
+                ["default"] = wanted ?? first,
+            };
+        }
+
+        first = LatencyTag;
+        members.Add(first);
+
+        foreach (var server in servers)
+            members.Add(tags[server]);
+
+        return new JsonObject
+        {
+            ["type"] = "selector",
+            ["tag"] = SingBoxOptions.ProxyExitTag,
+            ["outbounds"] = members,
+            ["default"] = pinned ?? first,
+        };
     }
 
     /// <summary>Группа автоподбора — общая (<see cref="LatencyTag"/>) и у каждого пула.</summary>
@@ -2475,7 +2550,7 @@ public sealed class SingBoxConfigCompiler
                 ? new JsonObject
                 {
                     ["inbound"] = new JsonArray { SingBoxOptions.LocalProxyTag },
-                    ["outbound"] = options.SelectorTag,
+                    ["outbound"] = SingBoxOptions.ProxyExitTag,
                 }
                 : new JsonObject
                 {

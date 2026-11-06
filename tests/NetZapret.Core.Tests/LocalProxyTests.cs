@@ -90,8 +90,79 @@ public class LocalProxyTests
         Assert.True(home >= 0 && home < own, "домашняя сеть через прокси — как есть");
         Assert.True(user < 0 || own < user, "правила маршрутов прокси не касаются");
 
-        var selector = rules[own].GetProperty("outbound").GetString();
-        Assert.Equal(new SingBoxOptions().SelectorTag, selector);
+        Assert.Equal(SingBoxOptions.ProxyExitTag, rules[own].GetProperty("outbound").GetString());
+    }
+
+    private static JsonElement Outbound(JsonElement root, string tag) =>
+        root.GetProperty("outbounds").EnumerateArray().Single(o => o.GetProperty("tag").GetString() == tag);
+
+    private static List<string> Members(JsonElement group) =>
+        group.GetProperty("outbounds").EnumerateArray().Select(m => m.GetString()!).ToList();
+
+    [Fact]
+    public void Proxy_group_has_no_direct_exit_so_tunnel_bypass_cannot_leak_home_address()
+    {
+        // Обход туннеля ставит основную группу на «direct»; прокси идёт своей.
+        var (_, root) = Compile(2080, Vless);
+
+        var main = Members(Outbound(root, new SingBoxOptions().SelectorTag));
+        var proxy = Members(Outbound(root, SingBoxOptions.ProxyExitTag));
+
+        Assert.Contains("direct", main);
+        Assert.DoesNotContain("direct", proxy);
+        Assert.Equal(main.Where(m => m != "direct"), proxy);
+    }
+
+    [Fact]
+    public void Proxy_pool_is_built_even_without_routes_and_the_proxy_follows_it()
+    {
+        var second = Vless with { Tag = "DE", Host = "de.example.com" };
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var pool = new ServerPool("fast", "Скоростной", ["DE"]);
+
+        var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Vless, second], new SingBoxOptions
+        {
+            LocalProxyPort = 2080,
+            LocalProxyServer = ServerPools.RuleServer("fast"),
+            Pools = [pool],
+        }).Json;
+        var root = JsonDocument.Parse(json).RootElement;
+
+        var proxy = Members(Outbound(root, SingBoxOptions.ProxyExitTag));
+
+        Assert.Equal(ServerPools.LatencyTag("fast"), proxy[0]);
+        Assert.DoesNotContain("direct", proxy);
+        Assert.DoesNotContain("auto", proxy);
+        Assert.Single(proxy, m => m.Contains("DE", StringComparison.Ordinal));
+        Assert.DoesNotContain(proxy, m => m.Contains("NL", StringComparison.Ordinal));
+        _ = Outbound(root, ServerPools.SelectorTag("fast"));
+
+        var (ok, said) = SingBoxCheck.Run(json);
+        Assert.True(ok, $"sing-box check не пройден: {said}");
+    }
+
+    [Fact]
+    public void Proxy_only_hybrid_acts_only_with_the_proxy_and_without_full_capture()
+    {
+        var on = new AppSettings { LocalProxyOn = true, LocalProxyCard = true, HybridProxyOnly = true };
+
+        Assert.True(on.HybridProxyOnlyActive);
+        Assert.False(on.TunnelCarriesRoutes);
+
+        Assert.False((on with { LocalProxyOn = false }).HybridProxyOnlyActive);
+        Assert.False(on.With(on.Engines with { IgnoreExclusions = true }).HybridProxyOnlyActive);
+        Assert.False((on with { HybridProxyOnly = false }).HybridProxyOnlyActive);
+    }
+
+    [Fact]
+    public void Proxy_pool_needs_selective_routing()
+    {
+        var pool = new ServerPool("fast", "Скоростной", ["DE"]);
+        var settings = new AppSettings { LocalProxyPool = "fast", Pools = [pool], SelectiveRouting = true };
+
+        Assert.Equal(ServerPools.RuleServer("fast"), settings.LocalProxyServer);
+        Assert.Null((settings with { SelectiveRouting = false }).LocalProxyServer);
+        Assert.Null((settings with { LocalProxyPool = "нет" }).LocalProxyServer);
     }
 
     [Fact]

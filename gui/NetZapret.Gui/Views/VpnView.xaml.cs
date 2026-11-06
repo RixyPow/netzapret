@@ -3220,7 +3220,9 @@ public partial class VpnView : UserControl
             ? $"Для программ, где он прописан: всё, что они шлют на {address}, пойдёт через VPN."
             : !settings.Engines.Tunnel
                 ? $"{address} — поднимется, когда туннель включён."
-                : $"SOCKS5 и HTTP на {address}: программы, где он прописан, идут через VPN.";
+                : settings.HybridProxyOnlyActive
+                    ? $"SOCKS5 и HTTP на {address}. VPN только через прокси: маршруты «через VPN» — мимо туннеля."
+                    : $"SOCKS5 и HTTP на {address}: программы, где он прописан, идут через VPN.";
     }
 
     private void OnLocalProxy(object sender, RoutedEventArgs e)

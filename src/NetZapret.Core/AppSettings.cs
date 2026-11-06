@@ -405,6 +405,47 @@ public sealed record AppSettings
     /// </remarks>
     public bool? LocalProxyCard { get; init; }
 
+    /// <summary>
+    /// Пул серверов локального прокси (ключ пула); <c>null</c> — пул по умолчанию.
+    /// </summary>
+    /// <remarks>
+    /// Выбирается, только когда включён Selective Routing (<see cref="EnginePools"/>):
+    /// без него пулов нет, и прокси идёт через любые серверы, как маршруты.
+    /// </remarks>
+    public string? LocalProxyPool { get; init; }
+
+    /// <summary>Пул прокси значением поля сервера правила; <c>null</c> — пул по умолчанию.</summary>
+    [JsonIgnore]
+    public string? LocalProxyServer =>
+        LocalProxyPool is { Length: > 0 } id && ServerPools.Find(EnginePools, id) is not null
+            ? ServerPools.RuleServer(id)
+            : null;
+
+    /// <summary>
+    /// «VPN только через прокси»: в «Гибриде» туннель не забирает трафик Windows
+    /// по маршрутам «через VPN», через VPN идёт только локальный прокси.
+    /// </summary>
+    /// <remarks>
+    /// Решение владельца 06.11. Движок туннеля поднимается ради прокси, а TUN
+    /// остаётся только ради DNS — как у движка ради DNS при одном десинке
+    /// (<c>DnsEngine</c>): заводит адреса резолверов Windows, имена спрашивает
+    /// по DoH. Маршруты «через VPN» при этом идут мимо туннеля, к десинку.
+    /// Действует, только пока прокси поднимается (<see cref="LocalProxyActive"/>)
+    /// и туннель не забирает всё («Туннель», «Игнорировать исключения»).
+    /// </remarks>
+    public bool HybridProxyOnly { get; init; }
+
+    /// <summary>Действует ли <see cref="HybridProxyOnly"/> сейчас.</summary>
+    [JsonIgnore]
+    public bool HybridProxyOnlyActive => HybridProxyOnly && LocalProxyActive && Engines.Tunnel && !Engines.TunnelTakesAll;
+
+    /// <summary>
+    /// Идут ли маршруты «через VPN» в туннель: туннель поднимается и не занят
+    /// одним прокси (<see cref="HybridProxyOnlyActive"/>).
+    /// </summary>
+    [JsonIgnore]
+    public bool TunnelCarriesRoutes => NeedsProxy && !HybridProxyOnlyActive;
+
     /// <summary>Видна ли карточка локального прокси (<see cref="LocalProxyCard"/>).</summary>
     [JsonIgnore]
     public bool LocalProxyCardShown => LocalProxyCard ?? LocalProxyOn;

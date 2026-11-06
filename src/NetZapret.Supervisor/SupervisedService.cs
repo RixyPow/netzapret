@@ -870,7 +870,7 @@ public sealed class SingBoxService : SupervisedService
 
         foreach (var exit in StartExits(_preferredExit))
         {
-            if (await api.SelectAsync(SelectorGroup, exit, cancellationToken))
+            if (await SelectMirroredAsync(api, SelectorGroup, exit, cancellationToken))
             {
                 placed = true;
                 _pinnedPlaced = exit == _preferredExit;
@@ -907,7 +907,7 @@ public sealed class SingBoxService : SupervisedService
                     using var warm = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
 
                     if (await PickOneByOneAsync(warm, cancellationToken) is { } best && run == _run)
-                        await warm.SelectAsync(SelectorGroup, best, cancellationToken);
+                        await SelectMirroredAsync(warm, SelectorGroup, best, cancellationToken);
                 }
                 catch (Exception)
                 {
@@ -1333,7 +1333,7 @@ public sealed class SingBoxService : SupervisedService
         // а не в автоподбор, который мог стоять на мёртвом.
         var target = _bypass.TargetFor(action, _returnTo ?? LatencyGroup);
 
-        if (!await api.SelectAsync(SelectorGroup, target, cancellationToken))
+        if (!await SelectMirroredAsync(api, SelectorGroup, target, cancellationToken))
         {
             // Откат: положение осталось прежним, и помнить надо прежнее.
             _bypass.Forget();
@@ -1603,7 +1603,7 @@ public sealed class SingBoxService : SupervisedService
             Record(_preferredExit!, pinned);
 
             if (_watch.OnPinned(pinned is not null) == ExitAction.Restore
-                && await api.SelectAsync(SelectorGroup, _preferredExit!, cancellationToken))
+                && await SelectMirroredAsync(api, SelectorGroup, _preferredExit!, cancellationToken))
             {
                 Remark = null;
                 Note($"выбранный сервер «{_preferredExit}» снова отвечает — трафик возвращён на него.");
@@ -1653,7 +1653,7 @@ public sealed class SingBoxService : SupervisedService
                 if (run != _run)
                     return;
 
-                if (best is not null && await api.SelectAsync(SelectorGroup, best, CancellationToken.None))
+                if (best is not null && await SelectMirroredAsync(api, SelectorGroup, best, CancellationToken.None))
                     Note($"{why} — поставлен «{best}», первый ответивший при проверке по одному.{promise}");
                 else if (best is null)
                     Note($"{why}, и ни один сервер автоподбора не ответил.");
@@ -1677,6 +1677,88 @@ public sealed class SingBoxService : SupervisedService
     /// и знать не должен.
     /// </remarks>
     private const string SelectorGroup = "auto";
+
+    /// <summary>Группа, за которой следует выбор локального прокси; читается из конфига.</summary>
+    private (DateTime Stamp, string? Source, HashSet<string> Members)? _proxyMirror;
+
+    /// <summary>
+    /// Переключает группу и следом — группу локального прокси, если она идёт за этой.
+    /// </summary>
+    /// <remarks>
+    /// У прокси своя группа без прямого выхода (<see cref="SingBoxOptions.ProxyExitTag"/>):
+    /// обход туннеля ставит основную на «direct», и прокси иначе отдал бы программе
+    /// домашний адрес. Всё прочее — прогрев, замена молчащего, возврат выбранного,
+    /// выход из обхода — прокси повторяет. Прямой выход и пул по умолчанию в его
+    /// группе не значатся и не повторяются: прокси остаётся на прежнем сервере.
+    /// </remarks>
+    private async Task<bool> SelectMirroredAsync(ClashApi api, string group, string target, CancellationToken cancellationToken)
+    {
+        if (!await api.SelectAsync(group, target, cancellationToken))
+            return false;
+
+        if (ProxyMirror() is { } mirror && mirror.Source == group && mirror.Members.Contains(target))
+        {
+            // Неудача — не беда основной группы: прокси останется где был.
+            await api.SelectAsync(SingBoxOptions.ProxyExitTag, target, cancellationToken);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// За какой группой следует прокси и кто в его группе — по конфигу движка.
+    /// </summary>
+    /// <remarks>
+    /// Источник узнаётся по участникам: автоподбор пула в группе — значит, пул
+    /// (<c>pool-ключ-latency</c> → <c>pool-ключ</c>), иначе пул по умолчанию.
+    /// </remarks>
+    private (string? Source, HashSet<string> Members)? ProxyMirror()
+    {
+        try
+        {
+            var stamp = File.GetLastWriteTimeUtc(_configPath);
+
+            if (_proxyMirror is { } known && known.Stamp == stamp)
+                return (known.Source, known.Members);
+
+            string? source = null;
+            var members = new HashSet<string>(StringComparer.Ordinal);
+
+            using (var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(_configPath)))
+            {
+                if (document.RootElement.TryGetProperty("outbounds", out var outbounds))
+                {
+                    foreach (var outbound in outbounds.EnumerateArray())
+                    {
+                        if (!outbound.TryGetProperty("tag", out var tag) || tag.GetString() != SingBoxOptions.ProxyExitTag)
+                            continue;
+
+                        foreach (var member in outbound.GetProperty("outbounds").EnumerateArray())
+                        {
+                            var name = member.GetString()!;
+                            members.Add(name);
+
+                            if (name.StartsWith(ServerPools.SelectorPrefix, StringComparison.Ordinal)
+                                && name.EndsWith("-latency", StringComparison.Ordinal))
+                            {
+                                source = name[..^"-latency".Length];
+                            }
+                        }
+
+                        source ??= SelectorGroup;
+                    }
+                }
+            }
+
+            _proxyMirror = (stamp, source, members);
+            return (source, members);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException
+            or InvalidOperationException or KeyNotFoundException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>Группа автоподбора — куда возвращаемся.</summary>
     private const string LatencyGroup = "auto-latency";
@@ -1782,7 +1864,7 @@ public sealed class SingBoxService : SupervisedService
             {
                 foreach (var exit in StartExits(pool.Pinned).Select(e => e == LatencyGroup ? pool.Latency : e))
                 {
-                    if (await api.SelectAsync(pool.Selector, exit, cancellationToken))
+                    if (await SelectMirroredAsync(api, pool.Selector, exit, cancellationToken))
                     {
                         pool.Present = true;
                         pool.PinnedPlaced = exit == pool.Pinned;
@@ -1794,7 +1876,7 @@ public sealed class SingBoxService : SupervisedService
                     continue;
 
                 if (await PickOneByOneAsync(api, cancellationToken, group: pool.Latency) is { } best && run == _run)
-                    await api.SelectAsync(pool.Selector, best, cancellationToken);
+                    await SelectMirroredAsync(api, pool.Selector, best, cancellationToken);
             }
             catch (Exception)
             {
@@ -1896,7 +1978,7 @@ public sealed class SingBoxService : SupervisedService
             var pinned = await MeasureOnceAsync(api, pool.Pinned!, measured, cancellationToken);
 
             if (pool.Watch.OnPinned(pinned is not null) == ExitAction.Restore
-                && await api.SelectAsync(pool.Selector, pool.Pinned!, cancellationToken))
+                && await SelectMirroredAsync(api, pool.Selector, pool.Pinned!, cancellationToken))
             {
                 Note($"пул «{pool.Pool.Name}»: выбранный сервер «{pool.Pinned}» снова отвечает — пул возвращён на него.");
                 return;
@@ -1942,7 +2024,7 @@ public sealed class SingBoxService : SupervisedService
 
                 if (best is not null)
                 {
-                    if (!await api.SelectAsync(pool.Selector, best, CancellationToken.None))
+                    if (!await SelectMirroredAsync(api, pool.Selector, best, CancellationToken.None))
                         return;
 
                     bool wasSilent = pool.Fallen || pool.SilenceNoted;
@@ -1961,7 +2043,7 @@ public sealed class SingBoxService : SupervisedService
 
                 pool.SilenceNoted = true;
 
-                if (_deadPoolToDefault && await api.SelectAsync(pool.Selector, SelectorGroup, CancellationToken.None))
+                if (_deadPoolToDefault && await SelectMirroredAsync(api, pool.Selector, SelectorGroup, CancellationToken.None))
                 {
                     pool.Fallen = true;
                     Note($"пул «{pool.Pool.Name}»: ни один сервер не ответил — его маршруты уведены в пул "

@@ -587,7 +587,7 @@ public partial class CheckView : UserControl
             // надо раньше, чем они появятся на экране.
             await ReadSetupAsync(settings, running, _work.Token);
 
-            await RunAsync(targets, engine, running && settings.NeedsProxy, _work.Token);
+            await RunAsync(targets, engine, running && settings.TunnelCarriesRoutes, _work.Token);
 
             await Summarise(engine);
         }
@@ -1214,7 +1214,7 @@ public partial class CheckView : UserControl
             : RoutingMode.Desync;
 
         if (_settings is { } settings)
-            mode = settings.Engines.Effective(mode, settings.NeedsProxy);
+            mode = settings.Engines.Effective(mode, settings.TunnelCarriesRoutes);
 
         if (mode == RoutingMode.Desync && bypass == DesyncBypass.None)
             return ("десинк", "", "Text", "Мимо VPN; пакеты обрабатывает десинк — секцией пресета по имени или адресу.");
@@ -2173,7 +2173,7 @@ public partial class CheckView : UserControl
             if (ReferenceEquals(_owners, AddressOwners.None))
                 _owners = await Task.Run(() => AddressOwners.Load(zapretRoot));
 
-            bool tunnelUp = _measuredWithEngines && settings.NeedsProxy;
+            bool tunnelUp = _measuredWithEngines && settings.TunnelCarriesRoutes;
             bool tunnelled = tunnelUp && _engine is not null && Proxied(_engine, host);
             var service = Collected.FirstOrDefault(r => r.Host == host)?.Report.Service ?? OwnLists.NameLabel;
 

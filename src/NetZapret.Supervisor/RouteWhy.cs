@@ -27,7 +27,7 @@ public static class RouteWhy
         var connection = ConnectionEvent.Describe(target);
         var decision = engine.Evaluate(connection);
         var engines = settings.Engines;
-        bool tunnelUp = settings.NeedsProxy;
+        bool tunnelUp = settings.TunnelCarriesRoutes;
 
         var lines = new List<string>
         {
