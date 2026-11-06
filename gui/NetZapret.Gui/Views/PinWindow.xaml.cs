@@ -1012,7 +1012,7 @@ public partial class PinWindow : Window
         // 240 запросов.
         var main = zones.FirstOrDefault() ?? names[0];
 
-        Status.Text = "Спрашиваю у посредников (Comss, Zapret DNS, GeoHide, DNS-AI, AstraCat), какие адреса они отдают сейчас…";
+        Status.Text = "Спрашиваю у посредников (Comss, Zapret DNS, GeoHide, WLRUS, Dagami, DNS-AI, AstraCat), какие адреса они отдают сейчас…";
         var live = await IntermediaryDns.AskManyAsync([main], CancellationToken.None);
 
         // Посредники — из живого каталога Zapret, где он стоит, и из снимка,
