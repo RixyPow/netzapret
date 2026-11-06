@@ -164,13 +164,27 @@ public static class SiteFixer
         // Как есть — она же и называет симптом.
         progress?.Report($"Проверяю {host} как есть…");
         var now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
-        steps.Add(new($"как есть ({Word(route)})", now.Kind == BlockKind.None, Said(now)));
+        steps.Add(new($"как есть ({Word(route)})", now.Opens, Said(now)));
 
         if (await OursAsync(host, now, route, state, settings, steps, progress, cancellationToken) is { } ours)
             return ours;
 
         bool cloudflare = CloudflareNet.Contains(now.Answered ?? now.Addresses.FirstOrDefault());
         var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy, cloudflare);
+
+        // Сайт отвечает проверкой на робота, а скриптов своей зоны у неё нет
+        // или они малы для заморозки: судить не по чему. Другие пути увидели бы ту же
+        // проверку, и подбор записал бы первый попавшийся — маршрут не трогаем.
+        // Замёрзший скрипт проверки сюда не доходит: это уже обрыв (Stall).
+        if (now.BehindBotWall)
+        {
+            var wall = $"{host} отвечает проверкой на робота ({Word(route)}) — саму страницу проба не видит "
+                + "и судить, открывается ли сайт, ей не по чему. Маршрут не менял. Если в браузере "
+                + "страница встаёт на полпути (без стилей и картинок) — поставьте маршрут руками: "
+                + "«десинк» или «через VPN».";
+
+            return new(host, steps, null, false, wall, Advice: wall);
+        }
 
         if (now.Kind == BlockKind.None)
         {
@@ -307,7 +321,7 @@ public static class SiteFixer
     /// <summary>Вердикт словами — с адресом, на котором он получен.</summary>
     private static string Said(TargetReport report) =>
         report.Describe() + (report.Answered is { } a ? $", {a}" : string.Empty)
-        + (report.Kind != BlockKind.None && report.Why is { } why ? $": {why}" : string.Empty);
+        + (!report.Opens && report.Why is { } why ? $": {why}" : string.Empty);
 
     /// <summary>
     /// Можно ли пробовать десинк пробным winws2; нельзя — почему.
@@ -434,7 +448,7 @@ public static class SiteFixer
         {
             var report = await BlockCheck.TrialAsync(host, cancellationToken);
 
-            return (report.Kind == BlockKind.None, Said(report), false);
+            return (report.Opens, Said(report), false);
         }
     }
 
@@ -493,7 +507,7 @@ public static class SiteFixer
             await Task.Delay(ShieldReload, cancellationToken);
 
             report = await BlockCheck.CheckAsync(host, null, cancellationToken);
-            works = report.Kind == BlockKind.None;
+            works = report.Opens;
         }
         finally
         {

@@ -206,23 +206,24 @@ public sealed class PageAssetsTests
     }
 
     /// <summary>
-    /// Подресурс нужен только обычной маленькой странице. Отказ, проверка
-    /// на робота и переадресация уже сказали своё, а большая страница
-    /// показала бы заморозку сама.
+    /// Подресурс нужен маленькой странице с ответом 200. Отказ и переадресация
+    /// уже сказали своё, а большая страница показала бы заморозку сама.
+    /// Проверка на робота с ответом 200 — тоже маленькая страница: её скрипт
+    /// у lolz.team замерзал на 16 092 Б (05.11).
     /// </summary>
     [Theory]
-    [InlineData(200, false, false, null, 148, true)]
-    [InlineData(200, false, false, null, 19_999, true)]
-    [InlineData(200, false, false, null, 20_000, false)]
-    [InlineData(200, true, false, null, 148, false)]
-    [InlineData(200, false, true, null, 148, false)]
-    [InlineData(200, false, false, "www.example.com", 148, false)]
-    [InlineData(404, false, false, null, 148, false)]
-    [InlineData(null, false, false, null, 148, false)]
-    public void Only_a_plain_small_page_asks_for_an_asset(
-        int? status, bool refused, bool challenged, string? moved, int total, bool expected)
+    [InlineData(200, false, null, 148, true)]
+    [InlineData(200, false, null, 19_999, true)]
+    [InlineData(200, false, null, 20_000, false)]
+    [InlineData(200, true, null, 148, false)]
+    [InlineData(200, false, "www.example.com", 148, false)]
+    [InlineData(403, false, null, 148, false)]
+    [InlineData(404, false, null, 148, false)]
+    [InlineData(null, false, null, 148, false)]
+    public void Only_a_small_page_asks_for_an_asset(
+        int? status, bool refused, string? moved, int total, bool expected)
     {
-        Assert.Equal(expected, BlockCheck.NeedsAsset(status, refused, challenged, moved, total));
+        Assert.Equal(expected, BlockCheck.NeedsAsset(status, refused, moved, total));
     }
 
     private static byte[] Squeeze(byte[] plain, Func<Stream, Stream> wrap)

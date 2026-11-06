@@ -380,6 +380,20 @@ public sealed record ProbeOutcome
     /// <summary>Сайт объявил HTTP/3 (<c>alt-svc: h3</c>) — браузер пойдёт к нему и по QUIC.</summary>
     public bool OffersHttp3 { get; init; }
 
+    /// <summary>
+    /// Вместо страницы пришла проверка на робота с ответом 200: самого сайта проба не видела.
+    /// </summary>
+    /// <remarks>
+    /// Маленькая страница проверки проходит там, где сайт замерзает. 05.11
+    /// lolz.team (ddosfilter на 5.196.180.36, маршрут «напрямую»): пробе —
+    /// капча «Проверка безопасности» на 1330 Б, трижды «доступен»; браузеру —
+    /// заглушка на 370 Б и её скрипт <c>/_dfjs/b.js</c> на 35 132 Б, который
+    /// замерзал на 16 092 Б три раза из трёх, а за ним и сам форум. Снимается,
+    /// если подресурс той же зоны пришёл целиком и больше порога заморозки:
+    /// путь тогда проверен и без страницы.
+    /// </remarks>
+    public bool BotWall { get; init; }
+
     public string Describe() => Ok
         ? "ок"
         : Reset ? "RST"
@@ -554,8 +568,22 @@ public sealed record TargetReport
         ? Data.Describe()
         : "н/с";
 
+    /// <summary>
+    /// Открылся — и проба видела сам сайт, а не проверку на робота перед ним
+    /// (<see cref="ProbeOutcome.BotWall"/>).
+    /// </summary>
+    /// <remarks>
+    /// Этим судит подбор маршрута: за проверкой на робота «как есть» не значит
+    /// «открывается», и записать путь по такому замеру нельзя.
+    /// </remarks>
+    public bool Opens => Kind == BlockKind.None && !Data.BotWall;
+
+    /// <summary>Открыт по всем меркам, но видна только проверка на робота.</summary>
+    public bool BehindBotWall => Kind == BlockKind.None && Data.BotWall;
+
     public string Describe() => Kind switch
     {
+        BlockKind.None when Data.BotWall => "за проверкой на робота",
         BlockKind.None => "доступен",
         BlockKind.TlsDpi => "DPI по TLS",
         BlockKind.TunnelFailed => "туннель не доставил",
@@ -605,6 +633,7 @@ public sealed record TargetReport
     /// </remarks>
     public Reach Reach => Kind switch
     {
+        BlockKind.None when Data.BotWall => Reach.Unknown,
         BlockKind.None => Quic is { Ok: false } ? Reach.Limited : Reach.Open,
         BlockKind.NoAddress or BlockKind.Handshake => Reach.Unknown,
         BlockKind.Stall or BlockKind.Forbidden => Reach.Limited,
@@ -624,6 +653,7 @@ public sealed record TargetReport
         : Kind == BlockKind.TlsDpi && EchHelloAccepted ? "откроется с ECH"
         : Kind switch
         {
+            BlockKind.None when Data.BotWall => "проверка на робота",
             BlockKind.None => Quic is { Ok: false } ? "QUIC молчит" : null,
             BlockKind.TlsDpi => "DPI по TLS",
             BlockKind.TunnelFailed => "туннель не довёз",
@@ -673,6 +703,7 @@ public sealed record TargetReport
         {
             var decisive = Kind switch
             {
+                BlockKind.None when Data.BotWall => Data,
                 BlockKind.None => null,
                 BlockKind.GeoBlock or BlockKind.Forbidden or BlockKind.Stall => Data,
                 BlockKind.TlsDpi or BlockKind.Handshake or BlockKind.TlsWhiteOnly or BlockKind.TlsByAddress
@@ -711,6 +742,8 @@ public sealed record TargetReport
     /// </remarks>
     public string Remedy() => Kind switch
     {
+        BlockKind.None when Data.BotWall => "открыть в браузере: грузится целиком — ничего не нужно, "
+            + "встаёт на полпути (без стилей, без картинок) — другой маршрут: «десинк» или «через VPN»",
         BlockKind.None => "ничего не нужно",
         BlockKind.TlsDpi => "десинк",
         BlockKind.TunnelFailed => "другой сервер подписки — десинк тут ни при чём",
@@ -2604,11 +2637,17 @@ public static class BlockCheck
             // не могла — в разметке ищутся скрипты и стили той же зоны,
             // и проба докачает их отдельно (WeighAssetsAsync).
             IReadOnlyList<string> assets = [];
+            bool wall = false;
 
-            if (kept is not null && header > 0 && NeedsAsset(status, refused, challenged, moved, total)
+            if (kept is not null && header > 0 && NeedsAsset(status, refused, moved, total)
                 && PageAssets.Decode(kept.ToArray()[header..], chunked, contentEncoding) is { } html)
             {
                 assets = PageAssets.SameSite(host, html);
+
+                // Проверка на робота с ответом 200 — метки Cloudflare у неё нет,
+                // узнаётся по словам. Её скрипты своей зоны тоже докачиваются:
+                // браузер их грузит, и заморозку ловят именно они (BotWall).
+                wall = LooksLikeBotCheck(VisibleText(html));
             }
 
             return new ProbeOutcome
@@ -2625,10 +2664,13 @@ public static class BlockCheck
                         ? $"сайт ответил {status} и причину не назвал — связь исправна"
                     : challenged
                         ? $"{(cloudflare ? "Cloudflare" : "сайт")} проверяет на робота — связь исправна, браузер проверку пройдёт"
+                    : wall
+                        ? $"вместо сайта — проверка на робота, {total} Б: саму страницу проба не видит"
                         : promised is { } size ? $"{total} из {size} Б" : $"{total} Б",
                 Received = total,
                 Moved = moved,
                 Assets = assets,
+                BotWall = wall,
                 OffersHttp3 = offersHttp3,
             };
         }
@@ -2652,13 +2694,15 @@ public static class BlockCheck
     /// Стоит ли за этой страницей докачивать подресурс.
     /// </summary>
     /// <remarks>
-    /// Только у обычного ответа: отказ, проверка на робота и переадресация
-    /// уже сказали своё, а страница от <see cref="Signatures.FreezeTo"/>
-    /// и больше заморозку показала бы сама. Порог по полученному целиком,
-    /// с заголовками: ТСПУ считает байты соединения, а не тела.
+    /// Только у ответа 200: отказ и переадресация уже сказали своё, а страница
+    /// от <see cref="Signatures.FreezeTo"/> и больше заморозку показала бы сама.
+    /// Порог по полученному целиком, с заголовками: ТСПУ считает байты
+    /// соединения, а не тела. Проверка на робота с ответом 200 — тоже: её
+    /// скрипт браузер качает первым, и на нём заморозка видна (lolz.team 05.11,
+    /// <see cref="ProbeOutcome.BotWall"/>). До 05.11 проверку на робота пропускали.
     /// </remarks>
-    internal static bool NeedsAsset(int? status, bool refused, bool challenged, string? moved, int total) =>
-        status is 200 && !refused && !challenged && moved is null && total < Signatures.FreezeTo;
+    internal static bool NeedsAsset(int? status, bool refused, string? moved, int total) =>
+        status is 200 && !refused && moved is null && total < Signatures.FreezeTo;
 
     /// <summary>
     /// Докачивает подресурсы маленькой страницы и возвращает исход передачи
@@ -2715,12 +2759,17 @@ public static class BlockCheck
                 };
             }
 
+            // Большой подресурс пришёл целиком — путь проверен и без страницы,
+            // так что и за проверкой на робота судить уже есть по чему.
             if (asset.Ok && !asset.Refused && !asset.Forbidden && asset.Received >= Signatures.FreezeTo)
             {
                 return data with
                 {
-                    Detail = $"{data.Detail}; {Shorten(path)} {asset.Received} Б",
+                    Detail = data.BotWall
+                        ? $"проверка на робота {data.Received} Б; {Shorten(path)} {asset.Received} Б"
+                        : $"{data.Detail}; {Shorten(path)} {asset.Received} Б",
                     Assets = [],
+                    BotWall = false,
                 };
             }
         }
@@ -2954,10 +3003,17 @@ public static class BlockCheck
     internal static bool LooksLikeBotCheck(string? text) =>
         text is not null && BotCheckWords.Any(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
 
+    /// <remarks>
+    /// Русские слова и «enable JavaScript and cookies» — с 05.11, по ddosfilter
+    /// у lolz.team: капча «Проверка безопасности… Подтвердите, что вы человек»
+    /// и заглушка, где видна одна строка из noscript. Голое «enable JavaScript»
+    /// не годится: так пишет в noscript любое одностраничное приложение.
+    /// </remarks>
     private static readonly string[] BotCheckWords =
     [
         "just a moment", "checking your browser", "verify you are human", "verifying you are human",
-        "captcha", "are you a robot", "ddos-guard",
+        "captcha", "are you a robot", "ddos-guard", "enable javascript and cookies",
+        "проверка безопасности", "что вы человек", "вы не робот",
     ];
 
     /// <summary>

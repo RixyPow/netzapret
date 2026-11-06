@@ -249,6 +249,68 @@ public class BlockCheckTests
         Assert.False(BlockCheck.LooksLikeBotCheck(xai));
     }
 
+    /// <summary>
+    /// Проверка на робота ddosfilter перед lolz.team узнаётся в обоих видах.
+    /// </summary>
+    /// <remarks>
+    /// 05.11: пробе — капча altcha на 1330 Б, браузеру — заглушка на 370 Б со скриптом
+    /// <c>/_dfjs/b.js</c>, который замерзал на 16 092 Б. Разметка — ответы того дня, сжаты.
+    /// </remarks>
+    [Fact]
+    public void A_ddosfilter_wall_is_known_in_both_forms()
+    {
+        var captcha = BlockCheck.VisibleText(
+            "<html><head><title>Проверка безопасности</title><script src=\"https://cdn.jsdelivr.net/gh/altcha-org/altcha/dist/altcha.min.js\" "
+            + "type=\"module\"></script></head><body><div class=\"title\">🤖🛡️ Проверка безопасности.</div><div class=\"subtitle\">"
+            + "Подтвердите, что вы человек и мы вас сразу пропустим! 🚀</div><altcha-widget id=\"captcha\" challengeurl=\"/_dfh/captask\">"
+            + "</altcha-widget></body></html>");
+
+        const string stub = "<html><head><link rel=\"icon\" href=\"data:,\"></head><body><script type=\"text/javascript\" "
+            + "src=\"/_dfjs/b.js\"></script><script>document.addEventListener('DOMContentLoaded',() => {main(\"a\", \"b\", \"c\");});"
+            + "</script><noscript>Please enable JavaScript and cookies</noscript></body></html>";
+
+        Assert.True(BlockCheck.LooksLikeBotCheck(captcha));
+        Assert.True(BlockCheck.LooksLikeBotCheck(BlockCheck.VisibleText(stub)));
+
+        // Скрипт заглушки — своей зоны: его проба и докачивает.
+        Assert.Equal(["/_dfjs/b.js"], PageAssets.SameSite("lolz.team", stub));
+    }
+
+    /// <summary>Одностраничное приложение без JavaScript — не проверка на робота.</summary>
+    [Theory]
+    [InlineData("<noscript>You need to enable JavaScript to run this app.</noscript><div id=\"root\"></div>")]
+    [InlineData("<h1>Добро пожаловать</h1><p>Безопасность ваших данных — наш приоритет.</p>")]
+    public void An_ordinary_small_page_is_not_a_wall(string html)
+    {
+        Assert.False(BlockCheck.LooksLikeBotCheck(BlockCheck.VisibleText(html)));
+    }
+
+    /// <summary>
+    /// За проверкой на робота сайт не «доступен»: подбор маршрута по такому замеру не судит.
+    /// </summary>
+    [Fact]
+    public void Behind_a_wall_the_site_is_not_called_open()
+    {
+        var wall = Report(BlockKind.None) with
+        {
+            Data = new ProbeOutcome { Ok = true, BotWall = true, Detail = "вместо сайта — проверка на робота, 1330 Б" },
+        };
+
+        Assert.False(wall.Opens);
+        Assert.True(wall.BehindBotWall);
+        Assert.Equal("за проверкой на робота", wall.Describe());
+        Assert.Equal(Reach.Unknown, wall.Reach);
+        Assert.Equal("проверка на робота", wall.Brief());
+        Assert.Contains("1330", wall.Why);
+        Assert.Contains("браузере", wall.Remedy());
+
+        var open = Report(BlockKind.None);
+
+        Assert.True(open.Opens);
+        Assert.False(open.BehindBotWall);
+        Assert.Equal("доступен", open.Describe());
+    }
+
     [Fact]
     public void A_bare_refusal_is_its_own_verdict()
     {
