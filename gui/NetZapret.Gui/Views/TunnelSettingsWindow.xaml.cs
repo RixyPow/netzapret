@@ -460,42 +460,62 @@ public partial class TunnelSettingsWindow : Window
 
     private void ShowLocalProxy(AppSettings settings)
     {
-        Word(LocalProxyWord, settings.LocalProxyOn);
-        LocalProxySwitch.IsChecked = settings.LocalProxyOn;
+        bool card = settings.LocalProxyCardShown;
+        Word(LocalProxyWord, card);
+        LocalProxySwitch.IsChecked = card;
 
         if (!LocalProxyPortBox.IsKeyboardFocused)
             LocalProxyPortBox.Text = settings.LocalProxyPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        var address = LocalProxy.Address(settings.LocalProxyPort);
-        LocalProxyAddress.Text = address;
+        Line(LocalProxyLine, !card
+            ? "Прокси для программ, где он прописан: SOCKS5 и HTTP на 127.0.0.1, всё — через VPN."
+            : settings.LocalProxyOn
+                ? $"Карточка на вкладке VPN. Прокси включён: {LocalProxy.Address(settings.LocalProxyPort)}."
+                : "Карточка на вкладке VPN. Прокси включается там.");
 
-        Line(LocalProxyLine, !settings.LocalProxyOn
-            ? string.Empty
-            : !settings.Engines.Tunnel
-                ? "Туннель выключен — прокси не поднимется, пока его не включите."
-                : settings.WarpEnabled
-                    ? "Через прокси пойдёт WARP — он сейчас путь туннеля."
-                    : string.Empty);
+        bool warp = settings.WarpCardShown;
+        Word(WarpCardWord, warp);
+        WarpCardSwitch.IsChecked = warp;
+
+        Line(WarpCardLine, warp
+            ? "Карточка на вкладке VPN."
+            : "Бесплатный выход через сеть Cloudflare вместо подписок.");
     }
 
-    private void OnLocalProxy(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Показать или спрятать карточку прокси; спрятанный прокси выключается.
+    /// </summary>
+    /// <remarks>
+    /// Иначе прокси работал бы, а выключить его было бы негде: выключатель
+    /// живёт в карточке.
+    /// </remarks>
+    private void OnLocalProxyCard(object sender, RoutedEventArgs e)
     {
         bool on = LocalProxySwitch.IsChecked == true;
-        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        bool wasOn = AppSettings.Load(AppSettings.DefaultPath).LocalProxyActive;
 
-        // Занятый порт роняет движок туннеля целиком — проверить до записи.
-        // Свой же поднятый прокси портом не мешает.
-        if (on && LocalProxy.Problem(settings.LocalProxyPort, settings, ownNow: settings.LocalProxyOn) is { } problem)
-        {
-            LocalProxySwitch.IsChecked = false;
-            Status.Text = problem;
-            return;
-        }
-
-        Save(s => s with { LocalProxyOn = on },
+        Save(s => on ? s with { LocalProxyCard = true } : s with { LocalProxyCard = false, LocalProxyOn = false },
             on
-                ? $"Локальный прокси поднимется на {LocalProxy.Address(settings.LocalProxyPort)}."
-                : "Локального прокси не будет.");
+                ? "Карточка «Локальный прокси» — на вкладке VPN, прокси включается там."
+                : wasOn
+                    ? "Карточка «Локальный прокси» спрятана, прокси выключен."
+                    : "Карточка «Локальный прокси» спрятана.");
+    }
+
+    /// <summary>
+    /// Показать или спрятать карточку WARP; спрятанный WARP выключается.
+    /// </summary>
+    private void OnWarpCard(object sender, RoutedEventArgs e)
+    {
+        bool on = WarpCardSwitch.IsChecked == true;
+        bool wasOn = AppSettings.Load(AppSettings.DefaultPath).WarpEnabled;
+
+        Save(s => on ? s with { WarpCard = true } : s with { WarpCard = false, WarpEnabled = false },
+            on
+                ? "Карточка WARP — на вкладке VPN."
+                : wasOn
+                    ? "Карточка WARP спрятана, WARP выключен: туннель вернётся к подпискам."
+                    : "Карточка WARP спрятана.");
     }
 
     private void OnLocalProxyPort(object sender, RoutedEventArgs e)
@@ -528,21 +548,6 @@ public partial class TunnelSettingsWindow : Window
     {
         if (e.Key == System.Windows.Input.Key.Enter)
             OnLocalProxyPort(sender, e);
-    }
-
-    private void OnLocalProxyCopy(object sender, RoutedEventArgs e)
-    {
-        var address = "socks5://" + LocalProxy.Address(AppSettings.Load(AppSettings.DefaultPath).LocalProxyPort);
-
-        try
-        {
-            Clipboard.SetText(address);
-            Status.Text = $"Скопировано: {address}. Для HTTP — тот же адрес и порт.";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Буфер обмена занят: " + ex.GetBaseException().Message;
-        }
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

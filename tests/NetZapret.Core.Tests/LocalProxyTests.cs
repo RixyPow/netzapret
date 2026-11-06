@@ -126,6 +126,45 @@ public class LocalProxyTests
     }
 
     [Fact]
+    public void Card_follows_the_proxy_until_the_setting_is_made()
+    {
+        // До настройки показа прокси включался в окне настроек (e0e51d9):
+        // включённый не должен пропасть с вкладки и перестать подниматься.
+        Assert.False(new AppSettings().LocalProxyCardShown);
+        Assert.True(new AppSettings { LocalProxyOn = true }.LocalProxyActive);
+
+        // Спрятанная карточка гасит и прокси: выключить его было бы негде.
+        Assert.False(new AppSettings { LocalProxyOn = true, LocalProxyCard = false }.LocalProxyActive);
+    }
+
+    [Fact]
+    public void Warp_card_is_shown_by_default_and_always_while_warp_is_on()
+    {
+        Assert.True(new AppSettings().WarpCardShown);
+        Assert.False(new AppSettings { WarpCard = false }.WarpCardShown);
+        Assert.True(new AppSettings { WarpCard = false, WarpEnabled = true }.WarpCardShown);
+    }
+
+    [Fact]
+    public void Card_settings_survive_save_and_load()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-settings-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            new AppSettings { LocalProxyCard = true, WarpCard = false }.Save(path);
+            var back = AppSettings.Load(path);
+
+            Assert.True(back.LocalProxyCard);
+            Assert.False(back.WarpCard);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Default_port_is_acceptable()
     {
         Assert.Null(LocalProxy.Problem(LocalProxy.DefaultPort, new AppSettings(), ownNow: true));

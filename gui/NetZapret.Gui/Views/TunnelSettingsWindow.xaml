@@ -147,38 +147,70 @@
             </gui:Card>
 
             <!--
-                Локальный прокси (обсуждение №42, идея №18): вход движка туннеля,
-                который видят только программы, где он прописан. Здесь, а не
-                на вкладке: задают однажды, как и всё в этом окне.
+                Что показывать на вкладке VPN (владелец 06.11): WARP и локальный
+                прокси нужны не всем. Сами выключатели пути — в карточках
+                на вкладке, здесь только показ; спрятанное выключается.
             -->
-            <TextBlock Text="ЛОКАЛЬНЫЙ ПРОКСИ" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
+            <TextBlock Text="НА ВКЛАДКЕ VPN" Style="{StaticResource GroupHead}" Margin="4,20,0,7" />
 
             <gui:Card Style="{StaticResource SettingsGroup}">
                 <StackPanel>
                     <Grid Margin="16,13">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                        <Border Grid.Column="0" Style="{StaticResource IconTile}" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <Image Source="{StaticResource CloudflareLogo}" Width="28"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="Cloudflare WARP" VerticalAlignment="Center" />
+                            <TextBlock x:Name="WarpCardLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="2" x:Name="WarpCardWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="3" x:Name="WarpCardSwitch" Style="{StaticResource Switch}"
+                                      Click="OnWarpCard" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource IconTile}" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE71B;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Прокси для отдельных программ" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <TextBlock Text="Локальный прокси" VerticalAlignment="Center" TextWrapping="Wrap" />
 
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="SOCKS5 и HTTP на одном порту, только на этом компьютере (127.0.0.1). Системный прокси Windows не меняется: прокси видят только те программы, в настройках которых он прописан, — браузер или его отдельный профиль, лаунчер, curl.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN тем же сервером, что выбран на вкладке, мимо правил «Маршрутов»: прокси прописывают ради VPN. Домашняя сеть — роутер, сетевой диск — открывается как есть. Имена разрешаются на сервере, если программа отдаёт их прокси (SOCKS5 с удалённым DNS, socks5h, или HTTP).&#x0a;&#x0a;Работает, пока поднят туннель — в «Гибриде» и «Туннеле». Пароля у прокси нет, поэтому он не открыт в домашнюю сеть. Игры прокси почти никогда не умеют.&#x0a;&#x0a;Применяется при следующем запуске движков." />
+                                                Content="SOCKS5 и HTTP на одном порту, только на этом компьютере (127.0.0.1). Системный прокси Windows не меняется: прокси видят только те программы, в настройках которых он прописан, — браузер или его отдельный профиль, Telegram, лаунчер, curl.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN тем же сервером, что выбран на вкладке, мимо правил «Маршрутов». Домашняя сеть — роутер, сетевой диск — открывается как есть.&#x0a;&#x0a;Включённый здесь — карточка на вкладке VPN: там прокси включается, там же адрес и «Скопировать»." />
                             </StackPanel>
-
                             <TextBlock x:Name="LocalProxyLine" Style="{StaticResource Caption}"
                                        Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
 
-                        <TextBlock Grid.Column="1" x:Name="LocalProxyWord" Style="{StaticResource Caption}"
+                        <TextBlock Grid.Column="2" x:Name="LocalProxyWord" Style="{StaticResource Caption}"
                                    VerticalAlignment="Center" Margin="0,0,10,0" />
 
-                        <ToggleButton Grid.Column="2" x:Name="LocalProxySwitch" Style="{StaticResource Switch}"
-                                      Click="OnLocalProxy" VerticalAlignment="Center" />
+                        <ToggleButton Grid.Column="3" x:Name="LocalProxySwitch" Style="{StaticResource Switch}"
+                                      Click="OnLocalProxyCard" VerticalAlignment="Center" />
                     </Grid>
 
                     <Border Style="{StaticResource RowLine}" />
@@ -188,21 +220,18 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                            <TextBlock Text="Адрес · SOCKS5 и HTTP" VerticalAlignment="Center" />
-                            <TextBlock x:Name="LocalProxyAddress" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                       TextWrapping="Wrap" />
+                            <TextBlock Text="Порт локального прокси" VerticalAlignment="Center" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
+                                       Text="Применяется при следующем запуске движков." />
                         </StackPanel>
 
                         <TextBox Grid.Column="1" x:Name="LocalProxyPortBox" Width="80" VerticalAlignment="Center"
                                  gui:Hint.Text="порт" KeyDown="OnLocalProxyPortKey" />
                         <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Сохранить"
                                 Click="OnLocalProxyPort" Margin="8,0,0,0" VerticalAlignment="Center" />
-                        <Button Grid.Column="3" Style="{StaticResource Ghost}" Content="Скопировать"
-                                Click="OnLocalProxyCopy" Margin="8,0,0,0" VerticalAlignment="Center" />
                     </Grid>
                 </StackPanel>
             </gui:Card>

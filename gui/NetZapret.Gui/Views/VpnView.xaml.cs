@@ -1680,6 +1680,12 @@ public partial class VpnView : UserControl
     /// </remarks>
     private void ShowWarp(AppSettings settings)
     {
+        ShowLocalProxy(settings);
+
+        // Карточка — по выключателю в «Настройках туннеля» (владелец 06.11);
+        // включённый WARP видно всегда.
+        WarpCard.Visibility = settings.WarpCardShown ? Visibility.Visible : Visibility.Collapsed;
+
         bool on = settings.WarpEnabled;
 
         WarpSwitch.IsChecked = on;
@@ -3194,6 +3200,74 @@ public partial class VpnView : UserControl
             : settings.KillSwitchActive
                 ? "Включён: если VPN упадёт, сети не будет, пока туннель не поднимется."
                 : "Включён, но действует только в режиме «Туннель».";
+    }
+
+    /// <summary>
+    /// Карточка локального прокси: видна по настройке, выключатель — сам прокси.
+    /// </summary>
+    private void ShowLocalProxy(AppSettings settings)
+    {
+        LocalProxyCard.Visibility = settings.LocalProxyCardShown ? Visibility.Visible : Visibility.Collapsed;
+
+        bool on = settings.LocalProxyOn;
+        var address = LocalProxy.Address(settings.LocalProxyPort);
+
+        LocalProxySwitch.IsChecked = on;
+        LocalProxyWord.Text = on ? "Включён" : "Выключен";
+        LocalProxyDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, on ? "Accent" : "Faint");
+
+        LocalProxyLine.Text = !on
+            ? $"Для программ, где он прописан: всё, что они шлют на {address}, пойдёт через VPN."
+            : !settings.Engines.Tunnel
+                ? $"{address} — поднимется, когда туннель включён."
+                : $"SOCKS5 и HTTP на {address}: программы, где он прописан, идут через VPN.";
+    }
+
+    private void OnLocalProxy(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            bool on = LocalProxySwitch.IsChecked == true;
+
+            // Занятый порт роняет движок туннеля целиком — проверить до записи.
+            // Свой же поднятый прокси портом не мешает.
+            if (on && LocalProxy.Problem(settings.LocalProxyPort, settings, ownNow: settings.LocalProxyOn) is { } problem)
+            {
+                LocalProxySwitch.IsChecked = false;
+                Status.Text = problem + " Порт — в «Настройках».";
+                return;
+            }
+
+            var next = settings with { LocalProxyOn = on };
+            next.Save(AppSettings.DefaultPath);
+            ShowLocalProxy(next);
+
+            Status.Text = on
+                ? $"Локальный прокси поднимется на {LocalProxy.Address(next.LocalProxyPort)}. Применится при следующем запуске движков."
+                : "Локальный прокси выключен. Применится при следующем запуске движков.";
+
+            this.Offer(on ? "Локальный прокси включён" : "Локальный прокси выключен");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось переключить: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private void OnLocalProxyCopy(object sender, RoutedEventArgs e)
+    {
+        var address = "socks5://" + LocalProxy.Address(AppSettings.Load(AppSettings.DefaultPath).LocalProxyPort);
+
+        try
+        {
+            Clipboard.SetText(address);
+            Status.Text = $"Скопировано: {address}. Для HTTP — тот же адрес и порт.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Буфер обмена занят: " + ex.GetBaseException().Message;
+        }
     }
 
     private void OnKillSwitch(object sender, RoutedEventArgs e)

@@ -758,6 +758,42 @@
                 </gui:Card>
 
                 <!--
+                    Локальный прокси (обсуждение №42): показывается по выключателю
+                    в «Настройках туннеля», как и WARP (владелец 06.11).
+                -->
+                <gui:Card x:Name="LocalProxyCard" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="18,16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource IconTile}" VerticalAlignment="Center" Margin="0,0,14,0">
+                            <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE71B;" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Локальный прокси" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="SOCKS5 и HTTP на одном порту, только на этом компьютере (127.0.0.1). Системный прокси Windows не меняется: прокси видят только те программы, в настройках которых он прописан, — браузер или его отдельный профиль, Telegram, лаунчер, curl.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN тем же сервером, что выбран выше, мимо правил «Маршрутов»: в отличие от маршрута программы, ничего не нужно дописывать, и другие программы на тех же сайтах не задеваются. Домашняя сеть — роутер, сетевой диск — открывается как есть. Имена разрешаются на сервере, если программа отдаёт их прокси (SOCKS5 с удалённым DNS или HTTP).&#x0a;&#x0a;Работает, пока поднят туннель. Пароля нет, поэтому прокси не открыт в домашнюю сеть. Порт — в «Настройках». Применяется при следующем запуске движков." />
+                            </StackPanel>
+                            <TextBlock x:Name="LocalProxyLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="LocalProxyCopy" Style="{StaticResource IconGhost}" Content="&#xE8C8;"
+                                    Margin="0,0,14,0" Click="OnLocalProxyCopy" ToolTip="Скопировать адрес" />
+
+                            <Ellipse x:Name="LocalProxyDot" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center" />
+                            <TextBlock x:Name="LocalProxyWord" Style="{StaticResource Caption}" Margin="0,0,12,0" VerticalAlignment="Center" />
+                            <ToggleButton x:Name="LocalProxySwitch" Style="{StaticResource Switch}" VerticalAlignment="Center" Click="OnLocalProxy" />
+                        </StackPanel>
+                    </Grid>
+                </gui:Card>
+
+                <!--
                     Kill switch (владелец 27.10: «давай сделаем килсвитч как
                     настройку на вкладке впн»; жёсткий, только в «Туннеле»).
                     Фильтры ставит надзор — KillSwitch, SupervisorHost.EngageKillSwitch.

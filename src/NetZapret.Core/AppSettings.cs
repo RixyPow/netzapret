@@ -396,6 +396,38 @@ public sealed record AppSettings
     public int LocalProxyPort { get; init; } = LocalProxy.DefaultPort;
 
     /// <summary>
+    /// Карточка локального прокси на вкладке VPN — по выключателю в «Настройках туннеля».
+    /// </summary>
+    /// <remarks>
+    /// Решение владельца 06.11: прокси и WARP нужны не всем, и их карточки
+    /// показываются по настройке. <c>null</c> — не задано: карточка видна,
+    /// если прокси уже включён (с e0e51d9 он включался в окне настроек).
+    /// </remarks>
+    public bool? LocalProxyCard { get; init; }
+
+    /// <summary>Видна ли карточка локального прокси (<see cref="LocalProxyCard"/>).</summary>
+    [JsonIgnore]
+    public bool LocalProxyCardShown => LocalProxyCard ?? LocalProxyOn;
+
+    /// <summary>Поднимается ли прокси: включён и карточка не спрятана.</summary>
+    [JsonIgnore]
+    public bool LocalProxyActive => LocalProxyOn && LocalProxyCardShown;
+
+    /// <summary>
+    /// Карточка WARP на вкладке VPN — по выключателю в «Настройках туннеля».
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> — не задано: видна, как была всегда. Включённый WARP
+    /// видно при любой настройке — спрятанный путь туннеля не объяснял бы,
+    /// почему подписки на паузе.
+    /// </remarks>
+    public bool? WarpCard { get; init; }
+
+    /// <summary>Видна ли карточка WARP (<see cref="WarpCard"/>).</summary>
+    [JsonIgnore]
+    public bool WarpCardShown => (WarpCard ?? true) || WarpEnabled;
+
+    /// <summary>
     /// Секрет прокси Telegram — один на всё время, иначе после каждого
     /// перезапуска Telegram пришлось бы подключать заново.
     /// </summary>
