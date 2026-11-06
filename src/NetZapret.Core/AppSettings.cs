@@ -386,6 +386,16 @@ public sealed record AppSettings
     public int TelegramProxyPort { get; init; } = TgWsProxy.DefaultPort;
 
     /// <summary>
+    /// Поднимать локальный прокси (SOCKS5 и HTTP на 127.0.0.1) вместе с туннелем
+    /// (<see cref="LocalProxy"/>).
+    /// </summary>
+    /// <remarks>Выключен по умолчанию: прокси нужен тому, кто его пропишет в программе.</remarks>
+    public bool LocalProxyOn { get; init; }
+
+    /// <summary>Порт локального прокси на 127.0.0.1.</summary>
+    public int LocalProxyPort { get; init; } = LocalProxy.DefaultPort;
+
+    /// <summary>
     /// Секрет прокси Telegram — один на всё время, иначе после каждого
     /// перезапуска Telegram пришлось бы подключать заново.
     /// </summary>

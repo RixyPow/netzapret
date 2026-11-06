@@ -429,6 +429,22 @@ public sealed class SingBoxOptions
     /// </remarks>
     public bool HealthInbound { get; init; }
 
+    /// <summary>Тег входа локального прокси для программ человека.</summary>
+    public const string LocalProxyTag = "local-proxy";
+
+    /// <summary>
+    /// Порт локального прокси (<c>mixed</c> на 127.0.0.1), который программы
+    /// человека прописывают у себя сами; <c>null</c> — прокси нет.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №42 и идея №18 (<c>docs/ideas.md</c>): «несистемный прокси» —
+    /// его видят только программы, где он указан явно. Всё, что пришло в него,
+    /// идёт в туннель мимо правил маршрутов: прокси указывают ради VPN.
+    /// Без пароля — браузеры SOCKS с паролем не умеют; и только петля, чтобы
+    /// VPN не раздавался в домашнюю сеть.
+    /// </remarks>
+    public int? LocalProxyPort { get; init; }
+
     /// <summary>Что именно заводить в туннель.</summary>
     public TunnelScope Scope { get; init; } = TunnelScope.Everything;
 
@@ -1358,6 +1374,17 @@ public sealed class SingBoxConfigCompiler
             }
 
             inbounds.Add(health);
+        }
+
+        if (options.LocalProxyPort is { } localPort)
+        {
+            inbounds.Add(new JsonObject
+            {
+                ["type"] = "mixed",
+                ["tag"] = SingBoxOptions.LocalProxyTag,
+                ["listen"] = "127.0.0.1",
+                ["listen_port"] = localPort,
+            });
         }
 
         return inbounds;
@@ -2437,6 +2464,25 @@ public sealed class SingBoxConfigCompiler
         }
 
         rules.Add(new JsonObject { ["ip_is_private"] = true, ["outbound"] = "direct" });
+
+        // Локальный прокси — в туннель мимо правил маршрутов, но после домашней
+        // сети строкой выше: роутер и сетевой диск через прокси открываются как
+        // есть. Без серверов — отказ, а не правила: прокси прописывают ради VPN,
+        // и молча отдать программе домашний адрес хуже, чем не соединить.
+        if (options.LocalProxyPort is not null)
+        {
+            rules.Add(haveServers
+                ? new JsonObject
+                {
+                    ["inbound"] = new JsonArray { SingBoxOptions.LocalProxyTag },
+                    ["outbound"] = options.SelectorTag,
+                }
+                : new JsonObject
+                {
+                    ["inbound"] = new JsonArray { SingBoxOptions.LocalProxyTag },
+                    ["action"] = "reject",
+                });
+        }
 
         // В режиме «всё через VPN» правила не отбрасываются целиком, как было
         // раньше: исключения на прямой проход обязаны пережить его. Российские

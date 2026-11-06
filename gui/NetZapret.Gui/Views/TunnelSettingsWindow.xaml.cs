@@ -131,6 +131,8 @@ public partial class TunnelSettingsWindow : Window
         DeadPool.IsChecked = settings.DeadPoolToDefault;
         DeadPool.IsEnabled = selective;
 
+        ShowLocalProxy(settings);
+
         Word(FakeIpMemoryWord, settings.FakeIpMemory);
         FakeIpMemory.IsChecked = settings.FakeIpMemory;
 
@@ -454,6 +456,93 @@ public partial class TunnelSettingsWindow : Window
             on
                 ? "Когда живых серверов не останется, подписка перечитается сама — не чаще раза в 30 минут."
                 : "Подписка перечитывается как прежде: при запуске движков, во вкладке VPN и кнопкой «Обновить».");
+    }
+
+    private void ShowLocalProxy(AppSettings settings)
+    {
+        Word(LocalProxyWord, settings.LocalProxyOn);
+        LocalProxySwitch.IsChecked = settings.LocalProxyOn;
+
+        if (!LocalProxyPortBox.IsKeyboardFocused)
+            LocalProxyPortBox.Text = settings.LocalProxyPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        var address = LocalProxy.Address(settings.LocalProxyPort);
+        LocalProxyAddress.Text = address;
+
+        Line(LocalProxyLine, !settings.LocalProxyOn
+            ? string.Empty
+            : !settings.Engines.Tunnel
+                ? "Туннель выключен — прокси не поднимется, пока его не включите."
+                : settings.WarpEnabled
+                    ? "Через прокси пойдёт WARP — он сейчас путь туннеля."
+                    : string.Empty);
+    }
+
+    private void OnLocalProxy(object sender, RoutedEventArgs e)
+    {
+        bool on = LocalProxySwitch.IsChecked == true;
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        // Занятый порт роняет движок туннеля целиком — проверить до записи.
+        // Свой же поднятый прокси портом не мешает.
+        if (on && LocalProxy.Problem(settings.LocalProxyPort, settings, ownNow: settings.LocalProxyOn) is { } problem)
+        {
+            LocalProxySwitch.IsChecked = false;
+            Status.Text = problem;
+            return;
+        }
+
+        Save(s => s with { LocalProxyOn = on },
+            on
+                ? $"Локальный прокси поднимется на {LocalProxy.Address(settings.LocalProxyPort)}."
+                : "Локального прокси не будет.");
+    }
+
+    private void OnLocalProxyPort(object sender, RoutedEventArgs e)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (!int.TryParse(LocalProxyPortBox.Text.Trim(), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out int port))
+        {
+            Status.Text = "Порт — число от 1024 до 65535.";
+            return;
+        }
+
+        if (port == settings.LocalProxyPort)
+        {
+            Status.Text = $"Порт и так {port}.";
+            return;
+        }
+
+        if (LocalProxy.Problem(port, settings) is { } problem)
+        {
+            Status.Text = problem;
+            return;
+        }
+
+        Save(s => s with { LocalProxyPort = port }, $"Порт локального прокси — {port}.");
+    }
+
+    private void OnLocalProxyPortKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            OnLocalProxyPort(sender, e);
+    }
+
+    private void OnLocalProxyCopy(object sender, RoutedEventArgs e)
+    {
+        var address = "socks5://" + LocalProxy.Address(AppSettings.Load(AppSettings.DefaultPath).LocalProxyPort);
+
+        try
+        {
+            Clipboard.SetText(address);
+            Status.Text = $"Скопировано: {address}. Для HTTP — тот же адрес и порт.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Буфер обмена занят: " + ex.GetBaseException().Message;
+        }
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();
