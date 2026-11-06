@@ -195,4 +195,25 @@ public sealed class RulesShareTests : IDisposable
         Assert.Equal("instagram.com", clash.Name);
         Assert.Contains("десинк", clash.Outcome);
     }
+
+    /// <summary>
+    /// Пин с пометкой nz:desync десинку открыт — щит его не берёт, и со своим
+    /// рецептом он не спорит. С туннелем спорит по-прежнему: fakeip прибитое
+    /// имя не получает. 06.11 obsidian.md на 172.67.74.64 карточка звала
+    /// «рецепт не применится ни разу», хотя рецепт применялся.
+    /// </summary>
+    [Fact]
+    public void A_pin_open_to_desync_does_not_clash_with_a_recipe()
+    {
+        var clashes = RouteClashes.FromRules(
+            [
+                Rule(MatchKind.Domain, "*.obsidian.md", RoutingMode.Desync),
+                Rule(MatchKind.Domain, "*.instagram.com", RoutingMode.Desync),
+                Rule(MatchKind.Domain, "*.twimg.com", RoutingMode.Proxy),
+            ],
+            ["obsidian.md", "instagram.com", "twimg.com"],
+            openToDesync: new HashSet<string>(["obsidian.md", "twimg.com"], StringComparer.OrdinalIgnoreCase));
+
+        Assert.Equal(["instagram.com", "twimg.com"], clashes.Select(c => c.Name).Order());
+    }
 }

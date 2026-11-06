@@ -592,7 +592,9 @@ public static class Doctor
         // прибито в hosts и потому выведено из-под десинка.
         try
         {
-            var clashes = RouteClashes.FromRules(UserRulesFile.Load().Entries, HostsEditor.Pins().Keys.ToList());
+            var clashes = RouteClashes.FromRules(
+                UserRulesFile.Load().Entries, HostsEditor.Pins().Keys.ToList(),
+                openToDesync: HostsEditor.DesyncPins());
 
             foreach (var clash in clashes)
                 lines.Add(Warn($"{clash.Name}: {clash.Outcome}"));

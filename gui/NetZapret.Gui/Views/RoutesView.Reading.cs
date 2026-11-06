@@ -252,7 +252,7 @@ public partial class RoutesView
 
         try
         {
-            clashes = RouteClashes.FromRules(userRules.Entries, pins);
+            clashes = RouteClashes.FromRules(userRules.Entries, pins, openToDesync: HostsEditor.DesyncPins());
         }
         catch (Exception)
         {

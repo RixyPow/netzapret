@@ -76,10 +76,34 @@ public static class RouteClashes
     /// или доменом им не о чем.
     /// </remarks>
     /// <param name="pins">Прибитые нами имена.</param>
+    /// <param name="openToDesync">
+    /// Прибитые с пометкой <c>nz:desync</c>: щит их не берёт, рецепт к ним
+    /// применяется, и с десинком они не спорят. С туннелем — по-прежнему:
+    /// fakeip прибитое имя не получает при любой пометке. 06.11 obsidian.md
+    /// на 172.67.74.64 с пометкой и своим рецептом карточка звала
+    /// «рецепт не применится ни разу» — а он применялся.
+    /// </param>
     public static IReadOnlyList<RouteClash> FromRules(
         IEnumerable<UserRuleEntry> rules,
         IEnumerable<string> pins,
-        Func<string, IReadOnlyList<string>>? members = null)
+        Func<string, IReadOnlyList<string>>? members = null,
+        IReadOnlySet<string>? openToDesync = null)
+    {
+        var clashes = FromRulesAll(rules, pins, members);
+
+        if (openToDesync is not { Count: > 0 })
+            return clashes;
+
+        return clashes
+            .Where(c => !(Pair(c.First, c.Second, RouteChoice.Pin, RouteChoice.Desync)
+                && openToDesync.Contains(Trim(c.Name))))
+            .ToList();
+    }
+
+    private static IReadOnlyList<RouteClash> FromRulesAll(
+        IEnumerable<UserRuleEntry> rules,
+        IEnumerable<string> pins,
+        Func<string, IReadOnlyList<string>>? members)
     {
         var entries = new List<RouteEntry>();
 
