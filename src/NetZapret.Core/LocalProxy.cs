@@ -32,7 +32,7 @@ public static class LocalProxy
     /// </summary>
     /// <param name="port">Порт, который выбирает человек.</param>
     /// <param name="settings">Нынешние настройки — чтобы не спорить с портом прокси Telegram.</param>
-    /// <param name="ownNow">Порт уже занят нашим же прокси (движок поднят с ним) — не помеха.</param>
+    /// <param name="ownNow">Порт заведомо наш — проверять, свободен ли он, не нужно (тесты).</param>
     public static string? Problem(int port, AppSettings settings, bool ownNow = false)
     {
         if (port is < 1024 or > 65535)
@@ -46,10 +46,53 @@ public static class LocalProxy
         if (port == settings.TelegramProxyPort)
             return "На этом порту прокси Telegram — выберите другой.";
 
-        if (!ownNow && !IsFree(port))
+        // Порт держит наш же движок — не помеха. По настройкам этого не узнать:
+        // 06.11 прокси был поднят, человек спрятал карточку (настройка
+        // выключилась, движок не перезапускался) и включил снова — и окно
+        // назвало свой же порт «занят другой программой».
+        if (!ownNow && !HeldByEngine(port) && !IsFree(port))
             return $"Порт {port} уже занят другой программой — выберите другой.";
 
         return null;
+    }
+
+    /// <summary>
+    /// Слушает ли этот порт вход прокси в конфиге, с которым поднят движок.
+    /// </summary>
+    /// <remarks>
+    /// Конфиг пишется перед каждым запуском движков, так что его вход — то,
+    /// что сейчас слушает sing-box. Остановленный движок порт отпускает, и
+    /// тогда проверка привязкой ниже его увидит свободным.
+    /// </remarks>
+    public static bool HeldByEngine(int port, string? configPath = null)
+    {
+        try
+        {
+            var path = configPath ?? Path.Combine("runtime", "singbox.json");
+            if (!File.Exists(path))
+                return false;
+
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+
+            if (!document.RootElement.TryGetProperty("inbounds", out var inbounds))
+                return false;
+
+            foreach (var inbound in inbounds.EnumerateArray())
+            {
+                if (inbound.TryGetProperty("tag", out var tag) && tag.GetString() == "local-proxy"
+                    && inbound.TryGetProperty("listen_port", out var listen) && listen.TryGetInt32(out int held)
+                    && held == port)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool IsFree(int port)

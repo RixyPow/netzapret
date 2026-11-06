@@ -165,6 +165,27 @@ public class LocalProxyTests
     }
 
     [Fact]
+    public void Port_held_by_our_running_engine_is_not_called_busy()
+    {
+        // 06.11: прокси поднят, карточку спрятали и включили снова — свой же
+        // порт окно назвало «занят другой программой».
+        var (json, _) = Compile(47123, Vless);
+        var path = Path.Combine(Path.GetTempPath(), $"nz-engine-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, json);
+
+        try
+        {
+            Assert.True(LocalProxy.HeldByEngine(47123, path));
+            Assert.False(LocalProxy.HeldByEngine(47124, path));
+            Assert.False(LocalProxy.HeldByEngine(47123, path + ".нет"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Default_port_is_acceptable()
     {
         Assert.Null(LocalProxy.Problem(LocalProxy.DefaultPort, new AppSettings(), ownNow: true));

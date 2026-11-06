@@ -3231,8 +3231,8 @@ public partial class VpnView : UserControl
             bool on = LocalProxySwitch.IsChecked == true;
 
             // Занятый порт роняет движок туннеля целиком — проверить до записи.
-            // Свой же поднятый прокси портом не мешает.
-            if (on && LocalProxy.Problem(settings.LocalProxyPort, settings, ownNow: settings.LocalProxyOn) is { } problem)
+            // Свой же поднятый прокси портом не мешает (LocalProxy.HeldByEngine).
+            if (on && LocalProxy.Problem(settings.LocalProxyPort, settings) is { } problem)
             {
                 LocalProxySwitch.IsChecked = false;
                 Status.Text = problem + " Порт — в «Настройках».";
