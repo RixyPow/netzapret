@@ -423,9 +423,6 @@
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                         <TextBlock Text="VPN" Style="{StaticResource Title}" TextWrapping="Wrap" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
-                                   TextWrapping="Wrap"
-                                   Text="Подписки, их серверы и то, через что идёт трафик." />
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -568,7 +565,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Недавние серверы" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Выходы, через которые недавно шёл трафик, — свежие первыми. Замечаются, пока программа открыта: смену при закрытом окне журнал увидит, когда окно спросит движок снова.&#x0a;&#x0a;Задержка и цвет — по последнему замеру сервера." />
+                                                Content="Выходы, через которые недавно шёл трафик, — свежие первыми. Замечаются, пока работают движки и открыто окно. Задержка и цвет — по последнему замеру." />
                             </StackPanel>
 
                             <ItemsControl x:Name="RecentList" Margin="0,10,0,0">
@@ -615,7 +612,7 @@
 
                             <TextBlock x:Name="RecentEmpty" Style="{StaticResource Caption}" TextWrapping="Wrap"
                                        Margin="0,10,0,0" Visibility="Collapsed"
-                                       Text="Пока пусто: журнал заполняется, пока движки работают и окно открыто." />
+                                       Text="Пока пусто." />
                         </StackPanel>
                     </gui:Card>
                 </Grid>
@@ -638,7 +635,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Быстрая смена сервера" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="«Авто» — автоподбор: движок сам опрашивает серверы и берёт быстрейший из живых. Мёртвый выход не выбирается.&#x0a;&#x0a;Плитка сервера закрепляет его — автоподбор выключится. Закреплённый держится, даже если перестанет отвечать, — пока в «Настройках» не включена «Замена выбранному серверу».&#x0a;&#x0a;Здесь серверы подписок в работе, быстрые первыми. Все — в списке подписок ниже." />
+                                                    Content="«Авто» — автоподбор: движок сам берёт быстрейший из живых серверов.&#x0a;&#x0a;Плитка сервера закрепляет его и выключает автоподбор. Закреплённый держится, даже если перестанет отвечать, — пока в «Настройках» не включена «Замена выбранному серверу»." />
                                 </StackPanel>
                                 <TextBlock x:Name="PickLine" Style="{StaticResource Caption}" Margin="0,5,0,0" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
@@ -715,7 +712,7 @@
                                               VerticalAlignment="Center" Click="OnForeign" />
                                 <TextBlock Text="Только зарубежные" Margin="10,0,0,0" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Автоподбор не берёт отечественные выходы. Подбор идёт по задержке и потому сползает на ближайший сервер — свой же, а через него не работает ровно то, ради чего туннель обычно и нужен: адрес остаётся отечественным, и отказ по стране приходит тот же, что без туннеля.&#x0a;&#x0a;Выбрать отечественный плиткой или в списке это не мешает. Применяется при следующем запуске движков." />
+                                                Content="Автоподбор не берёт отечественные выходы: через них адрес остаётся отечественным, и отказ по стране тот же, что без туннеля. Выбрать такой руками можно. Применяется при следующем запуске движков." />
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
@@ -723,7 +720,7 @@
                                               VerticalAlignment="Center" Click="OnStable" />
                                 <TextBlock Text="Сначала стабильные" Margin="10,0,0,0" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Нестабильные — серверы, что работают через раз: из последних пяти и больше замеров удачных меньше четырёх из пяти. Они жёлтые в списке.&#x0a;&#x0a;Включено — в автоподборе, в ленте и при сортировке по задержке они идут после стабильных: автоподбор возьмёт нестабильный, только если не ответил ни один стабильный. Выключено — только по задержке, как все.&#x0a;&#x0a;Выбрать нестабильный руками можно всегда. Автоподбор меняется при следующем запуске движков." />
+                                                Content="Нестабильные (жёлтые) — удачных меньше четырёх из пяти последних замеров. Включено — автоподбор и лента берут их после стабильных; выключено — только по задержке. Применяется при следующем запуске движков." />
                             </StackPanel>
                         </WrapPanel>
                     </StackPanel>
@@ -752,7 +749,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Cloudflare WARP" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Бесплатный выход Cloudflare: без счёта, без срока, без почты и ключей — учётную запись движок заводит себе сам.&#x0a;&#x0a;Это выбор пути: включённый WARP ставит подписки на паузу, и весь туннель идёт через него. Выключили — туннель вернётся к подпискам и к выбранному там серверу. Применяется при следующем запуске движков.&#x0a;&#x0a;Выпускает трафик в ближайшем городе Cloudflare, из России — в Москве. От блокировок оператора спасает, от отказов по стране — нет: адрес остаётся отечественным.&#x0a;&#x0a;Идёт по MASQUE поверх HTTP/2 на 443 порту. После запуска ему нужно около полуминуты, прежде чем пойдёт трафик.&#x0a;&#x0a;Учётную запись WARP заводит один раз, при первом запуске, и из России её часто не пускают — тогда WARP подключается без конца. Помогает другой VPN-клиент, включённый на минуту: перезапустите движки, запись заведётся через него и сохранится, потом его можно выключить." />
+                                                Content="Бесплатный выход Cloudflare, без счёта и ключей. Включённый WARP ставит подписки на паузу — весь туннель идёт через него. Применяется при следующем запуске движков.&#x0a;&#x0a;Выход в ближайшем городе Cloudflare, из России — в Москве: от блокировок оператора спасает, от отказов по стране — нет. После запуска ему нужно около полуминуты.&#x0a;&#x0a;Учётную запись WARP заводит один раз, при первом запуске, и из России её часто не пускают — тогда WARP подключается без конца. Помогает другой VPN-клиент, включённый на минуту: перезапустите движки, запись заведётся через него и сохранится, потом его можно выключить." />
                             </StackPanel>
                             <TextBlock x:Name="WarpLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
@@ -792,7 +789,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Локальный прокси" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="SOCKS5 и HTTP на одном порту, только на этом компьютере (127.0.0.1). Системный прокси Windows не меняется: прокси видят только те программы, в настройках которых он прописан, — браузер или его отдельный профиль, Telegram, лаунчер, curl.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN тем же сервером, что выбран выше, мимо правил «Маршрутов»: в отличие от маршрута программы, ничего не нужно дописывать, и другие программы на тех же сайтах не задеваются. Домашняя сеть — роутер, сетевой диск — открывается как есть. Имена разрешаются на сервере, если программа отдаёт их прокси (SOCKS5 с удалённым DNS или HTTP).&#x0a;&#x0a;Работает, пока поднят туннель. Пароля нет, поэтому прокси не открыт в домашнюю сеть. Порт — в «Настройках». Применяется при следующем запуске движков." />
+                                                Content="SOCKS5 и HTTP на одном порту, только для этого компьютера. Системный прокси Windows не меняется: прокси видят программы, где он прописан.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN выбранным выше сервером, мимо «Маршрутов»; домашняя сеть открывается как есть. Работает, пока поднят туннель. Порт — в «Настройках». Применяется при следующем запуске движков." />
                             </StackPanel>
                             <TextBlock x:Name="LocalProxyLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
@@ -829,7 +826,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Kill switch" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Не пускает трафик мимо VPN. Пока движки работают, Windows выпускает в сеть только то, что идёт через туннель, — и когда серверы не отвечают, и пока движок туннеля падает или перезапускается. Сети в это время нет совсем: так трафик не уйдёт с вашего настоящего адреса.&#x0a;&#x0a;Действует только в режиме «Туннель»: в «Гибриде» десинк и «напрямую» идут мимо туннеля по замыслу. Локальная сеть (роутер, принтер) и сам NetZapret работают и при нём.&#x0a;&#x0a;Снимается, когда вы останавливаете движки или закрываете программу, — в системе ничего не остаётся. «Обход туннеля» при нём не срабатывает. Применяется при следующем запуске движков." />
+                                                Content="Пока движки работают, Windows выпускает в сеть только туннель: упал VPN — сети нет, и трафик не уйдёт с вашего настоящего адреса. Локальная сеть работает.&#x0a;&#x0a;Только в режиме «Туннель». Снимается при остановке движков и выходе из программы; «Обход туннеля» при нём не срабатывает. Применяется при следующем запуске движков." />
                             </StackPanel>
                             <TextBlock x:Name="KillSwitchLine" Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap" />
                         </StackPanel>
@@ -855,12 +852,13 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="Пулы серверов" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="Пулы серверов" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ContentControl x:Name="PoolsInfo" Style="{StaticResource Info}" Margin="2,0,0,0" />
+                    </StackPanel>
 
                     <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Новый пул" Click="OnNewPool" />
                 </Grid>
-
-                <TextBlock x:Name="PoolsLine" Style="{StaticResource Caption}" Margin="4,8,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
             <StackPanel x:Name="SubsBlock">
@@ -873,7 +871,11 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock Grid.Column="0" Text="Подписки" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <TextBlock Text="Подписки" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                        Content="Движок берёт серверы всех подписок «в работе» и отдельных ключей. «Замерить все» ходит через каждый сервер по очереди отдельным движком — работающий обход не прерывается." />
+                    </StackPanel>
 
                     <Border Grid.Column="1" CornerRadius="10" Padding="10,3" Margin="12,0,0,0" VerticalAlignment="Center"
                             Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
@@ -923,7 +925,7 @@
             </StackPanel>
 
             <TextBlock x:Name="Footer" Style="{StaticResource Caption}" Margin="4,10,0,0" TextWrapping="Wrap"
-                           Text="Движок берёт серверы всех подписок «в работе» и отдельных ключей, а автоподбор — быстрейший из живых. Замер поднимает движок с локальным входом и ходит через каждый сервер по очереди — TUN не трогается, работающий обход не прерывается." />
+                           Visibility="Collapsed" />
         </Grid>
     </Grid>
 </UserControl>

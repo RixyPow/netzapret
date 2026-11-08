@@ -160,7 +160,7 @@
                                 ToolTip="Закрыть" />
                     </Grid>
                     <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Если программа помогает — поставьте звезду на GitHub и подпишитесь на канал: так о ней узнают другие, а вы — о новых версиях. Поддержать разработку можно и донатом." />
+                               Text="Если программа помогает — поставьте звезду на GitHub и подпишитесь на канал. Поддержать можно и донатом." />
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
                         <Button Style="{StaticResource Ghost}" Padding="14,7" Margin="0,0,8,0" Click="OnGreetingTelegram"

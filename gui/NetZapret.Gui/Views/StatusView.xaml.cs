@@ -401,7 +401,8 @@ public partial class StatusView : UserControl
         bool SingBoxUp,
         DateTime? ConfigBuilt,
         bool Coming = false,
-        string PresetNote = "");
+        string PresetNote = "",
+        string PresetProblem = "");
 
     private static Seen Read(bool starting)
     {
@@ -448,8 +449,10 @@ public partial class StatusView : UserControl
         {
         }
 
+        var (presetNote, presetProblem) = PresetNoteOf(settings.PresetName);
+
         return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built,
-            !running && EngineControl.Coming, PresetNoteOf(settings.PresetName));
+            !running && EngineControl.Coming, presetNote, presetProblem);
     }
 
     private bool _updating;
@@ -511,7 +514,12 @@ public partial class StatusView : UserControl
         Problem.Visibility = Visibility.Collapsed;
 
         PresetValue.Text = settings.DescribePreset();
-        PresetNote.Text = seen.PresetNote;
+        // Описание пресета — в подсказке «i» у «Текущий пресет»; строкой под
+        // именем — только беда: пресета нет или нет его файла.
+        PresetInfo.Content = seen.PresetNote;
+        PresetInfo.Visibility = seen.PresetNote.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        PresetNote.Text = seen.PresetProblem;
+        PresetNote.Visibility = seen.PresetProblem.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
         ShowServerFlag(_exit ?? NetZapret.Subscriptions.Warp.PreferredExit(settings));
         DnsValue.Text = settings.UseRouterDns
@@ -1052,7 +1060,8 @@ public partial class StatusView : UserControl
     private static PresetNoteRead? _presetNote;
 
     /// <summary>
-    /// Первая фраза описания пресета — из его же файла; зовётся в пуле (<see cref="Read"/>).
+    /// Первая фраза описания пресета — из его же файла, и беда с ним, если есть;
+    /// зовётся в пуле (<see cref="Read"/>).
     /// </summary>
     /// <remarks>
     /// Разбор файла — сотни строк, а меняется выбор раз в неделю: файл читается
@@ -1061,30 +1070,31 @@ public partial class StatusView : UserControl
     /// создаётся заново на каждый заход. Симуляция 05.11 застала поток окна
     /// в <c>PresetReader.Read</c> посреди подвисания.
     /// </remarks>
-    private static string PresetNoteOf(string? preset)
+    private static (string Note, string Problem) PresetNoteOf(string? preset)
     {
         if (preset is null)
-            return "Десинк без пресета не поднимается.";
+            return (string.Empty, "Десинк без пресета не поднимается.");
 
         try
         {
             if (NetZapret.Zapret.ZapretPaths.FindPreset(preset) is not { } file)
-                return "Файла пресета нет в папке presets.";
+                return (string.Empty, "Файла пресета нет в папке presets.");
 
             var key = $"{file}|{File.GetLastWriteTimeUtc(file).Ticks}";
 
             if (_presetNote is { } known && known.Key == key)
-                return known.Note;
+                return (known.Note, string.Empty);
 
+            // Нет описания — нет и подсказки: «описания нет» человеку ничего не даёт.
             var description = new NetZapret.Zapret.PresetReader().Read([file]).FirstOrDefault()?.Description;
-            var note = FirstSentence(description) ?? "Описания в файле пресета нет.";
+            var note = FirstSentence(description) ?? string.Empty;
 
             _presetNote = new PresetNoteRead(key, note);
-            return note;
+            return (note, string.Empty);
         }
         catch (Exception)
         {
-            return string.Empty;
+            return (string.Empty, string.Empty);
         }
     }
 

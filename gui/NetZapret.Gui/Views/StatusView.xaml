@@ -330,8 +330,6 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
                             <TextBlock FontWeight="SemiBold" FontSize="14" TextWrapping="Wrap"
                                        Text="Нравится NetZapret? Поставьте звезду и подпишитесь на канал" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Так о программе узнают другие, а вы — о новых версиях." />
                         </StackPanel>
 
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -494,7 +492,10 @@
 
                     <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
                         <StackPanel>
-                            <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" VerticalAlignment="Center" />
+                                <ContentControl x:Name="PresetInfo" Style="{StaticResource Info}" Margin="2,-4,0,-4" Visibility="Collapsed" />
+                            </StackPanel>
 
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
@@ -518,7 +519,8 @@
                                         и придуманное разошлось бы с файлом.
                                     -->
                                     <TextBlock x:Name="PresetNote" Style="{StaticResource Caption}" Margin="0,4,0,0"
-                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34" />
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="34"
+                                               Visibility="Collapsed" />
                                 </StackPanel>
 
                                 <!--
@@ -652,7 +654,7 @@
                                                Foreground="{DynamicResource Accent}" Margin="0,0,9,0" />
                                     <TextBlock x:Name="ModeDesyncName" FontWeight="SemiBold" FontSize="14.5" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="winws2: вмешивается в рукопожатие TLS так, что фильтр оператора не опознаёт имя. Трафик идёт напрямую, своим обычным путём, и адрес остаётся домашним.&#x0a;&#x0a;Лечит блокировки по имени и не лечит отказы по стране: сайт видит тот же адрес, что и без него." />
+                                                    Content="winws2: портит рукопожатие TLS так, что фильтр оператора не узнаёт имя. Трафик идёт напрямую, адрес домашний.&#x0a;&#x0a;Лечит блокировки по имени, но не отказы по стране." />
                                 </StackPanel>
                             </RadioButton>
 
@@ -663,7 +665,7 @@
                                                Foreground="{DynamicResource Accent}" Margin="0,0,9,0" />
                                     <TextBlock x:Name="ModeTunnelName" FontWeight="SemiBold" FontSize="14.5" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="sing-box: поднимает сетевой адаптер и уводит через него трафик. Адрес становится зарубежным, и это лечит отказы по стране.&#x0a;&#x0a;В этом режиме забирает всё, кроме поставленного «напрямую», — как обычный VPN. Без исключений (настройки туннеля) — вообще всё.&#x0a;&#x0a;Требует подписки или WARP: без них поднимать нечего." />
+                                                    Content="sing-box: уводит трафик в VPN через свой сетевой адаптер — адрес зарубежный, это лечит отказы по стране.&#x0a;&#x0a;Забирает всё, кроме поставленного «напрямую». Нужна подписка или WARP." />
                                 </StackPanel>
                             </RadioButton>
 
@@ -674,7 +676,7 @@
                                                Foreground="{DynamicResource Accent}" Margin="0,0,9,0" />
                                     <TextBlock x:Name="ModeRouteName" FontWeight="SemiBold" FontSize="14.5" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Оба движка сразу. Что названо в маршрутах «через VPN», уходит в туннель; остальное идёт напрямую, и закрытое по имени чинит десинк.&#x0a;&#x0a;Адрес для сайтов из маршрутов — зарубежный, для прочих — домашний: российские сервисы не видят VPN." />
+                                                    Content="Оба движка сразу: что в «Маршрутах» стоит «через VPN», уходит в туннель, остальное идёт напрямую, и закрытое по имени чинит десинк.&#x0a;&#x0a;Российские сервисы видят домашний адрес." />
                                 </StackPanel>
                             </RadioButton>
                         </Grid>
@@ -749,7 +751,7 @@
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Задача планировщика, а не служба: правами администратора задача наделяется сразу, запрос UAC при входе не появляется. Запускается та же программа и с теми же ключами, что и кнопка «Запустить», — иначе автозапуск поднимал бы не то, что вы проверили руками." />
+                                                    Content="Задача планировщика с правами администратора — запроса UAC при входе нет. Поднимает то же, что кнопка «Запустить»." />
                                 </StackPanel>
 
                                 <!--

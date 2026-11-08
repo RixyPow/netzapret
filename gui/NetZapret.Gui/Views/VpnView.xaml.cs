@@ -617,7 +617,7 @@ public partial class VpnView : UserControl
                 ? "Движок меряет серверы пула и возьмёт быстрейший из живых — обычно это секунды."
                 : running
                     ? "Движок не ответил, какой выход держит."
-                    : "При запуске движков — быстрейший из живых серверов всех подписок в работе.";
+                    : string.Empty;
             ShowFlag(string.Empty);
             ShowStats(null, null, null);
         }
@@ -658,6 +658,9 @@ public partial class VpnView : UserControl
 
         if (probe is { } checkedNow && CurrentDetail.Text.Length > 0)
             CurrentDetail.Text += $" Проверен {SecondsAgo(checkedNow.At)} назад.";
+
+        // Пустая строка не держит под собой места.
+        CurrentDetail.Visibility = CurrentDetail.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // Метка состояния: зелёная, пока выход отвечает; красная — не ответил
         // на последнюю проверку; без проверки — по тому, работают ли движки.
@@ -1700,13 +1703,15 @@ public partial class VpnView : UserControl
         // в кэше движка). Сам совет у нас не проверялся.
         bool stuck = on && EnginesRunning && Warp.RegistrationFailing(EngineLog.DefaultPath);
 
+        // Выключенный — строки нет: что такое WARP, говорит подсказка «i».
         WarpLine.Text = stuck
             ? "WARP не может завести учётную запись — из России её часто не пускают. Включите на минуту "
               + "другой VPN-клиент и перезапустите движки: запись заведётся через него и сохранится, "
               + "потом другой VPN можно выключить."
             : on
                 ? $"Туннель идёт только через WARP, подписки на паузе. Выход в Москве{measured}."
-                : "Бесплатный выход через сеть Cloudflare. Включите — и туннель пойдёт через него вместо подписок.";
+                : string.Empty;
+        WarpLine.Visibility = WarpLine.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // Замер — руками движка, а он знает WARP, только когда тот в конфиге.
         // Кнопка на месте всегда: пропадая, она не говорила, почему её нет.
@@ -3234,13 +3239,15 @@ public partial class VpnView : UserControl
         LocalProxyWord.Text = on ? "Включён" : "Выключен";
         LocalProxyDot.SetResourceReference(System.Windows.Shapes.Shape.FillProperty, on ? "Accent" : "Faint");
 
+        // Выключенный — строки нет: что он делает, говорит подсказка «i».
         LocalProxyLine.Text = !on
-            ? $"Для программ, где он прописан: всё, что они шлют на {address}, пойдёт через VPN."
+            ? string.Empty
             : !settings.Engines.Tunnel
                 ? $"{address} — поднимется, когда туннель включён."
                 : settings.HybridProxyOnlyActive
                     ? $"SOCKS5 и HTTP на {address}. VPN только через прокси: маршруты «через VPN» — мимо туннеля."
                     : $"SOCKS5 и HTTP на {address}: программы, где он прописан, идут через VPN.";
+        LocalProxyLine.Visibility = LocalProxyLine.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnLocalProxy(object sender, RoutedEventArgs e)
