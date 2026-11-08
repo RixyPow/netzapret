@@ -38,7 +38,7 @@
             равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
-        <Border Grid.Column="0" Style="{StaticResource RailPanel}">
+        <Border Grid.Column="0" x:Name="RailBorder" Style="{StaticResource RailPanel}">
             <DockPanel LastChildFill="True">
 
                 <!--

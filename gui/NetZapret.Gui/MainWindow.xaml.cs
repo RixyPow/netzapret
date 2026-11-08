@@ -298,10 +298,10 @@ public partial class MainWindow : Window
     /// видит <c>Section</c> ещё не созданным и ничего не делает.
     /// </para>
     /// <para>
-    /// Уходит навсегда, стоит уйти на любой другой раздел и вернуться: клик
-    /// по «Главной» снова показывает обычную <see cref="StatusView"/>.
     /// Мастер — это то, что видно один раз при входе, а не отдельный
-    /// постоянный режим «Главной». Открыть его заново можно из «Ещё».
+    /// постоянный режим «Главной». С 08.11 он на всё окно, без меню
+    /// (<see cref="WholeWindow"/>): уходят из него «Пропустить» на первом
+    /// шаге или «Готово» на последнем. Открыть его заново можно из «Ещё».
     /// </para>
     /// </remarks>
     private void ShowOnboardingIfNeeded()
@@ -334,12 +334,30 @@ public partial class MainWindow : Window
         var onboarding = new OnboardingView();
         onboarding.Completed += (_, _) =>
         {
+            WholeWindow(false);
             var status = new StatusView();
             ShowPage(status);
             Motion.Page(status);
         };
 
+        WholeWindow(true);
         ShowPage(onboarding);
+    }
+
+    /// <summary>
+    /// Мастер — на всё окно: меню на это время спрятано (макеты владельца 08.11).
+    /// </summary>
+    /// <remarks>
+    /// Новичку меню из пятнадцати пунктов рядом с «Добро пожаловать» — лишнее:
+    /// мастер ведёт сам, а выйти из него можно «Пропустить» на первом шаге
+    /// или «Готово» на последнем. До 08.11 мастер был обычным разделом,
+    /// и из него уходили в любой другой.
+    /// </remarks>
+    private void WholeWindow(bool on)
+    {
+        RailBorder.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetColumn(SectionArea, on ? 0 : 1);
+        Grid.SetColumnSpan(SectionArea, on ? 2 : 1);
     }
 
     /// <summary>
