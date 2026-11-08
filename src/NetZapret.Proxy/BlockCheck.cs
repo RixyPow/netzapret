@@ -772,6 +772,36 @@ public sealed record TargetReport
         BlockKind.LongHello => "запасной адрес Cloudflare в hosts («Сайт не открывается?» пробует его сам) или десинк, иначе VPN",
         _ => "ничего — у имени нет адреса",
     };
+
+    /// <summary>
+    /// Чем лечится — несколькими словами, для итога проверки.
+    /// </summary>
+    /// <remarks>
+    /// Итог перечисляет виды блокировок разом, и полный совет у каждого
+    /// превращал его в стену текста (жалоба владельца 08.11). Полный
+    /// (<see cref="Remedy"/>) остаётся в панели имени и в «Сайт не открывается?».
+    /// </remarks>
+    public string RemedyBrief() => Kind switch
+    {
+        BlockKind.None when Data.BotWall => "открыть в браузере",
+        BlockKind.None => "ничего",
+        BlockKind.TlsDpi => "десинк",
+        BlockKind.TunnelFailed => "другой сервер подписки",
+        BlockKind.ForeignFakeIp => "закрыть другой VPN-клиент",
+        BlockKind.RouterFakeIp => "выключить подмену DNS на роутере",
+        BlockKind.Stall => "другой рецепт десинка или VPN",
+        BlockKind.HttpsPort or BlockKind.Full or BlockKind.Sinkhole => "только VPN",
+        BlockKind.Dns => "другой DNS или снять пин",
+        BlockKind.GeoBlock when PinFirst => "пин на посредника или VPN не в России",
+        BlockKind.GeoBlock => "VPN с выходом не в России",
+        BlockKind.BrokenCname => "подставить адрес",
+        BlockKind.Handshake => "ничего — в браузере откроется",
+        BlockKind.TlsWhiteOnly => "рецепт с разрешённым именем или VPN",
+        BlockKind.TlsByAddress => "другой адрес того же CDN или VPN",
+        BlockKind.Forbidden => "открыть в браузере, отказ и там — VPN",
+        BlockKind.LongHello => "запасной адрес Cloudflare или VPN",
+        _ => "ничего",
+    };
 }
 
 /// <summary>Что вообще умеет эта сеть.</summary>

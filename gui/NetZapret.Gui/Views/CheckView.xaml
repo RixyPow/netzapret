@@ -462,15 +462,66 @@
                             <TextBlock Text="Итог" FontWeight="SemiBold" FontSize="15" />
                             <TextBlock x:Name="SummaryHint" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0" />
 
-                            <ItemsControl x:Name="Sections" Margin="0,4,0,0">
+                            <!--
+                                Раздел итога — карточкой на подложке (08.11, владелец: итог
+                                структурнее и без лишнего текста). Точка цвета раздела, заголовок
+                                и число имён справа; ниже — пары обстановки, данные, вывод цветом
+                                раздела и «Что делать». Пояснения — в «i» у заголовка.
+                            -->
+                            <ItemsControl x:Name="Sections" Margin="0,4,0,0" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="0,12,0,0">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" Foreground="{Binding Color}"
-                                                       TextWrapping="Wrap" />
-                                            <TextBlock Text="{Binding Body}" Style="{StaticResource Caption}"
-                                                       TextWrapping="Wrap" Margin="0,4,0,0" />
-                                        </StackPanel>
+                                        <Border Margin="0,10,0,0" CornerRadius="10" Padding="14,12" Background="{DynamicResource Raised}">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse Width="8" Height="8" Fill="{Binding Color}" Margin="0,6,10,0"
+                                                             VerticalAlignment="Top" />
+                                                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="SemiBold"
+                                                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                                                    <ContentControl Grid.Column="2" Style="{StaticResource Info}" Margin="0,-4,0,-4"
+                                                                    Content="{Binding Tip}" Visibility="{Binding TipShown}" />
+                                                    <TextBlock Grid.Column="3" Text="{Binding Count}" FontWeight="SemiBold"
+                                                               Foreground="{Binding Color}" Margin="10,0,0,0" VerticalAlignment="Top"
+                                                               Visibility="{Binding CountShown}" />
+                                                </Grid>
+
+                                                <ItemsControl ItemsSource="{Binding Pairs}" Visibility="{Binding PairsShown}"
+                                                              Margin="18,8,0,0" Focusable="False">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Margin="0,2">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="64" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="{Binding Label}" Style="{StaticResource Caption}"
+                                                                           FontSize="13" VerticalAlignment="Top" />
+                                                                <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <TextBlock Text="{Binding Body}" Visibility="{Binding BodyShown}"
+                                                           TextWrapping="Wrap" LineHeight="20" Margin="18,6,0,0" />
+
+                                                <TextBlock Text="{Binding Note}" Visibility="{Binding NoteShown}"
+                                                           Foreground="{Binding Color}" TextWrapping="Wrap" LineHeight="20"
+                                                           Margin="18,6,0,0" />
+
+                                                <TextBlock Visibility="{Binding CureShown}" TextWrapping="Wrap" LineHeight="20"
+                                                           Margin="18,6,0,0">
+                                                    <Run Text="Что делать:" Foreground="{DynamicResource Muted}" />
+                                                    <Run Text="{Binding Cure, Mode=OneWay}" />
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

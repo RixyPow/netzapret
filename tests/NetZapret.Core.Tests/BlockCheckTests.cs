@@ -541,6 +541,29 @@ public class BlockCheckTests
         }
     }
 
+    /// <summary>
+    /// Короткий совет есть у каждого вида и умещается в строку итога.
+    /// </summary>
+    /// <remarks>
+    /// Итог проверки перечисляет виды разом (08.11): длинный совет у каждого
+    /// снова сложил бы стену текста. Отказ по стране — не десинк и короткий.
+    /// </remarks>
+    [Fact]
+    public void Every_kind_has_a_short_remedy()
+    {
+        foreach (var kind in Enum.GetValues<BlockKind>())
+        {
+            var brief = Report(kind).RemedyBrief();
+
+            Assert.False(string.IsNullOrWhiteSpace(brief), kind.ToString());
+            Assert.True(brief.Length <= 40, $"{kind}: {brief}");
+        }
+
+        Assert.Contains("VPN", Report(BlockKind.GeoBlock).RemedyBrief());
+        Assert.DoesNotContain("десинк", Report(BlockKind.GeoBlock).RemedyBrief());
+        Assert.Contains("пин", (Report(BlockKind.GeoBlock) with { PinFirst = true }).RemedyBrief());
+    }
+
     private static TargetReport Report(BlockKind kind) => new()
     {
         Host = "example.org",

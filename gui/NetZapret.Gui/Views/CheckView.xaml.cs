@@ -190,8 +190,64 @@ public sealed record DotLine(string Name, string Value, Brush Ink)
 /// <summary>Строка «Подробностей» в панели.</summary>
 public sealed record DetailLine(string Label, string Value);
 
-/// <summary>Раздел итога в панели.</summary>
-public sealed record SectionRow(string Title, string Body, Brush Color);
+/// <summary>
+/// Раздел итога в панели — карточкой: точка цвета, заголовок, данные, совет.
+/// </summary>
+/// <remarks>
+/// До 08.11 раздел был заголовком и абзацем мелким серым текстом, а итог
+/// по видам — одним абзацем «вид: число — имена. Лечится: …» на все виды
+/// разом; владелец попросил структуру и меньше текста. Теперь у карточки
+/// части: <see cref="Pairs"/> (обстановка замера), <see cref="Body"/> —
+/// данные (имена, строки), <see cref="Note"/> — вывод цветом раздела,
+/// <see cref="Cure"/> — «Что делать», <see cref="Tip"/> — пояснение в «i».
+/// В файл отчёта идёт всё, вместе с пояснением (<see cref="ReportText"/>).
+/// </remarks>
+public sealed record SectionRow(string Title, string Body, Brush Color)
+{
+    /// <summary>Сколько имён — справа от заголовка; пусто — не показывается.</summary>
+    public string Count { get; init; } = string.Empty;
+
+    public IReadOnlyList<DetailLine> Pairs { get; init; } = [];
+
+    public string Note { get; init; } = string.Empty;
+
+    public string Cure { get; init; } = string.Empty;
+
+    public string Tip { get; init; } = string.Empty;
+
+    /// <summary>Текст для файла отчёта вместо собранного из частей.</summary>
+    public string? Report { get; init; }
+
+    public Visibility CountShown => Shown(Count);
+    public Visibility PairsShown => Pairs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility BodyShown => Shown(Body);
+    public Visibility NoteShown => Shown(Note);
+    public Visibility CureShown => Shown(Cure);
+    public Visibility TipShown => Shown(Tip);
+
+    /// <summary>Раздел целиком — для файла отчёта.</summary>
+    public string ReportText
+    {
+        get
+        {
+            if (Report is not null)
+                return $"{Title}\n{Report}";
+
+            var parts = new List<string> { Count.Length > 0 ? $"{Title}: {Count}" : Title };
+            parts.AddRange(Pairs.Select(p => $"{p.Label}: {p.Value}"));
+
+            foreach (var part in new[] { Body, Note, Cure.Length > 0 ? $"Что делать: {Cure}" : string.Empty, Tip })
+            {
+                if (part.Length > 0)
+                    parts.Add(part);
+            }
+
+            return string.Join("\n", parts);
+        }
+    }
+
+    private static Visibility Shown(string text) => text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+}
 
 /// <summary>
 /// Проверка блокировок: что закрыто и чем лечится.
@@ -740,8 +796,7 @@ public partial class CheckView : UserControl
             foreach (var section in _sections)
             {
                 text.AppendLine();
-                text.AppendLine(section.Title);
-                text.AppendLine(section.Body);
+                text.AppendLine(section.ReportText);
             }
         }
 
@@ -1307,14 +1362,6 @@ public partial class CheckView : UserControl
     };
 
     /// <summary>
-    /// Итог: по видам блокировок и по спорящим правилам.
-    /// </summary>
-    /// <remarks>
-    /// Спорящие правила показываются даже когда всё открыто: правило, до
-    /// которого не доходит очередь, — поломка, которая ждёт своего часа,
-    /// и заметить её иначе нечем.
-    /// </remarks>
-    /// <summary>
     /// Чем лечится вид блокировки — словами самого отчёта.
     /// </summary>
     /// <remarks>
@@ -1322,13 +1369,35 @@ public partial class CheckView : UserControl
     /// первое: итог перечислял вид и имена, совет не называл вовсе. Совет
     /// был в TargetReport.Remedy и выверен тестами — «зависание стоит другого
     /// рецепта раньше туннеля», «отказ по стране десинком не лечится», —
-    /// но звала его только консоль.
+    /// но звала его только консоль. С 08.11 в итоге — короткий совет
+    /// (<see cref="TargetReport.RemedyBrief"/>): полный у каждого вида разом
+    /// складывался в стену текста. Полный — в панели имени.
     /// </remarks>
     private static string Cure(string host) =>
         _reports.FirstOrDefault(r => r.Host == host) is { } report
-            ? $". Лечится: {report.Remedy()}"
+            ? Capital(report.RemedyBrief())
             : string.Empty;
 
+    private static string Capital(string text) =>
+        text.Length > 0 ? char.ToUpperInvariant(text[0]) + text[1..] : text;
+
+    /// <summary>Имена через запятую, не больше шести — остальные числом.</summary>
+    private static string Names(IEnumerable<string> hosts)
+    {
+        var all = hosts.ToList();
+        var shown = string.Join(", ", all.Take(6));
+
+        return all.Count > 6 ? $"{shown} и ещё {all.Count - 6}" : shown;
+    }
+
+    /// <summary>
+    /// Итог: по видам блокировок и по спорящим правилам.
+    /// </summary>
+    /// <remarks>
+    /// Спорящие правила показываются даже когда всё открыто: правило, до
+    /// которого не доходит очередь, — поломка, которая ждёт своего часа,
+    /// и заметить её иначе нечем.
+    /// </remarks>
     private async Task Summarise(RuleEngine? engine)
     {
         var sections = new List<SectionRow>();
@@ -1338,25 +1407,37 @@ public partial class CheckView : UserControl
         // у имени»; третий, «сторона не даёт наш TLS», в список слов никто
         // не дописал, и он попал в раздел «что с этим делать», где делать
         // нечего: браузер умеет больше версий, чем наша проба.
+        //
+        // Каждый вид — своей карточкой (08.11): закрытые первыми, затем
+        // по числу имён. Прежде виды шли одним абзацем по числу, и «закрыт
+        // полностью» с одним именем оказывался под «отказом пробе», которого
+        // в браузере, скорее всего, нет.
         var byKind = Collected
             .Where(r => r.Actionable)
             .GroupBy(r => r.Verdict)
-            .OrderByDescending(g => g.Count())
+            .OrderByDescending(g => g.Any(r => r.Reach == Reach.Closed))
+            .ThenByDescending(g => g.Count())
             .ToList();
 
-        sections.Add(byKind.Count == 0
-            ? new SectionRow(
+        if (byKind.Count == 0)
+        {
+            sections.Add(new SectionRow(
                 "Всё открыто",
-                _target is null
-                    ? "Обходить нечего."
-                    : $"У «{_target.Describe}» обходить нечего. Проверено вчетверо глубже полного прогона.",
-                (Brush)FindResource("Accent"))
-            : new SectionRow(
-                "Итог",
-                string.Join("\n", byKind.Select(g =>
-                    $"{g.Key}: {g.Count()} — {string.Join(", ", g.Select(r => r.Host).Take(6))}"
-                    + Cure(g.First().Host))),
-                (Brush)FindResource("Warn")));
+                _target is null ? string.Empty : $"«{_target.Describe}» — обходить нечего.",
+                (Brush)FindResource("Accent")));
+        }
+
+        foreach (var group in byKind)
+        {
+            sections.Add(new SectionRow(
+                Capital(group.Key),
+                Names(group.Select(r => r.Host)),
+                (Brush)FindResource(group.Any(r => r.Reach == Reach.Closed) ? "Danger" : "Warn"))
+            {
+                Count = group.Count().ToString(),
+                Cure = Cure(group.First().Host),
+            });
+        }
 
         // Почерки — то, чего одно имя не покажет: байты до обрыва, адрес
         // из hosts, общий узел у нескольких имён (Signatures, 14.10). Сразу
@@ -1368,8 +1449,14 @@ public partial class CheckView : UserControl
         {
             sections.Add(new SectionRow(
                 finding.Headline,
-                finding.Describe(),
-                (Brush)FindResource(finding.Calm ? "Muted" : "Warn")));
+                string.Join("\n", finding.Lines.Take(6))
+                + (finding.Lines.Count > 6 ? $"\nи ещё {finding.Lines.Count - 6}" : string.Empty),
+                (Brush)FindResource(finding.Calm ? "Muted" : "Warn"))
+            {
+                Cure = Capital(finding.Signature.Remedy),
+                Tip = finding.Signature.Meaning,
+                Report = finding.Describe(),
+            });
         }
 
         if (engine is not null)
@@ -1382,10 +1469,13 @@ public partial class CheckView : UserControl
                     "Правила спорят об одних и тех же именах",
                     string.Join("\n", conflicts.Take(8).Select(c =>
                         $"{c.Loser.Value} → {Describe(c.Loser.Mode)} перекрыто "
-                        + $"{c.Winner.Value} → {Describe(c.Winner.Mode)}, например {c.Example}"))
-                    + "\n\nПобеждает правило, до которого очередь доходит раньше. "
-                    + "Перекрытое не применяется вовсе, хотя в файле есть.",
-                    (Brush)FindResource("Warn")));
+                        + $"{c.Winner.Value} → {Describe(c.Winner.Mode)}, например {c.Example}")),
+                    (Brush)FindResource("Warn"))
+                {
+                    Count = conflicts.Count.ToString(),
+                    Tip = "Побеждает правило, до которого очередь доходит раньше. "
+                        + "Перекрытое не применяется вовсе, хотя в файле есть.",
+                });
             }
         }
 
@@ -1410,10 +1500,14 @@ public partial class CheckView : UserControl
                 {
                     sections.Add(new SectionRow(
                         "Системный резолвер даёт нерабочий адрес",
-                        string.Join(", ", bad)
-                        + "\n\nАдрес от честного резолвера (DoH) у этих имён работает, от системного — нет. "
-                        + "Лечится сменой резолвера в разделе «DNS», а не маршрутом.",
-                        (Brush)FindResource("Warn")));
+                        Names(bad),
+                        (Brush)FindResource("Warn"))
+                    {
+                        Count = bad.Count.ToString(),
+                        Cure = "Сменить резолвер в разделе «DNS»",
+                        Tip = "Адрес от честного резолвера (DoH) у этих имён работает, от системного — нет. "
+                            + "Маршрут тут не поможет.",
+                    });
                 }
             }
             catch (OperationCanceledException)
@@ -1454,17 +1548,21 @@ public partial class CheckView : UserControl
                 ? new SectionRow(
                     "Что об этом сказал сам движок",
                     string.Join("\n", complaints.Select(c => $"{c.Host} через {c.Outbound}: {c.Error}"
-                        + (RealityRefusal.In(c.Error) ? $"\n    — {RealityRefusal.Explanation}." : "")))
-                    + "\n\nИмя движок разобрал верно — значит рукопожатие дошло до него целым, "
-                    + "и десинк его не портил. Выход назван тот, через который шло на самом деле.",
+                        + (RealityRefusal.In(c.Error) ? $"\n    — {RealityRefusal.Explanation}." : ""))),
                     (Brush)FindResource("Warn"))
+                {
+                    Tip = "Имя движок разобрал верно — значит рукопожатие дошло до него целым, "
+                        + "и десинк его не портил. Выход назван тот, через который шло на самом деле.",
+                }
                 : new SectionRow(
                     "Движку жаловаться не на что",
-                    "За этот прогон он не записал ни одной ошибки соединения по этим именам: "
-                    + "исходящий поднят, байты провезены. Значит рукопожатие закрыла удалённая "
-                    + "сторона, а не труба, и менять сервер подписки по этим строкам — не туда.\n\n"
-                    + "Журнал: " + EngineLog.DefaultPath,
-                    (Brush)FindResource("Muted")));
+                    string.Empty,
+                    (Brush)FindResource("Muted"))
+                {
+                    Note = "Соединение закрыла удалённая сторона, а не туннель — сервер подписки менять незачем.",
+                    Tip = "За этот прогон движок не записал ни одной ошибки соединения по этим именам: "
+                        + "исходящий поднят, байты провезены.\n\nЖурнал: " + EngineLog.DefaultPath,
+                });
         }
 
         // Какие из проверенных имён прибиты — и потому измерены не там,
@@ -1486,14 +1584,17 @@ public partial class CheckView : UserControl
         if (pinned.Count > 0)
         {
             sections.Add(new SectionRow(
-                $"Из проверенных прибиты в hosts: {pinned.Count}",
+                "Прибиты в hosts",
                 string.Join("\n", pinned.Take(12).Select(p => $"{p.Key} → {p.Value}"))
-                + (pinned.Count > 12 ? $"\n… и ещё {pinned.Count - 12}" : string.Empty)
-                + "\n\nИх строки в таблице описывают прибитый адрес, а не сайт. Пин бьёт "
-                + "любой резолв, включая наш: правило «через VPN» на такое имя молча "
-                + "не работает, а десинк его не трогает вовсе.\n\nЗдесь читается весь файл, "
-                + "вместе с чужими записями — свои показывает и снимает раздел «Файл hosts».",
-                (Brush)FindResource("Muted")));
+                + (pinned.Count > 12 ? $"\nи ещё {pinned.Count - 12}" : string.Empty),
+                (Brush)FindResource("Muted"))
+            {
+                Count = pinned.Count.ToString(),
+                Tip = "Их строки в таблице описывают прибитый адрес, а не сайт. Пин бьёт "
+                    + "любой резолв, включая наш: правило «через VPN» на такое имя молча "
+                    + "не работает, а десинк его не трогает вовсе.\n\nЗдесь читается весь файл, "
+                    + "вместе с чужими записями — свои показывает и снимает раздел «Файл hosts».",
+            });
         }
 
         if (HostsEditor.WhoReplaced() is { } who)
@@ -1615,17 +1716,18 @@ public partial class CheckView : UserControl
 
             sections.Add(new SectionRow(
                 $"Через сервер «{server.Tag}»",
-                body + "\n\n" + (reached.Count == readings.Count
-                    ? "Сервер довозит их все, а боевой туннель — нет. Значит виноват "
-                      + "не он, а то, как собран конфиг."
+                body,
+                (Brush)FindResource(reached.Count > 0 ? "Warn" : "Danger"))
+            {
+                Note = reached.Count == readings.Count
+                    ? "Сервер довозит их все, а туннель — нет: виноват не сервер, а то, как собран конфиг."
                     : reached.Count > 0
-                        ? "Часть сервер довозит, часть нет. Первые — беда конфига, "
-                          + "вторые — самого сервера либо сайта."
-                        : "Сервер не довозит ни одного. Вот теперь совет сменить сервер "
-                          + "подписки обоснован замером, а не догадкой.")
-                + "\n\nЗдесь поднимался отдельный движок с этим одним сервером, без TUN "
-                + "и без прав администратора — боевой обход при этом не трогался.",
-                (Brush)FindResource(reached.Count > 0 ? "Warn" : "Danger")));
+                        ? "Часть сервер довозит: эти — беда конфига, остальные — сервера либо сайта."
+                        : "Сервер не довозит ни одного.",
+                Cure = reached.Count == 0 ? "Сменить сервер подписки" : string.Empty,
+                Tip = "Здесь поднимался отдельный движок с этим одним сервером, без TUN "
+                    + "и без прав администратора — боевой обход при этом не трогался.",
+            });
 
             View.Sections.ItemsSource = null;
             View.Sections.ItemsSource = sections;
@@ -1731,8 +1833,11 @@ public partial class CheckView : UserControl
         {
             _setupRow = new SectionRow(
                 "Движки остановлены",
-                "Видно, что закрыто на самом деле: ни десинк, ни туннель сейчас не вмешиваются.",
-                (Brush)FindResource("Muted"));
+                string.Empty,
+                (Brush)FindResource("Muted"))
+            {
+                Note = "Ни десинк, ни туннель не вмешиваются — видно, что закрыто на самом деле.",
+            };
 
             return;
         }
@@ -1751,40 +1856,34 @@ public partial class CheckView : UserControl
                 ? await TunnelStatus.ReadExitAsync(cancellationToken)
                 : new ExitReading { Tunnelled = false };
 
-            var lines = new List<string>
+            var pairs = new List<DetailLine>
             {
-                $"Режим: {settings.DescribeMode()}",
-                $"Пресет: {settings.DescribePreset()}",
-                $"Сервер: {server ?? "не определён"}",
-                $"Туннель: {TunnelHealth.Describe(_tunnel)}",
+                new("Режим", settings.DescribeMode()),
+                new("Пресет", settings.DescribePreset()),
+                new("Сервер", server ?? "не определён"),
+                new("Туннель", TunnelHealth.Describe(_tunnel)),
             };
 
             if (exit.Address is { Length: > 0 })
             {
-                lines.Add($"Выход: {exit.Address}"
-                    + (exit.Country is { Length: > 0 } c ? $", {c}" : string.Empty)
-                    + (exit.Tunnelled ? " — через туннель" : " — мимо туннеля"));
+                pairs.Add(new("Выход", exit.Address
+                    + (exit.Country is { Length: > 0 } c ? $" · {c}" : string.Empty)
+                    + (exit.Tunnelled ? " · через туннель" : " · мимо туннеля")));
             }
 
             var key = _tunnel == TunnelState.Dead ? "Danger"
                 : exit.TunnelExitsDomestically ? "Warn"
                 : "Muted";
 
-            if (_tunnel == TunnelState.Dead)
+            _setupRow = new SectionRow("Обстановка замера", string.Empty, (Brush)FindResource(key))
             {
-                lines.Add(string.Empty);
-                lines.Add("Туннель поднят и не пропускает ничего. Пока это так, вердикты "
-                    + "по именам, заведённым в VPN, описывают не сайты, а его — менять "
-                    + "по ним маршруты не стоит.");
-            }
-            else if (exit.TunnelExitsDomestically)
-            {
-                lines.Add(string.Empty);
-                lines.Add("Выход туннеля в России. Связь исправна, но сервисы, закрывающиеся "
-                    + "от страны, откажут так же, как без туннеля.");
-            }
-
-            _setupRow = new SectionRow("Обстановка замера", string.Join("\n", lines), (Brush)FindResource(key));
+                Pairs = pairs,
+                Note = _tunnel == TunnelState.Dead
+                    ? "Туннель не пропускает ничего: вердикты по именам «через VPN» описывают его, а не сайты."
+                    : exit.TunnelExitsDomestically
+                        ? "Выход туннеля в России: сайты, закрытые от страны, откажут и через него."
+                        : string.Empty,
+            };
 
             // Одной строкой — в полосу под шапкой; подробно — в итоге.
             _setupLine = string.Join(" · ", new[]
@@ -1849,11 +1948,13 @@ public partial class CheckView : UserControl
             {
                 sections.Add(new SectionRow(
                     "Через туннель нарочно проверить нечем",
-                    "Служебный вход не поднят, а без него не узнать, довозит ли туннель эти "
-                    + "имена, когда их отправляют в него намеренно. Включается выключателем "
-                    + "«Проверять проход трафика» в разделе «Ещё» и начинает работать "
-                    + "с ближайшего перезапуска движков.",
-                    (Brush)FindResource("Muted")));
+                    string.Empty,
+                    (Brush)FindResource("Muted"))
+                {
+                    Cure = "Включить «Проверять проход трафика» в «Ещё» и перезапустить движки",
+                    Tip = "Служебный вход не поднят, а без него не узнать, довозит ли туннель эти "
+                        + "имена, когда их отправляют в него намеренно.",
+                });
 
                 View.Sections.ItemsSource = null;
                 View.Sections.ItemsSource = sections;
@@ -1884,21 +1985,20 @@ public partial class CheckView : UserControl
             // выше», когда тут как раз не открылось ни одно имя, — то есть
             // раздел спорил сам с собой в двух строках подряд.
             var conclusion = opened == lost.Count
-                ? "Здесь открылись все, а выше — ни одно. Значит сервер их довозит, "
-                  + "и дело в том, как собран конфиг: адрес, fakeip либо порядок правил."
+                ? "Открылись все: сервер их довозит, дело в сборке конфига — адрес, fakeip либо порядок правил."
                 : opened > 0
-                    ? "Часть открылась здесь, но не выше — по этим именам виноват "
-                      + "не сервер, а сборка конфига. Остальные не дошли и так."
-                    : "Здесь не открылось ни одно — значит дело не в обходе этого имени "
-                      + "мимо туннеля. Либо не довозит сервер, либо отвергает сама "
-                      + "удалённая сторона.";
+                    ? "Часть открылась: по ним виноват не сервер, а сборка конфига. Остальные не дошли и так."
+                    : "Не открылось ни одно: не довозит сервер либо отвергает сама удалённая сторона.";
 
             sections.Add(new SectionRow(
                 "Те же имена, пущенные в туннель нарочно",
-                string.Join("\n", lines)
-                + "\n\nЗдесь имя уехало движку именем, через служебный вход на петле. "
-                + conclusion,
-                (Brush)FindResource("Warn")));
+                string.Join("\n", lines),
+                (Brush)FindResource("Warn"))
+            {
+                Note = conclusion,
+                Tip = "Здесь имя уехало движку именем, через служебный вход на петле, — "
+                    + "доменные правила срабатывают так же, как для настоящей программы.",
+            });
 
             View.Sections.ItemsSource = null;
             View.Sections.ItemsSource = sections;
