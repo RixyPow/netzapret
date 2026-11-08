@@ -85,16 +85,24 @@
 
                         </Grid>
 
-                        <ItemsControl x:Name="ThemeList" Margin="0,16,0,0" Focusable="False">
+                        <!--
+                            Сеткой во всю ширину карточки (08.11): переносом плитки вставали
+                            по пять-шесть с пустой полосой справа — шестая не влезала на
+                            несколько точек (снимок владельца). Колонок — шесть на обычном окне
+                            владельца и девять на развёрнутом (OnThemeListSize, Tag списка);
+                            рисунок — Viewbox'ом, плитка 107–114 при прежних 112.
+                        -->
+                        <ItemsControl x:Name="ThemeList" Margin="0,16,-12,0" Focusable="False" Tag="6"
+                                      SizeChanged="OnThemeListSize">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel />
+                                    <UniformGrid Columns="{Binding Tag, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
 
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Tag="{Binding Id}" Click="OnTheme" Margin="0,0,14,6" Cursor="Hand"
+                                    <Button Tag="{Binding Id}" Click="OnTheme" Margin="0,0,12,10" Cursor="Hand"
                                             ToolTip="{Binding Tip}" Opacity="{Binding Fade}">
                                         <Button.Template>
                                             <ControlTemplate TargetType="Button">
@@ -102,8 +110,9 @@
                                             </ControlTemplate>
                                         </Button.Template>
 
-                                        <StackPanel Width="112">
-                                            <Grid Height="84">
+                                        <StackPanel>
+                                            <Viewbox Stretch="Uniform">
+                                            <Grid Width="112" Height="84">
                                                 <Border Margin="1" CornerRadius="11" Padding="1" Background="{Binding Backdrop}">
                                                     <Grid>
                                                         <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Image}" />
@@ -136,6 +145,7 @@
                                                 -->
                                                 <Border CornerRadius="12" BorderThickness="2" BorderBrush="{Binding Edge}" />
                                             </Grid>
+                                            </Viewbox>
 
                                             <TextBlock Text="{Binding Name}" Foreground="{Binding NameColor}"
                                                        HorizontalAlignment="Center" Margin="0,7,0,0"
@@ -152,17 +162,17 @@
                             не перезаписываются, иначе обновление программы
                             молча вернуло бы свой файл.
                         -->
-                        <WrapPanel Margin="0,4,0,4">
-                            <Button Style="{StaticResource Primary}" Content="Создать тему" Click="OnCreateTheme" Margin="0,0,8,8" />
-                            <Button x:Name="EditThemeButton" Style="{StaticResource Ghost}" Content="Изменить" Click="OnEditTheme" Margin="0,0,8,8" />
-                            <!-- Своя тема — в корзину Windows (владелец 21.10); у встроенной кнопка неактивна. -->
-                            <Button x:Name="DeleteThemeButton" Style="{StaticResource Ghost}" Content="Удалить" Click="OnDeleteTheme" Margin="0,0,8,8"
-                                    ToolTipService.ShowOnDisabled="True" />
-                            <Button Style="{StaticResource Ghost}" Content="Выгрузить в файл…" Click="OnExportTheme" Margin="0,0,8,8" />
-                            <Button Style="{StaticResource Ghost}" Content="Загрузить из файла…" Click="OnImportTheme" Margin="0,0,8,8" />
-                            <!-- Рядом с прочими действиями над темами (владелец, 05.10), а не отдельно в шапке. -->
-                            <Button Style="{StaticResource Ghost}" Content="Папка тем" Click="OnThemesFolder" Margin="0,0,8,8" />
-                        </WrapPanel>
+                        <!--
+                            08.11: в ряду — «Создать тему», «Изменить» и «⋯»; файлы, папка тем
+                            и «Удалить» — в меню (OnThemeMore). Шесть кнопок в ряд на окне
+                            владельца не влезали, и «Папка тем» уезжала второй строкой.
+                        -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,4">
+                            <Button Style="{StaticResource Primary}" Content="Создать тему" Click="OnCreateTheme" Margin="0,0,8,0" />
+                            <Button x:Name="EditThemeButton" Style="{StaticResource Ghost}" Content="Изменить" Click="OnEditTheme" Margin="0,0,8,0" />
+                            <Button Style="{StaticResource IconGhost}" Content="&#xE712;" Click="OnThemeMore"
+                                    ToolTip="Загрузить, выгрузить, папка тем, удалить" />
+                        </StackPanel>
                     </StackPanel>
                 </gui:Card>
 

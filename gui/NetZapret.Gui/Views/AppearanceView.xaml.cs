@@ -53,11 +53,6 @@ public partial class AppearanceView : UserControl
         // У встроенной «Изменить» создаёт новую — подпись говорит это заранее.
         EditThemeButton.Content = ThemeLoader.Shipped.Contains(current) ? "Изменить копию" : "Изменить";
 
-        // Удалить — только свою: встроенные едут с программой, и обновление вернуло бы их.
-        DeleteThemeButton.IsEnabled = !ThemeLoader.Shipped.Contains(current);
-        DeleteThemeButton.ToolTip = DeleteThemeButton.IsEnabled
-            ? "Папка темы уйдёт в корзину Windows — оттуда её можно вернуть"
-            : "Встроенные темы едут с программой и не удаляются";
         ShowFonts(settings);
         ShowTray(settings);
         ShowAnimations(settings);
@@ -119,6 +114,60 @@ public partial class AppearanceView : UserControl
             AnimationsNote.Text = "Выключены в Windows: Параметры → Специальные возможности → Визуальные эффекты.";
             AnimationsNote.Visibility = Visibility.Visible;
         }
+    }
+
+    /// <summary>Колонок у сетки тем: шесть на обычном окне, девять на развёрнутом.</summary>
+    private void OnThemeListSize(object sender, SizeChangedEventArgs e)
+    {
+        // Ширина списка — с полем справа у последней колонки (Margin −12). Замер
+        // 08.11 снимком из теста: окно владельца — список 714, развёрнутое — 1138. На 116
+        // выходит 6 и 9 колонок (владелец просил так), плитка 107 и 114 при
+        // прежних 112 — рисунок почти не меняет размер.
+        int columns = Math.Max(3, (int)Math.Floor(e.NewSize.Width / 116));
+
+        if (ThemeList.Tag is not int known || known != columns)
+            ThemeList.Tag = columns;
+    }
+
+    /// <summary>
+    /// Меню «⋯» у тем: загрузить и выгрузить файлом, папка тем, удалить.
+    /// </summary>
+    /// <remarks>
+    /// Удалить — только свою: встроенные едут с программой, и обновление
+    /// вернуло бы их; своя уходит в корзину Windows (21.10).
+    /// </remarks>
+    private void OnThemeMore(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement anchor)
+            return;
+
+        var menu = new ContextMenu { PlacementTarget = anchor, Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom };
+
+        menu.Items.Add(MenuEntry("\uE8E5", "Загрузить из файла…", () => OnImportTheme(anchor, e)));
+        menu.Items.Add(MenuEntry("\uEDE1", "Выгрузить в файл…", () => OnExportTheme(anchor, e)));
+        menu.Items.Add(MenuEntry("\uE838", "Папка тем", () => OnThemesFolder(anchor, e)));
+        menu.Items.Add(new Separator());
+
+        var delete = MenuEntry("\uE74D", "Удалить", () => OnDeleteTheme(anchor, e));
+        bool own = !ThemeLoader.Shipped.Contains(Themes.Current);
+        delete.IsEnabled = own;
+        delete.ToolTip = own
+            ? "Папка темы уйдёт в корзину Windows — оттуда её можно вернуть"
+            : "Встроенные темы едут с программой и не удаляются";
+        ToolTipService.SetShowOnDisabled(delete, true);
+        menu.Items.Add(delete);
+
+        menu.IsOpen = true;
+    }
+
+    private static MenuItem MenuEntry(string glyph, string text, Action act)
+    {
+        var icon = new TextBlock { Text = glyph, FontSize = 14, VerticalAlignment = VerticalAlignment.Center };
+        icon.SetResourceReference(TextBlock.FontFamilyProperty, "IconFont");
+
+        var item = new MenuItem { Header = text, Icon = icon };
+        item.Click += (_, _) => act();
+        return item;
     }
 
     private void OnHomeWidth(object sender, RoutedEventArgs e)
