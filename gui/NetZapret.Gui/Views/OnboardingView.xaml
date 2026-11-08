@@ -154,7 +154,7 @@
                                TextAlignment="Center" Margin="0,28,0,0" />
                     <TextBlock Style="{StaticResource PageNote}" FontSize="19" TextAlignment="Center" Margin="0,14,0,0"
                                MaxWidth="560"
-                               Text="Открывает заблокированные сайты, игры и Telegram. Настройка займёт минуту." />
+                               Text="Мультитул для обхода блокировок интернета&#x0a;Настройка займёт минуту" />
 
                     <Button Style="{StaticResource BigPrimary}" Content="Начать" Click="OnIntroNext"
                             FontSize="19" Width="300" Padding="0,15" Margin="0,36,0,0" HorizontalAlignment="Center" />
@@ -331,7 +331,7 @@
                         рамкой и подложкой, значком самого Telegram. Стоит то, что
                         в настройках; пишется при «Готово» (TgWsProxy.Switch).
                     -->
-                    <Border Margin="0,16,0,8" CornerRadius="14" BorderThickness="2" Padding="20,14"
+                    <Border Margin="0,26,0,8" CornerRadius="14" BorderThickness="2" Padding="20,14"
                             BorderBrush="#FF2AABEE" Background="#1A2AABEE">
                         <Grid>
                             <Grid.ColumnDefinitions>
