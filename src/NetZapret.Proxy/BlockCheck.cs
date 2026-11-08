@@ -1804,6 +1804,83 @@ public static class BlockCheck
     }
 
     /// <summary>
+    /// Резолвер из списка вкладки DNS, который даёт имени рабочий адрес.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// При «резолвер даёт нерабочий адрес» подбор говорил «маршрут не поможет:
+    /// свой DNS» — а какой DNS, не говорил. 08.11 у человека из чата Google (8.8.4.4)
+    /// отдавал shared.akamai.steamstatic.com узел 2.21.173.161, который из его сети
+    /// не принимает соединение (curl: 0 байт за 21,7 с), и картинки Steam не
+    /// грузились; 1.1.1.1 давал 23.215.2.24, и тот отвечал. Помогла смена
+    /// резолвера движка на Zapret DNS. Сеть доставки выбирает узел по резолверу
+    /// (Google передаёт ей часть адреса клиента, Cloudflare — нет), так что
+    /// разные резолверы и дают разные узлы.
+    /// </para>
+    /// <para>
+    /// Вопросы — по DoH через физический адаптер, всем разом, по одному на сервер;
+    /// соединение на 443 — по порядку списка, первый ответивший и называется.
+    /// Резолвер движка и адреса, что уже молчат, пропускаются.
+    /// </para>
+    /// </remarks>
+    /// <param name="dead">Адреса, которые дал резолвер движка, — они молчат.</param>
+    /// <param name="current">Адрес DoH резолвера движка (<c>AppSettings.DnsServer</c>).</param>
+    public static async Task<(DnsProvider Provider, string Address)?> WorkingResolverAsync(
+        string host, IEnumerable<string> dead, string? current, CancellationToken cancellationToken)
+    {
+        var silent = dead.ToHashSet(StringComparer.Ordinal);
+        var candidates = DnsSurvey.All
+            .Where(p => p.Choosable && !string.Equals(p.TlsAddress, current, StringComparison.Ordinal))
+            .ToList();
+        int? nic = DnsSurvey.PhysicalInterface();
+
+        async Task<IReadOnlyList<string>> AskAsync(DnsProvider provider)
+        {
+            try
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(Timeout);
+
+                var answer = await DnsSurvey.DohQueryAsync(
+                    provider.TlsAddress!, provider.TlsName!, provider.DohPath!, host, 1, nic, timeout.Token);
+
+                return answer is { Code: 0 }
+                    ? answer.Addresses.Where(a => a.AddressFamily == AddressFamily.InterNetwork)
+                        .Select(a => a.ToString()).ToList()
+                    : [];
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                return [];
+            }
+        }
+
+        var answers = await Task.WhenAll(candidates.Select(AskAsync));
+        var checkedAddresses = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            foreach (var address in answers[i].Where(a => !silent.Contains(a)))
+            {
+                // Подставной адрес и заглушки (0.0.0.0, частные) — не адрес сайта.
+                if (!IPAddress.TryParse(address, out var ip) || TunnelHealth.IsFakeIp(ip)
+                    || DnsSpoof.IsSinkhole(ip) || DnsSpoof.IsPrivate(ip))
+                {
+                    continue;
+                }
+
+                if (!checkedAddresses.TryGetValue(address, out bool works))
+                    checkedAddresses[address] = works = await AnswersAsync(address, cancellationToken);
+
+                if (works)
+                    return (candidates[i], address);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Ставит диагноз по совокупности проб.
     /// </summary>
     /// <remarks>

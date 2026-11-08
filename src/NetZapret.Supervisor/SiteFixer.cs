@@ -197,6 +197,9 @@ public static class SiteFixer
                 Advice: open);
         }
 
+        if (now.Kind == BlockKind.Dns && await WrongAddressAsync(host, now, settings, steps, progress, cancellationToken) is { } dns)
+            return dns;
+
         // Пин — правка hosts для имени, а подбор без записи (окно пути маршрута)
         // выбирает путь всему маршруту: пину там не место.
         foreach (var step in plan.Steps.Where(s => (recipes || s.Kind != RouteTry.Recipes)
@@ -560,6 +563,75 @@ public static class SiteFixer
         {
             return new("через VPN", false, ex.GetBaseException().Message, RouteTry.Vpn);
         }
+    }
+
+    /// <summary>
+    /// «Резолвер даёт нерабочий адрес»: прибито в hosts — снять пин; иначе — какой резолвер даёт рабочий.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Нашёлся резолвер с рабочим адресом — маршрут не пишется: смена резолвера
+    /// движка чинит и остальные имена той же сети доставки, а VPN — одно имя
+    /// и за трафик подписки. 08.11 так у человека из чата: Google отдавал картинкам
+    /// Steam мёртвый узел Akamai, смена резолвера на Zapret DNS починила всё разом.
+    /// </para>
+    /// <para>
+    /// Пин в hosts сильнее и резолвера, и маршрута: имя «через VPN» с пином
+    /// подставного адреса не получит, а проба через вход проверки движка
+    /// разрешила бы имя сама и «открыла» бы его — подбор записал бы VPN впустую.
+    /// </para>
+    /// </remarks>
+    /// <returns>Итог; <c>null</c> — резолвера не нашлось, дальше шаги плана (VPN).</returns>
+    private static async Task<SiteFixResult?> WrongAddressAsync(
+        string host,
+        TargetReport now,
+        AppSettings settings,
+        StepLog steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (HostsEditor.Parse().FirstOrDefault(e => e.Enabled
+                && e.Names.Any(n => string.Equals(n, host, StringComparison.OrdinalIgnoreCase))) is { } pin)
+        {
+            var unpin = $"{host} прибит в hosts к {pin.Address}, а этот адрес не работает. Маршрут тут не поможет — "
+                + "снимите пин на вкладке «Файл hosts» (или подберите новый). Маршрут не менял.";
+
+            return new(host, steps, null, false, unpin, Advice: unpin);
+        }
+
+        progress?.Report($"Спрашиваю {host} у других резолверов…");
+
+        var dead = new List<string>();
+
+        try
+        {
+            dead.AddRange((await System.Net.Dns.GetHostAddressesAsync(host, cancellationToken)).Select(a => a.ToString()));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Имя не разрешилось вовсе — мёртвых адресов нет, ищем любой рабочий.
+        }
+
+        var current = settings.DnsServer;
+        var mine = DnsSurvey.ByAddress(current)?.Name ?? current;
+        var found = await BlockCheck.WorkingResolverAsync(host, dead, current, cancellationToken);
+
+        if (found is not { } working)
+        {
+            steps.Add(new("другие резолверы", false, "рабочего адреса не дал ни один из списка вкладки DNS"));
+            return null;
+        }
+
+        steps.Add(new($"резолвер {working.Provider.Name}", true, $"даёт {working.Address} — отвечает"));
+
+        var said = dead.Count > 0
+            ? $"Резолвер движка ({mine}) даёт {host} адрес {dead[0]}, а он не отвечает"
+            : $"Резолвер движка ({mine}) не разрешает {host}";
+        var fix = $"{said}; {working.Provider.Name} даёт {working.Address}, и он отвечает. Выберите {working.Provider.Name} "
+            + "резолвером движка на вкладке DNS и перезапустите движки — это поправит и другие сайты той же сети. "
+            + "Маршрут не менял.";
+
+        return new(host, steps, null, false, fix, Advice: fix);
     }
 
     /// <summary>

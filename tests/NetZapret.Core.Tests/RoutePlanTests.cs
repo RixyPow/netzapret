@@ -84,8 +84,21 @@ public sealed class RoutePlanTests
         Assert.Contains("браузере", plan.Advice);
     }
 
+    [Fact]
+    public void A_wrong_address_from_the_resolver_tries_vpn_and_keeps_the_resolver_advice()
+    {
+        // 08.11: Google отдавал картинкам Steam мёртвый узел Akamai. Через VPN
+        // имя разрешает выход, и мёртвый узел ему не достаётся.
+        var plan = RoutePlan.For(Report(BlockKind.Dns), RoutingMode.Direct, desync: true, tunnel: true);
+
+        Assert.Equal([RouteTry.Vpn], Kinds(plan));
+        Assert.Contains(Report(BlockKind.Dns).Remedy(), plan.Advice);
+
+        Assert.Empty(RoutePlan.For(Report(BlockKind.Dns), RoutingMode.Direct, desync: true, tunnel: false).Steps);
+        Assert.Empty(RoutePlan.For(Report(BlockKind.Dns), RoutingMode.Proxy, desync: true, tunnel: true).Steps);
+    }
+
     [Theory]
-    [InlineData(BlockKind.Dns)]
     [InlineData(BlockKind.Sinkhole)]
     [InlineData(BlockKind.BrokenCname)]
     [InlineData(BlockKind.ForeignFakeIp)]
