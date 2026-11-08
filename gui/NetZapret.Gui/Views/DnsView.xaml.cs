@@ -404,12 +404,63 @@ public partial class DnsView : UserControl
     {
         InitializeComponent();
 
-        Loaded += (_, _) => Reload();
+        _dnsNowTimer.Tick += (_, _) => _ = ShowDnsNowAsync();
+
+        Loaded += (_, _) =>
+        {
+            Reload();
+            _ = ShowDnsNowAsync();
+            _dnsNowTimer.Start();
+        };
         Unloaded += (_, _) =>
         {
             _work?.Cancel();
             _logos?.Cancel();
+            _dnsNowTimer.Stop();
         };
+    }
+
+    /// <summary>
+    /// Строка «Сейчас» (<see cref="DnsNow"/>) — раз в 3 с, пока вкладка на экране:
+    /// ступень DNS надзор меняет сам, не спрашивая окно.
+    /// </summary>
+    private readonly System.Windows.Threading.DispatcherTimer _dnsNowTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+
+    private bool _dnsNowBusy;
+
+    /// <summary>Резолвер из конфига движка по времени записи файла: в «Туннеле» конфиг ~1 МБ, разбирать его раз в 3 с незачем.</summary>
+    private static (DateTime Written, string? Server) _engineResolver;
+
+    /// <remarks>Чтение — не в потоке окна: настройки, состояние надзора и конфиг движка — три файла.</remarks>
+    private async Task ShowDnsNowAsync()
+    {
+        if (_dnsNowBusy)
+            return;
+
+        _dnsNowBusy = true;
+
+        try
+        {
+            DnsNowLine.Text = await Task.Run(() =>
+            {
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+                var config = settings.ProxyConfigPath;
+                var written = System.IO.File.Exists(config) ? System.IO.File.GetLastWriteTimeUtc(config) : default;
+
+                if (written != _engineResolver.Written)
+                    _engineResolver = (written, DnsUpstream.FromConfig(config)?.Server);
+
+                return DnsNow.Describe(settings, SupervisorState.Load(SupervisorState.DefaultPath), _engineResolver.Server);
+            });
+        }
+        catch (Exception)
+        {
+            // Файл занят записью — покажем на следующем такте.
+        }
+        finally
+        {
+            _dnsNowBusy = false;
+        }
     }
 
     private void Reload()
@@ -942,7 +993,7 @@ public partial class DnsView : UserControl
 
             var name = _rows.FirstOrDefault(r => r.Address == address)?.Name ?? address;
 
-            Status.Text = $"Апстрим: {name}. Применится при следующем запуске движков.";
+            Status.Text = $"DNS движка: {name}. Применится при следующем запуске движков.";
             this.Offer($"Резолвер сменён на {name}");
 
             // В адаптерах вписан выбранный — сменился выбранный, сменить и там.

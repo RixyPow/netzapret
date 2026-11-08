@@ -327,9 +327,10 @@
                         <ComboBox Grid.Column="1" x:Name="DnsPick" Width="260" VerticalAlignment="Center"
                                   SelectionChanged="OnDnsPicked"
                                   ToolTip="Через что программа узнаёт адреса сайтов. Сменить можно на вкладке DNS.">
-                            <ComboBoxItem Content="авто: напрямую, при отказе DoH — по TCP, затем туннель" Tag="Auto" />
-                            <ComboBoxItem Content="спрашивать напрямую" Tag="Direct" />
-                            <ComboBoxItem Content="спрашивать через туннель" Tag="Tunnel" />
+                            <!-- Коротко, как на вкладке DNS (обсуждение №55): что делает «авто», — в справке. -->
+                            <ComboBoxItem Content="авто" Tag="Auto" />
+                            <ComboBoxItem Content="напрямую" Tag="Direct" />
+                            <ComboBoxItem Content="через туннель" Tag="Tunnel" />
                         </ComboBox>
                         <ContentControl Grid.Column="2" x:Name="DnsInfo" Style="{StaticResource Info}" Margin="4,0,0,0" />
 
