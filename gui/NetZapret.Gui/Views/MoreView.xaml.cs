@@ -71,8 +71,7 @@ public partial class MoreView : UserControl
 
         RootValue.Text = Path.GetFullPath(".");
 
-        Status.Text = "Изменения записываются сразу, а действовать начинают при следующем "
-            + "запуске движков.";
+        Status.Text = string.Empty;
 
         StartDefenderCheck();
     }
@@ -172,10 +171,8 @@ public partial class MoreView : UserControl
         {
             var count = UserRulesFile.Load(UserRulesFile.DefaultPath).Entries.Count;
 
-            RoutesValue.Text = count == 0
-                ? "Своих маршрутов нет — судьбу соединений решают общие правила."
-                : $"Своих маршрутов: {count}. Это выборы «напрямую», «десинк» и «через VPN», "
-                  + "сделанные руками поверх общих правил.";
+            // Что это за маршруты — в подсказке «i» у заголовка; здесь только счёт.
+            RoutesValue.Text = count == 0 ? "Своих маршрутов нет." : $"Своих маршрутов: {count}.";
 
             ForgetRoutesButton.IsEnabled = count > 0;
         }
@@ -490,9 +487,8 @@ public partial class MoreView : UserControl
         if (_downloads is not { } total)
             return;
 
-        DownloadsValue.Text = $"Скачано с GitHub: {total:N0} раз. Это скачивания, а не установки: "
-            + "обновление из программы тоже засчитывается. Своего счётчика у программы нет — "
-            + "она не сообщает о вас никуда.";
+        DownloadsValue.Text = $"Скачано с GitHub: {total:N0} раз — с обновлениями из программы. "
+            + "Своего счётчика у программы нет: о вас она не сообщает никуда.";
         DownloadsValue.Visibility = Visibility.Visible;
     }
 

@@ -63,8 +63,6 @@
 
                     <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                         <TextBlock Text="Замер скорости" Style="{StaticResource Title}" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                   Text="Задержка, скачивание и отдача — через туннель или напрямую." />
                     </StackPanel>
 
                     <!-- Путь: что мерить. Туннель — только при поднятом движке. -->

@@ -139,17 +139,15 @@
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                     <TextBlock Text="Диагностика" Style="{StaticResource Title}" TextWrapping="Wrap" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Всё, от чего зависит работа: права, движки, правила, конфиг, резолвер, надзор." />
                 </StackPanel>
 
                 <WrapPanel Grid.Column="1" VerticalAlignment="Center">
                     <Button x:Name="ReportButton" Style="{StaticResource Primary}" Click="OnReport"
                             Content="Собрать отчёт" gui:ButtonGlyph.Lead="&#xE896;" Margin="0,0,8,0"
-                            ToolTip="Журналы движков, настройки, свои маршруты и последняя проверка блокировок одним архивом — его прикладывают к сообщению о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                            ToolTip="Журналы, настройки, свои маршруты и последняя проверка блокировок одним архивом — для сообщения о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
                     <Button Style="{StaticResource Ghost}" Click="OnLog" Content="Журнал"
                             gui:ButtonGlyph.Lead="&#xE8FD;" Margin="0,0,8,0"
-                            ToolTip="Что говорят sing-box, winws2, надзор и окно. Открывается отдельным окном — его можно держать рядом." />
+                            ToolTip="Журналы sing-box, winws2, надзора и окна — отдельным окном." />
                     <Button x:Name="RunButton" Style="{StaticResource Ghost}" Click="OnRun"
                             Content="Проверить снова" gui:ButtonGlyph.Lead="&#xE72C;" />
                 </WrapPanel>

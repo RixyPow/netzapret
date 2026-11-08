@@ -15,10 +15,19 @@
             <StackPanel Grid.Column="0">
 
                 <TextBlock Text="Ещё" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Антивирус, выключатели, папки программы и обслуживание. Оформление — своим разделом, обновление — на «Главной», подписки — в «VPN»." />
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
+                <!-- Строка ответа на действие; пустая не занимает места. -->
+                <TextBlock x:Name="Status" Margin="4,16,0,0" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
 
                 <!--
                     Первым в разделе (владелец 26.09: «подними разбор неисправностей
@@ -41,10 +50,9 @@
                             <TextBlock Text="Сайт не открывается?" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <TextBlock Text="· проверка, тестовый режим" Style="{StaticResource Caption}"
                                        VerticalAlignment="Center" Margin="6,0,0,0" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Проверит сайт, по тому, что закрыто, подберёт путь — напрямую, десинк с рецептом или VPN — и запишет первый сработавший. Идёт до минуты; движки должны быть запущены.&#x0a;&#x0a;«Напрямую» действует сразу, рецепт и VPN — после перезапуска движков." />
                         </StackPanel>
-
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                   Text="Вставьте ссылку или имя сайта. Программа проверит его, по тому, что именно закрыто, подберёт путь — напрямую, десинк с подходящим рецептом или VPN — и сама запишет первый сработавший. Рецепты пробуются вживую, не останавливая десинк; на это уходит до минуты. «Напрямую» действует сразу, рецепт и VPN — после перезапуска движков. Движки должны быть запущены." />
 
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>
@@ -73,9 +81,11 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                            <TextBlock Text="Мастер первого запуска" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Знакомство, выбор темы, режим работы и подписка на VPN — показывается один раз при первом открытии. Ничего из настроенного он не сбрасывает." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Мастер первого запуска" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Знакомство, тема, режим работы и подписка на VPN. Ничего из настроенного не сбрасывает." />
+                            </StackPanel>
                         </StackPanel>
 
                         <Button Grid.Column="1" Style="{StaticResource Ghost}"
@@ -94,16 +104,17 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Папка программы в исключениях Defender" Style="{StaticResource Caption}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Папка программы в исключениях Defender" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Исключается одна папка, защита не выключается. Без исключения Defender может удалить winws2.exe: в нём библиотека WinDivert." />
+                                </StackPanel>
                                 <TextBlock x:Name="DefenderValue" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0" />
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="DefenderButton" Style="{StaticResource Ghost}"
                                     Content="Добавить" Click="OnExclude" VerticalAlignment="Center" />
                         </Grid>
-
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                                   Text="Исключается одна папка, а не отключается защита. Defender опознаёт в winws2.exe библиотеку WinDivert и удаляет файл — наблюдалось вживую. Снимать защиту со всей системы ради этого не нужно и нельзя: программа, глушащая антивирус, сама выглядит как вредонос." />
                     </StackPanel>
                 </gui:Card>
 
@@ -174,9 +185,11 @@
 
                         <Border Height="1" Background="{DynamicResource Border}" Margin="0,8,0,14" />
 
-                        <TextBlock Text="В составе" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,4" TextWrapping="Wrap"
-                                   Text="Чужие движки едут в архиве как есть и запускаются отдельными процессами. Условия каждого — в docs/THIRD-PARTY.md в репозитории." />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="В составе" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Чужие движки едут как есть и работают отдельными процессами. Условия каждого — в docs/THIRD-PARTY.md в репозитории." />
+                        </StackPanel>
 
                         <ItemsControl x:Name="Components">
                             <ItemsControl.ItemTemplate>
@@ -247,9 +260,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Искать обновления при запуске" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Text="Только искать. Установка остаётся отдельным действием с отдельным согласием — кнопкой в карточке «Обновление» на «Главной»." />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Искать обновления при запуске" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Только искать: ставит обновление кнопка в карточке «Обновление» на «Главной»." />
+                                </StackPanel>
                             </StackPanel>
 
                             <TextBlock Grid.Column="1" x:Name="UpdatesWord" Style="{StaticResource Caption}"
@@ -268,9 +283,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Сбросить настройки до заводских" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Text="Режим, пресет, выбранный сервер, свои маршруты и рабочие файлы. Ссылка подписки остаётся: её выдаёт поставщик, и восстановить её программа не может." />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Сбросить настройки до заводских" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Режим, пресет, выбранный сервер, свои маршруты и рабочие файлы. Ссылка подписки остаётся. Прежние настройки лягут рядом с расширением .bak." />
+                                </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="ResetSettingsButton" Style="{StaticResource Destructive}"
@@ -286,7 +303,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Забыть маршруты" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Забыть маршруты" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Снимает выборы «напрямую», «десинк» и «через VPN», сделанные руками: решать станут общие правила. Прежний файл ляжет рядом с расширением .bak." />
+                                </StackPanel>
                                 <TextBlock x:Name="RoutesValue" Style="{StaticResource Caption}" Margin="0,5,0,0"
                                            TextWrapping="Wrap" />
                             </StackPanel>
@@ -304,9 +325,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Очистить рабочие файлы" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Text="Журналы и конфиги от прошлых запусков из runtime. В собранных конфигах лежат пароли серверов открытым текстом — держать прошлогодние незачем. Действующий конфиг остаётся." />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Очистить рабочие файлы" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Журналы и конфиги прошлых запусков из runtime: в конфигах пароли серверов открытым текстом. Действующий конфиг остаётся." />
+                                </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="CleanButton" Style="{StaticResource Ghost}"
@@ -322,9 +345,11 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Сбросить сетевой стек Windows" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                           Text="winsock и TCP/IP. Лечение для сети, оставшейся в странном состоянии после опытов с адаптерами и DNS. Потребуется перезагрузка компьютера: без неё сеть остаётся в переходном состоянии, то есть хуже исходного." />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Сбросить сетевой стек Windows" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="winsock и TCP/IP — для сети, оставшейся в странном состоянии после опытов с адаптерами и DNS. Потребуется перезагрузка: без неё сеть хуже исходной." />
+                                </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" x:Name="ResetNetworkButton" Style="{StaticResource Destructive}"

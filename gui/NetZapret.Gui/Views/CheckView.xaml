@@ -181,8 +181,6 @@
             -->
             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
                 <TextBlock Text="Проверка блокировок" Style="{StaticResource Title}" TextWrapping="Wrap" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Что закрыто в этой сети и чем это лечится." />
             </StackPanel>
 
             <WrapPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">

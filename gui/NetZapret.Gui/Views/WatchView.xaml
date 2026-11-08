@@ -58,10 +58,8 @@
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Наблюдение" Style="{StaticResource Title}" VerticalAlignment="Center" />
                 <ContentControl Style="{StaticResource Info}" Margin="4,2,0,0"
-                                Content="Источник — события ядра Windows (ETW): каждое новое соединение и программа, которая его открыла.&#x0a;&#x0a;«Куда» — что сказали бы правила для этого имени или адреса. Точно известно только про подставные адреса движка, сам движок и домашнюю сеть — это залитый кружок.&#x0a;&#x0a;Всё, и прямое тоже, пишется в runtime\watch.log и едет в отчёт." />
+                                Content="Каждое новое соединение и программа, которая его открыла, — по событиям ядра Windows (ETW). Ничего не меняет, только смотрит.&#x0a;&#x0a;«Куда» — что сказали бы правила. ● — известно точно: подставной адрес движка, сам движок, домашняя сеть; ○ — ответ правил, движок не спрашивали.&#x0a;&#x0a;Всё, и прямое тоже, пишется в runtime\watch.log и едет в отчёт." />
             </StackPanel>
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Соединения по мере появления и правило, которое к каждому применилось бы. Ничего не меняет — только смотрит." />
 
             <!--
                 WrapPanel: на узком окне лишнее уходит на вторую строку, а не за край.
@@ -143,7 +141,6 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition x:Name="TableRow" Height="*" />
-                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <!--
@@ -323,9 +320,6 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                 </gui:Card>
-
-                <TextBlock Grid.Row="4" Style="{StaticResource Caption}" Margin="4,8,0,0" TextWrapping="Wrap"
-                           Text="● — известно точно: подставной адрес движка, сам движок, домашняя сеть · ○ — так сказали бы правила, движок не спрашивали" />
             </Grid>
 
             <!--

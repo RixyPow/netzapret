@@ -101,10 +101,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                <TextBlock Text="Файл hosts" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"
-                           Text="Имена, прибитые к адресам. Windows разрешает их сама, раньше всякого DNS — и нашего тоже." />
+            <!-- Подсказка обязана говорить правду (владелец 19.10): «отменяет любой маршрут» — неверно. -->
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                <TextBlock Text="Файл hosts" Style="{StaticResource Title}" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="4,2,0,0"
+                                Content="Имена из hosts Windows разрешает сама, раньше всякого DNS — и нашего тоже.&#x0a;&#x0a;В «Гибриде» правило «через VPN» на прибитое имя не сработает: туннель забирает имена подставными адресами. Где трафик и так идёт через движок, правило по домену действует.&#x0a;&#x0a;Перед каждой правкой рядом с файлом ложится его копия." />
             </StackPanel>
 
             <WrapPanel Grid.Column="1" VerticalAlignment="Center">
@@ -443,7 +444,7 @@
 
                             <StackPanel x:Name="ListPanel" Margin="0,12,0,0" Visibility="Collapsed">
                                 <TextBlock Style="{StaticResource Caption}" Margin="2,0,0,4" TextWrapping="Wrap"
-                                           Text="По строке: адрес и имя в любом порядке, можно несколько имён. Решётка и всё за ней — подпись." />
+                                           Text="По строке: адрес и имена в любом порядке. После # — подпись." />
                                 <TextBox x:Name="NewList" AcceptsReturn="True" Height="130" TextWrapping="NoWrap"
                                          VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"
                                          Style="{StaticResource {x:Type TextBox}}" FontFamily="{DynamicResource MonoFont}"
@@ -455,11 +456,13 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Адрес самого сервиса" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Адрес самого сервиса" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Включите, если адрес — сам сервис (Meta, Twitter), а не посредник: тогда имя обработает десинк. Для XBOX DNS, Comss и им подобных — выключено." />
+                                </StackPanel>
                                 <ToggleButton x:Name="NewService" Grid.Column="1" Style="{StaticResource Switch}" Margin="10,0,0,0" />
                             </Grid>
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Включите, если адрес — сам сервис (Meta, Twitter), а не посредник: тогда десинк имя не пропустит. Для XBOX DNS, Comss и им подобных — выключено." />
 
                             <Button x:Name="AddButton" Style="{StaticResource Primary}" Content="Добавить запись"
                                     Click="OnAddPin" Margin="0,14,0,0" HorizontalAlignment="Stretch"
@@ -491,21 +494,6 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
-                    </gui:Card>
-
-                    <!-- Подсказка обязана говорить правду (владелец 19.10): «отменяет любой маршрут» — неверно. -->
-                    <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Что делает запись" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                                       Text="Имя из hosts Windows разрешает сама, до всякого DNS, и адрес берётся из файла." />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                       Text="VPN: в «Гибриде» туннель забирает имена через подставные адреса, а прибитое имя их не получит — правило «через VPN» на него не сработает. Где трафик и так идёт через движок, правило по домену действует: имя видно из рукопожатия." />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                       Text="Десинк: имя с видом «посредник» щит пропускает без обработки, «адрес сервиса» — оставляет рецепту." />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                       Text="Перед каждой правкой рядом с файлом ложится его копия." />
                         </StackPanel>
                     </gui:Card>
 

@@ -311,7 +311,8 @@ public partial class CheckView : UserControl
 
     private CheckView View => _shown ?? this;
     private static IReadOnlyList<SectionRow> _sections = [];
-    private static string _status = "Проверка идёт минуты: по каждому имени четыре пробы, и каждая ждёт ответа.";
+    // В покое строка пуста: сколько идёт проверка, сказано в пустой таблице.
+    private static string _status = string.Empty;
 
     /// <summary>Цель точечной проверки; <c>null</c> — проверяется весь справочник.</summary>
     private static CheckTarget? _target;
@@ -1967,14 +1968,12 @@ public partial class CheckView : UserControl
         EmptyHint.Text = all == 0
             ? _running
                 ? "Первые ответы появятся через несколько секунд…"
-                : "Здесь появятся проверенные имена: нажмите «Проверить всё». Проверка идёт минуты — "
-                  + "по каждому имени соединение, и каждое ждёт ответа."
+                : "Пока пусто. Проверка идёт минуты: каждое имя ждёт ответа."
             : "Под этот отбор ничего не подходит."
               + (_query.Length > 0 ? " Enter — проверить «" + _query + "» отдельно." : string.Empty);
 
         SummaryHint.Text = all == 0
-            ? "Выберите строку — здесь будет всё о ней: стадии замера, адреса, почерк поломки и что с этим делать. "
-              + "Пока строка не выбрана — итог проверки."
+            ? "Здесь будет итог проверки, а щелчок по строке покажет всё о ней."
             : _running ? "Проверка идёт — итог появится, когда она закончится." : string.Empty;
 
         SummaryHint.Visibility = SummaryHint.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
