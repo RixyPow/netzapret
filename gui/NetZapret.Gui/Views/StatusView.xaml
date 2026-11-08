@@ -492,10 +492,7 @@
 
                     <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
                         <StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" VerticalAlignment="Center" />
-                                <ContentControl x:Name="PresetInfo" Style="{StaticResource Info}" Margin="2,-4,0,-4" Visibility="Collapsed" />
-                            </StackPanel>
+                            <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>

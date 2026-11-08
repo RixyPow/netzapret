@@ -514,12 +514,12 @@ public partial class StatusView : UserControl
         Problem.Visibility = Visibility.Collapsed;
 
         PresetValue.Text = settings.DescribePreset();
-        // Описание пресета — в подсказке «i» у «Текущий пресет»; строкой под
-        // именем — только беда: пресета нет или нет его файла.
-        PresetInfo.Content = seen.PresetNote;
-        PresetInfo.Visibility = seen.PresetNote.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        PresetNote.Text = seen.PresetProblem;
-        PresetNote.Visibility = seen.PresetProblem.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // Описание пресета — строкой под именем, как до 08.11: в подсказке «i» его
+        // не видно, а им пресеты и различают (владелец вернул в тот же день).
+        // Беда с пресетом — на том же месте вместо описания.
+        string presetLine = seen.PresetProblem.Length > 0 ? seen.PresetProblem : seen.PresetNote;
+        PresetNote.Text = presetLine;
+        PresetNote.Visibility = presetLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
         ShowServerFlag(_exit ?? NetZapret.Subscriptions.Warp.PreferredExit(settings));
         DnsValue.Text = settings.UseRouterDns
