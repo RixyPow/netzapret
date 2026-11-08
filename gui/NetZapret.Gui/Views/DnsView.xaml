@@ -254,13 +254,16 @@
 
                             <!--
                                 Куда имена идут сейчас (DnsNow): при «авто» иначе не видно,
-                                ушёл ли движок на запасной или в туннель. Место — на две
-                                строки, как у подсказки DNS адаптеров: надзор меняет ступень
-                                сам, и карточка не должна прыгать вслед.
+                                ушёл ли движок на запасной или в туннель. Одна строка, место
+                                под неё держится, пока строка читается: надзор меняет ступень
+                                сам, и карточка не должна прыгать вслед. До 08.11 место было
+                                на две строки — под пояснением пути, которое ушло в «i», — и
+                                карточка стояла с пустым низом.
                             -->
                             <Grid Margin="0,10,0,0">
-                                <TextBlock Style="{StaticResource Caption}" Text="1&#x0a;2" Visibility="Hidden" />
-                                <TextBlock x:Name="DnsNowLine" Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                <TextBlock Style="{StaticResource Caption}" Text="1" Visibility="Hidden" />
+                                <TextBlock x:Name="DnsNowLine" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                                            Foreground="{DynamicResource Text}" />
                             </Grid>
 
@@ -307,17 +310,14 @@
                             </ComboBox>
 
                             <!--
-                                Место под подсказку — всегда две строки. Она меняется
-                                с выбором и итогом записи (одна строка у «не трогать»,
-                                две у прочих), и карточка, а с ней соседняя в том же
-                                ряду, прыгала по высоте на 5–20 точек (замер 08.11).
-                                Невидимая строка-распорка держит высоту в любом
-                                масштабе и шрифте темы.
+                                Строка — только с итогом записи или отказом. До 08.11 под
+                                подсказку о выборе всегда держались две строки (иначе
+                                карточка прыгала на 5–20 точек); подсказка ушла в «i», и
+                                распорка оставила бы пустой низ — у соседней карточки
+                                «DNS движка» тоже одна строка.
                             -->
-                            <Grid Margin="0,10,0,0">
-                                <TextBlock Style="{StaticResource Caption}" Text="1&#x0a;2" Visibility="Hidden" />
-                                <TextBlock x:Name="AdapterDnsHint" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-                            </Grid>
+                            <TextBlock x:Name="AdapterDnsHint" Style="{StaticResource Caption}" Margin="0,10,0,0"
+                                       TextWrapping="Wrap" Visibility="Collapsed" />
                         </StackPanel>
                     </Grid>
                 </gui:Card>

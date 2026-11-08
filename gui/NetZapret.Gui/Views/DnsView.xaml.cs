@@ -623,15 +623,8 @@ public partial class DnsView : UserControl
             .FirstOrDefault(item => item.Tag is string tag && tag == settings.AdapterDns.ToString());
         _filling = false;
 
-        AdapterDnsHint.Text = settings.AdapterDns switch
-        {
-            // Не длиннее двух строк на узком окне (~1000): под подсказку
-            // держится место ровно на две — длиннее, и карточка снова прыгнет.
-            AdapterDnsMode.Automatic => string.Empty,
-            AdapterDnsMode.Resolver when refusal is not null => refusal,
-            AdapterDnsMode.Resolver => string.Empty,
-            _ => string.Empty,
-        };
+        // Строкой — только отказ: что значит каждый выбор, сказано в «i».
+        SayAdapterDns(settings.AdapterDns == AdapterDnsMode.Resolver && refusal is not null ? refusal : string.Empty);
     }
 
     private async void OnAdapterDns(object sender, SelectionChangedEventArgs e)
@@ -689,7 +682,7 @@ public partial class DnsView : UserControl
         }
         catch (Exception ex)
         {
-            AdapterDnsHint.Text = "DNS адаптеров не записался: " + ex.GetBaseException().Message;
+            SayAdapterDns("DNS адаптеров не записался: " + ex.GetBaseException().Message);
             return;
         }
 
@@ -703,13 +696,20 @@ public partial class DnsView : UserControl
         if (result.Changed.Count > 0)
         {
             // Почему перезапуск — в справке карточки: здесь места две строки.
-            AdapterDnsHint.Text = said + " Нужен перезапуск движков.";
+            SayAdapterDns(said + " Нужен перезапуск движков.");
             this.Offer("DNS адаптеров изменён");
         }
         else if (result.Refused is not null || result.Failed.Count > 0)
         {
-            AdapterDnsHint.Text = said;
+            SayAdapterDns(said);
         }
+    }
+
+    /// <summary>Строка под выбором DNS адаптеров: пустая не занимает места.</summary>
+    private void SayAdapterDns(string text)
+    {
+        AdapterDnsHint.Text = text;
+        AdapterDnsHint.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
