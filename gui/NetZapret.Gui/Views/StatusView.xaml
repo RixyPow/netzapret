@@ -107,14 +107,15 @@
         </ControlTemplate>
 
         <!--
-            Скругление подсветки — внутренний край плашки: её 10 минус рамка 1,5.
+            Скругление подсветки — внутренний край плашки: её 12 минус рамка 1,5
+            (с 08.11 плашка 50 в высоту и скругление 12; до того 10 и 8,5).
             С 05.11 до правки стояло 12 от прежней плашки в 50 точек без рамки,
             и подсветка при наведении выходила круглее самой кнопки.
         -->
         <Style x:Key="SplitLeft" TargetType="Button" BasedOn="{StaticResource SplitPart}">
             <Setter Property="Tag">
                 <Setter.Value>
-                    <CornerRadius>8.5,0,0,8.5</CornerRadius>
+                    <CornerRadius>10.5,0,0,10.5</CornerRadius>
                 </Setter.Value>
             </Setter>
             <Setter Property="Template" Value="{StaticResource SplitShape}" />
@@ -123,7 +124,7 @@
         <Style x:Key="SplitRight" TargetType="Button" BasedOn="{StaticResource SplitPart}">
             <Setter Property="Tag">
                 <Setter.Value>
-                    <CornerRadius>0,8.5,8.5,0</CornerRadius>
+                    <CornerRadius>0,10.5,10.5,0</CornerRadius>
                 </Setter.Value>
             </Setter>
             <Setter Property="Template" Value="{StaticResource SplitShape}" />
@@ -398,33 +399,37 @@
                                     с 05.11 — рамкой (ShowEngineButtons): у работающего
                                     главное — волна, а не кнопка, которую жмут редко.
                                 -->
-                                <Border x:Name="EngineButtons" Height="36" CornerRadius="10" BorderThickness="1.5"
+                                <!--
+                                    С 08.11 — 50 в высоту и шрифт 16 (владелец: главную кнопку
+                                    крупнее); ЦП и память ушли в нижнюю строку «Главной».
+                                -->
+                                <Border x:Name="EngineButtons" Height="50" CornerRadius="12" BorderThickness="1.5"
                                         Background="{DynamicResource AccentFill}" BorderBrush="Transparent">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="36" />
+                                            <ColumnDefinition Width="44" />
                                         </Grid.ColumnDefinitions>
 
                                         <Button x:Name="StartButton" Style="{StaticResource SplitLeft}" Click="OnStart" Visibility="Collapsed">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,10,0" FontSize="14"
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE768;" Margin="0,0,11,0" FontSize="17"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                <TextBlock Text="Запустить" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                <TextBlock Text="Запустить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                             </StackPanel>
                                         </Button>
                                         <Button x:Name="StopButton" Style="{StaticResource SplitLeft}" Click="OnStop" Visibility="Collapsed">
                                             <StackPanel Orientation="Horizontal">
-                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,10,0" FontSize="14"
+                                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE71A;" Margin="0,0,11,0" FontSize="17"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                                <TextBlock Text="Остановить" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                <TextBlock Text="Остановить" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                                             </StackPanel>
                                         </Button>
 
-                                        <Rectangle x:Name="EngineButtonsSeam" Grid.Column="1" Width="1" Margin="0,10"
+                                        <Rectangle x:Name="EngineButtonsSeam" Grid.Column="1" Width="1" Margin="0,13"
                                                    Fill="{DynamicResource OnAccent}" Opacity="0.35" />
 
                                         <Button Grid.Column="2" x:Name="EngineMenuButton" Style="{StaticResource SplitRight}"
@@ -443,8 +448,9 @@
                                     Счётчики — всегда, а не только при работе (владелец 19.10):
                                     при остановленных движках — прочерки. Получено и отдано —
                                     движком туннеля с его запуска; процессор — в долях одного
-                                    ядра: winws2 однопоточный (EngineLoad). С 05.11 — сеткой
-                                    2×2, каждый в строку, без подписи над числом: колонка
+                                    ядра: winws2 однопоточный (EngineLoad). С 08.11 здесь только
+                                    получено и отдано, ЦП и память — в нижней строке (Footer);
+                                    с 05.11 по 08.11 — сеткой 2×2 без подписи над числом: колонка
                                     стала узкой, а карточка не выше 128 — иначе «Главная»
                                     в не развёрнутом окне владельца уходит под прокрутку
                                     (HomeFitTests: на 156 страница 666 при видимых 651).
@@ -457,25 +463,16 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
 
-                                    <TextBlock x:Name="DownMeter" Grid.Row="0" Grid.Column="0" FontSize="13" Background="Transparent"
+                                    <TextBlock x:Name="DownMeter" Grid.Row="0" Grid.Column="0" FontSize="14" Background="Transparent"
                                                ToolTip="Получено через движок туннеля с его запуска. В «Гибриде» — то, что пришло из туннеля; в «Туннеле» — всё, включая «напрямую».">
                                         <Run Text="↓ " Foreground="{DynamicResource Muted}" /><Run x:Name="DownValue" Text="—" />
                                     </TextBlock>
-                                    <TextBlock x:Name="UpMeter" Grid.Row="0" Grid.Column="1" FontSize="13" Background="Transparent"
+                                    <TextBlock x:Name="UpMeter" Grid.Row="0" Grid.Column="1" FontSize="14" Background="Transparent"
                                                ToolTip="Отдано через движок туннеля с его запуска. В «Гибриде» — то, что ушло в туннель; в «Туннеле» — всё, включая «напрямую».">
                                         <Run Text="↑ " Foreground="{DynamicResource Muted}" /><Run x:Name="UpValue" Text="—" />
                                     </TextBlock>
-                                    <TextBlock x:Name="CpuMeter" Grid.Row="1" Grid.Column="0" Margin="0,8,0,0" FontSize="13" Background="Transparent">
-                                        <Run Text="ЦП " Foreground="{DynamicResource Muted}" /><Run x:Name="CpuValue" Text="—" />
-                                    </TextBlock>
-                                    <TextBlock x:Name="RamMeter" Grid.Row="1" Grid.Column="1" Margin="0,8,0,0" FontSize="13" Background="Transparent">
-                                        <Run Text="Память " Foreground="{DynamicResource Muted}" /><Run x:Name="RamValue" Text="—" />
-                                    </TextBlock>
+
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -834,6 +831,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal">
@@ -842,7 +840,20 @@
                         <TextBlock x:Name="FooterState" Style="{StaticResource Caption}" Margin="8,0,0,0" />
                     </StackPanel>
 
-                    <TextBlock Grid.Column="1" x:Name="FooterConfig" Style="{StaticResource Caption}" Margin="16,0,0,0" />
+                    <!--
+                        Нагрузка движков — здесь с 08.11 (владелец): из карточки
+                        состояния ушла, чтобы дать место крупной кнопке.
+                    -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0">
+                        <TextBlock x:Name="CpuMeter" Style="{StaticResource Caption}" Background="Transparent">
+                            <Run Text="ЦП " /><Run x:Name="CpuValue" Text="—" Foreground="{DynamicResource Text}" />
+                        </TextBlock>
+                        <TextBlock x:Name="RamMeter" Style="{StaticResource Caption}" Background="Transparent" Margin="16,0,0,0">
+                            <Run Text="Память " /><Run x:Name="RamValue" Text="—" Foreground="{DynamicResource Text}" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="2" x:Name="FooterConfig" Style="{StaticResource Caption}" Margin="24,0,0,0" />
                 </Grid>
 
             </Grid>
