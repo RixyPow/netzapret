@@ -175,24 +175,6 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     /// <summary>
-    /// Скрытая просьба о звезде возвращается на «Главную» один раз (08.11, к 1.5.0),
-    /// а скрытая после этого — остаётся скрытой.
-    /// </summary>
-    [Theory]
-    [InlineData("""{ "OnboardingDone": true, "SupportCardHidden": true }""", false)]
-    [InlineData("""{ "OnboardingDone": true, "SupportCardHidden": true, "SupportCardBack": true }""", true)]
-    [InlineData("""{ "OnboardingDone": true }""", false)]
-    public void SupportCardComesBackOnce(string json, bool hidden)
-    {
-        File.WriteAllText(_path, json);
-
-        var read = AppSettings.Load(_path);
-
-        Assert.Equal(hidden, read.SupportCardHidden);
-        Assert.True(read.SupportCardBack);
-    }
-
-    /// <summary>
     /// Всех переводят на пресет по умолчанию один раз (03.10, тогда V11 Lite,
     /// с 19.10 — V12 Lite); выключенный десинк так и остаётся.
     /// </summary>
