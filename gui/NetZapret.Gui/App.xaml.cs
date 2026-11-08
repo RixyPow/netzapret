@@ -202,6 +202,36 @@ public partial class App : Application
             Journal.Write("маршруты", "снять правила по программе не вышло: " + ex.GetBaseException().Message);
         }
 
+        // DNS адаптеров по выбору человека (AdapterDns, 08.11): новый адаптер
+        // или правка руками снова получают выбранное. В фоне: без расхождения
+        // команд нет вовсе, а с ним netsh и сброс кэша идут до секунд.
+        try
+        {
+            var dns = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (dns.AdapterDns != AdapterDnsMode.Keep)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var result = await Proxy.AdapterDns.ApplyAsync(dns);
+
+                        if (result.Changed.Count > 0 || result.Failed.Count > 0)
+                            Journal.Write("DNS", "адаптеры при запуске: " + result.Describe(dns.AdapterDns));
+                    }
+                    catch (Exception ex)
+                    {
+                        Journal.Write("DNS", "адаптеры при запуске: " + ex.GetBaseException().Message);
+                    }
+                });
+            }
+        }
+        catch (Exception)
+        {
+            // Настройки не прочитались — окно скажет об этом само, DNS подождёт.
+        }
+
         // Закрытие окна больше не закрывает программу: крестик прячет её
         // в трей. Выход остаётся явным — пунктом в меню значка.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;

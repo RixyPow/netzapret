@@ -558,6 +558,112 @@ public partial class DnsView : UserControl
 
         // Цена пути — те же слова, что в мастере первого запуска.
         TunnelHint.Text = DnsRoutes.Explain(settings);
+
+        // Подпись «выбранного резолвера» зависит от выбора в списке ниже —
+        // показывается здесь же, где и сам выбор.
+        ShowAdapterDns(settings);
+    }
+
+    /// <summary>Выбор DNS адаптеров (<see cref="AppSettings.AdapterDns"/>) и что он значит сейчас.</summary>
+    private void ShowAdapterDns(AppSettings settings)
+    {
+        var addresses = AdapterDns.ResolverAddresses(settings, out var refusal);
+
+        AdapterDnsResolverItem.Content = refusal is null
+            ? $"выбранный резолвер — {string.Join(", ", addresses)}"
+            : "выбранный резолвер";
+
+        // Как у пути DNS: показ состояния не должен записывать его обратно.
+        _filling = true;
+        AdapterDnsChoice.SelectedItem = AdapterDnsChoice.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag is string tag && tag == settings.AdapterDns.ToString());
+        _filling = false;
+
+        AdapterDnsHint.Text = settings.AdapterDns switch
+        {
+            AdapterDnsMode.Automatic => "Программа ставит адаптерам «автоматически»: DNS выдаёт сеть. Записанное остаётся и после выхода из программы.",
+            AdapterDnsMode.Resolver when refusal is not null => refusal + " Адаптеры не менялись.",
+            AdapterDnsMode.Resolver => $"Программа вписывает в адаптеры выбранный резолвер ({string.Join(", ", addresses)}). "
+                + "Записанное остаётся и после выхода из программы.",
+            _ => "Программа DNS адаптеров не трогает — только показывает.",
+        };
+    }
+
+    private async void OnAdapterDns(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsInitialized || _filling
+            || AdapterDnsChoice.SelectedItem is not ComboBoxItem { Tag: string tag }
+            || !Enum.TryParse<AdapterDnsMode>(tag, out var mode))
+        {
+            return;
+        }
+
+        AppSettings next;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            // Выбор того же самого — не выбор.
+            if (settings.AdapterDns == mode)
+                return;
+
+            next = settings with { AdapterDns = mode };
+            next.Save(AppSettings.DefaultPath);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+            return;
+        }
+
+        ShowAdapterDns(next);
+        await ApplyAdapterDnsAsync(next);
+    }
+
+    /// <summary>
+    /// Пишет DNS адаптеров по выбору — не в потоке окна: netsh и сброс кэша
+    /// идут до секунд.
+    /// </summary>
+    /// <remarks>
+    /// Резолверы Windows движок читает при запуске и заводит их адреса в TUN
+    /// (<see cref="SystemResolvers"/>). Сменились адреса — при работающих
+    /// движках новые мимо туннеля, пока их не перезапустить; отсюда и
+    /// предложение перезапуска.
+    /// </remarks>
+    private async Task ApplyAdapterDnsAsync(AppSettings settings)
+    {
+        if (settings.AdapterDns == AdapterDnsMode.Keep)
+            return;
+
+        AdapterDnsResult result;
+
+        try
+        {
+            result = await Task.Run(() => AdapterDns.ApplyAsync(settings));
+        }
+        catch (Exception ex)
+        {
+            AdapterDnsHint.Text = "DNS адаптеров не записался: " + ex.GetBaseException().Message;
+            return;
+        }
+
+        var said = result.Describe(settings.AdapterDns);
+
+        if (result.Changed.Count > 0 || result.Failed.Count > 0)
+            Journal.Write("DNS", "адаптеры: " + said);
+
+        ShowSystem();
+
+        if (result.Changed.Count > 0)
+        {
+            AdapterDnsHint.Text = said + " Движок читает резолверы Windows при запуске — перезапустите движки.";
+            this.Offer("DNS адаптеров изменён");
+        }
+        else if (result.Refused is not null || result.Failed.Count > 0)
+        {
+            AdapterDnsHint.Text = said;
+        }
     }
 
     /// <summary>
@@ -836,6 +942,10 @@ public partial class DnsView : UserControl
 
             Status.Text = $"Апстрим: {name}. Применится при следующем запуске движков.";
             this.Offer($"Резолвер сменён на {name}");
+
+            // В адаптерах вписан выбранный — сменился выбранный, сменить и там.
+            if (settings.AdapterDns == AdapterDnsMode.Resolver)
+                _ = ApplyAdapterDnsAsync(settings);
         }
         catch (Exception ex)
         {
@@ -1034,6 +1144,9 @@ public partial class DnsView : UserControl
 
         Status.Text = $"Автовыбор: {best.Name} · {address}. Применится при следующем запуске движков.";
         this.Offer($"Резолвер сменён на {best.Name}");
+
+        if (next.AdapterDns == AdapterDnsMode.Resolver)
+            _ = ApplyAdapterDnsAsync(next);
     }
 
     /// <summary>

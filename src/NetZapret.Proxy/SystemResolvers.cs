@@ -86,7 +86,7 @@ public static class SystemResolvers
         return $"{address}/32";
     }
 
-    private static bool IsOwnTunnel(NetworkInterface adapter)
+    internal static bool IsOwnTunnel(NetworkInterface adapter)
     {
         foreach (var marker in TunnelMarkers)
         {
