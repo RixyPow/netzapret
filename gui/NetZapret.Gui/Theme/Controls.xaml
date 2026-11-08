@@ -460,7 +460,13 @@
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="Background" Value="{DynamicResource Surface}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Border}" />
-        <Setter Property="Padding" Value="16,13" />
+        <!--
+            Поля 12+12, а не 13+13: сумма по оси кратна 4 — целые пиксели при
+            100/125/150 %. С 13+13 выключатель в строке без подписи (08.11,
+            подписи под настройками убраны) вставал на 16,25 пикселя и терял
+            верх рамки — BorderThicknessTests, «Оформление».
+        -->
+        <Setter Property="Padding" Value="16,12" />
         <Setter Property="Margin" Value="0,0,0,7" />
         <Setter Property="Template">
             <Setter.Value>
