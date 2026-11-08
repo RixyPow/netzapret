@@ -283,6 +283,39 @@ public sealed class AmneziaKeyTests
     }
 
     /// <summary>
+    /// UDP к подставным адресам через WireGuard/AmneziaWG разрешается заранее
+    /// (обсуждение №55: без resolve вход TUN отбрасывал UDP по имени — время,
+    /// STUN); у конфига без такого выхода правила нет.
+    /// </summary>
+    [Fact]
+    public void Udp_to_names_is_resolved_only_with_a_wireguard_exit()
+    {
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []\n");
+        var awg = Single(Key(Awg(new JsonObject { ["config"] = Conf })));
+        Assert.True(ProxyUriParser.TryParse("trojan://secret@a.example:443#Германия", out var trojan, out var error), error);
+
+        static JsonNode? Resolve(string json) => JsonNode.Parse(json)!["route"]!["rules"]!.AsArray()
+            .FirstOrDefault(r => (string?)r!["action"] == "resolve");
+
+        var with = new SingBoxConfigCompiler().Compile(engine.RuleSet, [awg], new SingBoxOptions()).Json;
+        var rule = Resolve(with);
+
+        Assert.NotNull(rule);
+        Assert.Equal("udp", (string?)rule["network"]);
+
+        // Раньше маршрутов, после перехвата DNS: иначе до него не дойдёт очередь.
+        var rules = JsonNode.Parse(with)!["route"]!["rules"]!.AsArray().Select(r => (string?)r!["action"] ?? (string?)r!["outbound"]).ToList();
+        Assert.True(rules.IndexOf("hijack-dns") < rules.IndexOf("resolve"));
+        Assert.Equal(rules.IndexOf("hijack-dns") + 1, rules.IndexOf("resolve"));
+
+        var check = SingBoxCheck.Run(with);
+        Assert.True(check.Ok, check.Said);
+
+        var without = new SingBoxConfigCompiler().Compile(engine.RuleSet, [trojan!], new SingBoxOptions()).Json;
+        Assert.Null(Resolve(without));
+    }
+
+    /// <summary>
     /// Маскировка, которой движок не знает (J1–J3, Itime у AmneziaWG 1.5), не теряется
     /// молча: едет в ссылке и называется при добавлении.
     /// </summary>

@@ -2521,6 +2521,30 @@ public sealed class SingBoxConfigCompiler
 
         rules.Add(new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" });
 
+        // UDP к подставным адресам через WireGuard/AmneziaWG — с настоящим адресом
+        // заранее. Такой выход гонит UDP пакетами, без соединения, и вход TUN
+        // решает путь ещё на первом пакете (pre-match, sing-box route/route.go,
+        // preMatchFlow): подставному адресу там нужен настоящий, и без действия
+        // resolve раньше в правилах пакет отбрасывается — «a resolve action is
+        // required before routing to outbound/wireguard». Обсуждение №55, 08.11:
+        // 337 таких строк в журнале AmneziaWG — время (time.cloudflare.com), STUN
+        // звонков, всё UDP по имени через VPN. TCP идёт обычным путём, его выход
+        // разрешает имя сам, — сайты открывались. Только UDP и только при таком
+        // выходе: прочим конфиг не меняется, а прокси уровня VLESS имя передают
+        // серверу и в настоящем адресе не нуждаются. Разрешает тем же резолвером,
+        // что и TCP у такого выхода (правила DNS, подставные пропускаются, затем
+        // remote). Вживую в TUN не проверено — нужны права администратора;
+        // через socks тот же UDP по имени проходит и без правила (опыт 08.11).
+        if (tags.Keys.Any(s => s.IsEndpoint))
+        {
+            rules.Add(new JsonObject
+            {
+                ["network"] = "udp",
+                ["action"] = "resolve",
+                ["strategy"] = "prefer_ipv4",
+            });
+        }
+
         foreach (var node in BuildDohRejects(options))
             rules.Add(node);
 
