@@ -107,13 +107,11 @@ public partial class TunnelSettingsWindow : Window
         // Замену ищет сторож, а он молчит при выключенной проверке: сказать
         // об этом надо здесь же, иначе включённая настройка не делает ничего
         // и не объясняет почему (у владельца 30.09 стояло «не проверять»).
-        ReplaceLine.Text = settings.ExitCheckSeconds <= 0
+        Line(ReplaceLine, settings.ExitCheckSeconds <= 0
             ? "Проверка подключённого сервера выключена — замену искать некому. Включите её ниже."
             : string.IsNullOrWhiteSpace(settings.PreferredServer)
-            ? "Сейчас сервер не выбран — работает автоподбор, он ищет замену сам."
-            : settings.ReplaceSilentServer
-                ? $"Пока «{settings.PreferredServer}» молчит, трафик пойдёт через другой сервер."
-                : $"Пока «{settings.PreferredServer}» молчит, туннель ждёт его.";
+                ? "Сервер не выбран — автоподбор ищет замену сам."
+                : string.Empty);
 
         bool selective = settings.SelectiveRouting == true;
         Word(SelectiveWord, selective);
@@ -124,7 +122,7 @@ public partial class TunnelSettingsWindow : Window
         Line(SelectiveLine, selective
             ? settings.WarpEnabled ? "Сейчас не действует: туннель идёт через WARP." : string.Empty
             : settings.Pools.Count > 0
-                ? $"Заведённые пулы ({settings.Pools.Count}) сохранены, но не действуют: их маршруты идут через любые серверы."
+                ? $"Заведённые пулы ({settings.Pools.Count}) сохранены, но не действуют."
                 : string.Empty);
 
         Word(DeadPoolWord, settings.DeadPoolToDefault);
@@ -136,13 +134,11 @@ public partial class TunnelSettingsWindow : Window
         Word(FakeIpMemoryWord, settings.FakeIpMemory);
         FakeIpMemory.IsChecked = settings.FakeIpMemory;
 
-        DeadPoolLine.Text = !selective
+        Line(DeadPoolLine, !selective
             ? "Действует, когда включён Selective Routing."
             : settings.Pools.Count == 0
-            ? "Своих пулов пока нет — все серверы в пуле по умолчанию."
-            : settings.DeadPoolToDefault
-                ? "Маршруты молчащего пула пойдут через любые серверы."
-                : "Маршруты молчащего пула ждут его и не открываются.";
+                ? "Своих пулов пока нет — все серверы в пуле по умолчанию."
+                : string.Empty);
 
         Word(BypassWord, settings.BypassWhenTunnelDead);
         Bypass.IsChecked = settings.BypassWhenTunnelDead;
@@ -269,14 +265,12 @@ public partial class TunnelSettingsWindow : Window
             : "При мёртвых выходах сеть не работает, но мимо туннеля не идёт ничего.";
 
         BypassInfo.Content = on
-            ? "Если выход не ответит три проверки подряд, трафик пойдёт мимо туннеля, "
-              + "чтобы не легла вся сеть. Вернётся в туннель сам, как только выход оживёт.\n\n"
-              + "Десинк при этом работает как обычно: обход касается только того, "
-              + "что шло через туннель, и закрытые сайты на это время останутся закрытыми."
-            : "При мёртвых выходах трафик так и будет уходить в туннель — то есть в никуда. "
-              + "Это выбор в пользу скрытности: ничего не пойдёт мимо туннеля даже ценой "
-              + "неработающей сети.\n\nВключайте, если пользуетесь программой ради обхода "
-              + "блокировок, а не ради скрытности.";
+            ? "Выход не ответил три проверки подряд — трафик туннеля идёт мимо него, чтобы не легла "
+              + "вся сеть, и возвращается, как только выход оживёт. Закрытые сайты на это время "
+              + "останутся закрытыми: десинк работает как обычно."
+            : "При мёртвых выходах трафик уходит в туннель, то есть в никуда: ничего не идёт "
+              + "мимо туннеля даже ценой неработающей сети.\n\nВключайте, если программа нужна "
+              + "ради обхода блокировок, а не ради скрытности.";
     }
 
     /// <summary>
@@ -467,11 +461,9 @@ public partial class TunnelSettingsWindow : Window
         if (!LocalProxyPortBox.IsKeyboardFocused)
             LocalProxyPortBox.Text = settings.LocalProxyPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        Line(LocalProxyLine, !card
-            ? "Прокси для программ, где он прописан: SOCKS5 и HTTP на 127.0.0.1, всё — через VPN."
-            : settings.LocalProxyOn
-                ? $"Карточка на вкладке VPN. Прокси включён: {LocalProxy.Address(settings.LocalProxyPort)}."
-                : "Карточка на вкладке VPN. Прокси включается там.");
+        Line(LocalProxyLine, card && settings.LocalProxyOn
+            ? $"Прокси включён: {LocalProxy.Address(settings.LocalProxyPort)}."
+            : string.Empty);
 
         ShowProxyPool(settings);
 
@@ -479,23 +471,17 @@ public partial class TunnelSettingsWindow : Window
         HybridProxyOnlySwitch.IsChecked = settings.HybridProxyOnly;
 
         // Сказать, когда включённое ничего не делает — как у прочих строк.
-        Line(HybridProxyOnlyLine, !settings.HybridProxyOnly
-            ? "Туннель только ради прокси: маршруты «через VPN» — мимо него."
-            : settings.HybridProxyOnlyActive
-                ? "Через VPN идут только программы с локальным прокси."
-                : !settings.LocalProxyActive
-                    ? "Сейчас не действует: локальный прокси выключен."
-                    : !settings.Engines.Tunnel
-                        ? "Сейчас не действует: туннель выключен."
-                        : "Сейчас не действует: туннель забирает всё.");
+        Line(HybridProxyOnlyLine, !settings.HybridProxyOnly || settings.HybridProxyOnlyActive
+            ? string.Empty
+            : !settings.LocalProxyActive
+                ? "Сейчас не действует: локальный прокси выключен."
+                : !settings.Engines.Tunnel
+                    ? "Сейчас не действует: туннель выключен."
+                    : "Сейчас не действует: туннель забирает всё.");
 
         bool warp = settings.WarpCardShown;
         Word(WarpCardWord, warp);
         WarpCardSwitch.IsChecked = warp;
-
-        Line(WarpCardLine, warp
-            ? "Карточка на вкладке VPN."
-            : "Бесплатный выход через сеть Cloudflare вместо подписок.");
     }
 
     /// <summary>

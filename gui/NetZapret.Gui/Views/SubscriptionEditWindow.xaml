@@ -18,11 +18,13 @@
         <TextBlock Text="Имя" FontWeight="SemiBold" Margin="0,18,0,6" />
         <TextBox x:Name="NameBox" gui:Hint.Text="Имя для себя" />
 
-        <TextBlock Text="Новая ссылка" FontWeight="SemiBold" Margin="0,16,0,6" />
+        <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+            <TextBlock Text="Новая ссылка" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                            Content="Прежняя ссылка не показывается: она равносильна паролю. Вставьте новую, если продавец её сменил." />
+        </StackPanel>
         <PasswordBox x:Name="UrlBox" gui:Hint.Text="Пусто — оставить прежнюю" />
 
-        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Text="Прежняя ссылка не показывается: она равносильна паролю. Вставьте новую, если продавец её сменил." />
 
         <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
                    TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />

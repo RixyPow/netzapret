@@ -29,7 +29,7 @@
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Обновление" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                    Content="Обновление останавливает движки: с 0.5.0 супервизор — это та же программа, и заменить её файл, пока он запущен, Windows не даёт. Соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса переживают обновление." />
+                                    Content="Обновление останавливает движки — соединения на это время оборвутся. Настройки, свои маршруты и подставленные адреса сохранятся." />
                 </StackPanel>
 
                 <TextBlock x:Name="VersionValue" Style="{StaticResource Caption}" Margin="0,5,0,0" />

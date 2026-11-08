@@ -21,8 +21,6 @@
 
         <StackPanel>
             <TextBlock x:Name="Heading" Text="Своя тема" Style="{StaticResource Title}" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                       Text="Начинается с цветов выбранной сейчас темы, и каждая правка сразу видна на окне. Смысл зелёного, красного и жёлтого общий для всех тем — оттенки ваши. Нечитаемый цвет отмечен в своей строке, а «Поправить нечитаемое» подстроит его светлоту, не трогая выбранное." />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
@@ -38,7 +36,11 @@
                     </Grid>
                 </gui:Card>
 
-                <TextBlock Text="Цвета" FontWeight="SemiBold" FontSize="15" Margin="4,18,0,10" />
+                <StackPanel Orientation="Horizontal" Margin="4,18,0,10">
+                    <TextBlock Text="Цвета" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                    Content="Каждая правка сразу видна на окне. Смысл зелёного, красного и жёлтого общий для всех тем — оттенки ваши. Нечитаемый цвет отмечен в своей строке; «Поправить нечитаемое» подстроит его светлоту, не трогая выбранное." />
+                </StackPanel>
 
                 <ItemsControl x:Name="ColorRows" Focusable="False">
                     <ItemsControl.ItemTemplate>
@@ -128,8 +130,6 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Плотность карточек" />
-                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                               Text="Чем прозрачнее, тем больше видно картинку сквозь стекло." />
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" x:Name="AlphaChoice" VerticalAlignment="Center" SelectionChanged="OnChanged" />
                             </Grid>
@@ -143,9 +143,11 @@
                             -->
                             <Border Height="1" Background="{DynamicResource Border}" Margin="0,16,0,14" />
 
-                            <TextBlock Text="Картинка на «Главной»" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                       Text="Тяните картинку по миниатюре «Главной», колесом с Ctrl или ползунком — размер. На «Главной» она видна в карточке справа; что в ней картинка не закрывает, зальётся градиентом из фона окна в её цвет." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Картинка на «Главной»" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Тяните картинку по миниатюре «Главной»; колесом с Ctrl или ползунком — размер. На «Главной» она видна в карточке справа; что картинка в ней не закрывает, зальётся градиентом из фона окна в её цвет." />
+                            </StackPanel>
 
                             <!--
                                 Выбор темы (владелец 20.10: «добавь настройку для каждой темы
@@ -158,9 +160,11 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Margin="0,0,16,0">
-                                    <TextBlock Text="«Главная» на всю ширину" />
-                                    <TextBlock Style="{StaticResource Caption}" Margin="0,2,0,0" TextWrapping="Wrap"
-                                               Text="Карточки до правого края, картинка под ними, как на прочих вкладках, — укладка на миниатюре тогда не нужна. Выключено — картинка в карточке справа. В «Оформлении» это можно сменить для себя." />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="«Главная» на всю ширину" VerticalAlignment="Center" />
+                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                        Content="Карточки до правого края, картинка под ними, как на прочих вкладках, — укладка на миниатюре тогда не нужна. Выключено — картинка в карточке справа. Для себя это можно сменить в «Оформлении»." />
+                                    </StackPanel>
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="HomeWideSwitch" Style="{StaticResource Switch}"
                                               Click="OnHomeWide" VerticalAlignment="Center" />

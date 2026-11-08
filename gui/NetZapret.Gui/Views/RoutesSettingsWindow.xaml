@@ -22,8 +22,6 @@
         <ScrollViewer Grid.Row="0" Style="{StaticResource PageScroll}" Padding="22,20,22,0">
             <StackPanel>
                 <TextBlock Text="Настройки маршрутов" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Маршруты сервисов и свои сайты — на вкладке «Маршруты». Здесь — то, что задают однажды." />
 
                 <TextBlock Text="DISCORD" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
 
@@ -41,11 +39,9 @@
                                     <TextBlock Text="Предлагать перезапуск Discord" VerticalAlignment="Center" />
 
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Discord запоминает голосовые серверы на сеанс и до перезапуска ходит по-старому. После смены его маршрута программа предложит перезапустить его. Сама не перезапускает никогда: посреди звонка это хуже задержки." />
+                                                    Content="Discord запоминает голосовые серверы на сеанс и до перезапуска ходит по-старому. Программа только предлагает перезапуск — сама Discord не перезапускает: посреди звонка это хуже задержки." />
                                 </StackPanel>
 
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                           Text="После смены маршрута Discord — предложение перезапустить его." />
                             </StackPanel>
 
                             <TextBlock Grid.Column="1" x:Name="RestartWord" Style="{StaticResource Caption}"
@@ -69,11 +65,9 @@
                                     <TextBlock Text="Дописывать адреса голоса Discord" VerticalAlignment="Center" />
 
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Звук Discord идёт на голые адреса, и в туннель попадает только адресом из списка части «Звук голоса (адреса)». Пока эта часть стоит «через VPN», новые адреса его серверов берутся из журнала Discord и дописываются в список сетью /20. Заработают после перезапуска движков. Что дописалось бы, показывает nz voice." />
+                                                    Content="Звук Discord идёт на голые адреса и в туннель попадает только по списку части «Звук голоса (адреса)». Пока эта часть «через VPN», новые адреса его серверов берутся из журнала Discord и дописываются в список. Заработают после перезапуска движков." />
                                 </StackPanel>
 
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                           Text="Новые адреса голоса — из журнала Discord в список, пока голос «через VPN»." />
                             </StackPanel>
 
                             <TextBlock Grid.Column="1" x:Name="LearnWord" Style="{StaticResource Caption}"
@@ -102,11 +96,9 @@
                                     <TextBlock Text="Дописывать адреса серверов Roblox" VerticalAlignment="Center" />
 
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Матч Roblox идёт на голый адрес сервера и в туннель попадает только адресом из списка части «Игровые серверы (адреса)». Там сети самой Roblox, а часть плейсов стоит на Amazon — мимо туннеля их выкидывает с ошибкой 277 или 279. Пока часть стоит «через VPN», адреса серверов берутся из журнала Roblox и дописываются в список сетью /20. Заработают после перезапуска движков." />
+                                                    Content="Матч Roblox идёт на голый адрес сервера и в туннель попадает только по списку части «Игровые серверы (адреса)»; плейсы на Amazon мимо туннеля выкидывает с ошибкой 277 или 279. Пока часть «через VPN», адреса серверов берутся из журнала Roblox и дописываются в список. Заработают после перезапуска движков." />
                                 </StackPanel>
 
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                           Text="Новые адреса игровых серверов — из журнала Roblox в список, пока его серверы «через VPN»." />
                             </StackPanel>
 
                             <TextBlock Grid.Column="1" x:Name="LearnRobloxWord" Style="{StaticResource Caption}"
@@ -135,11 +127,9 @@
                                     <TextBlock Text="Дописывать адреса серверов ARC Raiders" VerticalAlignment="Center" />
 
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Матч ARC Raiders идёт на голые адреса серверов в Google Cloud и в туннель попадает только адресом из списка части «Игровые серверы (адреса)». Заранее эти адреса не знает никто, поэтому список пополняется сам: пока часть стоит «через VPN» и игра запущена, «Наблюдение» видит её соединения и дописывает адреса без имени сетью /24. Заработают после перезапуска движков — первый матч ещё пойдёт напрямую." />
+                                                    Content="Матч ARC Raiders идёт на голые адреса серверов в Google Cloud и в туннель попадает только по списку части «Игровые серверы (адреса)». Пока часть «через VPN» и игра запущена, «Наблюдение» дописывает адреса её соединений в список. Заработают после перезапуска движков — первый матч ещё пойдёт напрямую." />
                                 </StackPanel>
 
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                           Text="Адреса серверов — из соединений игры в список, пока её серверы «через VPN»." />
                             </StackPanel>
 
                             <TextBlock Grid.Column="1" x:Name="LearnArcWord" Style="{StaticResource Caption}"
@@ -156,10 +146,12 @@
                     решениями» — раздел «Напрямую» каталога hosts Zapret GUI.
                     Адрес прописывается как есть, десинк остаётся (PinSolutions).
                 -->
-                <TextBlock Text="ПИНЫ НАПРЯМУЮ" Style="{StaticResource GroupHead}" Margin="4,22,0,7" />
+                <StackPanel Orientation="Horizontal" Margin="4,19,0,4">
+                    <TextBlock Text="ПИНЫ НАПРЯМУЮ" Style="{StaticResource GroupHead}" Margin="0" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                    Content="Имя прибивается в hosts к адресу самого сервиса, а десинк продолжает работать: провайдер режет его имя и там. Из каталога Zapret GUI, раздел «Напрямую»." />
+                </StackPanel>
 
-                <TextBlock Style="{StaticResource Caption}" Margin="4,0,0,9" TextWrapping="Wrap"
-                           Text="Имя прибивается в hosts к адресу самого сервиса, а десинк продолжает работать: провайдер режет его имя и там. Из каталога Zapret GUI, раздел «Напрямую»." />
 
                 <gui:Card Style="{StaticResource SettingsGroup}">
                     <ItemsControl x:Name="Solutions">

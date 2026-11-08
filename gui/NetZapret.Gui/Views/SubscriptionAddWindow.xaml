@@ -42,8 +42,6 @@
             </Button>
         </Grid>
 
-        <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Text="Ссылка, ключи, картинка с QR-кодом или файл .conf — поля ниже заполнятся сами." />
 
         <TextBlock Text="Тип" FontWeight="SemiBold" Margin="0,18,0,6" />
         <ComboBox x:Name="KindBox" SelectedIndex="0" SelectionChanged="OnKind">
@@ -55,17 +53,23 @@
             <TextBlock Text="Имя подписки" FontWeight="SemiBold" Margin="0,16,0,6" />
             <TextBox x:Name="NameBox" gui:Hint.Text="Пусто — назовём сами" />
 
-            <TextBlock Text="Ссылка подписки" FontWeight="SemiBold" Margin="0,16,0,6" />
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+                <TextBlock Text="Ссылка подписки" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                Content="Равносильна паролю: после добавления не показывается — ни здесь, ни на вкладке." />
+            </StackPanel>
             <PasswordBox x:Name="UrlBox" gui:Hint.Text="https://… либо happ://, clash://, sn://"
                          LostKeyboardFocus="OnUrlLeft" />
         </StackPanel>
 
         <StackPanel x:Name="KeyFields" Visibility="Collapsed">
-            <TextBlock Text="Ключи" FontWeight="SemiBold" Margin="0,16,0,6" />
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+                <TextBlock Text="Ключи" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                Content="Лягут в папку «Отдельные ключи», имя каждому — из самого ключа. Равносильны паролю: после добавления не показываются." />
+            </StackPanel>
             <PasswordBox x:Name="KeysBox" gui:Hint.Text="Один ключ или несколько подряд" />
 
-            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                       Text="Лягут в папку «Отдельные ключи»; имя каждому — из самого ключа." />
         </StackPanel>
 
         <gui:Card Style="{StaticResource SettingsGroup}" Margin="0,18,0,0">
@@ -77,9 +81,11 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
-                    <TextBlock Text="Сразу в работу" />
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                               Text="Серверы сразу пойдут в общий автоподбор. Выключите — добавится на паузе, включите потом на вкладке." />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Сразу в работу" VerticalAlignment="Center" />
+                        <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                        Content="Серверы сразу пойдут в общий автоподбор. Выключено — подписка добавится на паузе, включить её можно потом на вкладке VPN." />
+                    </StackPanel>
                 </StackPanel>
 
                 <TextBlock Grid.Column="1" x:Name="InPoolWord" Style="{StaticResource Caption}"
@@ -90,8 +96,6 @@
             </Grid>
         </gui:Card>
 
-        <TextBlock Style="{StaticResource Caption}" Margin="0,14,0,0" TextWrapping="Wrap"
-                   Text="Ссылка и ключи равносильны паролю: после добавления они не показываются — ни здесь, ни на вкладке." />
 
         <TextBlock x:Name="Found" Style="{StaticResource Caption}" Margin="0,10,0,0"
                    TextWrapping="Wrap" Foreground="{DynamicResource Accent}" Visibility="Collapsed" />

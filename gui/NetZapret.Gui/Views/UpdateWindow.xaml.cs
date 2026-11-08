@@ -115,10 +115,9 @@ public partial class UpdateWindow : Window
     {
         Subtitle.Text = !_newer
             ? string.Equals(_latest.Version, UpdateCheck.Current, StringComparison.OrdinalIgnoreCase)
-                ? $"{UpdateCheck.Current} — последняя версия  ·  источник: GitHub"
-                : $"Установлена {UpdateCheck.Current}  ·  последняя на GitHub — {_latest.Version}  ·  источник: GitHub"
-            : $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {Math.Max(versions, 1)}"
-                + "  ·  источник: GitHub";
+                ? $"{UpdateCheck.Current} — последняя версия"
+                : $"Установлена {UpdateCheck.Current}  ·  последняя на GitHub — {_latest.Version}"
+            : $"{UpdateCheck.Current} → {_latest.Version}  ·  версий в обновлении: {Math.Max(versions, 1)}";
     }
 
     /// <summary>Лента версий и чейнджлог выбранной в ней — сперва найденной.</summary>

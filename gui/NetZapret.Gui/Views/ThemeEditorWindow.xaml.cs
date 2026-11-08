@@ -270,7 +270,7 @@ public partial class ThemeEditorWindow : Window
 
     private void ShowImage()
     {
-        ImageName.Text = _image is null ? "нет — фон сплошной, цветом «Фон окна»" : Path.GetFileName(_image);
+        ImageName.Text = _image is null ? "нет" : Path.GetFileName(_image);
         ClearImage.IsEnabled = _image is not null;
         ImageSettings.Visibility = _image is null ? Visibility.Collapsed : Visibility.Visible;
 
