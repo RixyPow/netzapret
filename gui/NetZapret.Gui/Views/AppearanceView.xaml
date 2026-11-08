@@ -10,6 +10,41 @@
         в «Ещё» и занимало там больше места, чем всё остальное вместе:
         темы, фон, шрифт, размер, меню трея.
     -->
+    <UserControl.Resources>
+        <!-- Строка с выключателем внутри группы: нажимается вся, своей рамки нет — рамка у группы. -->
+        <Style x:Key="PlainRow" TargetType="Button">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GroupTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Margin" Value="4,22,0,10" />
+        </Style>
+
+        <Style x:Key="GroupLine" TargetType="Border">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{DynamicResource Border}" />
+            <Setter Property="Margin" Value="0,10,0,10" />
+        </Style>
+    </UserControl.Resources>
+
     <ScrollViewer Style="{StaticResource PageScroll}" Padding="32,28,32,28">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -128,81 +163,75 @@
                             <!-- Рядом с прочими действиями над темами (владелец, 05.10), а не отдельно в шапке. -->
                             <Button Style="{StaticResource Ghost}" Content="Папка тем" Click="OnThemesFolder" Margin="0,0,8,8" />
                         </WrapPanel>
+                    </StackPanel>
+                </gui:Card>
 
-                        <!--
-                            Настройки оформления (владелец, 23.09: «добавь
-                            настройки оформления, по типу размытие вкл/выкл»).
-                            Хранятся у человека, а не в теме; видны, когда
-                            у выбранной темы есть картинка фона.
-                        -->
-                        <StackPanel x:Name="LookPanel" Margin="0,8,0,0">
-                            <Button Style="{StaticResource Choice}" Tag="background" Click="OnLook" Margin="0,0,0,7">
-                                <Grid>
+                <!--
+                    Настройки фона — у человека, а не в теме; видны, когда у темы есть
+                    картинка. С 08.11 — группами-карточками со строками через черту, как
+                    «Обслуживание» в «Ещё»: без подписей строки-кнопки вперемешку с голыми
+                    строками и заголовками читались слепленными (снимок владельца 08.11).
+                -->
+                <TextBlock Text="Фон" Style="{StaticResource GroupTitle}" />
+                <gui:Card Style="{StaticResource Card}" Padding="20,12">
+                    <StackPanel>
+                        <StackPanel x:Name="LookPanel">
+                            <Button Style="{StaticResource PlainRow}" Tag="background" Click="OnLook">
+                                <Grid MinHeight="36">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="Картинка фона" FontWeight="SemiBold" />
-                                    </StackPanel>
+                                    <TextBlock Text="Картинка фона" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <ToggleButton Grid.Column="1" x:Name="BackgroundSwitch" Style="{StaticResource Switch}"
                                                   IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                                 </Grid>
                             </Button>
-
-                            <Button Style="{StaticResource Choice}" Tag="blur" Click="OnLook" Margin="0,0,0,7"
-                                    x:Name="BlurRow">
-                                <Grid>
+                            <Border Style="{StaticResource GroupLine}" />
+                            <Button Style="{StaticResource PlainRow}" x:Name="BlurRow" Tag="blur" Click="OnLook">
+                                <Grid MinHeight="36">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel>
-                                        <TextBlock Text="Размытие под карточками и меню" FontWeight="SemiBold" />
-                                    </StackPanel>
+                                    <TextBlock Text="Размытие под карточками и меню" FontWeight="SemiBold" VerticalAlignment="Center" />
                                     <ToggleButton Grid.Column="1" x:Name="BlurSwitch" Style="{StaticResource Switch}"
                                                   IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                                 </Grid>
                             </Button>
-
-                            <Border x:Name="DimRow" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Border}"
-                                    BorderThickness="1.5" CornerRadius="14" Padding="16,11">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Затемнение фона" FontWeight="SemiBold" />
-                                    </StackPanel>
-                                    <ComboBox Grid.Column="1" x:Name="DimChoice" Width="190" VerticalAlignment="Center"
-                                              SelectionChanged="OnDim">
-                                        <ComboBoxItem Content="как задумал автор" />
-                                        <ComboBoxItem Content="темнее" />
-                                        <ComboBoxItem Content="намного темнее" />
-                                    </ComboBox>
-                                </Grid>
-                            </Border>
+                            <Border Style="{StaticResource GroupLine}" />
+                            <Grid MinHeight="36" x:Name="DimRow">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="280" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Затемнение фона" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="DimChoice" VerticalAlignment="Center"
+                                          SelectionChanged="OnDim">
+                                    <ComboBoxItem Content="как задумал автор" />
+                                    <ComboBoxItem Content="темнее" />
+                                    <ComboBoxItem Content="намного темнее" />
+                                </ComboBox>
+                            </Grid>
                         </StackPanel>
-
-                        <TextBlock x:Name="LookNone" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                        <TextBlock x:Name="LookNone" Style="{StaticResource Caption}" Margin="0,8,0,8"
                                    TextWrapping="Wrap" Visibility="Collapsed"
                                    Text="У этой темы нет картинки фона." />
-
-                        <!--
-                            Шрифт и размер — здесь же, в оформлении (владелец,
-                            24.09). Шрифт один на всю программу; в списке каждый
-                            написан собой — выбирают глазами, а не по имени.
-                            Применяется сразу: образец — само окно.
-                        -->
-                        <Grid Margin="0,14,0,8">
+                    </StackPanel>
+                </gui:Card>
+                <!--
+                    Шрифт один на всю программу, размер — всё окно целиком. Ширина «Главной» —
+                    у каждой темы своя (AppSettings.HomeWideThemes).
+                -->
+                <TextBlock Text="Окно" Style="{StaticResource GroupTitle}" />
+                <gui:Card Style="{StaticResource Card}" Padding="20,12">
+                    <StackPanel>
+                        <Grid MinHeight="36">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="280" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Шрифт" FontWeight="SemiBold" />
-                            </StackPanel>
+                            <TextBlock Text="Шрифт" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <ComboBox Grid.Column="1" x:Name="UiFontChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnFontChoice">
                                 <ComboBox.ItemsPanel>
@@ -217,39 +246,24 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                         </Grid>
-
-                        <Grid>
+                        <Border Style="{StaticResource GroupLine}" />
+                        <Grid MinHeight="36">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="280" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Размер" FontWeight="SemiBold" />
-                            </StackPanel>
+                            <TextBlock Text="Размер" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <ComboBox Grid.Column="1" x:Name="ScaleChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnFontChoice" />
                         </Grid>
-
-                        <!--
-                            Меню трея (владелец, 24.09: «добавь в настройки
-                            оформления ещё и вид трея»). Не внутри блока фона:
-                            тот виден только у тем с картинкой, а меню есть всегда.
-                            Меню читает настройки при каждом открытии — сохранить
-                            и есть применить.
-                        -->
-                        <!--
-                            Анимации окна (владелец, 28.09: «добавим анимаций
-                            по всей программе, с возможностью их выключить»).
-                        -->
-                        <TextBlock Text="Движение" FontWeight="SemiBold" Margin="0,18,0,8" />
-
-                        <Button Style="{StaticResource Choice}" Click="OnAnimations" Margin="0,0,0,7">
-                            <Grid>
+                        <Border Style="{StaticResource GroupLine}" />
+                        <Button Style="{StaticResource PlainRow}" Click="OnAnimations">
+                            <Grid MinHeight="36">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
+                                <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="Анимации" FontWeight="SemiBold" />
                                     <TextBlock x:Name="AnimationsNote" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
                                                Visibility="Collapsed" />
@@ -258,52 +272,48 @@
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                             </Grid>
                         </Button>
-
-                        <!-- «Главная» во всю ширину (владелец, 01.10: для тем без картинки). -->
-                        <TextBlock Text="Главная" FontWeight="SemiBold" Margin="0,18,0,8" />
-
-                        <Button Style="{StaticResource Choice}" Click="OnHomeWidth" Margin="0,0,0,7">
-                            <Grid>
+                        <Border Style="{StaticResource GroupLine}" />
+                        <Button Style="{StaticResource PlainRow}" Click="OnHomeWidth">
+                            <Grid MinHeight="36">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="На всю ширину окна — для этой темы" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                        Content="Выключено — картинка темы в карточке справа. У каждой темы выбор свой." />
-                                    </StackPanel>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="«Главная» на всю ширину — для этой темы" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Выключено — картинка темы в карточке справа. У каждой темы выбор свой." />
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="HomeWidthSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                             </Grid>
                         </Button>
-
-                        <TextBlock Text="Меню в трее" FontWeight="SemiBold" Margin="0,18,0,8" />
-
-                        <Button Style="{StaticResource Choice}" Click="OnTrayBlur" Margin="0,0,0,7">
-                            <Grid>
+                    </StackPanel>
+                </gui:Card>
+                <!--
+                    Меню читает настройки при каждом открытии — сохранить и есть применить.
+                -->
+                <TextBlock Text="Меню в трее" Style="{StaticResource GroupTitle}" />
+                <gui:Card Style="{StaticResource Card}" Padding="20,12">
+                    <StackPanel>
+                        <Button Style="{StaticResource PlainRow}" Click="OnTrayBlur">
+                            <Grid MinHeight="36">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="Размытие под меню" FontWeight="SemiBold" />
-                                </StackPanel>
+                                <TextBlock Text="Размытие под меню" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ToggleButton Grid.Column="1" x:Name="TrayBlurSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                             </Grid>
                         </Button>
-
-                        <Grid>
+                        <Border Style="{StaticResource GroupLine}" />
+                        <Grid MinHeight="36">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="280" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="Плотность подложки" FontWeight="SemiBold" />
-                            </StackPanel>
+                            <TextBlock Text="Плотность подложки" FontWeight="SemiBold" VerticalAlignment="Center" />
                             <ComboBox Grid.Column="1" x:Name="TrayDensityChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnTrayDensity" />
                         </Grid>
