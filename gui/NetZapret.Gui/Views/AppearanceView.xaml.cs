@@ -36,12 +36,12 @@ public partial class AppearanceView : UserControl
 
         var bad = loads.Where(l => !l.Ok).ToList();
 
-        ThemeHint.Text = @"Своя тема — папка в themes\ рядом с программой: цвета, шрифты и фон. "
-            + @"Формат описан в themes\README.md."
-            + (bad.Count == 0
-                ? string.Empty
-                : $" Не применяются: {string.Join(", ", bad.Select(b => b.Theme?.Name ?? b.Id))} — "
-                  + "наведите на плитку, чтобы увидеть почему.");
+        // Где лежат свои темы — в подсказке «i» у заголовка; строкой — только беда.
+        ThemeHint.Text = bad.Count == 0
+            ? string.Empty
+            : $"Не применяются: {string.Join(", ", bad.Select(b => b.Theme?.Name ?? b.Id))} — "
+              + "причина в подсказке плитки.";
+        ThemeHint.Visibility = bad.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
 
         // Настройка просила одну тему, а применилась другая — сказать сразу,
         // иначе человек решит, что выбор не сохранился.
@@ -115,8 +115,10 @@ public partial class AppearanceView : UserControl
         // Выключены в Windows — наш выключатель ничего не решает, и сказать
         // это надо здесь же, а не оставлять человека щёлкать без толку.
         if (!SystemParameters.ClientAreaAnimation)
-            AnimationsNote.Text = "Выключены в самой Windows (Параметры → Специальные возможности → "
-                + "Визуальные эффекты) — пока они там выключены, окно не анимирует ничего.";
+        {
+            AnimationsNote.Text = "Выключены в Windows: Параметры → Специальные возможности → Визуальные эффекты.";
+            AnimationsNote.Visibility = Visibility.Visible;
+        }
     }
 
     private void OnHomeWidth(object sender, RoutedEventArgs e)

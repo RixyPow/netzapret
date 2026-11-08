@@ -119,7 +119,7 @@ public partial class TgProxyView : UserControl
         if (!settings.TelegramProxy)
         {
             return new Look(Tone.Off, "Выключен", "Включите — и он поднимется со следующим запуском движков.",
-                "Выключен", "Включите прокси выключателем выше.");
+                "Выключен", string.Empty);
         }
 
         // Держит окно само (TgWsProxyKeeper) — движки тут ни при чём.
@@ -127,7 +127,7 @@ public partial class TgProxyView : UserControl
         {
             return TgWsProxyKeeper.Running
                 ? new Look(Tone.Good, "Работает", $"{address} — работает без движков, пока открыта программа.",
-                    "Принимает соединения", "Держит программа — и без движков, пока она открыта.")
+                    "Принимает соединения", string.Empty)
                 : new Look(Tone.Wait, "Не запущен",
                     "Включён без движков, но сейчас не запущен: ждёт, пока движки, запущенные до этой настройки, отпустят порт, — перезапустите их.",
                     "Ждёт порт", "Порт держат движки, запущенные до этой настройки.");
@@ -138,7 +138,7 @@ public partial class TgProxyView : UserControl
         if (state is null || !state.IsSupervisorAlive())
         {
             return new Look(Tone.Off, "Ждёт движков", "Включён; поднимется вместе с движками — сейчас они остановлены.",
-                "Ждёт движков", "Поднимется вместе с ними.");
+                "Ждёт движков", string.Empty);
         }
 
         var service = state.Services.FirstOrDefault(s => s.Name == TgWsProxyService.ServiceName);
@@ -154,7 +154,7 @@ public partial class TgProxyView : UserControl
 
         return service.Health switch
         {
-            ServiceHealth.Healthy => new Look(Tone.Good, "Работает", line, "Принимает соединения", "Поднят вместе с движками."),
+            ServiceHealth.Healthy => new Look(Tone.Good, "Работает", line, "Принимает соединения", string.Empty),
             ServiceHealth.Degraded => new Look(Tone.Wait, "Не отвечает", line, "Не отвечает", "Процесс жив, порт не слушает."),
             ServiceHealth.Stopped => new Look(Tone.Off, "Остановлен", line, "Остановлен", "Надзор его не держит."),
             _ => new Look(Tone.Bad, "Не работает", line, "Не работает", "Надзор не смог его поднять — причина в строке выше."),
@@ -192,6 +192,7 @@ public partial class TgProxyView : UserControl
         StateText.Text = look.Line;
         HealthText.Text = look.Health;
         HealthNote.Text = look.Note;
+        HealthNote.Visibility = look.Note.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         // Мерцает живое — работает или ждёт; выключенный и сломанный стоят.
         Pulse(look.Tone is Tone.Good or Tone.Wait);

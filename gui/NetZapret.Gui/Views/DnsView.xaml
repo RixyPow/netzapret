@@ -31,8 +31,6 @@
 
             <StackPanel>
                 <TextBlock Text="DNS" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Через кого туннель узнаёт адреса имён. Выбор резолвера действует внутри sing-box; DNS адаптеров Windows меняется только выбором в «Резолверах системы»." />
             </StackPanel>
 
             <Grid Margin="0,20,0,0">
@@ -84,7 +82,7 @@
                             <TextBlock Grid.Row="1" x:Name="SurveyStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
                                        TextWrapping="Wrap" TextTrimming="WordEllipsis"
                                        LineHeight="17" LineStackingStrategy="BlockLineHeight" Height="51"
-                                       Text="Кто на самом деле отвечает на DNS и подменяет ли ответы." />
+                                       Visibility="Collapsed" />
 
                             <!--
                                 Когда был обзор и кто вышел быстрее — постоянно на виду,
@@ -169,7 +167,7 @@
                             <TextBlock x:Name="PinsStatus" Style="{StaticResource Caption}" Margin="0,5,0,0"
                                        TextWrapping="Wrap" TextTrimming="WordEllipsis"
                                        LineHeight="17" LineStackingStrategy="BlockLineHeight" Height="51"
-                                       Text="Живы ли адреса, к которым прибиты имена, и что посредники отдают сейчас." />
+                                       Visibility="Collapsed" />
 
                             <!--
                                 Состояние автозамены постоянно на виду: без него
@@ -267,7 +265,7 @@
                             </Grid>
 
                             <TextBlock x:Name="TunnelHint" Style="{StaticResource Caption}"
-                                       Margin="0,6,0,0" TextWrapping="Wrap" />
+                                       Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
                         </StackPanel>
                     </Grid>
                 </gui:Card>
@@ -378,29 +376,32 @@
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="DNS роутера / OpenWRT" FontWeight="SemiBold" FontSize="16" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Движок спрашивает роутер обычным DNS в домашней сети, без DoH и без VPN. Пока включён, автовыбор резолвера и путь DNS не действуют; выключите — вернутся прежние." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="DNS роутера / OpenWRT" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Движок спрашивает роутер обычным DNS в домашней сети, без DoH и без VPN. Пока включено, автовыбор резолвера и путь DNS не действуют.
+
+Только для роутера со своим DoH/DoT (https-dns-proxy, stubby). Если он пересылает обычный DNS провайдеру, YouTube и домены под десинком могут получить NXDOMAIN или заглушку. Перед включением программа проверит роутер." />
+                            </StackPanel>
                         </StackPanel>
                         <ToggleButton Grid.Column="1" x:Name="RouterDnsSwitch" Style="{StaticResource Switch}"
                                       VerticalAlignment="Center" Click="OnRouterDnsToggle" />
                     </Grid>
-                    <TextBlock Style="{StaticResource Caption}" Margin="0,10,0,0" TextWrapping="Wrap"
-                               Text="ВАЖНО: режим для роутера со своим DoH/DoT (https-dns-proxy, stubby). Если он пересылает обычный DNS провайдеру, YouTube и домены под десинком могут получить NXDOMAIN или заглушку. Если нужная LAN не найдена, включится запасной DoH с предупреждением; PBR роутера может перестать действовать." />
                     <WrapPanel Margin="0,14,0,0">
                         <TextBox x:Name="RouterDnsIp" Width="170" Margin="0,0,8,6" VerticalContentAlignment="Center"
                                  ToolTip="LAN IPv4 роутера, например 192.168.1.1" />
                         <Button x:Name="RouterDnsUse" Style="{StaticResource Ghost}" Content="Использовать" Click="OnRouterDnsUse" Margin="0,0,8,6" />
                         <Button x:Name="RouterDnsTest" Style="{StaticResource Ghost}" Content="Проверить роутер" Click="OnRouterDnsTest" Margin="0,0,0,6" />
                     </WrapPanel>
-                    <TextBlock x:Name="RouterDnsStatus" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                               Text="Перед включением программа проверит роутер: отвечает ли он и не подменяет ли заблокированные имена." />
+                    <TextBlock x:Name="RouterDnsStatus" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" />
                 </StackPanel>
             </gui:Card>
 
-            <TextBlock Text="Резолверы туннеля" FontWeight="SemiBold" FontSize="16" Margin="2,22,0,0" />
-            <TextBlock Style="{StaticResource Caption}" Margin="2,4,0,0" TextWrapping="Wrap"
-                       Text="Задержка — по DoH из обзора выше. Нажмите на строку, чтобы туннель спрашивал этого резолвера." />
+            <StackPanel Orientation="Horizontal" Margin="2,22,0,0">
+                <TextBlock Text="Резолверы туннеля" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                Content="Нажмите на строку, чтобы туннель спрашивал этого резолвера. Задержка — по DoH из обзора выше." />
+            </StackPanel>
 
             <ItemsControl x:Name="Resolvers" Margin="0,2,0,0">
                 <ItemsControl.ItemTemplate>
@@ -548,9 +549,11 @@
                     </Border>
 
                     <StackPanel Grid.Column="1">
-                        <TextBlock Text="Свой резолвер" FontWeight="SemiBold" />
-                        <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                                   Text="Адрес цифрами. Имя для DoH — если резолвер его умеет: без него туннелю такой резолвер не выбрать, его можно только измерить в обзоре." />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Свой резолвер" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Адрес — цифрами. Имя для DoH — если резолвер его умеет: без него туннелю такой резолвер не выбрать, только измерить в обзоре." />
+                        </StackPanel>
 
                         <Grid Margin="0,10,0,0">
                             <Grid.ColumnDefinitions>

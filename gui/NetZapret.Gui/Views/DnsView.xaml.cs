@@ -257,18 +257,12 @@ public partial class DnsView : UserControl
     /// <summary>Две строки под итогом обзора: когда мерилось и кто быстрее всех по DoH.</summary>
     private void ShowSurveyWhen()
     {
-        bool auto = AppSettings.Load(AppSettings.DefaultPath) is { DnsAuto: true, UseRouterDns: false };
-
         if (_last is not { } last)
         {
             SurveyWhen.Text = _verdictsAt is { } verdictsAt
-                ? $"Обзора в этом запуске окна ещё не было; пометки у резолверов — с проверки {When(verdictsAt)}."
-                : "Обзора в этом запуске окна ещё не было.";
-            SurveyBest.Text = auto
-                ? "Автовыбор поставит быстрейший по DoH после «Проверить»."
-                : _verdictsAt is null
-                    ? "Задержки и пометки у резолверов ниже появятся после «Проверить»."
-                    : "Задержки у резолверов ниже появятся после «Проверить».";
+                ? $"Пометки — с проверки {When(verdictsAt)}."
+                : "Ещё не проверялось.";
+            SurveyBest.Text = string.Empty;
             SurveyWhen.ToolTip = SurveyBest.ToolTip = null;
             return;
         }
@@ -276,7 +270,7 @@ public partial class DnsView : UserControl
         int answered = last.Rows.Count(r => r.DohMs is not null);
         int asked = last.Rows.Count(r => r.Provider.TlsAddress is not null);
 
-        SurveyWhen.Text = $"Последний обзор в {last.At:HH:mm}: по DoH ответили {answered} из {asked}.";
+        SurveyWhen.Text = $"Обзор в {last.At:HH:mm}: по DoH ответили {answered} из {asked}.";
 
         var best = last.Rows
             .Where(r => r.Provider.Choosable && r.DohMs is not null)
@@ -285,8 +279,7 @@ public partial class DnsView : UserControl
 
         SurveyBest.Text = best is null
             ? "Ни один резолвер, годный туннелю, по DoH не ответил."
-            : $"Быстрее всех по DoH — {best.Provider.Name}, {best.DohMs:0} мс"
-              + (auto ? " · автовыбор ставит быстрейшего" : string.Empty) + ".";
+            : $"Быстрее всех — {best.Provider.Name}, {best.DohMs:0} мс.";
 
         SurveyWhen.ToolTip = SurveyWhen.Text;
         SurveyBest.ToolTip = SurveyBest.Text;
@@ -539,7 +532,7 @@ public partial class DnsView : UserControl
             })
             .ToList();
 
-        Status.Text = "Задержку покажет обзор выше.";
+        Status.Text = string.Empty;
 
         ShowLast();
         ShowSurveyWhen();
@@ -569,7 +562,7 @@ public partial class DnsView : UserControl
         }
         else if (!settings.UseRouterDns)
         {
-            ShowRouterStatus("Перед включением программа проверит роутер: отвечает ли он и не подменяет ли заблокированные имена.", null);
+            ShowRouterStatus(string.Empty, null);
         }
         else if (_lastCheck is { } last && last.Address == settings.RouterDnsAddress)
         {
@@ -634,10 +627,10 @@ public partial class DnsView : UserControl
         {
             // Не длиннее двух строк на узком окне (~1000): под подсказку
             // держится место ровно на две — длиннее, и карточка снова прыгнет.
-            AdapterDnsMode.Automatic => "Адаптерам стоит «автоматически»: DNS выдаёт сеть. Остаётся и после выхода из программы.",
+            AdapterDnsMode.Automatic => string.Empty,
             AdapterDnsMode.Resolver when refusal is not null => refusal,
-            AdapterDnsMode.Resolver => $"В адаптеры вписывается {string.Join(", ", addresses)}; остаётся и после выхода из программы.",
-            _ => "Программа DNS адаптеров не трогает — только показывает, что стоит.",
+            AdapterDnsMode.Resolver => string.Empty,
+            _ => string.Empty,
         };
     }
 
@@ -732,6 +725,7 @@ public partial class DnsView : UserControl
     private void ShowRouterStatus(string text, RouterDnsFit? fit)
     {
         RouterDnsStatus.Text = text;
+        RouterDnsStatus.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         if (fit is RouterDnsFit.Spoofs or RouterDnsFit.Unknown)
             RouterDnsStatus.SetResourceReference(TextBlock.ForegroundProperty, "Warn");
@@ -1410,6 +1404,7 @@ public partial class DnsView : UserControl
     {
         PinsStatus.Text = text;
         PinsStatus.ToolTip = text;
+        PinsStatus.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -1424,6 +1419,7 @@ public partial class DnsView : UserControl
     {
         SurveyStatus.Text = text;
         SurveyStatus.ToolTip = text;
+        SurveyStatus.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Строки состояния автозамены: когда проверялось, кто под подозрением и под присмотром.</summary>

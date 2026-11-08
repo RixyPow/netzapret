@@ -20,8 +20,6 @@
             <StackPanel Grid.Column="0">
 
                 <TextBlock Text="Оформление" Style="{StaticResource Title}" />
-                <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
-                           Text="Тема, фон, шрифт, размер и меню в трее. Применяется сразу; настройки фона, шрифта и меню общие для всех тем." />
 
                 <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,16,0,0" TextWrapping="Wrap" />
 
@@ -41,9 +39,13 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="Тема" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Тема" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                    Content="Своя тема — папка в themes\ рядом с программой: цвета, шрифты и фон. Формат — в themes\README.md." />
+                                </StackPanel>
                                 <TextBlock x:Name="ThemeHint" Style="{StaticResource Caption}"
-                                           Margin="0,5,0,0" TextWrapping="Wrap" />
+                                           Margin="0,5,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
                             </StackPanel>
 
                         </Grid>
@@ -142,8 +144,6 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="Картинка фона" FontWeight="SemiBold" />
-                                        <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                                   Text="Выключенная — остаются цвета темы, фон сплошной." />
                                     </StackPanel>
                                     <ToggleButton Grid.Column="1" x:Name="BackgroundSwitch" Style="{StaticResource Switch}"
                                                   IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
@@ -159,8 +159,6 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="Размытие под карточками и меню" FontWeight="SemiBold" />
-                                        <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                                   Text="Матовое стекло: под карточками фон размыт, между ними — чёткий. Плотность стекла подбирается так, чтобы текст на нём читался." />
                                     </StackPanel>
                                     <ToggleButton Grid.Column="1" x:Name="BlurSwitch" Style="{StaticResource Switch}"
                                                   IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
@@ -176,8 +174,6 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="Затемнение фона" FontWeight="SemiBold" />
-                                        <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                                   Text="Только темнее задуманного: затемнение и есть то, чем тема читается." />
                                     </StackPanel>
                                     <ComboBox Grid.Column="1" x:Name="DimChoice" Width="190" VerticalAlignment="Center"
                                               SelectionChanged="OnDim">
@@ -191,7 +187,7 @@
 
                         <TextBlock x:Name="LookNone" Style="{StaticResource Caption}" Margin="0,8,0,0"
                                    TextWrapping="Wrap" Visibility="Collapsed"
-                                   Text="У этой темы нет картинки фона — размытию и затемнению нечего делать." />
+                                   Text="У этой темы нет картинки фона." />
 
                         <!--
                             Шрифт и размер — здесь же, в оформлении (владелец,
@@ -206,8 +202,6 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Шрифт" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                           Text="Один на всю программу. Не моноширинный держит цифры в таблицах чуть менее ровно." />
                             </StackPanel>
                             <ComboBox Grid.Column="1" x:Name="UiFontChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnFontChoice">
@@ -231,8 +225,6 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Размер" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                           Text="Всё окно целиком, как масштаб в Telegram, — вместе со списками, подсказками и окнами." />
                             </StackPanel>
                             <ComboBox Grid.Column="1" x:Name="ScaleChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnFontChoice" />
@@ -260,7 +252,7 @@
                                 <StackPanel>
                                     <TextBlock Text="Анимации" FontWeight="SemiBold" />
                                     <TextBlock x:Name="AnimationsNote" Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                               Text="Разделы появляются плавно, карточки — по очереди, уведомления выезжают снизу, в мастере бегут точки. Выключенные — всё показывается сразу." />
+                                               Visibility="Collapsed" />
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="AnimationsSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
@@ -277,9 +269,11 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
-                                    <TextBlock Text="На всю ширину окна — для этой темы" FontWeight="SemiBold" />
-                                    <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                               Text="Карточки «Главной» растягиваются до правого края, картинка темы ложится под них, как на прочих вкладках. Выключено — картинка в карточке справа. У каждой темы выбор свой; темы без картинки по умолчанию на всю ширину." />
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="На всю ширину окна — для этой темы" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                        Content="Выключено — картинка темы в карточке справа. У каждой темы выбор свой." />
+                                    </StackPanel>
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="HomeWidthSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
@@ -296,8 +290,6 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <TextBlock Text="Размытие под меню" FontWeight="SemiBold" />
-                                    <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                               Text="Под меню — размытое то, что было на экране. Выключенное — меню прозрачно по плотности ниже, и сквозь него видно окна." />
                                 </StackPanel>
                                 <ToggleButton Grid.Column="1" x:Name="TrayBlurSwitch" Style="{StaticResource Switch}"
                                               IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
@@ -311,8 +303,6 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center">
                                 <TextBlock Text="Плотность подложки" FontWeight="SemiBold" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,3,0,0" TextWrapping="Wrap"
-                                           Text="Сколько цвета темы лежит под текстом меню. Меньше — виднее фон, но текст на пёстром читается хуже." />
                             </StackPanel>
                             <ComboBox Grid.Column="1" x:Name="TrayDensityChoice" VerticalAlignment="Center"
                                       SelectionChanged="OnTrayDensity" />
