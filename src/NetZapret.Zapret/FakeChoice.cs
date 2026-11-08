@@ -13,7 +13,8 @@ public enum FakeKind
 
 /// <summary>Образец подделки: встроенный в winws2 или файл из <c>bin\</c>.</summary>
 /// <param name="Id">Как он хранится в настройках: имя файла (<c>stun2.bin</c>) или встроенное имя.</param>
-public sealed record FakeBlob(string Id, FakeKind Kind, bool BuiltIn)
+/// <param name="Note">Что сказать сверх имени: содержимое не то, что обещает имя, или это копия другого образца.</param>
+public sealed record FakeBlob(string Id, FakeKind Kind, bool BuiltIn, string? Note = null)
 {
     /// <summary>Как назвать человеку: без <c>.bin</c> и без приставок.</summary>
     public string Title => BuiltIn ? Id : Path.GetFileNameWithoutExtension(Id);
@@ -86,20 +87,113 @@ public static class FakeChoice
     }
 
     /// <summary>Образцы, что есть: встроенные и файлы <c>bin\*.bin</c> корня Zapret.</summary>
+    /// <remarks>
+    /// <para>
+    /// Вид — по содержимому, если его видно (<see cref="ContentKind"/>), иначе по имени.
+    /// Имя врёт: в копии Zapret GUI <c>ACTIVE_DISCORD_UDP.bin</c> побайтно равен
+    /// <c>quic_initial_steamcommunity_com.bin</c> — первый пакет QUIC с именем
+    /// steamcommunity.com, а не пакет Discord (сверка 08.11, на это указал PR
+    /// Flowseal №18613). По имени он числился «пакетом UDP», и SuzuyaJ74 в №51
+    /// пробовал его на голосе Discord, не зная, что это QUIC от Steam.
+    /// </para>
+    /// <para>
+    /// Побайтные копии называются: копия получает пометку «копия &lt;образец&gt;»,
+    /// где образец — тот из одинаковых файлов, чьё имя совпадает с содержимым.
+    /// </para>
+    /// </remarks>
     public static IReadOnlyList<FakeBlob> Available(string? zapretRoot)
     {
-        var files = new List<FakeBlob>();
         var bin = zapretRoot is null ? null : Path.Combine(zapretRoot, "bin");
 
-        if (bin is not null && Directory.Exists(bin))
+        if (bin is null || !Directory.Exists(bin))
+            return BuiltIns;
+
+        var read = new List<(string Name, FakeKind ByName, FakeKind? ByContent, string? Hash)>();
+
+        foreach (var name in Directory.EnumerateFiles(bin, "*.bin").Select(Path.GetFileName).OfType<string>()
+                     .Order(StringComparer.OrdinalIgnoreCase))
         {
-            foreach (var file in Directory.EnumerateFiles(bin, "*.bin").Select(Path.GetFileName).OfType<string>()
-                         .Order(StringComparer.OrdinalIgnoreCase))
-                files.Add(new FakeBlob(file, KindOf(file), false));
+            byte[]? bytes = null;
+
+            try
+            {
+                var path = Path.Combine(bin, name);
+
+                // Образцы — сотни байт, крупнее пакета не бывает; большое не читаем.
+                if (new FileInfo(path).Length <= 64 * 1024)
+                    bytes = File.ReadAllBytes(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+
+            read.Add((name, KindOf(name), bytes is null ? null : ContentKind(bytes),
+                bytes is null ? null : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))));
+        }
+
+        var files = new List<FakeBlob>();
+
+        foreach (var (name, byName, byContent, hash) in read)
+        {
+            var notes = new List<string>();
+            var kind = byContent ?? byName;
+
+            // Помечается только имя, которое обещает другое: «1.bin» или «fake_tls_3.bin»
+            // ничего не обещают, им вид молча берётся из содержимого.
+            if (byContent is { } content && byName != FakeKind.Other && content != byName)
+            {
+                notes.Add($"внутри — {KindWord(content)}");
+
+                // Чья это копия — того из одинаковых, чьё имя честно и подробнее прочих.
+                var original = hash is null
+                    ? null
+                    : read.Where(r => r.Hash == hash && r.Name != name && r.ByName == content)
+                        .OrderByDescending(r => r.Name.Length)
+                        .Select(r => r.Name)
+                        .FirstOrDefault();
+
+                notes.Add(original is null ? "хотя имя говорит иное" : $"копия {original}");
+            }
+
+            files.Add(new FakeBlob(name, kind, false, notes.Count == 0 ? null : string.Join(", ", notes)));
         }
 
         return [.. BuiltIns, .. files];
     }
+
+    /// <summary>Вид по первым байтам; <c>null</c> — не узнан.</summary>
+    /// <remarks>
+    /// Запись рукопожатия TLS (<c>16 03 xx</c>), длинный заголовок QUIC версии 1
+    /// или 2 (старшие два бита первого байта и версия следом), STUN — «магическое
+    /// число» <c>2112A442</c> в байтах 4–7 (RFC 5389).
+    /// </remarks>
+    public static FakeKind? ContentKind(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length >= 3 && bytes[0] == 0x16 && bytes[1] == 0x03)
+            return FakeKind.Tls;
+
+        if (bytes.Length >= 5 && (bytes[0] & 0xC0) == 0xC0)
+        {
+            uint version = (uint)(bytes[1] << 24 | bytes[2] << 16 | bytes[3] << 8 | bytes[4]);
+
+            if (version is 0x00000001 or 0x6B3343CF)
+                return FakeKind.Quic;
+        }
+
+        if (bytes.Length >= 20 && bytes[4] == 0x21 && bytes[5] == 0x12 && bytes[6] == 0xA4 && bytes[7] == 0x42)
+            return FakeKind.Udp;
+
+        return null;
+    }
+
+    /// <summary>Вид словами — для пометки и для окна выбора.</summary>
+    public static string KindWord(FakeKind kind) => kind switch
+    {
+        FakeKind.Tls => "приветствие TLS",
+        FakeKind.Quic => "первый пакет QUIC",
+        FakeKind.Udp => "пакет UDP",
+        _ => "прочее",
+    };
 
     /// <summary>Что из образцов годится в это место: по протоколу секции.</summary>
     public static IReadOnlyList<FakeBlob> Fitting(FakeSlot slot, IReadOnlyList<FakeBlob> available) =>

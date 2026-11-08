@@ -52,13 +52,7 @@ public partial class FakePickerWindow : Window
 
     private static string Describe(FakeBlob blob, string? zapretRoot)
     {
-        var kind = blob.Kind switch
-        {
-            FakeKind.Tls => "приветствие TLS",
-            FakeKind.Quic => "первый пакет QUIC",
-            FakeKind.Udp => "пакет UDP",
-            _ => "прочее",
-        };
+        var kind = FakeChoice.KindWord(blob.Kind) + (blob.Note is { } note ? $" ({note})" : string.Empty);
 
         if (blob.BuiltIn)
             return kind + " · встроен в winws2";

@@ -90,6 +90,40 @@ public sealed class FakeChoiceTests
         Assert.Equal(FakeKind.Tls, FakeChoice.KindOf("nz-tls_clienthello_awswaf_com.bin"));
     }
 
+    /// <summary>
+    /// ACTIVE_DISCORD_UDP.bin копии Zapret GUI — пакет QUIC Steam, а не Discord (PR Flowseal №18613,
+    /// сверено хэшем 08.11): вид по содержимому, в пометке — чья копия.
+    /// </summary>
+    [Fact]
+    public void A_misnamed_sample_is_marked_by_what_is_inside()
+    {
+        var available = FakeChoice.Available(Path.Combine(RepoRoot(), "vendor", "zapret-gui"));
+        var discord = available.Single(b => b.Id == "ACTIVE_DISCORD_UDP.bin");
+
+        Assert.Equal(FakeKind.Quic, discord.Kind);
+        Assert.Contains("копия quic_initial_steamcommunity_com.bin", discord.Note, StringComparison.Ordinal);
+
+        // Честные имена не помечаются, даже если у них есть двойник.
+        Assert.Null(available.Single(b => b.Id == "quic_initial_steamcommunity_com.bin").Note);
+        Assert.Null(available.Single(b => b.Id == "stun2.bin").Note);
+    }
+
+    [Fact]
+    public void Kind_is_read_from_the_first_bytes()
+    {
+        Assert.Equal(FakeKind.Tls, FakeChoice.ContentKind([0x16, 0x03, 0x01, 0x02, 0x00]));
+        Assert.Equal(FakeKind.Quic, FakeChoice.ContentKind([0xC5, 0x00, 0x00, 0x00, 0x01, 0x14]));
+        Assert.Equal(FakeKind.Quic, FakeChoice.ContentKind([0xD3, 0x6B, 0x33, 0x43, 0xCF]));
+
+        var stun = new byte[20];
+        stun[1] = 0x01;
+        stun[4] = 0x21; stun[5] = 0x12; stun[6] = 0xA4; stun[7] = 0x42;
+        Assert.Equal(FakeKind.Udp, FakeChoice.ContentKind(stun));
+
+        Assert.Null(FakeChoice.ContentKind([0x00, 0x01, 0x02]));
+        Assert.Null(FakeChoice.ContentKind([0xC0, 0x12, 0x34, 0x56, 0x78]));
+    }
+
     private static ZapretPreset V12Lite() =>
         new PresetReader().Load(Path.Combine(RepoRoot(), "presets", "Universal V12 Lite.txt"));
 
