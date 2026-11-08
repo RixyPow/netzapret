@@ -470,6 +470,7 @@ public partial class MoreView : UserControl
         IssuesLink.Tag = About.Issues;
         DiscussionsLink.Tag = About.Discussions;
         TelegramLink.Tag = About.Telegram;
+        SloykaLink.Tag = About.SloykaTelegram;
         SupportLink.Tag = About.Support;
 
         Components.ItemsSource = About.Components;

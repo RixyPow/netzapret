@@ -32,6 +32,9 @@ public static class About
 
     public const string Telegram = "https://t.me/netzapret23";
 
+    /// <summary>Телеграм-канал автора арта тем «Слойка», которые едут в поставке.</summary>
+    public const string SloykaTelegram = "https://t.me/cn0uka";
+
     public const string Support = "https://t.me/tribute/app?startapp=g6vq";
 
     /// <summary>

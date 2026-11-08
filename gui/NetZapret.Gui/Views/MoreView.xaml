@@ -179,6 +179,12 @@
                                     <TextBlock Text="Телеграм-канал" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button x:Name="SloykaLink" Style="{StaticResource Ghost}" Click="OnLink" Margin="0,0,8,8">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Style="{StaticResource LineShape}" Data="{StaticResource TelegramPlane}" />
+                                    <TextBlock Text="Канал Слойки" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button x:Name="SupportLink" Style="{StaticResource Ghost}" Content="Поддержать"
                                     Click="OnLink" Margin="0,0,8,8" />
                         </WrapPanel>
