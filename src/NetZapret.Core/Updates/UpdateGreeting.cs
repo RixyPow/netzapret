@@ -1,14 +1,15 @@
 namespace NetZapret.Core.Updates;
 
 /// <summary>
-/// Уведомление после обновления: звезда на GitHub и канал в Telegram.
+/// Уведомление после обновления: звезда на GitHub, канал в Telegram и донат.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Владелец 03.10: всплывать после каждого обновления — но только у тех, кто
-/// скрыл карточку с той же просьбой на «Главной» (01.10). Пока карточка
-/// стоит, просьба и так перед глазами, и уведомление рядом было бы ею же
-/// дважды. Скрывшему — напоминание один раз на каждую новую версию.
+/// После каждого обновления — всем (решение владельца 08.11). С 03.10 по 08.11
+/// оно всплывало только у тех, кто скрыл карточку с той же просьбой на «Главной»:
+/// пока карточка стояла, просьба и так была перед глазами. С 08.11 карточка
+/// по умолчанию не показывается вовсе (<see cref="SupportAsk"/>), а уведомление
+/// сбоку и есть просьба — в нём и «Поддержать», которого у карточки нет.
 /// </para>
 /// <para>
 /// Сравниваются три числа версии (<see cref="UpdateCheck.Current"/>), без
@@ -17,13 +18,6 @@ namespace NetZapret.Core.Updates;
 /// не обновление; запуск при этом всё равно запоминается, иначе следующий
 /// запуск той же версии принял бы её за новую.
 /// </para>
-/// <para>
-/// Разово — всем (владелец 08.11, к выпуску 1.5.0): первое обновление после
-/// этой правки показывает уведомление и тем, у кого карточка на «Главной»
-/// стоит, — в ней нет «Поддержать», а уведомление выезжает само. Отметка
-/// <see cref="AppSettings.GreetingForAll"/> ставится с первым же запомненным
-/// запуском новой версии; дальше — снова только скрывшим карточку.
-/// </para>
 /// </remarks>
 public static class UpdateGreeting
 {
@@ -31,12 +25,9 @@ public static class UpdateGreeting
     /// <param name="current">Версия, запущенная сейчас.</param>
     public static bool Due(AppSettings settings, string current) =>
         settings.OnboardingDone
-        && (settings.SupportCardHidden || settings.GreetingForAll != true)
         && !string.Equals(settings.LastRunVersion, current, StringComparison.Ordinal);
 
-    /// <summary>
-    /// Настройки с запомненной версией — после показа или его пропуска; разовый показ всем на этом исчерпан.
-    /// </summary>
+    /// <summary>Настройки с запомненной версией — после показа или его пропуска.</summary>
     public static AppSettings Seen(AppSettings settings, string current) =>
-        settings with { LastRunVersion = current, GreetingForAll = true };
+        settings with { LastRunVersion = current };
 }

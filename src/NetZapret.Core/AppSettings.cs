@@ -922,8 +922,17 @@ public sealed record AppSettings
     /// </remarks>
     public bool OnboardingDone { get; init; }
 
-    /// <summary>Спрятана ли на «Главной» просьба о звезде на GitHub и канале (01.10).</summary>
+    /// <summary>
+    /// Нажимал ли человек «Скрыть» у просьбы о звезде на «Главной» (01.10). С 08.11 показ
+    /// решает <see cref="Updates.SupportAsk"/> по <see cref="SupportCardHiddenFor"/>; эта
+    /// отметка только хранится.
+    /// </summary>
     public bool SupportCardHidden { get; init; }
+
+    /// <summary>
+    /// Какой показ карточки «Нравится NetZapret?» человек скрыл (<see cref="Updates.SupportAsk.Campaign"/>, 08.11).
+    /// </summary>
+    public string? SupportCardHiddenFor { get; init; }
 
     /// <summary>Анимации окна: смена разделов, появление карточек, уведомления, схема мастера.</summary>
     /// <remarks>
@@ -1247,12 +1256,6 @@ public sealed record AppSettings
     /// пересборка обновлением не считается. Решение — в <see cref="Updates.UpdateGreeting"/>.
     /// </remarks>
     public string? LastRunVersion { get; init; }
-
-    /// <summary>
-    /// Показано ли уведомление после обновления всем, а не только скрывшим карточку
-    /// (08.11, к 1.5.0); <c>null</c> — настройки старше. Решение — в <see cref="Updates.UpdateGreeting"/>.
-    /// </summary>
-    public bool? GreetingForAll { get; init; }
 
     /// <summary>
     /// Настройки с нуля — с отметками разовых переводов.

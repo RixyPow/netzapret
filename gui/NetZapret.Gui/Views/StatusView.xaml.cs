@@ -305,7 +305,7 @@ public partial class StatusView : UserControl
     private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
 
     private void ShowSupport(AppSettings settings) =>
-        SupportCard.Visibility = settings.OnboardingDone && !settings.SupportCardHidden
+        SupportCard.Visibility = NetZapret.Core.Updates.SupportAsk.Shown(settings)
             ? Visibility.Visible
             : Visibility.Collapsed;
 
@@ -318,7 +318,7 @@ public partial class StatusView : UserControl
 
         try
         {
-            (AppSettings.Load(AppSettings.DefaultPath) with { SupportCardHidden = true })
+            NetZapret.Core.Updates.SupportAsk.Hide(AppSettings.Load(AppSettings.DefaultPath))
                 .Save(AppSettings.DefaultPath);
         }
         catch (Exception)
