@@ -337,7 +337,18 @@
                     </Grid>
                 </gui:Card>
 
-                <TextBlock x:Name="Status" Style="{StaticResource Caption}" Margin="4,12,0,0" TextWrapping="Wrap" />
+                <!-- Строка итога действия; пустая не занимает места. -->
+                <TextBlock x:Name="Status" Margin="4,12,0,0" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Caption}">
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
 
             <!--
