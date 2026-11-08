@@ -61,17 +61,29 @@ public sealed class WatchContext
     /// мимо ли туннеля соединение: перехват полный или о нём ничего не известно.
     /// </param>
     /// <param name="tunExcluded">Что из TUN выведено (<c>route_exclude_address</c>).</param>
+    /// <param name="fakeForEveryName">
+    /// Движок отдаёт подставной адрес любому имени («Туннель»): тогда подставной
+    /// адрес значит только «через движок», а путь решают правила по имени.
+    /// </param>
     public WatchContext(
         IEnumerable<string> fakeRanges,
         IEnumerable<IPAddress> servers,
         IEnumerable<string>? tunRoutes = null,
-        IEnumerable<string>? tunExcluded = null)
+        IEnumerable<string>? tunExcluded = null,
+        bool fakeForEveryName = false)
     {
         _fake = Ranges(fakeRanges);
         _servers = servers.Select(Normal).ToHashSet();
         _tunRoutes = tunRoutes is null ? null : Ranges(tunRoutes);
         _tunExcluded = Ranges(tunExcluded ?? []);
+        FakeForEveryName = fakeForEveryName;
     }
+
+    /// <summary>
+    /// Подставной адрес у всех имён, не только у «через VPN»
+    /// (<c>TunnelEndpoints.FakeForEveryName</c>).
+    /// </summary>
+    public bool FakeForEveryName { get; }
 
     private static List<IpCidrRange> Ranges(IEnumerable<string> cidrs) => cidrs
         .Select(r => { try { return IpCidrRange.Parse(r); } catch (RuleConfigurationException) { return null; } })

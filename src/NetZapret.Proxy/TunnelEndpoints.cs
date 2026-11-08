@@ -141,6 +141,35 @@ public static class TunnelEndpoints
     }
 
     /// <summary>
+    /// Отдаёт ли движок подставной адрес любому имени, а не только именам «через VPN».
+    /// </summary>
+    /// <remarks>
+    /// Так в «Туннеле»: правило DNS без условий по имени — <c>A</c>/<c>AAAA</c>
+    /// → <c>fake</c>, — и куда идти, движок решает уже по имени: <c>*.ru</c>
+    /// выходит из него напрямую. Наблюдение считало подставной адрес признаком
+    /// VPN и писало «туннель» всем российским сайтам (обсуждение №55, 08.11:
+    /// 196 строк <c>.ru</c> в журнале наблюдения человека).
+    /// </remarks>
+    public static bool FakeForEveryName(string configPath)
+    {
+        try
+        {
+            var rules = JsonNode.Parse(File.ReadAllText(configPath))?["dns"]?["rules"] as JsonArray;
+
+            return (rules ?? [])
+                .OfType<JsonObject>()
+                .Any(r => (string?)r["server"] == "fake"
+                    && !r.ContainsKey("domain") && !r.ContainsKey("domain_suffix")
+                    && !r.ContainsKey("domain_regex") && !r.ContainsKey("domain_keyword")
+                    && !r.ContainsKey("rule_set"));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Что забирает TUN: сети <c>route_address</c> и <c>route_exclude_address</c>
     /// у входа <c>tun</c>.
     /// </summary>

@@ -1035,7 +1035,10 @@ public partial class WatchView : UserControl
 
         menu.Items.Add(MenuEntry(Glyph.Info, "Почему так", () => _ = WhyAsync(target)));
 
-        if (outside && entry.Rule != WatchEntry.FakeRule)
+        // Подставной адрес без имени («Туннель») — маршрут для 198.18.x ничего не значит.
+        bool fakeOnly = entry.Host is null && entry.Rule.EndsWith(WatchEntry.FakeForAllMark, StringComparison.Ordinal);
+
+        if (outside && entry.Rule != WatchEntry.FakeRule && !fakeOnly)
         {
             // В «Маршруты», а не правилом отсюда (владелец 12.10: «кнопка
             // добавить маршрут должна вести на вкладку маршруты»): там видно,

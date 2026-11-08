@@ -110,6 +110,89 @@ public sealed class WatchEntryTests
         Assert.True(entry.Routed);
     }
 
+    private static readonly WatchContext TunnelMode = new(["198.18.0.0/15", "fc00::/18"], [], fakeForEveryName: true);
+
+    /// <summary>
+    /// «Туннель»: подставной адрес у всех имён, путь решают правила по имени.
+    /// Обсуждение №55, 08.11: mail.yandex.ru на <c>[fc00::378]</c> писался
+    /// «туннель», а движок вёл его напрямую правилом российских зон.
+    /// </summary>
+    [Fact]
+    public void InTunnelModeAFakeAddressFollowsTheRules()
+    {
+        var entry = WatchEntry.From(
+            Connection("chrome.exe", "mail.yandex.ru", "fc00::378", 443),
+            new RuleDecision { Mode = RoutingMode.Direct, Reason = "domain «*.ru» — российские зоны" },
+            TunnelMode);
+
+        Assert.Equal(WatchRoute.Direct, entry.Mode);
+        Assert.EndsWith(WatchEntry.FakeForAllMark, entry.Rule);
+        Assert.False(entry.Certain);
+        Assert.EndsWith(" · подставной", entry.RuleName);
+        Assert.Empty(WatchEntry.AddressesOf([entry]));
+    }
+
+    [Fact]
+    public void InTunnelModeAFakeAddressViaVpnStaysTheTunnel()
+    {
+        var entry = WatchEntry.From(
+            Connection("chrome.exe", "chatgpt.com", "198.18.0.40", 443),
+            new RuleDecision { Mode = RoutingMode.Proxy, Reason = "по умолчанию" },
+            TunnelMode);
+
+        Assert.Equal(WatchRoute.Proxy, entry.Mode);
+    }
+
+    /// <summary>
+    /// Почему наблюдение судит подставной адрес «Туннеля» без адреса: по адресу
+    /// fc00:: — домашняя сеть, и правила по имени не спрашиваются вовсе.
+    /// </summary>
+    [Fact]
+    public void TheNameDecidesOnlyWithoutTheFakeAddress()
+    {
+        var engine = RuleEngine.Build(RuZones.Rules().ToList(), RoutingMode.Proxy, operating: OperatingMode.ProxyAll);
+        var connection = Connection("chrome.exe", "mail.yandex.ru", "fc00::378", 443);
+
+        Assert.Contains("локальная сеть", engine.Evaluate(connection).Reason);
+
+        var byName = engine.Evaluate(connection with { RemoteAddress = null });
+
+        Assert.Equal(RoutingMode.Direct, byName.Mode);
+        Assert.NotNull(byName.Rule);
+    }
+
+    /// <summary>
+    /// «Подставной у всех имён» читается из конфига движка: в «Туннеле» правило
+    /// DNS без условий по имени, в «Гибриде» — только по именам «через VPN».
+    /// </summary>
+    [Theory]
+    [InlineData("proxy", NetZapret.Proxy.TunnelScope.Everything, true)]
+    [InlineData("selective", NetZapret.Proxy.TunnelScope.ProxyOnly, false)]
+    public void FakeForEveryNameIsReadFromTheConfig(string mode, NetZapret.Proxy.TunnelScope scope, bool expected)
+    {
+        var engine = RuleSetLoader.Load($"""
+            mode: {mode}
+            rules:
+              - match: domain
+                value: chatgpt.com
+                mode: proxy
+            """);
+
+        var path = Path.Combine(Path.GetTempPath(), $"nz-fake-all-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, new NetZapret.Proxy.SingBoxConfigCompiler().Compile(engine.RuleSet, [],
+                new NetZapret.Proxy.SingBoxOptions { Scope = scope }).Json);
+
+            Assert.Equal(expected, NetZapret.Proxy.TunnelEndpoints.FakeForEveryName(path));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>Без поднятого движка подставного диапазона нет — 198.18.x тогда чужой.</summary>
     [Fact]
     public void WithoutTheEngineAFakeRangeIsNotTrusted()

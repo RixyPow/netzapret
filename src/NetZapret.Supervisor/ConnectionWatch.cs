@@ -99,7 +99,8 @@ public sealed class ConnectionWatch : IAsyncDisposable
                 NetZapret.Proxy.TunnelEndpoints.FakeRanges(settings.ProxyConfigPath),
                 NetZapret.Proxy.TunnelEndpoints.Read(settings.ProxyConfigPath),
                 routes,
-                excluded);
+                excluded,
+                NetZapret.Proxy.TunnelEndpoints.FakeForEveryName(settings.ProxyConfigPath));
         }
         catch (Exception)
         {
@@ -183,7 +184,15 @@ public sealed class ConnectionWatch : IAsyncDisposable
                 }
 
                 var connection = events.Current;
-                var decision = _engine.Evaluate(connection);
+
+                // Подставной адрес в «Туннеле» о пути не говорит — судят по имени.
+                // По адресу правила сочли бы подставной fc00:: домашней сетью
+                // (жёсткое исключение) и написали бы «напрямую» и имени через VPN.
+                var judged = _context.FakeForEveryName && connection.RemoteAddress is { } remote && _context.IsFake(remote)
+                    ? connection with { RemoteAddress = null }
+                    : connection;
+
+                var decision = _engine.Evaluate(judged);
 
                 Interlocked.Increment(ref _total);
 

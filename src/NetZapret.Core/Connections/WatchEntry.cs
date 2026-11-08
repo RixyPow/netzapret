@@ -57,6 +57,14 @@ public sealed record WatchEntry(
                 remote is not null && context.IsServer(remote)
                     ? "движок: соединение с сервером VPN, мимо перехвата"
                     : "движок: выход «напрямую» из туннеля или его DNS"),
+            // «Туннель»: подставной адрес у всех имён, и путь движок решает по
+            // имени — российские зоны выходят из него напрямую (обсуждение №55).
+            // Наблюдение отвечает за него теми же правилами; имени не узнало —
+            // правила судят по адресу, и выходит путь по умолчанию.
+            not null when context.IsFake(remote) && context.FakeForEveryName => (Route(decision.Mode),
+                (decision.Rule is null
+                    ? decision.Reason ?? "по умолчанию"
+                    : $"#{decision.Rule.Ordinal} {decision.Reason}") + FakeForAllMark),
             not null when context.IsFake(remote) => (WatchRoute.Proxy,
                 FakeRule),
             not null when WatchContext.IsMulticast(remote) => (WatchRoute.Local,
@@ -92,6 +100,12 @@ public sealed record WatchEntry(
 
     /// <summary>Правило записи с подставным адресом движка.</summary>
     public const string FakeRule = "подставной адрес движка — имя идёт через VPN";
+
+    /// <summary>
+    /// Хвост правила у подставного адреса в «Туннеле»: соединение идёт через
+    /// движок, а куда из него — решают правила по имени.
+    /// </summary>
+    public const string FakeForAllMark = " · подставной адрес, путь — по имени в движке";
 
     /// <summary>
     /// Начало правила у соединения, которое правила ведут в VPN, а адрес в TUN не попадает.
@@ -142,6 +156,9 @@ public sealed record WatchEntry(
 
         if (rule.StartsWith(BypassMark, StringComparison.Ordinal))
             return "мимо туннеля · " + ShortRule(rule[BypassMark.Length..]);
+
+        if (rule.EndsWith(FakeForAllMark, StringComparison.Ordinal))
+            return ShortRule(rule[..^FakeForAllMark.Length]) + " · подставной";
 
         int space = rule.IndexOf(' ');
 
@@ -238,7 +255,7 @@ public sealed record WatchEntry(
     /// </remarks>
     public static IReadOnlyList<string> AddressesOf(IEnumerable<WatchEntry> entries) =>
         [.. entries
-            .Where(e => Outside(e) && e.Rule != FakeRule)
+            .Where(e => Outside(e) && e.Rule != FakeRule && !e.Rule.EndsWith(FakeForAllMark, StringComparison.Ordinal))
             .Select(e => e.Ip)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(ip => (Text: ip, Parsed: System.Net.IPAddress.TryParse(ip, out var a) ? a : null))
