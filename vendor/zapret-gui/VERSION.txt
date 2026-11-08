@@ -1,2 +1,2 @@
-Zapret GUI 21.1.7.201
-Снято 24.10.2026 12:50 из C:\Zapret\Dev командой nz zapret-gui take.
+Zapret GUI 21.1.7.232
+Снято 08.11.2026 11:28 из C:\Zapret\Dev командой nz zapret-gui take.

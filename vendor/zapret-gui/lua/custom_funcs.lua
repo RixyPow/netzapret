@@ -4674,3 +4674,71 @@ function tlsrec(ctx, desync)
 	ls.tlsrec = st
 	return VERDICT_DROP
 end
+
+-- Малое окно только на начало ответа сервера, потом — настоящее (ТСПУ, октябрь 2026).
+-- Фильтр режет TLS с части адресов по первым байтам ответа сервера, но читает ответ только
+-- в пределах окна приёма клиента: при окне в 1-2 байта он не узнаёт подпись TLS и пропускает.
+-- wssize из zapret-antidpi занижает множитель окна в SYN, а множитель задаётся один раз на всё
+-- соединение: после cutoff сервер читает каждое окно клиента в 2^(настоящий-заниженный) раз
+-- меньше задуманного, и скорость падает в десятки раз. Здесь окно и множитель занижаются так же,
+-- но после того как клиент подтвердил первые байты ответа сервера, каждое исходящее th_win
+-- умножается обратно на 2^(настоящий-заниженный), не больше 65535.
+-- Нужен каждый исходящий пакет соединения, а пустые подтверждения WinDivert ловит только с
+-- --wf-tcp-empty=1. В профиле — --out-range=a и --payload=all перед этой функцией. Нужен учёт
+-- соединения (track): без него функция отключается.
+-- standard args : direction
+-- arg : wsize - окно на начало соединения (по умолчанию 1)
+-- arg : scale - множитель в SYN (по умолчанию 1)
+-- arg : open - сколько байт ответа сервера должно быть подтверждено, чтобы открыть окно (по умолчанию 1)
+function wssize_ramp(ctx, desync)
+	local dis = desync.dis
+	if not dis.tcp then
+		if not dis.icmp then instance_cutoff_shim(ctx, desync) end
+		return
+	end
+	direction_cutoff_opposite(ctx, desync)
+	if not direction_check(desync) then return end
+	local track = desync.track
+	if not track then
+		instance_cutoff_shim(ctx, desync)
+		return
+	end
+	local tcp = dis.tcp
+	local st = track.lua_state
+	local wsize = tonumber(desync.arg.wsize) or 1
+	local fake = tonumber(desync.arg.scale) or 1
+	if bitand(tcp.th_flags, TH_SYN) ~= 0 then
+		local i = find_tcp_option(tcp.options, TCP_KIND_SCALE)
+		if not i then
+			-- Без множителя занижать нечего: сервер и так видит окно как есть.
+			instance_cutoff_shim(ctx, desync)
+			return
+		end
+		local real = u8(tcp.options[i].data)
+		st.wssize_ramp_shift = real > fake and (real - fake) or 0
+		if real > fake then tcp.options[i].data = bu8(fake) end
+		tcp.th_win = wsize
+		if b_debug then DLOG("wssize_ramp: SYN scale "..real.." => "..fake..", window "..wsize) end
+		return VERDICT_MODIFY
+	end
+	local shift = st.wssize_ramp_shift
+	if not shift then
+		-- SYN этого соединения не видели: настоящего множителя не знаем.
+		instance_cutoff_shim(ctx, desync)
+		return
+	end
+	local server = track.pos and track.pos.server and track.pos.server.tcp
+	local acked = 0
+	if server and server.seq0 then
+		acked = (tcp.th_ack - server.seq0 - 1) % 4294967296
+		if acked >= 2147483648 then acked = 0 end
+	end
+	if acked < (tonumber(desync.arg.open) or 1) then
+		tcp.th_win = wsize
+		return VERDICT_MODIFY
+	end
+	if shift == 0 then return end
+	local win = math.floor(tcp.th_win * 2^shift)
+	tcp.th_win = win > 65535 and 65535 or win
+	return VERDICT_MODIFY
+end
