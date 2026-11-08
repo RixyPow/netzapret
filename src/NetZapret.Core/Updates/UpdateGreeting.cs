@@ -17,6 +17,13 @@ namespace NetZapret.Core.Updates;
 /// не обновление; запуск при этом всё равно запоминается, иначе следующий
 /// запуск той же версии принял бы её за новую.
 /// </para>
+/// <para>
+/// Разово — всем (владелец 08.11, к выпуску 1.5.0): первое обновление после
+/// этой правки показывает уведомление и тем, у кого карточка на «Главной»
+/// стоит, — в ней нет «Поддержать», а уведомление выезжает само. Отметка
+/// <see cref="AppSettings.GreetingForAll"/> ставится с первым же запомненным
+/// запуском новой версии; дальше — снова только скрывшим карточку.
+/// </para>
 /// </remarks>
 public static class UpdateGreeting
 {
@@ -24,10 +31,12 @@ public static class UpdateGreeting
     /// <param name="current">Версия, запущенная сейчас.</param>
     public static bool Due(AppSettings settings, string current) =>
         settings.OnboardingDone
-        && settings.SupportCardHidden
+        && (settings.SupportCardHidden || settings.GreetingForAll != true)
         && !string.Equals(settings.LastRunVersion, current, StringComparison.Ordinal);
 
-    /// <summary>Настройки с запомненной версией — после показа или его пропуска.</summary>
+    /// <summary>
+    /// Настройки с запомненной версией — после показа или его пропуска; разовый показ всем на этом исчерпан.
+    /// </summary>
     public static AppSettings Seen(AppSettings settings, string current) =>
-        settings with { LastRunVersion = current };
+        settings with { LastRunVersion = current, GreetingForAll = true };
 }

@@ -1249,6 +1249,12 @@ public sealed record AppSettings
     public string? LastRunVersion { get; init; }
 
     /// <summary>
+    /// Показано ли уведомление после обновления всем, а не только скрывшим карточку
+    /// (08.11, к 1.5.0); <c>null</c> — настройки старше. Решение — в <see cref="Updates.UpdateGreeting"/>.
+    /// </summary>
+    public bool? GreetingForAll { get; init; }
+
+    /// <summary>
     /// Настройки с нуля — с отметками разовых переводов.
     /// </summary>
     /// <remarks>
