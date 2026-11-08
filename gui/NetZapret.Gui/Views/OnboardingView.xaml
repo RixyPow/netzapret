@@ -161,24 +161,29 @@
                 </StackPanel>
 
                 <!--
-                    Шаг 2: тема. Плитка — та же, что в «Оформлении» (112×84, кружок выбора):
-                    08.11 по макету была 216×136, и из восемнадцати тем на экран вставало
-                    восемь — владелец вернул прежнюю. Все темы видны без прокрутки.
+                    Шаг 2: тема. Плитка — та же, что в «Оформлении» (кружок выбора), крупнее:
+                    08.11 по макету была своя, 216×136, — владелец вернул прежнюю и попросил
+                    крупнее, по пять в ряд.
                 -->
                 <StackPanel x:Name="Step2" Visibility="Collapsed">
                     <TextBlock Text="Выберите тему" Style="{StaticResource PageTitle}" />
                     <TextBlock Style="{StaticResource PageNote}" Margin="0,6,0,0" Text="Сменить можно в любой момент" />
 
-                    <ItemsControl x:Name="ThemeList" Margin="0,24,0,0" Focusable="False">
+                    <!--
+                        По пять в ряд, во всю ширину (владелец 08.11): плитка та же, что
+                        в «Оформлении», но рисунок растягивается Viewbox'ом — пропорции
+                        и толщины те же, только крупнее. Подпись — обычным текстом.
+                    -->
+                    <ItemsControl x:Name="ThemeList" Margin="-8,16,-8,0" Focusable="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <WrapPanel />
+                                <UniformGrid Columns="5" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
 
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Tag="{Binding Id}" Click="OnTheme" Margin="0,0,14,10" Cursor="Hand"
+                                <Button Tag="{Binding Id}" Click="OnTheme" Margin="8,0,8,16" Cursor="Hand"
                                         ToolTip="{Binding Tip}" Opacity="{Binding Fade}">
                                     <Button.Template>
                                         <ControlTemplate TargetType="Button">
@@ -186,8 +191,10 @@
                                         </ControlTemplate>
                                     </Button.Template>
 
-                                    <StackPanel Width="112">
-                                        <Grid Height="84">
+                                    <!-- Не шире 230: на развёрнутом окне рамка росла бы вместе с рисунком до 5 точек. -->
+                                    <StackPanel MaxWidth="230">
+                                        <Viewbox Stretch="Uniform">
+                                        <Grid Width="112" Height="84">
                                             <Border Margin="1" CornerRadius="11" Padding="1" Background="{Binding Backdrop}">
                                                 <Grid>
                                                     <Rectangle RadiusX="10" RadiusY="10" Fill="{Binding Image}" />
@@ -220,9 +227,10 @@
                                             -->
                                             <Border CornerRadius="12" BorderThickness="2" BorderBrush="{Binding Edge}" />
                                         </Grid>
+                                        </Viewbox>
 
-                                        <TextBlock Text="{Binding Name}" Foreground="{Binding NameColor}"
-                                                   HorizontalAlignment="Center" Margin="0,7,0,0"
+                                        <TextBlock Text="{Binding Name}" Foreground="{Binding NameColor}" FontSize="15"
+                                                   FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,9,0,0"
                                                    TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </Button>
