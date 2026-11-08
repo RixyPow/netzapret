@@ -75,6 +75,43 @@ public static class Warp
     /// </remarks>
     public const string RegistrationHost = "api.cloudflareclient.com";
 
+    /// <summary>Что выход MASQUE пишет на каждое соединение, пока учётной записи нет.</summary>
+    public const string NotRegisteredMark = "tunnel not initialized";
+
+    /// <summary>
+    /// Не заводится ли учётная запись сейчас — по свежему концу журнала движка.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Регистрация нужна один раз, и из России она часто не проходит (см. выше
+    /// и <c>docs/warp.md</c>): без записи в кэше выход отвечает
+    /// «tunnel not initialized» на каждое соединение, и WARP не поднимается
+    /// вовсе. Человек видит только «подключается» без конца.
+    /// </para>
+    /// <para>
+    /// Смотрится только конец журнала (64 КБ): журнал движка быстро
+    /// дописывается, и давняя неудача, после которой запись завелась,
+    /// туда уже не попадёт.
+    /// </para>
+    /// </remarks>
+    public static bool RegistrationFailing(string logPath)
+    {
+        const int Tail = 64 * 1024;
+
+        try
+        {
+            using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            stream.Seek(Math.Max(0, stream.Length - Tail), SeekOrigin.Begin);
+
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd().Contains(NotRegisteredMark, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Выходы, которые подмешиваются к серверам действующей подписки.
     /// </summary>
