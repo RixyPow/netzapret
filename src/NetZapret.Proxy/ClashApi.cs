@@ -247,12 +247,21 @@ public sealed class ClashApi : IDisposable
     /// Ставит режим Clash (<c>PATCH /configs</c>); <c>true</c> — движок принял.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Режим у нас — рычаг для правил DNS (<see cref="SingBoxOptions.DnsTcpMode"/>):
     /// маршруты его не смотрят, и смена режима трогает только их. Имя режима —
     /// любое из названных в правилах: движок собирает список сам
     /// (<c>mode-list</c>), опыт 20.10 — <c>204</c>, в журнале
-    /// «clash-mode: updated mode». Перезапуск движка возвращает режим по
-    /// умолчанию, как и переключатель пути.
+    /// «clash-mode: updated mode».
+    /// </para>
+    /// <para>
+    /// Перезапуск движка режим по умолчанию <b>не</b> возвращает, если в конфиге
+    /// есть файл кэша (память подставных адресов, MASQUE): sing-box хранит там
+    /// режим и выбор селекторов и при запуске ставит их обратно. Опыт 08.11
+    /// отдельным движком: <c>Rule</c> → <c>dns-spare</c> → <c>Kill</c> → новый
+    /// запуск — <c>dns-spare</c>. Прежде здесь было написано обратное, и надзор
+    /// на это полагался (обсуждение №55): см. <see cref="ModeAsync"/>.
+    /// </para>
     /// </remarks>
     public async Task<bool> SetModeAsync(string mode, CancellationToken cancellationToken)
     {
@@ -356,6 +365,30 @@ public sealed class ClashApi : IDisposable
             return body?["uploadTotal"]?.GetValue<long>() is { } up && body["downloadTotal"]?.GetValue<long>() is { } down
                 ? (up, down)
                 : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Какой режим Clash стоит сейчас (<c>GET /configs</c>); <c>null</c> — движок не ответил.</summary>
+    /// <remarks>
+    /// Нужен затем, чтобы не считать режим заводским после перезапуска: с файлом
+    /// кэша движок поднимается с прежним (<see cref="SetModeAsync"/>).
+    /// </remarks>
+    public async Task<string?> ModeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, $"{Root}/configs", null, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            return JsonNode.Parse(body)?["mode"]?.GetValue<string>();
         }
         catch (Exception)
         {

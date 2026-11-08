@@ -587,6 +587,63 @@ public sealed class SingBoxService : SupervisedService
     /// <summary>Сказано ли в журнал, что имена не разрешаются вовсе: говорится раз, а не каждые 30 с.</summary>
     private bool _dnsDownNoted;
 
+    /// <summary>Проверены ли в этом запуске режим Clash и переключатель пути DNS (<see cref="ResetDnsLeversAsync"/>).</summary>
+    private bool _dnsLeversChecked;
+
+    /// <summary>
+    /// Ставит рычаги DNS обычными — режим <see cref="SingBoxOptions.DnsRuleMode"/>
+    /// и переключатель пути «напрямую», — если движок поднялся с другими.
+    /// </summary>
+    /// <returns><c>true</c> — проверено; <c>false</c> — Clash API не ответил, спросить на следующей проверке.</returns>
+    /// <remarks>
+    /// <para>
+    /// С памятью подставных адресов (по умолчанию включена) или MASQUE у движка
+    /// есть файл кэша, и sing-box хранит в нём режим Clash и выбор селекторов —
+    /// при запуске ставит их обратно (опыт 08.11: <c>dns-spare</c> пережил
+    /// <c>Kill</c> и новый запуск). Надзор же считал движок поднятым с режимом
+    /// по умолчанию и путём «напрямую» и сам их не ставил. Ушёл движок на запасной
+    /// резолвер, остановлен до возврата — дальше запасной навсегда, без строки
+    /// в журнале и карточки на «Главной». Обсуждение №55: выбран Quad9 или
+    /// Cloudflare — отвечал Google, выбран Google — Cloudflare, а «через туннель»
+    /// (там правила запасного нет) — верно.
+    /// </para>
+    /// <para>
+    /// Ступени выбираются заново проверками: обычные рычаги здесь — исходная
+    /// точка, как у движка без кэша, а не решение о резолвере.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> ResetDnsLeversAsync(CancellationToken cancellationToken)
+    {
+        using var api = new ClashApi($"127.0.0.1:{_healthPort}", Talk, EngineKeys.Current(_configPath));
+
+        if (await api.ModeAsync(cancellationToken) is not { } mode)
+            return false;
+
+        if (!string.Equals(mode, SingBoxOptions.DnsRuleMode, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!await api.SetModeAsync(SingBoxOptions.DnsRuleMode, cancellationToken))
+                return false;
+
+            Note($"DNS: движок поднялся в режиме «{mode}» из своего кэша — возвращён обычный, имена у выбранного резолвера.");
+        }
+
+        _dnsMode = SingBoxOptions.DnsRuleMode;
+
+        // Переключатель пути есть только у «авто» с выходом; нет его — нечего и проверять.
+        if (_dnsViaAuto && await api.SelectedAsync(SingBoxOptions.DnsPathTag, cancellationToken) is { } path
+            && !string.Equals(path, "direct", StringComparison.Ordinal))
+        {
+            if (!await api.SelectAsync(SingBoxOptions.DnsPathTag, "direct", cancellationToken))
+                return false;
+
+            Note("DNS (авто): переключатель пути поднялся «через туннель» из кэша движка — возвращён «напрямую».");
+        }
+
+        _dnsViaTunnel = false;
+
+        return true;
+    }
+
     /// <summary>Выбранный резолвер не отвечает ни по DoH, ни по TCP, запасной тоже — остаётся туннель.</summary>
     private bool DnsNeedsTunnel => !_directDnsOk && !_directTcpOk && !_spareOk;
 
@@ -707,13 +764,16 @@ public sealed class SingBoxService : SupervisedService
             _ => SingBoxOptions.DnsRuleMode,
         };
 
-        // Ещё не ставили и менять не надо — переключатель и так «напрямую»,
-        // режим — по умолчанию.
+        // Переключателя пути может не быть вовсе (не «авто», DNS роутера,
+        // dnscrypt): не спрашивая, ставить его незачем. Что он не застрял
+        // «через туннель» из кэша движка, проверяет ResetDnsLeversAsync.
+        // Режим так не угадывается (обсуждение №55): не проверен — ставится явно.
         if (_dnsViaTunnel is null && !viaTunnel)
             _dnsViaTunnel = false;
 
-        if (_dnsMode is null && mode == SingBoxOptions.DnsRuleMode)
-            _dnsMode = mode;
+        // Первая установка «обычного» — исходная точка, а не возврат резолвера:
+        // без этого журнал говорил бы «снова отвечает» о том, кто и не молчал.
+        bool modeKnown = _dnsMode is not null;
 
         bool pathChanges = _dnsViaTunnel != viaTunnel;
         bool modeChanges = _dnsMode != mode;
@@ -739,7 +799,7 @@ public sealed class SingBoxService : SupervisedService
                 _dnsMode = mode;
             }
 
-            if (step != DnsLadder.Step.None)
+            if (step != DnsLadder.Step.None && (modeKnown || step != DnsLadder.Step.Direct))
                 Note(DnsNote(step));
         }
 
@@ -1045,14 +1105,17 @@ public sealed class SingBoxService : SupervisedService
         _trafficPortMissingSince = null;
         _trafficPortMissingNoted = false;
         _dnsViaTunnel = null;
+        _dnsLeversChecked = false;
         _dnsCheckCounter = 0;
         _directDns = null;
         _directDnsOk = true;
         _directDnsAnswers = 0;
 
-        // Режим DNS новый движок берёт из конфига — по умолчанию. До 25.10 прежний
-        // помнился: после перезапуска надзор считал «по TCP» поставленным и не
-        // ставил его в движок, который снова спрашивал молчащий DoH.
+        // Режим DNS нового движка надзор не знает, пока не спросит
+        // (ResetDnsLeversAsync): без файла кэша он из конфига, по умолчанию,
+        // с файлом — прежний. До 25.10 прежний помнился здесь: после перезапуска
+        // надзор считал «по TCP» поставленным и не ставил его в движок, который
+        // снова спрашивал молчащий DoH.
         _directTcpOk = false;
         _spareOk = false;
         _dnsMode = null;
@@ -1161,6 +1224,11 @@ public sealed class SingBoxService : SupervisedService
         // такое перезапуском и лечится.
         if (!await SingBoxRunner.IsPortAcceptingAsync(_healthPort, TimeSpan.FromSeconds(2), cancellationToken))
             return ServiceCheck.Broken;
+
+        // Рычаги DNS — раз на запуск и раньше всего прочего: с файлом кэша
+        // движок поднимается с режимом и путём прошлого запуска (ResetDnsLeversAsync).
+        if (!_dnsLeversChecked)
+            _dnsLeversChecked = await ResetDnsLeversAsync(cancellationToken);
 
         // Ради DNS сторожить выход и проверять проход трафика нечем: выхода нет.
         // А резолвер есть — он и есть вся работа такого движка.

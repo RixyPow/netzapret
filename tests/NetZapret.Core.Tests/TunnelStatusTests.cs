@@ -248,4 +248,31 @@ public sealed class TunnelStatusTests
         Assert.Equal("замена молчащему", TunnelStatus.StandingWord("🇩🇪 Германия", false, "🇪🇪 Эстония", "замена молчащему"));
         Assert.StartsWith("в настройках выбран «🇪🇪 Эстония»", TunnelStatus.StandingWord("🇩🇪 Германия", false, "🇪🇪 Эстония", null));
     }
+
+    /// <summary>
+    /// Режим Clash читается у движка, а не считается заводским: с файлом кэша
+    /// движок поднимается с прежним (обсуждение №55, запасной резолвер навсегда).
+    /// </summary>
+    [Fact]
+    public async Task The_engine_mode_is_read_back()
+    {
+        await using var api = new FakeApi(path => path.StartsWith("/configs", StringComparison.Ordinal)
+            ? (200, """{"port":0,"mode":"dns-spare","log-level":"warning"}""")
+            : (404, string.Empty));
+
+        using var clash = new ClashApi($"127.0.0.1:{api.Port}");
+
+        Assert.Equal("dns-spare", await clash.ModeAsync(CancellationToken.None));
+    }
+
+    /// <summary>Не ответил — «не знаю», а не «по умолчанию»: надзор спросит снова.</summary>
+    [Fact]
+    public async Task A_silent_engine_gives_no_mode()
+    {
+        await using var api = new FakeApi(_ => (500, "oops"));
+
+        using var clash = new ClashApi($"127.0.0.1:{api.Port}");
+
+        Assert.Null(await clash.ModeAsync(CancellationToken.None));
+    }
 }
