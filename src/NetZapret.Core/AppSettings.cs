@@ -925,6 +925,11 @@ public sealed record AppSettings
     /// <summary>Спрятана ли на «Главной» просьба о звезде на GitHub и канале (01.10).</summary>
     public bool SupportCardHidden { get; init; }
 
+    /// <summary>
+    /// Возвращена ли просьба о звезде разовым переводом (08.11, к 1.5.0); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? SupportCardBack { get; init; }
+
     /// <summary>Анимации окна: смена разделов, появление карточек, уведомления, схема мастера.</summary>
     /// <remarks>
     /// Включены по умолчанию (владелец, 28.09: «добавим анимаций по всей
@@ -1194,6 +1199,19 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// Разовый возврат просьбы о звезде и канале на «Главную» всем, кто её скрыл
+    /// (владелец 08.11, к выпуску 1.5.0).
+    /// </summary>
+    /// <remarks>
+    /// Один раз: скрывший её снова после перевода сохраняет и отметку, и
+    /// «Скрыть» дальше значит то, что значит. Пока карточка стоит, уведомление
+    /// после обновления (<see cref="Updates.UpdateGreeting"/>) не всплывает —
+    /// просьба и так перед глазами.
+    /// </remarks>
+    private static AppSettings SupportCardOnce(AppSettings read) =>
+        read.SupportCardBack == true ? read : read with { SupportCardHidden = false, SupportCardBack = true };
+
+    /// <summary>
     /// «Selective Routing» для настроек старше 21.10: включён, если пулы уже заведены.
     /// </summary>
     /// <remarks>
@@ -1256,7 +1274,7 @@ public sealed record AppSettings
     /// и следующее чтение перевело бы их ещё раз: включённый человеком game
     /// filter молча выключился бы.
     /// </remarks>
-    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true, PresetV12Lite = true };
+    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true, PresetV12Lite = true, SupportCardBack = true };
 
     /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
     [JsonIgnore]
@@ -1317,11 +1335,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return WithoutServerDescriptions(SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return SupportCardOnce(WithoutServerDescriptions(SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            })))))));
+            }))))))));
         }
         catch (Exception)
         {
