@@ -69,7 +69,7 @@ public partial class ProgramPickerWindow : Window
             : shown.Count == 0
                 ? "Ничего не подошло. Нужной программы нет среди запущенных — закройте окно и выберите её файлом."
                 : string.IsNullOrWhiteSpace(Search.Text)
-                    ? $"Запущено программ: {_all.Count}. Нажмите на нужную."
+                    ? $"Запущено программ: {_all.Count}."
                     : $"Подходит: {shown.Count} из {_all.Count}.";
     }
 

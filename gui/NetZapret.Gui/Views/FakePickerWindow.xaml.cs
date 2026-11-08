@@ -42,8 +42,8 @@ public partial class FakePickerWindow : Window
         _all = items;
 
         Status.Text = slot.Udp
-            ? $"Образцов для UDP: {offer.Count}. Для голоса Discord пробуют stun2 и ACTIVE_DISCORD_UDP (обсуждение №30)."
-            : $"Образцов для TCP: {offer.Count} — приветствия TLS разных сайтов.";
+            ? $"Образцов для UDP: {offer.Count}. Для голоса Discord пробуют stun2 и ACTIVE_DISCORD_UDP."
+            : $"Образцов для TCP: {offer.Count}.";
 
         ShowList();
 

@@ -216,8 +216,7 @@ public partial class DesyncView : UserControl
             _rows = rows;
             Redraw();
 
-            Status.Text = $"Пресетов: {rows.Count}, из них наших {rows.Count(r => r.Official)}. "
-                + "Выбор применяется при следующем запуске движков.";
+            Status.Text = $"Пресетов: {rows.Count}, из них наших {rows.Count(r => r.Official)}.";
 
             StartCounting(rows);
         }
@@ -261,9 +260,11 @@ public partial class DesyncView : UserControl
             // Про поддельные пакеты сказано отдельно, потому что именно они
             // ломаются под поднятым TUN, если трафик из туннеля не выведен.
             // Замер 2026-08-23; чистые split и disorder его переживают.
+            // Чем грозят — в подсказке строки: одна и та же фраза под каждым
+            // пресетом читалась шумом.
             fake == 0
                 ? string.Empty
-                : $"{fake} с поддельным пакетом — под туннелем такие секции работают не всегда")
+                : $"{fake} с поддельным пакетом")
         {
             File = file,
             Detail = detail,
@@ -404,8 +405,8 @@ public partial class DesyncView : UserControl
         Others.ItemsSource = null;
         Others.ItemsSource = theirs;
 
-        Show(OwnHeader, OwnNote, searching || ours.Count > 0);
-        Show(OthersHeader, OthersNote, theirs.Count > 0);
+        Show(OwnHeader, searching || ours.Count > 0);
+        Show(OthersHeader, theirs.Count > 0);
 
         NothingFound.Text = $"Пресетов с «{needle}» в имени нет.";
         NothingFound.Visibility = searching && ours.Count == 0 && theirs.Count == 0
@@ -436,11 +437,8 @@ public partial class DesyncView : UserControl
         CaptureTile.Margin = new Thickness(0, side ? 0 : 12, 0, 0);
     }
 
-    private static void Show(UIElement header, UIElement note, bool visible)
-    {
+    private static void Show(UIElement header, bool visible) =>
         header.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        note.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-    }
 
     /// <summary>
     /// Каталог рецептов и вердикт по каждому.
@@ -483,13 +481,12 @@ public partial class DesyncView : UserControl
 
         Catalog.ItemsSource = rows;
 
+        // Где выбирается рецепт — в подсказке «i» у заголовка; здесь только счёт.
         CatalogNote.Text = preset is null
-            ? $"Рецептов в каталоге: {rows.Count}. Выберите пресет, чтобы увидеть, какие из них он потянет."
+            ? $"Рецептов в каталоге: {rows.Count}; пресет не выбран."
             : providers.Count == 0
-                ? $"Рецептов в каталоге: {rows.Count}. Модули движка не читаются, поэтому доступность не проверена."
-                : $"Рецептов в каталоге: {rows.Count}, из них «{settings.DescribePreset()}» "
-                    + $"потянет {ready}. Выбираются рецепты не здесь, а для отдельного имени — "
-                    + "в разделе «Маршруты».";
+                ? $"Рецептов в каталоге: {rows.Count}. Модули движка не читаются — доступность не проверена."
+                : $"Рецептов в каталоге: {rows.Count}, из них «{settings.DescribePreset()}» потянет {ready}.";
     }
 
     /// <summary>
@@ -734,11 +731,14 @@ public partial class DesyncView : UserControl
     {
         ChosenName.Text = settings.DescribePreset();
 
+        // Строкой — только когда пресет не действует; что выбранный применяется
+        // при запуске движков, понятно и так.
         ChosenDetail.Text = settings.Mode == OperatingMode.Off
             ? "Режим «выключено»: десинк не запустится, какой бы пресет ни стоял."
             : settings.PresetName is null
                 ? "Пакеты не правятся. Всё, что закрыто по имени, останется закрытым — кроме того, что уведено через VPN."
-                : "Применяется при запуске движков в разделе «Состояние».";
+                : string.Empty;
+        ChosenDetail.Visibility = ChosenDetail.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         Recommended.Visibility = string.Equals(settings.PresetName, AppSettings.DefaultPresetName,
             StringComparison.OrdinalIgnoreCase)
@@ -916,7 +916,7 @@ public partial class DesyncView : UserControl
 
         var window = new PresetNameWindow(
             $"Копия «{name}»",
-            "Копия — ваш пресет: её можно править и переименовывать, обновление программы её не тронет. Подделки секций, выбранные у оригинала, к копии не переходят.",
+            "Копию можно править и переименовывать, обновление программы её не тронет. Подделки секций оригинала к ней не переходят.",
             "Создать",
             PresetFiles.CopyName(directory, name),
             directory)
@@ -940,7 +940,7 @@ public partial class DesyncView : UserControl
 
         var window = new PresetNameWindow(
             $"Переименовать «{name}»",
-            "Если пресет выбран, выбор перейдёт на новое имя; запущенные движки подхватят его при следующем запуске.",
+            "Если пресет выбран, выбор перейдёт на новое имя — со следующего запуска движков.",
             "Переименовать",
             name,
             directory,

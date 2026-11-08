@@ -22,7 +22,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
-            <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
+            <TextBlock Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap"><Run x:Name="Head" /><InlineUIContainer BaselineAlignment="Center"><ContentControl Style="{StaticResource Info}" Margin="4,0,0,0" Content="Файл пресета не меняется. Выбор действует со следующего запуска движков." /></InlineUIContainer></TextBlock>
             <TextBlock x:Name="Step" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap" />
         </StackPanel>
 
@@ -65,10 +65,6 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-
-            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Margin="0,0,16,0"
-                       Text="Файл пресета не меняется. Выбор действует со следующего запуска движков." />
 
             <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
                     Click="OnCancel" />

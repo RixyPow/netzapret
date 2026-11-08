@@ -253,8 +253,7 @@ public partial class RecipeWindow : Window
 
         Say(_rows.Count == 0
             ? "Ни одного рецепта не нашлось — ни в пресете, ни в каталоге."
-            : $"Рецептов: {_rows.Count} — из пресета «{preset.Name}» и из каталога. "
-              + "Проверка подбирает рабочий сама — движки останавливать не нужно.");
+            : $"Рецептов: {_rows.Count} — из пресета «{preset.Name}» и из каталога.");
 
         TestButton.IsEnabled = _rows.Count > 0;
 
@@ -263,9 +262,8 @@ public partial class RecipeWindow : Window
             if (already is null)
             {
                 PresetButton.Visibility = Visibility.Collapsed;
-                PresetNote.Text = $"Пресет «{preset.Name}» не знает {domain}: ни одна его секция это имя "
-                    + "не берёт, и без рецепта десинк не сделал бы с ним ничего. Выберите рецепт — "
-                    + "или «Отмена», и маршрут останется прежним.";
+                PresetNote.Text = $"Пресет «{preset.Name}» не знает {domain}: без рецепта десинк не сделает "
+                    + "с ним ничего. Выберите рецепт — или «Отмена», и маршрут останется прежним.";
             }
             else
             {

@@ -25,7 +25,7 @@ public partial class PresetNameWindow : Window
         _except = except;
 
         Head.Text = head;
-        Note.Text = note;
+        NoteTip.Content = note;
         Confirm.Content = confirm;
         NameBox.Text = suggested;
 

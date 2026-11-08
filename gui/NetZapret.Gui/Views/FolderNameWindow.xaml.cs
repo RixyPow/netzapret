@@ -38,7 +38,7 @@ public partial class FolderNameWindow : Window
         if (pool)
         {
             Title = "Пул серверов";
-            Note.Text = "Пул — папка серверов из любых подписок. Маршрут «через VPN», направленный в пул, идёт только через его серверы.";
+            NoteTip.Content = "Пул — папка серверов из любых подписок. Маршрут «через VPN» в пуле идёт только через его серверы.";
             NameLabel.Text = "Название пула";
             NameBox.SetValue(Hint.TextProperty, "например, Россия");
         }

@@ -140,25 +140,23 @@
 
                     <Button Style="{StaticResource Choice}" Tag="direct" Click="OnMode">
                         <StackPanel>
-                            <TextBlock Text="Напрямую" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Без вмешательства. Так же нужно для пина: прибитый адрес задаёт куда идти, а не как, и правило поверх него уведёт соединение мимо." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Напрямую" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,-4,0,-4"
+                                                Content="Без десинка и VPN. Нужно и для пина: прибитый адрес задаёт, куда идти, а не как, и правило поверх него уведёт соединение мимо." />
+                            </StackPanel>
                         </StackPanel>
                     </Button>
 
                     <Button Style="{StaticResource Choice}" Tag="desync" Click="OnMode">
                         <StackPanel>
                             <TextBlock Text="Десинк" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Пакеты правятся на лету, трафик идёт напрямую." />
                         </StackPanel>
                     </Button>
 
                     <Button Style="{StaticResource Choice}" Tag="proxy" Click="OnMode">
                         <StackPanel>
                             <TextBlock Text="Через VPN" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="В туннель. Лечит и то, что закрыто по самому адресу." />
                         </StackPanel>
                     </Button>
 
@@ -166,9 +164,11 @@
 
                     <Button x:Name="PinButton" Style="{StaticResource Choice}" Click="OnPin">
                         <StackPanel>
-                            <TextBlock Text="Закрепить адрес в hosts" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Для случая, когда имя не разрешается или резолвер отвечает заглушкой. Правит системный файл: нужны права администратора, и запись переживёт удаление программы." />
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Закрепить адрес в hosts" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,-4,0,-4"
+                                                Content="Когда имя не разрешается или резолвер отвечает заглушкой. Правит системный файл: нужны права администратора, и запись переживёт удаление программы." />
+                            </StackPanel>
                         </StackPanel>
                     </Button>
 
@@ -184,8 +184,6 @@
                     <Button Style="{StaticResource Choice}" Tag="reset" Click="OnMode" Margin="0,16,0,0">
                         <StackPanel>
                             <TextBlock Text="Убрать свой выбор" FontWeight="SemiBold" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"
-                                       Text="Вернуть как было: правило из поставки снова начнёт действовать." />
                         </StackPanel>
                     </Button>
                 </StackPanel>

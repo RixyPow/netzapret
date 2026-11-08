@@ -21,7 +21,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Выберите программу" Style="{StaticResource Title}" FontSize="20" />
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock Text="Выберите программу" Style="{StaticResource Title}" FontSize="20" VerticalAlignment="Center" />
+            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                            Content="Правило — по имени файла: после обновления программы оно не теряется." />
+        </StackPanel>
 
         <TextBox Grid.Row="1" x:Name="Search" Margin="0,16,0,0" TextChanged="OnSearch"
                  gui:Hint.Text="Поиск по имени или пути…" />
@@ -79,10 +83,6 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-
-            <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Margin="0,0,16,0"
-                       Text="Правило — по имени файла: после обновления программы оно не теряется." />
 
             <Button Grid.Column="1" Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True"
                     Click="OnCancel" />

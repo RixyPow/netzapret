@@ -12,10 +12,7 @@
         идёт туда же, куда шёл. Окно постоянного размера, как «имя списка».
     -->
     <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
-        <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
-
-        <TextBlock x:Name="Note" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                   Text="Папка собирает маршруты вместе. Куда идёт каждый маршрут, она не меняет. Пустая папка исчезнет сама." />
+        <TextBlock Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap"><Run x:Name="Head" /><InlineUIContainer BaselineAlignment="Center"><ContentControl x:Name="NoteTip" Content="Куда идёт маршрут, папка не меняет. Пустая папка исчезнет сама." Style="{StaticResource Info}" Margin="4,0,0,0" /></InlineUIContainer></TextBlock>
 
         <TextBlock x:Name="NameLabel" Text="Название папки" FontWeight="SemiBold" Margin="0,18,0,6" />
 

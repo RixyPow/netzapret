@@ -140,7 +140,7 @@ public partial class PathWindow : Window
         if (probe is { Length: > 0 })
         {
             PickRow.Visibility = Visibility.Visible;
-            PickNote.Text = $"Проверит {probe} и отметит первый открывший путь — до минуты. Движки должны быть запущены.";
+            PickNote.Text = $"Проверит {probe} — до минуты; движки должны быть запущены.";
         }
 
         Rebuild();
@@ -150,7 +150,7 @@ public partial class PathWindow : Window
     {
         Options.Children.Clear();
 
-        Options.Children.Add(Card(PathPick.Direct, "Напрямую", "Мимо VPN и без десинка — как без программы."));
+        Options.Children.Add(Card(PathPick.Direct, "Напрямую", null, tip: "Мимо VPN и без десинка — как без программы."));
 
         Options.Children.Add(Card(PathPick.Desync, "Десинк", _desyncNote,
             Picked == PathPick.Desync && _canRecipe ? RecipeButton() : null));
@@ -158,8 +158,8 @@ public partial class PathWindow : Window
         Options.Children.Add(Card(PathPick.Proxy, "Через VPN", ProxyNote(),
             Picked == PathPick.Proxy && _poolsOn ? PoolList() : null));
 
-        Options.Children.Add(Card(PathPick.Off, "Выключено",
-            "Не действует ни этот маршрут, ни заводское правило на тот же список — имена решают другие правила."));
+        Options.Children.Add(Card(PathPick.Off, "Выключено", null,
+            tip: "Не действует ни этот маршрут, ни заводское правило на тот же список — имена решают другие правила."));
     }
 
     private string ProxyNote() => ServerPools.Find(_pools, Pool) is { } pool
@@ -168,16 +168,30 @@ public partial class PathWindow : Window
             ? "Через серверы подписок: автоподбор или выбранный на вкладке VPN."
             : "Пул по умолчанию — все серверы.";
 
-    private Button Card(PathPick pick, string head, string note, UIElement? inside = null)
+    private Button Card(PathPick pick, string head, string? note, UIElement? inside = null, string? tip = null)
     {
         bool chosen = Picked == pick;
 
         var text = new StackPanel();
-        text.Children.Add(new TextBlock { Text = head, FontWeight = FontWeights.SemiBold, FontSize = 15 });
+        var title = new StackPanel { Orientation = Orientation.Horizontal };
+        title.Children.Add(new TextBlock { Text = head, FontWeight = FontWeights.SemiBold, FontSize = 15, VerticalAlignment = VerticalAlignment.Center });
 
-        var caption = new TextBlock { Text = note, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap };
-        caption.SetResourceReference(StyleProperty, "Caption");
-        text.Children.Add(caption);
+        if (tip is not null)
+        {
+            // Отрицательный отступ по высоте: «i» не растит строку выше соседних без него.
+            var info = new ContentControl { Content = tip, Margin = new Thickness(2, -4, 0, -4) };
+            info.SetResourceReference(StyleProperty, "Info");
+            title.Children.Add(info);
+        }
+
+        text.Children.Add(title);
+
+        if (note is not null)
+        {
+            var caption = new TextBlock { Text = note, Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap };
+            caption.SetResourceReference(StyleProperty, "Caption");
+            text.Children.Add(caption);
+        }
 
         if (inside is not null)
             text.Children.Add(inside);
@@ -251,7 +265,7 @@ public partial class PathWindow : Window
         {
             var hint = new TextBlock
             {
-                Text = "Свои пулы — папки серверов, например «Россия» или «Скоростной», — заводятся на вкладке VPN.",
+                Text = "Свои пулы заводятся на вкладке VPN.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(2, 2, 0, 0),
             };

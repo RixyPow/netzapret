@@ -929,16 +929,16 @@ public partial class RoutesView : UserControl
 
         Order.ItemsSource = rows;
 
-        OrderSummary.Text = $"{ruleSet.Rules.Count} правил, порядок: process → domain → ip → default. "
-            + "Побеждает то, до которого очередь доходит раньше. Свои правила с ручкой ⠿ "
-            + "перетаскиваются внутри своей группы.";
+        // Кто побеждает и как переставлять — в подсказке «i» у заголовка.
+        OrderSummary.Text = $"{ruleSet.Rules.Count} правил, порядок: process → domain → ip → default.";
 
+        // Строкой — только когда порядок не действует. Про источник имён
+        // (fakeip) прежде писалось при любых доменных правилах — то есть
+        // всегда, и сделать с этим человек ничего не мог.
         OrderNote.Text = ruleSet.Operating != OperatingMode.Selective
             ? "В этом режиме правила не вычисляются — они показаны для справки."
-            : engine.RequiresHostnames
-                ? "Доменные правила требуют источника имён — его даёт fakeip, "
-                  + "поднимаемый вместе с туннелем."
-                : string.Empty;
+            : string.Empty;
+        OrderNote.Visibility = OrderNote.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string ColorOf(RoutingMode mode) => mode switch
@@ -2362,16 +2362,19 @@ public partial class RoutesView : UserControl
             .Concat(AppSettings.Load(AppSettings.DefaultPath).ProgramRoutes.Select(p => p.Program))
             .ToList();
 
+        // Без своих правил строки нет: как добавить, говорит подсказка поля поиска.
         OwnSummary.Text = own.Count == 0
-            ? "Впишите сайт в поле ниже: если его нет в списке, появится «Добавить»."
+            ? string.Empty
             : $"Своих правил: {own.Count} — {string.Join(", ", own.Take(3))}"
               + (own.Count > 3 ? $" и ещё {own.Count - 3}" : string.Empty)
-              + ". Они в списке ниже вместе с сервисами; строки и папки перетаскиваются мышью.";
+              + ".";
 
         // Снятые правила по программе (Rules.ProgramRulesOff, 04.10) — словами,
         // а не молча: человек ставил игру «через VPN», и правило пропало.
         if (AppSettings.Load(AppSettings.DefaultPath).RemovedProgramRules is { Count: > 0 } removed)
-            OwnSummary.Text += $" Прежние правила по программе сняты 04.10: {string.Join(", ", removed)}. Добавьте программу заново — теперь это папка из доменов и адресов.";
+            OwnSummary.Text = (OwnSummary.Text + $" Прежние правила по программе сняты 04.10: {string.Join(", ", removed)}. Добавьте программу заново — теперь это папка из доменов и адресов.").TrimStart();
+
+        OwnSummary.Visibility = OwnSummary.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnAddOwn(object sender, RoutedEventArgs e) => AddOwn();

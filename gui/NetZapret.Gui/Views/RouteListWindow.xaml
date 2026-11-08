@@ -52,12 +52,13 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Style="{StaticResource Title}" FontSize="20" Text="Добавить списком" />
+        <StackPanel Orientation="Horizontal">
+            <TextBlock Style="{StaticResource Title}" FontSize="20" Text="Добавить списком" VerticalAlignment="Center" />
+            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                            Content="Сайты или адреса — по строке, через запятую или пробел; ссылки тоже годятся. example.com покрывает и поддомены. Путь — один на весь список, отдельный сайт поправляется потом в его строке." />
+        </StackPanel>
 
-        <TextBlock Grid.Row="1" Style="{StaticResource Caption}" Margin="0,8,0,12" TextWrapping="Wrap"
-                   Text="Сайты или адреса — по строке, через запятую или пробел; ссылки тоже годятся. Имя означает зону: example.com покрывает и поддомены. Путь — один на весь список, поправить отдельный сайт можно потом в его строке." />
-
-        <TextBox Grid.Row="2" x:Name="ListBox" AcceptsReturn="True" TextWrapping="NoWrap"
+        <TextBox Grid.Row="2" x:Name="ListBox" Margin="0,14,0,0" AcceptsReturn="True" TextWrapping="NoWrap"
                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                  VerticalContentAlignment="Top" TextChanged="OnChanged"
                  gui:Hint.Text="7tv.app&#x0a;7tv.io&#x0a;203.0.113.0/24" />
@@ -69,9 +70,11 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
-                <TextBlock Text="Сводить к сайту" TextWrapping="Wrap" />
-                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,2,0,0"
-                           Text="cdn.example.com станет example.com: длинные имена сетей доставки меняются, и правило на точное имя завтра не совпадёт ни с чем." />
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Сводить к сайту" VerticalAlignment="Center" />
+                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                    Content="cdn.example.com станет example.com: имена сетей доставки меняются, и правило на точное имя завтра не совпадёт ни с чем." />
+                </StackPanel>
             </StackPanel>
 
             <ToggleButton Grid.Column="1" x:Name="ToSite" Style="{StaticResource Switch}" IsChecked="True"

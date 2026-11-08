@@ -15,10 +15,10 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0">
-            <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" />
-            <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                       Text="Рецепт — это то, что winws2 сделает с рукопожатием: подделает пакет, порежет его, переставит куски. Наборы взяты из вашего пресета: там они подобраны под живые блокировки, а не выдуманы нами." />
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" VerticalAlignment="Center" />
+            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                            Content="Рецепт — что winws2 сделает с рукопожатием: подделает пакет, порежет его, переставит куски. Наборы — из вашего пресета и из каталога; проверка идёт без остановки движков.&#x0a;&#x0a;«Решает пресет» — без своего рецепта: имя берут списки пресета, а не попало в них — с ним не делается ничего." />
         </StackPanel>
 
         <!--
@@ -122,8 +122,7 @@
             </Grid.ColumnDefinitions>
 
             <TextBlock x:Name="PresetNote" Grid.Column="0" Style="{StaticResource Caption}" VerticalAlignment="Center"
-                       TextWrapping="Wrap" Margin="0,0,16,0"
-                       Text="«Решает пресет» — прежнее поведение: имя выпускается напрямую, а что с ним делать, решают его списки. Если имя в них не попало, не делается ничего." />
+                       TextWrapping="Wrap" Margin="0,0,16,0" />
 
             <StackPanel Grid.Column="1" Orientation="Horizontal">
                 <Button x:Name="TestButton" Style="{StaticResource Ghost}"

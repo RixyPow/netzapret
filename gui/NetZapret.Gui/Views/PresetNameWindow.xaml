@@ -12,9 +12,7 @@
         как «Папка» и «Имя списка»: в нём одно поле.
     -->
     <StackPanel LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
-        <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
-
-        <TextBlock x:Name="Note" Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap" />
+        <TextBlock Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap"><Run x:Name="Head" /><InlineUIContainer BaselineAlignment="Center"><ContentControl x:Name="NoteTip" Style="{StaticResource Info}" Margin="4,0,0,0" /></InlineUIContainer></TextBlock>
 
         <TextBlock Text="Название пресета" FontWeight="SemiBold" Margin="0,18,0,6" />
 

@@ -23,10 +23,7 @@
 
         <ScrollViewer Grid.Row="0" Style="{StaticResource PageScroll}" Padding="28,24,28,0">
             <StackPanel>
-                <TextBlock x:Name="Head" Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap" />
-
-                <TextBlock Style="{StaticResource Caption}" Margin="0,8,0,0" TextWrapping="Wrap"
-                           Text="Куда идут имена и адреса этого маршрута. Применится при следующем запуске движков." />
+                <TextBlock Style="{StaticResource Title}" FontSize="20" TextWrapping="Wrap"><Run x:Name="Head" /><InlineUIContainer BaselineAlignment="Center"><ContentControl Style="{StaticResource Info}" Margin="4,0,0,0" Content="Выбор применится при следующем запуске движков." /></InlineUIContainer></TextBlock>
 
                 <TextBlock x:Name="DefaultNow" Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
                            Visibility="Collapsed" />
