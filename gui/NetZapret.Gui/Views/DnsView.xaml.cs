@@ -581,11 +581,12 @@ public partial class DnsView : UserControl
 
         AdapterDnsHint.Text = settings.AdapterDns switch
         {
-            AdapterDnsMode.Automatic => "Программа ставит адаптерам «автоматически»: DNS выдаёт сеть. Записанное остаётся и после выхода из программы.",
-            AdapterDnsMode.Resolver when refusal is not null => refusal + " Адаптеры не менялись.",
-            AdapterDnsMode.Resolver => $"Программа вписывает в адаптеры выбранный резолвер ({string.Join(", ", addresses)}). "
-                + "Записанное остаётся и после выхода из программы.",
-            _ => "Программа DNS адаптеров не трогает — только показывает.",
+            // Не длиннее двух строк на узком окне (~1000): под подсказку
+            // держится место ровно на две — длиннее, и карточка снова прыгнет.
+            AdapterDnsMode.Automatic => "Адаптерам стоит «автоматически»: DNS выдаёт сеть. Остаётся и после выхода из программы.",
+            AdapterDnsMode.Resolver when refusal is not null => refusal,
+            AdapterDnsMode.Resolver => $"В адаптеры вписывается {string.Join(", ", addresses)}; остаётся и после выхода из программы.",
+            _ => "Программа DNS адаптеров не трогает — только показывает, что стоит.",
         };
     }
 
@@ -657,7 +658,8 @@ public partial class DnsView : UserControl
 
         if (result.Changed.Count > 0)
         {
-            AdapterDnsHint.Text = said + " Движок читает резолверы Windows при запуске — перезапустите движки.";
+            // Почему перезапуск — в справке карточки: здесь места две строки.
+            AdapterDnsHint.Text = said + " Нужен перезапуск движков.";
             this.Offer("DNS адаптеров изменён");
         }
         else if (result.Refused is not null || result.Failed.Count > 0)
