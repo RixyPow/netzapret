@@ -116,11 +116,20 @@ public sealed class RuleEngine
         // перекрывал его же amazon.txt, и с Amazon «через VPN» приложение
         // узнало бы свой адрес уже через туннель — ровно то, от чего прячем.
         // Имя, вписанное человеком поимённо, остаётся сильнее (решение 23.09).
-        int layer = source == RuleSource.Setting ? 1
-            : user ? (ownName ? 0 : 2)
-            : 3;
+        //
+        // Список программы (ProgramRoutes) — после всех выборов человека
+        // и раньше заводских правил (08.11). Его пополняет «Наблюдение» тем,
+        // что программа открыла, а не человек: Chrome «через VPN» выучил
+        // vk.com, список программы стоял в файле первым и в той же группе,
+        // что свои имена, — и «vk.com → напрямую» человека проигрывал ему,
+        // vk у всех браузеров шёл через VPN (вопрос в чате 07.11).
+        bool program = match == MatchKind.HostList && ProgramRoutes.IsProgramList(value);
 
-        return MatchKindPriority.Of(match) * 4 + layer;
+        int layer = source == RuleSource.Setting ? 1
+            : user ? (program ? 3 : ownName ? 0 : 2)
+            : 4;
+
+        return MatchKindPriority.Of(match) * 5 + layer;
     }
 
     /// <summary>

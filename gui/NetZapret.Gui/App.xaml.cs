@@ -202,6 +202,31 @@ public partial class App : Application
             Journal.Write("маршруты", "снять правила по программе не вышло: " + ex.GetBaseException().Message);
         }
 
+        // Из доменов программ — имена, о которых решил человек (ProgramRoutes.Prune,
+        // 08.11). До движков: иначе конфиг собрался бы с выученным лишним.
+        // Только у кого программы есть — разбор правил со списками стоит
+        // десятых долей секунды.
+        try
+        {
+            var routes = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (routes.ProgramRoutes.Count > 0)
+            {
+                var (engine, _) = Zapret.RuleSetExpander.LoadFor(routes);
+                var pruned = Core.Rules.ProgramRoutes.Prune(engine, AppSettings.DefaultPath);
+
+                if (pruned.Count > 0)
+                {
+                    Journal.Write("маршруты", "из маршрутов программ убраны имена со своим решением человека: "
+                        + string.Join(", ", pruned.Select(p => $"{p.Name} ({p.Program})")));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Journal.Write("маршруты", "почистить маршруты программ не вышло: " + ex.GetBaseException().Message);
+        }
+
         // DNS адаптеров по выбору человека (AdapterDns, 08.11): новый адаптер
         // или правка руками снова получают выбранное. В фоне: без расхождения
         // команд нет вовсе, а с ним netsh и сброс кэша идут до секунд.

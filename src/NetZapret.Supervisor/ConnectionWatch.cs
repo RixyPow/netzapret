@@ -203,7 +203,7 @@ public sealed class ConnectionWatch : IAsyncDisposable
 
                 _journal?.AppendLine(entry.ToLine());
 
-                Learn(connection);
+                Learn(connection, decision);
 
                 yield return entry;
             }
@@ -217,14 +217,14 @@ public sealed class ConnectionWatch : IAsyncDisposable
     /// <remarks>
     /// Сбой записи списка не обрывает наблюдение: оно нужно и без пополнения.
     /// </remarks>
-    private void Learn(ConnectionEvent connection)
+    private void Learn(ConnectionEvent connection, RuleDecision decision)
     {
         if (_learner is null)
             return;
 
         try
         {
-            if (_learner.Observe(connection) is { } learned)
+            if (_learner.Observe(connection, decision) is { } learned)
             {
                 _journal?.AppendLine(WatchEntry.Session(DateTimeOffset.Now,
                     $"маршрут программы {learned.Program}: дописано {learned.Value}"));

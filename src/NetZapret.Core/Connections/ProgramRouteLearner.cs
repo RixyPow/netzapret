@@ -100,10 +100,19 @@ public sealed class ProgramRouteLearner
     /// <summary>
     /// Смотрит на соединение и дописывает, если оно новое для программы.
     /// </summary>
+    /// <param name="decision">
+    /// Что о соединении решили правила (у наблюдения оно уже есть). Решил
+    /// человек — своим правилом, выбором в «Маршрутах», настройкой или
+    /// нижним слоем российских зон — ничего не дописывается
+    /// (<see cref="DecidedByPerson"/>).
+    /// </param>
     /// <returns>Дописанное; <c>null</c> — ничего.</returns>
-    public ProgramLearned? Observe(ConnectionEvent connection)
+    public ProgramLearned? Observe(ConnectionEvent connection, RuleDecision? decision = null)
     {
         if (connection.ExecutableName is not { } name || connection.IsLoopback)
+            return null;
+
+        if (decision?.Rule is { } rule && DecidedByPerson(rule))
             return null;
 
         lock (_gate)
@@ -144,6 +153,28 @@ public sealed class ProgramRouteLearner
             return new ProgramLearned(known.Program, known.AddressesList, network);
         }
     }
+
+    /// <summary>
+    /// Решено ли это имя или адрес человеком, а не списком программы и не заводским правилом.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Список программы учится всему, что программа открывает, а действует
+    /// для всех программ: правило — по имени и адресу, не по процессу. Браузер
+    /// «через VPN» выучил бы так каждый сайт, на который в нём зашли, и увёл
+    /// бы его в туннель у всех (07.11, vk.com из Chrome). То, о чём человек уже
+    /// решил, учить незачем: его решение и так сильнее списка программы
+    /// (<see cref="RuleEngine.Tier"/>), а выученная строка только путала бы.
+    /// </para>
+    /// <para>
+    /// Российские зоны (нижний слой, <see cref="RuZones"/>) — тоже решение:
+    /// «напрямую, если нет других правил». Выученный в список программы
+    /// <c>*.ru</c> стал бы как раз таким другим правилом.
+    /// </para>
+    /// </remarks>
+    public static bool DecidedByPerson(RoutingRule rule) =>
+        rule.Source is RuleSource.User or RuleSource.Setting or RuleSource.Fallback
+        && !(rule.Match == MatchKind.HostList && ProgramRoutes.IsProgramList(rule.Value));
 
     /// <summary>Сеть адреса, от её начала: «45.82.160.17» → «45.82.160.0/24».</summary>
     public static string Network(IPAddress address)

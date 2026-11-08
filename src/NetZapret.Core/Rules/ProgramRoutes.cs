@@ -140,6 +140,60 @@ public static class ProgramRoutes
     public static IReadOnlyList<string> Entries(string listPath, string? root = null) =>
         OwnLists.Names(listPath, root);
 
+    /// <summary>
+    /// Убирает из доменов программ имена, о которых решил человек.
+    /// </summary>
+    /// <remarks>
+    /// Выученное до 08.11, когда учитель ещё не смотрел на чужие решения
+    /// (<see cref="Connections.ProgramRouteLearner.DecidedByPerson"/>): у человека
+    /// из чата Chrome «через VPN» успел выучить vk.com. Порядок движка его
+    /// решение теперь и так ставит выше, но строка в списке программы
+    /// осталась бы ловушкой — сними он своё правило, vk снова ушёл бы в VPN.
+    /// Только домены: адрес в списке — сеть /24, и чужое решение о соседнем
+    /// адресе ещё не значит, что эта сеть лишняя.
+    /// </remarks>
+    /// <param name="engine">Правила со всеми списками (<c>RuleSetExpander.LoadFor</c>).</param>
+    /// <returns>Убранное: программа и имя.</returns>
+    public static IReadOnlyList<(string Program, string Name)> Prune(
+        RuleEngine engine, string settingsPath, string? root = null)
+    {
+        var removed = new List<(string, string)>();
+
+        foreach (var route in AppSettings.Load(settingsPath).ProgramRoutes)
+        {
+            var list = DomainsPath(route.Program);
+
+            var decided = Entries(list, root)
+                .Where(name => AddressInput.Normalize(name) is null)
+                .Where(name => engine.Evaluate(Connections.ConnectionEvent.Describe(name)).Rule is { } rule
+                    && Connections.ProgramRouteLearner.DecidedByPerson(rule))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            if (decided.Count == 0)
+                continue;
+
+            RemoveLines(list, decided, root);
+            removed.AddRange(decided.Select(name => (route.Program, name)));
+        }
+
+        return removed;
+    }
+
+    /// <summary>Убирает строки списка, не трогая шапку и прочее.</summary>
+    private static void RemoveLines(string listPath, IReadOnlySet<string> names, string? root)
+    {
+        var full = Full(listPath, root);
+
+        if (!File.Exists(full))
+            return;
+
+        var kept = File.ReadAllLines(full)
+            .Where(line => !names.Contains(line.Trim()))
+            .ToList();
+
+        File.WriteAllText(full, string.Join("\r\n", kept) + "\r\n", new UTF8Encoding(false));
+    }
+
     /// <summary>Дописывает строку в список программы.</summary>
     internal static void Append(string listPath, string value, string? root = null)
     {
