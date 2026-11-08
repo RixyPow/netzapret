@@ -16,7 +16,8 @@ namespace NetZapret.Zapret;
 /// Секции встают последними: берут только то, что не взяла ни одна секция
 /// пресета, щит и свои рецепты. Трогают первые четыре пакета соединения
 /// (у Flowseal — --dpi-desync-cutoff=n4), дальше игра идёт нетронутой.
-/// Отбор по ipset-all — список Flowseal: Cloudflare, облака, хостинги.
+/// Отбор по ipset-all — список Flowseal: Cloudflare, облака, хостинги, —
+/// и по своему <see cref="OwnList"/>: сети игр, которых у Flowseal нет.
 /// </para>
 /// <para>
 /// <b>Сети Riot в нём есть — все.</b> Прежде здесь стояло обратное («проверено
@@ -37,6 +38,17 @@ namespace NetZapret.Zapret;
 /// </remarks>
 public static class GameFilter
 {
+    /// <summary>
+    /// Свои игровые сети — <c>config/lists/game-net.txt</c>, в сборке <c>lists/nz-game-net.txt</c>.
+    /// </summary>
+    /// <remarks>
+    /// Вторым <c>--ipset</c> к ipset-all: winws2 берёт объединение списков профиля.
+    /// Свой файл, а не правка ipset-all — тот приходит из копии Zapret GUI
+    /// и обновлением перезаписывается. Первые — сети Overwatch (обсуждение №54,
+    /// 08.11): дописанные руками в ipset-all, они выровняли человеку пинг.
+    /// </remarks>
+    public const string OwnList = "lists/nz-game-net.txt";
+
     /// <summary>Порты игр — как у Flowseal при включённом game filter.</summary>
     public const string Ports = "1024-65535";
 
@@ -97,6 +109,7 @@ public static class GameFilter
             $"--name={TcpName}",
             $"--filter-tcp={Ports}",
             "--ipset=lists/ipset-all.txt",
+            $"--ipset={OwnList}",
             "--ipset-exclude=lists/ipset-exclude.txt",
             "--out-range=-n4",
             "--payload=all",
@@ -108,6 +121,7 @@ public static class GameFilter
             $"--name={UdpName}",
             $"--filter-udp={Ports}",
             "--ipset=lists/ipset-all.txt",
+            $"--ipset={OwnList}",
             "--ipset-exclude=lists/ipset-exclude.txt",
             "--out-range=-n4",
             "--payload=all",

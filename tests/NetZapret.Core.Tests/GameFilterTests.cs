@@ -114,4 +114,34 @@ public sealed class GameFilterTests
     [InlineData("", false)]
     public void CoverageOfGamePortsIsRead(string ports, bool covers) =>
         Assert.Equal(covers, GameFilter.Covers(ports));
+
+    /// <summary>
+    /// Свои игровые сети (обсуждение №54, Overwatch) — в обеих секциях вместе с ipset-all,
+    /// и сам список лежит в config/lists: сборка кладёт его как lists/nz-game-net.txt.
+    /// </summary>
+    [Fact]
+    public void BothSectionsTakeOwnGameNetworksToo()
+    {
+        var on = WinwsCommandLine.Build(new PresetReader().Load(ShippedPresetPath()), gameFilter: true).ToList();
+
+        foreach (var name in new[] { GameFilter.TcpName, GameFilter.UdpName })
+        {
+            var section = on.Skip(on.IndexOf($"--name={name}")).TakeWhile((a, i) => i == 0 || a != "--new").ToList();
+
+            Assert.Contains("--ipset=lists/ipset-all.txt", section);
+            Assert.Contains($"--ipset={GameFilter.OwnList}", section);
+        }
+
+        var root = Repository()!;
+        var own = File.ReadAllLines(Path.Combine(root, "config", "lists", "game-net.txt"))
+            .Where(l => l.Length > 0 && !l.StartsWith('#'))
+            .ToList();
+
+        Assert.Equal("lists/nz-game-net.txt", GameFilter.OwnList);
+        Assert.Contains("85.236.96.0/23", own);
+        Assert.Contains("137.221.78.0/24", own);
+    }
+
+    private static string ShippedPresetPath() =>
+        Path.Combine(Repository()!, "presets", "Universal V12 Lite.txt");
 }
