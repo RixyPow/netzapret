@@ -275,13 +275,20 @@
                                 как «de», влипшее в название.
                             -->
                             <Grid Grid.Column="1" Width="38" Margin="0,0,14,0" VerticalAlignment="Center">
-                                <Border CornerRadius="4" ClipToBounds="True"
-                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
-                                        Visibility="{Binding FlagShown}">
-                                    <Image Source="{Binding Flag}" Width="36" Height="25"
-                                           Stretch="UniformToFill"
-                                           RenderOptions.BitmapScalingMode="HighQuality" />
-                                </Border>
+                                <!--
+                                    Флаг — фоном слоя на точку внутри ячейки, рамка — слоем поверх.
+                                    До 08.11 картинка стояла своим размером внутри рамки 1,5 и не
+                                    влезала в неё: низ и правый край флага срезались (Польша с узкой
+                                    красной полосой, Чехия с треугольником не по центру).
+                                -->
+                                <Grid Width="38" Height="27" Visibility="{Binding FlagShown}">
+                                    <Border Margin="1" CornerRadius="3" RenderOptions.BitmapScalingMode="HighQuality">
+                                        <Border.Background>
+                                            <ImageBrush ImageSource="{Binding Flag}" Stretch="UniformToFill" />
+                                        </Border.Background>
+                                    </Border>
+                                    <Border CornerRadius="4" BorderBrush="{DynamicResource Border}" BorderThickness="1.5" />
+                                </Grid>
 
                                 <Border Background="{DynamicResource Raised}"
                                         BorderBrush="{DynamicResource Border}" BorderThickness="1.5"
@@ -576,11 +583,15 @@
                                             </Grid.ColumnDefinitions>
 
                                             <Grid Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center">
-                                                <Border CornerRadius="3" ClipToBounds="True" Visibility="{Binding FlagShown}"
-                                                        BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
-                                                    <Image Source="{Binding Flag}" Width="24" Height="16" Stretch="UniformToFill"
-                                                           RenderOptions.BitmapScalingMode="HighQuality" />
-                                                </Border>
+                                                <!-- Флаг фоном, рамка поверх — как в строке списка выше. -->
+                                                <Grid Width="26" Height="18" Visibility="{Binding FlagShown}">
+                                                    <Border Margin="1" CornerRadius="2" RenderOptions.BitmapScalingMode="HighQuality">
+                                                        <Border.Background>
+                                                            <ImageBrush ImageSource="{Binding Flag}" Stretch="UniformToFill" />
+                                                        </Border.Background>
+                                                    </Border>
+                                                    <Border CornerRadius="3" BorderBrush="{DynamicResource Border}" BorderThickness="1.5" />
+                                                </Grid>
                                                 <TextBlock Text="{Binding Mark}" FontFamily="{Binding MarkFont}" FontSize="{Binding MarkSize}"
                                                            FontWeight="SemiBold" Foreground="{Binding MarkBrush}" Width="24"
                                                            TextAlignment="Center" VerticalAlignment="Center"
@@ -661,12 +672,16 @@
                                                     BorderBrush="{Binding Edge}" Background="{Binding Fill}"
                                                     ToolTip="{Binding Tip}" Tag="{Binding Tag}" Click="OnQuick">
                                                 <StackPanel HorizontalAlignment="Center">
-                                                    <Grid Height="22" HorizontalAlignment="Center">
-                                                        <Border CornerRadius="3" ClipToBounds="True" Visibility="{Binding FlagShown}"
-                                                                BorderBrush="{DynamicResource Border}" BorderThickness="1.5">
-                                                            <Image Source="{Binding Flag}" Width="32" Height="22" Stretch="UniformToFill"
-                                                                   RenderOptions.BitmapScalingMode="HighQuality" />
-                                                        </Border>
+                                                    <Grid Height="24" HorizontalAlignment="Center">
+                                                        <!-- Флаг фоном, рамка поверх — как в строке списка. -->
+                                                        <Grid Width="34" Height="24" Visibility="{Binding FlagShown}">
+                                                            <Border Margin="1" CornerRadius="2" RenderOptions.BitmapScalingMode="HighQuality">
+                                                                <Border.Background>
+                                                                    <ImageBrush ImageSource="{Binding Flag}" Stretch="UniformToFill" />
+                                                                </Border.Background>
+                                                            </Border>
+                                                            <Border CornerRadius="3" BorderBrush="{DynamicResource Border}" BorderThickness="1.5" />
+                                                        </Grid>
                                                         <TextBlock Text="{Binding Mark}" FontFamily="{Binding MarkFont}" FontSize="16"
                                                                    FontWeight="SemiBold" Foreground="{Binding Soft}"
                                                                    VerticalAlignment="Center" HorizontalAlignment="Center"
