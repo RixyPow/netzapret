@@ -6,7 +6,7 @@ using Xunit;
 
 namespace NetZapret.Core.Tests;
 
-/// <summary>Конфиг без сигнала Firefox — для тестов о прочих правилах DNS.</summary>
+/// <summary>Конфиг без сигнала Firefox и пустого ответа на HTTPS — для тестов о прочих правилах DNS.</summary>
 /// <remarks>Сигнал стоит первым всегда (<see cref="FirefoxCanaryTests"/>), и счёт правил по номерам о нём не знает.</remarks>
 internal static class WithoutCanary
 {
@@ -18,6 +18,14 @@ internal static class WithoutCanary
             && rules[0]?["action"]?.GetValue<string>() == "predefined")
         {
             rules.RemoveAt(0);
+        }
+
+        // И пустой ответ на HTTPS имён «через VPN» (AddressHintsTests) — он
+        // встаёт за очередью и о прочих правилах ничего не говорит.
+        if (root["dns"]?["rules"] is JsonArray all)
+        {
+            foreach (var hints in all.Where(r => r?["rcode"]?.GetValue<string>() == "NOERROR").ToList())
+                all.Remove(hints);
         }
 
         return root.ToJsonString();

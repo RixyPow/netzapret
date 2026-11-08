@@ -1263,7 +1263,69 @@ public sealed class SingBoxConfigCompiler
             result.Add(node);
         }
         result.Reverse();
+
+        if (WithoutAddressHints(result) is { } hints)
+            result.Add(hints);
+
         return result;
+    }
+
+    /// <summary>
+    /// Пустой ответ на записи HTTPS и SVCB имён, получивших fakeip.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// fakeip подменяет только A и AAAA, а запись HTTPS (тип 65) уходила
+    /// к настоящему резолверу — с <c>ipv4hint</c> настоящих адресов. Chromium
+    /// (Chrome, Discord, всё на Electron) спрашивает её рядом с A и соединяется
+    /// и по подсказкам: 08.11 у владельца Discord держал TCP к 162.159.135.232
+    /// (discord.com по DoH; в кэше Windows — только 198.18.0.96), а запись
+    /// HTTPS от DNS движка несла ровно пять адресов discord.com. Часть «Квесты
+    /// и API» стояла «через VPN», служебный адрес Discord отвечал FI, а покупка
+    /// за Orbs — «выставление счетов приостановлено в вашей стране»: запрос
+    /// шёл мимо туннеля с домашнего адреса. Так же — любое имя «через VPN»
+    /// на Cloudflare и других, кто публикует HTTPS.
+    /// </para>
+    /// <para>
+    /// Ответ fakeip на HTTPS не годится: опыт 08.11 отдельным движком —
+    /// запрос молчит до таймаута клиента. Пустой ответ (NOERROR без записей)
+    /// приходит сразу, и браузер берёт A. ECH у таких имён пропадает —
+    /// они и так идут через туннель, где имя провайдер не видит.
+    /// </para>
+    /// <para>
+    /// Одним правилом после всей очереди: правила «напрямую» выше без
+    /// <c>query_type</c> и забирают HTTPS своих имён первыми, а правил
+    /// с настоящим резолвером ниже последнего VPN очередь не пишет. Поля
+    /// имени в одном правиле sing-box складывает через «или».
+    /// </para>
+    /// </remarks>
+    private static JsonObject? WithoutAddressHints(IEnumerable<JsonObject> rules)
+    {
+        var fields = new[] { "domain", "domain_suffix", "domain_regex" };
+        var hints = new JsonObject();
+
+        foreach (var rule in rules.Where(r => (string?)r["server"] == "fake"))
+        {
+            foreach (var field in fields)
+            {
+                if (rule[field] is not JsonArray names)
+                    continue;
+
+                if (hints[field] is not JsonArray into)
+                    hints[field] = into = new JsonArray();
+
+                foreach (var name in names)
+                    into.Add(name!.GetValue<string>());
+            }
+        }
+
+        if (hints.Count == 0)
+            return null;
+
+        hints["query_type"] = new JsonArray { "HTTPS", "SVCB" };
+        hints["action"] = "predefined";
+        hints["rcode"] = "NOERROR";
+        return hints;
     }
 
     /// <summary>

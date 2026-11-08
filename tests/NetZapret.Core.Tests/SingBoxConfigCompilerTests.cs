@@ -649,7 +649,7 @@ public class SingBoxConfigCompilerTests
 
         Assert.DoesNotContain(
             root.GetProperty("dns").GetProperty("rules").EnumerateArray(),
-            r => r.GetProperty("server").GetString() == "bootstrap");
+            r => r.TryGetProperty("server", out var server) && server.GetString() == "bootstrap");
     }
 
     [Fact]
