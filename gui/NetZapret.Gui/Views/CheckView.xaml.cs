@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NetZapret.Core;
+using NetZapret.Core.Diagnostics;
 using NetZapret.Core.Connections;
 using NetZapret.Core.Rules;
 using NetZapret.Core.Services;
@@ -862,10 +863,16 @@ public partial class CheckView : UserControl
         {
             var picked = new List<(string, string)>();
             var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var routeZones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var (key, label) in target.Routes)
             {
-                foreach (var host in RouteKeys.Zones(key, zapretRoot)
+                var zones = RouteKeys.Zones(key, zapretRoot);
+
+                foreach (var zone in zones)
+                    routeZones.TryAdd(zone.TrimStart('*', '.'), label);
+
+                foreach (var host in zones
                     .Where(h => !NotWorthChecking.Contains(h))
                     .Take(4))
                 {
@@ -873,6 +880,8 @@ public partial class CheckView : UserControl
                         picked.Add((host, label));
                 }
             }
+
+            picked.AddRange(RecentNodes.Pick(RecentNodes.FromDnsCache(), routeZones, taken));
 
             return picked;
         }
@@ -891,6 +900,9 @@ public partial class CheckView : UserControl
         var targets = new List<(string, string)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        // Зоны частей — для узлов, на которые недавно ходили (RecentNodes, 08.11).
+        var partZones = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var service in ServiceCatalog.All)
         {
             foreach (var part in service.Parts)
@@ -903,8 +915,12 @@ public partial class CheckView : UserControl
                     continue;
 
                 int taken = 0;
+                var domains = HostListReader.Read(part.List, zapretRoot, out _);
 
-                foreach (var domain in HostListReader.Read(part.List, zapretRoot, out _))
+                foreach (var zone in domains)
+                    partZones.TryAdd(zone.TrimStart('*', '.'), $"{service.Name} · {part.Name}");
+
+                foreach (var domain in domains)
                 {
                     if (taken == perPart)
                         break;
@@ -942,6 +958,13 @@ public partial class CheckView : UserControl
             // Свои правила не прочитались — проверка каталога от этого
             // не теряет смысла.
         }
+
+        // Узлы, на которые на этой машине недавно ходили (кэш DNS Windows):
+        // списки держат зоны, а картинки и видео идут с узлов внутри них —
+        // scontent-hel3-1.cdninstagram.com, rr…googlevideo.com. 07.11 проверка
+        // Instagram говорила «десинк решает», а медиа с узла не грузились.
+        targets.AddRange(RecentNodes.Pick(
+            RecentNodes.FromDnsCache().Where(h => !NotWorthChecking.Contains(h)), partZones, seen));
 
         return targets;
     }
