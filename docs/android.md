@@ -146,7 +146,7 @@ macOS и Linux, но делается сейчас Android.
 | oob, tlsrec | да |
 | подделка QUIC (`fake` по UDP) | да — лишние датаграммы с низким TTL, без autottl |
 
-В V12 Lite (по умолчанию) рецепты — `hostfakesplit:…:tcp_ts:tcp_md5`,
+В V12 Lite (по умолчанию до 10.11, в V13 Lite так же) рецепты — `hostfakesplit:…:tcp_ts:tcp_md5`,
 `multidisorder:…:seqovl=1`, `send`+`syndata`, QUIC `fake` с `ip_autottl`.
 Ни один не переносится как есть. **Пресеты V12 на телефон без root не
 едут — нужен свой каталог рецептов в другой, бедной модели.** Секции

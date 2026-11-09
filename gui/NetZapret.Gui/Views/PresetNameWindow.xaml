@@ -16,7 +16,7 @@
 
         <TextBlock Text="Название пресета" FontWeight="SemiBold" Margin="0,18,0,6" />
 
-        <TextBox x:Name="NameBox" KeyDown="OnKey" gui:Hint.Text="например, Мой V12 Lite" />
+        <TextBox x:Name="NameBox" KeyDown="OnKey" gui:Hint.Text="например, Мой V13 Lite" />
 
         <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"
                    TextWrapping="Wrap" Foreground="{DynamicResource Danger}" Visibility="Collapsed" />

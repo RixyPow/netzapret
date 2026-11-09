@@ -195,10 +195,12 @@ public sealed class AppSettingsTests : IDisposable
 
     /// <summary>
     /// С V11 Lite на V12 Lite переводят один раз (19.10); прочие пресеты и выключенный десинк не трогают.
+    /// Следом идёт перевод 10.11, и V12 Lite едет дальше, на V13 Lite.
     /// </summary>
     [Theory]
-    [InlineData("""{ "PresetV11Lite": true, "PresetName": "Universal V11 Lite" }""", "Universal V12 Lite")]
-    [InlineData("""{ "PresetV11Lite": true, "PresetName": "universal v11 lite" }""", "Universal V12 Lite")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetName": "Universal V11 Lite" }""", "Universal V13 Lite")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetName": "universal v11 lite" }""", "Universal V13 Lite")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV13": true, "PresetName": "Universal V11 Lite" }""", "Universal V12 Lite")]
     [InlineData("""{ "PresetV11Lite": true, "PresetName": "Universal V11" }""", "Universal V11")]
     [InlineData("""{ "PresetV11Lite": true, "PresetName": "white sni (circular)" }""", "white sni (circular)")]
     [InlineData("""{ "PresetV11Lite": true, "PresetName": null }""", null)]
@@ -211,6 +213,69 @@ public sealed class AppSettingsTests : IDisposable
 
         Assert.Equal(expected, read.PresetName);
         Assert.True(read.PresetV12Lite);
+    }
+
+    /// <summary>
+    /// С V12 Lite на V13 Lite и с V12 на V13 переводят один раз (10.11); прочие пресеты и выключенный десинк не трогают.
+    /// </summary>
+    [Theory]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "Universal V12 Lite" }""", "Universal V13 Lite")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "universal v12 lite" }""", "Universal V13 Lite")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "Universal V12" }""", "Universal V13")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "Universal V11" }""", "Universal V11")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "white sni (circular)" }""", "white sni (circular)")]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": null }""", null)]
+    [InlineData("""{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetV13": true, "PresetName": "Universal V12 Lite" }""", "Universal V12 Lite")]
+    public void V12IsMovedToV13Once(string json, string? expected)
+    {
+        File.WriteAllText(_path, json);
+
+        var read = AppSettings.Load(_path);
+
+        Assert.Equal(expected, read.PresetName);
+        Assert.True(read.PresetV13);
+    }
+
+    /// <summary>
+    /// Подделки секций V12 и V12 Lite копируются на V13 и V13 Lite, прежние остаются,
+    /// уже выбранные у V13 не перезаписываются, чужие пресеты не трогаются.
+    /// </summary>
+    [Fact]
+    public void FakeSwapsFollowTheMoveToV13()
+    {
+        File.WriteAllText(_path, """
+            {
+              "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "Universal V12 Lite",
+              "FakeSwaps": [
+                { "Preset": "Universal V12 Lite", "Section": "discord.media (voice RTC)", "Slot": 0, "Blob": "tls_clienthello_5ka_ru.bin" },
+                { "Preset": "Universal V12", "Section": "Голосовые звонки/чаты", "Slot": 1, "Blob": "stun2.bin" },
+                { "Preset": "Universal V12", "Section": "Голосовые звонки/чаты", "Slot": 0, "Blob": "quic_initial_5ka_ru.bin" },
+                { "Preset": "Universal V13", "Section": "Голосовые звонки/чаты", "Slot": 0, "Blob": "ACTIVE_DISCORD_UDP.bin" },
+                { "Preset": "Universal V11 Lite", "Section": "discord.com", "Slot": 0, "Blob": "stun2.bin" }
+              ]
+            }
+            """);
+
+        var swaps = AppSettings.Load(_path).FakeSwaps;
+
+        Assert.Equal(7, swaps.Count);
+        Assert.Contains(new FakeSwap("Universal V12 Lite", "discord.media (voice RTC)", 0, "tls_clienthello_5ka_ru.bin"), swaps);
+        Assert.Contains(new FakeSwap("Universal V13 Lite", "discord.media (voice RTC)", 0, "tls_clienthello_5ka_ru.bin"), swaps);
+        Assert.Contains(new FakeSwap("Universal V13", "Голосовые звонки/чаты", 1, "stun2.bin"), swaps);
+        Assert.Contains(new FakeSwap("Universal V13", "Голосовые звонки/чаты", 0, "ACTIVE_DISCORD_UDP.bin"), swaps);
+        Assert.DoesNotContain(new FakeSwap("Universal V13", "Голосовые звонки/чаты", 0, "quic_initial_5ka_ru.bin"), swaps);
+        Assert.Single(swaps, s => s.Section == "discord.com");
+    }
+
+    /// <summary>Вернувшийся на V12 Lite после перевода на нём и остаётся.</summary>
+    [Fact]
+    public void V12LiteChosenAfterTheMoveStays()
+    {
+        File.WriteAllText(_path, """{ "PresetV11Lite": true, "PresetV12Lite": true, "PresetName": "Universal V12 Lite" }""");
+
+        (AppSettings.Load(_path) with { PresetName = "Universal V12 Lite" }).Save(_path);
+
+        Assert.Equal("Universal V12 Lite", AppSettings.Load(_path).PresetName);
     }
 
     /// <summary>Вернувшийся на V11 Lite после перевода на нём и остаётся.</summary>

@@ -50,7 +50,7 @@ public static class PresetNewness
             .ThenByDescending(item => string.Equals(name(item), Core.AppSettings.DefaultPresetName, StringComparison.OrdinalIgnoreCase))
 
             // Затем Lite над полным: основным в паре владелец держит Lite
-            // (V11 — 12.10, V12 — 19.10), и с умолчанием на V12 Lite пара V11
+            // (V11 — 12.10, V12 — 19.10, V13 — 10.11), и с умолчанием на V13 Lite пары V11 и V12
             // иначе перевернулась бы по алфавиту.
             .ThenByDescending(item => name(item).EndsWith(" Lite", StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(item => Version.TryParse(builtinVersion(item), out var version) ? version : null)

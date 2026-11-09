@@ -132,7 +132,7 @@ public sealed record AppSettings
     /// <summary>Название пресета Zapret; <c>null</c> — не запускать десинк.</summary>
     /// <remarks>
     /// <para>
-    /// По умолчанию — Universal V12 Lite: он идёт в сборке и покрывает больше всего
+    /// По умолчанию — Universal V13 Lite: он идёт в сборке и покрывает больше всего
     /// случаев. Пустое значение означало бы, что при первом запуске десинк
     /// молча не работает, а человек об этом узнаёт по неоткрывающимся сайтам.
     /// Если такого пресета нет, обзор состояния скажет об этом прямо.
@@ -170,16 +170,23 @@ public sealed record AppSettings
     /// открываются и так, с секцией — тоже (12 из 12).
     /// </para>
     /// <para>
+    /// Был V12 Lite, стал V13 Lite (владелец, 10.11): тот же пресет, у X —
+    /// наложение приветствием 4pda и по адресам, и новой секцией по именам
+    /// (x.com и t.co переехали на Cloudflare вне ipset-twitter). Замер 10.11
+    /// тем рецептом через живой десинк — 17 запросов к X из 18.
+    /// </para>
+    /// <para>
     /// Смена касается только новых установок. Настройки переживают обновление
     /// намеренно — в них работа человека, — поэтому у тех, кто уже запускался,
     /// останется прежний выбор, и меняется он в меню. Исключения — разовые
     /// переводы по слову владельца: всех на V11 Lite (<see cref="PresetOnce"/>,
-    /// 03.10) и с V11 Lite на V12 Lite (<see cref="LiteToV12Once"/>, 19.10).
+    /// 03.10), с V11 Lite на V12 Lite (<see cref="LiteToV12Once"/>, 19.10)
+    /// и с V12 на V13 (<see cref="V12ToV13Once"/>, 10.11).
     /// </para>
     /// </remarks>
     public string? PresetName { get; init; } = DefaultPresetName;
 
-    public const string DefaultPresetName = "Universal V12 Lite";
+    public const string DefaultPresetName = "Universal V13 Lite";
 
     /// <summary>Тег сервера либо <c>null</c> для автоподбора по задержке.</summary>
     public string? PreferredServer { get; init; }
@@ -1203,6 +1210,68 @@ public sealed record AppSettings
             };
 
     /// <summary>
+    /// Переведён ли пресет с V12 на V13 разовым переводом (10.11); <c>null</c> — настройки старше.
+    /// </summary>
+    public bool? PresetV13 { get; init; }
+
+    /// <summary>Пары разового перевода 10.11: с чего — на что.</summary>
+    private static readonly (string From, string To)[] V13Moves =
+    [
+        ("Universal V12 Lite", "Universal V13 Lite"),
+        ("Universal V12", "Universal V13"),
+    ];
+
+    /// <summary>
+    /// Разовый перевод с Universal V12 Lite на V13 Lite и с V12 на V13 (владелец, 10.11).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// V13 и V13 Lite — те же V12 и V12 Lite, у X — наложение приветствием
+    /// 4pda по адресам и по именам (замер — у <see cref="PresetName"/>). Пара
+    /// сохраняет выбор ширины перехвата UDP: сидевший на полном V12 ради игр
+    /// встаёт на полный V13, а не на Lite.
+    /// </para>
+    /// <para>
+    /// Подделки, выбранные у секций V12 и V12 Lite (<see cref="FakeSwaps"/>),
+    /// копируются на V13 и V13 Lite: секции у пар те же, с теми же местами,
+    /// а без копии перевод молча вернул бы человеку подделки пресета. Прежние
+    /// остаются — вернувшийся на V12 найдёт свои. Прочие пресеты и выключенный
+    /// десинк не трогаются. Один раз: вернувшийся на V12 на нём и остаётся.
+    /// </para>
+    /// </remarks>
+    private static AppSettings V12ToV13Once(AppSettings read)
+    {
+        if (read.PresetV13 == true)
+            return read;
+
+        var name = read.PresetName;
+
+        foreach (var (from, to) in V13Moves)
+        {
+            if (string.Equals(read.PresetName, from, StringComparison.OrdinalIgnoreCase))
+                name = to;
+        }
+
+        var swaps = read.FakeSwaps.ToList();
+
+        foreach (var (from, to) in V13Moves)
+        {
+            foreach (var swap in read.FakeSwaps.Where(s => string.Equals(s.Preset, from, StringComparison.OrdinalIgnoreCase)))
+            {
+                bool taken = swaps.Any(s =>
+                    string.Equals(s.Preset, to, StringComparison.OrdinalIgnoreCase)
+                    && s.Section == swap.Section
+                    && s.Slot == swap.Slot);
+
+                if (!taken)
+                    swaps.Add(swap with { Preset = to });
+            }
+        }
+
+        return read with { PresetName = name, FakeSwaps = swaps, PresetV13 = true };
+    }
+
+    /// <summary>
     /// «Selective Routing» для настроек старше 21.10: включён, если пулы уже заведены.
     /// </summary>
     /// <remarks>
@@ -1265,7 +1334,7 @@ public sealed record AppSettings
     /// и следующее чтение перевело бы их ещё раз: включённый человеком game
     /// filter молча выключился бы.
     /// </remarks>
-    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true, PresetV12Lite = true };
+    public static AppSettings Fresh => new() { WarpIsPath = true, GameFilterReset = true, PresetV11Lite = true, PresetV12Lite = true, PresetV13 = true };
 
     /// <summary>Есть ли выход кроме WARP: подписка или отдельные ключи.</summary>
     [JsonIgnore]
@@ -1326,11 +1395,11 @@ public sealed record AppSettings
             // Mullvad тоже: его убрали из списка 10.10, и выбравший его
             // остался бы с DoH на адрес без имени для сертификата — туннель
             // без имён.
-            return WithoutServerDescriptions(SelectiveRoutingOnce(HomeWideOnce(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
+            return WithoutServerDescriptions(SelectiveRoutingOnce(HomeWideOnce(V12ToV13Once(LiteToV12Once(PresetOnce(GameFilterOnce(WarpAsPath(read with
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
-            })))))));
+            }))))))));
         }
         catch (Exception)
         {

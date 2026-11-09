@@ -69,6 +69,6 @@ public sealed class PresetFilesTests : IDisposable
 
         Assert.Equal("Новый", after.PresetName);
         Assert.Equal(["Новый", "Другой"], after.FakeSwaps.Select(s => s.Preset));
-        Assert.Equal("Universal V12 Lite", PresetFiles.Renamed(new AppSettings(), "Мой", "Новый").PresetName);
+        Assert.Equal(AppSettings.DefaultPresetName, PresetFiles.Renamed(new AppSettings(), "Мой", "Новый").PresetName);
     }
 }
