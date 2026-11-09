@@ -1347,7 +1347,7 @@ public partial class VpnView : UserControl
 
             if (i >= _items.Count)
                 _items.Add(items[i]);
-            else if (!ReferenceEquals(_items[i], items[i]))
+            else if (!ReferenceEquals(_items[i], items[i]) && !Same(_items[i], items[i]))
                 _items[i] = items[i];
             else if (items[i] is SubRow folder)
                 folder.Refresh();
@@ -1358,6 +1358,22 @@ public partial class VpnView : UserControl
         while (_items.Count > items.Count)
             _items.RemoveAt(_items.Count - 1);
     }
+
+    /// <summary>
+    /// Строка сервера, в которой с прошлой пересборки не изменилось ничего.
+    /// </summary>
+    /// <remarks>
+    /// Пересборка (<see cref="Reshow"/>) делает все строки серверов заново, и по
+    /// ссылке каждая — новая: список собирал видимые карточки с нуля, хотя менялась
+    /// обычно одна (метка «сейчас», задержка) или ни одной. Замер 10.11 на настройках
+    /// владельца: при заходе в раздел пересборок пять подряд (книга, выход движка,
+    /// подписки, пулы, замеры), и в двух последних из 56 строк менялось 7 и 0.
+    /// Запись сравнивается по значению: кисти и флаги у равных строк — те же
+    /// объекты из ресурсов и кеша. В списке остаётся прежняя запись — содержимое
+    /// у неё то же.
+    /// </remarks>
+    private static bool Same(object shown, object next) =>
+        shown is ServerRow was && next is ServerRow now && was == now;
 
     /// <summary>Содержимое списка вкладки — постоянное, меняется по месту (ShowPage).</summary>
     private readonly System.Collections.ObjectModel.ObservableCollection<object> _items = [];
@@ -3057,7 +3073,13 @@ public partial class VpnView : UserControl
             });
         }
 
-        QuickServers.ItemsSource = tiles;
+        // Только когда лента изменилась: пересборка идёт и раз в несколько секунд,
+        // и пять раз подряд при заходе, а новый список — это все плитки заново,
+        // до двадцати пяти штук. Замер 10.11: перекладки окна при заходе —
+        // 144–163 мс вместо 204–219. Плитка — запись, сравнивается по значению;
+        // кисти, шрифты и флаги у равных плиток — те же объекты.
+        if (QuickServers.ItemsSource is not List<QuickTile> shown || !shown.SequenceEqual(tiles))
+            QuickServers.ItemsSource = tiles;
 
         Brush Edge(bool on) => (Brush)FindResource(on ? "Accent" : "Border");
         Brush Fill(bool on) => (Brush)FindResource(on ? "AccentFill" : "Surface");
