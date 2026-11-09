@@ -111,6 +111,15 @@ wscale больше 14, остальное — `zapret-lib.lua` и blockcheck2, 
 версии winws2 обрезает своим буфером на «lua_com» — имя выпуска длинное;
 наш код её не разбирает, `lua_compat_ver` в правке не менялся.
 
+С 10.11 — `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-6-gd5f65b7-native`
+(SHA-256 `05cd64e6…ed9aabc5`, сверен с описанием выпуска 09.11), в
+`tools\zapret2-native-v1.0.7-34-gfd8ae05-native-3-g0de505f-native-6-gd5f65b7\`;
+`-2-gfe91a63` (в выпуск не попал) — в своей папке как `winws2-native.exe.bak`.
+В движке одна правка bol-van (`3752f92`, исправления): разбор цепочки
+заголовков у непервых фрагментов IPv6 и отладочная строка поиска профиля;
+остальное — lua форка. Сверка 10.11 на всех 15 пресетах: вывод
+`--dry-run --debug=1` и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
+
 `winws2.exe` под `tools\` должен быть один: сборка берёт последний найденный.
 Прежний, `binaries\windows-x86_64\winws2.exe` из выпуска
 [bol-van/zapret2](https://github.com/bol-van/zapret2/releases), лежит
