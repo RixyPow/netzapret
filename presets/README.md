@@ -14,7 +14,9 @@ Flowseal (у него — для list-general и ipset-all). Секция и с�
 `ipset-hetzner.txt` — из пресета Zapret GUI «general 1.10.3».
 
 Universal V13 (с 10.11) — V12 Lite, у секции «Twitter/X» вместо multidisorder
-тот же рецепт наложения приветствием 4pda.to. По умолчанию остаётся V12 Lite.
+тот же рецепт наложения приветствием 4pda.to, и им же — новая секция
+«Twitter/X (по имени)» перед ней: x.com и t.co переехали на Cloudflare, вне
+`ipset-twitter`. По умолчанию остаётся V12 Lite.
 
 Старше V8 «Universal» здесь нет: 08.10 по слову владельца убраны V5, V5
 (game filter), V5 my, V6, V6 voicefix, V7 и V8 diag. Обновление новые файлы

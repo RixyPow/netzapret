@@ -1,7 +1,7 @@
 # Preset: Universal V13
 # BuiltinVersion: 2.26
 # IconColor: #d29922
-# Description: Universal V12 Lite, у секции Twitter/X — наложение приветствием 4pda.to вместо multidisorder. Всё прочее — как в V12 Lite.
+# Description: Universal V12 Lite, у Twitter/X — наложение приветствием 4pda.to вместо multidisorder, по адресам X и по именам (x.com и t.co переехали на Cloudflare, вне списка адресов). Всё прочее — как в V12 Lite.
 
 --lua-init=@lua/zapret-lib.lua
 --lua-init=@lua/zapret-antidpi.lua
@@ -402,14 +402,30 @@
 
 --new
 
+# V13 (10.11): секция по именам X тем же рецептом, что у «Twitter/X» ниже.
+# x.com и t.co переехали на Cloudflare 162.159.140.x, которого в
+# ipset-twitter нет: их приветствие доставалось «Russia blacklist TCP 443»
+# (оба имени лежат в реестре), и рецепт Twitter до них не доходил. SYN
+# к этим адресам по-прежнему берёт «discord.com (IP fallback)» — имени
+# в SYN нет. Выше этой секции имён X нет ни в одном списке (сверка 10.11
+# по спискам сборки).
+--name=Twitter/X (по имени)
+--filter-tcp=80,443
+--hostlist=lists/nz-twitter.txt
+--out-range=-d8
+--lua-desync=multisplit:pos=1:seqovl=568:seqovl_pattern=tls_4pda
+
+--new
+
 # V13 (10.11): наложение приветствием 4pda (рецепт каталога «seqovl-4pda»,
 # как у «Hetzner TCP») вместо multidisorder. Этим рецептом через живой
 # десинк (своё правило на имена X) прошло 17 запросов из 18: t.co, api.x.com
 # (172.66.0.227), abs, pbs и video.twimg.com (Fastly 199.232.172.x,
 # 104.18.37.x) — 3 из 3, x.com (162.159.140.229) — 2 из 3, раз нет ответа
 # за 10 с. С multidisorder на тех же адресах не сравнивалось.
-# x.com теперь на Cloudflare 162.159.140.x, а этого адреса в ipset-twitter
-# нет — без своего правила его имя берёт «Russia blacklist TCP 443» ниже.
+# Секция по адресам берёт и чужие сайты на них: fandom.com на 172.66.2.166
+# (сверка 10.11; так же 14.10) получает этот рецепт, его секция «Fandom»
+# стоит ниже.
 --name=Twitter/X
 --filter-tcp=80,443
 --ipset=lists/ipset-twitter.txt
