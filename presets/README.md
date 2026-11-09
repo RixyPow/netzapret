@@ -5,7 +5,7 @@
 
 Пресеты и их формат — из [Zapret GUI](https://wiki.zapret.moe/), автор —
 loop-uh, лицензия MIT. Часть лежит здесь без изменений, часть изменена,
-Universal V8–V13, V11 Lite и V12 Lite собраны уже в этом проекте из тех же секций. Разбор —
+Universal V8–V13, V11 Lite, V12 Lite и V13 Lite собраны уже в этом проекте из тех же секций. Разбор —
 в [docs/THIRD-PARTY.md](../docs/THIRD-PARTY.md).
 
 Universal V12 и V12 Lite (с 19.10) — V11 и V11 Lite с секцией «Hetzner TCP»
@@ -13,10 +13,11 @@ Universal V12 и V12 Lite (с 19.10) — V11 и V11 Lite с секцией «Het
 Flowseal (у него — для list-general и ipset-all). Секция и список
 `ipset-hetzner.txt` — из пресета Zapret GUI «general 1.10.3».
 
-Universal V13 (с 10.11) — V12 Lite, у секции «Twitter/X» вместо multidisorder
-тот же рецепт наложения приветствием 4pda.to, и им же — новая секция
-«Twitter/X (по имени)» перед ней: x.com и t.co переехали на Cloudflare, вне
-`ipset-twitter`. По умолчанию остаётся V12 Lite.
+Universal V13 и V13 Lite (с 10.11) — V12 и V12 Lite, у секции «Twitter/X»
+вместо multidisorder тот же рецепт наложения приветствием 4pda.to, и им же —
+новая секция «Twitter/X (по имени)» перед ней: x.com и t.co переехали на
+Cloudflare, вне `ipset-twitter`. V13 Lite — по умолчанию; с V12 Lite на V13 Lite
+и с V12 на V13 настройки переводятся один раз, с выбранными подделками секций.
 
 Старше V8 «Universal» здесь нет: 08.10 по слову владельца убраны V5, V5
 (game filter), V5 my, V6, V6 voicefix, V7 и V8 diag. Обновление новые файлы

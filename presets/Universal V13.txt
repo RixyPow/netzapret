@@ -1,7 +1,7 @@
 # Preset: Universal V13
 # BuiltinVersion: 2.26
-# IconColor: #d29922
-# Description: Universal V12 Lite, у Twitter/X — наложение приветствием 4pda.to вместо multidisorder, по адресам X и по именам (x.com и t.co переехали на Cloudflare, вне списка адресов). Всё прочее — как в V12 Lite.
+# IconColor: #39c5cf
+# Description: Universal V12, у Twitter/X — наложение приветствием 4pda.to вместо multidisorder, по адресам X и по именам. То же, что V13 Lite, но перехват UDP — от V10: весь исходящий UDP на 443-65535 идёт в winws2. Для игр, которым Lite не помогает; цена — задержка каждого нового UDP-потока.
 
 --lua-init=@lua/zapret-lib.lua
 --lua-init=@lua/zapret-antidpi.lua
@@ -17,15 +17,14 @@
 --ipcache-hostname=0
 
 --wf-tcp-out=80,443-65535
-# V11 Lite (03.10): UDP — только то, что секциям пресета на деле нужно.
-# V10 перехватывал весь исходящий UDP на 443-65535, и каждый новый поток
-# платил winws2 28-38 мс процессора в одном потоке (замер 03.10: первый
-# пакет UDP 39,7 мс против 4,7 в обход), а пачка новых потоков стопорила
-# соседние — игровой UDP в том числе, при любом маршруте. Вики Zapret GUI
-# числит такой перехват «агрессивным» и предупреждает, что он бьёт по
-# производительности и сетевым играм. Game filter, если включён, сам
-# расширит перехват до 1024-65535.
---wf-udp-out=443,6568,19294-19344,50000-51000
+# V11 (12.10): перехват UDP — как у V10, весь 443-65535 (владелец: «V11
+# с базой V10, но с новыми секциями из V11 Lite»). Ради игр, которые на V10
+# работали, а на V11 Lite нет: Wardogs у пользователя 11.10 — на V10 с game
+# filter заходит на серверы, на V11 Lite с ним же не грузит в игру. Цена —
+# та, ради которой делался Lite: каждый новый UDP-поток платит winws2
+# 28-38 мс процессора на сборке v1.0.5.2 с Cygwin (замер 03.10; родной
+# winws2 с 07.10 дешевле втрое по TCP, по UDP не мерился).
+--wf-udp-out=443-65535
 
 --wf-raw-part=@windivert.filter/windivert_part.discord_media.txt
 --wf-raw-part=@windivert.filter/windivert_part.stun.txt
@@ -366,10 +365,10 @@
 #
 # Если пойдут Decryption Failures - откатывать сюда, к fake и -n8.
 --name=Discord UDP (обычно не нужно)
-# V11 Lite: только порты голоса. В V10 тут был весь 443-65535, и при game
-# filter игровой UDP к сетям Google и Cloudflare из ipset-discord попадал
-# под udplen раньше секций игр.
---filter-udp=443,19294-19344,50000-50100
+# V11: как в V10, весь 443-65535. В V11 Lite — только порты голоса: при game
+# filter игровой UDP к сетям Google и Cloudflare из ipset-discord попадает
+# сюда под udplen раньше секций игр.
+--filter-udp=443-65535
 --ipset=lists/ipset-discord.txt
 --out-range=a
 --payload=all
@@ -541,8 +540,8 @@
 --new
 
 --name=Amazon UDP
-# V11 Lite: только QUIC. Прочий UDP к AWS — игры — сюда больше не идёт.
---filter-udp=443
+# V11: как в V10, весь 443-65535 — и игровой UDP к AWS. В V11 Lite — только QUIC.
+--filter-udp=443-65535
 --ipset=lists/ipset-amazon.txt
 --out-range=-n8
 --payload=all
