@@ -33,7 +33,8 @@ namespace NetZapret.Gui;
 /// </para>
 /// <para>
 /// И прежний такт шёл, пока окно спрятано в трей (до закрытия через минуту):
-/// 11–22 % ядра на невидимую волну. Теперь при спрятанном окне её нет.
+/// 11–22 % ядра на невидимую волну. Теперь при спрятанном окне её нет,
+/// а с 09.11 — и при свёрнутом (<see cref="OnScreen"/>).
 /// </para>
 /// <para>
 /// Кадр за это подешевел: форма горба считается один раз на кадр, а не для
@@ -103,12 +104,18 @@ public sealed class TunnelWave : FrameworkElement
         IsHitTestVisible = false;
         SnapsToDevicePixels = false;
 
-        Loaded += (_, _) => Move(_want && IsVisible);
-        Unloaded += (_, _) => Move(false, keepWish: true);
-
-        // Окно спрятано в трей — кадры отрисовки ему ни к чему.
-        IsVisibleChanged += (_, _) => Move(_want && IsVisible && IsLoaded, keepWish: true);
+        // Окно спрятано в трей или свёрнуто — кадры отрисовки ему ни к чему.
+        // До 09.11 смотрели только IsVisible, а у свёрнутого окна он true:
+        // волна шла полным ходом (OnScreen).
+        OnScreen.Watch(this, seen =>
+        {
+            _seen = seen;
+            Move(_want && seen, keepWish: true);
+        });
     }
+
+    /// <summary>Элемент на экране: в окне, окно показано и не свёрнуто (<see cref="OnScreen"/>).</summary>
+    private bool _seen;
 
     /// <summary>Сила трафика 0–1: частота, рост и скорость волн.</summary>
     public double Traffic
@@ -159,7 +166,7 @@ public sealed class TunnelWave : FrameworkElement
 
         bool move = !idle && Motion.Enabled;
         _want = move;
-        Move(move && IsLoaded && IsVisible);
+        Move(move && _seen);
 
         if (!_moving)
         {

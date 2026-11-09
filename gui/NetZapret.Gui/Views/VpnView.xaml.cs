@@ -376,15 +376,25 @@ public partial class VpnView : UserControl
             // только при перезаходе на вкладку.
             var load = LoadAsync();
             _ = ShowExitAsync();
-            _exitTimer.Start();
             await load;
         };
+
+        // Опрос движка и проба выхода — только пока вкладка на экране: в свёрнутом
+        // окне они шли как в открытом, и раз в 15 с через сервер уходил запрос
+        // ради карточки, которую никто не видит (09.11). Вернулись — первый тик
+        // через три секунды, как и при заходе.
+        OnScreen.Watch(this, seen =>
+        {
+            if (seen)
+                _exitTimer.Start();
+            else
+                _exitTimer.Stop();
+        });
 
         Unloaded += (_, _) =>
         {
             _work?.Cancel();
             _reading?.Cancel();
-            _exitTimer.Stop();
         };
 
         _exitTimer.Tick += async (_, _) =>

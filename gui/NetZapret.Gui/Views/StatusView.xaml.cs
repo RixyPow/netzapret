@@ -272,10 +272,28 @@ public partial class StatusView : UserControl
         // чтобы нажатие «Запустить» отозвалось раньше, чем человек усомнится.
         _refresh.Tick += (_, _) => Update();
 
+        // Опрос — только пока раздел на экране. В свёрнутом окне он шёл как
+        // в открытом: каждые две секунды чтение настроек и состояния, замер
+        // процессов движков и два запроса к Clash API — ради строк, которых
+        // никто не видит (09.11). Вернулись — читаем сразу, не дожидаясь тика.
+        OnScreen.Watch(this, seen =>
+        {
+            if (!seen)
+            {
+                _refresh.Stop();
+                return;
+            }
+
+            // Через очередь окна, а не прямо отсюда: Update ждёт чтение в пуле
+            // и возвращается в поток окна по его контексту, а смена видимости
+            // приходит и вне операции очереди (Show из кода) — тогда контекста
+            // нет, и продолжение ушло бы в пул, к элементам окна из чужого потока.
+            Dispatcher.BeginInvoke(new Action(Update));
+            _refresh.Start();
+        });
+
         Loaded += (_, _) =>
         {
-            Update();
-
             // Не по времени, в отличие от прочего: режим меняется только
             // отсюда, а автозапуск спрашивается у планировщика запуском
             // schtasks — раз в две секунды это был бы процесс на ровном месте.
@@ -291,15 +309,9 @@ public partial class StatusView : UserControl
             // при каждом возврате.
             UpdateNotice.Changed += OnUpdateChanged;
             ShowUpdate();
-
-            _refresh.Start();
         };
 
-        Unloaded += (_, _) =>
-        {
-            UpdateNotice.Changed -= OnUpdateChanged;
-            _refresh.Stop();
-        };
+        Unloaded += (_, _) => UpdateNotice.Changed -= OnUpdateChanged;
     }
 
     private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
