@@ -141,21 +141,41 @@ public static class Motion
         // часы начинали с времени до паузы раздела, и уже второй кадр
         // выходил на 0,83 (замер 28.09) — проявление снова выглядело
         // появлением. Здесь первый показанный кадр — ноль, дальше по
-        // реальному времени, с мягким замедлением к концу.
-        var clock = new Stopwatch();
+        // времени кадров, с мягким замедлением к концу.
+        //
+        // Время проявления — сумма шагов кадров, и шаг не больше MaxStep: кадр,
+        // на котором раздел был занят, проявление не перепрыгивает, а пережидает.
+        // По часам «VPN» проявлялся рывком (замер 09.11, настройки владельца):
+        // подписки ложатся в окно уже после Loaded, кадр посреди проявления шёл
+        // 40–46 мс, и прозрачность прыгала на 0,26–0,34 за кадр; первый заход
+        // (раздел строится ~0,3 с) проявления не видел вовсе — второй кадр
+        // приходил, когда 240 мс уже вышли.
         const double Length = 240;
+        const double MaxStep = 17;
+
+        var clock = new Stopwatch();
+        TimeSpan last = default;
+        double run = 0;
 
         void Frame(object? sender, EventArgs e)
         {
+            // Время кадра, а не часы: кадры отрисовки приходят и по два на одно
+            // время (после перекладки) — такой шага не даёт.
+            var at = (e as RenderingEventArgs)?.RenderingTime ?? clock.Elapsed;
+
             if (!clock.IsRunning)
             {
                 page.BeginAnimation(UIElement.OpacityProperty, null);
                 page.Opacity = 0;
                 clock.Start();
+                last = at;
                 return;
             }
 
-            double x = Math.Min(1, clock.Elapsed.TotalMilliseconds / Length);
+            run += Math.Clamp((at - last).TotalMilliseconds, 0, MaxStep);
+            last = at;
+
+            double x = Math.Min(1, run / Length);
 
             if (x >= 1)
             {
