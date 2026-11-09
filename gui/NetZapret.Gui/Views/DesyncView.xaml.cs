@@ -1052,6 +1052,41 @@ public partial class DesyncView : UserControl
     }
 
     /// <summary>
+    /// Открывает ipset-all — список адресов, по которому отбирает game filter.
+    /// </summary>
+    /// <remarks>
+    /// Путь — тот, что у запуска: <see cref="GameFilter"/> ссылается на
+    /// <c>lists/ipset-all.txt</c> от корня Zapret, а корень ищет
+    /// <see cref="ZapretPaths.Discover"/>. Файл — из копии Zapret GUI и при
+    /// обновлении программы приходит заново; свои сети, которые переживают
+    /// обновление, — в <see cref="GameFilter.OwnList"/>.
+    /// </remarks>
+    private void OnOpenGameList(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var root = ZapretPaths.Discover()?.Root;
+            var path = root is null ? null : Path.Combine(root, "lists", "ipset-all.txt");
+
+            if (path is null || !File.Exists(path))
+            {
+                Status.Text = "Файл ipset-all.txt не найден — движок десинка не установлен.";
+                return;
+            }
+
+            Open(path);
+
+            Status.Text = "Открыт ipset-all.txt. Правка подействует после перезапуска движков.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось открыть ipset-all.txt: " + ex.GetBaseException().Message;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
     /// Отдаёт файл системе, а при отказе — «Блокноту».
     /// </summary>
     /// <remarks>

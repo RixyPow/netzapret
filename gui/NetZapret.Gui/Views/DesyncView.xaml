@@ -281,6 +281,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0"
@@ -297,7 +298,16 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <ToggleButton Grid.Column="2" x:Name="GameFilterSwitch" Style="{StaticResource Switch}"
+                                    <!--
+                                        Список адресов game filter — ipset-all (10.11): поправить
+                                        его без поиска по папкам движка. Кнопка внутри плитки-
+                                        кнопки: свой щелчок она забирает, выключатель не трогает.
+                                    -->
+                                    <Button Grid.Column="2" Style="{StaticResource IconGhost}" Content="&#xE8E5;"
+                                            Margin="0,0,10,0" VerticalAlignment="Center" Click="OnOpenGameList"
+                                            ToolTip="Открыть ipset-all.txt — адреса game filter. Правка действует после перезапуска движков, обновление программы её перезапишет." />
+
+                                    <ToggleButton Grid.Column="3" x:Name="GameFilterSwitch" Style="{StaticResource Switch}"
                                                   IsHitTestVisible="False" Focusable="False" VerticalAlignment="Center" />
                                 </Grid>
                             </Button>
