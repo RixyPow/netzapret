@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace NetZapret.Supervisor;
 
@@ -20,9 +21,9 @@ public sealed record EngineUse(string Name, double? Cores, long Memory);
 /// </para>
 /// <para>
 /// Процессы — по номерам из состояния надзора, а не по именам: winws2 и sing-box
-/// бывают и чужие (Zapret GUI, Happ), и их нагрузка не наша. Процессор
-/// читается без прав администратора. Шаг <see cref="Process.TotalProcessorTime"/>
-/// — 15,6 мс: при замере раз в две секунды это 0,8 % ядра.
+/// бывают и чужие (Zapret GUI, Happ), и их нагрузка не наша. Процессор и память
+/// читаются без прав администратора (<see cref="Read"/>). Шаг процессорного
+/// времени — 15,6 мс: при замере раз в две секунды это 0,8 % ядра.
 /// </para>
 /// </remarks>
 public sealed class EngineLoad
@@ -40,25 +41,19 @@ public sealed class EngineLoad
             if (service.ProcessId is not { } pid)
                 continue;
 
-            try
-            {
-                using var process = Process.GetProcessById(pid);
+            // Процесс вышел между чтением состояния и замером — его просто нет.
+            if (Read(pid) is not { } read)
+                continue;
 
-                var cpu = process.TotalProcessorTime;
-                long now = Stopwatch.GetTimestamp();
+            long now = Stopwatch.GetTimestamp();
 
-                double? cores = _seen.TryGetValue(pid, out var was)
-                    ? Share(cpu - was.Cpu, Stopwatch.GetElapsedTime(was.At, now))
-                    : null;
+            double? cores = _seen.TryGetValue(pid, out var was)
+                ? Share(read.Cpu - was.Cpu, Stopwatch.GetElapsedTime(was.At, now))
+                : null;
 
-                _seen[pid] = (cpu, now);
-                alive.Add(pid);
-                result.Add(new EngineUse(service.Name, cores, process.WorkingSet64));
-            }
-            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-            {
-                // Процесс вышел между чтением состояния и замером — его просто нет.
-            }
+            _seen[pid] = (read.Cpu, now);
+            alive.Add(pid);
+            result.Add(new EngineUse(service.Name, cores, read.Memory));
         }
 
         foreach (var gone in _seen.Keys.Where(pid => !alive.Contains(pid)).ToList())
@@ -66,6 +61,82 @@ public sealed class EngineLoad
 
         return result;
     }
+
+    /// <summary>
+    /// Процессорное время и рабочий набор процесса; <c>null</c> — процесса нет
+    /// или он не даёт себя спросить.
+    /// </summary>
+    /// <remarks>
+    /// Прямо у системы, по дескриптору процесса, а не через <see cref="Process"/>:
+    /// его <c>WorkingSet64</c> ради одного числа снимает все процессы и потоки
+    /// системы. Замер 09.11 на машине владельца: 13 мс и 12,5 мс процессора
+    /// на замер двух движков, раз в две секунды, пока открыта «Главная», —
+    /// две трети всего её опроса (19 мс на тик). Право
+    /// <c>PROCESS_QUERY_LIMITED_INFORMATION</c> даётся и без прав администратора.
+    /// </remarks>
+    private static (TimeSpan Cpu, long Memory)? Read(int pid)
+    {
+        nint handle = OpenProcess(QueryLimitedInformation, false, pid);
+
+        if (handle == 0)
+            return null;
+
+        try
+        {
+            // Завершившийся процесс, чей дескриптор ещё кто-то держит, открывается
+            // и отдаёт времена — но это уже не работающий движок.
+            if (!GetExitCodeProcess(handle, out int exit) || exit != StillActive)
+                return null;
+
+            if (!GetProcessTimes(handle, out _, out _, out long kernel, out long user))
+                return null;
+
+            var counters = new MemoryCounters { Size = (uint)Marshal.SizeOf<MemoryCounters>() };
+
+            if (!K32GetProcessMemoryInfo(handle, ref counters, counters.Size))
+                return null;
+
+            return (TimeSpan.FromTicks(kernel + user), (long)counters.WorkingSetSize);
+        }
+        finally
+        {
+            CloseHandle(handle);
+        }
+    }
+
+    private const int QueryLimitedInformation = 0x1000;
+    private const int StillActive = 259;
+
+    /// <summary>PROCESS_MEMORY_COUNTERS: из него нужен только рабочий набор.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryCounters
+    {
+        public uint Size;
+        public uint PageFaultCount;
+        public nuint PeakWorkingSetSize;
+        public nuint WorkingSetSize;
+        public nuint QuotaPeakPagedPoolUsage;
+        public nuint QuotaPagedPoolUsage;
+        public nuint QuotaPeakNonPagedPoolUsage;
+        public nuint QuotaNonPagedPoolUsage;
+        public nuint PagefileUsage;
+        public nuint PeakPagefileUsage;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(int access, bool inherit, int pid);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(nint handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetExitCodeProcess(nint handle, out int code);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetProcessTimes(nint handle, out long creation, out long exit, out long kernel, out long user);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool K32GetProcessMemoryInfo(nint handle, ref MemoryCounters counters, uint size);
 
     /// <summary>Доля ядра: процессорное время за промежуток к самому промежутку.</summary>
     public static double Share(TimeSpan cpu, TimeSpan wall) =>

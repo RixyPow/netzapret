@@ -61,4 +61,29 @@ public sealed class EngineLoadTests
         Assert.NotNull(second.Cores);
         Assert.True(second.Cores >= 0);
     }
+
+    /// <summary>
+    /// Вышедший процесс в замер не идёт, даже пока его дескриптор кто-то держит:
+    /// система такой открывает и отдаёт его времена, как у живого.
+    /// </summary>
+    [Fact]
+    public void AnExitedProcessIsNotMeasured()
+    {
+        using var gone = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", "/c exit")
+        {
+            CreateNoWindow = true,
+            UseShellExecute = false,
+        })!;
+
+        gone.WaitForExit();
+
+        var state = new SupervisorState
+        {
+            SupervisorProcessId = Environment.ProcessId,
+            StartedAt = DateTimeOffset.Now,
+            Services = [new ServiceState { Name = "winws2", Health = ServiceHealth.Healthy, ProcessId = gone.Id }],
+        };
+
+        Assert.Empty(new EngineLoad().Sample(state));
+    }
 }
