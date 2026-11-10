@@ -68,6 +68,12 @@ internal sealed class TrayIcon : IDisposable
 
     private readonly NotifyIcon _icon;
     private TrayMenu? _menu;
+
+    /// <summary>Меню по левой кнопке ждёт, не будет ли это двойным щелчком.</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _menuDelay = new();
+
+    /// <summary>Только что был двойной щелчок: следующее отпускание левой — его.</summary>
+    private bool _doubled;
     private readonly DispatcherTimer _refresh = new() { Interval = TimeSpan.FromSeconds(2) };
     private ShellWatcher? _shell;
 
@@ -110,15 +116,47 @@ internal sealed class TrayIcon : IDisposable
         // Значок — в цветах эмблемы темы (21.10), и сменилась тема — сменился он.
         Themes.Changed += OnThemeChanged;
 
-        // Любой кнопкой — меню: в нём и состояние, и путь к окну. Двойной
-        // щелчок по-прежнему открывает окно сразу.
-        _icon.MouseUp += (_, e) =>
+        // Правой кнопкой — меню сразу. Левой — меню, только если второго
+        // щелчка не было за время двойного щелчка системы: прежде меню
+        // открывалось на первый щелчок двойного, мигало и пряталось, когда
+        // поверх вставало окно (жалоба 10.11 — «моргает меню от дабл клика»).
+        // Цена — меню по левой кнопке появляется на полсекунды позже.
+        _menuDelay.Interval = TimeSpan.FromMilliseconds(SystemInformation.DoubleClickTime);
+        _menuDelay.Tick += (_, _) =>
         {
-            if (e.Button is MouseButtons.Left or MouseButtons.Right)
-                OpenMenu();
+            _menuDelay.Stop();
+            OpenMenu();
         };
 
-        _icon.DoubleClick += (_, _) => Show();
+        _icon.MouseUp += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                _menuDelay.Stop();
+                OpenMenu();
+                return;
+            }
+
+            if (e.Button != MouseButtons.Left)
+                return;
+
+            // Отпускание после двойного щелчка — его хвост, не новый щелчок.
+            if (_doubled)
+            {
+                _doubled = false;
+                return;
+            }
+
+            _menuDelay.Stop();
+            _menuDelay.Start();
+        };
+
+        _icon.DoubleClick += (_, _) =>
+        {
+            _menuDelay.Stop();
+            _doubled = true;
+            Show();
+        };
 
         _icon.BalloonTipClicked += (_, _) =>
         {
