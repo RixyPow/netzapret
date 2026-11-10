@@ -40,6 +40,9 @@ var command = args.FirstOrDefault()?.ToLowerInvariant();
 return command switch
 {
     "status" or "состояние" => Status(),
+    "start" or "запуск" => await Engines(EngineVerb.Start, args.Skip(1).ToList()),
+    "stop" or "остановка" => await Engines(EngineVerb.Stop, args.Skip(1).ToList()),
+    "restart" or "перезапуск" => await Engines(EngineVerb.Restart, args.Skip(1).ToList()),
     "where" or "куда" => Where(string.Join(' ', args.Skip(1))),
     "dns" => await Dns(),
     "dns-mode" or "днс" => DnsMode(args.ElementAtOrDefault(1)),
@@ -114,6 +117,59 @@ int Status()
         : "итог: " + EngineHealth.Complaint(state));
 
     return EngineHealth.Running(state) ? 0 : 1;
+}
+
+// Запустить, погасить, перезапустить движки — просьбой к открытому окну.
+//
+// Прав у nz нет и не будет, а у окна они есть: оно делает то же, что его
+// кнопка, и отвечает её же словами (EngineRequests). Здесь — только оставить
+// просьбу и дождаться: ни сборки конфига, ни запуска процессов.
+async Task<int> Engines(EngineVerb verb, List<string> options)
+{
+    bool wait = !options.Contains("--no-wait");
+
+    var asked = await EngineRequests.SendAsync(
+        verb,
+        "nz",
+        take: TimeSpan.FromSeconds(6),
+        answer: TimeSpan.FromMinutes(3),
+        taken: () => Console.WriteLine("окно приняло просьбу"),
+        CancellationToken.None);
+
+    if (!asked.Taken)
+    {
+        Console.Error.WriteLine("окно просьбу не забрало: NetZapret не открыт (и не в трее) либо собран до этой команды");
+        return 2;
+    }
+
+    if (asked.Reply is null)
+    {
+        Console.Error.WriteLine("окно не ответило за три минуты — что с движками, скажет nz status");
+        return 1;
+    }
+
+    Console.WriteLine(asked.Reply.Message.Trim());
+
+    if (!asked.Reply.Ok)
+        return 1;
+
+    if (!wait)
+        return 0;
+
+    // Окно отвечает, когда надзор поднят; сами движки встают ещё до двадцати секунд.
+    bool up = verb != EngineVerb.Stop;
+
+    if (await EngineRequests.WaitAsync(up, TimeSpan.FromSeconds(up ? 90 : 20), CancellationToken.None))
+    {
+        Console.WriteLine(up ? "итог: движки подняты" : "итог: движки остановлены");
+        return 0;
+    }
+
+    Console.WriteLine(up
+        ? "итог: " + EngineHealth.Complaint(SupervisorState.Load(SupervisorState.DefaultPath))
+        : "итог: надзор ещё жив");
+
+    return 1;
 }
 
 // Куда пойдёт имя, программа или адрес — сейчас, а не по правилам.
@@ -575,6 +631,9 @@ int Help()
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
     Console.WriteLine();
     Console.WriteLine("  nz status    что сейчас поднято");
+    Console.WriteLine("  nz start | stop | restart [--no-wait]");
+    Console.WriteLine("               запустить, погасить, перезапустить движки — просьбой к открытому окну");
+    Console.WriteLine("               (оно делает то же, что его кнопки); ждёт, пока движки поднимутся");
     Console.WriteLine("  nz doctor    те же проверки, что раздел «Диагностика» окна");
     Console.WriteLine("  nz where <имя|программа.exe|адрес>");
     Console.WriteLine("               куда пойдёт и через что разрешится имя: по правилам,");
@@ -602,7 +661,7 @@ int Help()
     Console.WriteLine("               диагностика, голос Discord, hosts, сторож серверов, наблюдение —");
     Console.WriteLine("               без ссылок подписок и ключей");
     Console.WriteLine();
-    Console.WriteLine("Поднять и погасить движки можно самой программой:");
+    Console.WriteLine("Без открытого окна поднять и погасить движки можно самой программой:");
     Console.WriteLine("  NetZapret.exe --start");
     Console.WriteLine("  NetZapret.exe --stop");
     Console.WriteLine("Им нужны права администратора — ставится драйвер перехвата.");

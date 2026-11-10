@@ -286,6 +286,9 @@ public partial class App : Application
         // а не с запуска окна до выхода (AutoFillWatch).
         AutoFillWatch.Start(Dispatcher);
 
+        // Просьбы nz start, stop и restart: у неё прав нет, у окна есть (11.11).
+        EngineRequestWatch.Start();
+
         SingleInstance.OnShowRequested(TrayIcon.Show);
 
         // Выход по просьбе --quit — тем же путём, что пункт меню трея:
