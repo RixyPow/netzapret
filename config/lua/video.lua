@@ -19,19 +19,45 @@
 -- (её делает wssize_ramp из custom_funcs, но ей нужны все пустые подтверждения, а их
 -- WinDivert отдаёт только с --wf-tcp-empty=1).
 --
+-- Цена — те самые 65535 Б: замер 10.11 дома, видео через зарубежный узел — 6,7–7,7 Мбит/с
+-- вместо 150–300. А режет фильтр не всех: дома — пятую часть соединений (132 рукопожатия
+-- из 150 проходят и так), на других сетях часть узлов наглухо, а остальные не трогает.
+-- Поэтому малое окно получает не всякое соединение, а только адрес, у которого ответ
+-- только что срезали: приветствие ушло, а ответа за две секунды не было. Первый раз —
+-- на минуту, повторно без удачного обычного соединения между ними — на час: узел,
+-- закрытый наглухо, после двух заминок идёт с малым окном, а узел, потерявший одно
+-- соединение, через минуту снова работает на полной скорости.
+--
+-- Узнаётся срезанный ответ задним числом — на следующем SYN к тому же адресу: таймеров
+-- у функции нет, а соединение без ответа пакетов больше не шлёт. Первое такое соединение
+-- поэтому всё же виснет; зато следующее к этому адресу проходит.
+--
 -- Два шага, потому что у SYN имени ещё нет и его берёт секция по адресам, а приветствие —
 -- секция по имени:
---   nz_first2:syn  — в секции по адресам: убирает множитель окна из SYN и помечает соединение;
---   nz_first2      — в секции по имени, перед рецептом приветствия: пока сервер не прислал
---                    ни байта, ставит исходящим пакетам окно в два байта. Соединения без
---                    пометки не трогает — у узла провайдера множитель на месте, и «два»
---                    значило бы 512 Б и лишнее ожидание.
+--   nz_first2:syn  — в секции по адресам: решает, нужно ли адресу малое окно, и если да —
+--                    убирает множитель окна из SYN;
+--   nz_first2      — в секции по имени, перед рецептом приветствия: соединению с малым
+--                    окном ставит исходящим пакетам окно в два байта, пока сервер не прислал
+--                    ни байта; за обычным следит — пришёл ли ответ. Соединения, чей SYN
+--                    первый шаг не видел (узел провайдера), не трогает.
 -- Подтверждение первых двух байт уходит от Windows уже с настоящим окном — пустые пакеты
 -- сюда не попадают, — и сервер шлёт остальное как обычно.
 --
 -- standard args : direction
 -- arg : syn - шаг для SYN (см. выше)
+-- arg : always - (с syn) малое окно всем соединениям, без оглядки на то, резали ли ответ
+-- arg : after - (с syn) сколько секунд приветствие может ждать ответа (по умолчанию 2)
+-- arg : hold - (с syn) на сколько секунд адрес получает малое окно в первый раз (60)
+-- arg : hold2 - (с syn) на сколько — если ответ срезали снова (3600)
 -- arg : wsize - окно до первых байт ответа сервера (по умолчанию 2)
+
+-- Адрес узла → до какого времени ему малое окно.
+local nz_first2_until = {}
+-- Адрес узла → когда ушло приветствие, на которое ещё не было ответа.
+local nz_first2_asked = {}
+-- Адрес узла → сколько раз подряд ответ не пришёл.
+local nz_first2_cuts = {}
+
 function nz_first2(ctx, desync)
 	local dis = desync.dis
 	if not dis.tcp then
@@ -41,7 +67,8 @@ function nz_first2(ctx, desync)
 	direction_cutoff_opposite(ctx, desync)
 	if not direction_check(desync) then return end
 	local track = desync.track
-	if not track then
+	local ip = dis_ipdst(dis)
+	if not track or not ip then
 		-- Без учёта соединения не узнать ни пометки, ни того, начал ли сервер отвечать.
 		instance_cutoff_shim(ctx, desync)
 		return
@@ -53,14 +80,41 @@ function nz_first2(ctx, desync)
 			instance_cutoff_shim(ctx, desync)
 			return
 		end
+		local small = desync.arg.always ~= nil
+		if not small then
+			local now = os.time()
+			local asked = nz_first2_asked[ip]
+			if asked and now - asked >= (tonumber(desync.arg.after) or 2) then
+				-- Прошлое приветствие к этому адресу осталось без ответа.
+				nz_first2_asked[ip] = nil
+				local cuts = (nz_first2_cuts[ip] or 0) + 1
+				nz_first2_cuts[ip] = cuts
+				local hold = cuts > 1 and (tonumber(desync.arg.hold2) or 3600) or (tonumber(desync.arg.hold) or 60)
+				nz_first2_until[ip] = now + hold
+				if b_debug then DLOG("nz_first2: "..ntop(ip).." ответ срезан "..cuts.." раз — малое окно на "..hold.." с") end
+			end
+			local till = nz_first2_until[ip]
+			if till then
+				if now < till then
+					small = true
+				else
+					nz_first2_until[ip] = nil
+				end
+			end
+		end
+		if not small then
+			st.nz_first2 = "watch"
+			return
+		end
+		st.nz_first2 = "small"
 		local i = find_tcp_option(tcp.options, TCP_KIND_SCALE)
-		st.nz_first2 = true
 		if not i then return end
 		table.remove(tcp.options, i)
 		if b_debug then DLOG("nz_first2: SYN без множителя окна") end
 		return VERDICT_MODIFY
 	end
-	if not st.nz_first2 then
+	local mode = st.nz_first2
+	if not mode then
 		instance_cutoff_shim(ctx, desync)
 		return
 	end
@@ -71,7 +125,17 @@ function nz_first2(ctx, desync)
 		if acked >= 2147483648 then acked = 0 end
 	end
 	if acked > 0 then
+		if mode == "watch" then
+			-- Обычному соединению сервер ответил: адрес не закрыт, счёт начинается заново.
+			nz_first2_asked[ip] = nil
+			nz_first2_cuts[ip] = nil
+		end
 		instance_cutoff_shim(ctx, desync)
+		return
+	end
+	if #dis.payload == 0 then return end
+	if mode == "watch" then
+		if not nz_first2_asked[ip] then nz_first2_asked[ip] = os.time() end
 		return
 	end
 	tcp.th_win = tonumber(desync.arg.wsize) or 2
