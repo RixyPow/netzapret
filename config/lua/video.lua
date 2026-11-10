@@ -35,9 +35,13 @@
 -- приходится виснуть на каждом. Шире нельзя: на сети с закрытыми узлами 173.194.164.241
 -- был закрыт, а 173.194.164.209 из той же /24 отвечал (замер 10.11).
 --
--- Узнаётся срезанный ответ задним числом — на следующем SYN к той же группе: таймеров
--- у функции нет, а соединение без ответа пакетов больше не шлёт. Первое такое соединение
--- поэтому всё же виснет; зато следующее проходит. Приветствия без ответа помнятся по
+-- Срезанный ответ узнаётся на следующем SYN к той же группе (так помечается группа), а на
+-- самом зависшем соединении — по таймеру через resetafter с (arg reset): оно без ответа
+-- пакетов больше не шлёт, ждать его клиент будет до своего таймаута, поэтому с reset ему
+-- сразу шлётся RST и плеер повторяет; без reset первое такое соединение виснет, зато
+-- следующее к группе проходит. Проверено 11.11 замером A/B: без reset срезанное молчит до
+-- таймаута (5,3 с у пробы, в браузере дольше), с reset — сброс за ~2 с, дальше малое окно.
+-- Приветствия без ответа помнятся по
 -- соединениям, а не одно на группу: плеер открывает к узлу несколько соединений сразу
 -- (видео и проверка связи), и ответ одного не должен стирать молчание другого — замер
 -- 10.11: при двух адресах группы одновременно из пяти срезов два терялись. И ответ
@@ -64,6 +68,12 @@
 -- arg : hold - (с syn) на сколько секунд группа получает малое окно после среза (60)
 -- arg : hold2 - (с syn) на сколько — группа, закрытая наглухо (3600)
 -- arg : wsize - окно до первых байт ответа сервера (по умолчанию 2)
+-- arg : reset - (в шаге по имени) первое соединение, чей ответ срезан, не ждёт таймаута
+--               клиента: через resetafter с без ответа ему шлётся RST от имени сервера
+--               (dis_reverse + ifin), плеер сразу открывает новое — и оно идёт с малым
+--               окном, потому что группа к этому мигу помечена. Без reset первое висит.
+-- arg : resetafter - (с reset) через сколько секунд слать RST (по умолчанию 1.6; обычный
+--                     ответ узла — меньше 0.5 с, так что срабатывает только на срезанном)
 
 -- Группа узлов → до какого времени ей малое окно.
 local nz_first2_until = {}
@@ -82,6 +92,28 @@ local nz_first2_alive = {}
 local function nz_first2_group(ip)
 	if #ip ~= 4 then return ip end
 	return string.sub(ip, 1, 3)..string.char(bitand(string.byte(ip, 4), 224))
+end
+
+-- Быстрый отказ (arg reset, с 11.11): сброс зависшего первого соединения к клиенту, чтобы
+-- плеер повторил сразу, не дожидаясь своего таймаута. По таймеру через resetafter с после
+-- приветствия без ответа: группа помечается (повтор пойдёт с малым окном) и клиенту от имени
+-- шлётся RST (dis_reverse + ifin, как stock standard_failure_detector). Только с arg reset.
+function nz_first2_reset_fire(name, data)
+	local st = data.st
+	if st.nz_first2_data_seen then return end
+	if st.nz_first2 ~= "watch" then return end
+	local ip = data.ip
+	local wait = nz_first2_asked[ip]
+	if wait and data.id then
+		wait[data.id] = nil
+		if next(wait) == nil then nz_first2_asked[ip] = nil end
+	end
+	local cuts = (nz_first2_cuts[ip] or 0) + 1
+	nz_first2_cuts[ip] = cuts
+	local closed = cuts >= (nz_first2_alive[ip] and 3 or 2)
+	nz_first2_until[ip] = os.time() + (closed and data.hold2 or data.hold)
+	rawsend_dissect(data.dis, {ifout = data.ifin})
+	if b_debug then DLOG("nz_first2: сброс зависшего соединения к клиенту; группа помечена, срез "..cuts) end
 end
 
 function nz_first2(ctx, desync)
@@ -166,6 +198,7 @@ function nz_first2(ctx, desync)
 	end
 	if acked > 0 then
 		if mode == "watch" then
+			st.nz_first2_data_seen = true
 			-- Обычному соединению сервер ответил в срок: группа не закрыта, счёт начинается
 			-- заново. Забывается только своё приветствие — чужое молчание остаётся на счету.
 			-- Запоздалый ответ не меняет ничего: приветствие остаётся на счету до следующего
@@ -198,6 +231,20 @@ function nz_first2(ctx, desync)
 				nz_first2_asked[ip] = wait
 			end
 			wait[st.nz_first2_id] = os.time()
+		end
+		if desync.arg.reset and not st.nz_first2_armed then
+			st.nz_first2_armed = true
+			local rst = deepcopy(dis)
+			rst.payload = nil
+			dis_reverse(rst)
+			rst.tcp.th_flags = TH_RST
+			rst.tcp.th_win = (track.pos and track.pos.reverse and track.pos.reverse.tcp and track.pos.reverse.tcp.winsize) or 64
+			rst.tcp.options = nil
+			local ms = math.floor((tonumber(desync.arg.resetafter) or 1.6) * 1000)
+			timer_set("nzr_"..desync_timer_name(desync), "nz_first2_reset_fire", ms, true, {
+				dis = rst, ifin = desync.ifin, st = st, ip = ip, id = st.nz_first2_id,
+				hold = tonumber(desync.arg.hold) or 60, hold2 = tonumber(desync.arg.hold2) or 3600,
+			})
 		end
 		return
 	end
