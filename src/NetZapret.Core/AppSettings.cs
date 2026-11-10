@@ -1327,6 +1327,17 @@ public sealed record AppSettings
     public string? LastRunVersion { get; init; }
 
     /// <summary>
+    /// Где стояло окно и какого размера, — чтобы открыться там же (10.11).
+    /// </summary>
+    /// <remarks>
+    /// До того окно всегда вставало посередине экрана в 1080×720, а из трея
+    /// оно через минуту закрывается по-настоящему и создаётся заново — так
+    /// что забывалось и положение внутри одного запуска. <c>null</c> — прежнее
+    /// поведение: посередине.
+    /// </remarks>
+    public WindowPlace? Window { get; init; }
+
+    /// <summary>
     /// Настройки с нуля — с отметками разовых переводов.
     /// </summary>
     /// <remarks>
@@ -1594,4 +1605,25 @@ public sealed record AppSettings
     public string DescribeServer() => PreferredServer ?? "авто (по задержке)";
 
     public string DescribePreset() => PresetName ?? "не запускать";
+}
+
+/// <summary>
+/// Обычное (не развёрнутое) место окна в точках экрана и развёрнуто ли оно.
+/// </summary>
+/// <remarks>
+/// Числа — как их отдаёт и берёт <c>GetWindowPlacement</c> (координаты рабочей
+/// области, физические пиксели): так развёрнутое окно помнит, куда вернуться,
+/// а мониторы с разным масштабом не путают размер.
+/// </remarks>
+public sealed record WindowPlace
+{
+    public int Left { get; init; }
+
+    public int Top { get; init; }
+
+    public int Right { get; init; }
+
+    public int Bottom { get; init; }
+
+    public bool Maximized { get; init; }
 }

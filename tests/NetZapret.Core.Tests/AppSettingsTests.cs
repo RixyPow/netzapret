@@ -18,6 +18,24 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     /// <summary>
+    /// Место окна переживает запись и чтение (10.11): без него окно после
+    /// перезапуска снова вставало посередине в 1080×720.
+    /// </summary>
+    [Fact]
+    public void WindowPlaceSurvivesSaving()
+    {
+        var place = new WindowPlace { Left = -1700, Top = 40, Right = -200, Bottom = 1000, Maximized = true };
+
+        new AppSettings { Window = place }.Save(_path);
+
+        Assert.Equal(place, AppSettings.Load(_path).Window);
+
+        // Прежний файл без поля — прежнее поведение, посередине.
+        new AppSettings().Save(_path);
+        Assert.Null(AppSettings.Load(_path).Window);
+    }
+
+    /// <summary>
     /// «Файла нет» и «файл не прочитался» — разные ответы (30.09): второй
     /// до того выдавал мастер первого запуска человеку, прошедшему его давно.
     /// </summary>

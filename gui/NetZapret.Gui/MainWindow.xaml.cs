@@ -62,6 +62,9 @@ public partial class MainWindow : Window
         ShowOnboardingIfNeeded();
         Loaded += (_, _) => ShowGreetingIfDue();
 
+        // Там же и того же размера, где окно было в прошлый раз (10.11).
+        WindowPlacement.Prepare(this, AppSettings.Load(AppSettings.DefaultPath).Window);
+
         SourceInitialized += (_, _) =>
         {
             DarkenTitleBar();
@@ -392,6 +395,11 @@ public partial class MainWindow : Window
     /// </remarks>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        // И при уходе в трей, и при выходе: окно из трея потом создаётся
+        // заново и берёт место отсюда. Закрытие спрятанного окна через
+        // минуту (Release) застаёт то же место — запись не повторится.
+        WindowPlacement.Remember(this);
+
         if (!App.Exiting && !_releasing)
         {
             e.Cancel = true;
