@@ -67,7 +67,7 @@ public sealed class RuleEngine
         // человеком поимённо, — это и есть его выбор для этого имени.
         var sorted = PartOrder.Apply(ordered
             .OrderBy(r => Tier(r.Match, r.Source, r.Value))
-            .ToList());
+            .ToList(), defaultMode);
 
         return new RuleEngine(new RuleSet
         {

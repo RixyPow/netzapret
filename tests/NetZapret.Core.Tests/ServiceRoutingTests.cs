@@ -501,6 +501,39 @@ public sealed class ServiceRoutingTests : IDisposable
         Assert.All(plain, part => Assert.Equal(part.Mode, part.DefaultMode));
     }
 
+    /// <summary>
+    /// «По умолчанию» у «Обновлений» при своём правиле — путь «Сайта и переписки»,
+    /// а не «Квестов и API» через VPN (10.11, жалоба владельца).
+    /// </summary>
+    [Fact]
+    public void TheDefaultOfUpdatesIsTheSiteEvenWithQuestsThroughVpn()
+    {
+        Write("discord-updates.txt", "updates.discord.com");
+        Write("discord-api.txt", "discord.com", "hcaptcha.com");
+
+        var basePath = Path.Combine(_root, "rules.yaml");
+        File.WriteAllText(basePath, "mode: selective\nrules: []\ndefault:\n  mode: desync\n");
+
+        var userPath = Path.Combine(_root, "rules.user.yaml");
+        var user = UserRulesFile.Load(userPath);
+        user.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Desync);
+        user.Set(MatchKind.HostList, "config/lists/discord-api.txt", RoutingMode.Proxy);
+        user.Set(MatchKind.HostList, "config/lists/discord-updates.txt", RoutingMode.Direct);
+        user.Save();
+
+        var engine = RuleSetLoader.LoadLayered(basePath, userPath);
+        RuleSetExpander.Expand(engine.RuleSet, _root);
+
+        var service = Core.Services.ServiceCatalog.All.Single(s => s.Name == "Discord");
+        var parts = ServiceRouting.Describe(service, engine, _root, UserRulesFile.Load(userPath));
+        var updates = parts.Single(p => p.Part.List == "config/lists/discord-updates.txt");
+
+        Assert.True(updates.Explicit);
+        Assert.Equal(RoutingMode.Direct, updates.Mode);
+        Assert.Equal(RoutingMode.Desync, updates.DefaultMode);
+        Assert.Equal(RoutingMode.Proxy, parts.Single(p => p.Part.List == "config/lists/discord-api.txt").Mode);
+    }
+
     private static UserRulesFile EmptyUserRules() =>
         UserRulesFile.Load(Path.Combine(Path.GetTempPath(), $"netzapret-none-{Guid.NewGuid():N}.yaml"));
 }

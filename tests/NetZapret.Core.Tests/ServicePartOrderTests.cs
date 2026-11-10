@@ -42,6 +42,49 @@ public sealed class ServicePartOrderTests
     /// в каталоге — иначе «раньше его правила» не найдёт ничего, и часть
     /// встанет в конец, где до неё не дойдёт очередь.
     /// </remarks>
+    /// <summary>
+    /// «Внутри соседки» (InsideOf) — правда по нашим спискам: соседка той же широкой
+    /// части, и каждое имя узкой лежит в её зоне.
+    /// </summary>
+    [Fact]
+    public void Every_inside_of_is_a_sibling_that_holds_all_its_names()
+    {
+        var parts = ServiceCatalog.All.SelectMany(s => s.Parts).ToList();
+        var root = RepoRoot();
+        var nested = parts.Where(p => p.InsideOf is not null).ToList();
+
+        Assert.NotEmpty(nested);
+
+        foreach (var part in nested)
+        {
+            var sibling = Assert.Single(parts, p => p.List == part.InsideOf);
+            Assert.NotNull(part.Within);
+            Assert.Equal(part.Within, sibling.Within);
+            Assert.True(parts.IndexOf(part) < parts.IndexOf(sibling), $"{part.Name} — раньше соседки в каталоге");
+
+            var zones = Names(root, sibling.List);
+
+            foreach (var name in Names(root, part.List))
+                Assert.Contains(zones, z => name == z || name.EndsWith("." + z, StringComparison.Ordinal));
+        }
+
+        static List<string> Names(string root, string list) =>
+            File.ReadAllLines(Path.Combine(root, list))
+                .Select(l => l.Trim().TrimStart('.'))
+                .Where(l => l.Length > 0 && !l.StartsWith('#'))
+                .ToList();
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "NetZapret.sln")))
+            dir = dir.Parent;
+
+        return dir?.FullName ?? throw new InvalidOperationException("корень репозитория не найден");
+    }
+
     [Fact]
     public void Every_within_names_a_list_of_the_catalog()
     {

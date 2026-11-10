@@ -59,6 +59,16 @@ public sealed class RoutingRule
     public bool Enabled { get; init; } = true;
 
     /// <summary>
+    /// Поставлено движком, а не взято из файла: путь широкой части для узкой без своего правила.
+    /// </summary>
+    /// <remarks>
+    /// Ставит <see cref="PartOrder"/> перед правилом соседней части, в которой
+    /// лежат имена узкой (<see cref="Services.ServicePart.InsideOf"/>). Слой —
+    /// заводской: в файле такого правила нет, и выбором человека оно не считается.
+    /// </remarks>
+    public bool Inherited { get; init; }
+
+    /// <summary>
     /// Часть выключена: не действует ни это правило, ни базовое на тот же список.
     /// </summary>
     /// <remarks>

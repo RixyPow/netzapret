@@ -39,8 +39,16 @@ public static class PartOrder
         .GroupBy(x => x.List, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.First().i, StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Узкие части внутри соседки: список, список соседки, широкий список.</summary>
+    private static readonly (string List, string Sibling, string Within)[] Nested = ServiceCatalog.All
+        .SelectMany(s => s.Parts)
+        .Where(p => p.InsideOf is not null && p.Within is not null)
+        .Select(p => (p.List, p.InsideOf!, p.Within!))
+        .ToArray();
+
     /// <summary>Тот же список, где каждая узкая часть стоит раньше своей широкой.</summary>
-    public static List<RoutingRule> Apply(List<RoutingRule> rules)
+    /// <param name="defaultMode">Умолчание движка — путь наследника, когда у широкой части правила нет.</param>
+    public static List<RoutingRule> Apply(List<RoutingRule> rules, RoutingMode defaultMode)
     {
         var result = new List<RoutingRule>(rules);
 
@@ -80,6 +88,79 @@ public static class PartOrder
                 result[places[k]] = ordered[k];
         }
 
+        Inherit(result, defaultMode);
+
         return result;
     }
+
+    /// <summary>
+    /// Узкая часть внутри соседки идёт путём своей широкой, а не соседки.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Порядок выше решает, только когда у обеих узких частей есть правила.
+    /// Без своего правила имена «Обновлений» (updates.discord.com) забирала
+    /// зона discord.com «Квестов и API»: 10.11 у владельца API шли через VPN,
+    /// «Сайт и переписка» — десинком, и «по умолчанию» у «Обновлений» значило
+    /// VPN. Части же каталога решают каждая за свои имена: путь API — выбор
+    /// для запросов к API, а не для обновлений клиента.
+    /// </para>
+    /// <para>
+    /// Наследник встаёт прямо перед правилом соседки и берёт путь правила
+    /// широкого списка (а нет его — умолчание движка). Своё правило узкой
+    /// части стоит раньше соседки (порядок каталога выше) и решает само;
+    /// наследник за ним ничего не меняет. Он ставится и тогда — чтобы
+    /// «Маршруты», пересобирая движок без своего правила части
+    /// (ServiceRouting.Without), нашли его уже со списком: списки читаются
+    /// после сборки, и новый наследник был бы пуст.
+    /// </para>
+    /// </remarks>
+    private static void Inherit(List<RoutingRule> result, RoutingMode defaultMode)
+    {
+        // Наследники прошлой сборки — со списками, уже прочитанными для них.
+        var earlier = new Dictionary<string, RoutingRule>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = result.Count - 1; i >= 0; i--)
+        {
+            if (!result[i].Inherited)
+                continue;
+
+            earlier.TryAdd(result[i].Value, result[i]);
+            result.RemoveAt(i);
+        }
+
+        foreach (var (list, sibling, within) in Nested)
+        {
+            int at = result.FindIndex(r => r.Match == MatchKind.HostList && Same(r.Value, sibling));
+
+            if (at < 0)
+                continue;
+
+            var wide = result.Find(r => r.Match == MatchKind.HostList && Same(r.Value, within));
+
+            var heir = new RoutingRule
+            {
+                Match = MatchKind.HostList,
+                Value = list,
+                Mode = wide?.Mode ?? defaultMode,
+                Server = wide?.Server,
+                Recipe = wide?.Recipe,
+                Source = RuleSource.Base,
+                Inherited = true,
+                Ordinal = result[at].Ordinal,
+            };
+
+            heir.Compile();
+
+            if (earlier.TryGetValue(list, out var before) && before.HostListDomains.Count > 0)
+            {
+                heir.LoadHostList(before.HostListDomains);
+                heir.LoadHostListAddresses(before.HostListCidrs);
+            }
+
+            result.Insert(at, heir);
+        }
+    }
+
+    private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 }

@@ -249,6 +249,68 @@ public sealed class RouteConflictTests : IDisposable
     }
 
     /// <summary>
+    /// «Обновления» без своего правила идут путём «Сайта и переписки», а не «Квестов и API»
+    /// (10.11: у владельца API через VPN, сайт десинком, и обновления уходили в VPN).
+    /// </summary>
+    [Theory]
+    [InlineData(RoutingMode.Desync, RoutingMode.Desync)]
+    [InlineData(RoutingMode.Direct, RoutingMode.Direct)]
+    [InlineData(null, RoutingMode.Desync)]
+    public void UpdatesWithoutTheirRuleFollowTheSiteNotTheQuests(RoutingMode? site, RoutingMode expected)
+    {
+        Write("discord.txt", "discord.com", "discord.gg", "discordapp.com");
+        Write("discord-updates.txt", "updates.discord.com");
+        Write("discord-api.txt", "discord.com", "hcaptcha.com");
+
+        var engine = LoadLayers("rules: []\ndefault:\n  mode: desync\n", file =>
+        {
+            if (site is { } mode)
+                file.Set(MatchKind.HostList, "config/lists/discord.txt", mode);
+
+            file.Set(MatchKind.HostList, "config/lists/discord-api.txt", RoutingMode.Proxy);
+        });
+
+        Assert.Equal(expected, engine.Evaluate(To("updates.discord.com")).Mode);
+        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(To("discord.com")).Mode);
+        Assert.Equal(RoutingMode.Proxy, engine.Evaluate(To("hcaptcha.com")).Mode);
+        Assert.DoesNotContain(RouteConflicts.Find(engine.RuleSet),
+            c => c.Winner.Value.EndsWith("discord-updates.txt") || c.Loser.Value.EndsWith("discord-updates.txt"));
+
+        // Пересборка из готового движка (так «Маршруты» считают «по умолчанию»)
+        // не теряет имён наследника и не плодит второго.
+        var rebuilt = RuleEngine.Build(engine.RuleSet.Rules.ToList(), engine.RuleSet.DefaultMode);
+        Assert.Equal(expected, rebuilt.Evaluate(To("updates.discord.com")).Mode);
+        Assert.Single(rebuilt.RuleSet.Rules, r => r.Inherited);
+    }
+
+    /// <summary>Своё правило «Обновлений» сильнее наследника; без «Квестов» наследника нет.</summary>
+    [Fact]
+    public void AnOwnUpdatesRuleWinsAndNoQuestsMeansNoHeir()
+    {
+        Write("discord.txt", "discord.com", "discord.gg", "discordapp.com");
+        Write("discord-updates.txt", "updates.discord.com");
+        Write("discord-api.txt", "discord.com", "hcaptcha.com");
+
+        var own = LoadLayers("rules: []\ndefault:\n  mode: desync\n", file =>
+        {
+            file.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Desync);
+            file.Set(MatchKind.HostList, "config/lists/discord-api.txt", RoutingMode.Proxy);
+            file.Set(MatchKind.HostList, "config/lists/discord-updates.txt", RoutingMode.Direct);
+        });
+
+        Assert.Equal(RoutingMode.Direct, own.Evaluate(To("updates.discord.com")).Mode);
+        Assert.DoesNotContain(RouteConflicts.Find(own.RuleSet), c => c.Loser.Inherited);
+
+        File.Delete(Path.Combine(_root, "config", "rules.user.yaml"));
+
+        var noQuests = LoadLayers("rules: []\ndefault:\n  mode: desync\n", file =>
+            file.Set(MatchKind.HostList, "config/lists/discord.txt", RoutingMode.Proxy));
+
+        Assert.DoesNotContain(noQuests.RuleSet.Rules, r => r.Inherited);
+        Assert.Equal(RoutingMode.Proxy, noQuests.Evaluate(To("updates.discord.com")).Mode);
+    }
+
+    /// <summary>
     /// Свой путь сервиса поверх заводского правила на тот же список — выбор, а не спор
     /// (14.10: github.txt «через VPN» против заводского «десинк, pass»).
     /// </summary>

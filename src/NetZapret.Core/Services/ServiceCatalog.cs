@@ -122,6 +122,18 @@ public sealed record ServicePart
     public string? Within { get; init; }
 
     /// <summary>
+    /// Список соседней узкой части (той же <see cref="Within"/>), в зонах которого лежат имена этой.
+    /// </summary>
+    /// <remarks>
+    /// updates.discord.com («Обновления») — внутри discord.com «Квестов и API».
+    /// Без своего правила такая часть идёт путём широкой, а не соседки
+    /// (<see cref="Rules.PartOrder"/>): 10.11 у владельца «Квесты и API» шли
+    /// через VPN, и «по умолчанию» у «Обновлений» показывало VPN, хотя
+    /// «Сайт и переписка», куда обновления входят, — десинк.
+    /// </remarks>
+    public string? InsideOf { get; init; }
+
+    /// <summary>
     /// Перечень на десятки тысяч имён, а не состав одного сервиса.
     /// </summary>
     /// <remarks>
@@ -303,6 +315,7 @@ public static class ServiceCatalog
                     Name = "Обновления",
                     List = "config/lists/discord-updates.txt",
                     Within = "config/lists/discord.txt",
+                    InsideOf = "config/lists/discord-api.txt",
                     Note = "обновления клиента; без них Discord зависает на запуске",
                 },
 
