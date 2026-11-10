@@ -325,7 +325,7 @@
         <TextBox x:Name="Search" Grid.Row="3" Margin="0,10,0,0" TextChanged="OnSearch" KeyDown="OnSearchKey"
                  gui:Hint.Text="Найти имя или сервис — или проверить своё (Enter)" />
 
-        <Grid x:Name="Main" Grid.Row="4" Margin="0,16,0,0">
+        <Grid x:Name="Main" Grid.Row="4" Margin="0,16,0,0" SizeChanged="OnMainSize">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="TableColumn" Width="*" />
                 <ColumnDefinition x:Name="GapColumn" Width="16" />

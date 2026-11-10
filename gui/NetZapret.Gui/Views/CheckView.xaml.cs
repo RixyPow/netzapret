@@ -1527,6 +1527,27 @@ public partial class CheckView : UserControl
             });
         }
 
+        // Узлы видео — и когда находки нет: замер шёл, и молчание о нём читалось
+        // бы как «не мерили». Спокойной строкой, с числами по узлам в подсказке.
+        if (_findings.All(f => f.Signature != Signatures.VideoNodesLossy))
+        {
+            if (_video is { Summary: { } said } video)
+            {
+                sections.Add(new SectionRow(
+                    "Зарубежные узлы видео YouTube " + said,
+                    string.Empty,
+                    (Brush)FindResource(video.Verdict == VideoNodesVerdict.Fine ? "Accent" : "Muted"))
+                {
+                    Tip = string.Join("\n", video.Lines),
+                    Report = string.Join("\n", video.Lines),
+                });
+            }
+            else if (_videoNote is { } note)
+            {
+                sections.Add(new SectionRow("Зарубежные узлы видео YouTube", note, (Brush)FindResource("Muted")));
+            }
+        }
+
         if (engine is not null)
         {
             var conflicts = RouteConflicts.Find(engine.RuleSet);
@@ -2663,9 +2684,25 @@ public partial class CheckView : UserControl
         PanelColumn.Width = stacked ? new GridLength(0) : new GridLength(width < 1180 ? 300 : 360);
         GapColumn.Width = stacked ? new GridLength(0) : new GridLength(16);
         GapRow.Height = stacked ? new GridLength(12) : new GridLength(0);
-        PanelRow.Height = stacked ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+        // Под таблицей панель берёт столько, сколько в ней есть, но не больше
+        // половины: прежде строки делили высоту пополам, и итог из одной строки
+        // («Проверка идёт…») оставлял таблице две с половиной строки (снимок
+        // владельца 10.11, окно 1330 при 125 %).
+        PanelRow.Height = stacked ? GridLength.Auto : new GridLength(0);
+        _stacked = stacked;
+        FitPanel(Main.ActualHeight);
 
         Grid.SetColumn(PanelCard, stacked ? 0 : 2);
         Grid.SetRow(PanelCard, stacked ? 2 : 0);
     }
+
+    /// <summary>Панель стоит под таблицей, а не рядом.</summary>
+    private bool _stacked;
+
+    private void OnMainSize(object sender, SizeChangedEventArgs e) => FitPanel(e.NewSize.Height);
+
+    /// <summary>Предел высоты панели под таблицей — половина места; рядом с таблицей предела нет.</summary>
+    private void FitPanel(double height) =>
+        PanelCard.MaxHeight = _stacked && height > 0 ? Math.Max(120, height / 2) : double.PositiveInfinity;
 }
