@@ -186,8 +186,11 @@ public sealed class ZapretGuiCopyTests : IDisposable
                     var path = match.Groups[1].Value;
                     var name = Path.GetFileName(path);
 
+                    // Своё — из config: образцы из blobs, модули lua (с 10.11) из lua, остальное — списки.
+                    var own = path.StartsWith("bin/") ? "blobs" : path.StartsWith("lua/") ? "lua" : "lists";
+
                     var found = name.StartsWith("nz-", StringComparison.Ordinal)
-                        ? File.Exists(Path.Combine(root, "config", path.StartsWith("bin/") ? "blobs" : "lists", name["nz-".Length..]))
+                        ? File.Exists(Path.Combine(root, "config", own, name["nz-".Length..]))
                         : File.Exists(Path.Combine(copy, path.Replace('/', Path.DirectorySeparatorChar)));
 
                     if (!found)

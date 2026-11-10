@@ -24,6 +24,8 @@ public sealed class PresetOwnListsTests
 {
     private static readonly Regex OwnList = new(@"lists/nz-(?<name>[^\s""]+\.txt)", RegexOptions.Compiled);
 
+    private static readonly Regex OwnLua = new(@"^--lua-init=@lua/nz-(?<name>[^\s""]+\.lua)", RegexOptions.Compiled | RegexOptions.Multiline);
+
     [Fact]
     public void EveryOwnListAPresetNamesHasASource()
     {
@@ -44,6 +46,49 @@ public sealed class PresetOwnListsTests
         }
 
         Assert.True(missing.Count == 0, "Нет исходника в config\\lists: " + string.Join(", ", missing.Distinct()));
+    }
+
+    /// <summary>
+    /// Наши модули lua в пресетах: на каждый <c>@lua/nz-*.lua</c> есть исходник в config\lua,
+    /// и оба скрипта сборки его доставляют.
+    /// </summary>
+    /// <remarks>
+    /// С модулем строже, чем со списком: без файла списка секция молча не совпадает ни с чем,
+    /// а без файла из <c>--lua-init</c> winws2 не поднимается вовсе — и видно это только
+    /// при запуске движков, сухой прогон lua не читает (10.11, «Universal V13 YT FIX»).
+    /// </remarks>
+    [Fact]
+    public void EveryOwnLuaModuleAPresetNamesHasASourceAndIsBundled()
+    {
+        if (Repository() is not { } root)
+            return;
+
+        var missing = new List<string>();
+        bool any = false;
+
+        foreach (var file in Directory.GetFiles(Path.Combine(root, "presets"), "*.txt"))
+        {
+            foreach (Match match in OwnLua.Matches(File.ReadAllText(file)))
+            {
+                any = true;
+
+                if (!File.Exists(Path.Combine(root, "config", "lua", match.Groups["name"].Value)))
+                    missing.Add($"{Path.GetFileName(file)}: {match.Value}");
+            }
+        }
+
+        Assert.True(missing.Count == 0, "Нет исходника в config\\lua: " + string.Join(", ", missing.Distinct()));
+
+        if (!any)
+            return;
+
+        foreach (var script in new[] { "build.cmd", "pack.cmd" })
+        {
+            Assert.Contains(
+                @"config\lua\*.lua",
+                File.ReadAllText(Path.Combine(root, script)),
+                StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     /// <summary>Основной пресет лежит в presets\ — иначе первый запуск идёт без десинка.</summary>

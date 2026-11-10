@@ -400,6 +400,15 @@ for %%F in ("%ROOT%config\blobs\*.bin") do (
     copy /y "%%F" "%ENGINES%\zapret\bin\nz-%%~nxF" >nul
 )
 
+rem Our own lua modules - desync functions a preset loads with --lua-init. Same
+rem rule and the same nz- prefix as the lists and blobs: winws2 loads them from
+rem lua\ next to the engine, and a module of ours must never shadow one from
+rem Zapret GUI. First one (10.11): video.lua, nz_first2 for the address filter
+rem on Google's foreign video nodes, used by the Universal V13 YT FIX preset.
+for %%F in ("%ROOT%config\lua\*.lua") do (
+    copy /y "%%F" "%ENGINES%\zapret\lua\nz-%%~nxF" >nul
+)
+
 
 rem Presets are ours and come from presets\ in the repository. Nothing is taken
 rem from the Zapret installation any more: it keeps two folders and a hundred
