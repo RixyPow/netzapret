@@ -49,6 +49,7 @@ return command switch
     "report" or "отчёт" => Report(),
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     "voice" or "голос" => Voice(),
+    "youtube" or "ютуб" => await Youtube(),
     "doctor" or "диагностика" => DoctorCommand(),
     "watch" or "наблюдение" => await Watch(args.Skip(1).ToList()),
     null or "help" or "--help" or "-h" => Help(),
@@ -535,6 +536,40 @@ int Report()
     return 0;
 }
 
+async Task<int> Youtube()
+{
+    Console.WriteLine($"узлов: {NetZapret.Proxy.VideoNodes.Hosts.Count}, каждый спрашивается по {NetZapret.Proxy.VideoNodes.Tries} раза по TCP и по QUIC…");
+
+    var (report, why) = await VideoNodesRun.MeasureAsync(AppSettings.Load(AppSettings.DefaultPath), CancellationToken.None);
+
+    if (report is null)
+    {
+        Console.WriteLine(why);
+        return 1;
+    }
+
+    Console.WriteLine();
+
+    foreach (var line in report.Lines)
+        Console.WriteLine("  " + line);
+
+    Console.WriteLine();
+    Console.WriteLine(report.Summary is { } summary
+        ? "зарубежные узлы видео YouTube " + summary
+        : "судить не по чему: узлов с адресом слишком мало");
+
+    // Тем же поиском, что итог проверки блокировок в окне: почерк, смысл и что делать.
+    foreach (var finding in NetZapret.Proxy.Signatures.Find([], video: report))
+    {
+        Console.WriteLine();
+        Console.WriteLine(finding.Signature.Meaning);
+        Console.WriteLine();
+        Console.WriteLine("что делать: " + finding.Signature.Remedy);
+    }
+
+    return report.Verdict is NetZapret.Proxy.VideoNodesVerdict.Lossy or NetZapret.Proxy.VideoNodesVerdict.Closed ? 1 : 0;
+}
+
 int Help()
 {
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
@@ -551,6 +586,8 @@ int Help()
     Console.WriteLine("  nz dns       обзор DNS-провайдеров: что отвечает и что подменяется");
     Console.WriteLine("  nz voice     голос Discord: адреса звука из его журнала против списка голоса —");
     Console.WriteLine("               что сторож окна дописал бы; ничего не пишет");
+    Console.WriteLine("  nz youtube   зарубежные узлы видео YouTube — с них идёт то, чего нет в кэше провайдера:");
+    Console.WriteLine("               TCP и QUIC своим именем узла и чужими именами мимо обхода; до полуминуты");
     Console.WriteLine("  nz watch [--seconds N] [--process имя.exe] [--routed] [--no-log] [--force]");
     Console.WriteLine("               наблюдение: соединения и правило к каждому, как раздел окна;");
     Console.WriteLine("               пишет runtime\\watch.log; нужен терминал администратора");

@@ -397,6 +397,12 @@ public partial class CheckView : UserControl
     /// <summary>Правила прогона — для проверки одного имени вне его.</summary>
     private static RuleEngine? _engine;
 
+    /// <summary>Замер зарубежных узлов видео YouTube этого прогона; <c>null</c> — не мерили.</summary>
+    private static VideoNodesReport? _video;
+
+    /// <summary>Почему узлы видео не мерились, когда прогон их касался.</summary>
+    private static string? _videoNote;
+
     private ICollectionView? _view;
 
     public CheckView()
@@ -565,6 +571,8 @@ public partial class CheckView : UserControl
         _logMark = EngineLog.Position();
         View.Sections.ItemsSource = null;
         _findings = [];
+        _video = null;
+        _videoNote = null;
         _setupLine = null;
         _selected = null;
         View.ShowPanel(null);
@@ -645,7 +653,23 @@ public partial class CheckView : UserControl
             // надо раньше, чем они появятся на экране.
             await ReadSetupAsync(settings, running, _work.Token);
 
+            // Зарубежные узлы видео YouTube — рядом с основным прогоном, а не после:
+            // это до полуминуты, а адреса у узлов свои, и пробам имён они не мешают.
+            // Проверка youtube.com спрашивает узел провайдера и про них не скажет
+            // ничего (10.11: «популярное играет, редкое не идёт»).
+            var video = VideoNodes.Concerns(targets.Select(t => t.Host))
+                ? MeasureVideoAsync(settings, _work.Token)
+                : null;
+
             await RunAsync(targets, engine, running && settings.TunnelCarriesRoutes, _work.Token);
+
+            if (video is not null)
+            {
+                if (!video.IsCompleted)
+                    Say("Досматриваю зарубежные узлы видео YouTube…");
+
+                (_video, _videoNote) = await video;
+            }
 
             await Summarise(engine);
         }
@@ -678,6 +702,27 @@ public partial class CheckView : UserControl
             // ещё столько же времени.
             if (SaveReport(running, interrupted) is { } note)
                 Say(_status + "  " + note);
+        }
+    }
+
+    /// <summary>
+    /// Мерит зарубежные узлы видео; сорвалось или прервано — как будто не мерили.
+    /// </summary>
+    /// <remarks>
+    /// Исключения гасятся здесь: задача идёт рядом с основным прогоном, и сорвись
+    /// тот раньше, чем её дождутся, её исключение осталось бы ничьим.
+    /// </remarks>
+    private static async Task<(VideoNodesReport? Report, string? Why)> MeasureVideoAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Task.Run(() => VideoNodesRun.MeasureAsync(settings, cancellationToken), cancellationToken);
+        }
+        catch (Exception)
+        {
+            return (null, null);
         }
     }
 
@@ -785,6 +830,29 @@ public partial class CheckView : UserControl
             // Пометка идёт первой: она отменяет совет, а не дополняет его.
             foreach (var row in explained)
                 text.AppendLine($"{row.Host}: {Explain(row)}");
+        }
+
+        // Узлы видео — таблицей и тогда, когда всё открыто: по отчёту человека,
+        // у которого «редкое не идёт», нужны числа по каждому узлу, а не только итог.
+        if (_video is not null || _videoNote is not null)
+        {
+            text.AppendLine();
+            text.AppendLine("ЗАРУБЕЖНЫЕ УЗЛЫ ВИДЕО YOUTUBE");
+            text.AppendLine(new string('-', 78));
+
+            if (_video is { } video)
+            {
+                foreach (var line in video.Lines)
+                    text.AppendLine(line);
+
+                text.AppendLine(video.Summary is { } summary
+                    ? "Итог: " + summary
+                    : "Итог: судить не по чему — узлов с адресом слишком мало");
+            }
+            else
+            {
+                text.AppendLine(_videoNote);
+            }
         }
 
         if (_sections.Count > 0)
@@ -1443,7 +1511,7 @@ public partial class CheckView : UserControl
         // из hosts, общий узел у нескольких имён (Signatures, 14.10). Сразу
         // за итогом: при массовом отказе находка одна, и она отменяет
         // всё, что ниже.
-        _findings = Signatures.Find(_reports, ReadHosts());
+        _findings = Signatures.Find(_reports, ReadHosts(), _video);
 
         foreach (var finding in _findings)
         {

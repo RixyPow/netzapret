@@ -192,16 +192,39 @@ public static class Signatures
             + "на 187 Мбит/с; вики zapret.moe, «Отключение QUIC как обход таймаутов ТСПУ» (прочитано 27.10).",
     };
 
+    public static Signature VideoNodesLossy { get; } = new()
+    {
+        Id = "video-nodes",
+        Title = "Зарубежные узлы видео YouTube открываются не всегда",
+        Meaning = "Чего нет в кэше провайдера — редкий или старый ролик, свежую загрузку, дальнее место при перемотке, — "
+            + "YouTube отдаёт с зарубежного узла Google. На большинстве таких узлов стоит фильтр по адресу: "
+            + "рукопожатие проходит только с именем Google, со своим именем узла — нет. Когда и через обход часть "
+            + "соединений к ним не встаёт, такие ролики идут с заминками или не идут вовсе, хотя популярное, "
+            + "из кэша провайдера, играет. Проверка youtube.com этого не видит: она спрашивает узел провайдера.",
+        Remedy = "пресет Universal V11–V13 из NetZapret 1.5.1 или новее: в прежних подделка SYN закрывала TCP к этим "
+            + "узлам совсем. Часть соединений узлы под фильтром теряют и мимо обхода, с именем Google, — случайно, "
+            + "около пятой части; рецепт десинка этого не поднимет, плеер переспрашивает сам, отсюда заминки. "
+            + "Ролики не идут вовсе — YouTube целиком через VPN в «Маршрутах» (и страница, и видео: ссылка потока "
+            + "привязана к адресу, с которого открыта страница).",
+        Origin = "10.11 — YouTube вставал посреди видео: TCP к зарубежным узлам через обход 0 из 6, мимо него 12 из 12 — "
+            + "SYN с приветствием внутри фильтр не пропускал; после правки пресетов — 82 из 96 через обход, "
+            + "78 из 96 мимо него с именем Google, QUIC 47 из 60; чистые узлы тех же сетей не теряли ничего "
+            + "(24 из 24), к порту отправителя отказ не привязан. Вики zapret.moe, страница "
+            + "DPI/tspu-tls-ip-filter-tcp-window-october-2026; ntc.party, «Zapret2» №1367–1372.",
+    };
+
     /// <summary>Все почерки — в том порядке, в каком их показывают.</summary>
-    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, LateFreeze, SharedNode, PartlySilent, EchHidden, QuicSilent];
+    public static IReadOnlyList<Signature> All { get; } = [MassFailure, DeadPin, Freeze, LateFreeze, SharedNode, PartlySilent, EchHidden, QuicSilent, VideoNodesLossy];
 
     /// <summary>
     /// Почерки в результатах одного прогона.
     /// </summary>
     /// <param name="hosts">Файл hosts целиком (<see cref="HostsFile.Read"/>); <c>null</c> — не читали.</param>
+    /// <param name="video">Замер зарубежных узлов видео (<see cref="VideoNodes"/>); <c>null</c> — не мерили.</param>
     public static IReadOnlyList<SignatureFinding> Find(
         IReadOnlyList<TargetReport> reports,
-        IReadOnlyDictionary<string, List<IPAddress>>? hosts = null)
+        IReadOnlyDictionary<string, List<IPAddress>>? hosts = null,
+        VideoNodesReport? video = null)
     {
         // Мимо туннеля: через туннель адрес подменный, и узел, пин или байты
         // говорят о трубе, а не о сайте.
@@ -236,8 +259,27 @@ public static class Signatures
         found.AddRange(PartlySilentNames(direct));
         found.AddRange(EchHiddenNames(direct));
         found.AddRange(QuicSilentNames(direct, hosts));
+        found.AddRange(VideoNodesFinding(video));
 
         return found;
+    }
+
+    private static IEnumerable<SignatureFinding> VideoNodesFinding(VideoNodesReport? video)
+    {
+        // Фильтра нет и всё встаёт — говорить не о чем; узлов мало — судить не по чему.
+        if (video is null || video.Verdict is VideoNodesVerdict.NotMeasured or VideoNodesVerdict.Fine)
+            yield break;
+
+        yield return new SignatureFinding
+        {
+            Signature = VideoNodesLossy,
+            Headline = $"Зарубежные узлы видео YouTube {video.Summary}",
+            Hosts = video.Measured.Select(n => n.Host).ToList(),
+            Lines = video.Lines,
+
+            // Фильтр стоит, но соединения встают — знать стоит, чинить нечего.
+            Calm = video.Verdict == VideoNodesVerdict.FilteredButPasses,
+        };
     }
 
     private static IEnumerable<SignatureFinding> QuicSilentNames(
