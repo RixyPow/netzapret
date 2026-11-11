@@ -211,4 +211,28 @@ public sealed class VideoNodesTests
         Assert.Contains("пинг не измерен", text);
         Assert.Contains("не соединились ни разу (пинг не измерен): узлов 1", text);
     }
+
+    /// <summary>
+    /// Площадка Google вместо кэша провайдера (11.11, Тула и СПб): отчёт говорит, что
+    /// всё видео идёт с зарубежных узлов, а не называет её кэшем провайдера.
+    /// </summary>
+    [Fact]
+    public void AGoogleSiteIsNotCalledTheProvidersCache()
+    {
+        Assert.True(VideoNodes.IsGoogleSite("fra16s69"));
+        Assert.True(VideoNodes.IsGoogleSite("arn09s18"));
+        Assert.False(VideoNodes.IsGoogleSite("sevensky-vko2"));
+        Assert.Equal("fra16s69 (Франкфурт)", VideoNodes.SiteName("fra16s69"));
+
+        var site = Node("x", 3, 3, NodeFilter.Unknown) with
+        {
+            Host = "rr1---fra16s69" + VideoNodes.Zone, Cache = true, GoogleSite = true, PingMs = 43,
+        };
+
+        var text = string.Join("\n", (Report(Node("a", 0, 0)) with { CacheNode = site }).Details);
+
+        Assert.Contains("Кэша Google у провайдера нет", text);
+        Assert.Contains("fra16s69 (Франкфурт)", text);
+        Assert.DoesNotContain("Кэш провайдера:", text);
+    }
 }

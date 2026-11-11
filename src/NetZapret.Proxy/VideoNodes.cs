@@ -66,6 +66,12 @@ public sealed record VideoNode
     /// <summary>Узел кэша провайдера, а не зарубежный: в общий счёт не идёт.</summary>
     public bool Cache { get; init; }
 
+    /// <summary>
+    /// Узел, к которому Google приписал сеть клиента, — площадка самого Google
+    /// (<c>fra16s69</c>), а не кэш у провайдера (<c>sevensky-vko2</c>).
+    /// </summary>
+    public bool GoogleSite { get; init; }
+
     /// <summary>Задержка до узла: наименьшее время установки TCP; <c>null</c> — не соединился ни разу.</summary>
     public int? PingMs { get; init; }
 
@@ -250,9 +256,23 @@ public sealed record VideoNodesReport
             if (Recipe is not null)
                 lines.Add(Recipe);
 
-            lines.Add(CacheNode is { } cache
-                ? "Кэш провайдера: " + cache.Detail()
-                : "Кэш провайдера: " + (CacheNote ?? "не определён"));
+            // Площадка Google вместо кэша провайдера — главное, что надо знать
+            // о такой сети: всё видео, и популярное тоже, идёт с зарубежных
+            // узлов под фильтром (11.11: Тула, Ростелеком — fra16s69; СПб,
+            // эТелеком — arn09s18; у обоих «не грузится вообще»).
+            if (CacheNode is { GoogleSite: true } site)
+            {
+                lines.Add("Кэша Google у провайдера нет: YouTube приписал эту сеть к своей площадке "
+                    + VideoNodes.SiteName(site.Short.Replace("rr1---", string.Empty))
+                    + " — всё видео, и популярное тоже, идёт с зарубежных узлов, как редкие ролики.");
+                lines.Add("  " + site.Detail());
+            }
+            else
+            {
+                lines.Add(CacheNode is { } cache
+                    ? "Кэш провайдера: " + cache.Detail()
+                    : "Кэш провайдера: " + (CacheNote ?? "не определён"));
+            }
 
             lines.Add(string.Empty);
             lines.Add("Зарубежные узлы (время попыток — от SYN до ответа сервера):");
@@ -388,6 +408,29 @@ public static class VideoNodes
     private const string MappingUrl = "https://redirector.googlevideo.com/report_mapping?di=no";
 
     /// <summary>
+    /// Имя площадки самого Google: код аэропорта, номер, «s» и номер — <c>fra16s69</c>,
+    /// <c>arn09s18</c>. У кэша провайдера имя своё, с дефисом: <c>sevensky-vko2</c>.
+    /// </summary>
+    public static bool IsGoogleSite(string name) =>
+        System.Text.RegularExpressions.Regex.IsMatch(name, "^[a-z]{3}[0-9]{2}s[0-9]{1,3}$");
+
+    /// <summary>Площадка с городом, когда код аэропорта знаком: «fra16s69 (Франкфурт)».</summary>
+    public static string SiteName(string name) =>
+        name.Length >= 3 && Cities.TryGetValue(name[..3], out var city) ? $"{name} ({city})" : name;
+
+    /// <summary>Города площадок Google, куда приписывают сети в России и рядом.</summary>
+    private static readonly Dictionary<string, string> Cities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["fra"] = "Франкфурт", ["arn"] = "Стокгольм", ["ams"] = "Амстердам", ["hel"] = "Хельсинки",
+        ["waw"] = "Варшава", ["prg"] = "Прага", ["vie"] = "Вена", ["bud"] = "Будапешт",
+        ["muc"] = "Мюнхен", ["zrh"] = "Цюрих", ["mil"] = "Милан", ["lhr"] = "Лондон",
+        ["par"] = "Париж", ["mad"] = "Мадрид", ["otp"] = "Бухарест", ["sof"] = "София",
+        ["beg"] = "Белград", ["ber"] = "Берлин", ["ham"] = "Гамбург", ["dus"] = "Дюссельдорф",
+        ["cph"] = "Копенгаген", ["osl"] = "Осло", ["tll"] = "Таллин", ["rix"] = "Рига",
+        ["ist"] = "Стамбул", ["led"] = "Санкт-Петербург", ["mow"] = "Москва", ["svo"] = "Москва",
+    };
+
+    /// <summary>
     /// Узлы — по одному из группы.
     /// </summary>
     /// <remarks>
@@ -481,7 +524,8 @@ public static class VideoNodes
             return (null, "не определён — redirector.googlevideo.com не ответил");
         }
 
-        var node = (await MeasureNodeAsync($"rr1---{name}{Zone}", aside, cancellationToken, filter: false)) with { Cache = true };
+        var node = (await MeasureNodeAsync($"rr1---{name}{Zone}", aside, cancellationToken, filter: false))
+            with { Cache = true, GoogleSite = IsGoogleSite(name) };
 
         return node.Tunnelled
             ? (null, $"{name} — YouTube заведён в туннель, это кэш у выхода; не мерился")
