@@ -151,4 +151,22 @@
     <PackageReference Include="Microsoft.Diagnostics.Runtime" Version="3.1.512801" />
   </ItemGroup>
 
+  <!--
+    msquic.dll — рядом с exe, а не внутри него. Выпуск публикуется одним файлом
+    (pack.cmd: PublishSingleFile и IncludeNativeLibrariesForSelfExtract), и
+    System.Net.Quic ищет msquic.dll в папке сборки — то есть рядом с exe, — а не там,
+    куда одиночный файл распаковывает свои библиотеки. Там его нет, и
+    QuicConnection.IsSupported в выпуске — false на любой Windows: проба QUIC в
+    проверке блокировок (с 27.10) и QUIC узлов видео YouTube у людей не мерились
+    вовсе, в отчётах «QUIC не мерился» (11.11, Тула и СПб). Проверено пробной
+    программой с теми же ключами публикации: без файла — false, с ним рядом — true.
+    ExcludeFromSingleFile на этот файл не помогает — он уходит в пакет иным путём.
+  -->
+  <Target Name="MsQuicBesideExe" AfterTargets="Publish" Condition="'$(PublishSingleFile)' == 'true'">
+    <ItemGroup>
+      <MsQuicBeside Include="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'msquic.dll'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(MsQuicBeside)" DestinationFolder="$(PublishDir)" />
+  </Target>
+
 </Project>
