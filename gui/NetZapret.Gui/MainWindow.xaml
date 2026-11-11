@@ -52,7 +52,9 @@
                     пока оставим что есть». До 21.10 — буквы «NZ» цветами наоборот
                     к странице; с 21.10 — эмблема в трёх цветах темы.
                 -->
-                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="20,24,18,20">
+                <!-- Щелчок по эмблеме — на «Главную» (12.11, как логотип на сайте). -->
+                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="20,24,18,20" Background="Transparent"
+                      Cursor="Hand" ToolTip="Главная" MouseLeftButtonUp="OnLogoClick">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -328,28 +330,9 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="&#xE721;" FontFamily="{DynamicResource IconFont}" FontSize="14"
                                        Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
-                            <!--
-                                Своим шаблоном, без рамки: рамку даёт карточка, а общий
-                                шаблон поля обводил бы строку цветом выбора при фокусе.
-                            -->
-                            <TextBox x:Name="PaletteInput" Grid.Column="1" Margin="9,0,6,0" VerticalAlignment="Center"
-                                     TextChanged="OnPaletteText" PreviewKeyDown="OnPaletteKey">
-                                <TextBox.Template>
-                                    <ControlTemplate TargetType="TextBox">
-                                        <Grid>
-                                            <TextBlock x:Name="Placeholder" Text="Что нужно сделать?" Margin="2,0,0,0"
-                                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
-                                                       IsHitTestVisible="False" Visibility="Collapsed" />
-                                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
-                                        </Grid>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="Text" Value="">
-                                                <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </TextBox.Template>
-                            </TextBox>
+                            <TextBox x:Name="PaletteInput" Grid.Column="1" Margin="7,0,6,0" VerticalAlignment="Center"
+                                     Style="{StaticResource PaletteField}" local:Hint.Text="Что нужно сделать?"
+                                     TextChanged="OnPaletteText" PreviewKeyDown="OnPaletteKey" />
                             <Border Grid.Column="2" CornerRadius="5" BorderThickness="1.5" BorderBrush="{DynamicResource Border}"
                                     Padding="5,1" VerticalAlignment="Center">
                                 <TextBlock Text="Esc" FontSize="10.5" Foreground="{DynamicResource Faint}" />

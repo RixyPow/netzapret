@@ -72,6 +72,34 @@ public sealed class HintTests
     }
 
     /// <summary>
+    /// Строка палитры «Что сделать?» — своим стилем, и подсказка там же, где первая буква.
+    /// </summary>
+    /// <remarks>
+    /// 12.11 владелец прислал снимок: курсор стоял правее первой буквы подсказки —
+    /// строка палитры наследовала отступ общего поля, а её шаблон его не учитывал.
+    /// </remarks>
+    [Fact]
+    public void The_palette_hint_starts_where_the_first_letter_will()
+    {
+        Sta.Run(() =>
+        {
+            var field = new TextBox { Style = (Style)Application.Current.FindResource("PaletteField") };
+            Hint.SetText(field, "Что нужно сделать?");
+            field.Width = 400;
+            field.ApplyTemplate();
+            field.Measure(new Size(400, double.PositiveInfinity));
+            field.Arrange(new Rect(field.DesiredSize));
+            field.UpdateLayout();
+
+            var hint = (TextBlock)field.Template.FindName("HintText", field);
+            var hintStart = hint.TranslatePoint(new Point(hint.Padding.Left, 0), field);
+            var caret = field.GetRectFromCharacterIndex(0);
+
+            Assert.Equal(caret.X, hintStart.X, 0.01);
+        });
+    }
+
+    /// <summary>
     /// Строка ввода — внутренний тип WPF, поэтому по имени, а не по типу.
     /// </summary>
     private static UIElement? Find(DependencyObject node, string type)

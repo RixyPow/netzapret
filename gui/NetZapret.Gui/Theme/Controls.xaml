@@ -404,6 +404,38 @@
     </Style>
 
     <!--
+        Строка ввода палитры «Что сделать?» (MainWindow, 11.11). Без рамки — её
+        даёт карточка палитры, а общий шаблон поля обводил бы строку цветом
+        выбора при фокусе. Отступа нет: в первом виде он оставался от общего
+        стиля (11,7), WPF отдавал его строке ввода, и курсор стоял внутри
+        подсказки, правее её первой буквы (снимок владельца 12.11). Подсказка —
+        на 2 правее края: так отходит строка ввода WPF; сторожит HintTests.
+    -->
+    <Style x:Key="PaletteField" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Grid Background="{TemplateBinding Background}">
+                        <TextBlock x:Name="HintText" IsHitTestVisible="False" Padding="2,0"
+                                   VerticalAlignment="Center" Foreground="{DynamicResource Muted}"
+                                   FontSize="{TemplateBinding FontSize}" TextTrimming="CharacterEllipsis"
+                                   Text="{TemplateBinding local:Hint.Text}" Visibility="Collapsed" />
+                        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="HintText" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         Поле для скрытого ввода. Шаблон тот же, что у обычного: без него
         подложка остаётся системной, то есть белой, и точки не видно на белом.
     -->
@@ -895,10 +927,18 @@
         цветом текста, подпись — Faint и мельче. Muted рядом с пунктами
         цветом текста спорил с ними (владелец 03.11 попросил темнее).
     -->
+    <!--
+        Подпись группы — ровно той же высоты, что черта свёрнутого меню
+        (RailGroupLine: 14 + 1 + 12 = 27): иначе значки при сворачивании
+        съезжали вверх, на каждую группу по 13 точек (снимки владельца 12.11).
+        Плотнее прежнего (20 + строка + 4) — так, как в свёрнутом, владельцу
+        и понравилось.
+    -->
     <Style x:Key="RailGroup" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource Faint}" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Margin" Value="20,20,20,4" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="Margin" Value="20,8,20,3" />
         <Style.Triggers>
             <!-- В свёрнутом меню подпись не влезает — вместо неё черта (RailGroupLine). -->
             <Trigger Property="local:RailCompact.IsOn" Value="True">

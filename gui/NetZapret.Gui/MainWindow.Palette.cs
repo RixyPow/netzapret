@@ -229,6 +229,9 @@ public partial class MainWindow
         }
     }
 
+    /// <summary>Эмблема в углу меню ведёт на «Главную» — как логотип на сайте.</summary>
+    private void OnLogoClick(object sender, MouseButtonEventArgs e) => Open("status");
+
     private void OnRailToggle(object sender, RoutedEventArgs e)
     {
         bool compact = !RailCompact.GetIsOn(RailBorder);
