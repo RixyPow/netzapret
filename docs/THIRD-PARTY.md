@@ -108,9 +108,11 @@ GPLv3 прямо оговаривает такой случай: объедин�
 
 `engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
 (автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
-после 1.4.1 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-6-gd5f65b7-native`
-(SHA-256 `05cd64e6960de8a0d831e308717ea9bcc7179092f9b21028361cf88aed9aabc5`,
-сверен с описанием выпуска), в 1.4.1 — `v1.0.7-34-gfd8ae05-native` (`b24d1e85…7c1136dee`),
+после 1.5.5 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-10-gdd65679-native`
+(SHA-256 `28f55a11d2dabcac87caf98f06509153f87bfd9d3a3fd56bc2fb14c2da1b2f2e`,
+сверен с описанием выпуска), в 1.5.1–1.5.5 — `…-native-6-gd5f65b7-native`
+(`05cd64e6…ed9aabc5`), в 1.5.0 — `…-native-2-gfe91a63-native` (`17fdb2cd…2e458c64`),
+в 1.4.1 — `v1.0.7-34-gfd8ae05-native` (`b24d1e85…7c1136dee`),
 в 1.2.4–1.4.0 — `v1.0.6-49-g9600a09-native` (`1a02c60e…d4a01fd2`),
 в 1.2.2–1.2.3 — `v1.0.6-33-gcb4b3d2-native` (`a8755b37…ae17f061`),
 в 1.2.1 стоял `v1.0.6-31-gb18c712-native` (`8767b3fd…3a05dd4d`),

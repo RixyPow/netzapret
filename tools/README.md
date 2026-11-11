@@ -120,6 +120,15 @@ wscale больше 14, остальное — `zapret-lib.lua` и blockcheck2, 
 остальное — lua форка. Сверка 10.11 на всех 15 пресетах: вывод
 `--dry-run --debug=1` и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
 
+С 11.11 — `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-10-gdd65679-native`
+(SHA-256 `28f55a11…c2da1b2f2e`, сверен с описанием выпуска 11.11), в
+`tools\zapret2-native-v1.0.7-34-gfd8ae05-native-3-g0de505f-native-10-gdd65679\`;
+`-6-gd5f65b7` (в 1.5.1–1.5.5) — в своей папке как `winws2-native.exe.bak`.
+Сверх `-6` у bol-van запуск в пространстве имён пользователя (`12e679a`,
+`nfq2/sec.c`, только ветка `__linux__` — для Windows код тот же) и опечатка
+в шаблоне issue. Сверка 11.11 на всех 18 пресетах: вывод `--dry-run --debug=1`
+и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
+
 `winws2.exe` под `tools\` должен быть один: сборка берёт последний найденный.
 Прежний, `binaries\windows-x86_64\winws2.exe` из выпуска
 [bol-van/zapret2](https://github.com/bol-van/zapret2/releases), лежит
