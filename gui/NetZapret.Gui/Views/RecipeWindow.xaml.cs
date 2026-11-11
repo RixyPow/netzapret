@@ -562,7 +562,7 @@ public partial class RecipeWindow : Window
         var profile = new OwnDesyncProfile
         {
             Name = "проба",
-            Steps = row.Steps,
+            Steps = PresetCompanions.With(PresetCompanions.ForDomains(_preset, paths.Root, [_domain]), row.Steps),
             HostListPath = RecipeTrial.ListPath,
             Ports = PresetPorts.ForDomains(_preset, paths.Root, [_domain]),
         };

@@ -400,6 +400,7 @@ public static class SiteFixer
             .ToList();
 
         var ports = PresetPorts.ForDomains(preset, paths.Root, [bare]);
+        var companions = PresetCompanions.ForDomains(preset, paths.Root, [bare]);
         int tried = 0;
 
         foreach (var recipe in runnable)
@@ -410,7 +411,7 @@ public static class SiteFixer
             var profile = new OwnDesyncProfile
             {
                 Name = "проба: " + recipe.Id,
-                Steps = recipe.Steps,
+                Steps = PresetCompanions.With(companions, recipe.Steps),
                 HostListPath = RecipeTrial.ListPath,
                 Ports = ports,
             };

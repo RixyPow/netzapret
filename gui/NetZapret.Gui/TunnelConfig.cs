@@ -550,7 +550,11 @@ internal static class TunnelConfig
 
                     return (
                         Name: group.Key,
-                        Steps: recipe.MissingModules.Count > 0 ? [] : recipe.Steps,
+                        // Шаг YT FIX секции, которую профиль подменяет, — перед рецептом:
+                        // без него свой рецепт для YouTube молча выключал YT FIX (11.11).
+                        Steps: recipe.MissingModules.Count > 0
+                            ? []
+                            : PresetCompanions.With(PresetCompanions.ForDomains(preset, zapretRoot, domains), recipe.Steps),
                         Domains: domains,
 
                         // Порты берутся у секции, которую профиль подменяет.
