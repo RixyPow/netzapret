@@ -376,6 +376,69 @@
                             </ToggleButton>
                         </Grid>
                     </Border>
+
+                    <!--
+                        Автозапуск и автообновление — рядом, пополам (12.11, набросок
+                        владельца). В первый проход оба включены; выбор записывается при
+                        «Готово», а пропущенный мастер ставит их как есть (ApplyStartup).
+                        Отступы — как у плиток режима: 14 между карточками, 26 от Telegram
+                        (8 его нижнего поля и 18 своего).
+                    -->
+                    <UniformGrid Columns="2" Margin="-7,18,-7,8">
+                        <Border Margin="7,0" CornerRadius="14" BorderThickness="2" Padding="20,14"
+                                BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Style="{StaticResource IconTile}" Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE945;" />
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Автозапуск" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource PageNote}" FontSize="14" Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Text="Обход поднимется при входе в Windows" />
+                                </StackPanel>
+
+                                <ToggleButton Grid.Column="2" x:Name="AutostartPick" Style="{StaticResource Switch}" VerticalAlignment="Center">
+                                    <ToggleButton.LayoutTransform>
+                                        <ScaleTransform ScaleX="1.25" ScaleY="1.25" />
+                                    </ToggleButton.LayoutTransform>
+                                </ToggleButton>
+                            </Grid>
+                        </Border>
+
+                        <Border Margin="7,0" CornerRadius="14" BorderThickness="2" Padding="20,14"
+                                BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Style="{StaticResource IconTile}" Margin="0,0,16,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE895;" />
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,16,0">
+                                    <TextBlock Text="Автообновление" FontSize="19" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource PageNote}" FontSize="14" Margin="0,4,0,0" TextWrapping="Wrap"
+                                               Text="Новая версия ставится сама при запуске" />
+                                </StackPanel>
+
+                                <ToggleButton Grid.Column="2" x:Name="AutoUpdatePick" Style="{StaticResource Switch}" VerticalAlignment="Center">
+                                    <ToggleButton.LayoutTransform>
+                                        <ScaleTransform ScaleX="1.25" ScaleY="1.25" />
+                                    </ToggleButton.LayoutTransform>
+                                </ToggleButton>
+                            </Grid>
+                        </Border>
+                    </UniformGrid>
                 </StackPanel>
 
             </Grid>

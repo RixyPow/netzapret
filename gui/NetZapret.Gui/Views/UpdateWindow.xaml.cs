@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using NetZapret.Core;
 using NetZapret.Core.Updates;
 
 namespace NetZapret.Gui.Views;
@@ -106,6 +107,24 @@ public partial class UpdateWindow : Window
         };
 
         Closed += (_, _) => _work.Cancel();
+
+        AutoUpdateSwitch.IsChecked = AppSettings.Load(AppSettings.DefaultPath).AutoInstallUpdates;
+    }
+
+    /// <summary>Автообновление — в настройки сразу (AppSettings.AutoInstallUpdates, 12.11).</summary>
+    private void OnAutoUpdate(object sender, RoutedEventArgs e)
+    {
+        bool on = AutoUpdateSwitch.IsChecked == true;
+
+        try
+        {
+            (AppSettings.Load(AppSettings.DefaultPath) with { AutoInstallUpdates = on }).Save(AppSettings.DefaultPath);
+        }
+        catch (Exception)
+        {
+            // Не записалось — выключатель возвращается к тому, что в настройках.
+            AutoUpdateSwitch.IsChecked = !on;
+        }
     }
 
     /// <summary>Установка доступна — окно предлагает новее установленного.</summary>

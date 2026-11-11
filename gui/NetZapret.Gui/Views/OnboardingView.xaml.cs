@@ -249,7 +249,84 @@ public partial class OnboardingView : UserControl
             ? "Telegram заработает без VPN"
             : "Прокси нет в этой сборке программы";
 
+        ShowStartupPicks(settings);
         ShowLocks();
+    }
+
+    // --- Автозапуск и автообновление (12.11) ------------------------------------
+
+    /// <summary>Шаг с выключателями показан — значит, выбор в них сделан человеком.</summary>
+    private bool _startupShown;
+
+    /// <summary>
+    /// В первый проход — оба включены; в повторном мастере — как стоит сейчас.
+    /// </summary>
+    /// <remarks>
+    /// Решение владельца 12.11: автозапуск и автообновление выбирает человек
+    /// в мастере, выключатели — рядом на последнем шаге (набросок). Включены
+    /// в первый проход, как на наброске; у прошедших мастер ничего не меняется,
+    /// пока они сами не переключат.
+    /// </remarks>
+    private async void ShowStartupPicks(AppSettings settings)
+    {
+        bool first = !settings.OnboardingDone;
+
+        _startupShown = true;
+        AutoUpdatePick.IsChecked = first || settings.AutoInstallUpdates;
+        AutostartPick.IsChecked = first || Autostart.Known is { Installed: true };
+
+        if (first)
+            return;
+
+        try
+        {
+            var (installed, _) = await Autostart.QueryAsync();
+            AutostartPick.IsChecked = installed;
+        }
+        catch (Exception)
+        {
+            // Планировщик не ответил — выключатель стоит как было известно.
+        }
+    }
+
+    /// <summary>
+    /// Ставит автозапуск и автообновление по выключателям шага 3.
+    /// </summary>
+    /// <remarks>
+    /// Шаг не открывали (мастер пропущен с первого шага или покинут раньше) —
+    /// в первый проход ставится то же, что выключатели показали бы: оба включены;
+    /// в повторном — ничего, выбор человека прежний. Задача планировщика —
+    /// в фоне: schtasks десятки миллисекунд, поток окна их не ждёт; не вышло —
+    /// строкой в журнал окна, выключатель в «Ещё» покажет правду.
+    /// </remarks>
+    private void ApplyStartup(bool first)
+    {
+        bool? autostart = _startupShown ? AutostartPick.IsChecked == true : first ? true : null;
+        bool? autoUpdate = _startupShown ? AutoUpdatePick.IsChecked == true : first ? true : null;
+
+        if (autoUpdate is { } update)
+        {
+            try
+            {
+                var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+                if (settings.AutoInstallUpdates != update)
+                    (settings with { AutoInstallUpdates = update }).Save(AppSettings.DefaultPath);
+            }
+            catch (Exception ex)
+            {
+                Journal.Write("окно", "мастер: автообновление не записалось — " + ex.GetBaseException().Message);
+            }
+        }
+
+        if (autostart is { } on)
+        {
+            _ = Task.Run(() =>
+            {
+                if (Autostart.Set(on) is { } problem)
+                    Journal.Write("окно", "мастер: " + problem);
+            });
+        }
     }
 
     private WorkMode? PickedMode() =>
@@ -415,6 +492,7 @@ public partial class OnboardingView : UserControl
     /// </remarks>
     private void Finish()
     {
+        ApplyStartup(first: !AppSettings.Load(AppSettings.DefaultPath).OnboardingDone);
         MarkDone();
         Completed?.Invoke(this, EventArgs.Empty);
     }
@@ -429,6 +507,11 @@ public partial class OnboardingView : UserControl
     /// </remarks>
     public void Leave()
     {
+        bool first = !AppSettings.Load(AppSettings.DefaultPath).OnboardingDone;
+
+        if (first)
+            ApplyStartup(first);
+
         if (MarkDone())
             Journal.Write("окно", "мастер первого запуска закрыт уходом в другой раздел");
     }
