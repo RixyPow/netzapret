@@ -551,7 +551,8 @@ public partial class StatusView : UserControl
         // Описание пресета — строкой под именем, как до 08.11: в подсказке «i» его
         // не видно, а им пресеты и различают (владелец вернул в тот же день).
         // Беда с пресетом — на том же месте вместо описания.
-        string presetLine = seen.PresetProblem.Length > 0 ? seen.PresetProblem : seen.PresetNote;
+        // В простом виде описания нет (владелец 11.11), беда — есть.
+        string presetLine = seen.PresetProblem.Length > 0 ? seen.PresetProblem : _advanced ? seen.PresetNote : string.Empty;
         PresetNote.Text = presetLine;
         PresetNote.Visibility = presetLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         ShowServer(settings, _exit);
@@ -1161,6 +1162,13 @@ public partial class StatusView : UserControl
         FooterStatePanel.Visibility = _advanced ? Visibility.Visible : Visibility.Collapsed;
         FooterConfig.Visibility = _advanced ? Visibility.Visible : Visibility.Collapsed;
         Footer.Visibility = _advanced && _narrow ? Visibility.Collapsed : Visibility.Visible;
+
+        // Простой вид (макет, 11.11): нагрузка слева, отчёт справа.
+        Grid.SetColumn(FooterMeters, _advanced ? 1 : 0);
+        ReportButton.Visibility = _advanced ? Visibility.Collapsed : Visibility.Visible;
+
+        if (_advanced)
+            ReportNote.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>«23 дня, 4 часа», «4 ч 12 мин», «7 мин».</summary>
@@ -1695,9 +1703,9 @@ public partial class StatusView : UserControl
         var engines = settings.Engines;
         var mode = WorkModes.Of(engines);
 
-        ModeDesyncName.Text = WorkModes.Name(WorkMode.Desync);
-        ModeTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
-        ModeRouteName.Text = WorkModes.Name(WorkMode.Route);
+        ModeDesyncName.Text = TileDesyncName.Text = WorkModes.Name(WorkMode.Desync);
+        ModeTunnelName.Text = TileTunnelName.Text = WorkModes.Name(WorkMode.Tunnel);
+        ModeRouteName.Text = TileRouteName.Text = WorkModes.Name(WorkMode.Route);
 
         // Пояснение — выбранного режима. «Без исключений» — настройка внутри
         // «Туннеля»: включённая, она меняет смысл режима, и молчать о ней нельзя.
@@ -1732,9 +1740,9 @@ public partial class StatusView : UserControl
             ShowModeLine();
 
         // «Ничего не поднято» режимом не считается — ни один сегмент не выбран.
-        ModeDesync.IsChecked = mode == WorkMode.Desync;
-        ModeTunnel.IsChecked = mode == WorkMode.Tunnel;
-        ModeRoute.IsChecked = mode == WorkMode.Route;
+        ModeDesync.IsChecked = TileDesync.IsChecked = mode == WorkMode.Desync;
+        ModeTunnel.IsChecked = TileTunnel.IsChecked = mode == WorkMode.Tunnel;
+        ModeRoute.IsChecked = TileRoute.IsChecked = mode == WorkMode.Route;
 
         // Режиму с туннелем без выхода везти некуда: «Туннель» не поднимет
         // ничего, «Гибрид» сработает как «Десинк». Сказать об этом здесь,
@@ -1794,6 +1802,7 @@ public partial class StatusView : UserControl
         if (advanced)
             ShowAutostart();
 
+        ShowLayout(advanced);
         ShowFooterRow();
         ShowCards(settings);
         ShowModes(settings);
@@ -1804,6 +1813,130 @@ public partial class StatusView : UserControl
         // Карточка «DNS роутера недоступен» — только простому виду: в подробном
         // это сказано строкой DNS в параметрах подключения.
         SetRouterDnsWarning(settings);
+    }
+
+    /// <summary>
+    /// Порядок и размеры частей по виду.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Простой вид — по макету владельца (11.11): состояние, «Сайт не
+    /// открывается?», режим плитками, пресет и сервер, внизу нагрузка и отчёт.
+    /// Подробный — как до 11.11: пресет и параметры сразу под состоянием,
+    /// режим сегментами, автозапуск с обновлением и быстрые действия.
+    /// </para>
+    /// <para>
+    /// Карточка состояния в простом виде — главная: строка страницы под ней
+    /// растягивается (вес 6, от 168 до 284 точек), и на развёрнутом окне
+    /// страница не обрывается провалом внизу, а на узком карточка сжимается
+    /// до своего минимума раньше, чем появится прокрутка.
+    /// </para>
+    /// </remarks>
+    private void ShowLayout(bool advanced)
+    {
+        var simple = advanced ? Visibility.Collapsed : Visibility.Visible;
+
+        SiteCard.Visibility = simple;
+        Grid.SetRow(CardsRow, advanced ? 6 : 13);
+        Grid.SetRow(SettingsRow, advanced ? 13 : 15);
+
+        // Состояние.
+        var row = Page.RowDefinitions[4];
+        row.Height = advanced ? GridLength.Auto : new GridLength(6, GridUnitType.Star);
+        row.MinHeight = advanced ? 0 : StateMin;
+        row.MaxHeight = advanced ? double.PositiveInfinity : StateMax;
+        StateGrid.Height = advanced ? 128 : double.NaN;
+
+        // Остаток высоты — сперва карточке состояния, потом уже полю над нижней
+        // строкой: при равных весах они делили его, и под карточками оставался
+        // провал в семьдесят точек (снимок 11.11, тёмная тема во всю ширину).
+        Page.RowDefinitions[16].Height = new GridLength(advanced ? 1 : 0.1, GridUnitType.Star);
+        StateText.Margin = advanced ? new Thickness(24, 16, 0, 0) : new Thickness(28, 24, 0, 0);
+        StateText.MaxWidth = advanced ? 340 : 420;
+        StateLine.FontSize = advanced ? 21 : 36;
+        StateLine.MaxHeight = advanced ? 58 : 98;
+        StateHint.FontSize = advanced ? 13.5 : 15;
+        StateHint.Margin = new Thickness(0, advanced ? 4 : 6, 0, 0);
+
+        // Режим: сегменты — подробному, плитки — простому.
+        ModeCaption.Text = advanced ? "Режим работы NZ" : "Режим работы";
+        ModeSegments.Visibility = advanced ? Visibility.Visible : Visibility.Collapsed;
+        ModeTiles.Visibility = simple;
+
+        // Пресет: подпись и описание — только подробному (решение владельца 11.11).
+        PresetCaption.Visibility = advanced ? Visibility.Visible : Visibility.Collapsed;
+        PresetRow.Margin = new Thickness(0, advanced ? 12 : 0, 0, 0);
+        PresetBody.VerticalAlignment = advanced ? VerticalAlignment.Stretch : VerticalAlignment.Center;
+        PresetMenu.VerticalAlignment = advanced ? VerticalAlignment.Top : VerticalAlignment.Center;
+    }
+
+    /// <summary>Карточка состояния простого вида — не ниже: надпись, волна и кнопка со счётчиками.</summary>
+    private const double StateMin = 168;
+
+    /// <summary>И не выше: дальше лишняя высота уходит под нижнюю строку, а не в пустую волну.</summary>
+    private const double StateMax = 284;
+
+    // --- «Сайт не открывается?» — простой вид ---------------------------------------
+
+    /// <summary>«Починить» залита, только когда в поле что-то есть: заливка на странице одна.</summary>
+    private void OnSiteText(object sender, TextChangedEventArgs e)
+    {
+        SiteFixButton.SetResourceReference(StyleProperty, SiteBox.Text.Trim().Length > 0 ? "Primary" : "Ghost");
+        SiteError.Visibility = Visibility.Collapsed;
+    }
+
+    private void OnSiteKey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+            FixSite();
+    }
+
+    private void OnSiteFix(object sender, RoutedEventArgs e) => FixSite();
+
+    /// <summary>
+    /// Открывает «Маршруты» на части сайта; части нет — заводит его своим доменом.
+    /// </summary>
+    /// <remarks>
+    /// Имя — тем же разбором, что поиск окна и «Сайт не открывается?» в «Ещё»
+    /// (<see cref="SiteFixer.HostOf"/>): ссылка, имя, «www.». Часть ищет и
+    /// заводит сам раздел (<see cref="RoutesView.PendingRevealAdds"/>): правила
+    /// он читает в фоне, и решать за него отсюда значило бы читать их второй
+    /// раз. Новая часть — своим доменом «напрямую», как добавляет поиск
+    /// «Маршрутов»; путь меняется в её строке.
+    /// </remarks>
+    private void FixSite()
+    {
+        if (SiteFixer.HostOf(SiteBox.Text) is not { } host)
+        {
+            SiteError.Text = SiteBox.Text.Trim().Length == 0
+                ? "Впишите сайт, например aternos.org."
+                : "Это не похоже на адрес сайта. Нужно что-то вроде aternos.org.";
+            SiteError.Visibility = Visibility.Visible;
+            return;
+        }
+
+        SiteError.Visibility = Visibility.Collapsed;
+        SiteBox.Text = string.Empty;
+
+        RoutesView.PendingReveal = host;
+        RoutesView.PendingRevealAdds = true;
+        Open("routes");
+    }
+
+    // --- Отчёт для разбора — простой вид, тот же, что в «Диагностике» -----------------
+
+    private async void OnReport(object sender, RoutedEventArgs e)
+    {
+        ReportButton.IsEnabled = false;
+        ReportNote.Text = "Собираю отчёт…";
+        ReportNote.ToolTip = null;
+        ReportNote.Visibility = Visibility.Visible;
+
+        var said = await ReportMaker.MakeAsync();
+
+        ReportNote.Text = said;
+        ReportNote.ToolTip = said;
+        ReportButton.IsEnabled = true;
     }
 
     /// <summary>Выбран вид «Главной» — в настройки и сразу на экран.</summary>

@@ -74,6 +74,37 @@
         </Style>
 
         <!--
+            Плитка режима простого вида (макет владельца, 11.11): крупный значок,
+            имя и подпись «Как Zapret». Выбранная — рамкой цвета темы, без заливки:
+            заливка на странице одна — у главной кнопки. Рамка 2, поля 14+14
+            и 12+12 — кратно 4 (window.md, рамки).
+        -->
+        <Style x:Key="ModeTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource Text}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Shape" Background="Transparent"
+                                BorderBrush="{DynamicResource Border}" BorderThickness="2"
+                                CornerRadius="12" Padding="14,12">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!--
             Плитка быстрого действия — карточкой, а не кнопкой: та же подложка
             со стеклом, рамка и скругление, что у Card (владелец 19.10: «нижние
             кнопки другого цвета, чем другие плитки»). У Ghost подложка Raised,
@@ -413,8 +444,14 @@
                     Надпись лежит поверх левой части, где волна только проявляется
                     (TunnelShape.Fade). Цвет волны и точки внизу — один ключ (ShowDot).
                 -->
-                <local:Card Grid.Row="4" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
-                    <Grid Height="128">
+                <!--
+                    В простом виде (11.11, макет владельца) карточка — главная: выше
+                    (строка страницы растягивается, ApplyView), надпись крупнее, волна
+                    шире и выше — та же TunnelWave, без свечения и эффектов: цена
+                    кадра растёт с площадью, а не с украшениями (window.md, такт).
+                -->
+                <local:Card Grid.Row="4" x:Name="StateCard" Style="{StaticResource Card}" Margin="0,12,0,0" Padding="0">
+                    <Grid x:Name="StateGrid" Height="128">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -423,7 +460,7 @@
                         <local:TunnelWave x:Name="Wave" Grid.Column="0" ClipToBounds="True" />
 
                         <!-- Не больше двух строк и трёх строк подсказки: карточка постоянной высоты. -->
-                        <StackPanel Grid.Column="0" Margin="24,16,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" MaxWidth="340">
+                        <StackPanel Grid.Column="0" x:Name="StateText" Margin="24,16,0,0" VerticalAlignment="Top" HorizontalAlignment="Left" MaxWidth="340">
                             <TextBlock x:Name="StateLine" FontSize="21" FontWeight="SemiBold" Text="Проверяю…"
                                        FontFamily="{DynamicResource DisplayFont}" TextWrapping="Wrap"
                                        TextTrimming="CharacterEllipsis" MaxHeight="58" />
@@ -528,22 +565,68 @@
                 </local:Card>
 
                 <!--
+                    «Сайт не открывается?» — простой вид (макет владельца, 11.11).
+                    Вписанный сайт открывает «Маршруты» на его части; части нет —
+                    имя заводится своим доменом, сперва «напрямую», и показывается
+                    (RoutesView.PendingRevealAdds). «Починить» залита, только когда
+                    в поле что-то есть: заливка на странице одна.
+                -->
+                <local:Card Grid.Row="6" x:Name="SiteCard" Style="{StaticResource HomeCard}" Margin="0,8,0,0"
+                            Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="Сайт не открывается?" Style="{StaticResource Caption}" FontSize="12.5" />
+
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!--
+                                Значок — поверх поля; текст и подсказка отодвинуты полем слева.
+                                Поле 18, а не 36: шаблон отдаёт Padding и рамке, и прокрутке
+                                (window.md, подсказка поля), отступ выходит двойным — около 40.
+                            -->
+                            <Grid Grid.Column="0" Margin="0,0,10,0">
+                                <TextBox x:Name="SiteBox" Padding="18,7,11,7" VerticalContentAlignment="Center"
+                                         local:Hint.Text="Впишите сайт, например aternos.org"
+                                         KeyDown="OnSiteKey" TextChanged="OnSiteText" />
+                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE774;" IsHitTestVisible="False"
+                                           HorizontalAlignment="Left" Margin="14,0,0,0" />
+                            </Grid>
+
+                            <!-- Поля свои: у залитой кнопки они шире, и кнопка росла бы при вводе. -->
+                            <Button Grid.Column="1" x:Name="SiteFixButton" Style="{StaticResource Ghost}" Content="Починить"
+                                    Click="OnSiteFix" MinWidth="120" Padding="18,9"
+                                    ToolTip="Показать маршрут сайта в «Маршрутах»; нет его — завести своим доменом, сперва «напрямую»" />
+                        </Grid>
+
+                        <TextBlock x:Name="SiteError" Style="{StaticResource Caption}" Foreground="{DynamicResource Danger}"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+                    </StackPanel>
+                </local:Card>
+
+                <!--
                     Пресет и сервер — рядом, как в макете. С 11.11 каждая карточка —
                     только когда её движок нужен режиму: в «Туннеле» пресет ни на что
                     не влияет, в «Десинке» сервера нет. Одна — во всю ширину (ShowCards).
                 -->
-                <Grid Grid.Row="6" Margin="0,8,0,0">
+                <Grid Grid.Row="6" x:Name="CardsRow" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition x:Name="CardsGap" Width="14" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
+                    <!--
+                        Подпись «Текущий пресет» и описание — только в подробном виде:
+                        в простом (макет владельца, 11.11) — значок, имя и «Изменить».
+                    -->
                     <local:Card x:Name="PresetCard" Grid.Column="0" Style="{StaticResource HomeCard}">
-                        <StackPanel>
-                            <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
+                        <StackPanel x:Name="PresetBody">
+                            <TextBlock x:Name="PresetCaption" Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
-                            <Grid Margin="0,12,0,0">
+                            <Grid x:Name="PresetRow" Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
@@ -597,10 +680,8 @@
                         подписки — на вкладке VPN.
                     -->
                     <local:Card x:Name="ServerCard" Grid.Column="2" Style="{StaticResource HomeCard}">
-                        <StackPanel>
-                            <TextBlock Text="Сервер" Style="{StaticResource Caption}" FontSize="12.5" />
-
-                            <Grid Margin="0,12,0,0">
+                        <StackPanel VerticalAlignment="Center">
+                            <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
@@ -629,7 +710,7 @@
                                 </StackPanel>
 
                                 <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Изменить"
-                                        Padding="12,7" Margin="10,0,0,0" VerticalAlignment="Top" Click="OnServerChange"
+                                        Padding="12,7" Margin="10,0,0,0" VerticalAlignment="Center" Click="OnServerChange"
                                         ToolTip="Серверы и подписки — вкладка VPN" />
                             </Grid>
                         </StackPanel>
@@ -731,9 +812,9 @@
                 <local:Card Grid.Row="10" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="14,12,14,12">
                     <StackPanel>
                         <!-- Подпись — как «Текущий пресет» у соседних карточек и с тем же отступом слева. -->
-                        <TextBlock Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,6" />
+                        <TextBlock x:Name="ModeCaption" Text="Режим работы NZ" Style="{StaticResource Caption}" FontSize="12.5" Margin="4,0,0,6" />
 
-                        <Grid>
+                        <Grid x:Name="ModeSegments">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="8" />
@@ -773,6 +854,82 @@
                                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
                                                     Content="Оба движка сразу: что в «Маршрутах» стоит «через VPN», уходит в туннель, остальное идёт напрямую, и закрытое по имени чинит десинк.&#x0a;&#x0a;Российские сервисы видят домашний адрес." />
                                 </StackPanel>
+                            </RadioButton>
+                        </Grid>
+
+                        <!--
+                            Простой вид (макет владельца, 11.11): плитки с крупным значком,
+                            именем и подписью простыми словами — те же, что в мастере
+                            первого запуска. «i» — с прежними пояснениями. Своя группа:
+                            сегменты подробного вида в разметке тоже есть, просто скрыты.
+                        -->
+                        <Grid x:Name="ModeTiles" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <RadioButton x:Name="TileDesync" Grid.Column="0" Style="{StaticResource ModeTile}"
+                                         GroupName="WorkModeTiles" Tag="Desync" Click="OnMode">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource LineGlyph}" FontSize="24" Text="&#xE9E9;"
+                                               Foreground="{DynamicResource Text}" Margin="2,0,14,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TileDesyncName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="Как Zapret" Style="{StaticResource Caption}" FontSize="12.5" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <ContentControl Grid.Column="2" Style="{StaticResource Info}" Margin="4,0,-6,0"
+                                                    Content="winws2: портит рукопожатие TLS так, что фильтр оператора не узнаёт имя. Трафик идёт напрямую, адрес домашний.&#x0a;&#x0a;Лечит блокировки по имени, но не отказы по стране." />
+                                </Grid>
+                            </RadioButton>
+
+                            <RadioButton x:Name="TileTunnel" Grid.Column="2" Style="{StaticResource ModeTile}"
+                                         GroupName="WorkModeTiles" Tag="Tunnel" Click="OnMode">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource LineGlyph}" FontSize="24" Text="&#xE774;"
+                                               Foreground="{DynamicResource Text}" Margin="2,0,14,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TileTunnelName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="Как обычный VPN" Style="{StaticResource Caption}" FontSize="12.5" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <ContentControl Grid.Column="2" Style="{StaticResource Info}" Margin="4,0,-6,0"
+                                                    Content="sing-box: уводит трафик в VPN через свой сетевой адаптер — адрес зарубежный, это лечит отказы по стране.&#x0a;&#x0a;Забирает всё, кроме поставленного «напрямую». Нужна подписка или WARP." />
+                                </Grid>
+                            </RadioButton>
+
+                            <RadioButton x:Name="TileRoute" Grid.Column="4" Style="{StaticResource ModeTile}"
+                                         GroupName="WorkModeTiles" Tag="Route" Click="OnMode">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource LineGlyph}" FontSize="24" Text="&#xE8AB;"
+                                               Foreground="{DynamicResource Text}" Margin="2,0,14,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock x:Name="TileRouteName" FontWeight="SemiBold" FontSize="15" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="Zapret и VPN вместе" Style="{StaticResource Caption}" FontSize="12.5" Margin="0,2,0,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <ContentControl Grid.Column="2" Style="{StaticResource Info}" Margin="4,0,-6,0"
+                                                    Content="Оба движка сразу: что в «Маршрутах» стоит «через VPN», уходит в туннель, остальное идёт напрямую, и закрытое по имени чинит десинк.&#x0a;&#x0a;Российские сервисы видят домашний адрес." />
+                                </Grid>
                             </RadioButton>
                         </Grid>
 
@@ -916,9 +1073,15 @@
                     только в подробном: в простом они видны карточками выше,
                     а время сборки — в «Диагностике».
                 -->
+                <!--
+                    В простом виде (макет владельца, 11.11) — без карточки и рамки:
+                    нагрузка слева, справа рамкой «Собрать отчёт для разбора» — тот же
+                    отчёт, что в «Диагностике» (ReportMaker). Итог — строкой рядом.
+                -->
                 <Grid Grid.Row="17" x:Name="Footer" Margin="4,10,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition x:Name="FooterStateColumn" Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
@@ -929,7 +1092,7 @@
                         <TextBlock x:Name="FooterState" Style="{StaticResource Caption}" Margin="8,0,0,0" />
                     </StackPanel>
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <StackPanel Grid.Column="1" x:Name="FooterMeters" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock x:Name="CpuMeter" Style="{StaticResource Caption}" Background="Transparent">
                             <Run Text="ЦП " /><Run x:Name="CpuValue" Text="—" Foreground="{DynamicResource Text}" />
                         </TextBlock>
@@ -940,6 +1103,15 @@
 
                     <TextBlock Grid.Column="2" x:Name="FooterConfig" Style="{StaticResource Caption}" Margin="24,0,0,0"
                                Visibility="Collapsed" />
+
+                    <TextBlock Grid.Column="2" x:Name="ReportNote" Style="{StaticResource Caption}" Margin="16,0,12,0"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420"
+                               Visibility="Collapsed" />
+
+                    <Button Grid.Column="3" x:Name="ReportButton" Style="{StaticResource Ghost}"
+                            Content="Собрать отчёт для разбора" local:ButtonGlyph.Lead="&#xE896;" Click="OnReport"
+                            Visibility="Collapsed"
+                            ToolTip="Журналы, настройки, свои маршруты и последняя проверка блокировок одним архивом — для сообщения о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
                 </Grid>
 
             </Grid>

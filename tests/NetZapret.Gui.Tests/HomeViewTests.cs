@@ -17,7 +17,10 @@ namespace NetZapret.Gui.Tests;
 public sealed class HomeViewTests
 {
     /// <summary>Части подробного вида; в простом их нет.</summary>
-    private static readonly string[] AdvancedOnly = ["Actions", "AutostartCard", "ParamsCard", "FooterStatePanel"];
+    private static readonly string[] AdvancedOnly = ["Actions", "AutostartCard", "ParamsCard", "FooterStatePanel", "ModeSegments", "PresetCaption"];
+
+    /// <summary>Части простого вида (макет владельца, 11.11); в подробном их нет.</summary>
+    private static readonly string[] SimpleOnly = ["SiteCard", "ModeTiles", "ReportButton"];
 
     [Fact]
     public void Switching_the_view_shows_and_hides_the_advanced_parts()
@@ -60,6 +63,16 @@ public sealed class HomeViewTests
             Assert.True(part.Visibility == (advanced ? Visibility.Visible : Visibility.Collapsed),
                 $"{name} в {(advanced ? "подробном" : "простом")} виде: {part.Visibility}");
         }
+
+        foreach (var name in SimpleOnly)
+        {
+            var part = (FrameworkElement)view.FindName(name);
+            Assert.True(part.Visibility == (advanced ? Visibility.Collapsed : Visibility.Visible),
+                $"{name} в {(advanced ? "подробном" : "простом")} виде: {part.Visibility}");
+        }
+
+        // Карточка состояния: в подробном — прежние 128, в простом растягивается.
+        Assert.Equal(advanced ? 128 : double.NaN, ((FrameworkElement)view.FindName("StateGrid")).Height);
 
         // Ссылки в шапке — в обоих видах (вернули в простой 11.11).
         Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("HeaderLinks")).Visibility);
