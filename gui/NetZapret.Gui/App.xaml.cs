@@ -335,12 +335,25 @@ public partial class App : Application
             // Автозапуск: окна нет, движки поднимаются сами. Иначе задача
             // в планировщике только показывала бы значок, а обход ждал бы,
             // пока человек откроет окно и нажмёт кнопку.
-            _ = StartOnLogonAsync();
+            _ = StartOnLogonThenUpdateAsync();
 
             return;
         }
 
         new MainWindow().Show();
+
+        // Поиск обновления — раз за процесс, из приложения (StartupUpdate).
+        _ = StartupUpdate.RunAsync(tray: false);
+    }
+
+    /// <summary>
+    /// Автозапуск: сперва движки, потом обновление — закачка пойдёт с обходом,
+    /// а обновлённая программа вернётся в трей и поднимет их снова.
+    /// </summary>
+    private static async Task StartOnLogonThenUpdateAsync()
+    {
+        await StartOnLogonAsync();
+        await StartupUpdate.RunAsync(tray: true);
     }
 
     /// <summary>

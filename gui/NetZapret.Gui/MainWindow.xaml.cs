@@ -110,11 +110,11 @@ public partial class MainWindow : Window
         };
 
         // Раз за запуск программы, а не за окно: окно теперь создаётся заново
-        // при каждом открытии из трея.
+        // при каждом открытии из трея. Обновление с 12.11 ищет приложение
+        // (StartupUpdate): при автозапуске окна нет.
         if (!_startedOnce)
         {
             _startedOnce = true;
-            _ = CheckForUpdateAsync();
             _ = WarmRoutesAsync();
         }
     }
@@ -202,25 +202,6 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Тихо спрашивает GitHub о новой версии — если это разрешено.
-    /// </summary>
-    /// <remarks>
-    /// Из окна, а не из супервизора: тот запускается автозапуском без окна,
-    /// и сказать о находке ему некому. Неудача молчит — нет сети сейчас,
-    /// спросим при следующем запуске.
-    /// </remarks>
-    private static async Task CheckForUpdateAsync()
-    {
-        try
-        {
-            await UpdateNotice.CheckAsync(AppSettings.Load(AppSettings.DefaultPath), CancellationToken.None);
-        }
-        catch (Exception)
-        {
-        }
-    }
-
     /// <summary>Точка у «Главной», пока новая версия не поставлена: обновление живёт там.</summary>
     private void ShowUpdateBadge() =>
         RailBadge.SetShown(RailStatus, UpdateNotice.Available is not null);
@@ -239,7 +220,10 @@ public partial class MainWindow : Window
     /// </remarks>
     private void OfferUpdateOnce()
     {
-        if (_updateOffered || !IsVisible || WindowState == WindowState.Minimized)
+        // Пока при запуске решается, ставить ли самой, и пока ставится, —
+        // не спрашивать: не поставится — StartupUpdate объявит находку заново.
+        if (_updateOffered || !IsVisible || WindowState == WindowState.Minimized
+            || StartupUpdate.Holding || UpdateRun.Busy)
             return;
 
         var release = UpdateNotice.Available;

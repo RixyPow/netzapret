@@ -16,6 +16,50 @@ public sealed class UpdateNoticeTests
         Notes = notes,
     };
 
+    /// <summary>
+    /// Сама при запуске ставится только выбранное в мастере, новее текущей
+    /// и не пропущенное (12.11).
+    /// </summary>
+    [Fact]
+    public void InstallsAtStartOnlyWhatWasChosen()
+    {
+        var newer = Release("999.0.0");
+        var chosen = new AppSettings { AutoInstallUpdates = true, OnboardingDone = true };
+
+        Assert.True(UpdateNotice.ShouldInstallAtStart(newer, chosen));
+
+        Assert.False(UpdateNotice.ShouldInstallAtStart(newer, chosen with { AutoInstallUpdates = false }));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(newer, chosen with { CheckForUpdates = false }));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(newer, chosen with { OnboardingDone = false }));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(newer, chosen with { DismissedUpdate = "999.0.0" }));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(Release(UpdateCheck.Current), chosen));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(Release("0.0.1"), chosen));
+        Assert.False(UpdateNotice.ShouldInstallAtStart(null, chosen));
+    }
+
+    /// <summary>
+    /// У прежних пользователей поля в файле нет — автообновление выключено:
+    /// их решение владелец велел не трогать (12.11).
+    /// </summary>
+    [Fact]
+    public void OldSettingsFileReadsAutoInstallOff()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-autoinstall-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(path, """{ "OnboardingDone": true, "CheckForUpdates": true }""");
+            Assert.False(AppSettings.Load(path).AutoInstallUpdates);
+
+            (AppSettings.Load(path) with { AutoInstallUpdates = true }).Save(path);
+            Assert.True(AppSettings.Load(path).AutoInstallUpdates);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     /// <summary>«Не сейчас» прячет эту версию, но не следующую.</summary>
     [Fact]
     public void DismissedVersionIsNotOfferedButTheNextIs()

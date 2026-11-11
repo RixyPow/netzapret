@@ -94,14 +94,38 @@ internal static class Autostart
     }
 
     /// <summary>
+    /// Ставит автозапуск таким, как выбрано: заводит задачу или убирает её.
+    /// </summary>
+    /// <returns>Почему не вышло; <c>null</c> — стало как выбрано.</returns>
+    /// <remarks>
+    /// Для мастера первого запуска (решение владельца 12.11: автозапуск выбирает
+    /// человек там). schtasks — десятки миллисекунд: звать не из потока окна.
+    /// </remarks>
+    public static string? Set(bool on)
+    {
+        if (on)
+            return TurnOn();
+
+        Known = null;
+
+        try
+        {
+            if (!AutostartTask.IsInstalled(AutostartTask.DefaultTaskName))
+                return null;
+
+            var (removed, output) = AutostartTask.Remove(AutostartTask.DefaultTaskName);
+            return removed ? null : "Не удалось убрать автозапуск: " + output;
+        }
+        catch (Exception ex)
+        {
+            return "Планировщик отказал: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
     /// Заводит задачу, если её ещё нет; заведённую не трогает.
     /// </summary>
     /// <returns>Почему не вышло; <c>null</c> — задача есть.</returns>
-    /// <remarks>
-    /// Автозапуск включён по умолчанию у новых пользователей (решение владельца
-    /// 12.11): зовётся, когда мастер первого запуска закрыт впервые. У тех, кто
-    /// мастер уже прошёл, ничего не меняется — их выбор остаётся их.
-    /// </remarks>
     public static string? TurnOn()
     {
         Known = null;

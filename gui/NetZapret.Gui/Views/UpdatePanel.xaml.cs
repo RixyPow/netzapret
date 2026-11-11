@@ -168,54 +168,19 @@ public partial class UpdatePanel : UserControl
     }
 
     /// <summary>
-    /// Вход в туннель для закачки — если туннель поднят и ему есть куда вести.
+    /// Ставит найденное обновление — общим путём <see cref="UpdateRun"/>.
     /// </summary>
     /// <remarks>
-    /// Вход проверки движка (health-in) ведёт в селектор выхода первым
-    /// правилом. В «Десинке» движок туннеля поднят только ради DNS, и такой
-    /// вход вёл бы напрямую — поэтому смотрим, нужен ли туннель настройкам.
-    /// Пароль входа — из конфига работающего движка; нет его — без туннеля.
-    /// </remarks>
-    private static System.Net.IWebProxy? TunnelForDownload()
-    {
-        try
-        {
-            var settings = AppSettings.Load(AppSettings.DefaultPath);
-
-            if (!settings.NeedsProxy || !settings.HasTunnelExit || !EngineControl.IsRunning)
-                return null;
-
-            return Proxy.EngineKeys.Current()?.Proxy(Proxy.SingBoxOptions.DefaultHealthPort);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Скачивает обновление и передаёт подмену внешнему сценарию.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Движки останавливаются до подмены, а не после. С 0.5.0 супервизор — это та же
-    /// программа с ключом, и пока он работает, Windows держит её файл: подмена
-    /// сорвалась бы на самом главном файле, а сценарий сообщил бы об этом уже
-    /// после того, как окно закрылось.
-    /// Но после закачки, а не до неё (04.10): закачка идёт с обходом,
-    /// а без обхода человек остаётся на секунды подмены.
-    /// </para>
-    /// <para>
-    /// Подменяет внешний сценарий, потому что заменить нужно и себя. Кто-то
-    /// обязан пережить наше завершение, и это не костыль, а единственный
-    /// вариант.
-    /// </para>
+    /// Качаем при работающих движках, гасим — только перед подменой. До 04.10
+    /// движки гасились первыми, и архив в 110 МБ шёл голой сетью без десинка
+    /// и туннеля: у Максима (Telegram) за 5–10 минут — 2 %, и всё это время
+    /// обхода не было.
     /// </remarks>
     private void OnInstallUpdate(object sender, RoutedEventArgs e) => _ = InstallAsync(askFirst: true);
 
     private async Task InstallAsync(bool askFirst)
     {
-        if (_release is null)
+        if (_release is null || UpdateRun.Busy)
             return;
 
         if (askFirst)
@@ -245,58 +210,10 @@ public partial class UpdatePanel : UserControl
 
         try
         {
-            // Качаем при работающих движках, гасим — только перед подменой.
-            // До 04.10 движки гасились первыми, и архив в 110 МБ шёл голой
-            // сетью без десинка и туннеля: у Максима (Telegram) за 5–10 минут —
-            // 2 %, и всё это время обхода не было. Теперь без обхода человек
-            // остаётся на секунды подмены, а не на время закачки.
-            string via = string.Empty;
-
-            var progress = new Progress<double>(fraction =>
-            {
-                Say($"Скачиваю {_release.Version}{via}… {fraction * 100:0} %");
-                InstallButton.Content = $"{fraction * 100:0} %";
-            });
-
-            var note = new Progress<string>(_ => via = " через туннель");
-
-            var plan = await UpdateInstaller.StageAsync(_release, progress, CancellationToken.None, TunnelForDownload(), note);
-
-            Say("Останавливаю движки…");
-            await EngineControl.StopAsync("обновление программы", CancellationToken.None);
-
-            var installedAt = Path.GetFullPath(".");
-            var script = UpdateInstaller.WriteApplyScript(plan, installedAt);
-
-            // Что дописано руками в наши списки, переносится в новые — сказать
-            // об этом сейчас: после подмены окна, которое могло бы сказать, нет.
-            var carried = plan.CarriedLists.Count == 0
-                ? string.Empty
-                : " Ваши дописки в списки перенесены: "
-                    + string.Join(", ", plan.CarriedLists.Select(c => $"{c.Key} — {c.Value}")) + ".";
-
-            Say($"Скачано {plan.Files} файлов.{carried} Закрываюсь для подмены…");
-
-            // Окно сейчас закроется, и строка выше проживёт секунду — в журнале она останется.
-            if (carried.Length > 0)
-                Journal.Write("обновление", $"{_release.Version}:{carried}");
-
-            // Окно подмены — копией самой программы (UpdateApplier, 12.10);
-            // не вышло (рабочая сборка, нет места) — прежний сценарий cmd.
-            if (!StartApplier(plan, installedAt, via))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = script,
-                    // Пути — аргументами, а не текстом сценария: он в ASCII,
-                    // и кириллица в пути становилась вопросами (12.10).
-                    Arguments = UpdateInstaller.ApplyArguments(Environment.ProcessId, plan, installedAt),
-                    UseShellExecute = true,
-                });
-            }
-
-            App.Exiting = true;
-            Application.Current.Shutdown();
+            await UpdateRun.InstallAsync(
+                _release,
+                new Progress<string>(text => Say(text)),
+                new Progress<double>(share => InstallButton.Content = $"{share * 100:0} %"));
         }
         catch (Exception ex)
         {
@@ -304,57 +221,6 @@ public partial class UpdatePanel : UserControl
             InstallButton.Content = "Обновить";
             InstallButton.IsEnabled = true;
             UpdateButton.IsEnabled = true;
-        }
-    }
-
-    /// <summary>
-    /// Запускает окно подмены — копию программы с ключом подмены.
-    /// </summary>
-    /// <returns><c>false</c> — копией не обойтись, нужен сценарий cmd.</returns>
-    /// <remarks>
-    /// Без оболочки: копия наследует права администратора этого окна — ей
-    /// гасить драйвер и писать в Program Files. Пути — списком аргументов,
-    /// кириллица доходит как есть.
-    /// </remarks>
-    private bool StartApplier(UpdatePlan plan, string installedAt, string via)
-    {
-        try
-        {
-            var copy = UpdateInstaller.PrepareApplier(Environment.ProcessPath, installedAt);
-
-            if (copy is null || _release is null)
-                return false;
-
-            string? notes = null;
-
-            if (!string.IsNullOrWhiteSpace(_release.Notes))
-            {
-                notes = Path.Combine(installedAt, UpdateInstaller.StagingDirectory, "notes.md");
-                File.WriteAllText(notes, _release.Notes);
-            }
-
-            var size = _release.ArchiveSize > 0 ? $"{_release.ArchiveSize / 1048576.0:0} МБ" : "Архив";
-            var downloaded = size + (via.Length > 0 ? via : " напрямую");
-
-            var start = new ProcessStartInfo(copy)
-            {
-                UseShellExecute = false,
-                WorkingDirectory = Path.GetDirectoryName(copy)!,
-            };
-
-            foreach (var argument in UpdateInstaller.ApplierArguments(
-                Environment.ProcessId, plan, installedAt, UpdateCheck.Current, _release.Version, downloaded, notes))
-            {
-                start.ArgumentList.Add(argument);
-            }
-
-            using var started = Process.Start(start);
-            return started is not null;
-        }
-        catch (Exception ex)
-        {
-            Journal.Write("обновление", "окно подмены не запустилось, иду сценарием: " + ex.GetBaseException().Message);
-            return false;
         }
     }
 }

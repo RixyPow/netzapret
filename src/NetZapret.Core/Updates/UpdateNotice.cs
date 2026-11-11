@@ -55,6 +55,21 @@ public static class UpdateNotice
         Available = UpdateCheck.IsNewer(release.Version, UpdateCheck.Current) ? release : null;
     }
 
+    /// <summary>
+    /// Ставить ли найденное при запуске обновление без вопроса (<see cref="AppSettings.AutoInstallUpdates"/>).
+    /// </summary>
+    /// <remarks>
+    /// Только тому, кто прошёл мастер: до его конца человек выбор ещё не сделал.
+    /// Пропущенную версию — нет: «Пропустить» сильнее общего согласия.
+    /// </remarks>
+    public static bool ShouldInstallAtStart(ReleaseInfo? release, AppSettings settings) =>
+        settings.AutoInstallUpdates
+        && settings.CheckForUpdates
+        && settings.OnboardingDone
+        && release is not null
+        && UpdateCheck.IsNewer(release.Version, UpdateCheck.Current)
+        && ShouldOffer(release, settings);
+
     /// <summary>Показывать ли карточку: есть новее и о нём не сказали «не сейчас».</summary>
     public static bool ShouldOffer(ReleaseInfo? release, AppSettings settings) =>
         release is not null

@@ -14,6 +14,7 @@ namespace NetZapret.Gui.Views;
 /// <summary>Что подменщику передала программа перед своим закрытием.</summary>
 /// <param name="Downloaded">Подпись к шагу «Скачано»: «112 МБ через туннель».</param>
 /// <param name="NotesFile">Чейнджлог новой версии; <c>null</c> — карточка «Что нового» пустая.</param>
+/// <param name="ToTray">Поднять обновлённую программу в трей с движками, как автозапуск.</param>
 public sealed record ApplyOptions(
     int ProcessId,
     string Source,
@@ -21,7 +22,8 @@ public sealed record ApplyOptions(
     string From,
     string To,
     string Downloaded,
-    string? NotesFile)
+    string? NotesFile,
+    bool ToTray = false)
 {
     /// <summary>Разбирает то, что собрал <see cref="UpdateInstaller.ApplierArguments"/>.</summary>
     public static ApplyOptions? Parse(string[] args)
@@ -38,7 +40,8 @@ public sealed record ApplyOptions(
             args[at + 4],
             args[at + 5],
             args[at + 6],
-            args.Length > at + 7 && args[at + 7].Length > 0 ? args[at + 7] : null);
+            args.Length > at + 7 && args[at + 7].Length > 0 ? args[at + 7] : null,
+            args.Length > at + 8 && args[at + 8] == UpdateInstaller.TraySwitch);
     }
 }
 
@@ -264,6 +267,8 @@ public partial class UpdateApplyWindow : Window
             {
                 WorkingDirectory = _options.Target,
                 UseShellExecute = true,
+                // Обновлённая сама при автозапуске — назад в трей с движками.
+                Arguments = _options.ToTray ? UpdateInstaller.TraySwitch : string.Empty,
             });
         }
         catch (Exception ex)

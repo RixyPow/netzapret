@@ -22,6 +22,21 @@ public sealed class ApplyOptionsTests
         Assert.Equal("0.15.3", options.To);
         Assert.Equal("112 МБ через туннель", options.Downloaded);
         Assert.Null(options.NotesFile);
+        Assert.False(options.ToTray);
         Assert.Null(ApplyOptions.Parse(["--tray"]));
+    }
+
+    /// <summary>
+    /// Поставленное само при автозапуске возвращается в трей — тем же ключом,
+    /// которым зовёт задача планировщика (12.11).
+    /// </summary>
+    [Fact]
+    public void TrayRelaunchSurvives()
+    {
+        var plan = new UpdatePlan { StagedAt = @"C:\NetZapret\runtime\update\files\NetZapret", Files = 1, Kept = [] };
+        var arguments = UpdateInstaller.ApplierArguments(7, plan, @"C:\NetZapret", "1.5.5", "1.6.0", "120 МБ напрямую", null, toTray: true);
+
+        Assert.True(ApplyOptions.Parse([.. arguments])!.ToTray);
+        Assert.Equal(TrayIcon.Switch, UpdateInstaller.TraySwitch);
     }
 }

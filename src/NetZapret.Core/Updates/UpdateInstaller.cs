@@ -609,11 +609,21 @@ public static class UpdateInstaller
     /// Аргументы окна подмены: номер процесса, откуда, куда, версии, подпись
     /// к «Скачано» и чейнджлог — списком, для ProcessStartInfo.ArgumentList.
     /// </summary>
-    /// <remarks>Списком, а не строкой: пути с пробелами и кириллицей доходят как есть.</remarks>
+    /// <remarks>
+    /// Списком, а не строкой: пути с пробелами и кириллицей доходят как есть.
+    /// <paramref name="toTray"/> — после подмены поднять программу в трей
+    /// с движками, как автозапуск: так возвращается обновлённая сама при
+    /// запуске при входе в Windows (12.11), иначе обход остался бы лежать.
+    /// </remarks>
     public static IReadOnlyList<string> ApplierArguments(
-        int processId, UpdatePlan plan, string installedAt, string from, string to, string downloaded, string? notesFile) =>
+        int processId, UpdatePlan plan, string installedAt, string from, string to, string downloaded, string? notesFile,
+        bool toTray = false) =>
         [ApplierSwitch, processId.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            plan.StagedAt, installedAt.TrimEnd('\\'), from, to, downloaded, notesFile ?? string.Empty];
+            plan.StagedAt, installedAt.TrimEnd('\\'), from, to, downloaded, notesFile ?? string.Empty,
+            toTray ? TraySwitch : string.Empty];
+
+    /// <summary>Ключ запуска в трей — тот же, что у автозапуска (TrayIcon.Switch в окне).</summary>
+    public const string TraySwitch = "--tray";
 
     /// <summary>Аргументы сценария подмены: номер процесса, откуда, куда и что запустить.</summary>
     public static string ApplyArguments(int processId, UpdatePlan plan, string installedAt, string? relaunch = null) =>

@@ -444,14 +444,6 @@ public partial class OnboardingView : UserControl
                 return false;
 
             (settings with { OnboardingDone = true }).Save(AppSettings.DefaultPath);
-
-            // Мастер закрыт впервые — значит, человек новый: автозапуск у новых
-            // включён по умолчанию (12.11). В фоне — schtasks идёт десятки мс,
-            // а выключить его можно в «Ещё».
-            _ = Task.Run(() => Journal.Write("окно", Autostart.TurnOn() is { } failure
-                ? "автозапуск по умолчанию не заведён: " + failure
-                : "автозапуск по умолчанию: задача планировщика есть"));
-
             return true;
         }
         catch (Exception)
