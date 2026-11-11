@@ -44,38 +44,6 @@
         </Style>
 
         <!--
-            Плитка быстрого действия — карточкой, а не кнопкой: та же подложка
-            со стеклом, рамка и скругление, что у Card (владелец 19.10: «нижние
-            кнопки другого цвета, чем другие плитки»). У Ghost подложка Raised,
-            и содержимое по середине — значки четырёх плиток стояли бы вразнобой.
-        -->
-        <Style x:Key="QuickAction" TargetType="Button" BasedOn="{StaticResource Ghost}">
-            <Setter Property="Padding" Value="10,8" />
-            <Setter Property="Background" Value="{DynamicResource Surface}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource CardEdge}" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <local:Card x:Name="Shape" Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="2"
-                                CornerRadius="14" Padding="{TemplateBinding Padding}"
-                                local:Glass.IsOn="True">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </local:Card>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Shape" Property="BorderBrush" Value="{DynamicResource Muted}" />
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!--
             Половинки одной плашки «Остановить ▾» (владелец 19.10: «склей две
             кнопки»). Подложка у плашки, у половинок — только подсветка при
             наведении и нажатии, со своим скруглением с внешней стороны:
@@ -135,8 +103,8 @@
             у Card. Владелец 20.10, снимок не развёрнутого окна (1067×712):
             «Главную опять надо мотать». С Manrope строки выше, чем у прежнего
             шрифта, и страница выросла на 22 точки — 666 при видимых 652.
-            Таких карточек четыре, в два ряда: пресет и параметры, автозапуск
-            и обновление (у него те же поля — в UpdatePanel.xaml).
+            С 11.11 таких карточки две: пресет и сервер (у карточки обновления
+            те же поля — в UpdatePanel.xaml).
         -->
         <Style x:Key="HomeCard" TargetType="local:Card" BasedOn="{StaticResource Card}">
             <Setter Property="Padding" Value="18,13" />
@@ -151,9 +119,10 @@
     -->
 
     <!--
-        Компоновка — по макету владельца 30.09: шапка со ссылками, крупная
-        карточка состояния, под ней пресет и параметры подключения рядом,
-        движки, автозапуск с обновлением, быстрые действия и строка внизу.
+        Компоновка — по макету владельца 30.09, упрощённому 11.11: заголовок,
+        крупная карточка состояния, под ней пресет и сервер рядом, режим
+        и строка нагрузки внизу. Прочее встаёт, только когда есть что
+        сказать: новая версия, предупреждения, упавший движок, установка.
 
         Две колонки: содержимое слева, не шире 940, и арт темы справа
         (SideArt, Themes.cs). Веса 100 к 1, а не две звёздочки поровну:
@@ -235,48 +204,13 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Шапка: заголовок и ссылки. Ссылки справа, как в макете. -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,16,0">
-                        <!-- Без подзаголовка: «Главная» помещается без прокрутки (владелец 04.10). -->
-                        <TextBlock Text="Главная" Style="{StaticResource Title}" FontSize="28" />
-                    </StackPanel>
-
-                    <!--
-                        Канал — кнопкой здесь, а не карточкой внизу страницы:
-                        в макете карточки нет, а быть на «Главной» ему велено
-                        (владелец, 28.09: в «Ещё» кнопку не находили).
-                    -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                        <Button Style="{StaticResource Ghost}" Click="OnDocs" Margin="0,0,8,0"
-                                ToolTip="Описание программы на GitHub">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Style="{StaticResource LineGlyph}" Text="&#xE82D;" Margin="0,0,8,0"
-                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                <TextBlock Text="Документация" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button Style="{StaticResource Ghost}" Click="OnGitHub" Margin="0,0,8,0"
-                                ToolTip="Исходники, выпуски, вопросы и обсуждения">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource LineShape}" Data="{StaticResource GitHubMark}" />
-                                <TextBlock Text="GitHub" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button Style="{StaticResource Ghost}" Click="OnTelegram"
-                                ToolTip="Новости в телеграм-канале: что вышло и зачем обновляться, коротко">
-                            <StackPanel Orientation="Horizontal">
-                                <Path Style="{StaticResource LineShape}" Data="{StaticResource TelegramPlane}" />
-                                <TextBlock Text="Telegram" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Grid>
+                <!--
+                    Шапка — один заголовок. Ссылки «Документация», «GitHub»
+                    и «Telegram» стояли здесь с 28.09 (в «Ещё» канал не находили);
+                    с 11.11 «Главная» проще — они в «Ещё → О программе», а канал
+                    ещё и в уведомлении после обновления.
+                -->
+                <TextBlock Grid.Row="0" Text="Главная" Style="{StaticResource Title}" FontSize="28" VerticalAlignment="Center" />
 
                 <!--
                     Вышла новая версия (UpdateNotice). Над состоянием: её видно
@@ -479,15 +413,19 @@
                     </Grid>
                 </local:Card>
 
-                <!-- Пресет и параметры подключения — рядом, как в макете. -->
+                <!--
+                    Пресет и сервер — рядом, как в макете. С 11.11 каждая карточка —
+                    только когда её движок нужен режиму: в «Туннеле» пресет ни на что
+                    не влияет, в «Десинке» сервера нет. Одна — во всю ширину (ShowCards).
+                -->
                 <Grid Grid.Row="6" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition x:Name="CardsGap" Width="14" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
-                    <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
+                    <local:Card x:Name="PresetCard" Grid.Column="0" Style="{StaticResource HomeCard}">
                         <StackPanel>
                             <TextBlock Text="Текущий пресет" Style="{StaticResource Caption}" FontSize="12.5" />
 
@@ -537,51 +475,48 @@
                         </StackPanel>
                     </local:Card>
 
-                    <!-- Настройка. Только показ: правка — в своих разделах. -->
-                    <local:Card Grid.Column="2" Style="{StaticResource HomeCard}">
+                    <!--
+                        Сервер — тем же видом, что пресет: подпись, плитка, имя крупно
+                        и «Изменить» — на вкладку VPN. До 11.11 здесь были «Параметры
+                        подключения» строками: сервер, DNS и подписки. DNS виден
+                        карточкой ниже, когда с ним беда (DnsWarning, RouterDnsWarning),
+                        подписки — на вкладке VPN.
+                    -->
+                    <local:Card x:Name="ServerCard" Grid.Column="2" Style="{StaticResource HomeCard}">
                         <StackPanel>
-                            <TextBlock Text="Параметры подключения" Style="{StaticResource Caption}" FontSize="12.5" />
+                            <TextBlock Text="Сервер" Style="{StaticResource Caption}" FontSize="12.5" />
 
                             <Grid Margin="0,12,0,0">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="26" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Style="{StaticResource LineGlyph}" Text="&#xE8CE;" Margin="0,0,0,7" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource Caption}" Text="Сервер"
-                                           Margin="0,0,14,7" VerticalAlignment="Center" />
-                                <!-- Флаг выхода — картинкой, как на вкладке VPN (FlagImages): Windows флагов не рисует. -->
-                                <Grid Grid.Row="0" Grid.Column="2" Margin="0,0,0,7">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border x:Name="ServerFlag" Width="22" Height="15" CornerRadius="3" Margin="0,0,8,0"
-                                            VerticalAlignment="Center" ClipToBounds="True" Visibility="Collapsed">
-                                        <Image x:Name="ServerFlagImage" Stretch="UniformToFill" />
-                                    </Border>
-                                    <TextBlock Grid.Column="1" x:Name="ServerValue" Text="—"
-                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                </Grid>
+                                <!--
+                                    Флаг выхода — фоном плитки, как флаги на вкладке VPN
+                                    (FlagImages, слой с ImageBrush: Image в рамке срезался).
+                                    Нет флага — значок сервера.
+                                -->
+                                <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
+                                    <Grid>
+                                        <TextBlock x:Name="ServerGlyph" Style="{StaticResource TileGlyph}" Text="&#xE774;"
+                                                   Foreground="{DynamicResource Accent}" />
+                                        <Border x:Name="ServerFlag" Width="24" Height="16" CornerRadius="3"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    </Grid>
+                                </Border>
 
-                                <TextBlock Grid.Row="1" Style="{StaticResource LineGlyph}" Text="&#xE774;" Margin="0,0,0,7" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Caption}" Text="DNS"
-                                           Margin="0,0,14,7" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="1" Grid.Column="2" x:Name="DnsValue" Text="—" Margin="0,0,0,7"
-                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ServerValue" FontSize="15" FontWeight="SemiBold" Text="—"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock x:Name="ServerNote" Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                               TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
+                                </StackPanel>
 
-                                <TextBlock Grid.Row="2" Style="{StaticResource LineGlyph}" Text="&#xE7C3;" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Caption}" Text="Подписки"
-                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="2" Grid.Column="2" x:Name="SubscriptionValue" Text="—"
-                                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Изменить"
+                                        Padding="12,7" Margin="10,0,0,0" VerticalAlignment="Top" Click="OnServerChange"
+                                        ToolTip="Серверы и подписки — вкладка VPN" />
                             </Grid>
                         </StackPanel>
                     </local:Card>
@@ -676,13 +611,14 @@
                         </Grid>
 
                         <!--
-                            Пояснение выбранного режима слева, его движки справа.
-                            Место — под две строки всегда: в окне по умолчанию
-                            пояснение «Гибрида» в одну не влезает, и обрезанное
-                            многоточием читалось хуже, а ряд, растущий только
-                            у одного режима, снова дёргал бы страницу.
+                            Слева — оговорка о режиме, справа — его движки. С 11.11
+                            строка только когда есть что сказать (ShowModeLine):
+                            режим не выбран, «без исключений», движок упал или
+                            поднимается. Общее пояснение режима — в «i» у его кнопки,
+                            а «работает» у обоих движков сказано карточкой состояния.
+                            Высота постоянная — под две строки оговорки.
                         -->
-                        <Grid Margin="4,10,0,0" Height="34">
+                        <Grid x:Name="ModeLine" Margin="4,10,0,0" Height="34" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -721,140 +657,32 @@
                 <TextBlock Grid.Row="11" x:Name="EnginesLine" Style="{StaticResource Caption}"
                            Margin="4,10,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
 
-                <!-- Автозапуск и обновление — рядом, как в макете. -->
-                <Grid Grid.Row="13" Margin="0,8,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="14" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <local:Card Grid.Column="0" Style="{StaticResource HomeCard}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0">
-                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE945;" />
-                            </Border>
-
-                            <StackPanel Grid.Column="1" Margin="0,0,12,0">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="Автозапуск" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center" />
-                                    <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                    Content="Задача планировщика с правами администратора — запроса UAC при входе нет. Поднимает то же, что кнопка «Запустить»." />
-                                </StackPanel>
-
-                                <!--
-                                    Что именно поднимется — теми же словами, какими
-                                    это задано выключателями движков. Своего выбора
-                                    у автозапуска нет намеренно: он был бы вторым
-                                    местом, где решают одно и то же.
-                                -->
-                                <TextBlock x:Name="AutostartRaises" Style="{StaticResource Caption}"
-                                           Margin="0,5,0,0" TextWrapping="Wrap" />
-
-                                <!--
-                                    Слова о задаче — только когда с ней не всё
-                                    ясно: проверяется, не читается, устарела.
-                                    «Заведена» и так говорит выключатель. Встают
-                                    на место строки выше (AutostartNote).
-                                -->
-                                <TextBlock x:Name="AutostartValue" Style="{StaticResource Caption}"
-                                           Margin="0,5,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
-                            </StackPanel>
-
-                            <!--
-                                Выключатель, а не кнопка «Завести/Убрать» (макет
-                                30.09). Щелчок заводит или убирает задачу, а положение
-                                затем ставится по ответу планировщика, не по щелчку:
-                                отказал планировщик — выключатель вернётся.
-                            -->
-                            <ToggleButton Grid.Column="2" x:Name="AutostartSwitch" Style="{StaticResource Switch}"
-                                          Click="OnAutostart" VerticalAlignment="Top" />
-                        </Grid>
-                    </local:Card>
-
-                    <views:UpdatePanel Grid.Column="2" x:Name="Updates" />
-                </Grid>
+                <!--
+                    Обновление — только пока идёт установка или она не удалась:
+                    здесь ход закачки и ошибка (UpdatePanel). Найденную версию
+                    объявляет карточка наверху (UpdateCard), проверка руками —
+                    в «Ещё → Обслуживание». До 11.11 карточка стояла всегда, рядом
+                    с автозапуском, а автозапуск — настройка на один раз — теперь
+                    в «Ещё». Быстрые действия ниже (проверка блокировок, журнал,
+                    диагностика, конфиг) повторяли меню слева; журнал и конфиг —
+                    в меню «Остановить ▾».
+                -->
+                <views:UpdatePanel Grid.Row="13" x:Name="Updates" Margin="0,8,0,0" Visibility="Collapsed" />
 
                 <!--
-                    Быстрые действия (макет 30.09): переходы в разделы разбора
-                    и папка настроек — то, за чем идут, когда что-то не так.
-                    По той же сетке, что ряды выше: две половины с зазором 14,
-                    каждая — пополам. Равные четверти от UniformGrid середину
-                    сдвигали, и край кнопки не сходился с краем карточки (04.10).
+                    Строка внизу — нагрузка движков (с 08.11 здесь, а не в карточке
+                    состояния: место крупной кнопке). Состояние, режим и пресет
+                    стояли тут же до 11.11 — они видны карточками выше; время
+                    сборки конфига — в «Диагностике».
                 -->
-                <Grid Grid.Row="15" x:Name="Actions" Margin="0,8,0,0" SizeChanged="OnActionsSize">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="8" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="14" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="8" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-
-                    <!--
-                        Плитками со значком и подписью (макет 19.10): новичку голое
-                        «Диагностика» не говорило, зачем туда идти. Содержимое
-                        прижато влево (QuickAction), а не по середине кнопки, —
-                        иначе значки четырёх плиток стояли бы вразнобой.
-                    -->
-                    <Button x:Name="ActionCheck" Grid.Column="0" Style="{StaticResource QuickAction}" Click="OnQuickCheck">
-                        <views:HomeAction Glyph="&#xE721;" Title="Проверить блокировки" Note="Что закрыто и чем лечится" />
-                    </Button>
-                    <Button x:Name="ActionLog" Grid.Column="2" Style="{StaticResource QuickAction}" Click="OnQuickLog">
-                        <views:HomeAction Glyph="&#xE8FD;" Title="Открыть журнал" Note="Журналы движков" />
-                    </Button>
-                    <Button x:Name="ActionDoctor" Grid.Column="4" Style="{StaticResource QuickAction}" Click="OnQuickDoctor">
-                        <views:HomeAction Glyph="&#xE756;" Title="Диагностика" Note="Что мешает работе" />
-                    </Button>
-                    <Button x:Name="ActionConfig" Grid.Column="6" Style="{StaticResource QuickAction}" Click="OnQuickConfig"
-                            ToolTip="Папка config в проводнике, файл настроек выделен">
-                        <views:HomeAction Glyph="&#xE8B7;" Title="Открыть конфиг" Note="Папка с настройками" />
-                    </Button>
-                </Grid>
-
-                <!--
-                    Строка внизу: сколько работает обход и когда собран конфиг
-                    туннеля. В макете — «Подписки обновлены»; но списки серверов
-                    берутся при сборке конфига на запуске, и отдельного времени
-                    обновления подписок программа не хранит. Время файла конфига —
-                    то, что известно наверняка, им и названо.
-                -->
-                <Grid Grid.Row="17" x:Name="Footer" Margin="4,10,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Orientation="Horizontal">
-                        <Ellipse x:Name="FooterDot" Width="8" Height="8" VerticalAlignment="Center"
-                                 Fill="{DynamicResource Faint}" />
-                        <TextBlock x:Name="FooterState" Style="{StaticResource Caption}" Margin="8,0,0,0" />
-                    </StackPanel>
-
-                    <!--
-                        Нагрузка движков — здесь с 08.11 (владелец): из карточки
-                        состояния ушла, чтобы дать место крупной кнопке.
-                    -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="16,0,0,0">
-                        <TextBlock x:Name="CpuMeter" Style="{StaticResource Caption}" Background="Transparent">
-                            <Run Text="ЦП " /><Run x:Name="CpuValue" Text="—" Foreground="{DynamicResource Text}" />
-                        </TextBlock>
-                        <TextBlock x:Name="RamMeter" Style="{StaticResource Caption}" Background="Transparent" Margin="16,0,0,0">
-                            <Run Text="Память " /><Run x:Name="RamValue" Text="—" Foreground="{DynamicResource Text}" />
-                        </TextBlock>
-                    </StackPanel>
-
-                    <TextBlock Grid.Column="2" x:Name="FooterConfig" Style="{StaticResource Caption}" Margin="24,0,0,0" />
-                </Grid>
+                <StackPanel Grid.Row="17" x:Name="Footer" Orientation="Horizontal" Margin="4,10,0,0">
+                    <TextBlock x:Name="CpuMeter" Style="{StaticResource Caption}" Background="Transparent">
+                        <Run Text="ЦП " /><Run x:Name="CpuValue" Text="—" Foreground="{DynamicResource Text}" />
+                    </TextBlock>
+                    <TextBlock x:Name="RamMeter" Style="{StaticResource Caption}" Background="Transparent" Margin="16,0,0,0">
+                        <Run Text="Память " /><Run x:Name="RamValue" Text="—" Foreground="{DynamicResource Text}" />
+                    </TextBlock>
+                </StackPanel>
 
             </Grid>
         </ScrollViewer>

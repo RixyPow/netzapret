@@ -68,11 +68,6 @@ public partial class StatusView : UserControl
 
     private void OnTelegram(object sender, RoutedEventArgs e) => OpenLink(About.Telegram);
 
-    private void OnGitHub(object sender, RoutedEventArgs e) => OpenLink(About.Repository);
-
-    /// <summary>Описание — README на GitHub: он и есть документация, другой нет.</summary>
-    private void OnDocs(object sender, RoutedEventArgs e) => OpenLink(About.Repository + "#readme");
-
     private static void OpenLink(string url)
     {
         try
@@ -179,43 +174,10 @@ public partial class StatusView : UserControl
         ArtShade.Fill = new SolidColorBrush(Color.FromArgb((byte)Math.Round(ArtDim * 255), backdrop.R, backdrop.G, backdrop.B));
     }
 
-    /// <summary>
-    /// Плитки быстрых действий — всегда в ряд; на узком окне без подписи,
-    /// с заголовком в две строки. Там же прячется строка внизу.
-    /// </summary>
-    /// <remarks>
-    /// С подписью и значком (макет 19.10) плитке нужно около 205 точек: на окне
-    /// в 1000 точек в ряд выходило «Проверить бл…» и «Открыть журн…» (снимок
-    /// из теста). До 19.10 плитки на узком окне вставали по две, и «Главная»
-    /// в не развёрнутом окне владельца (около 1067×712) уходила под прокрутку:
-    /// снимок из теста — страница 755 точек при видимых 649. Строка внизу
-    /// повторяет состояние, режим и пресет, видные выше, — на узком окне
-    /// она не нужнее, чем место под ней. Решается по ширине самой сетки,
-    /// а не окна: её сужает и масштаб.
-    /// </remarks>
-    private void OnActionsSize(object sender, SizeChangedEventArgs e)
-    {
-        bool narrow = e.NewSize.Width < NarrowActions;
-
-        foreach (var tile in new[] { ActionCheck, ActionLog, ActionDoctor, ActionConfig })
-        {
-            if (tile.Content is HomeAction action)
-                action.Compact = narrow;
-        }
-
-        Footer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-    }
-
-    /// <summary>Уже этой ширины сетки плитки теряют подпись.</summary>
-    private const double NarrowActions = 850;
-
-    private void OnQuickCheck(object sender, RoutedEventArgs e) => Open("check");
-
-    private void OnQuickLog(object sender, RoutedEventArgs e) => LogWindow.Open();
-
-    private void OnQuickDoctor(object sender, RoutedEventArgs e) => Open("doctor");
-
     private void OnDesyncSettings(object sender, RoutedEventArgs e) => Open("desync");
+
+    /// <summary>Серверы и подписки — вкладка VPN.</summary>
+    private void OnServerChange(object sender, RoutedEventArgs e) => Open("vpn");
 
     private void Open(string section) => (Window.GetWindow(this) as MainWindow)?.Open(section);
 
@@ -227,7 +189,7 @@ public partial class StatusView : UserControl
     /// открытый им, тоже был бы администраторским — правка настроек мимо окна
     /// с полными правами без нужды. Проводник открывается от человека.
     /// </remarks>
-    private void OnQuickConfig(object sender, RoutedEventArgs e)
+    private void OpenConfigFolder()
     {
         try
         {
@@ -294,12 +256,9 @@ public partial class StatusView : UserControl
 
         Loaded += (_, _) =>
         {
-            // Не по времени, в отличие от прочего: режим меняется только
-            // отсюда, а автозапуск спрашивается у планировщика запуском
-            // schtasks — раз в две секунды это был бы процесс на ровном месте.
+            // Не по времени, в отличие от прочего: режим меняется только отсюда.
             var settings = AppSettings.Load(AppSettings.DefaultPath);
             ShowModes(settings);
-            ShowAutostart();
             ShowWidth(settings);
             ShowSupport(settings);
 
@@ -403,15 +362,12 @@ public partial class StatusView : UserControl
     /// <summary>То, что «Главная» читает с диска и у системы на каждом тике.</summary>
     /// <param name="Problem">Настройки не прочитались — почему; тогда прочее пусто.</param>
     /// <param name="SingBoxUp">Есть ли процесс sing-box — для фазы запуска, только пока он идёт.</param>
-    /// <param name="ConfigBuilt">Когда собран конфиг туннеля; <c>null</c> — файла нет.</param>
     private sealed record Seen(
         AppSettings? Settings,
         string? Problem,
-        string Subscriptions,
         SupervisorState? State,
         bool Running,
         bool SingBoxUp,
-        DateTime? ConfigBuilt,
         bool Coming = false,
         string PresetNote = "",
         string PresetProblem = "");
@@ -426,44 +382,15 @@ public partial class StatusView : UserControl
         }
         catch (Exception ex)
         {
-            return new Seen(null, $"Настройки не читаются: {ex.Message}", string.Empty, null, false, false, null);
-        }
-
-        // Ссылки на подписки — пароли, и в окне им не место. Показываем лишь
-        // счёт: его хватает, чтобы понять, почему нет серверов.
-        string subscriptions;
-
-        try
-        {
-            subscriptions = SubscriptionBook.Load().Describe(settings);
-        }
-        catch (Exception)
-        {
-            subscriptions = string.Empty;
+            return new Seen(null, $"Настройки не читаются: {ex.Message}", null, false, false);
         }
 
         var state = SupervisorState.Load(SupervisorState.DefaultPath);
         bool running = state is not null && state.IsSupervisorAlive();
 
-        DateTime? built = null;
-
-        try
-        {
-            // Конфиг собирается при каждом запуске, и серверы подписок берутся
-            // тогда же, — поэтому время файла и есть время, когда их взяли.
-            // Отдельного «подписки обновлены» программа не хранит.
-            var config = new FileInfo(Path.Combine("runtime", "singbox.json"));
-
-            if (config.Exists)
-                built = config.LastWriteTime;
-        }
-        catch (Exception)
-        {
-        }
-
         var (presetNote, presetProblem) = PresetNoteOf(settings.PresetName);
 
-        return new Seen(settings, null, subscriptions, state, running, starting && !running && IsRunning("sing-box"), built,
+        return new Seen(settings, null, state, running, starting && !running && IsRunning("sing-box"),
             !running && EngineControl.Coming, presetNote, presetProblem);
     }
 
@@ -532,15 +459,9 @@ public partial class StatusView : UserControl
         string presetLine = seen.PresetProblem.Length > 0 ? seen.PresetProblem : seen.PresetNote;
         PresetNote.Text = presetLine;
         PresetNote.Visibility = presetLine.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ServerValue.Text = TunnelStatus.ServerLine(settings, _exit);
-        ShowServerFlag(_exit ?? NetZapret.Subscriptions.Warp.PreferredExit(settings));
-        DnsValue.Text = settings.UseRouterDns
-            ? RouterDnsConnection.ConfigWarning(settings) is not null
-                ? $"Запасной DoH · {settings.DnsServer} (DNS роутера недоступен)"
-                : $"Роутер · {settings.RouterDnsAddress}:53 · UDP"
-            : settings.DnsCryptActive is { } crypt ? $"{DnsCrypt.Describe(crypt).Title} · dnscrypt-proxy"
-            : settings.DnsServer;
-        SubscriptionValue.Text = seen.Subscriptions;
+        ShowServer(settings, _exit);
+        ShowCards(settings);
+        SetRouterDnsWarning(settings);
 
         var state = seen.State;
         bool running = seen.Running;
@@ -554,7 +475,7 @@ public partial class StatusView : UserControl
         }
 
         ShowState(settings, state, running, seen.SingBoxUp, seen.Coming);
-        ShowFooter(settings, state, running, seen.ConfigBuilt);
+        ShowModeLine();
         ShowWarnings(settings);
 
         bool tunnel = running && state!.Services.Any(s => s.Name == "sing-box");
@@ -612,8 +533,7 @@ public partial class StatusView : UserControl
                 return;
 
             _exit = server;
-            ServerValue.Text = TunnelStatus.ServerLine(settings, server);
-            ShowServerFlag(server);
+            ShowServer(settings, server);
         }
         finally
         {
@@ -634,7 +554,6 @@ public partial class StatusView : UserControl
 
         if (!running)
         {
-            ShowDot("Faint");
             ShowWave("Faint", idle: true);
 
             StateLine.Text = "Остановлено";
@@ -645,9 +564,9 @@ public partial class StatusView : UserControl
 
             StartButton.IsEnabled = settings.NeedsProxy || settings.NeedsDesync;
 
-            // Движки остаются на виду и остановленными, просто серыми. Пустое
-            // место на их месте читается как «их нет вовсе», тогда как раздел
-            // отвечает на другой вопрос: что должно работать и работает ли.
+            // Всё остановлено — так и сказано карточкой состояния; строки
+            // движков под режимами нет (с 11.11).
+            _enginesTrouble = false;
             SetEngines(Planned(settings, "остановлен", "Faint"));
             SetDnsWarning(null);
 
@@ -674,7 +593,6 @@ public partial class StatusView : UserControl
 
         var colour = healthy ? "Accent" : broken ? "Danger" : "Warn";
 
-        ShowDot(colour);
         ShowWave(colour);
 
         StateLine.Text = healthy
@@ -695,6 +613,7 @@ public partial class StatusView : UserControl
         if (broken && Failures(services) is { Length: > 0 } failures)
             ShowProblem(failures);
 
+        _enginesTrouble = services.Any(s => s.Health != ServiceHealth.Healthy);
         SetEngines(services.Select(Row).ToList());
     }
 
@@ -731,7 +650,6 @@ public partial class StatusView : UserControl
         StopButton.IsEnabled = true;
         ShowEngineButtons(true);
 
-        ShowDot("Warn");
         ShowWave("Warn", starting: true);
 
         StateLine.Text = "Запускается…";
@@ -744,6 +662,7 @@ public partial class StatusView : UserControl
         // и «запускается». Прежде список опустошался, и они пропадали ровно
         // на те десятки секунд, когда на них и смотрят: раздел отвечал «их
         // нет» на вопрос «поднимаются ли они».
+        _enginesTrouble = true;
         SetEngines(services.Count > 0
             ? services.Select(Row).ToList()
             : Planned(settings, "запускается", "Warn"));
@@ -822,8 +741,8 @@ public partial class StatusView : UserControl
     /// Состояние волны на карточке: цвет, доля прохода сквозь барьер, мерцание.
     /// </summary>
     /// <remarks>
-    /// Цвет — тот же ключ, что у точки внизу (ShowDot): разойдясь, они дали бы
-    /// зелёную волну при красной точке. Проход — смысл картинки: работает —
+    /// Цвет — ключ состояния: тот же, что у слова «Работает» и у движков
+    /// в строке под режимами. Проход — смысл картинки: работает —
     /// заметная часть волны проходит, с оговорками — меньше, упал — ничего;
     /// стоит — волн нет вовсе, ровная линия у барьера.
     /// </remarks>
@@ -902,17 +821,67 @@ public partial class StatusView : UserControl
         _moved = (total, now);
     }
 
-    /// <summary>Красит точку в строке внизу «Главной» — тем же ключом, что волну (ShowWave).</summary>
-    private void ShowDot(string colourKey) => FooterDot.Fill = (Brush)FindResource(colourKey);
-
-    /// <summary>Флаг выхода у строки «Сервер» — картинкой (FlagImages); нет картинки — без флага.</summary>
-    private void ShowServerFlag(string? tag)
+    /// <summary>
+    /// Карточка «Сервер»: имя выхода крупно, под ним — кто его выбрал, в плитке — флаг.
+    /// </summary>
+    /// <remarks>
+    /// Выход спрашивается у движка (<see cref="ReadExitAsync"/>), а не берётся
+    /// из настроек: там «авто», а трафик идёт через один определённый.
+    /// Флаг — фоном плитки (FlagImages): Windows флагов не рисует, а картинка
+    /// в рамке срезалась (флаги VPN, 08.11).
+    /// </remarks>
+    private void ShowServer(AppSettings settings, string? live)
     {
-        var country = tag is null ? string.Empty : NetZapret.Subscriptions.CountryTag.Split(tag).Country;
+        var preferred = NetZapret.Subscriptions.Warp.PreferredExit(settings);
+        var shown = live ?? preferred;
+
+        ServerValue.Text = shown is null ? "Автоподбор" : TunnelStatus.NameOf(shown);
+
+        // Кто выбрал — только про работающий выход: до запуска слово
+        // говорило бы о том, чего ещё нет.
+        var who = live is null
+            ? string.Empty
+            : TunnelStatus.Standing(live, preferred) switch
+            {
+                ExitStanding.Auto => "автоподбор",
+                ExitStanding.Pinned => "выбран вручную",
+                _ => "временная замена выбранному",
+            };
+
+        ServerNote.Text = who;
+        ServerNote.Visibility = who.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        var country = shown is null ? string.Empty : NetZapret.Subscriptions.CountryTag.Split(shown).Country;
         var flag = country.Length == 2 ? FlagImages.For(country) : null;
 
-        ServerFlagImage.Source = flag;
+        ServerFlag.Background = flag is null ? null : new ImageBrush(flag) { Stretch = Stretch.UniformToFill };
         ServerFlag.Visibility = flag is null ? Visibility.Collapsed : Visibility.Visible;
+        ServerGlyph.Visibility = flag is null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Пресет — когда режиму нужен десинк, сервер — когда нужен туннель; одна —
+    /// во всю ширину.
+    /// </summary>
+    /// <remarks>
+    /// До 11.11 обе стояли всегда: в «Туннеле» пресет ни на что не влияет,
+    /// в «Десинке» сервера нет — карточка говорила о том, чего не будет.
+    /// Режим не выбран — обе, как прежде: выбирать есть из чего.
+    /// </remarks>
+    private void ShowCards(AppSettings settings)
+    {
+        bool none = !settings.NeedsDesync && !settings.NeedsProxy;
+        bool preset = settings.NeedsDesync || none;
+        bool server = settings.NeedsProxy || none;
+
+        PresetCard.Visibility = preset ? Visibility.Visible : Visibility.Collapsed;
+        ServerCard.Visibility = server ? Visibility.Visible : Visibility.Collapsed;
+
+        bool both = preset && server;
+        CardsGap.Width = new GridLength(both ? 14 : 0);
+        Grid.SetColumnSpan(PresetCard, both ? 1 : 3);
+        Grid.SetColumn(ServerCard, both ? 2 : 0);
+        Grid.SetColumnSpan(ServerCard, both ? 1 : 3);
     }
 
     /// <summary>Нагрузка движков между замерами: доля ядра считается по разнице, поэтому замер один на окно.</summary>
@@ -1001,6 +970,16 @@ public partial class StatusView : UserControl
         };
         menu.Items.Add(restart);
 
+        // Журнал и папка настроек — здесь с 11.11: стояли плитками быстрых
+        // действий внизу «Главной», вместе с переходами, которые повторяли меню.
+        var log = new MenuItem { Header = "Открыть журнал" };
+        log.Click += (_, _) => LogWindow.Open();
+        menu.Items.Add(log);
+
+        var config = new MenuItem { Header = "Открыть папку настроек", ToolTip = "Папка config в проводнике, файл настроек выделен" };
+        config.Click += (_, _) => OpenConfigFolder();
+        menu.Items.Add(config);
+
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
 
         // Те же два выхода, что в трее (TrayMenu): «убрать окно» и «выключить
@@ -1015,26 +994,6 @@ public partial class StatusView : UserControl
         menu.Items.Add(stop);
 
         menu.IsOpen = true;
-    }
-
-    /// <summary>
-    /// Строка внизу: состояние с длительностью, режим и пресет — и время сборки конфига туннеля.
-    /// </summary>
-    /// <remarks>
-    /// Режим и пресет — по макету 19.10: внизу их видно одной строкой, не читая карточек.
-    /// </remarks>
-    private void ShowFooter(AppSettings settings, SupervisorState? state, bool running, DateTime? configBuilt)
-    {
-        var said = running && _startingSince is null
-            ? $"{StateLine.Text} · {Span(DateTimeOffset.Now - state!.StartedAt)}"
-            : StateLine.Text;
-
-        FooterState.Text = $"{said} · Режим: {settings.DescribeMode()}"
-            + (settings.NeedsDesync ? $" · Пресет: {settings.DescribePreset()}" : string.Empty);
-
-        FooterConfig.Text = configBuilt is { } at
-            ? $"Конфиг туннеля собран {at:dd.MM.yyyy} в {at:HH:mm}"
-            : string.Empty;
     }
 
     /// <summary>«23 дня, 4 часа», «4 ч 12 мин», «7 мин».</summary>
@@ -1257,6 +1216,9 @@ public partial class StatusView : UserControl
     /// «предупреждение … прям на главной, а должно быть в диагностике».
     /// </remarks>
     private IReadOnlyList<EngineRow>? _engines;
+
+    /// <summary>Движок не работает, как надо: упал, поднимается, проверка не проходит.</summary>
+    private bool _enginesTrouble;
     private IReadOnlyList<WarningRow>? _warnings;
     private DateTimeOffset _warningsAt = DateTimeOffset.MinValue;
     private bool _warningsBusy;
@@ -1289,6 +1251,25 @@ public partial class StatusView : UserControl
         // скажет «выключен», как в трее, а высота карточки от режима не зависит.
         ShowEngine(rows.FirstOrDefault(r => r.Name == "winws2"), DesyncDot, DesyncState, DesyncPid, _desyncIdle);
         ShowEngine(rows.FirstOrDefault(r => r.Name == "sing-box"), TunnelDot, TunnelState, TunnelPid);
+        ShowModeLine();
+    }
+
+    /// <summary>
+    /// Строка под режимами — только когда есть что сказать.
+    /// </summary>
+    /// <remarks>
+    /// С 11.11: оговорка о режиме (не выбран, «без исключений») или движок,
+    /// который не работает, как надо, — упал, поднимается, не нужен. Когда
+    /// оба работают, «Работает» уже сказано карточкой состояния; когда всё
+    /// остановлено — «Остановлено» там же.
+    /// </remarks>
+    private void ShowModeLine()
+    {
+        bool engines = _enginesTrouble;
+        bool said = ModeText.Text.Length > 0;
+        ModeText.Visibility = said ? Visibility.Visible : Visibility.Collapsed;
+        DesyncChip.Visibility = TunnelChip.Visibility = engines ? Visibility.Visible : Visibility.Collapsed;
+        ModeLine.Visibility = said || engines ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -1321,15 +1302,11 @@ public partial class StatusView : UserControl
         dot.Fill = row.Color;
         state.Text = row.Word;
 
-        // Номер процесса — чтобы найти движок в диспетчере задач (владелец,
-        // 26.09). У движка не в порядке на его месте причина надзора: она
-        // важнее номера. В строке плитки места мало — целиком она в подсказке.
-        pid.Text = row.Detail.Length > 0
-            ? row.Detail
-            : row.ProcessId is { } id ? $"№{id}" : string.Empty;
-        pid.ToolTip = row.Detail.Length > 0
-            ? row.Detail
-            : row.ProcessId is { } shown ? $"Процесс {shown} — так его ищут в диспетчере задач" : null;
+        // Причина надзора у движка не в порядке; в строке места мало — целиком
+        // в подсказке. Номер процесса стоял здесь с 26.09 (найти в диспетчере
+        // задач), с 11.11 строка видна только при беде, и номер в ней лишний.
+        pid.Text = row.Detail;
+        pid.ToolTip = row.Detail.Length > 0 ? row.Detail : null;
     }
 
     /// <summary>
@@ -1369,6 +1346,30 @@ public partial class StatusView : UserControl
         ShowAllWarnings();
     }
 
+    /// <summary>DNS роутера недоступен — работает запасной DoH.</summary>
+    private WarningRow? _routerDnsWarning;
+
+    /// <summary>
+    /// DNS роутера выбран, а не годится — карточкой предупреждений.
+    /// </summary>
+    /// <remarks>
+    /// До 11.11 это было словами в строке «DNS» карточки параметров; строка
+    /// DNS ушла с «Главной» (что выбрано — вкладка DNS), а беда осталась на виду.
+    /// </remarks>
+    private void SetRouterDnsWarning(AppSettings settings)
+    {
+        WarningRow? row = settings.UseRouterDns && RouterDnsConnection.ConfigWarning(settings) is not null
+            ? new WarningRow("DNS роутера недоступен",
+                $"Имена спрашиваются у запасного DoH — {settings.DnsServer}. Проверить роутер — вкладка DNS.")
+            : null;
+
+        if (row == _routerDnsWarning)
+            return;
+
+        _routerDnsWarning = row;
+        ShowAllWarnings();
+    }
+
     private void SetDnsWarning(WarningRow? row)
     {
         if (row == _dnsWarning)
@@ -1381,7 +1382,15 @@ public partial class StatusView : UserControl
     /// <summary>Резолвер — первым: без имён не работает ничего, и это важнее защитника.</summary>
     private void ShowAllWarnings()
     {
-        IReadOnlyList<WarningRow> rows = _dnsWarning is { } dns ? [dns, .. _guardWarnings] : _guardWarnings;
+        var rows = new List<WarningRow>();
+
+        if (_dnsWarning is { } dns)
+            rows.Add(dns);
+
+        if (_routerDnsWarning is { } router)
+            rows.Add(router);
+
+        rows.AddRange(_guardWarnings);
 
         if (_warnings is not null && _warnings.SequenceEqual(rows))
             return;
@@ -1521,15 +1530,16 @@ public partial class StatusView : UserControl
         // «Туннеля»: включённая, она меняет смысл режима, и молчать о ней нельзя.
         // У «Гибрида» она отменяет само пояснение: маршруты не решают ничего,
         // всё уходит в VPN, а десинк не поднимается (EngineChoice.DesyncRuns).
+        // С 11.11 обычное пояснение режима (WorkModes.Explain) — только в «i»
+        // у его кнопки; здесь — лишь то, что меняет его смысл сейчас.
         ModeText.Text = mode is not { } chosen
             ? "Режим не выбран — движки не поднимутся."
-            : chosen == WorkMode.Route && engines.IgnoreExclusions
+            : engines.IgnoreExclusions && chosen == WorkMode.Route
                 ? "Сейчас без исключений: всё идёт через VPN, маршруты и десинк не действуют."
-                : WorkModes.Explain(chosen)
-                    + (chosen == WorkMode.Tunnel && engines.IgnoreExclusions
-                        ? " Сейчас без исключений: в VPN идёт и «напрямую»."
-                        : string.Empty);
-        ModeText.ToolTip = ModeText.Text;
+                : engines.IgnoreExclusions && chosen == WorkMode.Tunnel
+                    ? "Сейчас без исключений: в VPN идёт всё, и «напрямую» тоже."
+                    : string.Empty;
+        ModeText.ToolTip = ModeText.Text.Length > 0 ? ModeText.Text : null;
 
         _desyncIdle = engines.Desync && !engines.DesyncRuns
             ? "Включено «Игнорировать исключения» в настройках туннеля: всё идёт через VPN, "
@@ -1538,6 +1548,8 @@ public partial class StatusView : UserControl
 
         if (_engines is { } shown)
             ShowEngines(shown);
+        else
+            ShowModeLine();
 
         // «Ничего не поднято» режимом не считается — ни один сегмент не выбран.
         ModeDesync.IsChecked = mode == WorkMode.Desync;
@@ -1556,13 +1568,6 @@ public partial class StatusView : UserControl
 
         EnginesLine.Text = complaint ?? string.Empty;
         EnginesLine.Visibility = complaint is null ? Visibility.Collapsed : Visibility.Visible;
-
-        // Автозапуск поднимает ровно это. Сказано здесь же, где задано:
-        // иначе про связь пришлось бы догадываться, а догадка — источник
-        // того самого «трей запускается, а движки нужно поднимать кнопкой».
-        AutostartRaises.Text = mode is { } raised
-            ? $"При входе в Windows поднимется режим «{WorkModes.Name(raised)}»."
-            : "При входе в Windows ничего не поднимется: режим не выбран.";
     }
 
     /// <summary>
@@ -1598,190 +1603,6 @@ public partial class StatusView : UserControl
     {
         if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<WorkMode>(tag, out var mode))
             Choose(c => WorkModes.Apply(c, mode));
-    }
-
-    /// <summary>Что планировщик ответил в прошлый раз — на время работы окна.</summary>
-    private static (bool Installed, bool Stale)? _autostart;
-
-    /// <remarks>
-    /// Планировщик спрашивается в фоне, а до ответа показывается прошлый.
-    /// Замер 28.09: два запуска schtasks — «заведена ли» и «не устарела ли» —
-    /// 73–91 мс на главном потоке при каждом открытии «Главной», и это была
-    /// большая часть паузы, о которую спотыкалась анимация раздела.
-    /// </remarks>
-    private async void ShowAutostart()
-    {
-        if (_autostart is { } known)
-        {
-            ApplyAutostart(known);
-        }
-        else
-        {
-            AutostartNote("Задача планировщика: проверяю…");
-            AutostartSwitch.IsEnabled = false;
-        }
-
-        try
-        {
-            var fresh = await Task.Run(() =>
-            {
-                bool installed = AutostartTask.IsInstalled(AutostartTask.DefaultTaskName);
-                return (Installed: installed, Stale: installed && IsStale());
-            });
-
-            _autostart = fresh;
-            ApplyAutostart(fresh);
-        }
-        catch (Exception ex)
-        {
-            AutostartNote("Задача планировщика не читается.");
-            AutostartSwitch.IsEnabled = false;
-            ShowProblem("Планировщик не отвечает: " + ex.GetBaseException().Message);
-        }
-    }
-
-    /// <summary>
-    /// Слова о задаче — на месте строки «При входе поднимется…», а не под ней.
-    /// </summary>
-    /// <remarks>
-    /// Пока задача проверяется, не читается или устарела, обещание режима
-    /// неверно или не проверено: устаревшая поднимает прежнюю консоль, а не
-    /// режим. А две строки по две в узком окне растягивали ряд автозапуска,
-    /// и «Главная» уходила под прокрутку (снимок из теста 19.10, окно 1067×712).
-    /// </remarks>
-    private void AutostartNote(string? text)
-    {
-        AutostartValue.Text = text ?? string.Empty;
-        AutostartValue.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
-        AutostartRaises.Visibility = text is null ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    private void ApplyAutostart((bool Installed, bool Stale) state)
-    {
-        bool installed = state.Installed;
-
-        AutostartNote(null);
-        AutostartSwitch.IsChecked = installed;
-        AutostartSwitch.IsEnabled = true;
-
-        if (state.Stale)
-        {
-            AutostartNote("Задача устарела — выключите и включите снова.");
-
-            ShowProblem(
-                "Задача автозапуска осталась от прежней версии и запускает не то, "
-                + "что нужно: до 0.5.0 это была консольная программа, которой в поставке "
-                + "больше нет. Выключите автозапуск и включите снова — это два щелчка.");
-        }
-    }
-
-    /// <summary>
-    /// Запускает ли задача не ту программу.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Задача переживает обновление, а её команда — нет: она записана внутрь
-    /// задачи целиком, путём и ключами. До 0.5.0 автозапуск поднимал
-    /// netzapret.exe, которого в поставке уже нет, и «заведена» при мёртвой
-    /// команде — худший из возможных ответов: обход при входе не поднимется,
-    /// а окно скажет, что всё в порядке.
-    /// </para>
-    /// <para>
-    /// Сверяется имя файла, а не путь целиком, и не ключи. Ключи менялись
-    /// и ещё будут меняться, а запуск исчезнувшей программы — беда другого
-    /// порядка. Путь целиком не годится: он может содержать кириллицу,
-    /// а schtasks при перенаправлении отвечает однобайтовой OEM — имя же
-    /// латинское и переживает любую из них.
-    /// </para>
-    /// </remarks>
-    private static bool IsStale()
-    {
-        try
-        {
-            // Кодировка не задаётся намеренно. Заданная Unicode здесь уже
-            // стояла и всё ломала: schtasks пишет однобайтовый текст, а тот,
-            // прочитанный парами байт, превращался в кашу, не содержащую
-            // вообще ничего, — и всякая задача объявлялась устаревшей.
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "schtasks.exe",
-                ArgumentList = { "/query", "/tn", AutostartTask.DefaultTaskName, "/xml" },
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-            });
-
-            if (process is null)
-                return false;
-
-            var xml = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(10_000);
-
-            if (xml.Length == 0)
-                return false;
-
-            return Path.GetFileName(Environment.ProcessPath) is { Length: > 0 } name
-                && !xml.Contains(name, StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception)
-        {
-            // Не прочиталось — молчим: пугать задачей, о которой мы ничего
-            // не выяснили, хуже, чем не сказать.
-            return false;
-        }
-    }
-
-    private void OnAutostart(object sender, RoutedEventArgs e)
-    {
-        // Задача поднимает эту же программу в роли супервизора. Прежде она
-        // звала консольную рядом, и без неё автозапуск молча не работал.
-        var exe = Environment.ProcessPath;
-
-        if (exe is null)
-        {
-            ShowProblem("Не удалось определить путь к программе — задача не заведена.");
-            return;
-        }
-
-        try
-        {
-            if (AutostartTask.IsInstalled(AutostartTask.DefaultTaskName))
-            {
-                var (removed, output) = AutostartTask.Remove(AutostartTask.DefaultTaskName);
-
-                if (!removed)
-                    ShowProblem("Не удалось убрать автозапуск: " + output);
-            }
-            else
-            {
-                var (ok, output) = AutostartTask.Install(new AutostartOptions
-                {
-                    TaskName = AutostartTask.DefaultTaskName,
-                    ExecutablePath = exe,
-
-                    // Задача поднимает интерфейс в трей, а движки он заводит
-                    // сам — теми же ключами, что и кнопка «Запустить». Прежде
-                    // задача поднимала один супервизор, и при входе не было
-                    // ни значка, ни способа остановить обход, кроме как
-                    // открыть программу заново.
-                    Arguments = TrayIcon.Switch,
-                    WorkingDirectory = Path.GetFullPath("."),
-                    // SID, а не имя: см. AutostartTask.CurrentUserId.
-                    UserId = AutostartTask.CurrentUserId(),
-                });
-
-                if (!ok)
-                    ShowProblem("Не удалось завести автозапуск: " + output);
-            }
-        }
-        catch (Exception ex)
-        {
-            ShowProblem("Планировщик отказал: " + ex.GetBaseException().Message);
-        }
-
-        // Задачу только что завели или убрали — запомненный ответ устарел.
-        _autostart = null;
-        ShowAutostart();
     }
 
     /// <summary>

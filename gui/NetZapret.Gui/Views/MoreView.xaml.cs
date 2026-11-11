@@ -15,7 +15,8 @@ namespace NetZapret.Gui.Views;
 /// Всё, что не заслужило своего раздела, но нужно.
 /// </summary>
 /// <remarks>
-/// Режим и автозапуск отсюда ушли на «Главную», а подписки — в «VPN».
+/// Режим отсюда ушёл на «Главную», а подписки — в «VPN». Автозапуск
+/// и проверка обновлений вернулись сюда 11.11, когда «Главную» упростили.
 /// Здесь они и правда лежали по остаточному принципу: режим задаёт рамку,
 /// внутри которой имеют смысл маршруты, и место ему рядом с кнопкой запуска,
 /// а подписке — там, где видно, что она приносит.
@@ -28,7 +29,12 @@ public partial class MoreView : UserControl
 
         ShowAbout();
 
-        Loaded += (_, _) => Reload();
+        Loaded += (_, _) =>
+        {
+            Reload();
+            ShowAutostart();
+        };
+        Unloaded += (_, _) => _check?.Cancel();
     }
 
     /// <summary>
@@ -229,11 +235,69 @@ public partial class MoreView : UserControl
         File.Move(path, backup);
     }
 
-    /// <summary>«Искать обновления при запуске» — тумблер и слово рядом.</summary>
+    /// <summary>«Искать обновления при запуске» — тумблер и слово рядом; версия — над ним.</summary>
     private void ShowUpdates(AppSettings settings)
     {
         UpdatesSwitch.IsChecked = settings.CheckForUpdates;
         UpdatesWord.Text = settings.CheckForUpdates ? "вкл." : "выкл.";
+        VersionTitle.Text = "Версия " + UpdateCheck.Current;
+    }
+
+    private CancellationTokenSource? _check;
+
+    /// <summary>
+    /// Спрашивает GitHub и открывает окно обновления — и когда ставить нечего.
+    /// </summary>
+    /// <remarks>
+    /// С 11.11 здесь, а не кнопкой «Проверить» в карточке «Обновление» на
+    /// «Главной» (та теперь только на время установки). Окно — как прежде
+    /// (владелец 06.10): там чейнджлог, а «Обновить» неактивна, если ставить
+    /// нечего. Найденное запоминается (UpdateNotice) — «Главная» покажет
+    /// карточку «Вышла …». Итог строкой под версией: окно закрыли — он виден.
+    /// </remarks>
+    private async void OnCheckNow(object sender, RoutedEventArgs e)
+    {
+        _check?.Cancel();
+        _check = new CancellationTokenSource();
+
+        CheckNowButton.IsEnabled = false;
+        SayCheck("Спрашиваю GitHub…");
+
+        ReleaseInfo? found = null;
+
+        try
+        {
+            found = await UpdateCheck.LatestAsync(_check.Token);
+
+            UpdateNotice.Remember(found);
+
+            SayCheck(found is null
+                ? "Не удалось узнать: GitHub не ответил."
+                : UpdateCheck.IsNewer(found.Version, UpdateCheck.Current)
+                    ? $"Есть новее: {found.Version}."
+                    : "Установлена последняя.");
+        }
+        catch (OperationCanceledException)
+        {
+            SayCheck("Проверка прервана.");
+        }
+        catch (Exception ex)
+        {
+            SayCheck("Не удалось узнать: " + ex.GetBaseException().Message);
+        }
+        finally
+        {
+            CheckNowButton.IsEnabled = true;
+        }
+
+        if (found is not null)
+            (Window.GetWindow(this) as MainWindow)?.ShowUpdateWindow(found);
+    }
+
+    private void SayCheck(string text)
+    {
+        CheckValue.Text = text;
+        CheckValue.Visibility = Visibility.Visible;
     }
 
     private void OnUpdatesSwitch(object sender, RoutedEventArgs e)
@@ -248,7 +312,7 @@ public partial class MoreView : UserControl
             // Движкам безразлично: читается окном при его запуске.
             Status.Text = next.CheckForUpdates
                 ? "Записано: обновления будут искаться при запуске программы."
-                : "Записано: при запуске обновления не ищутся — проверить можно кнопкой на «Главной».";
+                : "Записано: при запуске обновления не ищутся — проверить можно кнопкой «Проверить сейчас».";
         }
         catch (Exception ex)
         {
@@ -466,6 +530,8 @@ public partial class MoreView : UserControl
         AuthorValue.Text = $"NetZapret {UpdateCheck.Current}. Автор — {About.Author}; идеи и отчёты об ошибках "
             + "приносят участники обсуждений и issues на GitHub. Лицензия MIT, программа бесплатна.";
 
+        // Описание — README на GitHub: он и есть документация, другой нет.
+        DocsLink.Tag = About.Repository + "#readme";
         RepositoryLink.Tag = About.Repository;
         IssuesLink.Tag = About.Issues;
         DiscussionsLink.Tag = About.Discussions;
@@ -491,6 +557,182 @@ public partial class MoreView : UserControl
         DownloadsValue.Text = $"Скачано с GitHub: {total:N0} раз — с обновлениями из программы. "
             + "Своего счётчика у программы нет: о вас она не сообщает никуда.";
         DownloadsValue.Visibility = Visibility.Visible;
+    }
+
+    // --- Автозапуск: с «Главной» сюда 11.11, код тот же ---------------------------
+
+    /// <summary>Что планировщик ответил в прошлый раз — на время работы окна.</summary>
+    private static (bool Installed, bool Stale)? _autostart;
+
+    /// <summary>Отказ планировщика — строкой под заголовком, а не наверху раздела, далеко от выключателя.</summary>
+    private string? _autostartFailure;
+
+    /// <remarks>
+    /// Планировщик спрашивается в фоне, а до ответа показывается прошлый.
+    /// Замер 28.09: два запуска schtasks — «заведена ли» и «не устарела ли» —
+    /// 73–91 мс на главном потоке при каждом открытии раздела.
+    /// </remarks>
+    private async void ShowAutostart()
+    {
+        if (_autostart is { } known)
+        {
+            ApplyAutostart(known);
+        }
+        else
+        {
+            AutostartValue.Text = "Задача планировщика: проверяю…";
+            AutostartSwitch.IsEnabled = false;
+        }
+
+        try
+        {
+            var fresh = await Task.Run(() =>
+            {
+                bool installed = AutostartTask.IsInstalled(AutostartTask.DefaultTaskName);
+                return (Installed: installed, Stale: installed && IsStale());
+            });
+
+            _autostart = fresh;
+            ApplyAutostart(fresh);
+        }
+        catch (Exception ex)
+        {
+            AutostartValue.Text = "Планировщик не отвечает: " + ex.GetBaseException().Message;
+            AutostartSwitch.IsEnabled = false;
+        }
+    }
+
+    /// <summary>
+    /// Выключатель по ответу планировщика и строка под заголовком: что
+    /// поднимется при входе, а если с задачей не всё ясно — что с ней.
+    /// </summary>
+    /// <remarks>
+    /// Поднимает ровно режим, выбранный на «Главной». Сказано здесь, где
+    /// включают: иначе про связь пришлось бы догадываться, а догадка —
+    /// источник «трей запускается, а движки нужно поднимать кнопкой».
+    /// </remarks>
+    private void ApplyAutostart((bool Installed, bool Stale) state)
+    {
+        AutostartSwitch.IsChecked = state.Installed;
+        AutostartSwitch.IsEnabled = true;
+
+        if (_autostartFailure is { } failure)
+        {
+            _autostartFailure = null;
+            AutostartValue.Text = failure;
+            return;
+        }
+
+        if (state.Stale)
+        {
+            // До 0.5.0 задача поднимала консольную программу, которой в поставке больше нет.
+            AutostartValue.Text = "Задача осталась от прежней версии и запускает не то — выключите и включите снова.";
+            return;
+        }
+
+        var mode = WorkModes.Of(AppSettings.Load(AppSettings.DefaultPath).Engines);
+
+        AutostartValue.Text = mode is { } raised
+            ? $"Поднимется режим «{WorkModes.Name(raised)}»."
+            : "Ничего не поднимется: режим не выбран.";
+    }
+
+    /// <summary>
+    /// Запускает ли задача не ту программу.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Задача переживает обновление, а её команда — нет: она записана внутрь
+    /// задачи целиком, путём и ключами. До 0.5.0 автозапуск поднимал
+    /// netzapret.exe, которого в поставке уже нет, и «заведена» при мёртвой
+    /// команде — худший из возможных ответов.
+    /// </para>
+    /// <para>
+    /// Сверяется имя файла, а не путь целиком, и не ключи: путь может
+    /// содержать кириллицу, а schtasks при перенаправлении отвечает
+    /// однобайтовой OEM — имя же латинское и переживает любую из них.
+    /// </para>
+    /// </remarks>
+    private static bool IsStale()
+    {
+        try
+        {
+            // Кодировка не задаётся намеренно: schtasks пишет однобайтовый текст,
+            // а прочитанный парами байт он превращался в кашу, и всякая задача
+            // объявлялась устаревшей.
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "schtasks.exe",
+                ArgumentList = { "/query", "/tn", AutostartTask.DefaultTaskName, "/xml" },
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+            });
+
+            if (process is null)
+                return false;
+
+            var xml = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(10_000);
+
+            if (xml.Length == 0)
+                return false;
+
+            return Path.GetFileName(Environment.ProcessPath) is { Length: > 0 } name
+                && !xml.Contains(name, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception)
+        {
+            // Не прочиталось — молчим: пугать задачей, о которой ничего не выяснили, хуже.
+            return false;
+        }
+    }
+
+    private void OnAutostart(object sender, RoutedEventArgs e)
+    {
+        // Задача поднимает эту же программу в трей, а движки она заводит сама —
+        // теми же ключами, что и кнопка «Запустить».
+        var exe = Environment.ProcessPath;
+
+        if (exe is null)
+        {
+            AutostartValue.Text = "Не удалось определить путь к программе — задача не заведена.";
+            return;
+        }
+
+        try
+        {
+            if (AutostartTask.IsInstalled(AutostartTask.DefaultTaskName))
+            {
+                var (removed, output) = AutostartTask.Remove(AutostartTask.DefaultTaskName);
+
+                if (!removed)
+                    _autostartFailure = "Не удалось убрать автозапуск: " + output;
+            }
+            else
+            {
+                var (ok, output) = AutostartTask.Install(new AutostartOptions
+                {
+                    TaskName = AutostartTask.DefaultTaskName,
+                    ExecutablePath = exe,
+                    Arguments = TrayIcon.Switch,
+                    WorkingDirectory = Path.GetFullPath("."),
+                    // SID, а не имя: см. AutostartTask.CurrentUserId.
+                    UserId = AutostartTask.CurrentUserId(),
+                });
+
+                if (!ok)
+                    _autostartFailure = "Не удалось завести автозапуск: " + output;
+            }
+        }
+        catch (Exception ex)
+        {
+            _autostartFailure = "Планировщик отказал: " + ex.GetBaseException().Message;
+        }
+
+        // Задачу только что завели или убрали — запомненный ответ устарел.
+        _autostart = null;
+        ShowAutostart();
     }
 
     private void OnLink(object sender, RoutedEventArgs e)

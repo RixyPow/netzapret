@@ -630,8 +630,11 @@ public static class Doctor
 
         var path = settings.ProxyConfigPath;
 
+        // Время сборки — здесь с 11.11: прежде оно стояло нижней строкой
+        // «Главной», а нужно только при разборе — поменялось ли что-то
+        // после последнего запуска.
         lines.Add(File.Exists(path)
-            ? Ok($"Конфиг собран: {path}")
+            ? Ok($"Конфиг собран {File.GetLastWriteTime(path):dd.MM.yyyy} в {File.GetLastWriteTime(path):HH:mm}: {path}")
             : Warn($"{path} не собран — соберётся при первом запуске движков."));
 
         lines.Add(settings.PreferredServer is { } server

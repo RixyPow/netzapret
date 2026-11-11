@@ -8,46 +8,22 @@ using NetZapret.Core.Updates;
 namespace NetZapret.Gui.Views;
 
 /// <summary>
-/// Версия, проверка и установка обновления — на «Главной».
+/// Установка обновления — на «Главной», с ходом закачки и ошибкой.
 /// </summary>
 /// <remarks>
-/// Перенесено из «Ещё» 23.09 по просьбе владельца. Код тот же; разница
-/// в том, что карточка «Вышла новая версия» больше не уводит в другой
-/// раздел, а зовёт установку здесь же — <see cref="Install"/>.
+/// Перенесено из «Ещё» 23.09 по просьбе владельца: карточка «Вышла новая
+/// версия» не уводит в другой раздел, а зовёт установку здесь же —
+/// <see cref="Install"/>. С 11.11 карточка видна только во время установки
+/// и после сбоя, а проверка руками — в «Ещё → Обслуживание» (MoreView).
 /// </remarks>
 public partial class UpdatePanel : UserControl
 {
-    private CancellationTokenSource? _work;
-
     /// <summary>Найденное обновление; <c>null</c> — ставить нечего.</summary>
     private ReleaseInfo? _release;
 
     public UpdatePanel()
     {
         InitializeComponent();
-
-        Loaded += (_, _) => ShowVersion(AppSettings.Load(AppSettings.DefaultPath));
-        Unloaded += (_, _) => _work?.Cancel();
-    }
-
-    public void ShowVersion(AppSettings settings)
-    {
-        VersionValue.Text = "Текущая версия: " + UpdateCheck.Current;
-
-        // Найденное при запуске окна (UpdateNotice) показывается сразу —
-        // вместе с кнопкой установки, без повторного вопроса GitHub.
-        if (UpdateNotice.Available is { } found)
-        {
-            _release = found;
-            InstallButton.Visibility = Visibility.Visible;
-            UpdateValue.Text = $"Есть новее: {found.Version}.";
-        }
-        else
-        {
-            UpdateValue.Text = settings.CheckForUpdates
-                ? "Проверяется при запуске программы."
-                : "Проверка при запуске выключена.";
-        }
     }
 
     /// <summary>Установка с карточки «Вышла новая версия» или из окна обновления — та же.</summary>
@@ -83,61 +59,6 @@ public partial class UpdatePanel : UserControl
             UpdateValue.ClearValue(TextBlock.ForegroundProperty);
 
         BringIntoView();
-    }
-
-    /// <summary>
-    /// Спрашивает GitHub и открывает окно обновления — и когда ставить нечего.
-    /// </summary>
-    /// <remarks>
-    /// Владелец 06.10: «пусть кнопка проверить открывает окно обновления, там
-    /// такой же чейнджлог, только кнопка обновить некликабельная». Строка
-    /// под версией остаётся: окно закрыли — итог проверки виден и так.
-    /// GitHub не ответил — окна нет, открывать его не с чем.
-    /// </remarks>
-    private async void OnCheckUpdate(object sender, RoutedEventArgs e)
-    {
-        _work?.Cancel();
-        _work = new CancellationTokenSource();
-
-        UpdateButton.IsEnabled = false;
-        Say("Спрашиваю GitHub…");
-
-        ReleaseInfo? found = null;
-
-        try
-        {
-            var release = await UpdateCheck.LatestAsync(_work.Token);
-            found = release;
-
-            UpdateNotice.Remember(release);
-
-            _release = release is not null && UpdateCheck.IsNewer(release.Version, UpdateCheck.Current)
-                ? release
-                : null;
-
-            InstallButton.Visibility = _release is null ? Visibility.Collapsed : Visibility.Visible;
-
-            UpdateValue.Text = release is null
-                ? "Не удалось узнать: GitHub не ответил."
-                : _release is not null
-                    ? $"Есть новее: {release.Version}."
-                    : "Установлена последняя.";
-        }
-        catch (OperationCanceledException)
-        {
-            UpdateValue.Text = "Проверка прервана.";
-        }
-        catch (Exception ex)
-        {
-            Say("Не удалось узнать: " + ex.GetBaseException().Message, failed: true);
-        }
-        finally
-        {
-            UpdateButton.IsEnabled = true;
-        }
-
-        if (found is not null)
-            (Window.GetWindow(this) as MainWindow)?.ShowUpdateWindow(found);
     }
 
     /// <summary>
@@ -208,8 +129,10 @@ public partial class UpdatePanel : UserControl
                 return;
         }
 
+        // Карточка встаёт на время установки: ход закачки и ошибки — здесь.
+        Visibility = Visibility.Visible;
+        VersionValue.Text = $"{UpdateCheck.Current} → {_release.Version}";
         InstallButton.IsEnabled = false;
-        UpdateButton.IsEnabled = false;
 
         try
         {
@@ -270,9 +193,7 @@ public partial class UpdatePanel : UserControl
         {
             Say("Обновиться не вышло: " + ex.GetBaseException().Message, failed: true);
             InstallButton.Content = "Обновить";
-
             InstallButton.IsEnabled = true;
-            UpdateButton.IsEnabled = true;
         }
     }
 

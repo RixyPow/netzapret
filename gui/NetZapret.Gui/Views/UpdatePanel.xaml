@@ -11,6 +11,10 @@
         Карточкой рядом с автозапуском, по макету 30.09. Пояснение о том,
         что обновление останавливает движки, — в подсказке у заголовка:
         оно нужно в момент решения, а не при каждом взгляде на окно.
+
+        С 11.11 карточка видна только во время установки и после её сбоя
+        (StatusView прячет её, Install показывает): проверка руками — в «Ещё
+        → Обслуживание», найденная версия — карточкой «Вышла …» наверху.
     -->
     <!-- Поля 13 по вертикали — как у соседней карточки автозапуска (HomeCard в StatusView.xaml). -->
     <gui:Card Style="{StaticResource Card}" Padding="18,13">
@@ -37,23 +41,9 @@
                            Margin="0,6,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
-            <!--
-                Кнопки столбцом: карточка в полстраницы, и две кнопки в строку
-                сжимали текст слева до слова на строку.
-            -->
-            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
-                        Content="Проверить" Click="OnCheckUpdate" />
-
-                <!--
-                    Появляется только когда есть что ставить:
-                    кнопка установки при последней версии
-                    предлагала бы действие без смысла.
-                -->
-                <Button x:Name="InstallButton" Style="{StaticResource Primary}"
-                        Content="Обновить" Click="OnInstallUpdate" Margin="0,8,0,0"
-                        Padding="18,9" Visibility="Collapsed" />
-            </StackPanel>
+            <!-- Ход закачки — процентом на самой кнопке; после сбоя — повтор. -->
+            <Button Grid.Column="2" x:Name="InstallButton" Style="{StaticResource Primary}"
+                    Content="Обновить" Click="OnInstallUpdate" Padding="18,9" VerticalAlignment="Center" />
         </Grid>
     </gui:Card>
 </UserControl>
