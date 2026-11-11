@@ -3,3 +3,12 @@
 # origin.com жив: клиент EA App до сих пор ходит на него за учётной записью.
 ea.com
 origin.com
+
+# Apex Legends (Respawn): сайт игры и Respawn. Её служебные имена
+# (apexstatic.cdn.origin.com, apex.prod.dm.origin.com) уже покрыты
+# origin.com. Взято 11.11 из сборки zapret-discord-youtube, где Apex,
+# по словам приславшего, работает; в игре у нас не проверено.
+# gamelift-ping.<регион>.api.aws не взяты: это замер пинга AWS GameLift,
+# им пользуется не только Apex.
+apexlegends.com
+respawn.com
