@@ -606,8 +606,8 @@ async Task<int> Youtube()
 
     Console.WriteLine();
 
-    foreach (var line in report.Lines)
-        Console.WriteLine("  " + line);
+    foreach (var line in report.Details)
+        Console.WriteLine(line);
 
     Console.WriteLine();
     Console.WriteLine(report.Summary is { } summary

@@ -117,6 +117,12 @@ public static class SupportReport
             // Права не проверяются: отчёт собирает и nz без администратора.
             parts.Add(("doctor.txt", Section(() => Doctor.Describe(Doctor.Run(settings, elevation: false)))));
 
+            // YouTube: зарубежные узлы видео свежим замером — то же, что nz youtube.
+            // Жалобу «редкое не идёт, 4K тормозит» без него не разобрать: нужны
+            // задержки до узлов, QUIC и кэш провайдера, а проверку блокировок
+            // человек мог и не запускать. Около 20 с к сбору отчёта.
+            parts.Add(("youtube.txt", Section(() => Youtube(settings))));
+
             // Голос Discord: что сторож дописал бы — тот же текст, что nz voice.
             parts.Add(("voice.txt", Section(() => Core.Services.DiscordVoiceLearn.Report(root: root).Text)));
 
@@ -281,6 +287,22 @@ public static class SupportReport
     private static string YesNo(bool value) => value ? "да" : "нет";
 
     /// <summary>Часть отчёта, которая может не собраться: тогда — почему, а не пропуск архива.</summary>
+    /// <summary>Замер узлов видео YouTube текстом; срок — минута, чтобы отчёт не повис на сети.</summary>
+    private static string Youtube(AppSettings settings)
+    {
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        var (report, why) = Task.Run(() => VideoNodesRun.MeasureAsync(settings, limit.Token)).GetAwaiter().GetResult();
+
+        if (report is null)
+            return (why ?? "не мерилось") + Environment.NewLine;
+
+        return string.Join(Environment.NewLine, report.Details)
+            + Environment.NewLine + Environment.NewLine
+            + "Итог: " + (report.Summary ?? "судить не по чему — узлов с адресом слишком мало")
+            + Environment.NewLine;
+    }
+
     private static string Section(Func<string> build)
     {
         try

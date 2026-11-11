@@ -63,7 +63,46 @@ public sealed record VideoNode
 
     public NodeFilter Filter { get; init; }
 
+    /// <summary>Узел кэша провайдера, а не зарубежный: в общий счёт не идёт.</summary>
+    public bool Cache { get; init; }
+
+    /// <summary>Задержка до узла: наименьшее время установки TCP; <c>null</c> — не соединился ни разу.</summary>
+    public int? PingMs { get; init; }
+
+    /// <summary>Время каждой попытки TCP от SYN до ServerHello, мс; <c>null</c> — ответа не было.</summary>
+    public IReadOnlyList<int?> TcpMs { get; init; } = [];
+
+    /// <summary>Время каждого рукопожатия QUIC, мс; <c>null</c> — не прошло.</summary>
+    public IReadOnlyList<int?> QuicMs { get; init; } = [];
+
     public bool Measured => Address is not null && !Tunnelled && Tries > 0;
+
+    /// <summary>
+    /// Сколько ответов по TCP пришло с задержкой: дольше двух задержек до узла
+    /// на <see cref="VideoNodes.LagMs"/> и больше.
+    /// </summary>
+    /// <remarks>
+    /// Обычное рукопожатие — две задержки (SYN и приветствие). Соединению с малым
+    /// окном (рецепт YT FIX) сервер шлёт первые два байта по своему таймеру,
+    /// через 0,27–0,34 с (замер 10.11); столько же вечером прибавляет и сам узел
+    /// каждому третьему-четвёртому соединению. По одной попытке одно от другого
+    /// не отличить — в отчёте это названо как есть.
+    /// </remarks>
+    public int Lagged => PingMs is { } ping
+        ? TcpMs.Count(ms => ms is { } took && took >= 2 * ping + VideoNodes.LagMs)
+        : 0;
+
+    /// <summary>
+    /// Потолок скорости одного соединения с малым окном, Мбит/с; <c>null</c> — задержка не мерилась.
+    /// </summary>
+    /// <remarks>
+    /// Соединение без множителя окна — 65 535 Б на задержку. Замер 11.11 на
+    /// фронтах Google в сетях узлов: 36 мс — 16 Мбит/с, 50 мс — 9,6–10,6.
+    /// </remarks>
+    public double? CeilingMbit => PingMs is > 0 and var ping ? 65535 * 8 / (ping / 1000.0) / 1e6 : null;
+
+    /// <summary>Дальше порога, за которым рецепт прощает первый срез (<see cref="VideoNodes.FarMs"/>).</summary>
+    public bool Far => PingMs > VideoNodes.FarMs;
 
     /// <summary>Имя узла без общей зоны: её повторять в каждой строке незачем.</summary>
     public string Short => Host.EndsWith(VideoNodes.Zone, StringComparison.OrdinalIgnoreCase)
@@ -90,6 +129,34 @@ public sealed record VideoNode
             + (QuicTries > 0 ? $", QUIC {Quic} из {QuicTries}" : string.Empty)
             + filter;
     }
+
+    /// <summary>
+    /// То же с числами для разбора: задержка, время каждой попытки, потолок с малым окном.
+    /// </summary>
+    public string Detail()
+    {
+        if (!Measured)
+            return Describe();
+
+        var filter = Filter switch
+        {
+            NodeFilter.Open => "; мимо обхода отвечает любому имени",
+            NodeFilter.GoogleOnly => "; мимо обхода — только имени Google",
+            NodeFilter.Closed => "; мимо обхода не отвечает ни одному имени",
+            _ => string.Empty,
+        };
+
+        return $"{Short} ({Address}) — пинг {(PingMs is { } ping ? $"{ping} мс" : "не измерен")}"
+            + $"; TCP {Tcp} из {Tries}{Times(TcpMs)}"
+            + (Lagged > 0 ? $", с задержкой {Lagged}" : string.Empty)
+            + (QuicTries > 0 ? $"; QUIC {Quic} из {QuicTries}{Times(QuicMs)}" : "; QUIC не мерился")
+            + filter
+            + (!Cache && CeilingMbit is { } ceiling ? $"; с малым окном до ~{ceiling:0} Мбит/с" : string.Empty);
+    }
+
+    private static string Times(IReadOnlyList<int?> times) => times.Count == 0
+        ? string.Empty
+        : ": " + string.Join(", ", times.Select(ms => ms is { } took ? took.ToString() : "нет")) + " мс";
 }
 
 /// <summary>Замер зарубежных узлов видео за один прогон.</summary>
@@ -154,6 +221,101 @@ public sealed record VideoNodesReport
 
     /// <summary>По строке на узел.</summary>
     public IReadOnlyList<string> Lines => Nodes.Select(n => n.Describe()).ToList();
+
+    /// <summary>Узел кэша провайдера, с которого плеер начинает; <c>null</c> — не определён.</summary>
+    public VideoNode? CacheNode { get; init; }
+
+    /// <summary>Почему узел кэша не определён.</summary>
+    public string? CacheNote { get; init; }
+
+    /// <summary>Пресет десинка и стоит ли в нём рецепт узлов видео — словами; <c>null</c> — не выяснялось.</summary>
+    public string? Recipe { get; init; }
+
+    /// <summary>
+    /// Всё, что нужно для разбора жалобы на YouTube: пресет, кэш провайдера,
+    /// узлы с задержкой и временем каждой попытки, сводка.
+    /// </summary>
+    /// <remarks>
+    /// По одному итогу «TCP 26 из 30» не понять, какой у человека случай
+    /// (разбор 11.11): идёт ли плеер по QUIC или по TCP, близко узлы или
+    /// далеко (от этого зависит цена малого окна), отвечает ли сам кэш
+    /// провайдера. Отчёт несёт это числами, чтобы не переспрашивать.
+    /// </remarks>
+    public IReadOnlyList<string> Details
+    {
+        get
+        {
+            var lines = new List<string>();
+
+            if (Recipe is not null)
+                lines.Add(Recipe);
+
+            lines.Add(CacheNode is { } cache
+                ? "Кэш провайдера: " + cache.Detail()
+                : "Кэш провайдера: " + (CacheNote ?? "не определён"));
+
+            lines.Add(string.Empty);
+            lines.Add("Зарубежные узлы (время попыток — от SYN до ответа сервера):");
+            lines.AddRange(Nodes.Select(n => "  " + n.Detail()));
+
+            var measured = Measured;
+
+            if (measured.Count == 0)
+                return lines;
+
+            lines.Add(string.Empty);
+            lines.Add("Сводка:");
+
+            foreach (var (name, group) in new[]
+                     {
+                         ($"ближние (пинг до {VideoNodes.FarMs} мс)", measured.Where(n => n.PingMs is not null && !n.Far).ToList()),
+                         ($"дальние (пинг больше {VideoNodes.FarMs} мс)", measured.Where(n => n.Far).ToList()),
+                     })
+            {
+                if (group.Count == 0)
+                    continue;
+
+                int low = group.Min(n => n.PingMs!.Value), high = group.Max(n => n.PingMs!.Value);
+
+                static string Span(double from, double to) => $"{from:0}" == $"{to:0}" ? $"{from:0}" : $"{from:0}–{to:0}";
+                int quicTries = group.Sum(n => n.QuicTries);
+
+                lines.Add($"  {name}: узлов {group.Count}, пинг {(low == high ? $"{low}" : $"{low}–{high}")} мс"
+                    + $"; TCP {group.Sum(n => n.Tcp)} из {group.Sum(n => n.Tries)}"
+                    + (quicTries > 0 ? $"; QUIC {group.Sum(n => n.Quic)} из {quicTries}" : string.Empty)
+                    + $"; соединение с малым окном — до ~{Span(group.Min(n => n.CeilingMbit!.Value), group.Max(n => n.CeilingMbit!.Value))} Мбит/с");
+            }
+
+            int unreached = measured.Count(n => n.PingMs is null);
+
+            if (unreached > 0)
+                lines.Add($"  не соединились ни разу (пинг не измерен): узлов {unreached}");
+
+            int lagged = measured.Sum(n => n.Lagged);
+
+            lines.Add($"  ответов по TCP с задержкой от {VideoNodes.LagMs} мс сверх обычного: {lagged} из {Tcp}"
+                + (lagged > 0 ? " — малое окно рецепта либо медленный ответ узла" : string.Empty));
+
+            if (QuicTries > 0)
+            {
+                int silent = measured.Count(n => n.QuicTries > 0 && n.Quic == 0);
+
+                // Плеер сначала идёт по QUIC (11.11 дома редкие ролики и 4K шли
+                // с зарубежных узлов по h3, рецепт TCP в деле не участвовал).
+                lines.Add(silent == 0
+                    ? "  плеер сначала пробует QUIC: он отвечает у всех узлов — видео, скорее всего, пойдёт по QUIC, без малого окна"
+                    : $"  плеер сначала пробует QUIC: у {silent} из {measured.Count} узлов он не прошёл ни разу — с них видео пойдёт по TCP, после ожидания QUIC");
+            }
+            else
+            {
+                lines.Add("  QUIC на этой машине не мерился — как пойдёт плеер, по нему не сказать");
+            }
+
+            lines.Add("  скорость самого видео не мерилась: ссылку на поток выдаёт только плеер; потолок выше — расчёт (64 КБ окна на пинг)");
+
+            return lines;
+        }
+    }
 }
 
 /// <summary>
@@ -210,6 +372,20 @@ public static class VideoNodes
 
     /// <summary>Имя Google, которое фильтр по адресу пропускает.</summary>
     public const string AllowedName = "www.google.com";
+
+    /// <summary>Задержка, выше которой узел — «дальний»: порог <c>far</c> рецепта в пресете YT FIX.</summary>
+    /// <remarks>
+    /// Дома 11.11 задержка до узлов двух родов: 25–31 мс и 50–61 мс. Дальним
+    /// малое окно режет скорость до ~10 Мбит/с, и рецепт прощает им первый срез.
+    /// </remarks>
+    public const int FarMs = 35;
+
+    /// <summary>На сколько ответ должен опоздать против двух задержек, чтобы счесться задержанным.</summary>
+    /// <remarks>Малое окно прибавляет 270–340 мс (замер 10.11), обычный разброс — десятки.</remarks>
+    public const int LagMs = 200;
+
+    /// <summary>Откуда узнаётся узел кэша провайдера: Google отвечает именем узла, к которому приписан адрес клиента.</summary>
+    private const string MappingUrl = "https://redirector.googlevideo.com/report_mapping?di=no";
 
     /// <summary>
     /// Узлы — по одному из группы.
@@ -269,12 +445,91 @@ public static class VideoNodes
         // и мимо обхода оно бы уже не прошло.
         using var adapter = ProbePorts.Through(PhysicalNetwork.Interface());
 
+        var cache = CacheAsync(aside, cancellationToken);
         var nodes = await Task.WhenAll(Hosts.Select(host => MeasureNodeAsync(host, aside, cancellationToken)));
+        var (cacheNode, cacheNote) = await cache;
 
-        return new VideoNodesReport { Nodes = nodes, Desync = desync };
+        return new VideoNodesReport { Nodes = nodes, Desync = desync, CacheNode = cacheNode, CacheNote = cacheNote };
     }
 
-    private static async Task<VideoNode> MeasureNodeAsync(string host, bool aside, CancellationToken cancellationToken)
+    /// <summary>
+    /// Узел кэша провайдера — тот, с которого плеер начинает, — и его замер.
+    /// </summary>
+    /// <remarks>
+    /// Из ответа берётся только имя узла: в нём же стоит внешний адрес клиента,
+    /// и в отчёт он не попадает. Мимо обхода узел кэша не спрашивается — фильтра
+    /// на нём нет, он у провайдера.
+    /// </remarks>
+    private static async Task<(VideoNode? Node, string? Note)> CacheAsync(bool aside, CancellationToken cancellationToken)
+    {
+        string name;
+
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            var text = await http.GetStringAsync(MappingUrl, cancellationToken);
+            var match = System.Text.RegularExpressions.Regex.Match(text, @"=>\s*([a-z0-9-]+)");
+
+            if (!match.Success)
+                return (null, "не определён — Google не назвал узел");
+
+            name = match.Groups[1].Value;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return (null, "не определён — redirector.googlevideo.com не ответил");
+        }
+
+        var node = (await MeasureNodeAsync($"rr1---{name}{Zone}", aside, cancellationToken, filter: false)) with { Cache = true };
+
+        return node.Tunnelled
+            ? (null, $"{name} — YouTube заведён в туннель, это кэш у выхода; не мерился")
+            : (node, null);
+    }
+
+    /// <summary>Задержка до адреса: наименьшее из трёх времён установки TCP; <c>null</c> — не соединился.</summary>
+    /// <remarks>
+    /// Мимо обхода, когда можно: новое соединение через winws2 стоит ему 10–30 мс
+    /// процессора (замер 03.10 и 07.10), а узлы спрашиваются разом — первый прогон
+    /// 11.11 через обход показал 38–40 мс там, где curl по одному давал 27–28.
+    /// </remarks>
+    private static async Task<int?> PingAsync(IPAddress address, bool aside, CancellationToken cancellationToken)
+    {
+        using var ports = aside ? ProbePorts.Use() : null;
+
+        int? best = null;
+
+        for (int i = 0; i < Tries; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            using var client = ProbePorts.Client(AddressFamily.InterNetwork);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(Timeout);
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                await client.ConnectAsync(address, 443, limit.Token);
+            }
+            catch (Exception ex) when (ex is SocketException or OperationCanceledException)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                continue;
+            }
+
+            int took = Math.Max(1, (int)watch.ElapsedMilliseconds);
+
+            if (best is null || took < best)
+                best = took;
+        }
+
+        return best;
+    }
+
+    private static async Task<VideoNode> MeasureNodeAsync(string host, bool aside, CancellationToken cancellationToken, bool filter = true)
     {
         IPAddress? address;
 
@@ -293,7 +548,12 @@ public static class VideoNodes
         if (TunnelHealth.IsFakeIp(address))
             return new VideoNode { Host = host, Address = address.ToString(), Tunnelled = true };
 
+        // Задержка — первой и голым соединением: приветствия за ней могут
+        // пометить группу, и следующие пойдут с малым окном.
+        int? ping = await PingAsync(address, aside, cancellationToken);
+
         int tcp = 0;
+        var tcpMs = new List<int?>();
 
         for (int i = 0; i < Tries; i++)
         {
@@ -301,11 +561,17 @@ public static class VideoNodes
 
             // Браузерным приветствием: его и увидит фильтр от Хрома — длинное,
             // двумя пакетами. Ответ — ServerHello, а не отказ: узел своё имя знает.
-            if ((await BrowserHello.AskAsync(address, host, Timeout, cancellationToken)).Answer == HelloAnswer.Accepted)
+            var hello = await BrowserHello.AskAsync(address, host, Timeout, cancellationToken);
+            bool accepted = hello.Answer == HelloAnswer.Accepted;
+
+            if (accepted)
                 tcp++;
+
+            tcpMs.Add(accepted ? (int)hello.Elapsed.TotalMilliseconds : null);
         }
 
         int quic = 0, quicTries = 0;
+        var quicMs = new List<int?>();
 
         for (int i = 0; i < Tries; i++)
         {
@@ -319,6 +585,8 @@ public static class VideoNodes
 
             if (answer.Ok)
                 quic++;
+
+            quicMs.Add(answer.Ok ? (int)answer.Elapsed.TotalMilliseconds : null);
         }
 
         return new VideoNode
@@ -329,7 +597,10 @@ public static class VideoNodes
             Tcp = tcp,
             QuicTries = quicTries,
             Quic = quic,
-            Filter = aside ? await FilterAsync(address, cancellationToken) : NodeFilter.Unknown,
+            PingMs = ping,
+            TcpMs = tcpMs,
+            QuicMs = quicMs,
+            Filter = aside && filter ? await FilterAsync(address, cancellationToken) : NodeFilter.Unknown,
         };
     }
 

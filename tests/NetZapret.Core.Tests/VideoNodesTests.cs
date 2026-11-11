@@ -158,4 +158,57 @@ public sealed class VideoNodesTests
         Assert.All(VideoNodes.Hosts, h => Assert.EndsWith(VideoNodes.Zone, h));
         Assert.True(VideoNodes.Hosts.Count >= VideoNodes.NodeFloor);
     }
+
+    /// <summary>
+    /// Отчёт для разбора (11.11): по узлу — задержка, время каждой попытки и потолок
+    /// с малым окном; ответ, опоздавший на 0,2 с против двух задержек, помечен.
+    /// </summary>
+    [Fact]
+    public void TheDetailCarriesPingTimesAndTheSmallWindowCeiling()
+    {
+        var node = Node("a", 2, 3) with { PingMs = 50, TcpMs = [104, null, 347], QuicMs = [60, 62, 61] };
+
+        Assert.Equal(1, node.Lagged);
+        Assert.True(node.Far);
+        Assert.Equal(10, Math.Round(node.CeilingMbit!.Value));
+
+        var line = node.Detail();
+
+        Assert.Contains("пинг 50 мс", line);
+        Assert.Contains("TCP 2 из 3: 104, нет, 347 мс, с задержкой 1", line);
+        Assert.Contains("QUIC 3 из 3: 60, 62, 61 мс", line);
+        Assert.Contains("до ~10 Мбит/с", line);
+    }
+
+    /// <summary>Сводка делит узлы порогом рецепта и говорит, как пойдёт плеер: QUIC у части узлов молчит.</summary>
+    [Fact]
+    public void TheDetailsSplitNodesByPingAndSayWhereQuicIsSilent()
+    {
+        var near = Node("a", 3, 3) with { PingMs = 22, TcpMs = [60, 61, 62], QuicMs = [30, 30, 30] };
+        var far = Node("b", 3, 0) with { PingMs = 44, TcpMs = [100, 100, 100], QuicMs = [null, null, null] };
+        var cache = Node("cache", 3, 3, NodeFilter.Unknown) with { Cache = true, PingMs = 2 };
+
+        var text = string.Join("\n", (Report(near, far) with { CacheNode = cache, Recipe = "Пресет: X." }).Details);
+
+        Assert.StartsWith("Пресет: X.", text);
+        Assert.Contains("Кэш провайдера: rr1---sn-cache", text);
+        Assert.Contains("ближние (пинг до 35 мс): узлов 1, пинг 22 мс", text);
+        Assert.Contains("дальние (пинг больше 35 мс): узлов 1, пинг 44 мс", text);
+        Assert.Contains("у 1 из 2 узлов он не прошёл ни разу", text);
+
+        // Кэш провайдера — не зарубежный узел: потолка малого окна у него нет и в счёт он не идёт.
+        Assert.DoesNotContain("с малым окном", cache.Detail());
+        Assert.Equal(6, (Report(near, far) with { CacheNode = cache }).Tries);
+    }
+
+    /// <summary>Узел без замера задержки и кэш, который не определился, отчёт не роняют.</summary>
+    [Fact]
+    public void TheDetailsSurviveMissingPingAndCache()
+    {
+        var text = string.Join("\n", (Report(Node("a", 0, 0)) with { CacheNote = "не определён — Google не назвал узел" }).Details);
+
+        Assert.Contains("Кэш провайдера: не определён", text);
+        Assert.Contains("пинг не измерен", text);
+        Assert.Contains("не соединились ни разу (пинг не измерен): узлов 1", text);
+    }
 }

@@ -842,9 +842,12 @@ public partial class CheckView : UserControl
 
             if (_video is { } video)
             {
-                foreach (var line in video.Lines)
+                // С задержками, временем каждой попытки, кэшем провайдера и сводкой:
+                // по одному итогу случай человека не разобрать (11.11).
+                foreach (var line in video.Details)
                     text.AppendLine(line);
 
+                text.AppendLine();
                 text.AppendLine(video.Summary is { } summary
                     ? "Итог: " + summary
                     : "Итог: судить не по чему — узлов с адресом слишком мало");

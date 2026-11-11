@@ -36,6 +36,46 @@ public static class VideoNodesRun
             aside: winws is null or { KeepsProbesOut: true },
             cancellationToken);
 
-        return (report, null);
+        return (report with { Recipe = Recipe(settings, desync: winws is not null) }, null);
+    }
+
+    /// <summary>
+    /// Пресет и стоит ли в нём рецепт узлов видео — строкой для отчёта.
+    /// </summary>
+    /// <remarks>
+    /// От этого зависит, как читать числа: с шагом <c>nz_first2</c> срезанное
+    /// соединение сбрасывается и повторяется с малым окном, без него — виснет.
+    /// Читается файл пресета, а не строка запуска: шаг либо есть в пресете,
+    /// либо его нет, а у работающего winws2 без прав строку не спросить.
+    /// </remarks>
+    public static string Recipe(AppSettings settings, bool desync)
+    {
+        if (!desync)
+            return "Десинк не работает: числа ниже — о сети без обхода.";
+
+        var name = settings.PresetName;
+
+        if (string.IsNullOrEmpty(name))
+            return "Пресет: не выбран.";
+
+        string[] steps;
+
+        try
+        {
+            steps = File.ReadLines(Path.Combine(Zapret.ZapretPaths.PresetDirectory, name + ".txt"))
+                .Select(line => line.Trim())
+                .Where(line => line.StartsWith("--lua-desync=nz_first2", StringComparison.Ordinal))
+                .Select(line => line["--lua-desync=".Length..])
+                .Distinct()
+                .ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Пресет: {name} (файл не прочитан).";
+        }
+
+        return steps.Length == 0
+            ? $"Пресет: {name}; рецепта узлов видео (малое окно по надобности) в нём нет."
+            : $"Пресет: {name}; рецепт узлов видео есть: {string.Join(", ", steps)}.";
     }
 }
