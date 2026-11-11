@@ -598,11 +598,14 @@
                             <!-- Поля свои: у залитой кнопки они шире, и кнопка росла бы при вводе. -->
                             <Button Grid.Column="1" x:Name="SiteFixButton" Style="{StaticResource Ghost}" Content="Починить"
                                     Click="OnSiteFix" MinWidth="120" Padding="18,9"
-                                    ToolTip="Показать маршрут сайта в «Маршрутах»; нет его — завести своим доменом, сперва «напрямую»" />
+                                    ToolTip="Подобрать сайту путь — как «Сайт не открывается?» в «Ещё»: первый открывший записывается в «Маршруты»" />
                         </Grid>
 
                         <TextBlock x:Name="SiteError" Style="{StaticResource Caption}" Foreground="{DynamicResource Danger}"
                                    Margin="0,6,0,0" TextWrapping="Wrap" Visibility="Collapsed" />
+
+                        <!-- Ход и итог автоподбора — тот же, что в «Ещё» (SiteFix, 12.11). -->
+                        <views:FixProgress x:Name="SiteProgress" Margin="0,12,0,0" Action="OnSiteReveal" />
                     </StackPanel>
                 </local:Card>
 

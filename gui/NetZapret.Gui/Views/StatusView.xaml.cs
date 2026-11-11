@@ -1896,19 +1896,19 @@ public partial class StatusView : UserControl
     private void OnSiteFix(object sender, RoutedEventArgs e) => FixSite();
 
     /// <summary>
-    /// Открывает «Маршруты» на части сайта; части нет — заводит его своим доменом.
+    /// «Починить» — автоподбор маршрута, тот же, что «Сайт не открывается?» в «Ещё».
     /// </summary>
     /// <remarks>
-    /// Имя — тем же разбором, что поиск окна и «Сайт не открывается?» в «Ещё»
-    /// (<see cref="SiteFixer.HostOf"/>): ссылка, имя, «www.». Часть ищет и
-    /// заводит сам раздел (<see cref="RoutesView.PendingRevealAdds"/>): правила
-    /// он читает в фоне, и решать за него отсюда значило бы читать их второй
-    /// раз. Новая часть — своим доменом «напрямую», как добавляет поиск
-    /// «Маршрутов»; путь меняется в её строке.
+    /// 11.11 кнопка только открывала «Маршруты» на части сайта (нет части —
+    /// заводила его своим доменом «напрямую»); 12.11 владелец попросил, чтобы
+    /// она запускала автоподбор (<see cref="SiteFix"/>): путь пробуется замером,
+    /// первый открывший записывается правилом сайта, а «Показать в «Маршрутах»»
+    /// в итоге ведёт на его часть. Имя — тем же разбором (<see cref="SiteFixer.HostOf"/>):
+    /// не сайт — строка под полем, а не подбор вслепую.
     /// </remarks>
-    private void FixSite()
+    private async void FixSite()
     {
-        if (SiteFixer.HostOf(SiteBox.Text) is not { } host)
+        if (SiteFixer.HostOf(SiteBox.Text) is null)
         {
             SiteError.Text = SiteBox.Text.Trim().Length == 0
                 ? "Впишите сайт, например aternos.org."
@@ -1918,12 +1918,13 @@ public partial class StatusView : UserControl
         }
 
         SiteError.Visibility = Visibility.Collapsed;
-        SiteBox.Text = string.Empty;
-
-        RoutesView.PendingReveal = host;
-        RoutesView.PendingRevealAdds = true;
-        Open("routes");
+        _siteHost = await SiteFix.RunAsync(SiteBox.Text, SiteProgress, SiteFixButton, this);
     }
+
+    /// <summary>Имя последнего подбора на «Главной» — для «Показать в «Маршрутах»».</summary>
+    private string? _siteHost;
+
+    private void OnSiteReveal(object sender, RoutedEventArgs e) => SiteFix.ShowRoute(_siteHost, this);
 
     // --- Отчёт для разбора — простой вид, тот же, что в «Диагностике» -----------------
 

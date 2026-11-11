@@ -630,115 +630,15 @@ public partial class MoreView : UserControl
     private string? _fixHost;
 
     /// <summary>
-    /// «Сайт не открывается»: подбор маршрута по симптому, сработавший — в правила (SiteFixer).
+    /// «Сайт не открывается»: подбор маршрута по симптому, сработавший — в правила
+    /// (SiteFixer). Ход и итог — общие с простой «Главной» (<see cref="SiteFix"/>).
     /// </summary>
     private async void OnFix(object sender, RoutedEventArgs e)
     {
-        var input = FixSite.Text;
-
-        if (string.IsNullOrWhiteSpace(input) || !FixButton.IsEnabled)
-            return;
-
-        FixButton.IsEnabled = false;
-        FixButton.Content = "Проверяю…";
         _fixHost = null;
-        Fix.Start();
-
-        var progress = new Progress<string>(Fix.Now);
-        var stepDone = new Progress<SiteFixStep>(Fix.Add);
-
-        try
-        {
-            var result = await Task.Run(() => SiteFixer.FixAsync(input, progress, CancellationToken.None, stepDone));
-
-            ShowFix(result);
-
-            Journal.Write("починка сайта", $"{result.Host}: "
-                + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
-                + result.Outcome());
-
-            if (result.Applied is { } applied && result.NeedsRestart)
-            {
-                this.Offer($"Маршрут для {result.Host}: " + (applied == RoutingMode.Proxy
-                    ? "через VPN"
-                    : result.Recipe is { } recipe ? $"десинк, {recipe}" : "десинк"));
-            }
-        }
-        catch (Exception ex)
-        {
-            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", "Проверка не удалась", ex.GetBaseException().Message);
-        }
-        finally
-        {
-            FixButton.IsEnabled = true;
-            FixButton.Content = "Починить";
-        }
+        _fixHost = await SiteFix.RunAsync(FixSite.Text, Fix, FixButton, this);
     }
 
-    /// <summary>Итог подбора — плашкой над ходом.</summary>
-    private void ShowFix(SiteFixResult result)
-    {
-        _fixHost = result.Host;
-        Fix.Finish(result.Steps);
-
-        if (result.Host is null || result.Steps.Count == 0)
-        {
-            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", result.Summary, null);
-            return;
-        }
-
-        var rule = SiteFixer.RuleValue(result.Host);
-        const string reveal = "Показать в «Маршрутах»";
-
-        switch (result.Applied)
-        {
-            case RoutingMode.Direct:
-                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"Записан маршрут «напрямую» для {rule}",
-                    "Десинк этому сайту мешал. Действует уже сейчас.", reveal);
-                break;
-
-            case RoutingMode.Desync:
-                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent",
-                    $"Записан маршрут «десинк»{(result.Recipe is { } recipe ? $" с рецептом «{recipe}»" : string.Empty)} для {rule}",
-                    "Заработает после перезапуска движков.", reveal);
-                break;
-
-            case RoutingMode.Proxy:
-                int recipes = result.Steps.Count(s => s.Try == RouteTry.Recipes && s.Recipe is not null);
-
-                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"Записан маршрут «через VPN» для {rule}",
-                    "Заработает после перезапуска движков."
-                    + (recipes > 0 ? $" Рецептов десинка опробовано {recipes} — ни один не открыл." : string.Empty),
-                    reveal);
-                break;
-
-            case null when result.Pinned is { } spare:
-                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"{result.Host} прибит к запасному адресу Cloudflare {spare}",
-                    "На своём адресе сайт режут, на запасном открывается. Действует уже сейчас; снять — на вкладке «Файл hosts».");
-                break;
-
-            case null when result.Ours is { } section:
-                Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", $"{result.Host} закрывает наш десинк — секция «{section}»",
-                    result.Advice);
-                break;
-
-            default:
-                bool open = result.Steps[0].Works;
-
-                Fix.Outcome(open ? FixProgress.Glyphs.Ok : FixProgress.Glyphs.No, open ? "Accent" : "Danger",
-                    open ? $"{result.Host} открывается как есть — менять нечего" : $"{result.Host} не открылся ни одним путём — маршрут не менял",
-                    result.Advice);
-                break;
-        }
-    }
-
-    /// <summary>«Маршруты» на части, чьё правило теперь решает это имя (RoutesView.Reveal) — отбор сбрасывается на «Все».</summary>
-    private void OnFixReveal(object sender, RoutedEventArgs e)
-    {
-        if (_fixHost is null)
-            return;
-
-        RoutesView.PendingReveal = _fixHost;
-        (Window.GetWindow(this) as MainWindow)?.Open("routes");
-    }
+    /// <summary>«Маршруты» на части, чьё правило теперь решает это имя.</summary>
+    private void OnFixReveal(object sender, RoutedEventArgs e) => SiteFix.ShowRoute(_fixHost, this);
 }
