@@ -272,10 +272,10 @@
                 </Grid.RowDefinitions>
 
                 <!--
-                    Шапка: заголовок, справа — выбор вида. Ссылки «Документация»,
-                    «GitHub» и «Telegram» — только в подробном (там они с 28.09:
-                    в «Ещё» канал не находили); в простом их нет, они в «Ещё →
-                    О программе», а канал ещё и в уведомлении после обновления.
+                    Шапка: заголовок, справа — ссылки «Документация», «GitHub»,
+                    «Telegram» и выбор вида. Ссылки — в обоих видах: с 28.09 они
+                    здесь, потому что в «Ещё» канал не находили; из простого вида
+                    их убрали 11.11 и в тот же вечер вернули по слову владельца.
                 -->
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
@@ -287,8 +287,7 @@
                     <TextBlock Grid.Column="0" Text="Главная" Style="{StaticResource Title}" FontSize="28"
                                VerticalAlignment="Center" Margin="0,0,16,0" />
 
-                    <StackPanel Grid.Column="1" x:Name="HeaderLinks" Orientation="Horizontal" VerticalAlignment="Center"
-                                Visibility="Collapsed">
+                    <StackPanel Grid.Column="1" x:Name="HeaderLinks" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Style="{StaticResource Ghost}" Click="OnDocs" Margin="0,0,8,0"
                                 ToolTip="Описание программы на GitHub">
                             <StackPanel Orientation="Horizontal">

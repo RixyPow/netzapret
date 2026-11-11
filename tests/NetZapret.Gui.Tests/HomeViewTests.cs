@@ -17,7 +17,7 @@ namespace NetZapret.Gui.Tests;
 public sealed class HomeViewTests
 {
     /// <summary>Части подробного вида; в простом их нет.</summary>
-    private static readonly string[] AdvancedOnly = ["HeaderLinks", "Actions", "AutostartCard", "ParamsCard", "FooterStatePanel"];
+    private static readonly string[] AdvancedOnly = ["Actions", "AutostartCard", "ParamsCard", "FooterStatePanel"];
 
     [Fact]
     public void Switching_the_view_shows_and_hides_the_advanced_parts()
@@ -60,6 +60,9 @@ public sealed class HomeViewTests
             Assert.True(part.Visibility == (advanced ? Visibility.Visible : Visibility.Collapsed),
                 $"{name} в {(advanced ? "подробном" : "простом")} виде: {part.Visibility}");
         }
+
+        // Ссылки в шапке — в обоих видах (вернули в простой 11.11).
+        Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("HeaderLinks")).Visibility);
 
         // «Сервер» простого вида — по режиму (без выхода туннеля его нет);
         // в подробном его место у параметров подключения, и его нет всегда.
