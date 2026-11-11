@@ -18,8 +18,13 @@
     -->
     <Grid x:Name="Root" LayoutTransform="{DynamicResource UiScaleTransform}">
         <Grid.ColumnDefinitions>
-            <!-- Шире на значок с отступом (30.09): под них ушло 30 точек, а самой длинной подписи, «Проверке блокировок», нужна прежняя ширина. -->
-            <ColumnDefinition Width="236" />
+            <!--
+                Ширину задаёт сама полоса меню (RailBorder): 236 или 72 свёрнутой
+                (11.11, ApplyRail). 236 — шире на значок с отступом (30.09): под них
+                ушло 30 точек, а самой длинной подписи, «Проверке блокировок», нужна
+                прежняя ширина.
+            -->
+            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -38,7 +43,7 @@
             равноправны — проверку блокировок нельзя прятать глубже
             остальных, она и отличает нас от любого клиента VPN.
         -->
-        <Border Grid.Column="0" x:Name="RailBorder" Style="{StaticResource RailPanel}">
+        <Border Grid.Column="0" x:Name="RailBorder" Style="{StaticResource RailPanel}" Width="236">
             <DockPanel LastChildFill="True">
 
                 <!--
@@ -47,7 +52,7 @@
                     пока оставим что есть». До 21.10 — буквы «NZ» цветами наоборот
                     к странице; с 21.10 — эмблема в трёх цветах темы.
                 -->
-                <Grid DockPanel.Dock="Top" Margin="20,24,18,20">
+                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="20,24,18,20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -60,7 +65,7 @@
                         и с обводкой — в стыках заливок иначе просвечивает шов;
                         обводка в 5 точек svg — пиксель на плитке в 40 при 125 %.
                     -->
-                    <Viewbox Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0">
+                    <Viewbox x:Name="LogoMark" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0">
                         <Canvas Width="256" Height="256" Clip="{x:Static local:Emblem.Outline}">
                             <Path Data="{x:Static local:Emblem.Band}" Fill="{DynamicResource LogoBand}"
                                   Stroke="{DynamicResource LogoBand}" StrokeThickness="5" StrokeLineJoin="Round" />
@@ -69,11 +74,77 @@
                         </Canvas>
                     </Viewbox>
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel x:Name="LogoText" Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,2,0,0" />
                     </StackPanel>
                 </Grid>
+
+                <!--
+                    «Что нужно сделать?» (11.11, по образцу стенда разработчика):
+                    поиск по задачам разделов, Ctrl+K. Сама строка — кнопка: искать
+                    начинают в палитре (PaletteLayer), которая ложится поверх неё,
+                    — так один путь и у развёрнутого меню, и у свёрнутого до значков.
+                -->
+                <Button x:Name="SearchButton" DockPanel.Dock="Top" Margin="8,0,10,10" Click="OnPaletteOpen"
+                        Cursor="Hand" Focusable="False" ToolTip="Найти, где что сделать (Ctrl+K)">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Box" Height="38" CornerRadius="10" BorderThickness="1.5" Padding="12,0"
+                                    BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Muted}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <Grid x:Name="SearchContent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE721;" FontFamily="{DynamicResource IconFont}" FontSize="14"
+                                   Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock x:Name="SearchLabel" Grid.Column="1" Text="Что сделать?" Foreground="{DynamicResource Muted}"
+                                   Margin="9,0,6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                        <Border x:Name="SearchChip" Grid.Column="2" CornerRadius="5" BorderThickness="1.5"
+                                BorderBrush="{DynamicResource Border}" Padding="5,1" VerticalAlignment="Center">
+                            <TextBlock Text="Ctrl+K" FontSize="10.5" Foreground="{DynamicResource Faint}" />
+                        </Border>
+                    </Grid>
+                </Button>
+
+                <!--
+                    Свернуть меню до значков (11.11): на ноутбуке 1366 точек при
+                    125 % меню в 236 забирало пятую часть окна. Внизу, как в
+                    «Параметрах» Windows и браузерах; состояние помнят настройки.
+                -->
+                <Button x:Name="RailToggle" DockPanel.Dock="Bottom" Margin="8,6,10,14" Click="OnRailToggle"
+                        Cursor="Hand" Focusable="False">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Shape" Height="36" CornerRadius="8" Background="Transparent">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                    <StackPanel x:Name="RailToggleLine" Orientation="Horizontal" Margin="12,0">
+                        <TextBlock x:Name="RailToggleGlyph" Text="&#xE76B;" Width="18" Margin="0,0,12,0" TextAlignment="Center"
+                                   FontFamily="{DynamicResource IconFont}" FontSize="13" Foreground="{DynamicResource Muted}"
+                                   VerticalAlignment="Center" />
+                        <TextBlock x:Name="RailToggleLabel" Text="Свернуть меню" Foreground="{DynamicResource Muted}"
+                                   FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
 
                 <!--
                     Полоса прокручивается: разделов девять, и на невысоком
@@ -96,6 +167,7 @@
                         <RadioButton Style="{StaticResource RailItem}" Content="TG Proxy" Tag="tgproxy" local:MenuIcon.Shape="{StaticResource TelegramPlane}" Checked="OnSection" />
 
                         <!-- Подпись группы, а не пункт: мельче и приглушённым (RailGroup). -->
+                        <Border Style="{StaticResource RailGroupLine}" />
                         <TextBlock Style="{StaticResource RailGroup}" Text="Разбор" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Проверка блокировок" Tag="check" local:MenuIcon.Glyph="&#xE721;" Checked="OnSection" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Замер скорости" Tag="speed" local:MenuIcon.Glyph="&#xEC4A;" Checked="OnSection" />
@@ -105,6 +177,7 @@
                         <!-- «Журнал» — с 07.10 окном из «Диагностики» (LogWindow): место в меню отдано «TG Proxy». -->
                         <RadioButton Style="{StaticResource RailItem}" Content="Диагностика" Tag="doctor" local:MenuIcon.Glyph="&#xE9D9;" Checked="OnSection" />
 
+                        <Border Style="{StaticResource RailGroupLine}" />
                         <TextBlock Style="{StaticResource RailGroup}" Text="Прочее" />
                         <RadioButton Style="{StaticResource RailItem}" Content="Оформление" Tag="look" local:MenuIcon.Glyph="&#xE790;" Checked="OnSection" />
                         <RadioButton x:Name="RailMore" Style="{StaticResource RailItem}" Content="Ещё" Tag="more" local:MenuIcon.Glyph="&#xE713;" Checked="OnSection" />
@@ -217,5 +290,130 @@
 
             </StackPanel>
         </Grid>
+
+        <!--
+            Палитра «Что нужно сделать?» (11.11). Слоем во всё окно, а не Popup:
+            так её масштабирует «Размер» из «Оформления» вместе с окном, а щелчок
+            мимо карточки ловит сам слой и закрывает её. Карточка встаёт строкой
+            ввода ровно на строку поиска в меню (OnPaletteOpen) — поиск словно
+            раскрывается вниз, как у стенда разработчика.
+        -->
+        <Grid x:Name="PaletteLayer" Grid.ColumnSpan="2" Visibility="Collapsed" Background="Transparent"
+              MouseLeftButtonDown="OnPaletteBackdrop">
+            <Grid x:Name="PaletteBox" HorizontalAlignment="Left" VerticalAlignment="Top" Width="560">
+                <!--
+                    Тень — отдельным пустым слоем: DropShadowEffect на карточке
+                    с текстом снял бы с текста ClearType (как у Card, 27.10).
+                -->
+                <Border CornerRadius="12" Background="{DynamicResource Surface}" Margin="2">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="30" ShadowDepth="8" Direction="270" Opacity="0.45" Color="Black" />
+                    </Border.Effect>
+                </Border>
+
+                <!--
+                    Непрозрачная подложка: у тем со стеклом Surface полупрозрачна,
+                    и сквозь список читались меню и раздел под ним (снимок 11.11).
+                -->
+                <Border CornerRadius="12" Background="{DynamicResource Backdrop}" />
+
+                <Border CornerRadius="12" BorderThickness="1.5" BorderBrush="{DynamicResource Border}"
+                        Background="{DynamicResource Surface}">
+                    <DockPanel>
+                        <Grid DockPanel.Dock="Top" Height="35" Margin="12,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE721;" FontFamily="{DynamicResource IconFont}" FontSize="14"
+                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center" />
+                            <!--
+                                Своим шаблоном, без рамки: рамку даёт карточка, а общий
+                                шаблон поля обводил бы строку цветом выбора при фокусе.
+                            -->
+                            <TextBox x:Name="PaletteInput" Grid.Column="1" Margin="9,0,6,0" VerticalAlignment="Center"
+                                     TextChanged="OnPaletteText" PreviewKeyDown="OnPaletteKey">
+                                <TextBox.Template>
+                                    <ControlTemplate TargetType="TextBox">
+                                        <Grid>
+                                            <TextBlock x:Name="Placeholder" Text="Что нужно сделать?" Margin="2,0,0,0"
+                                                       Foreground="{DynamicResource Muted}" VerticalAlignment="Center"
+                                                       IsHitTestVisible="False" Visibility="Collapsed" />
+                                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="Text" Value="">
+                                                <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </TextBox.Template>
+                            </TextBox>
+                            <Border Grid.Column="2" CornerRadius="5" BorderThickness="1.5" BorderBrush="{DynamicResource Border}"
+                                    Padding="5,1" VerticalAlignment="Center">
+                                <TextBlock Text="Esc" FontSize="10.5" Foreground="{DynamicResource Faint}" />
+                            </Border>
+                        </Grid>
+
+                        <Rectangle DockPanel.Dock="Top" Height="1" Fill="{DynamicResource Border}" />
+
+                        <TextBlock x:Name="PaletteEmpty" DockPanel.Dock="Top" Style="{StaticResource Caption}" FontSize="13"
+                                   Margin="18,14,18,16" TextWrapping="Wrap" Visibility="Collapsed"
+                                   Text="Ничего не нашлось. Попробуйте другими словами — или впишите сайт, например youtube.com." />
+
+                        <ListBox x:Name="PaletteList" Background="Transparent" BorderThickness="0" Padding="0,6"
+                                 MaxHeight="440" Focusable="False"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 PreviewMouseLeftButtonUp="OnPaletteClick">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Focusable" Value="False" />
+                                    <Setter Property="Cursor" Value="Hand" />
+                                    <EventSetter Event="MouseEnter" Handler="OnPaletteHover" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border x:Name="Row" Margin="6,1" Padding="10,8" CornerRadius="8" Background="Transparent">
+                                                    <ContentPresenter />
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Row" Property="Background" Value="{DynamicResource Raised}" />
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid Width="18" Margin="0,0,12,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Glyph}" FontFamily="{DynamicResource IconFont}" FontSize="15"
+                                                       TextAlignment="Center" Foreground="{DynamicResource Muted}" />
+                                            <Path Data="{Binding Shape}" Width="14" Height="14" Stretch="Uniform"
+                                                  Fill="{DynamicResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <TextBlock Grid.Column="1" Text="{Binding Text}" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Where}" Style="{StaticResource Caption}"
+                                                   Margin="12,0,0,0" VerticalAlignment="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>
+

@@ -551,7 +551,7 @@
                 <ControlTemplate TargetType="RadioButton">
                     <Grid>
                         <Border x:Name="Shape" Background="Transparent" CornerRadius="8" Margin="8,0,10,0" Height="36">
-                            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                            <StackPanel x:Name="Line" Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
                                 <!--
                                     Значок (MenuIcon.cs). Колонка постоянной ширины:
                                     знаки разной ширины иначе сдвигали бы подписи,
@@ -591,6 +591,23 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="local:RailBadge.Shown" Value="True">
                             <Setter TargetName="Badge" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!--
+                            Свёрнутое меню (RailCompact, 11.11): только значок посередине.
+                            Точка «есть новое» — над значком справа, без своей ширины:
+                            иначе значок съезжал бы влево от середины.
+                        -->
+                        <Trigger Property="local:RailCompact.IsOn" Value="True">
+                            <Setter TargetName="Label" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Line" Property="Margin" Value="0" />
+                            <Setter TargetName="Line" Property="HorizontalAlignment" Value="Center" />
+                            <Setter TargetName="Icon" Property="Margin" Value="0" />
+                            <Setter TargetName="Badge" Property="Margin" Value="-3,0,-4,0" />
+                            <Setter TargetName="Badge" Property="RenderTransform">
+                                <Setter.Value>
+                                    <TranslateTransform Y="-8" />
+                                </Setter.Value>
+                            </Setter>
                         </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Icon" Property="Opacity" Value="1" />
@@ -882,6 +899,28 @@
         <Setter Property="Foreground" Value="{DynamicResource Faint}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Margin" Value="20,20,20,4" />
+        <Style.Triggers>
+            <!-- В свёрнутом меню подпись не влезает — вместо неё черта (RailGroupLine). -->
+            <Trigger Property="local:RailCompact.IsOn" Value="True">
+                <Setter Property="Visibility" Value="Collapsed" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        Черта между группами свёрнутого меню — на месте подписи группы (11.11).
+        Отдельным элементом: фоном самой подписи высотой 1 черта не рисовалась.
+    -->
+    <Style x:Key="RailGroupLine" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource Border}" />
+        <Setter Property="Margin" Value="22,14,24,12" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <Trigger Property="local:RailCompact.IsOn" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!--

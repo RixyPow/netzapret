@@ -949,6 +949,9 @@ public sealed record AppSettings
     /// </remarks>
     public bool Animations { get; init; } = true;
 
+    /// <summary>Меню слева свёрнуто до значков (11.11, кнопка внизу меню).</summary>
+    public bool RailCompact { get; init; }
+
     /// <summary>
     /// Отпечаток значка программы при прошлом запуске: сменился — Windows
     /// перечитывает кеш значков (<see cref="IconCache"/>, 21.10).

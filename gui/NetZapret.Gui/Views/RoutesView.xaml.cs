@@ -1969,6 +1969,24 @@ public partial class RoutesView : UserControl
     /// одно — имя ставится в поиск: «Маршруты» сами предложат добавить его
     /// своим доменом.
     /// </remarks>
+    /// <summary>
+    /// Показать часть для имени сейчас — раздел уже на экране (поиск окна, 11.11).
+    /// </summary>
+    /// <remarks>
+    /// Правила ещё не прочитаны — заявкой, как при переходе: часть найдётся,
+    /// когда они встанут.
+    /// </remarks>
+    internal void RevealNow(string host)
+    {
+        if (_engine is null)
+        {
+            PendingReveal = host;
+            return;
+        }
+
+        Reveal(host);
+    }
+
     private void Reveal(string host)
     {
         _route = null;

@@ -442,6 +442,13 @@ public partial class CheckView : UserControl
                 Rows.SelectedItem = _selected;
             else
                 ShowPanel(null);
+
+            // Пришли из поиска окна «Проверить сайт» (11.11).
+            if (PendingHost is { } host)
+            {
+                PendingHost = null;
+                CheckHost(host);
+            }
         };
 
         Collected.CollectionChanged += OnCollected;
@@ -2198,6 +2205,30 @@ public partial class CheckView : UserControl
         _query = Search.Text.Trim();
         _view?.Refresh();
         Recount();
+    }
+
+    /// <summary>
+    /// Сайт, который просили проверить из поиска окна, пока раздела не было на экране.
+    /// </summary>
+    /// <remarks>
+    /// Заявкой, а не вызовом — как <see cref="RoutesView.PendingReveal"/>: раздел
+    /// создаётся заново при переходе, и проверку начинает, когда встанет.
+    /// </remarks>
+    internal static string? PendingHost { get; set; }
+
+    /// <summary>
+    /// Проверить один сайт — как вписать его в поиск раздела и нажать Enter.
+    /// </summary>
+    /// <remarks>
+    /// Идёт полный прогон — имя только ставится в поиск: второй прогон рядом
+    /// с первым мерил бы сам себя.
+    /// </remarks>
+    internal void CheckHost(string host)
+    {
+        Search.Text = host;
+
+        if (!_running)
+            _ = CheckOneAsync(host);
     }
 
     /// <summary>Enter: первое найденное — в панель; не нашлось — проверить имя отдельно.</summary>

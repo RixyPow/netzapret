@@ -56,6 +56,10 @@ public partial class MainWindow : Window
         Closed += (_, _) => BackdropVideo.Detach(BackdropLayer);
 
         VersionLabel.Text = "версия " + Version();
+
+        // Меню — как оставили в прошлый раз; Ctrl+K — поиск «Что нужно сделать?» (11.11).
+        ApplyRail(AppSettings.Load(AppSettings.DefaultPath).RailCompact);
+        PreviewKeyDown += OnWindowKey;
         ShowIcon();
         Themes.Changed += ShowIcon;
         Closed += (_, _) => Themes.Changed -= ShowIcon;
