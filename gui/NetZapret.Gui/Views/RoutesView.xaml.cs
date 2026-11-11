@@ -727,10 +727,13 @@ public partial class RoutesView : UserControl
             _engine = engine;
 
             // Пришли сюда щелчком по имени в проверке блокировок — показать его часть.
+            // С «Главной» («Сайт не открывается?») — и завести, если части нет.
             if (PendingReveal is { } wanted)
             {
+                bool add = PendingRevealAdds;
                 PendingReveal = null;
-                Reveal(wanted);
+                PendingRevealAdds = false;
+                Reveal(wanted, add);
             }
         }
         catch (Exception ex)
@@ -1953,6 +1956,18 @@ public partial class RoutesView : UserControl
     /// </remarks>
     public static string? PendingReveal { get; set; }
 
+    /// <summary>
+    /// С заявкой <see cref="PendingReveal"/>: части нет — завести имя своим доменом
+    /// и показать его.
+    /// </summary>
+    /// <remarks>
+    /// Так приходит поле «Сайт не открывается?» простой «Главной» (11.11): человек
+    /// вписал сайт, чтобы что-то с ним сделать, и пустой поиск с предложением
+    /// «добавить» был бы лишним шагом. Проверка блокировок и поиск окна этого
+    /// не просят — им достаточно показать.
+    /// </remarks>
+    public static bool PendingRevealAdds { get; set; }
+
     /// <summary>Движок правил последней сборки — им ищется часть для имени.</summary>
     private RuleEngine? _engine;
 
@@ -1987,7 +2002,7 @@ public partial class RoutesView : UserControl
         Reveal(host);
     }
 
-    private void Reveal(string host)
+    private void Reveal(string host, bool addMissing = false)
     {
         _route = null;
         FilterAll.IsChecked = true;
@@ -2011,6 +2026,10 @@ public partial class RoutesView : UserControl
         }
 
         _reveal = null;
+
+        if (addMissing && AddOwnDomain(host, reveal: true))
+            return;
+
         Search.Text = host;
     }
 
@@ -2660,36 +2679,57 @@ public partial class RoutesView : UserControl
             return;
         }
 
-        var name = DomainInput.Normalize(Search.Text);
-
-        if (name is null)
+        if (DomainInput.Normalize(Search.Text) is null)
         {
             Status.Text = "Это не похоже на имя сайта. Нужно что-то вроде example.com.";
             return;
         }
 
+        // Поле не очищается: по нему же отфильтрован список, и добавленный
+        // домен остаётся на экране одной строкой — ровно той, где его
+        // дальше править.
+        AddOwnDomain(Search.Text);
+    }
+
+    /// <summary>
+    /// Свой домен — правилом «*.имя», «напрямую» (UserRulesFile.AddOwnDomain),
+    /// и сказать об этом.
+    /// </summary>
+    /// <returns><c>false</c> — не имя сайта или не записалось (сказано в строке).</returns>
+    /// <remarks>
+    /// Одно на поиск раздела и на «Сайт не открывается?» с «Главной». Одной
+    /// строкой, без файла: файл заводится только по просьбе — ссылкой
+    /// «список» в строке домена (владелец, 26.09). Пришло с «Главной» —
+    /// показать заведённое, как показали бы найденное (<see cref="PendingReveal"/>).
+    /// </remarks>
+    private bool AddOwnDomain(string text, bool reveal = false)
+    {
         try
         {
-            var file = UserRulesFile.Load();
-            // Одной строкой, без файла: файл заводится только по просьбе —
-            // ссылкой «список» в строке домена (владелец, 26.09).
-            file.Set(MatchKind.Domain, "*." + name, RoutingMode.Direct, recipe: null);
-            file.Save();
-            PlaceAdded("own|*." + name);
+            if (UserRulesFile.AddOwnDomain(text) is not { } value)
+            {
+                Status.Text = "Это не похоже на имя сайта. Нужно что-то вроде example.com.";
+                return false;
+            }
 
-            // Поле не очищается: по нему же отфильтрован список, и добавленный
-            // домен остаётся на экране одной строкой — ровно той, где его
-            // дальше править.
+            var name = value[2..];
+            PlaceAdded("own|" + value);
+
+            if (reveal)
+                PendingReveal = name;
+
             Reload();
 
             Status.Text = $"Записано: {name} → напрямую. Режим меняется в его строке ниже. "
                 + "Применится при следующем запуске движков.";
 
             this.Offer($"Добавлен маршрут: {name}");
+            return true;
         }
         catch (Exception ex)
         {
             Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+            return false;
         }
     }
 

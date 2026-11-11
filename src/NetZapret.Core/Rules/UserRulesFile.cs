@@ -34,6 +34,41 @@ public sealed class UserRulesFile
 
     public static string DefaultPath => System.IO.Path.Combine("config", "rules.user.yaml");
 
+    /// <summary>
+    /// Записывает свой домен — зоной «*.имя», «напрямую».
+    /// </summary>
+    /// <returns>Значение правила («*.example.com»); <c>null</c> — вписанное не похоже на имя сайта.</returns>
+    /// <remarks>
+    /// <para>
+    /// Жило в «Маршрутах», в поле поиска. С 11.11 свой домен заводит и поле
+    /// «Сайт не открывается?» на «Главной», и правило должно выходить одно
+    /// и то же.
+    /// </para>
+    /// <para>
+    /// Звёздочка ставится сама: имя означает зону, и <c>example.com</c> должен
+    /// покрывать поддомены — иначе картинки с <c>cdn.example.com</c> пойдут мимо
+    /// правила. По той же причине снимается «www.»: «*.www.example.com» не
+    /// покрыло бы сам сайт. «Напрямую», а не выбранное заранее (владелец, 23.09):
+    /// режим, рецепт и пин правятся в строке части — там же, где у всех.
+    /// </para>
+    /// </remarks>
+    public static string? AddOwnDomain(string? text, string? path = null)
+    {
+        if (DomainInput.Normalize(text) is not { } name)
+            return null;
+
+        if (name.StartsWith("www.", StringComparison.Ordinal) && name.IndexOf('.', 4) > 0)
+            name = name[4..];
+
+        var value = "*." + name;
+        var file = Load(path);
+
+        file.Set(MatchKind.Domain, value, RoutingMode.Direct, recipe: null);
+        file.Save();
+
+        return value;
+    }
+
     public static UserRulesFile Load(string? path = null)
     {
         var target = path ?? DefaultPath;

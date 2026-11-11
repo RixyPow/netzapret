@@ -446,9 +446,9 @@ public partial class DoctorView : UserControl
     /// Собирает отчёт для разбора и показывает его в проводнике.
     /// </summary>
     /// <remarks>
-    /// Сборка и вычистка — в библиотеке (<see cref="SupportReport"/>), ссылки
-    /// подписок она находит сама. Окно только открывает папку с готовым файлом,
-    /// чтобы его сразу можно было перетащить в чат.
+    /// Сборка и вычистка — в библиотеке (<see cref="SupportReport"/>), запуск
+    /// и проводник — <see cref="ReportMaker"/>: то же делает кнопка внизу
+    /// простой «Главной».
     /// </remarks>
     private async void OnReport(object sender, RoutedEventArgs e)
     {
@@ -456,30 +456,8 @@ public partial class DoctorView : UserControl
         ReportValue.Visibility = Visibility.Visible;
         ReportValue.Text = "Собираю отчёт…";
 
-        try
-        {
-            var result = await Task.Run(() => SupportReport.Create(MainWindow.Version(), machine: true));
-
-            ReportValue.Text = $"Отчёт готов: {Path.GetFileName(result.Path)} — в папке reports. "
-                + $"Внутри: {string.Join(", ", result.Files)}.";
-
-            try
-            {
-                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{result.Path}\"");
-            }
-            catch (Exception)
-            {
-                // Проводник не открылся — путь назван выше, файл на месте.
-            }
-        }
-        catch (Exception ex)
-        {
-            ReportValue.Text = "Отчёт не собрался: " + ex.Message;
-        }
-        finally
-        {
-            ReportButton.IsEnabled = true;
-        }
+        ReportValue.Text = await ReportMaker.MakeAsync();
+        ReportButton.IsEnabled = true;
     }
 
     /// <summary>
