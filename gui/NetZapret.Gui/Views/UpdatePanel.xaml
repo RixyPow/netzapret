@@ -12,9 +12,10 @@
         что обновление останавливает движки, — в подсказке у заголовка:
         оно нужно в момент решения, а не при каждом взгляде на окно.
 
-        С 11.11 карточка видна только во время установки и после её сбоя
-        (StatusView прячет её, Install показывает): проверка руками — в «Ещё
-        → Обслуживание», найденная версия — карточкой «Вышла …» наверху.
+        С 11.11 вид у «Главной» двух родов (ShowView): в подробном карточка
+        стоит всегда, с версией и «Проверить», как прежде; в простом — только
+        во время установки и после её сбоя, а проверка руками — в «Ещё →
+        Обслуживание», найденная версия — карточкой «Вышла …» наверху.
     -->
     <!-- Поля 13 по вертикали — как у соседней карточки автозапуска (HomeCard в StatusView.xaml). -->
     <gui:Card Style="{StaticResource Card}" Padding="18,13">
@@ -41,9 +42,18 @@
                            Margin="0,6,0,0" TextWrapping="Wrap" />
             </StackPanel>
 
-            <!-- Ход закачки — процентом на самой кнопке; после сбоя — повтор. -->
-            <Button Grid.Column="2" x:Name="InstallButton" Style="{StaticResource Primary}"
-                    Content="Обновить" Click="OnInstallUpdate" Padding="18,9" VerticalAlignment="Center" />
+            <!--
+                Кнопки столбцом: карточка в полстраницы, и две кнопки в строку
+                сжимали текст слева до слова на строку. «Проверить» — только
+                в подробном виде; «Обновить» — когда есть что ставить, ход
+                закачки — процентом на ней, после сбоя — повтор.
+            -->
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                <Button x:Name="UpdateButton" Style="{StaticResource Ghost}"
+                        Content="Проверить" Click="OnCheckUpdate" Visibility="Collapsed" />
+                <Button x:Name="InstallButton" Style="{StaticResource Primary}"
+                        Content="Обновить" Click="OnInstallUpdate" Padding="18,9" Visibility="Collapsed" />
+            </StackPanel>
         </Grid>
     </gui:Card>
 </UserControl>

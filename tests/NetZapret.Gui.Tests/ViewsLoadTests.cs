@@ -25,6 +25,7 @@ public sealed class ViewsLoadTests
     public static TheoryData<string, Func<UserControl>> Views => new()
     {
         { "Состояние", () => new StatusView() },
+        { "Состояние подробно", () => new StatusView(advanced: true) },
         { "Маршруты", () => new RoutesView() },
         { "TG Proxy", () => new TgProxyView() },
         { "Проверка", () => new CheckView() },

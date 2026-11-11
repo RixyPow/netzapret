@@ -24,13 +24,19 @@ public sealed class HomeFitTests
     private const double Width = 817;
     private const double Height = 674;
 
-    [Fact]
-    public void HomeFitsTheOwnersWindowInManrope()
+    /// <param name="advanced">
+    /// Оба вида «Главной» (11.11): подробный — прежняя страница со всеми
+    /// карточками, он и упирался в высоту; простой короче, но сторожим и его.
+    /// </param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HomeFitsTheOwnersWindowInManrope(bool advanced)
     {
         Sta.Run(() =>
         {
             var manrope = BundledFonts.Find("Manrope")!;
-            var view = new StatusView { Width = Width, Height = Height };
+            var view = new StatusView(advanced) { Width = Width, Height = Height };
             var window = new Window
             {
                 SizeToContent = SizeToContent.WidthAndHeight,
@@ -63,7 +69,7 @@ public sealed class HomeFitTests
             var scroll = Below<ScrollViewer>(view)!;
 
             Assert.True(scroll.ExtentHeight <= scroll.ViewportHeight,
-                $"страница {scroll.ExtentHeight:F1} при видимых {scroll.ViewportHeight:F1}");
+                $"{(advanced ? "подробный" : "простой")}: страница {scroll.ExtentHeight:F1} при видимых {scroll.ViewportHeight:F1}");
 
             // Закрыть нельзя: закрытие последнего окна гасит общее приложение тестов.
             window.Hide();
