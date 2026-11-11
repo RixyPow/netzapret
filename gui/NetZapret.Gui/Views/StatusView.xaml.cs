@@ -123,6 +123,24 @@ public partial class StatusView : UserControl
     {
         double width = ArtLayer.ActualWidth, height = ArtLayer.ActualHeight;
 
+        // Места под карточку с картинкой нет — колонка содержимого во всю ширину
+        // (12.11, снимок владельца: неразвёрнутое окно, карточки нет, а колонка
+        // держит свои 940 — справа пустая полоса в сотню точек). Решает ширина
+        // страницы (слой арта — на обе колонки), а не колонок — иначе правка
+        // колонок меняла бы и само решение. Та же раскладка, что у миниатюры
+        // в редакторе тем (SideArtLayout.Tile).
+        if (ArtLayer.Visibility == Visibility.Visible && width > 0)
+        {
+            bool room = SideArtLayout.Tile(width, height) is not null;
+            double max = room ? SideArtLayout.ContentMax : double.PositiveInfinity;
+
+            if (ContentColumn.MaxWidth != max)
+            {
+                ContentColumn.MaxWidth = max;
+                ArtColumn.Width = room ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            }
+        }
+
         // Арт — картинка темы или её живой фон: видео в словаре ресурсов
         // не лежит (BackdropVideo), его рисунок берётся оттуда, а пропорции —
         // у кадра.
