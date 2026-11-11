@@ -85,22 +85,55 @@ internal static class Autostart
                 return removed ? null : "Не удалось убрать автозапуск: " + output;
             }
 
-            var (ok, installOutput) = AutostartTask.Install(new AutostartOptions
-            {
-                TaskName = AutostartTask.DefaultTaskName,
-                ExecutablePath = exe,
-                Arguments = TrayIcon.Switch,
-                WorkingDirectory = Path.GetFullPath("."),
-                // SID, а не имя: см. AutostartTask.CurrentUserId.
-                UserId = AutostartTask.CurrentUserId(),
-            });
-
-            return ok ? null : "Не удалось завести автозапуск: " + installOutput;
+            return Install(exe);
         }
         catch (Exception ex)
         {
             return "Планировщик отказал: " + ex.GetBaseException().Message;
         }
+    }
+
+    /// <summary>
+    /// Заводит задачу, если её ещё нет; заведённую не трогает.
+    /// </summary>
+    /// <returns>Почему не вышло; <c>null</c> — задача есть.</returns>
+    /// <remarks>
+    /// Автозапуск включён по умолчанию у новых пользователей (решение владельца
+    /// 12.11): зовётся, когда мастер первого запуска закрыт впервые. У тех, кто
+    /// мастер уже прошёл, ничего не меняется — их выбор остаётся их.
+    /// </remarks>
+    public static string? TurnOn()
+    {
+        Known = null;
+
+        var exe = Environment.ProcessPath;
+
+        if (exe is null)
+            return "Не удалось определить путь к программе — задача не заведена.";
+
+        try
+        {
+            return AutostartTask.IsInstalled(AutostartTask.DefaultTaskName) ? null : Install(exe);
+        }
+        catch (Exception ex)
+        {
+            return "Планировщик отказал: " + ex.GetBaseException().Message;
+        }
+    }
+
+    private static string? Install(string exe)
+    {
+        var (ok, output) = AutostartTask.Install(new AutostartOptions
+        {
+            TaskName = AutostartTask.DefaultTaskName,
+            ExecutablePath = exe,
+            Arguments = TrayIcon.Switch,
+            WorkingDirectory = Path.GetFullPath("."),
+            // SID, а не имя: см. AutostartTask.CurrentUserId.
+            UserId = AutostartTask.CurrentUserId(),
+        });
+
+        return ok ? null : "Не удалось завести автозапуск: " + output;
     }
 
     /// <summary>
