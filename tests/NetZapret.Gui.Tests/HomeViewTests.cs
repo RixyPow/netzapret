@@ -71,8 +71,8 @@ public sealed class HomeViewTests
                 $"{name} в {(advanced ? "подробном" : "простом")} виде: {part.Visibility}");
         }
 
-        // Карточка состояния: в подробном — прежние 128, в простом растягивается.
-        Assert.Equal(advanced ? 128 : double.NaN, ((FrameworkElement)view.FindName("StateGrid")).Height);
+        // Карточка состояния — постоянной высоты (12.11: растянутая скакала).
+        Assert.Equal(advanced ? 128 : StatusView.StateTall, ((FrameworkElement)view.FindName("StateGrid")).Height);
 
         // Ссылки в шапке — в обоих видах (вернули в простой 11.11).
         Assert.Equal(Visibility.Visible, ((FrameworkElement)view.FindName("HeaderLinks")).Visibility);

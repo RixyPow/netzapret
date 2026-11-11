@@ -1826,10 +1826,13 @@ public partial class StatusView : UserControl
     /// режим сегментами, автозапуск с обновлением и быстрые действия.
     /// </para>
     /// <para>
-    /// Карточка состояния в простом виде — главная: строка страницы под ней
-    /// растягивается (вес 6, от 168 до 284 точек), и на развёрнутом окне
-    /// страница не обрывается провалом внизу, а на узком карточка сжимается
-    /// до своего минимума раньше, чем появится прокрутка.
+    /// Карточка состояния в простом виде — главная, но постоянной высоты
+    /// (<see cref="StateTall"/>, 12.11). Первый вид 11.11 растягивал её по
+    /// остатку страницы (168–284 точки), и владелец увидел, что она скачет:
+    /// любая строка ниже — ошибка под полем сайта, итог отчёта, предупреждение —
+    /// меняла её высоту, а на развёрнутом окне под волной пустовала треть.
+    /// Нижняя строка (нагрузка и «Собрать отчёт») стоит сразу под карточками,
+    /// а не прижата к низу страницы: оторванная, она висела отдельно.
     /// </para>
     /// </remarks>
     private void ShowLayout(bool advanced)
@@ -1840,17 +1843,15 @@ public partial class StatusView : UserControl
         Grid.SetRow(CardsRow, advanced ? 6 : 13);
         Grid.SetRow(SettingsRow, advanced ? 13 : 15);
 
-        // Состояние.
-        var row = Page.RowDefinitions[4];
-        row.Height = advanced ? GridLength.Auto : new GridLength(6, GridUnitType.Star);
-        row.MinHeight = advanced ? 0 : StateMin;
-        row.MaxHeight = advanced ? double.PositiveInfinity : StateMax;
-        StateGrid.Height = advanced ? 128 : double.NaN;
+        // Состояние — постоянной высоты в обоих видах (см. выше).
+        StateGrid.Height = advanced ? 128 : StateTall;
 
-        // Остаток высоты — сперва карточке состояния, потом уже полю над нижней
-        // строкой: при равных весах они делили его, и под карточками оставался
-        // провал в семьдесят точек (снимок 11.11, тёмная тема во всю ширину).
-        Page.RowDefinitions[16].Height = new GridLength(advanced ? 1 : 0.1, GridUnitType.Star);
+        // Над нижней строкой: в подробном она прижата к низу, как была; в простом —
+        // сразу под карточками тем же шагом, что между ними (зазор перед строкой
+        // обновления уже его даёт), а остаток высоты уходит под неё.
+        var gap = Page.RowDefinitions[16];
+        gap.Height = new GridLength(1, GridUnitType.Star);
+        gap.MaxHeight = advanced ? double.PositiveInfinity : 0;
         StateText.Margin = advanced ? new Thickness(24, 16, 0, 0) : new Thickness(28, 24, 0, 0);
         StateText.MaxWidth = advanced ? 340 : 420;
         StateLine.FontSize = advanced ? 21 : 36;
@@ -1870,11 +1871,12 @@ public partial class StatusView : UserControl
         PresetMenu.VerticalAlignment = advanced ? VerticalAlignment.Top : VerticalAlignment.Center;
     }
 
-    /// <summary>Карточка состояния простого вида — не ниже: надпись, волна и кнопка со счётчиками.</summary>
-    private const double StateMin = 168;
-
-    /// <summary>И не выше: дальше лишняя высота уходит под нижнюю строку, а не в пустую волну.</summary>
-    private const double StateMax = 284;
+    /// <summary>
+    /// Высота карточки состояния простого вида: надпись, волна под ней и кнопка
+    /// со счётчиками, без пустой полосы под волной (12.11, снимок владельца —
+    /// карточка должна кончаться сразу под пунктиром).
+    /// </summary>
+    internal const double StateTall = 200;
 
     // --- «Сайт не открывается?» — простой вид ---------------------------------------
 
