@@ -40,6 +40,19 @@
 -- обнуляли бы счёт срезов закрытой. У крупных площадок группа — 32 адреса, их половины
 -- учатся врозь; пять адресов одного узла в одну шестнадцатку попадают всегда.
 --
+-- Цена малого окна зависит от задержки до узла (arg far, с 11.11): скорость соединения
+-- без множителя — 65535 Б на задержку. Замер 11.11 дома на фронтах Google в тех же сетях:
+-- 36 мс — 16 Мбит/с, 50 мс — 9,6–10,6 (обычное соединение — 100–220). До узлов видео
+-- дома 25–31 мс у одних групп и 50–61 у других. Близкой группе малое окно почти не
+-- вредит, и ей оно даётся с первого среза, как раньше. Далёкой (задержка больше far мс)
+-- первый срез прощается: повтор после сброса идёт обычным соединением и в 83–89 % случаев
+-- проходит на полной скорости; малое окно — со второго среза подряд. Замер 11.11, восемь
+-- узлов под фильтром по 30 рукопожатий через 1,5 с: без прощения обычных 63, с малым
+-- окном 169, отказов 8; с прощением всем — 157, 50 и 33 (отказ — сброс через 1 с и повтор).
+-- Задержка группы — наименьшее время от SYN до приветствия по её соединениям: приветствие
+-- клиент шлёт сразу за ответом на SYN. Группе, у которой задержка ещё не мерилась (первое
+-- же соединение не дошло до приветствия), срез не прощается.
+--
 -- Срезанный ответ узнаётся на следующем SYN к той же группе (так помечается группа), а на
 -- самом зависшем соединении — по таймеру через resetafter с (arg reset): оно без ответа
 -- пакетов больше не шлёт, ждать его клиент будет до своего таймаута, поэтому с reset ему
@@ -74,6 +87,8 @@
 --               одно и то же: шаг по имени позже этого срока ответ уже не засчитывает
 -- arg : hold - (с syn) на сколько секунд группа получает малое окно после среза (60)
 -- arg : hold2 - (с syn) на сколько — группа, закрытая наглухо (3600)
+-- arg : far - задержка в мс, выше которой группе прощается первый срез (в обоих шагах одна
+--             и та же); без него не прощается никому
 -- arg : wsize - окно до первых байт ответа сервера (по умолчанию 2)
 -- arg : reset - (в шаге по имени) первое соединение, чей ответ срезан, не ждёт таймаута
 --               клиента: через resetafter с без ответа ему шлётся RST от имени сервера
@@ -93,6 +108,21 @@ local nz_first2_serial = 0
 local nz_first2_cuts = {}
 -- Группа узлов → обычному соединению она хоть раз ответила: значит, не закрыта наглухо.
 local nz_first2_alive = {}
+
+-- Группа узлов → наименьшая задержка в мс (от SYN до приветствия).
+local nz_first2_rtt = {}
+
+-- Срез засчитан: группе малое окно, если он не прощён. Прощается первый из срезов подряд —
+-- группе с задержкой выше far мс (см. шапку); неизвестная задержка не прощает.
+local function nz_first2_cut(ip, far, hold, hold2, now)
+	local cuts = (nz_first2_cuts[ip] or 0) + 1
+	nz_first2_cuts[ip] = cuts
+	local closed = cuts >= (nz_first2_alive[ip] and 3 or 2)
+	local rtt = nz_first2_rtt[ip]
+	local spared = far and rtt and rtt > far and cuts == 1
+	if not spared then nz_first2_until[ip] = now + (closed and hold2 or hold) end
+	return cuts, spared
+end
 
 -- Группа узла: у IPv4 — 16 соседних адресов (последний байт без четырёх младших бит),
 -- у IPv6 — сам адрес.
@@ -115,12 +145,9 @@ function nz_first2_reset_fire(name, data)
 		wait[data.id] = nil
 		if next(wait) == nil then nz_first2_asked[ip] = nil end
 	end
-	local cuts = (nz_first2_cuts[ip] or 0) + 1
-	nz_first2_cuts[ip] = cuts
-	local closed = cuts >= (nz_first2_alive[ip] and 3 or 2)
-	nz_first2_until[ip] = os.time() + (closed and data.hold2 or data.hold)
+	local cuts, spared = nz_first2_cut(ip, data.far, data.hold, data.hold2, os.time())
 	rawsend_dissect(data.dis, {ifout = data.ifin})
-	if b_debug then DLOG("nz_first2: сброс зависшего соединения к клиенту; группа помечена, срез "..cuts) end
+	if b_debug then DLOG("nz_first2: сброс зависшего соединения к клиенту; срез "..cuts..(spared and ", прощён: группа далеко" or ", группа помечена")) end
 end
 
 function nz_first2(ctx, desync)
@@ -147,6 +174,8 @@ function nz_first2(ctx, desync)
 			return
 		end
 		local small = desync.arg.always ~= nil
+		-- Повторный SYN сдвигает отсчёт: задержка мерится от последнего.
+		st.nz_first2_syn = clock_getfloattime()
 		if not small then
 			local now = os.time()
 			local wait = nz_first2_asked[ip]
@@ -163,12 +192,9 @@ function nz_first2(ctx, desync)
 				end
 				if next(wait) == nil then nz_first2_asked[ip] = nil end
 				if cut then
-					local cuts = (nz_first2_cuts[ip] or 0) + 1
-					nz_first2_cuts[ip] = cuts
-					local closed = cuts >= (nz_first2_alive[ip] and 3 or 2)
-					local hold = closed and (tonumber(desync.arg.hold2) or 3600) or (tonumber(desync.arg.hold) or 60)
-					nz_first2_until[ip] = now + hold
-					if b_debug then DLOG("nz_first2: группа "..(#ip == 4 and ntop(ip) or "ipv6").." ответ срезан "..cuts.." раз — малое окно на "..hold.." с") end
+					local cuts, spared = nz_first2_cut(ip, tonumber(desync.arg.far),
+						tonumber(desync.arg.hold) or 60, tonumber(desync.arg.hold2) or 3600, now)
+					if b_debug then DLOG("nz_first2: группа "..(#ip == 4 and ntop(ip) or "ipv6").." ответ срезан "..cuts.." раз"..(spared and " — прощён: группа далеко" or " — малое окно")) end
 				end
 			end
 			local till = nz_first2_until[ip]
@@ -227,6 +253,14 @@ function nz_first2(ctx, desync)
 		return
 	end
 	if #dis.payload == 0 then return end
+	if st.nz_first2_syn then
+		local rtt = math.floor((clock_getfloattime() - st.nz_first2_syn) * 1000)
+		st.nz_first2_syn = nil
+		if rtt >= 0 and (not nz_first2_rtt[ip] or rtt < nz_first2_rtt[ip]) then
+			nz_first2_rtt[ip] = rtt
+			if b_debug then DLOG("nz_first2: задержка группы "..rtt.." мс") end
+		end
+	end
 	if mode == "watch" then
 		-- Приветствие обычного соединения: запомнить, когда ушло (повторы времени не сдвигают).
 		if not st.nz_first2_id then
@@ -251,6 +285,7 @@ function nz_first2(ctx, desync)
 			timer_set("nzr_"..desync_timer_name(desync), "nz_first2_reset_fire", ms, true, {
 				dis = rst, ifin = desync.ifin, st = st, ip = ip, id = st.nz_first2_id,
 				hold = tonumber(desync.arg.hold) or 60, hold2 = tonumber(desync.arg.hold2) or 3600,
+				far = tonumber(desync.arg.far),
 			})
 		end
 		return
