@@ -944,7 +944,18 @@
                             а «работает» у обоих движков сказано карточкой состояния.
                             Высота постоянная — под две строки оговорки.
                         -->
-                        <Grid x:Name="ModeLine" Margin="4,10,0,0" Height="34" Visibility="Collapsed">
+                        <!--
+                            Строка движков. Подробный вид — как до 11.11: пояснение режима
+                            слева, оба движка справа одной строкой высотой 34. Простой —
+                            с 12.11 (владелец) движки всегда, двумя плашками во всю ширину
+                            пополам, оговорка о режиме — строкой над ними. Раскладку
+                            переключает ShowLayout, разметка одна.
+                        -->
+                        <Grid x:Name="ModeLine" Margin="4,10,0,0" Height="34">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -954,27 +965,53 @@
                                        TextWrapping="Wrap" TextTrimming="CharacterEllipsis" LineHeight="16"
                                        LineStackingStrategy="BlockLineHeight" MaxHeight="32" Margin="0,0,14,0" />
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <StackPanel x:Name="DesyncChip" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
-                                    <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Десинк" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="DesyncState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="DesyncPid" Margin="6,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" VerticalAlignment="Center" />
-                                    <Button Style="{StaticResource IconGhost}" Content="&#xE713;" Margin="6,0,0,0"
-                                            Padding="5,2" MinWidth="0" Click="OnDesyncSettings"
-                                            ToolTip="Пресеты и рецепты — раздел «Десинк»" />
-                                </StackPanel>
+                            <Grid x:Name="EngineChips" Grid.Column="1" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="DesyncChipColumn" Width="Auto" />
+                                    <ColumnDefinition x:Name="EngineChipsGap" Width="16" />
+                                    <ColumnDefinition x:Name="TunnelChipColumn" Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                                <StackPanel x:Name="TunnelChip" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                                    <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
-                                    <TextBlock Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Туннель" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="TunnelState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" VerticalAlignment="Center" />
-                                    <TextBlock x:Name="TunnelPid" Margin="6,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}" VerticalAlignment="Center" />
-                                    <Button Style="{StaticResource IconGhost}" Content="&#xE713;" Margin="6,0,0,0"
-                                            Padding="5,2" MinWidth="0" Click="OnTunnelSettings"
-                                            ToolTip="Настройки туннеля" />
-                                </StackPanel>
-                            </StackPanel>
+                                <Border x:Name="DesyncChip" Grid.Column="0" CornerRadius="10" VerticalAlignment="Center">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse x:Name="DesyncDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock Grid.Column="1" Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Десинк" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" x:Name="DesyncState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" x:Name="DesyncPid" Margin="6,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <Button Grid.Column="4" Style="{StaticResource IconGhost}" Content="&#xE713;" Margin="6,0,0,0"
+                                                Padding="5,2" MinWidth="0" Click="OnDesyncSettings"
+                                                ToolTip="Пресеты и рецепты — раздел «Десинк»" />
+                                    </Grid>
+                                </Border>
+
+                                <Border x:Name="TunnelChip" Grid.Column="2" CornerRadius="10" VerticalAlignment="Center">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse x:Name="TunnelDot" Width="8" Height="8" VerticalAlignment="Center" Fill="{DynamicResource Faint}" />
+                                        <TextBlock Grid.Column="1" Margin="7,0,0,0" FontSize="12" Foreground="{DynamicResource Text}" Text="Туннель" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" x:Name="TunnelState" Margin="6,0,0,0" FontSize="12" Foreground="{DynamicResource Muted}" Text="—" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="3" x:Name="TunnelPid" Margin="6,0,0,0" FontSize="11.5" Foreground="{DynamicResource Faint}"
+                                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <Button Grid.Column="4" Style="{StaticResource IconGhost}" Content="&#xE713;" Margin="6,0,0,0"
+                                                Padding="5,2" MinWidth="0" Click="OnTunnelSettings"
+                                                ToolTip="Настройки туннеля" />
+                                    </Grid>
+                                </Border>
+                            </Grid>
                         </Grid>
                     </StackPanel>
                 </local:Card>
@@ -1111,10 +1148,20 @@
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="420"
                                Visibility="Collapsed" />
 
-                    <Button Grid.Column="3" x:Name="ReportButton" Style="{StaticResource Ghost}"
-                            Content="Собрать отчёт для разбора" local:ButtonGlyph.Lead="&#xE896;" Click="OnReport"
-                            Visibility="Collapsed"
-                            ToolTip="Журналы, настройки, свои маршруты и последняя проверка блокировок одним архивом — для сообщения о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                    <!--
+                        «Обновление» — слева от отчёта (12.11, владелец): то же окно
+                        обновления, что «Проверить» подробного вида, — и когда ставить
+                        нечего, с чейнджлогом последней версии.
+                    -->
+                    <StackPanel Grid.Column="3" Orientation="Horizontal">
+                        <Button x:Name="HomeUpdateButton" Style="{StaticResource Ghost}" Margin="0,0,8,0"
+                                Content="Обновление" local:ButtonGlyph.Lead="&#xE895;" Click="OnHomeUpdate"
+                                Visibility="Collapsed" ToolTip="Спросить GitHub о новой версии и открыть окно обновления" />
+                        <Button x:Name="ReportButton" Style="{StaticResource Ghost}"
+                                Content="Собрать отчёт для разбора" local:ButtonGlyph.Lead="&#xE896;" Click="OnReport"
+                                Visibility="Collapsed"
+                                ToolTip="Журналы, настройки, свои маршруты и последняя проверка блокировок одним архивом — для сообщения о неполадке. Ссылки подписок, ключи серверов и имя учётной записи Windows вычищаются." />
+                    </StackPanel>
                 </Grid>
 
             </Grid>

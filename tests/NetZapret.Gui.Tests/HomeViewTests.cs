@@ -71,7 +71,7 @@ public sealed class HomeViewTests
                 $"{name} в {(advanced ? "подробном" : "простом")} виде: {part.Visibility}");
         }
 
-        // Карточка состояния — постоянной высоты (12.11: растянутая скакала).
+        // Карточка состояния — по высоте окна, не по содержимому (12.11: растянутая скакала); здесь 794 — развёрнутое.
         Assert.Equal(advanced ? 128 : StatusView.StateTall, ((FrameworkElement)view.FindName("StateGrid")).Height);
 
         // Ссылки в шапке — в обоих видах (вернули в простой 11.11).

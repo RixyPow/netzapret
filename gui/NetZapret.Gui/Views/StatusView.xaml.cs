@@ -307,6 +307,13 @@ public partial class StatusView : UserControl
     {
         InitializeComponent();
 
+        // Высота карточки состояния простого вида — по высоте окна (StateHeight).
+        SizeChanged += (_, e) =>
+        {
+            if (e.HeightChanged && !_advanced)
+                StateGrid.Height = StateHeight(e.NewSize.Height);
+        };
+
         // Опрос по времени, а не подписка на события: супервизор — отдельный
         // процесс и пишет своё состояние в файл. Две секунды достаточно,
         // чтобы нажатие «Запустить» отозвалось раньше, чем человек усомнится.
@@ -1184,6 +1191,7 @@ public partial class StatusView : UserControl
         // Простой вид (макет, 11.11): нагрузка слева, отчёт справа.
         Grid.SetColumn(FooterMeters, _advanced ? 1 : 0);
         ReportButton.Visibility = _advanced ? Visibility.Collapsed : Visibility.Visible;
+        HomeUpdateButton.Visibility = ReportButton.Visibility;
 
         if (_advanced)
             ReportNote.Visibility = Visibility.Collapsed;
@@ -1448,22 +1456,22 @@ public partial class StatusView : UserControl
     }
 
     /// <summary>
-    /// Строка под режимами — только когда есть что сказать.
+    /// Строка под режимами: оба движка всегда, оговорка о режиме — когда есть.
     /// </summary>
     /// <remarks>
-    /// С 11.11: оговорка о режиме (не выбран, «без исключений») или движок,
-    /// который не работает, как надо, — упал, поднимается, не нужен. Когда
-    /// оба работают, «Работает» уже сказано карточкой состояния; когда всё
-    /// остановлено — «Остановлено» там же.
+    /// 11.11 в простом виде движки показывались, только когда один не в порядке;
+    /// 12.11 владелец попросил их постоянными — двумя плашками во всю строку.
+    /// Оговорка — режим не выбран или «без исключений».
     /// </remarks>
     private void ShowModeLine()
     {
-        // Подробный вид — как до 11.11: строка всегда, пояснение режима и оба движка.
-        bool engines = _enginesTrouble || _advanced;
         bool said = ModeText.Text.Length > 0;
         ModeText.Visibility = said ? Visibility.Visible : Visibility.Collapsed;
-        DesyncChip.Visibility = TunnelChip.Visibility = engines ? Visibility.Visible : Visibility.Collapsed;
-        ModeLine.Visibility = said || engines ? Visibility.Visible : Visibility.Collapsed;
+        DesyncChip.Visibility = TunnelChip.Visibility = Visibility.Visible;
+        ModeLine.Visibility = Visibility.Visible;
+
+        // В простом виде оговорка — строкой над плашками, с отступом до них.
+        ModeText.Margin = _advanced ? new Thickness(0, 0, 14, 0) : new Thickness(0, 0, 0, said ? 8 : 0);
     }
 
     /// <summary>
@@ -1862,7 +1870,7 @@ public partial class StatusView : UserControl
         Grid.SetRow(SettingsRow, advanced ? 13 : 15);
 
         // Состояние — постоянной высоты в обоих видах (см. выше).
-        StateGrid.Height = advanced ? 128 : StateTall;
+        StateGrid.Height = advanced ? 128 : StateHeight(ActualHeight);
 
         // Над нижней строкой: в подробном она прижата к низу, как была; в простом —
         // сразу под карточками тем же шагом, что между ними (зазор перед строкой
@@ -1876,6 +1884,28 @@ public partial class StatusView : UserControl
         StateLine.MaxHeight = advanced ? 58 : 98;
         StateHint.FontSize = advanced ? 13.5 : 15;
         StateHint.Margin = new Thickness(0, advanced ? 4 : 6, 0, 0);
+
+        // Движки: подробному — справа от пояснения одной строкой 34; простому —
+        // двумя плашками пополам во всю ширину, пояснение (оговорка) — над ними.
+        ModeLine.Height = advanced ? 34 : double.NaN;
+        Grid.SetRow(EngineChips, advanced ? 0 : 1);
+        Grid.SetColumn(EngineChips, advanced ? 1 : 0);
+        Grid.SetColumnSpan(EngineChips, advanced ? 1 : 2);
+        Grid.SetColumnSpan(ModeText, advanced ? 1 : 2);
+        EngineChips.HorizontalAlignment = advanced ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
+        ModeLine.Margin = advanced ? new Thickness(4, 10, 0, 0) : new Thickness(0, 12, 0, 0);
+        DesyncChipColumn.Width = TunnelChipColumn.Width = advanced ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+        EngineChipsGap.Width = new GridLength(advanced ? 16 : 12);
+
+        foreach (var chip in new[] { DesyncChip, TunnelChip })
+        {
+            if (advanced)
+                chip.ClearValue(Border.BackgroundProperty);
+            else
+                chip.SetResourceReference(Border.BackgroundProperty, "Raised");
+
+            chip.Padding = advanced ? new Thickness(0) : new Thickness(14, 6, 6, 6);
+        }
 
         // Режим: сегменты — подробному, плитки — простому.
         ModeCaption.Text = advanced ? "Режим работы NZ" : "Режим работы";
@@ -1895,6 +1925,21 @@ public partial class StatusView : UserControl
     /// карточка должна кончаться сразу под пунктиром).
     /// </summary>
     internal const double StateTall = 200;
+
+    /// <summary>Она же в невысоком окне — как было до 12.11 на его минимуме.</summary>
+    internal const double StateShort = 168;
+
+    /// <summary>
+    /// Высота карточки состояния по высоте раздела, а не по содержимому.
+    /// </summary>
+    /// <remarks>
+    /// С постоянными движками (12.11) простая «Главная» в неразвёрнутом окне
+    /// владельца не влезала: страница 677 при видимых 651 (HomeFitTests, Manrope).
+    /// Высота зависит только от окна: от строк ниже — ошибки под полем, итога
+    /// отчёта, предупреждения — она не меняется, и карточка не скачет; лишнее
+    /// уходит в прокрутку. Развёрнутое окно владельца — раздел 794, неразвёрнутое — 674.
+    /// </remarks>
+    internal static double StateHeight(double sectionHeight) => sectionHeight >= 740 ? StateTall : StateShort;
 
     // --- «Сайт не открывается?» — простой вид ---------------------------------------
 
@@ -1945,6 +1990,40 @@ public partial class StatusView : UserControl
     private void OnSiteReveal(object sender, RoutedEventArgs e) => SiteFix.ShowRoute(_siteHost, this);
 
     // --- Отчёт для разбора — простой вид, тот же, что в «Диагностике» -----------------
+
+    /// <summary>
+    /// «Обновление» простого вида: спросить GitHub и открыть окно обновления.
+    /// </summary>
+    /// <remarks>
+    /// То же, что «Проверить» в карточке подробного вида (<see cref="UpdatePanel.AskAsync"/>):
+    /// окно открывается и при последней версии — с её чейнджлогом и погашенной
+    /// «Обновить». GitHub не ответил — окна нет, итог строкой рядом.
+    /// </remarks>
+    private async void OnHomeUpdate(object sender, RoutedEventArgs e)
+    {
+        HomeUpdateButton.IsEnabled = false;
+        ReportNote.Text = "Спрашиваю GitHub…";
+        ReportNote.ToolTip = null;
+        ReportNote.Visibility = Visibility.Visible;
+
+        try
+        {
+            var (found, text, _) = await UpdatePanel.AskAsync(CancellationToken.None);
+
+            ReportNote.Text = text;
+            ReportNote.ToolTip = text;
+
+            if (found is not null)
+            {
+                ReportNote.Visibility = Visibility.Collapsed;
+                (Window.GetWindow(this) as MainWindow)?.ShowUpdateWindow(found);
+            }
+        }
+        finally
+        {
+            HomeUpdateButton.IsEnabled = true;
+        }
+    }
 
     private async void OnReport(object sender, RoutedEventArgs e)
     {
