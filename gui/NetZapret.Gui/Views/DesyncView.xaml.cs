@@ -536,6 +536,12 @@ public partial class DesyncView : UserControl
         foreach (var slot in slots)
             FakesList.Children.Add(FakeRow(key, slot, available, mine));
 
+        // Секции game filter — одни на любой пресет, и выбор у них общий (№64).
+        var games = settings.FakeSwaps.Where(s => s.Preset == FakeChoice.GameFilterKey).ToList();
+
+        foreach (var slot in FakeChoice.GameFilterSlots())
+            FakesList.Children.Add(FakeRow(FakeChoice.GameFilterKey, slot, available, games));
+
         NarrowFakes();
     }
 
@@ -570,7 +576,9 @@ public partial class DesyncView : UserControl
         var side = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         side.Children.Add(new TextBlock
         {
-            Text = chosen is null ? $"как в пресете — {slot.Blob}" : $"{Path.GetFileNameWithoutExtension(chosen)} вместо {slot.Blob}",
+            Text = chosen is null
+                ? (preset == FakeChoice.GameFilterKey ? $"как есть — {Path.GetFileNameWithoutExtension(slot.BlobFile ?? slot.Blob)}" : $"как в пресете — {slot.Blob}")
+                : $"{Path.GetFileNameWithoutExtension(chosen)} вместо {Path.GetFileNameWithoutExtension(slot.BlobFile ?? slot.Blob)}",
             Style = (Style)FindResource("Caption"),
             Foreground = chosen is null ? (Brush)FindResource("Muted") : (Brush)FindResource("Accent"),
             VerticalAlignment = VerticalAlignment.Center,
@@ -611,7 +619,7 @@ public partial class DesyncView : UserControl
             settings.Save(AppSettings.DefaultPath);
 
             FakesStatus.Text = blob is null
-                ? $"«{slot.Section}»: снова как в пресете ({slot.Blob}). Действует со следующего запуска движков."
+                ? $"«{slot.Section}»: снова как было ({slot.Blob}). Действует со следующего запуска движков."
                 : $"«{slot.Section}»: {Path.GetFileNameWithoutExtension(blob)} вместо {slot.Blob}. Действует со следующего запуска движков.";
             FakesStatus.Visibility = Visibility.Visible;
 

@@ -124,6 +124,36 @@ public sealed class FakeChoiceTests
         Assert.Null(FakeChoice.ContentKind([0xC0, 0x12, 0x34, 0x56, 0x78]));
     }
 
+    /// <summary>
+    /// Game filter (№64): три места — две подделки TCP и одна UDP; выбор у них
+    /// один на любой пресет и подставляется в его секции.
+    /// </summary>
+    [Fact]
+    public void Game_filter_slots_take_a_choice_under_any_preset()
+    {
+        var slots = FakeChoice.GameFilterSlots();
+
+        Assert.Equal(2, slots.Count(s => s.Section == GameFilter.TcpName && !s.Udp));
+        var udp = Assert.Single(slots, s => s.Section == GameFilter.UdpName);
+        Assert.True(udp.Udp);
+        Assert.Equal("ACTIVE_GAME_UDP.bin", udp.BlobFile);
+
+        var before = WinwsCommandLine.Build(V12Lite(), gameFilter: true).ToList();
+        var after = before.ToList();
+
+        int replaced = FakeChoice.Apply(after, "Universal V12 Lite", [new(FakeChoice.GameFilterKey, GameFilter.UdpName, 0, "stun2.bin")]);
+
+        Assert.Equal(1, replaced);
+        Assert.Contains("--lua-desync=fake:blob=nz_fake_stun2:repeats=10:payload=all", after);
+        Assert.DoesNotContain("--lua-desync=fake:blob=nz_game_udp:repeats=10:payload=all", after);
+
+        // Без game filter его секций в строке нет — выбор ничего не трогает.
+        var plain = WinwsCommandLine.Build(V12Lite()).ToList();
+        var same = plain.ToList();
+        Assert.Equal(0, FakeChoice.Apply(same, "Universal V12 Lite", [new(FakeChoice.GameFilterKey, GameFilter.UdpName, 0, "stun2.bin")]));
+        Assert.Equal(plain, same);
+    }
+
     private static ZapretPreset V12Lite() =>
         new PresetReader().Load(Path.Combine(RepoRoot(), "presets", "Universal V12 Lite.txt"));
 

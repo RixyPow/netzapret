@@ -232,13 +232,65 @@ public static class FakeChoice
     }
 
     /// <summary>
+    /// Ключ выбора у секций game filter — вместо имени пресета.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №64 (Rocket League, 11.11): с game filter игра висит на чёрном
+    /// экране — все её серверы Amazon лежат в ipset-all, и подделка встаёт перед
+    /// каждым UDP-потоком к ним. Секции game filter одни на любой пресет, поэтому
+    /// и выбор у них один на все пресеты — и на все игры сразу: образец,
+    /// подобранный под одну игру, получат и остальные.
+    /// </remarks>
+    public const string GameFilterKey = "game filter";
+
+    /// <summary>Места подделок в секциях game filter — те же, что он дописывает в строку.</summary>
+    public static IReadOnlyList<FakeSlot> GameFilterSlots()
+    {
+        var arguments = new List<string>();
+        GameFilter.Apply(arguments);
+
+        var declared = Declarations(arguments);
+        var result = new List<FakeSlot>();
+        int start = arguments.IndexOf("--new");
+
+        while (start >= 0 && start < arguments.Count)
+        {
+            int end = arguments.IndexOf("--new", start + 1);
+
+            if (end < 0)
+                end = arguments.Count;
+
+            var section = arguments.Skip(start + 1).Take(end - start - 1).ToList();
+            var name = section.FirstOrDefault(a => a.StartsWith("--name=", StringComparison.Ordinal))?["--name=".Length..];
+            int slot = 0;
+
+            foreach (var step in section.Where(a => a.StartsWith("--lua-desync=", StringComparison.Ordinal)).Select(a => a["--lua-desync=".Length..]))
+            {
+                if (name is null || BlobOf(step) is not { } blob)
+                    continue;
+
+                result.Add(new FakeSlot(name, slot++, step, blob, declared.GetValueOrDefault(blob), IsUdp(section), "game filter ipset-all игры"));
+            }
+
+            start = end;
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Подставляет выбранные подделки в готовую строку запуска; возвращает,
     /// сколько мест заменено.
     /// </summary>
+    /// <remarks>
+    /// Берёт выбор у пресета <paramref name="presetName"/> и у секций game filter
+    /// (<see cref="GameFilterKey"/>): их имена своих секций у пресета не бывает.
+    /// </remarks>
     public static int Apply(List<string> arguments, string? presetName, IReadOnlyList<FakeSwap>? swaps)
     {
         var mine = (swaps ?? [])
-            .Where(s => string.Equals(s.Preset, presetName, StringComparison.OrdinalIgnoreCase)
+            .Where(s => (string.Equals(s.Preset, presetName, StringComparison.OrdinalIgnoreCase)
+                         || (s.Preset == GameFilterKey && s.Section is GameFilter.TcpName or GameFilter.UdpName))
                         && !string.IsNullOrWhiteSpace(s.Blob))
             .ToList();
 
