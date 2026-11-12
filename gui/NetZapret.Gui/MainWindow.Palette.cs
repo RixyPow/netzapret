@@ -25,7 +25,7 @@ public partial class MainWindow
     /// <summary>Ширина меню: обычная и свёрнутого до значков.</summary>
     private const double RailWide = 236;
 
-    private const double RailNarrow = 58;
+    private const double RailNarrow = 66;
 
     private void OnPaletteOpen(object sender, RoutedEventArgs e) => OpenPalette();
 
@@ -230,16 +230,10 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// Эмблема: в развёрнутом меню — на «Главную», как логотип на сайте;
-    /// в свёрнутом — развернуть меню (13.11, владелец).
+    /// Эмблема сворачивает и разворачивает меню (13.11, владелец; 12.11 она
+    /// вела на «Главную», та — первым пунктом меню).
     /// </summary>
-    private void OnLogoClick(object sender, MouseButtonEventArgs e)
-    {
-        if (RailCompact.GetIsOn(RailBorder))
-            SetRail(false);
-        else
-            Open("status");
-    }
+    private void OnLogoClick(object sender, MouseButtonEventArgs e) => SetRail(!RailCompact.GetIsOn(RailBorder));
 
     private void OnRailToggle(object sender, RoutedEventArgs e) => SetRail(!RailCompact.GetIsOn(RailBorder));
 
@@ -269,8 +263,9 @@ public partial class MainWindow
     /// <para>
     /// 13.11 (владелец, два снимка поверх друг друга): при сворачивании ничего
     /// не сдвигается — ни значки, ни эмблема, ни поиск. Всё в меню стоит на одной
-    /// оси (x 29): подложки пунктов и строка поиска с 8, эмблема с 9; свёрнутое
-    /// меню — 58, ровно вдвое этой оси. Сворачивание только отрезает полосу
+    /// оси (x 33): подложки пунктов и строка поиска с 8, значки с 24, эмблема
+    /// с 13; свёрнутое меню — 66, ровно вдвое этой оси (было 58 — владелец
+    /// попросил шире). Сворачивание только отрезает полосу
     /// справа и прячет подписи — до 13.11 свёрнутое меню было 72 и ставило
     /// значки посередине, и они съезжали на 7 точек вправо, эмблема — влево.
     /// </para>
@@ -321,7 +316,11 @@ public partial class MainWindow
 
         LogoText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         RailCollapse.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        LogoMark.ToolTip = compact ? "Развернуть меню" : "Главная";
+        LogoMark.ToolTip = compact ? "Развернуть меню" : "Свернуть меню";
+
+        // Отступ эмблемы до имени — только при имени: в свёрнутом меню колонке
+        // эмблемы не хватало места, и раскладка срезала ей правые углы (13.11).
+        LogoMark.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 13, 0);
 
         SearchLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SearchChip.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;

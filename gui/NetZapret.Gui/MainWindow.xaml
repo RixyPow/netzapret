@@ -53,13 +53,11 @@
                     к странице; с 21.10 — эмблема в трёх цветах темы.
                 -->
                 <!--
-                    Щелчок по эмблеме: в развёрнутом меню — на «Главную» (12.11, как
-                    логотип на сайте), в свёрнутом — развернуть меню. Свернуть —
-                    стрелкой справа от имени (13.11, владелец: стрелка сверху, без
-                    надписи). Эмблема — на оси значков меню (x 29), поэтому при
+                    Эмблема и стрелка справа от имени сворачивают и разворачивают
+                    меню (13.11, владелец; 12.11 эмблема вела на «Главную»). Эмблема — на оси значков меню (x 33), поэтому при
                     сворачивании не сдвигается (ApplyRail).
                 -->
-                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="9,24,8,20">
+                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="13,24,8,20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -78,7 +76,7 @@
                         обводка в 5 точек svg — пиксель на плитке в 40 при 125 %.
                     -->
                     <Viewbox x:Name="LogoMark" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0"
-                             Cursor="Hand" ToolTip="Главная" MouseLeftButtonUp="OnLogoClick">
+                             Cursor="Hand" ToolTip="Свернуть меню" MouseLeftButtonUp="OnLogoClick">
                         <Canvas Width="256" Height="256" Clip="{x:Static local:Emblem.Outline}">
                             <Path Data="{x:Static local:Emblem.Band}" Fill="{DynamicResource LogoBand}"
                                   Stroke="{DynamicResource LogoBand}" StrokeThickness="5" StrokeLineJoin="Round" />
@@ -87,8 +85,7 @@
                         </Canvas>
                     </Viewbox>
 
-                    <StackPanel x:Name="LogoText" Grid.Column="1" VerticalAlignment="Center" Background="Transparent"
-                                Cursor="Hand" MouseLeftButtonUp="OnLogoClick">
+                    <StackPanel x:Name="LogoText" Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,2,0,0" />
                     </StackPanel>
@@ -104,7 +101,7 @@
                         Cursor="Hand" Focusable="False" ToolTip="Найти, где что сделать (Ctrl+K)">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
-                            <Border x:Name="Box" Height="38" CornerRadius="10" BorderThickness="1.5" Padding="12,0"
+                            <Border x:Name="Box" Height="38" CornerRadius="10" BorderThickness="1.5" Padding="16,0"
                                     BorderBrush="{DynamicResource Border}" Background="{DynamicResource Surface}">
                                 <ContentPresenter VerticalAlignment="Center" />
                             </Border>
@@ -306,7 +303,7 @@
                 <Border CornerRadius="12" BorderThickness="1.5" BorderBrush="{DynamicResource Border}"
                         Background="{DynamicResource Surface}">
                     <DockPanel>
-                        <Grid DockPanel.Dock="Top" Height="35" Margin="12,0">
+                        <Grid DockPanel.Dock="Top" Height="35" Margin="16,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
