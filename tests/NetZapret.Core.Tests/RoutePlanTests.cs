@@ -154,6 +154,47 @@ public sealed class RoutePlanTests
             : [],
     };
 
+    /// <summary>Особые пути (12.11): пины встают после десинка и раньше VPN — они дешевле туннеля.</summary>
+    [Fact]
+    public void Pins_come_after_desync_and_before_vpn()
+    {
+        var plan = RoutePlan.For(Report(BlockKind.TlsDpi), RoutingMode.Desync, desync: true, tunnel: true,
+            servicePin: true, relay: true);
+
+        Assert.Equal([RouteTry.Direct, RouteTry.Recipes, RouteTry.ServicePin, RouteTry.RelayPin, RouteTry.Vpn], Kinds(plan));
+    }
+
+    [Fact]
+    public void A_cut_address_tries_spare_service_pin_relay_then_vpn()
+    {
+        var plan = RoutePlan.For(Report(BlockKind.TlsByAddress), RoutingMode.Desync, desync: true, tunnel: true,
+            cloudflare: true, servicePin: true, relay: true);
+
+        Assert.Equal([RouteTry.CloudflareSpare, RouteTry.ServicePin, RouteTry.RelayPin, RouteTry.Vpn], Kinds(plan));
+    }
+
+    /// <summary>Отказ по стране — сперва посредник: он отвечает из-за границы без VPN (решение 05.11).</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_country_refusal_tries_a_relay_before_vpn(bool pinFirst)
+    {
+        var report = Report(BlockKind.GeoBlock) with { PinFirst = pinFirst };
+        var plan = RoutePlan.For(report, RoutingMode.Desync, desync: true, tunnel: true, servicePin: true, relay: true);
+
+        Assert.Equal([RouteTry.RelayPin, RouteTry.Vpn], Kinds(plan));
+    }
+
+    /// <summary>Пин сервиса без десинка не пробуется: его имена чинит рецепт секции.</summary>
+    [Fact]
+    public void A_service_pin_needs_desync()
+    {
+        var plan = RoutePlan.For(Report(BlockKind.TlsDpi), RoutingMode.Direct, desync: false, tunnel: false,
+            servicePin: true, relay: true);
+
+        Assert.Equal([RouteTry.RelayPin], Kinds(plan));
+    }
+
     [Fact]
     public void Recipes_are_tried_only_beside_a_desync_that_keeps_the_probe_ports_out()
     {

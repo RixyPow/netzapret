@@ -758,7 +758,7 @@ public sealed record TargetReport
         // не поможет: в отчёте 27.10 оба таких имени (notion.so, elevenlabs.io)
         // были прибиты.
         BlockKind.Dns => "свой DNS, а прибитое в hosts — снять пин",
-        BlockKind.GeoBlock when PinFirst => "пин на посредника («Маршруты» → сервис → кнопка-булавка), "
+        BlockKind.GeoBlock when PinFirst => "пин на посредника («Маршруты» → путь маршрута → «Пин посредника»), "
             + "не нашёлся рабочий — VPN с выходом не в России; десинк не поможет",
         BlockKind.GeoBlock => "только VPN — десинк не поможет",
         BlockKind.BrokenCname => "подставить адрес",

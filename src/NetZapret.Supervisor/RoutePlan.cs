@@ -29,6 +29,30 @@ public enum RouteTry
     CloudflareSpare,
 
     /// <summary>
+    /// Пин сервиса — имена на адресах самого сервиса (pin-solutions.yaml), с десинком поверх.
+    /// </summary>
+    /// <remarks>
+    /// Особый путь (владелец 12.11): у сервиса бывают узлы, которые провайдер
+    /// не режет по адресу, — каталог Zapret GUI держит их в разделе «Напрямую».
+    /// Пробуется под рецептом своей секции — так он и пойдёт после записи.
+    /// </remarks>
+    ServicePin,
+
+    /// <summary>
+    /// Пин посредника — имя на прокси посредника (Zapret DNS, Comss…), напрямую.
+    /// </summary>
+    /// <remarks>
+    /// Особый путь (владелец 12.11): обходит и отказ по стране, и блок имени —
+    /// посредник везёт приветствие из-за границы. Пробуется мимо десинка, с портов
+    /// пробы: пин посредника держит щит, а под рецептом он не живёт (замер 06.10:
+    /// со щитом 20 из 20, под рецептом 0 из 10).
+    /// </remarks>
+    RelayPin,
+
+    /// <summary>Приложение Telegram через свой прокси — не шаг плана, а подбор «Приложения» (<see cref="SiteFixer.PickTelegramAsync"/>).</summary>
+    TgProxy,
+
+    /// <summary>
     /// Мимо десинка — с портов пробы, которые основной winws2 не перехватывает.
     /// </summary>
     /// <remarks>Не шаг плана: так подбор узнаёт, не закрыл ли имя сам десинк (<see cref="SiteFixer"/>).</remarks>
@@ -89,10 +113,33 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
     /// <param name="desync">Десинк работает: рецептам и щиту есть где действовать.</param>
     /// <param name="tunnel">Туннель работает: VPN есть чем проверить.</param>
     /// <param name="cloudflare">Имя на адресе Cloudflare (<see cref="CloudflareNet"/>): есть запасные адреса.</param>
-    public static RoutePlan For(TargetReport report, RoutingMode route, bool desync, bool tunnel, bool cloudflare = false)
+    /// <param name="servicePin">У имени есть пин сервиса (<see cref="RouteTry.ServicePin"/>).</param>
+    /// <param name="relay">Имя можно прибить к посреднику (<see cref="RouteTry.RelayPin"/>): не подсеть.</param>
+    public static RoutePlan For(
+        TargetReport report,
+        RoutingMode route,
+        bool desync,
+        bool tunnel,
+        bool cloudflare = false,
+        bool servicePin = false,
+        bool relay = false)
     {
         var steps = new List<RoutePlanStep>();
         bool vpn = tunnel && route != RoutingMode.Proxy;
+
+        // Пины — дешевле VPN (ни трафика подписки, ни выхода в чужой стране) и
+        // встают перед ним. Пину сервиса нужен десинк: его имена чинит рецепт.
+        void Service(string why)
+        {
+            if (servicePin && desync)
+                steps.Add(new(RouteTry.ServicePin, [], why));
+        }
+
+        void Relay(string why)
+        {
+            if (relay)
+                steps.Add(new(RouteTry.RelayPin, [], why));
+        }
 
         void Vpn(string why)
         {
@@ -132,11 +179,15 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
                         report.Kind == BlockKind.TlsWhiteOnly ? "подделка разрешённого имени" : "рецепт на рукопожатие"));
                 }
 
+                Service("у сервиса есть узлы, которые не режут, — с десинком поверх");
+                Relay("посредник везёт имя мимо провайдера");
                 Vpn("десинк не помог");
                 return new(steps, null);
 
             case BlockKind.TlsByAddress or BlockKind.Full or BlockKind.HttpsPort:
                 Spare("режут адрес, а сайт на Cloudflare — он отвечает и на запасном");
+                Service("режут адрес — у сервиса есть другие узлы");
+                Relay("режут адрес — посредник ходит к сервису сам");
                 Vpn("режут адрес — десинку тут нечего прятать");
                 return new(steps, "Без VPN — только другой адрес того же сервиса, если он на CDN вроде Cloudflare: "
                     + "подстановкой адреса.");
@@ -149,6 +200,7 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
                     steps.Add(new(RouteTry.Preset, [], "десинк пресета"));
 
                 Spare("на ntc.party 8.6.112.x и 8.47.69.x этот блок не трогал");
+                Relay("посредник получает приветствие уже за границей");
                 Vpn("короткое приветствие проходит, браузерное — нет");
                 return new(steps, "Режут длинное приветствие браузера — с постквантовым ключом, двумя пакетами; "
                     + "короткое проходит. Так резали сайты Cloudflare 29.10–02.11.");
@@ -156,11 +208,13 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
             // Нейросеть без пина: сперва пин — он дешевле VPN (решение владельца 05.11).
             // Подбор пина — своё окно, сам «Сайт не открывается?» его не ставит.
             case BlockKind.GeoBlock when report.PinFirst:
+                Relay("сайт отказывает по стране — посредник отвечает из-за границы, VPN не нужен");
                 Vpn("сайт отказывает по стране, а пина у имени нет — без пина нужен выход в другой стране");
-                return new(steps, "Сначала пин на посредника: «Маршруты» → сервис → кнопка-булавка — посредник отвечает "
+                return new(steps, "Сначала пин на посредника: «Маршруты» → путь маршрута → «Пин посредника» — посредник отвечает "
                     + "из-за границы, VPN не нужен. Не нашёлся рабочий — VPN.");
 
             case BlockKind.GeoBlock:
+                Relay("сайт отказывает по стране — посредник отвечает из-за границы");
                 Vpn("сайт отказывает по стране — нужен выход в другой стране");
                 return new(steps, "Без VPN — посредник: пин из каталога на вкладке «Файл hosts» или Zapret DNS "
                     + "(dns.zapret.moe) для сервисов из его списка.");
@@ -169,6 +223,7 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
             // но сюда приходят с «не открывается» в браузере — значит отказ
             // и там. Выход в другой стране проверяется замером, как и везде.
             case BlockKind.Forbidden:
+                Relay("сайт отказал, причину не назвал — проверить посредником из-за границы");
                 Vpn("сайт отказал, причину не назвал — проверить выходом в другой стране");
                 return new(steps, "Связь исправна, отказал сам сайт. В браузере открывается — "
                     + "отказали только проверке, чинить нечего.");

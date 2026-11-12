@@ -21,6 +21,9 @@ public sealed record SiteFixStep(string Path, bool Works, string Detail, RouteTr
 /// <param name="RecipeId">Рецепт открывшего пути — идентификатор каталога, как его пишет правило.</param>
 /// <param name="Pinned">Имя прибито в hosts к этому запасному адресу Cloudflare (<see cref="RouteTry.CloudflareSpare"/>).</param>
 /// <param name="Ours">Закрывает не провайдер, а секция нашего пресета — её имя (или «секция по адресам», если не найдена).</param>
+/// <param name="Special">Открыл особый путь (<see cref="RouteSpecial"/>): пин сервиса, пин посредника, TG Proxy.</param>
+/// <param name="PinSource">Чей пин открыл: решение пина сервиса или имя посредника.</param>
+/// <param name="PinHosts">Пин посредника: какие имена к какому адресу прибить.</param>
 public sealed record SiteFixResult(
     string? Host,
     IReadOnlyList<SiteFixStep> Steps,
@@ -32,7 +35,10 @@ public sealed record SiteFixResult(
     RoutingMode? Found = null,
     string? RecipeId = null,
     string? Pinned = null,
-    string? Ours = null)
+    string? Ours = null,
+    RouteSpecial Special = RouteSpecial.None,
+    string? PinSource = null,
+    IReadOnlyDictionary<string, string>? PinHosts = null)
 {
     /// <summary>Чем кончилось — хвост строки журнала.</summary>
     public string Outcome() =>
@@ -114,13 +120,76 @@ public static class SiteFixer
     /// возвращается всегда: отменённое окно не должно оставить имя без десинка.
     /// </remarks>
     /// <param name="recipes">Пробовать ли рецепты: у маршрутов-списков адресов своего рецепта нет.</param>
+    /// <param name="list">
+    /// Список маршрута: по нему — пин сервиса части (<see cref="RouteSpecialPaths.SolutionFor"/>)
+    /// и имена для пина посредника; <c>null</c> — пин посредника только самому имени.
+    /// </param>
     public static Task<SiteFixResult> PickAsync(
         string host,
         bool recipes,
         IProgress<string>? progress,
         CancellationToken cancellationToken,
-        IProgress<SiteFixStep>? stepDone = null) =>
-        RunAsync(host, write: false, recipes, progress, cancellationToken, stepDone);
+        IProgress<SiteFixStep>? stepDone = null,
+        string? list = null) =>
+        RunAsync(host, write: false, recipes, progress, cancellationToken, stepDone, list);
+
+    /// <summary>
+    /// Подбор для приложения Telegram: путь «TG Proxy» — тем, чем ходит сам прокси.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Приложение ходит по адресам, без имени, и проба по имени ему не годится.
+    /// Проверяется то, что делает прокси (<see cref="TgProxyTune"/>): переход на
+    /// WebSocket к Telegram напрямую и через домены Cloudflare. Ответил хоть один
+    /// путь — прокси работать будет; дальше нужен один щелчок по ссылке в Telegram.
+    /// </para>
+    /// <para>
+    /// Сам Telegram Desktop не проверяется: собрать соединение MTProto без клиента
+    /// нечем (так же и сторож прокси судит только по живости процесса). «Открывается»
+    /// здесь значит «прокси дотянется до Telegram», и итог говорит это прямо.
+    /// </para>
+    /// </remarks>
+    public static async Task<SiteFixResult> PickTelegramAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken,
+        IProgress<SiteFixStep>? stepDone = null)
+    {
+        var steps = new StepLog(stepDone);
+
+        if (!RouteSpecialPaths.TgProxyShipped())
+            return new(null, steps, null, false, "Прокси Telegram (tg-ws-proxy) нет в поставке — пробовать нечем.");
+
+        progress?.Report("Проверяю пути прокси Telegram: прямой к DC2 и DC4 и домены Cloudflare…");
+
+        var tuning = await TgProxyTune.RunAsync(cancellationToken);
+
+        steps.Add(new("TG Proxy: прямой путь к DC2 и DC4", tuning.Direct,
+            tuning.DirectMs is { } ms ? $"переход на WebSocket за {ms} мс" : "переход на WebSocket не ответил",
+            RouteTry.TgProxy));
+
+        steps.Add(new("TG Proxy: домены Cloudflare", tuning.Bridges.Count > 0,
+            tuning.Bridges.Count > 0
+                ? $"ответили {tuning.Bridges.Count} из {tuning.Tried}, первый — {tuning.Bridges[0].Domain} ({tuning.Bridges[0].Ms} мс)"
+                : $"не ответил ни один из {tuning.Tried}",
+            RouteTry.TgProxy));
+
+        // Итог пригодится и прокси: он берёт рабочие домены первыми при запуске.
+        if (tuning.Direct || tuning.Bridges.Count > 0)
+            TgProxyTune.Save(tuning);
+
+        if (!tuning.Direct && tuning.Bridges.Count == 0)
+        {
+            return new(null, steps, null, false,
+                "Прокси Telegram не дотянулся ни прямым путём, ни через домены Cloudflare — остаётся VPN.",
+                Advice: "Через VPN: путь «Через VPN» у «Приложения» Telegram.");
+        }
+
+        return new(null, steps, null, true,
+            "Прокси Telegram дотягивается до Telegram"
+            + (tuning.Direct ? " прямым путём" : $" через {tuning.Bridges[0].Domain}")
+            + ". Сам Telegram Desktop не проверялся: прокси добавляется в нём один раз ссылкой с вкладки «TG Proxy».",
+            Found: RoutingMode.Desync, Special: RouteSpecial.TgProxy);
+    }
 
     private static async Task<SiteFixResult> RunAsync(
         string input,
@@ -128,7 +197,8 @@ public static class SiteFixer
         bool recipes,
         IProgress<string>? progress,
         CancellationToken cancellationToken,
-        IProgress<SiteFixStep>? stepDone)
+        IProgress<SiteFixStep>? stepDone,
+        string? list = null)
     {
         var host = HostOf(input);
         var steps = new StepLog(stepDone);
@@ -170,7 +240,13 @@ public static class SiteFixer
             return ours;
 
         bool cloudflare = CloudflareNet.Contains(now.Answered ?? now.Addresses.FirstOrDefault());
-        var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy, cloudflare);
+
+        // Пин сервиса — только у части маршрутов (подбор без записи, окно пути):
+        // он пишется в правило её списка, а «Сайт не открывается?» пишет правило имени.
+        var solution = list is null ? null : RouteSpecialPaths.SolutionFor(list, ZapretPaths.Discover()?.Root);
+
+        var plan = RoutePlan.For(now, route, settings.NeedsDesync, settings.NeedsProxy, cloudflare,
+            servicePin: solution is not null, relay: true);
 
         // Сайт отвечает проверкой на робота, а скриптов своей зоны у неё нет
         // или они малы для заморозки: судить не по чему. Другие пути увидели бы ту же
@@ -272,6 +348,42 @@ public static class SiteFixer
                         + $"Cloudflare {spare} он открывается. Прибил {host} к {spare} в hosts — с десинком, "
                         + "действует уже сейчас. Снять — на вкладке «Файл hosts».",
                         Pinned: spare);
+                }
+
+                case RouteTry.ServicePin when solution is not null:
+                {
+                    if (await TryServicePinAsync(host, solution, steps, progress, cancellationToken) is not { } at)
+                        break;
+
+                    return new(host, steps, null, true,
+                        $"{at.Name} открывается на адресе самого сервиса {at.Address} (пин «{solution.Name}», десинк поверх).",
+                        Found: RoutingMode.Desync, Special: RouteSpecial.ServicePin, PinSource: solution.Id);
+                }
+
+                case RouteTry.RelayPin:
+                {
+                    if (await TryRelayAsync(host, steps, progress, cancellationToken) is not { } relay)
+                        break;
+
+                    var hosts = RelayHosts(host, list, relay.Address);
+                    var opens = $"{host} открывается через посредника {relay.Name} ({relay.Address}, {relay.Detail}).";
+
+                    if (!write)
+                    {
+                        return new(host, steps, null, false, opens + $" Прибить имён: {hosts.Count}.",
+                            Found: RoutingMode.Direct, Special: RouteSpecial.RelayPin, PinSource: relay.Name, PinHosts: hosts);
+                    }
+
+                    if (SaveRelay(host, relay.Name, hosts) is { } failed)
+                    {
+                        steps.Add(new("пин в hosts", false, failed, RouteTry.RelayPin));
+                        break;
+                    }
+
+                    return new(host, steps, RoutingMode.Direct, false,
+                        opens + $" Прибил {string.Join(", ", hosts.Keys)} к {relay.Address} в hosts и записал маршрут "
+                        + $"«пин посредника» для {RuleValue(host)} — действует уже сейчас.",
+                        Found: RoutingMode.Direct, Special: RouteSpecial.RelayPin, PinSource: relay.Name, PinHosts: hosts);
                 }
 
                 case RouteTry.Vpn:
@@ -747,6 +859,169 @@ public static class SiteFixer
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Пробует пин сервиса: имя решения на его адресах, под рецептом своей секции.
+    /// </summary>
+    /// <remarks>
+    /// Через основной десинк (<see cref="BlockCheck.CheckAtAsync"/>) — так пин сервиса
+    /// и пойдёт после записи: строка с пометкой десинка, рецепт секции по имени.
+    /// Имя — само проверяемое, если оно в решении, иначе первое имя решения:
+    /// пример маршрута («media.discordapp.net») в решении бывает не всегда.
+    /// Только IPv4: адреса IPv6 без IPv6 в сети не годятся, а проверять его
+    /// наличие ради трёх проб — лишняя секунда.
+    /// </remarks>
+    private static async Task<(string Name, string Address)?> TryServicePinAsync(
+        string host,
+        PinSolution solution,
+        StepLog steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var entries = PinSolutions.Entries(solution, haveIpV6: false);
+
+        var name = entries.ContainsKey(host) ? host : entries.Keys.FirstOrDefault();
+
+        if (name is null)
+            return null;
+
+        foreach (var address in entries[name].Take(3))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report($"Пробую {name} на адресе самого сервиса {address}…");
+
+            var report = await BlockCheck.CheckAtAsync(name, System.Net.IPAddress.Parse(address), cancellationToken);
+            bool works = report.Kind == BlockKind.None;
+
+            steps.Add(new($"пин сервиса {address}", works, Said(report), RouteTry.ServicePin));
+
+            if (works)
+                return (name, address);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Пробует посредников: что они отдают имени сейчас — и открывается ли через это сайт.
+    /// </summary>
+    /// <remarks>
+    /// Проба мимо десинка (<see cref="PinPicker.ProbeAsync"/>, порты пробы) — тем путём,
+    /// каким пин посредника пойдёт после записи: щитом. Проверка на робота засчитана:
+    /// сайт ответил сам, а браузер её пройдёт (у Claude через Zapret DNS так и есть).
+    /// Не больше шести адресов — посредников восемь, и подбор не должен бить их залпом.
+    /// </remarks>
+    private static async Task<(string Name, string Address, string Detail)?> TryRelayAsync(
+        string host,
+        StepLog steps,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        progress?.Report($"Спрашиваю посредников (Zapret DNS, Comss и других), что они отдают {host}…");
+
+        var candidates = (await IntermediaryDns.AskAsync(host, cancellationToken))
+            .DistinctBy(c => c.Address, StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            steps.Add(new("пин посредника", false, "ни один посредник не отдаёт этому имени свой прокси", RouteTry.RelayPin));
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var name = RoutePins.Relay(candidate.Via)?.Name ?? candidate.Label;
+            progress?.Report($"Пробую {host} через посредника {name} ({candidate.Address}) мимо десинка…");
+
+            var probe = await PinPicker.ProbeAsync(candidate, host, cancellationToken);
+            bool works = probe.Verdict is PinVerdict.Works or PinVerdict.Challenge;
+
+            steps.Add(new($"посредник {name} {candidate.Address}", works, probe.Detail, RouteTry.RelayPin));
+
+            if (works)
+                return (name, candidate.Address, probe.Detail);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Имена для пина посредника: само имя и его www, а у маршрута — зоны его списка.
+    /// </summary>
+    /// <remarks>
+    /// Всем — один адрес (решение 10.10: одному сайту — одни пины, <see cref="PinPicker.OneAddress"/>).
+    /// hosts зон не знает: каждое имя прибивается отдельно, и голая зона www не покрывает,
+    /// а сайты сплошь переадресуют туда.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, string> RelayHosts(string host, string? list, string address)
+    {
+        var names = new List<string> { host };
+
+        if (list is not null)
+        {
+            try
+            {
+                names.AddRange(HostListReader.Read(list, ZapretPaths.Discover()?.Root, out _)
+                    .Select(d => d.TrimStart('*', '.').ToLowerInvariant())
+                    .Where(d => d.Contains('.') && !System.Net.IPAddress.TryParse(d, out _)));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Без списка — только само имя.
+            }
+        }
+
+        var apex = host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
+        names.Add(apex);
+
+        names.AddRange(names.Where(n => n.Count(c => c == '.') == 1).Select(n => "www." + n).ToList());
+
+        return names
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(n => n, _ => address, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Пин посредника имени: hosts, затем правило; не вышло — почему.</summary>
+    private static string? SaveRelay(string host, string relay, IReadOnlyDictionary<string, string> hosts)
+    {
+        var entry = new UserRuleEntry
+        {
+            Match = MatchKind.Domain,
+            Value = RuleValue(host),
+            Mode = RoutingMode.Direct,
+            Special = RouteSpecial.RelayPin,
+            Pin = relay,
+            PinHosts = hosts.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)[p.Value], StringComparer.OrdinalIgnoreCase),
+        };
+
+        try
+        {
+            var result = RoutePins.Apply(entry, haveIpV6: false);
+
+            if (result?.Reverted is { } reverted)
+                return reverted;
+
+            HostsEditor.FlushDns();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "hosts не записался: нужны права администратора";
+        }
+        catch (IOException ex)
+        {
+            return "hosts не записался: " + ex.Message;
+        }
+
+        var file = UserRulesFile.Load();
+        file.SetSpecial(entry.Match, entry.Value, RouteSpecial.RelayPin, pin: relay, hosts: entry.PinHosts);
+        file.Save();
+
+        return null;
     }
 
     /// <summary>Пробует имя на запасных адресах Cloudflare; первый открывший — ответ.</summary>
