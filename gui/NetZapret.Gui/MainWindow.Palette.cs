@@ -25,7 +25,7 @@ public partial class MainWindow
     /// <summary>Ширина меню: обычная и свёрнутого до значков.</summary>
     private const double RailWide = 236;
 
-    private const double RailNarrow = 72;
+    private const double RailNarrow = 58;
 
     private void OnPaletteOpen(object sender, RoutedEventArgs e) => OpenPalette();
 
@@ -229,13 +229,24 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Эмблема в углу меню ведёт на «Главную» — как логотип на сайте.</summary>
-    private void OnLogoClick(object sender, MouseButtonEventArgs e) => Open("status");
-
-    private void OnRailToggle(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Эмблема: в развёрнутом меню — на «Главную», как логотип на сайте;
+    /// в свёрнутом — развернуть меню (13.11, владелец).
+    /// </summary>
+    private void OnLogoClick(object sender, MouseButtonEventArgs e)
     {
-        bool compact = !RailCompact.GetIsOn(RailBorder);
-        ApplyRail(compact);
+        if (RailCompact.GetIsOn(RailBorder))
+            SetRail(false);
+        else
+            Open("status");
+    }
+
+    private void OnRailToggle(object sender, RoutedEventArgs e) => SetRail(!RailCompact.GetIsOn(RailBorder));
+
+    /// <summary>Свернуть или развернуть меню — с движением — и запомнить.</summary>
+    private void SetRail(bool compact)
+    {
+        ApplyRail(compact, animate: true);
 
         try
         {
@@ -243,40 +254,78 @@ public partial class MainWindow
         }
         catch (Exception)
         {
-            // Не записалось — меню всё равно свёрнуто до конца работы окна,
+            // Не записалось — меню свёрнуто до конца работы окна,
             // а при следующем запуске встанет как было. Ради этого не мешать.
         }
     }
+
+    /// <summary>Сворачивание и разворот меню — длительность движения.</summary>
+    private static readonly Duration RailMotion = new(TimeSpan.FromMilliseconds(220));
 
     /// <summary>
     /// Меню во всю ширину или только значками.
     /// </summary>
     /// <remarks>
-    /// Пункты и подписи групп переключаются сами — по наследуемому
-    /// <see cref="RailCompact"/> (шаблоны в Controls.xaml); здесь — то, что
-    /// в меню одно: эмблема, строка поиска, кнопка сворачивания. У пунктов
-    /// в свёрнутом меню подпись уходит в подсказку.
+    /// <para>
+    /// 13.11 (владелец, два снимка поверх друг друга): при сворачивании ничего
+    /// не сдвигается — ни значки, ни эмблема, ни поиск. Всё в меню стоит на одной
+    /// оси (x 29): подложки пунктов и строка поиска с 8, эмблема с 9; свёрнутое
+    /// меню — 58, ровно вдвое этой оси. Сворачивание только отрезает полосу
+    /// справа и прячет подписи — до 13.11 свёрнутое меню было 72 и ставило
+    /// значки посередине, и они съезжали на 7 точек вправо, эмблема — влево.
+    /// </para>
+    /// <para>
+    /// Движение — шириной полосы (220 мс): разворот сразу показывает подписи,
+    /// и полоса открывает их, как шторка; сворачивание прячет подписи в конце.
+    /// Без анимаций (Motion.Enabled) — сразу.
+    /// </para>
     /// </remarks>
-    private void ApplyRail(bool compact)
+    private void ApplyRail(bool compact, bool animate = false)
+    {
+        double target = compact ? RailNarrow : RailWide;
+        bool moving = animate && Motion.Enabled && RailBorder.IsLoaded && Math.Abs(RailBorder.ActualWidth - target) > 1;
+
+        RailBorder.ClipToBounds = true;
+
+        if (!compact || !moving)
+            ShowRailParts(compact);
+
+        if (!moving)
+        {
+            RailBorder.BeginAnimation(WidthProperty, null);
+            RailBorder.Width = target;
+            return;
+        }
+
+        var motion = new System.Windows.Media.Animation.DoubleAnimation(RailBorder.ActualWidth, target, RailMotion)
+        {
+            EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut },
+        };
+
+        motion.Completed += (_, _) =>
+        {
+            RailBorder.BeginAnimation(WidthProperty, null);
+            RailBorder.Width = target;
+
+            if (compact)
+                ShowRailParts(true);
+        };
+
+        RailBorder.BeginAnimation(WidthProperty, motion);
+    }
+
+    /// <summary>Подписи и то, что в свёрнутом меню не помещается; места значков не трогает.</summary>
+    private void ShowRailParts(bool compact)
     {
         RailCompact.SetIsOn(RailBorder, compact);
-        RailBorder.Width = compact ? RailNarrow : RailWide;
 
         LogoText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        LogoMark.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 13, 0);
-        LogoRow.Margin = compact ? new Thickness(0, 24, 0, 20) : new Thickness(20, 24, 18, 20);
-        LogoRow.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
+        RailCollapse.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        LogoMark.ToolTip = compact ? "Развернуть меню" : "Главная";
 
         SearchLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SearchChip.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        SearchContent.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Stretch;
-
-        RailToggleLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        RailToggleGlyph.Text = compact ? "" : "";
-        RailToggleGlyph.Margin = compact ? new Thickness(0) : new Thickness(0, 0, 12, 0);
-        RailToggleLine.Margin = compact ? new Thickness(0) : new Thickness(12, 0, 12, 0);
-        RailToggleLine.HorizontalAlignment = compact ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-        RailToggle.ToolTip = compact ? "Развернуть меню" : null;
+        SearchButton.Margin = compact ? new Thickness(8, 0, 8, 10) : new Thickness(8, 0, 10, 10);
 
         foreach (var item in Rail.Children.OfType<RadioButton>())
             item.ToolTip = compact ? item.Content : null;

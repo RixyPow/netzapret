@@ -52,13 +52,23 @@
                     пока оставим что есть». До 21.10 — буквы «NZ» цветами наоборот
                     к странице; с 21.10 — эмблема в трёх цветах темы.
                 -->
-                <!-- Щелчок по эмблеме — на «Главную» (12.11, как логотип на сайте). -->
-                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="20,24,18,20" Background="Transparent"
-                      Cursor="Hand" ToolTip="Главная" MouseLeftButtonUp="OnLogoClick">
+                <!--
+                    Щелчок по эмблеме: в развёрнутом меню — на «Главную» (12.11, как
+                    логотип на сайте), в свёрнутом — развернуть меню. Свернуть —
+                    стрелкой справа от имени (13.11, владелец: стрелка сверху, без
+                    надписи). Эмблема — на оси значков меню (x 29), поэтому при
+                    сворачивании не сдвигается (ApplyRail).
+                -->
+                <Grid x:Name="LogoRow" DockPanel.Dock="Top" Margin="9,24,8,20">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+
+                    <Button x:Name="RailCollapse" Grid.Column="2" Style="{StaticResource IconGhost}" Content="&#xE76B;"
+                            FontSize="12" Padding="7,6" MinWidth="0" VerticalAlignment="Center" Focusable="False"
+                            Click="OnRailToggle" ToolTip="Свернуть меню" />
 
                     <!--
                         С 21.10 — эмблема вместо букв «NZ» (владелец: «эмблему в левом
@@ -67,7 +77,8 @@
                         и с обводкой — в стыках заливок иначе просвечивает шов;
                         обводка в 5 точек svg — пиксель на плитке в 40 при 125 %.
                     -->
-                    <Viewbox x:Name="LogoMark" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0">
+                    <Viewbox x:Name="LogoMark" Width="40" Height="40" VerticalAlignment="Center" Margin="0,0,13,0"
+                             Cursor="Hand" ToolTip="Главная" MouseLeftButtonUp="OnLogoClick">
                         <Canvas Width="256" Height="256" Clip="{x:Static local:Emblem.Outline}">
                             <Path Data="{x:Static local:Emblem.Band}" Fill="{DynamicResource LogoBand}"
                                   Stroke="{DynamicResource LogoBand}" StrokeThickness="5" StrokeLineJoin="Round" />
@@ -76,7 +87,8 @@
                         </Canvas>
                     </Viewbox>
 
-                    <StackPanel x:Name="LogoText" Grid.Column="1" VerticalAlignment="Center">
+                    <StackPanel x:Name="LogoText" Grid.Column="1" VerticalAlignment="Center" Background="Transparent"
+                                Cursor="Hand" MouseLeftButtonUp="OnLogoClick">
                         <TextBlock Text="NetZapret" FontSize="19" FontWeight="SemiBold" />
                         <TextBlock x:Name="VersionLabel" Style="{StaticResource Caption}" Margin="0,2,0,0" />
                     </StackPanel>
@@ -118,34 +130,6 @@
                             <TextBlock Text="Ctrl+K" FontSize="10.5" Foreground="{DynamicResource Faint}" />
                         </Border>
                     </Grid>
-                </Button>
-
-                <!--
-                    Свернуть меню до значков (11.11): на ноутбуке 1366 точек при
-                    125 % меню в 236 забирало пятую часть окна. Внизу, как в
-                    «Параметрах» Windows и браузерах; состояние помнят настройки.
-                -->
-                <Button x:Name="RailToggle" DockPanel.Dock="Bottom" Margin="8,6,10,14" Click="OnRailToggle"
-                        Cursor="Hand" Focusable="False">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border x:Name="Shape" Height="36" CornerRadius="8" Background="Transparent">
-                                <ContentPresenter VerticalAlignment="Center" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Surface}" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                    <StackPanel x:Name="RailToggleLine" Orientation="Horizontal" Margin="12,0">
-                        <TextBlock x:Name="RailToggleGlyph" Text="&#xE76B;" Width="18" Margin="0,0,12,0" TextAlignment="Center"
-                                   FontFamily="{DynamicResource IconFont}" FontSize="13" Foreground="{DynamicResource Muted}"
-                                   VerticalAlignment="Center" />
-                        <TextBlock x:Name="RailToggleLabel" Text="Свернуть меню" Foreground="{DynamicResource Muted}"
-                                   FontSize="13" VerticalAlignment="Center" />
-                    </StackPanel>
                 </Button>
 
                 <!--
