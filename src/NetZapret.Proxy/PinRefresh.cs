@@ -757,6 +757,12 @@ public static class PinRefresh
             if (path is null)
                 HostsEditor.FlushDns();
 
+            // Запись особого маршрута говорит, какой пин стоит, — и после замены
+            // должна говорить правду (RoutePins). Только для настоящего hosts:
+            // проверка на копии (тесты, путь задан) файл маршрутов не трогает.
+            if (path is null && result.RevertedBy is null)
+                Core.Rules.UserRulesFile.RepinSaved(entries);
+
             if (result.RevertedBy is { } by)
             {
                 return new([], dead, result.Backup, $"hosts вернул к своему {by}", alive.Count)

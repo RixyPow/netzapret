@@ -90,6 +90,9 @@ public sealed class UserRulesFile
                     Server = r.Mode == RoutingMode.Proxy ? r.Server : null,
                     Enabled = r.Enabled,
                     Off = r.Off,
+                    Special = r.Special,
+                    Pin = r.Pin,
+                    PinHosts = r.PinHosts,
                 })
                 .ToList();
 
@@ -151,8 +154,18 @@ public sealed class UserRulesFile
     /// Куда в VPN при <see cref="RoutingMode.Proxy"/>: пул (<see cref="ServerPools.RuleServer"/>);
     /// <c>null</c> — пул по умолчанию.
     /// </param>
+    /// <remarks>
+    /// Пометку особого маршрута (<see cref="UserRuleEntry.Special"/>) запись
+    /// сохраняет, пока режим остаётся тем, каким особый маршрут работает: смена
+    /// рецепта у пина сервиса пин не снимает. Другой режим — другой путь,
+    /// и пометка уходит.
+    /// </remarks>
     public void Set(MatchKind match, string value, RoutingMode mode, string? recipe = null, string? before = null,
-        string? server = null) =>
+        string? server = null)
+    {
+        var was = _entries.FirstOrDefault(e => e.Match == match && e.Matches(value.Trim()));
+        bool keep = was is { Off: false } && was.Special != RouteSpecial.None && RouteSpecials.ModeOf(was.Special) == mode;
+
         Put(new UserRuleEntry
         {
             Match = match,
@@ -165,7 +178,102 @@ public sealed class UserRulesFile
             Recipe = mode == RoutingMode.Desync ? recipe : null,
             Server = mode == RoutingMode.Proxy && !string.IsNullOrWhiteSpace(server) ? server.Trim() : null,
             Enabled = true,
+            Special = keep ? was!.Special : RouteSpecial.None,
+            Pin = keep ? was!.Pin : null,
+            PinHosts = keep ? was!.PinHosts : UserRuleEntry.NoHosts,
         }, before);
+    }
+
+    /// <summary>
+    /// Записывает особый маршрут: режим — тот, каким он работает, и что ради него поставлено.
+    /// </summary>
+    /// <param name="recipe">Рецепт десинка — у пина сервиса и прокси Telegram; <c>null</c> — пресет.</param>
+    /// <param name="pin">Чей пин: решение из pin-solutions.yaml или источник адреса.</param>
+    /// <param name="hosts">Имена и адреса, прибитые ради маршрута; у пина сервиса не нужны.</param>
+    public void SetSpecial(MatchKind match, string value, RouteSpecial special, string? recipe = null, string? pin = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? hosts = null, string? before = null)
+    {
+        if (special == RouteSpecial.None)
+            throw new ArgumentException("Особый маршрут не задан.", nameof(special));
+
+        var mode = RouteSpecials.ModeOf(special);
+
+        Put(new UserRuleEntry
+        {
+            Match = match,
+            Value = value.Trim(),
+            Mode = mode,
+            Recipe = mode == RoutingMode.Desync ? recipe : null,
+            Enabled = true,
+            Special = special,
+            Pin = string.IsNullOrWhiteSpace(pin) ? null : pin.Trim(),
+            PinHosts = hosts is null
+                ? UserRuleEntry.NoHosts
+                : hosts.ToDictionary(p => p.Key, p => p.Value, StringComparer.OrdinalIgnoreCase),
+        }, before);
+    }
+
+    /// <summary>
+    /// Меняет адреса пина в записях, которые его держат, — за автозаменой пинов.
+    /// </summary>
+    /// <returns>Сколько записей изменилось.</returns>
+    /// <remarks>
+    /// Автозамена (<c>PinRefresh</c>) переводит имя на новый адрес посредника
+    /// раз в 6 часов. Без этого запись в файле врала бы об адресе с первой же
+    /// замены — а по ней читают отчёт и ставят пины чужой машины.
+    /// </remarks>
+    public int Repin(IReadOnlyDictionary<string, IReadOnlyList<string>> moved)
+    {
+        int changed = 0;
+
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            var entry = _entries[i];
+
+            if (entry.Special != RouteSpecial.RelayPin
+                || !entry.PinHosts.Any(p => moved.TryGetValue(p.Key, out var now) && now.Count > 0
+                    && !now.SequenceEqual(p.Value, StringComparer.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var hosts = entry.PinHosts.ToDictionary(
+                p => p.Key,
+                p => moved.TryGetValue(p.Key, out var now) && now.Count > 0 ? now : p.Value,
+                StringComparer.OrdinalIgnoreCase);
+
+            _entries[i] = entry with { PinHosts = hosts };
+            changed++;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
+    /// Переписывает адреса пинов в файле маршрутов за автозаменой; не прочиталось — молча.
+    /// </summary>
+    /// <returns>Сколько записей изменилось.</returns>
+    public static int RepinSaved(IReadOnlyDictionary<string, IReadOnlyList<string>> moved, string? path = null)
+    {
+        try
+        {
+            var file = Load(path);
+            int changed = file.Repin(moved);
+
+            if (changed > 0)
+                file.Save();
+
+            return changed;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
 
     /// <summary>
     /// Выключает часть: не действует ни своё правило, ни базовое на тот же список.
@@ -296,6 +404,12 @@ public sealed class UserRulesFile
         builder.AppendLine("# (enabled: false) сохраняется, но не применяется — действует");
         builder.AppendLine("# заводская. mode: off выключает часть целиком: не действует");
         builder.AppendLine("# ни эта запись, ни заводское правило на тот же список.");
+        builder.AppendLine("#");
+        builder.AppendLine("# special — особый маршрут: service-pin (пин на адреса самого сервиса,");
+        builder.AppendLine("# с десинком), relay-pin (пин на посредника, напрямую), tg-proxy");
+        builder.AppendLine("# (Telegram через свой прокси). pin — чей пин, pin_hosts — какие имена");
+        builder.AppendLine("# к каким адресам прибиты в hosts. Сами пины стоят в hosts; загрузка");
+        builder.AppendLine("# этого файла на другой машине ставит их по этим строкам.");
         builder.AppendLine();
 
         if (_entries.Count == 0)
@@ -317,6 +431,22 @@ public sealed class UserRulesFile
 
                 if (!string.IsNullOrWhiteSpace(entry.Recipe))
                     builder.AppendLine($"    recipe: {Quote(entry.Recipe)}");
+
+                if (!entry.Off && RouteSpecials.Word(entry.Special) is { } special)
+                {
+                    builder.AppendLine($"    special: {special}");
+
+                    if (!string.IsNullOrWhiteSpace(entry.Pin))
+                        builder.AppendLine($"    pin: {Quote(entry.Pin)}");
+
+                    if (entry.PinHosts.Count > 0)
+                    {
+                        builder.AppendLine("    pin_hosts:");
+
+                        foreach (var (host, addresses) in entry.PinHosts.OrderBy(p => p.Key, StringComparer.Ordinal))
+                            builder.AppendLine($"      {Quote(host)}: [{string.Join(", ", addresses.Select(Quote))}]");
+                    }
+                }
 
                 if (!entry.Enabled)
                     builder.AppendLine("    enabled: false");
@@ -381,10 +511,24 @@ public sealed record UserRuleEntry
     /// <summary>Часть выключена целиком (<see cref="RoutingRule.Off"/>); <see cref="Mode"/> тогда не значит ничего.</summary>
     public bool Off { get; init; }
 
+    /// <summary>Особый маршрут (<see cref="RouteSpecial"/>); <see cref="Mode"/> — режим, которым он работает.</summary>
+    public RouteSpecial Special { get; init; }
+
+    /// <summary>Чей пин: решение из pin-solutions.yaml или источник адреса.</summary>
+    public string? Pin { get; init; }
+
+    /// <summary>Имена и адреса, прибитые ради маршрута.</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> PinHosts { get; init; } = NoHosts;
+
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> NoHosts { get; } =
+        new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
     public bool Matches(string value) =>
         string.Equals(Value, value, StringComparison.OrdinalIgnoreCase);
 
-    public string DescribeMode() => Off ? "выключено" : Mode switch
+    public string DescribeMode() => Off ? "выключено"
+        : Special != RouteSpecial.None ? RouteSpecials.Describe(Special, Pin)
+        : Mode switch
     {
         RoutingMode.Proxy => "VPN",
         RoutingMode.Desync => "десинк",

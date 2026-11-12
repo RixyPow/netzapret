@@ -89,6 +89,16 @@ public sealed class RoutingRule
     /// </remarks>
     public bool Off { get; init; }
 
+    /// <summary>Особый маршрут (<see cref="RouteSpecial"/>); движку правил не нужен — только файлу и показу.</summary>
+    public RouteSpecial Special { get; init; }
+
+    /// <summary>Чей пин: решение из pin-solutions.yaml или источник адреса («Zapret DNS»).</summary>
+    public string? Pin { get; init; }
+
+    /// <summary>Какие имена к каким адресам прибиты ради этого маршрута; у пина сервиса — пусто (адреса в его файле).</summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> PinHosts { get; init; } =
+        new Dictionary<string, IReadOnlyList<string>>();
+
     /// <summary>Откуда правило пришло — для показа в выводе.</summary>
     public RuleSource Source { get; set; } = RuleSource.Base;
 

@@ -56,6 +56,9 @@ public static class RulesShare
                 Recipe = r.Recipe,
                 Enabled = r.Enabled,
                 Off = r.Off,
+                Special = r.Special,
+                Pin = r.Pin,
+                PinHosts = r.PinHosts,
             })
             .ToList();
 
@@ -92,6 +95,8 @@ public static class RulesShare
         one.Mode != other.Mode
         || one.Enabled != other.Enabled
         || one.Off != other.Off
+        || one.Special != other.Special
+        || !string.Equals(one.Pin ?? string.Empty, other.Pin ?? string.Empty, StringComparison.OrdinalIgnoreCase)
         || !string.Equals(one.Recipe ?? string.Empty, other.Recipe ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>

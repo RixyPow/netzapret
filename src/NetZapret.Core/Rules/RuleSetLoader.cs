@@ -243,6 +243,9 @@ public static class RuleSetLoader
                 Recipe = string.IsNullOrWhiteSpace(raw.Recipe) ? null : raw.Recipe.Trim(),
                 Enabled = raw.Enabled ?? true,
                 Ordinal = i,
+                Special = off ? RouteSpecial.None : RouteSpecials.Parse(raw.Special),
+                Pin = string.IsNullOrWhiteSpace(raw.Pin) ? null : raw.Pin.Trim(),
+                PinHosts = PinHostsOf(raw.PinHosts),
             });
         }
 
@@ -384,6 +387,32 @@ public static class RuleSetLoader
 
         /// <summary>Выключенное правило хранится, но не применяется.</summary>
         public bool? Enabled { get; set; }
+
+        /// <summary>Особый маршрут (<see cref="RouteSpecial"/>): service-pin, relay-pin, tg-proxy.</summary>
+        public string? Special { get; set; }
+
+        public string? Pin { get; set; }
+
+        /// <summary>Имя — адреса, прибитые ради маршрута.</summary>
+        public Dictionary<string, List<string>>? PinHosts { get; set; }
+    }
+
+    /// <summary>Имена и адреса пина: имена в нижнем регистре, пустые и повторы — прочь.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> PinHostsOf(Dictionary<string, List<string>>? raw)
+    {
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, addresses) in raw ?? [])
+        {
+            var host = name?.Trim().TrimEnd('.').ToLowerInvariant();
+            var list = (addresses ?? []).Select(a => a?.Trim() ?? string.Empty).Where(a => a.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            if (!string.IsNullOrEmpty(host) && list.Count > 0)
+                result[host] = list;
+        }
+
+        return result;
     }
 
     private sealed class DefaultDto
