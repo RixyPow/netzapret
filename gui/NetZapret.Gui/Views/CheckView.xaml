@@ -140,20 +140,26 @@
             </Grid>
         </DataTemplate>
 
-        <!-- Точка и слово: стадии, пути, итог подбора. -->
+        <!--
+            Точка и слово: пути, ход подбора. Итог — под названием во всю ширину:
+            рядом с длинным названием рецепта («Разрез с несколькими белыми
+            именами») колонке итога оставалось по слову на строку (снимок
+            владельца 13.11).
+        -->
         <DataTemplate x:Key="DotLine">
-            <Grid Margin="0,3">
+            <Grid Margin="0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="18" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Ellipse Width="8" Height="8" Fill="{Binding Ink}" VerticalAlignment="Top" Margin="0,5,0,0"
                          HorizontalAlignment="Left" />
-                <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,8,0"
-                           Visibility="{Binding NameShown}" />
-                <TextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap"
-                           Foreground="{DynamicResource Muted}" />
+                <StackPanel Grid.Column="1">
+                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Visibility="{Binding NameShown}" />
+                    <TextBlock Text="{Binding Value}" TextWrapping="Wrap" Margin="0,1,0,0"
+                               Foreground="{DynamicResource Muted}" />
+                </StackPanel>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>

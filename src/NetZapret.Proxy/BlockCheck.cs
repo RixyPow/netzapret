@@ -3290,6 +3290,17 @@ public static class BlockCheck
                 return $"нет ответа за {Timeout.TotalSeconds:0} с{where}";
         }
 
+        // Обрыв посреди рукопожатия .NET называет по-английски — «Received an
+        // unexpected EOF or 0 bytes from the transport stream.», — и эта строка
+        // шла в отчёт и в ход подбора как есть (13.11, снимок владельца: колонка
+        // итога из английских обрывков на каждом рецепте). Смысл один: сторона
+        // закрыла соединение, ничего не ответив.
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is IOException io && io.Message.Contains("EOF", StringComparison.OrdinalIgnoreCase))
+                return $"соединение закрыто без ответа{where}";
+        }
+
         return ex.GetBaseException().Message + where;
     }
 

@@ -236,6 +236,33 @@ public static class SiteFixer
         var now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
         steps.Add(new($"как есть ({Word(route)})", now.Opens, Said(now)));
 
+        // Мёртвый пин в hosts — снять и мерить заново: пока он стоит, ни рецепт,
+        // ни VPN до имени не доходят (см. DeadPin).
+        if (!now.Opens && now.Kind != BlockKind.None && !now.BehindBotWall && DeadPin(host) is { } dead)
+        {
+            // Подбор без записи (окно пути) hosts не трогает — только советует.
+            var failed = write ? Unpin(host, dead) : null;
+
+            if (!write || failed is not null)
+            {
+                var stuck = PinAdvice(host, dead, failed);
+                return new(host, steps, null, false, stuck, Advice: stuck);
+            }
+
+            steps.Add(new("пин в hosts", true, $"снят: {PinWho(dead)} не открывал {host}"));
+
+            progress?.Report($"Снял пин, проверяю {host} заново…");
+            now = await BlockCheck.CheckAsync(host, null, cancellationToken, throughTunnel: route == RoutingMode.Proxy);
+            steps.Add(new($"как есть без пина ({Word(route)})", now.Opens, Said(now)));
+
+            if (now.Kind == BlockKind.None)
+            {
+                return new(host, steps, null, false,
+                    $"Снял мёртвый пин {host} → {PinWho(dead)} в hosts — без него {host} открывается "
+                    + $"({Word(route)}). Маршрут не менял.");
+            }
+        }
+
         if (await OursAsync(host, now, route, state, settings, steps, progress, cancellationToken) is { } ours)
             return ours;
 
@@ -434,9 +461,19 @@ public static class SiteFixer
     public const int RecipeBudget = 8;
 
     /// <summary>Вердикт словами — с адресом, на котором он получен.</summary>
-    private static string Said(TargetReport report) =>
-        report.Describe() + (report.Answered is { } a ? $", {a}" : string.Empty)
-        + (!report.Opens && report.Why is { } why ? $": {why}" : string.Empty);
+    /// <remarks>
+    /// Адрес — один раз: «почему» обычно уже называет его с портом, и строка
+    /// подбора выходила «DPI по TLS, 31.25.239.132: …, 31.25.239.132:443, 0,2 с».
+    /// </remarks>
+    private static string Said(TargetReport report)
+    {
+        var why = !report.Opens ? report.Why : null;
+        var answered = report.Answered is { } a && (why is null || !why.Contains(a, StringComparison.Ordinal))
+            ? $", {a}"
+            : string.Empty;
+
+        return report.Describe() + answered + (why is not null ? $": {why}" : string.Empty);
+    }
 
     /// <summary>
     /// Можно ли пробовать десинк пробным winws2; нельзя — почему.
@@ -685,6 +722,89 @@ public static class SiteFixer
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return new("через VPN", false, ex.GetBaseException().Message, RouteTry.Vpn);
+        }
+    }
+
+    /// <summary>
+    /// Пин имени в hosts мимо десинка — его подбор снимает, если имя не открылось.
+    /// </summary>
+    /// <returns>Строка hosts; <c>null</c> — пина нет или это пин сервиса под десинк.</returns>
+    /// <remarks>
+    /// <para>
+    /// 13.11, снимок владельца: vrv.co прибит к посреднику GeoHide EU (31.25.239.132),
+    /// посредник этого имени не везёт — «DPI по TLS». Подбор перебрал рецепт за
+    /// рецептом на том же мёртвом адресе: пин сильнее маршрута, щит выводит такое
+    /// имя из-под десинка, и ни рецепт, ни VPN до него не доходят. Прежде пин
+    /// проверялся только при вердикте «DNS». Владелец решил: подбор снимает
+    /// мёртвый пин сам и продолжает с честным адресом.
+    /// </para>
+    /// <para>
+    /// Пин сервиса (<see cref="HostsEditor.DesyncMark"/>) — исключение: его адрес
+    /// идёт под десинк, и рецепты к нему как раз применяются.
+    /// </para>
+    /// </remarks>
+    private static HostsEntry? DeadPin(string host)
+    {
+        try
+        {
+            var pin = HostsEditor.Parse().FirstOrDefault(e => e.Enabled
+                && e.Names.Any(n => string.Equals(n, host, StringComparison.OrdinalIgnoreCase)));
+
+            return pin is null || pin.Note?.Contains(HostsEditor.DesyncMark, StringComparison.OrdinalIgnoreCase) == true
+                ? null
+                : pin;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Кому прибито: «посредник GeoHide EU (31.25.239.132)» или просто адрес.</summary>
+    private static string PinWho(HostsEntry pin) =>
+        pin.Note is { } note && HostsEditor.Via("#" + note) is { } key
+            ? $"посредник {RoutePins.Relay(key)?.Name ?? key} ({pin.Address})"
+            : pin.Address;
+
+    /// <summary>Совет, когда пин снять нельзя (подбор без записи) или не вышло.</summary>
+    private static string PinAdvice(string host, HostsEntry pin, string? failed) =>
+        $"{host} прибит в hosts к {PinWho(pin)}, а он сайт не открывает. Пока стоит пин, ни десинк, "
+        + "ни VPN до имени не доходят — рецепты не пробовал. "
+        + (failed is not null ? $"Снять пин не вышло ({failed}): " : string.Empty)
+        + "снимите его на вкладке «Файл hosts» и повторите подбор.";
+
+    /// <summary>
+    /// Снимает пин имени и его пары с www — свой блок и чужие строки; не вышло — почему.
+    /// </summary>
+    private static string? Unpin(string host, HostsEntry pin)
+    {
+        var bare = host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
+        var names = new HashSet<string>([bare, "www." + bare], StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            HostsEditor.Unpin(names);
+
+            // Чужие строки (Zapret GUI и прочие) — по номерам: наш блок их не держит.
+            var foreign = HostsEditor.Parse()
+                .Where(e => e.Enabled)
+                .SelectMany(e => e.Names.Where(names.Contains).Select(n => (e.Line, n)))
+                .ToList();
+
+            if (foreign.Count > 0)
+                HostsEditor.RemoveNames(foreign);
+
+            HostsEditor.FlushDns();
+
+            return DeadPin(host) is null ? null : "строка осталась в hosts";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return "нужны права администратора";
+        }
+        catch (IOException ex)
+        {
+            return ex.Message;
         }
     }
 
