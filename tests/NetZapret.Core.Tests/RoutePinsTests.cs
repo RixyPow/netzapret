@@ -229,6 +229,26 @@ public sealed class RoutePinsTests : IDisposable
         Assert.Equal("191.217.212.16", HostsEditor.Pins(_hosts)["chatgpt.com"]);
     }
 
+    /// <summary>Замена всех маршрутов: пин ушедшего маршрута снимается, пришедшего — ставится, общий остаётся.</summary>
+    [Fact]
+    public void SwapBookRemovesGoneAndPutsNew()
+    {
+        var kept = Entry(RouteSpecial.RelayPin, "Zapret DNS", Hosts(("claude.ai", "5.129.221.64"))) with { Value = "config/lists/claude.txt" };
+        var gone = Entry(RouteSpecial.RelayPin, "Comss DNS", Hosts(("chatgpt.com", "80.74.30.162"))) with { Value = "config/lists/chatgpt.txt" };
+        var fresh = Entry(RouteSpecial.RelayPin, "WLRUS DNS", Hosts(("grok.com", "191.217.212.16"))) with { Value = "config/lists/grok.txt" };
+
+        RoutePins.Apply(kept, false, _hosts, _solutions);
+        RoutePins.Apply(gone, false, _hosts, _solutions);
+
+        var lines = RoutePins.SwapBook([kept, gone], [kept, fresh], haveIpV6: false, _hosts);
+
+        var pins = HostsEditor.Pins(_hosts);
+        Assert.Equal("5.129.221.64", pins["claude.ai"]);
+        Assert.Equal("191.217.212.16", pins["grok.com"]);
+        Assert.False(pins.ContainsKey("chatgpt.com"));
+        Assert.Contains(lines, l => l.Contains("снят прежний"));
+    }
+
     [Fact]
     public void ReportNamesPinAndDrift()
     {

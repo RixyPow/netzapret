@@ -106,7 +106,7 @@ public partial class RoutesView
     /// Прежний файл перед заменой копируется в runtime: передумал — вернул.
     /// </para>
     /// </remarks>
-    private void OnLoadRoutes(object sender, RoutedEventArgs e)
+    private async void OnLoadRoutes(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
@@ -166,8 +166,21 @@ public partial class RoutesView
             file.ReplaceAll(incoming);
             file.Save();
 
+            // Особые маршруты несут свои пины — они встают в hosts вместе с
+            // файлом (владелец 13.11: «импорт книги маршрутов ставит пины»).
+            var pins = RoutePins.PinCount(incoming) + RoutePins.PinCount(current) == 0
+                ? []
+                : RoutePins.SwapBook(current, incoming, await HostsEditor.HasIpV6Async(CancellationToken.None));
+
+            foreach (var line in pins)
+                Journal.Write("маршруты", "загрузка: " + line);
+
+            if (pins.Count > 0)
+                _ = HostsEditor.FlushDnsAsync();
+
             Status.Text = $"Загружено: {incoming.Count} маршрутов. Применится при следующем запуске движков."
-                + (backup is null ? string.Empty : $" Прежние — в {backup}.");
+                + (backup is null ? string.Empty : $" Прежние — в {backup}.")
+                + (pins.Count == 0 ? string.Empty : " Пины: " + string.Join("; ", pins.Take(4)) + (pins.Count > 4 ? $" и ещё {pins.Count - 4}." : "."));
 
             this.Offer("Маршруты загружены");
 
@@ -199,6 +212,14 @@ public partial class RoutesView
             text.AppendLine($"Списков нет на этой машине ({missing.Count}), и эти правила не будут действовать: "
                 + string.Join(", ", missing.Take(ListedInQuestion).Select(RulesShare.NameOf))
                 + (missing.Count > ListedInQuestion ? $" и ещё {missing.Count - ListedInQuestion}." : "."));
+        }
+
+        // Пины меняют системный hosts — об этом надо сказать до, а не после.
+        if (RoutePins.PinCount(incoming) is var pins and > 0)
+        {
+            text.AppendLine();
+            text.AppendLine($"Маршрутов с пином: {pins} — их пины встанут в hosts; пины прежних маршрутов, "
+                + "которых в файле нет, снимутся.");
         }
 
         text.AppendLine();

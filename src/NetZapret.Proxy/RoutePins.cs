@@ -172,6 +172,51 @@ public static class RoutePins
     }
 
     /// <summary>
+    /// Пины при замене всех маршрутов чужим файлом: прежние особые маршруты,
+    /// которых в новом нет, снимают свои пины, новые — ставят.
+    /// </summary>
+    /// <returns>Строки итога для окна и журнала; пусто — пинов не касалось.</returns>
+    public static IReadOnlyList<string> SwapBook(
+        IReadOnlyList<UserRuleEntry> current,
+        IReadOnlyList<UserRuleEntry> incoming,
+        bool haveIpV6,
+        string? hostsPath = null)
+    {
+        var lines = new List<string>();
+        var solutions = PinSolutions.Load();
+
+        foreach (var gone in current.Where(e => e.Special is RouteSpecial.ServicePin or RouteSpecial.RelayPin
+                     && !incoming.Any(n => SamePin(n, e))))
+        {
+            try
+            {
+                var removed = Remove(gone, hostsPath, solutions);
+
+                if (removed.Count > 0)
+                    lines.Add($"{RulesShare.NameOf(gone)}: снят прежний {RouteSpecials.Describe(gone.Special, gone.Pin)} — имён {removed.Count}");
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+            {
+                lines.Add($"{RulesShare.NameOf(gone)}: прежний пин не снят — {ex.Message}");
+            }
+        }
+
+        lines.AddRange(ApplyAll(incoming, haveIpV6, hostsPath));
+        return lines;
+    }
+
+    /// <summary>Та же запись с тем же пином: тип, значение, род и чей пин.</summary>
+    private static bool SamePin(UserRuleEntry one, UserRuleEntry other) =>
+        one.Match == other.Match
+        && string.Equals(one.Value.Replace('\\', '/'), other.Value.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)
+        && one.Special == other.Special
+        && string.Equals(one.Pin, other.Pin, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Сколько особых записей с пином в наборе — для вопроса перед загрузкой.</summary>
+    public static int PinCount(IEnumerable<UserRuleEntry> entries) =>
+        entries.Count(e => e.Special is RouteSpecial.ServicePin or RouteSpecial.RelayPin && !e.Off && e.Enabled);
+
+    /// <summary>
     /// Что стоит в hosts по записи — любым блоком, нашим или чужим.
     /// </summary>
     /// <remarks>
