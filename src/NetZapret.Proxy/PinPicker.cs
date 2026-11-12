@@ -483,21 +483,48 @@ public static class PinPicker
 
     private static readonly string[] PlaceWords = ["region", "country", "countries", "territor", "geo"];
 
-    /// <summary>Спрашивает у адреса главную страницу имени.</summary>
+    /// <summary>Спрашивает у адреса главную страницу имени — тем путём, каким пойдёт пин.</summary>
+    /// <remarks>
+    /// <para>
+    /// Пин без пометки десинка держит щит (<c>pass</c>): после записи имя идёт
+    /// мимо рецептов. До 13.11 проба ходила обычным сокетом — через основной
+    /// winws2, под рецептом секции имени, — а замер 06.10 показал, что так пин
+    /// посредника не живёт: chatgpt.com и notion.so на прокси XBOX со щитом
+    /// 20 из 20, под рецептом 0 из 10. Подбор и автозамена судили посредника
+    /// не тем путём, каким он потом работал. Теперь проба — с портов пробы,
+    /// которые основной winws2 не перехватывает, и через физический адаптер,
+    /// мимо TUN (<see cref="ProbePorts"/>), как идёт «напрямую».
+    /// </para>
+    /// <para>
+    /// Десинк старой сборки порты пробы перехватывает (<c>KeepsProbesOut</c>) —
+    /// тогда проба выходит прежней, под рецептом.
+    /// </para>
+    /// </remarks>
+    /// <param name="desync">
+    /// Пин с пометкой десинка (адрес самого сервиса): проба — через основной
+    /// winws2, как пойдёт такой пин.
+    /// </param>
     public static async Task<PinProbe> ProbeAsync(
         PinCandidate candidate,
         string host,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool desync = false)
     {
         var clock = Stopwatch.StartNew();
 
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(Budget);
 
+        using var adapter = desync ? null : ProbePorts.Through(PhysicalNetwork.Interface());
+        using var ports = desync ? null : ProbePorts.Use();
+
         try
         {
-            using var client = new TcpClient();
-            await client.ConnectAsync(candidate.Address, 443, limit.Token);
+            if (!System.Net.IPAddress.TryParse(candidate.Address, out var address))
+                return new PinProbe(candidate, PinVerdict.Dead, null, null, clock.Elapsed, "не адрес");
+
+            using var client = ProbePorts.Client(address.AddressFamily);
+            await client.ConnectAsync(address, 443, limit.Token);
 
             // Сертификат проверяется по-настоящему. Посредник обязан пропускать
             // TLS насквозь; подсунувший свой сертификат читает трафик,
