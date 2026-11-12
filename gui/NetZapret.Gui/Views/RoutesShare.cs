@@ -167,7 +167,7 @@ public partial class RoutesView
             file.Save();
 
             // Особые маршруты несут свои пины — они встают в hosts вместе с
-            // файлом (владелец 13.11: «импорт книги маршрутов ставит пины»).
+            // файлом (решение владельца 13.11).
             var pins = RoutePins.PinCount(incoming) + RoutePins.PinCount(current) == 0
                 ? []
                 : RoutePins.SwapBook(current, incoming, await HostsEditor.HasIpV6Async(CancellationToken.None));
