@@ -326,6 +326,11 @@ public partial class MainWindow
         SearchChip.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         SearchButton.Margin = compact ? new Thickness(8, 0, 8, 10) : new Thickness(8, 0, 10, 10);
 
+        // Лупе в свёрнутой строке поля 16 по краям оставляют 14,6 на знак в 14,4,
+        // и раскладка срезала ей край (12,8 из 14,4 при 125 %, 13.11). Правое
+        // поле она может занять — лупа стоит слева и с места не сдвигается.
+        SearchContent.Margin = compact ? new Thickness(0, 0, -12, 0) : new Thickness(0);
+
         foreach (var item in Rail.Children.OfType<RadioButton>())
             item.ToolTip = compact ? item.Content : null;
     }

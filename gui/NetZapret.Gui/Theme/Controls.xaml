@@ -633,9 +633,17 @@
                             владелец попросил свёрнутое шире прежних 58). Точка
                             «есть новое» — над значком справа, без своей ширины.
                         -->
+                        <!--
+                            Отступ значка до подписи (12) и правое поле строки (16) в свёрнутом
+                            меню убраны: строке оставалось 16 точек на значок в 17,6 с отступом,
+                            и раскладка срезала ему правый край (13.11, глобус VPN на снимке
+                            владельца). Значок стоит по левому краю — убранное его не двигает.
+                        -->
                         <Trigger Property="local:RailCompact.IsOn" Value="True">
                             <Setter TargetName="Label" Property="Visibility" Value="Collapsed" />
                             <Setter TargetName="Shape" Property="Margin" Value="8,0,8,0" />
+                            <Setter TargetName="Icon" Property="Margin" Value="0" />
+                            <Setter TargetName="Line" Property="Margin" Value="16,0,0,0" />
                             <Setter TargetName="Badge" Property="Margin" Value="-3,0,-4,0" />
                             <Setter TargetName="Badge" Property="RenderTransform">
                                 <Setter.Value>
