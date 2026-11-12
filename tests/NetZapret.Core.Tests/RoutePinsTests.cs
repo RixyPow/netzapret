@@ -230,6 +230,22 @@ public sealed class RoutePinsTests : IDisposable
     }
 
     [Fact]
+    public void ReportNamesPinAndDrift()
+    {
+        var entry = Entry(RouteSpecial.RelayPin, "Comss DNS",
+            Hosts(("chatgpt.com", "80.74.30.162"), ("api.openai.com", "80.74.30.162")));
+
+        File.AppendAllText(_hosts, "80.74.30.162 chatgpt.com\r\n9.9.9.9 api.openai.com\r\n");
+
+        var text = RoutePins.Report([entry, Entry(RouteSpecial.TgProxy, "")], _hosts);
+
+        Assert.Contains("пин посредника Comss DNS", text);
+        Assert.Contains("в hosts на записанных адресах: 1 из 2", text);
+        Assert.Contains("api.openai.com: в hosts 9.9.9.9, записано 80.74.30.162", text);
+        Assert.Contains("TG Proxy", text);
+    }
+
+    [Fact]
     public void CompareSeesSpecialChange()
     {
         var plain = new UserRuleEntry { Match = MatchKind.HostList, Value = "config/lists/claude.txt", Mode = RoutingMode.Direct };

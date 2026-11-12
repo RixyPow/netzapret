@@ -203,6 +203,72 @@ public static class RoutePins
         return new RoutePinState(pinned, recorded.Count, moved, missing);
     }
 
+    /// <summary>
+    /// Особые маршруты для отчёта: что записано и что из этого стоит в hosts.
+    /// </summary>
+    /// <remarks>
+    /// Расхождение — первым делом при «пин не работает»: запись могла пережить
+    /// пин (hosts откатил защитник, имя перебито чужим блоком), и без этой
+    /// сверки в отчёте видны только две половины — файл маршрутов и hosts.
+    /// </remarks>
+    public static string Report(IEnumerable<UserRuleEntry> entries, string? hostsPath = null)
+    {
+        var special = entries.Where(e => e.Special != RouteSpecial.None && !e.Off).ToList();
+        var builder = new System.Text.StringBuilder();
+
+        builder.AppendLine("Особые маршруты — из rules.user.yaml, сверены с hosts.");
+        builder.AppendLine();
+
+        if (special.Count == 0)
+        {
+            builder.AppendLine("Особых маршрутов нет.");
+            return builder.ToString();
+        }
+
+        var solutions = PinSolutions.Load();
+
+        foreach (var entry in special)
+        {
+            builder.AppendLine($"{RulesShare.NameOf(entry)} ({entry.Value}) — {RouteSpecials.Describe(entry.Special, entry.Pin)}"
+                + $", режим {entry.Mode.ToString().ToLowerInvariant()}"
+                + (entry.Recipe is { } recipe ? $", рецепт {recipe}" : string.Empty)
+                + (entry.Enabled ? string.Empty : ", запись отключена"));
+
+            if (entry.Special == RouteSpecial.TgProxy)
+            {
+                builder.AppendLine("  пинов нет: путь — прокси Telegram (tg-ws-proxy, см. summary.txt).");
+                builder.AppendLine();
+                continue;
+            }
+
+            if (entry.Special == RouteSpecial.ServicePin && Solution(entry.Pin, solutions) is null)
+            {
+                builder.AppendLine($"  решения «{entry.Pin}» в pin-solutions.yaml нет — пин не ставится.");
+                builder.AppendLine();
+                continue;
+            }
+
+            var state = StateOf(entry, hostsPath, solutions);
+            builder.AppendLine($"  в hosts на записанных адресах: {state.Pinned} из {state.Total}");
+
+            foreach (var (name, now) in state.Moved.OrderBy(p => p.Key, StringComparer.Ordinal))
+                builder.AppendLine($"  {name}: в hosts {string.Join(", ", now)}, записано {string.Join(", ", Wanted(entry with { Enabled = true }, true, solutions)[name])}");
+
+            if (state.Missing.Count > 0)
+                builder.AppendLine($"  нет в hosts: {string.Join(", ", state.Missing.Take(20))}{(state.Missing.Count > 20 ? $" и ещё {state.Missing.Count - 20}" : string.Empty)}");
+
+            if (entry.Special == RouteSpecial.RelayPin)
+            {
+                foreach (var (name, addresses) in entry.PinHosts.OrderBy(p => p.Key, StringComparer.Ordinal).Take(40))
+                    builder.AppendLine($"  {name} → {string.Join(", ", addresses)}");
+            }
+
+            builder.AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
     /// <summary>Действующие строки hosts: имя — адреса, первым — тот, что Windows возьмёт.</summary>
     private static IReadOnlyDictionary<string, IReadOnlyList<string>> Active(string? hostsPath)
     {

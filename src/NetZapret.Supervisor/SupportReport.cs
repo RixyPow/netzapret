@@ -131,6 +131,11 @@ public static class SupportReport
             // из вложения, которое человек догадался прислать сам.
             if (Read(HostsFile.DefaultPath) is { } hosts)
                 parts.Add(("hosts.txt", HostsExcerpt(hosts)));
+
+            // Особые маршруты (пин сервиса, пин посредника, TG Proxy) — запись
+            // сверена с hosts: какой пин записан и стоит ли он на самом деле.
+            parts.Add(("special-routes.txt", Section(() => RoutePins.Report(
+                Core.Rules.UserRulesFile.Load(At(root, Path.Combine("config", "rules.user.yaml"))).Entries))));
         }
 
         // Сторож серверов и недавние выходы: что отвечало и когда — для жалоб
