@@ -108,9 +108,10 @@ GPLv3 прямо оговаривает такой случай: объедин�
 
 `engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
 (автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
-после 1.5.5 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-10-gdd65679-native`
-(SHA-256 `28f55a11d2dabcac87caf98f06509153f87bfd9d3a3fd56bc2fb14c2da1b2f2e`,
-сверен с описанием выпуска), в 1.5.1–1.5.5 — `…-native-6-gd5f65b7-native`
+после 1.6.0 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-24-g7513f59-native`
+(SHA-256 `4a8a55795e07d4b55b09fa277e5b680cd374e8ef3311ac7ff0ca47b191030514`,
+сверен с описанием выпуска), в 1.6.0 — `…-native-10-gdd65679-native` (`28f55a11…c2da1b2f2e`),
+в 1.5.1–1.5.5 — `…-native-6-gd5f65b7-native`
 (`05cd64e6…ed9aabc5`), в 1.5.0 — `…-native-2-gfe91a63-native` (`17fdb2cd…2e458c64`),
 в 1.4.1 — `v1.0.7-34-gfd8ae05-native` (`b24d1e85…7c1136dee`),
 в 1.2.4–1.4.0 — `v1.0.6-49-g9600a09-native` (`1a02c60e…d4a01fd2`),

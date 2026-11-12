@@ -129,6 +129,16 @@ wscale больше 14, остальное — `zapret-lib.lua` и blockcheck2, 
 в шаблоне issue. Сверка 11.11 на всех 18 пресетах: вывод `--dry-run --debug=1`
 и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
 
+С 13.11 — `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-24-g7513f59-native`
+(SHA-256 `4a8a5579…b191030514`, сверен с описанием выпуска 12.11), в
+`tools\zapret2-native-v1.0.7-34-gfd8ae05-native-3-g0de505f-native-24-g7513f59\`;
+`-10-gdd65679` (в 1.6.0) — в своей папке как `winws2-native.exe.bak`.
+Сверх `-10` у bol-van: новые запреты системных вызовов в seccomp (`nfq2/sec.c`,
+всё внутри `#ifdef __linux__`), объявление типа в `params.h` без смены
+поведения, скрипты установки и makefile для Linux/BSD. Для Windows движок
+тот же. Сверка 13.11 на всех 18 пресетах: вывод `--dry-run --debug=1`
+и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
+
 `winws2.exe` под `tools\` должен быть один: сборка берёт последний найденный.
 Прежний, `binaries\windows-x86_64\winws2.exe` из выпуска
 [bol-van/zapret2](https://github.com/bol-van/zapret2/releases), лежит
