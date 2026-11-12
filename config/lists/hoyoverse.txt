@@ -1,7 +1,7 @@
 # HoYoverse: Genshin Impact, Honkai, Zenless.
 #
-# mihoyo.com — прежнее имя, на нём до сих пор живут игровые серверы;
+# mihoyo.com убран 13.11 по решению владельца: прежнее имя, сам сайт режут
+# по адресу, проверка блокировок числила его недоступным.
 # hoyolab.com — сообщество и ежедневные награды.
 hoyoverse.com
-mihoyo.com
 hoyolab.com
