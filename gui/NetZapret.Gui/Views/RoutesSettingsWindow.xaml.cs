@@ -19,7 +19,14 @@ namespace NetZapret.Gui.Views;
 /// </remarks>
 public partial class RoutesSettingsWindow : Window
 {
-    private readonly IReadOnlyList<PinSolution> _solutions = PinSolutions.Load();
+    /// <summary>
+    /// Пины сервиса без своей части в «Маршрутах» (ntc.party, Render, Supercell).
+    /// </summary>
+    /// <remarks>
+    /// С 13.11 пин сервиса — особый путь в окне пути своей части (владелец 12.11);
+    /// здесь остаются только решения, у которых части нет (RouteSpecialPaths.Homeless).
+    /// </remarks>
+    private readonly IReadOnlyList<PinSolution> _solutions = NetZapret.Supervisor.RouteSpecialPaths.Homeless(ZapretPaths.Discover()?.Root);
 
     /// <summary>Есть ли IPv6; <c>null</c> — ещё не проверено.</summary>
     private bool? _ipV6;

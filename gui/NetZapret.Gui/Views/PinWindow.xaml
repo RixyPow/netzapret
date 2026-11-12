@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:gui="clr-namespace:NetZapret.Gui"
-        Title="Пин в hosts"
+        Title="Адрес для пина"
         Height="660" Width="820"
         MinHeight="420" MinWidth="560"
         Background="{DynamicResource Backdrop}"
@@ -134,62 +134,8 @@
                     </ItemsControl>
                 </StackPanel>
 
-                <!-- Шаг первый: что вообще сделать с сервисом. -->
-                <StackPanel x:Name="Actions">
-                    <TextBlock Text="Куда направить" FontWeight="SemiBold" Margin="2,0,0,10" />
-
-                    <Button Style="{StaticResource Choice}" Tag="direct" Click="OnMode">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Напрямую" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <ContentControl Style="{StaticResource Info}" Margin="2,-4,0,-4"
-                                                Content="Без десинка и VPN. Нужно и для пина: прибитый адрес задаёт, куда идти, а не как, и правило поверх него уведёт соединение мимо." />
-                            </StackPanel>
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource Choice}" Tag="desync" Click="OnMode">
-                        <StackPanel>
-                            <TextBlock Text="Десинк" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource Choice}" Tag="proxy" Click="OnMode">
-                        <StackPanel>
-                            <TextBlock Text="Через VPN" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
-
-                    <TextBlock Text="Пин в hosts" FontWeight="SemiBold" Margin="2,16,0,10" />
-
-                    <Button x:Name="PinButton" Style="{StaticResource Choice}" Click="OnPin">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Закрепить адрес в hosts" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <ContentControl Style="{StaticResource Info}" Margin="2,-4,0,-4"
-                                                Content="Когда имя не разрешается или резолвер отвечает заглушкой. Правит системный файл: нужны права администратора, и запись переживёт удаление программы." />
-                            </StackPanel>
-                        </StackPanel>
-                    </Button>
-
-                    <Button x:Name="UnpinButton" Style="{StaticResource Choice}" Click="OnUnpin"
-                            Visibility="Collapsed">
-                        <StackPanel>
-                            <TextBlock Text="Снять пин" FontWeight="SemiBold" Foreground="{DynamicResource Warn}" />
-                            <TextBlock x:Name="UnpinDetail" Style="{StaticResource Caption}"
-                                       Margin="0,4,0,0" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Button>
-
-                    <Button Style="{StaticResource Choice}" Tag="reset" Click="OnMode" Margin="0,16,0,0">
-                        <StackPanel>
-                            <TextBlock Text="Убрать свой выбор" FontWeight="SemiBold" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-
-                <!-- Шаг второй: чей адрес прибивать. -->
-                <StackPanel x:Name="Sources" Visibility="Collapsed">
+                <!-- Чей адрес прибивать: первый и единственный шаг окна. -->
+                <StackPanel x:Name="Sources">
                     <TextBlock Text="Чей адрес поставить" FontWeight="SemiBold" Margin="2,0,0,10" />
 
                     <ItemsControl x:Name="SourceList">
@@ -230,11 +176,11 @@
         </ScrollViewer>
 
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button x:Name="BackButton" Style="{StaticResource Ghost}" Content="Назад"
+            <Button x:Name="BackButton" Style="{StaticResource Ghost}" Content="К источникам"
                     Click="OnBack" Margin="0,0,8,0" Visibility="Collapsed" />
-            <Button x:Name="PinChosenButton" Style="{StaticResource Primary}" Content="Прибить выбранное"
+            <Button x:Name="PinChosenButton" Style="{StaticResource Primary}" Content="Выбрать отмеченное"
                     Click="OnPinChosen" Margin="0,0,8,0" Visibility="Collapsed" />
-            <Button Style="{StaticResource Ghost}" Content="Закрыть" Click="OnClose" />
+            <Button Style="{StaticResource Ghost}" Content="Отмена" IsCancel="True" Click="OnClose" />
         </StackPanel>
     </Grid>
 </Window>

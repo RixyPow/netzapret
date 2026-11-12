@@ -101,7 +101,7 @@ public sealed record PartRow : INotifyPropertyChanged
     /// По маршруту на момент сборки, как и <see cref="Mode"/>: шапка
     /// пересобирается вместе с разделом, а не по выбору в списке.
     /// </remarks>
-    public string Route => Applied switch
+    public string Route => Special != RouteSpecial.None ? RouteSpecials.Title(Special) : Applied switch
     {
         0 => HasPin ? "прибит в hosts" : "напрямую",
         1 => "десинк",
@@ -163,33 +163,6 @@ public sealed record PartRow : INotifyPropertyChanged
 
     public Visibility RemoveShown => Own ? Visibility.Visible : Visibility.Collapsed;
 
-    /// <summary>
-    /// Что случится по нажатию — словами, в подсказке.
-    /// </summary>
-    /// <remarks>
-    /// Кнопка стала значком, и слово «снять пин» с неё ушло. Значок один
-    /// на оба состояния — их различает только цвет, — и без подсказки
-    /// человек не знает, поставит он пин или снимет уже стоящий.
-    /// Разница велика: одно переписывает системный файл, другое возвращает
-    /// его как было.
-    /// </remarks>
-    public string PinHint => HasPin
-        ? "Снять пин: адрес перестанет быть прибитым в hosts. Маршрут не тронем."
-        : "Прибить адрес в hosts. Маршрут при этом уйдёт напрямую — иначе правило "
-            + "сработает поверх адреса и уведёт соединение мимо него.";
-
-    /// <summary>
-    /// Цвет значка: прибитое выделено, остальное обычным.
-    /// </summary>
-    /// <remarks>
-    /// Обычным, а не приглушённым. Пин нарисован тонкой обводкой, и на
-    /// четырнадцати точках приглушённый цвет делал его едва различимым —
-    /// у слова «пин», которое здесь стояло раньше, такой беды не было:
-    /// буквы толще линий.
-    /// </remarks>
-    public Brush PinColor =>
-        (Brush)Application.Current.FindResource(HasPin ? "Accent" : "Text");
-
     public BitmapImage? Icon
     {
         get => _icon;
@@ -236,7 +209,7 @@ public sealed record PartRow : INotifyPropertyChanged
     public Visibility MoreShown => Movable ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Выбранный путь словом — на кнопке выбора (макет владельца 13.10).</summary>
-    public string RouteLabel => Choice switch
+    public string RouteLabel => Special != RouteSpecial.None ? RouteSpecials.Title(Special) : Choice switch
     {
         0 => "напрямую",
         1 => "десинк",
@@ -249,6 +222,15 @@ public sealed record PartRow : INotifyPropertyChanged
 
     /// <summary>Имя пула — на кнопке пути и в подписи.</summary>
     public string? PoolName { get; set; }
+
+    /// <summary>Особый путь своего правила (<see cref="RouteSpecial"/>) — на кнопке пути вместо режима.</summary>
+    public RouteSpecial Special { get; set; }
+
+    /// <summary>Чей пин записан у особого пути.</summary>
+    public string? SpecialPin { get; set; }
+
+    /// <summary>Сколько имён записано у пина посредника.</summary>
+    public int SpecialNames { get; set; }
 
     /// <summary>
     /// Место пустой папки в порядке, а не маршрут: у пустой, заведённой
@@ -683,6 +665,7 @@ public partial class RoutesView : UserControl
             // идёт «через VPN» в пул по умолчанию, так его и показываем.
             _pools = settings.SelectiveRouting == true ? settings.Pools : null;
             MarkPools(services, userRules, _pools ?? []);
+            MarkSpecials(services, userRules);
 
             // Раскрытые папки переживают перерисовку. Прежде любое действие
             // внутри папки — пин, свой маршрут, обновление списка — собирало
@@ -1156,6 +1139,33 @@ public partial class RoutesView : UserControl
             part.PoolId = pool.Id;
             part.PoolName = pool.Name;
             part.Mode += $" · пул «{pool.Name}»";
+        }
+    }
+
+    /// <summary>
+    /// Особые пути (пин сервиса, пин посредника, TG Proxy) — подписью и на кнопке пути.
+    /// </summary>
+    private static void MarkSpecials(IReadOnlyList<ServiceRow> services, UserRulesFile rules)
+    {
+        if (!rules.Entries.Any(e => e.Special != RouteSpecial.None))
+            return;
+
+        foreach (var part in services.SelectMany(s => s.Parts))
+        {
+            if (RouteKeys.Parse(part.Key) is not var (kind, value))
+                continue;
+
+            var match = RouteKeys.MatchOf(kind, value);
+            var entry = rules.Entries.FirstOrDefault(e => e.Match == match && e.Matches(value));
+
+            if (entry is not { Off: false, Enabled: true } || entry.Special == RouteSpecial.None)
+                continue;
+
+            part.Special = entry.Special;
+            part.SpecialPin = entry.Pin;
+            part.SpecialNames = entry.PinHosts.Count;
+            part.Mode = RouteSpecials.Describe(entry.Special, entry.Pin)
+                + (entry.Recipe is { } recipe ? $" · рецепт {recipe}" : string.Empty);
         }
     }
 
@@ -1660,158 +1670,6 @@ public partial class RoutesView : UserControl
     private static bool Covers(IReadOnlyList<string> zones, string name) =>
         zones.Any(zone => string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
             || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// Пин части: первым нажатием открывает окно, повторным снимает.
-    /// </summary>
-    /// <remarks>
-    /// Снятие без вопроса, а закрепление через окно — потому что цена разная.
-    /// Закрепить значит выбрать чей адрес и переписать системный файл; снять
-    /// значит вернуть как было, и переспрашивать об этом незачем.
-    /// </remarks>
-    private void OnPin(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string key }
-            || key.Split('|', 2) is not [var kind, var value])
-        {
-            return;
-        }
-
-        var row = _all.SelectMany(s => s.Parts).FirstOrDefault(p => p.Key == key);
-
-        // Свой домен в каталоге не ищется — его там нет. Всё, что нужно
-        // окну, лежит в самом имени.
-        if (kind == RouteKeys.Own)
-        {
-            if (row is { HasPin: true })
-            {
-                Unpin(key, value);
-                return;
-            }
-
-            Open(new PinWindow(value, RouteKeys.Zones(key, _zapretRoot)), key, OwnLists.NameOf(value));
-            return;
-        }
-
-        var service = ServiceCatalog.All.FirstOrDefault(s =>
-            s.Parts.Any(p => string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase)));
-
-        var part = service?.Parts.FirstOrDefault(p =>
-            string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase));
-
-        if (service is null || part is null)
-            return;
-
-        if (row is { HasPin: true })
-        {
-            Unpin(key, part.Name);
-            return;
-        }
-
-        Open(new PinWindow(service, part), key, part.Name);
-    }
-
-    /// <summary>Показывает окно пина и разбирается с последствиями.</summary>
-    private void Open(PinWindow window, string key, string label)
-    {
-        window.Owner = Window.GetWindow(this);
-        window.ShowDialog();
-
-        if (!window.Changed)
-            return;
-
-        RouteDirectIfPinned(key);
-
-        Reload();
-        this.Offer($"«{label}»: маршрут или пин изменены");
-    }
-
-
-
-    /// <summary>
-    /// Прибитой части проставляет маршрут «напрямую».
-    /// </summary>
-    /// <remarks>
-    /// Пин и туннель друг друга исключают: пин говорит «иди на этот адрес»,
-    /// правило «через VPN» — «иди через зарубежный выход», и вместе выходит
-    /// «зайди на отечественный узел из-за границы». Замер 2026-09-11: рукопожатие
-    /// к прибитому адресу через выход в Нидерландах не проходит вовсе, браузер
-    /// показывает ERR_SSL_PROTOCOL_ERROR, и виноватым выглядит пин.
-    ///
-    /// Десинк поверх пина ломает то же самое, только на своём слое: он судит
-    /// по имени и о подмене адреса не знает.
-    ///
-    /// Поэтому пин сам ставит «напрямую» — единственный маршрут, при котором
-    /// он работает.
-    /// </remarks>
-    private void RouteDirectIfPinned(string key)
-    {
-        try
-        {
-            if (key.Split('|', 2) is not [var kind, var value])
-                return;
-
-            var zones = RouteKeys.Zones(key, ZapretPaths.Discover()?.Root);
-
-            if (!HostsEditor.Pins().Keys.Any(name => Covers(zones, name)))
-                return;
-
-            var file = UserRulesFile.Load();
-            file.Set(RouteKeys.MatchOf(kind, value), value, RoutingMode.Direct);
-            file.Save();
-        }
-        catch (Exception)
-        {
-            // Не записалось — пин всё равно поставлен, а маршрут виден
-            // в списке и правится вручную.
-        }
-    }
-
-    private void Unpin(string key, string label)
-    {
-        try
-        {
-            var zones = RouteKeys.Zones(key, ZapretPaths.Discover()?.Root);
-
-            var ours = HostsEditor.Pins().Keys.Where(pin => Covers(zones, pin)).ToList();
-
-            if (ours.Count == 0)
-                return;
-
-            // Спрашиваем (владелец, 26.09). Прежде повторное нажатие снимало
-            // молча — снятие казалось дешёвым, «вернуть как было». Но вернуть
-            // не выходит: 26.09 шесть пинов Crunchyroll ушли одним нажатием,
-            // а автоподбор следом не нашёл адреса ни одному из четырёх имён.
-            // Снятое заново может и не подобраться.
-            var sample = string.Join("\n", ours.Take(6).Select(n => "  " + n))
-                + (ours.Count > 6 ? $"\n  … и ещё {ours.Count - 6}" : string.Empty);
-
-            var answer = MessageBox.Show(
-                $"Снять пины с «{label}» — {Count(ours.Count, "имя", "имени", "имён")}?\n\n{sample}\n\n"
-                + "Адрес для них потом придётся подбирать заново, и найдётся он не всегда.",
-                "NetZapret",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question,
-                MessageBoxResult.No);
-
-            if (answer != MessageBoxResult.Yes)
-                return;
-
-            var result = HostsEditor.Unpin(ours);
-            _ = HostsEditor.FlushDnsAsync();
-
-            Reload();
-
-            Status.Text = $"Снято имён: {ours.Count}. Осталось прибитых: {result.Pinned}. "
-                + "Маршрут не трогали — он остался таким, каким был.";
-
-            this.Offer($"Пин снят: {label}");
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось снять пин: " + ex.GetBaseException().Message;
-        }
-    }
 
     /// <summary>Всё, что собрано; поиск отбирает из этого, не перечитывая правила.</summary>
     private IReadOnlyList<ServiceRow> _all = [];
@@ -2890,20 +2748,28 @@ public partial class RoutesView : UserControl
     /// <summary>
     /// Окно пути: по умолчанию, напрямую, десинк с рецептом, через VPN с пулом, выключено.
     /// </summary>
-    private void AskPath(PartRow row)
+    private async void AskPath(PartRow row)
     {
         var parsed = RouteKeys.Parse(row.Key);
         bool canRecipe = row.Probe is { Length: > 0 } && parsed is (var kind, _) && RouteKeys.TakesRecipe(kind);
 
         var current = !row.Explicit && row.DefaultLabel is not null
             ? PathPick.Default
-            : row.Applied switch
+            : row.Special switch
             {
-                0 => PathPick.Direct,
-                1 => PathPick.Desync,
-                PartRow.Off => PathPick.Off,
-                _ => PathPick.Proxy,
+                RouteSpecial.ServicePin => PathPick.ServicePin,
+                RouteSpecial.RelayPin => PathPick.RelayPin,
+                RouteSpecial.TgProxy => PathPick.TgProxy,
+                _ => row.Applied switch
+                {
+                    0 => PathPick.Direct,
+                    1 => PathPick.Desync,
+                    PartRow.Off => PathPick.Off,
+                    _ => PathPick.Proxy,
+                },
             };
+
+        var specials = await SpecialsOf(row);
 
         var desyncNote = row.Applied == 1
             ? row.Mode
@@ -2912,7 +2778,7 @@ public partial class RoutesView : UserControl
                 : "Чинят секции пресета по адресам — своего рецепта у адресов нет.";
 
         var window = new PathWindow(row.Title, current, row.PoolId, row.DefaultLabel, canRecipe, desyncNote, _pools,
-            probe: row.Probe is { Length: > 0 } probe ? probe : null)
+            probe: row.Probe is { Length: > 0 } probe ? probe : null, specials: specials)
         {
             Owner = Window.GetWindow(this),
         };
@@ -2921,6 +2787,16 @@ public partial class RoutesView : UserControl
             return;
 
         var match = RouteKeys.MatchOf(routeKind, value);
+
+        // Особый путь — своя запись: hosts, пометка в файле, прокси Telegram.
+        if (window.Picked is PathPick.ServicePin or PathPick.RelayPin or PathPick.TgProxy)
+        {
+            WriteSpecial(row, value, match, window, specials);
+            return;
+        }
+
+        // Ушли с особого пути — его пины снимаются, пометка тоже.
+        bool left = row.Special != RouteSpecial.None && LeaveSpecial(row, value, match);
 
         switch (window.Picked)
         {
@@ -2958,6 +2834,203 @@ public partial class RoutesView : UserControl
                 Write(row.Key, value, match, RoutingMode.Proxy, recipe: null,
                     server: window.Pool is { } pool ? ServerPools.RuleServer(pool) : null);
                 break;
+        }
+
+        // Тот же режим без особого пути (пин посредника → «напрямую») Choose не
+        // переписывает — запись уже сменена снятием, перечитать раздел надо здесь.
+        if (left)
+        {
+            Reload();
+            this.Offer("Маршрут изменён");
+        }
+    }
+
+    /// <summary>Какие особые пути есть у строки — для окна пути.</summary>
+    private async Task<PathSpecials> SpecialsOf(PartRow row)
+    {
+        if (RouteKeys.Parse(row.Key) is not var (kind, value))
+            return new PathSpecials();
+
+        bool own = kind == RouteKeys.Own;
+        var root = _zapretRoot;
+
+        var solution = own ? null : await Task.Run(() => NetZapret.Supervisor.RouteSpecialPaths.SolutionFor(value, root));
+        string? blocked = null;
+
+        if (solution is not null)
+            blocked = PinSolutions.Unavailable(solution, await HostsEditor.HasIpV6Async(CancellationToken.None));
+
+        Func<PinWindow>? picker = null;
+
+        if (row.CanPin)
+        {
+            if (own)
+            {
+                var zones = RouteKeys.Zones(row.Key, root);
+                picker = () => new PinWindow(value, zones);
+            }
+            else if (ServiceCatalog.All.FirstOrDefault(s => s.Parts.Any(p => string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase)))
+                is { } service
+                && service.Parts.First(p => string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase)) is { } part)
+            {
+                picker = () => new PinWindow(service, part);
+            }
+        }
+
+        return new PathSpecials
+        {
+            Solution = solution,
+            SolutionBlocked = blocked,
+            RelayPicker = picker,
+            TgProxy = !own && NetZapret.Supervisor.RouteSpecialPaths.IsTelegramApp(value) && NetZapret.Supervisor.RouteSpecialPaths.TgProxyShipped(),
+            Current = row.Special,
+            CurrentPin = row.SpecialPin,
+            CurrentNames = row.SpecialNames,
+            List = own && !OwnLists.IsOwn(value) ? null : value,
+        };
+    }
+
+    /// <summary>
+    /// Записывает особый путь: сперва hosts (не встал — в файле ничего не меняется), затем правило.
+    /// </summary>
+    private async void WriteSpecial(PartRow row, string value, MatchKind match, PathWindow window, PathSpecials specials)
+    {
+        try
+        {
+            var file = UserRulesFile.Load();
+            var old = file.Entries.FirstOrDefault(e => e.Match == match && e.Matches(value));
+
+            var special = window.Picked switch
+            {
+                PathPick.ServicePin => RouteSpecial.ServicePin,
+                PathPick.RelayPin => RouteSpecial.RelayPin,
+                _ => RouteSpecial.TgProxy,
+            };
+
+            // Пин посредника, выбранный раньше, остаётся, если адрес заново не подбирали.
+            if (special == RouteSpecial.RelayPin && window.RelayChosen is null && old?.Special == RouteSpecial.RelayPin)
+                return;
+
+            var pin = special switch
+            {
+                RouteSpecial.ServicePin => specials.Solution?.Id,
+                RouteSpecial.RelayPin => window.RelayChosen?.Source,
+                _ => null,
+            };
+
+            var hosts = special == RouteSpecial.RelayPin && window.RelayChosen is { } chosen
+                ? chosen.Hosts.ToDictionary(p => p.Key, p => (IReadOnlyList<string>)[p.Value], StringComparer.OrdinalIgnoreCase)
+                : null;
+
+            // Рецепт десинка остаётся: у пина сервиса им и чинятся имена.
+            var recipe = RouteSpecials.ModeOf(special) == RoutingMode.Desync && old is { Off: false, Mode: RoutingMode.Desync }
+                ? old.Recipe
+                : null;
+
+            var entry = new UserRuleEntry
+            {
+                Match = match,
+                Value = value,
+                Mode = RouteSpecials.ModeOf(special),
+                Recipe = recipe,
+                Special = special,
+                Pin = pin,
+                PinHosts = hosts ?? UserRuleEntry.NoHosts,
+            };
+
+            // Прежний пин другого рода или другого посредника — прочь.
+            if (old is { Special: RouteSpecial.ServicePin or RouteSpecial.RelayPin }
+                && (old.Special != special || !string.Equals(old.Pin, pin, StringComparison.OrdinalIgnoreCase) || hosts is not null))
+            {
+                RoutePins.Remove(old);
+            }
+
+            string note = string.Empty;
+
+            if (special is RouteSpecial.ServicePin or RouteSpecial.RelayPin)
+            {
+                var result = RoutePins.Apply(entry, await HostsEditor.HasIpV6Async(CancellationToken.None));
+
+                if (result?.Reverted is { } reverted)
+                {
+                    Status.Text = "hosts откатили сразу после записи — " + reverted + ". Маршрут не тронут.";
+                    return;
+                }
+
+                _ = HostsEditor.FlushDnsAsync();
+                note = result is null ? " Пинов не поставлено — в записи нет адресов." : $" В hosts имён: {result.Pinned} в нашем блоке.";
+            }
+
+            if (special == RouteSpecial.TgProxy)
+            {
+                TgWsProxy.Switch(AppSettings.Load(AppSettings.DefaultPath), on: true).Save(AppSettings.DefaultPath);
+                EngineControl.SyncTelegramProxy();
+                note = " Прокси Telegram включён; добавьте его в Telegram ссылкой с вкладки «TG Proxy», если ещё не добавлен.";
+            }
+
+            var within = ServiceCatalog.All.SelectMany(s => s.Parts)
+                .FirstOrDefault(p => string.Equals(p.List, value, StringComparison.OrdinalIgnoreCase))?.Within;
+
+            file = UserRulesFile.Load();
+            file.SetSpecial(match, value, special, recipe, pin, hosts ?? (special == RouteSpecial.RelayPin ? old?.PinHosts : null), before: within);
+            file.Save();
+
+            Reload();
+
+            Status.Text = $"Записано: «{row.Title}» → {RouteSpecials.Describe(special, pin)}.{note} Применится при следующем запуске движков.";
+            this.Offer("Маршрут изменён");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Status.Text = "hosts не записался: нужны права администратора. Маршрут не тронут.";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>
+    /// Уход с особого пути: пины записи снимаются из hosts, пометка — из файла.
+    /// </summary>
+    /// <returns>Запись изменилась.</returns>
+    /// <remarks>
+    /// Снимаются только имена на записанных адресах (<see cref="RoutePins.Remove"/>):
+    /// имя, перебитое человеком своим адресом, — уже его выбор.
+    /// </remarks>
+    private bool LeaveSpecial(PartRow row, string value, MatchKind match)
+    {
+        try
+        {
+            var file = UserRulesFile.Load();
+            int index = file.Entries.ToList().FindIndex(e => e.Match == match && e.Matches(value));
+
+            if (index < 0 || file.Entries[index].Special == RouteSpecial.None)
+                return false;
+
+            var old = file.Entries[index];
+            var removed = RoutePins.Remove(old);
+
+            if (removed.Count > 0)
+                _ = HostsEditor.FlushDnsAsync();
+
+            file.ReplaceAt(index, old with { Special = RouteSpecial.None, Pin = null, PinHosts = UserRuleEntry.NoHosts });
+            file.Save();
+
+            Journal.Write("маршруты", $"«{row.Title}»: снят {RouteSpecials.Describe(old.Special, old.Pin)}"
+                + (removed.Count > 0 ? $", из hosts убрано имён {removed.Count}" : string.Empty));
+
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            Status.Text = "Пин из hosts не снят: нужны права администратора.";
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось снять особый путь: " + ex.GetBaseException().Message;
+            return false;
         }
     }
 

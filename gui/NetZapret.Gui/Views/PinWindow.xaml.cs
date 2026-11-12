@@ -115,17 +115,30 @@ public sealed class CheckBlock : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 }
 
+/// <summary>Что выбрано в окне адреса: имя — адрес, профиль посредника и откуда адрес.</summary>
+/// <param name="Source">Чей пин — пишется в <c>pin:</c> особого маршрута: имя посредника, если он один.</param>
+public sealed record PinPick(
+    IReadOnlyDictionary<string, string> Hosts,
+    IReadOnlyDictionary<string, string>? Via,
+    string Source);
+
 /// <summary>
-/// Пин в hosts и маршрут сервиса — в одном окне.
+/// Подбор адреса для пина посредника — шаг окна пути.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Пин и маршрут вместе, а не порознь, потому что порознь они не работают.
-/// Пин задаёт адрес, но не дорогу: TUN вынюхивает имя из рукопожатия,
-/// и доменное правило срабатывает поверх прибитого адреса. Пин при маршруте
-/// «через VPN» — строка в файле, которая ни на что не влияет. Так и терялся
-/// ChatGPT: адрес был жив, а правило уводило соединение в туннель, который
-/// в тот час не работал.
+/// До 13.11 это было отдельное окно «Пин в hosts» со своим выбором пути
+/// («Куда направить»), открывавшееся булавкой на карточке, — второе окно
+/// на тот же вопрос, что и окно пути (владелец: «по факту у нас какого-то
+/// черта живут два отдельных окна»). Теперь путь выбирается только в окне
+/// пути (<see cref="PathWindow"/>), «Пин посредника» — один из его путей,
+/// а это окно лишь подбирает адрес и ничего не пишет: hosts и правило
+/// записывает «Готово» окна пути (<c>RoutePins</c>).
+/// </para>
+/// <para>
+/// Пин и маршрут по-прежнему вместе: пин посредника работает только
+/// «напрямую» — иначе доменное правило сработает поверх прибитого адреса.
+/// Особый маршрут так и пишется: relay-pin — режим direct.
 /// </para>
 /// </remarks>
 public partial class PinWindow : Window
@@ -184,8 +197,8 @@ public partial class PinWindow : Window
 
     private string? _snapshotDate;
 
-    /// <summary>Что-то изменилось — разделу «Маршруты» надо перечитать.</summary>
-    public bool Changed { get; private set; }
+    /// <summary>Выбранный адрес; <c>null</c> — окно закрыли без выбора.</summary>
+    public PinPick? Chosen { get; private set; }
 
     public PinWindow(ServiceDefinition service, ServicePart part)
         : this(new PinTarget
@@ -258,7 +271,7 @@ public partial class PinWindow : Window
     /// </summary>
     /// <remarks>
     /// Рамка у окна обычная, и крестик с Alt+F4 работают и посреди пробы, когда
-    /// само окно погашено. «Маршруты» читают <see cref="Changed"/> сразу после
+    /// само окно погашено. Окно пути читает <see cref="Chosen"/> сразу после
     /// закрытия; пин, записанный позже, остался бы в hosts без перечитки раздела
     /// и без предложения перезапуска.
     /// </remarks>
@@ -319,44 +332,19 @@ public partial class PinWindow : Window
     {
         ServiceState.Text = $"Сейчас: {_target.Current()}. {_target.Source} — "
             + $"имён {_target.Zones.Count}"
-            + (_target.Zones.Count > 0 ? $", например {_target.Zones[0]}." : ".");
-
-        ShowPins();
+            + (_target.Zones.Count > 0 ? $", например {_target.Zones[0]}." : ".")
+            + " Выбранное запишется в hosts по «Готово» в окне пути.";
 
         if (_target.ByAddress)
         {
             Status.Text = "Часть задана подсетями, а hosts понимает только имена — "
                 + "прибивать нечего.";
 
-            PinButton.IsEnabled = false;
+            Sources.Visibility = Visibility.Collapsed;
+            return;
         }
-    }
 
-    /// <summary>Показывает, что уже прибито по этому сервису.</summary>
-    private void ShowPins()
-    {
-        var ours = Pinned();
-
-        UnpinButton.Visibility = ours.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
-        if (ours.Count > 0)
-        {
-            UnpinDetail.Text = $"Прибито имён: {ours.Count} — {string.Join(", ", ours.Take(4))}"
-                + (ours.Count > 4 ? " и ещё…" : ".");
-        }
-    }
-
-    /// <summary>Наши прибитые имена, попадающие в зоны этого сервиса.</summary>
-    private IReadOnlyList<string> Pinned()
-    {
-        try
-        {
-            return HostsEditor.Pins().Keys.Where(Covers).ToList();
-        }
-        catch (Exception)
-        {
-            return [];
-        }
+        ShowSources();
     }
 
     /// <summary>
@@ -372,59 +360,8 @@ public partial class PinWindow : Window
         _target.Zones.Any(zone => string.Equals(zone, name, StringComparison.OrdinalIgnoreCase)
             || name.EndsWith("." + zone, StringComparison.OrdinalIgnoreCase));
 
-    private void OnMode(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string what })
-            return;
-
-        try
-        {
-            var file = UserRulesFile.Load();
-            var kind = _target.Match;
-
-            if (what == "reset")
-                file.Remove(kind, _target.Value);
-            else
-                file.Set(kind, _target.Value, Mode(what));
-
-            file.Save();
-            Changed = true;
-
-            Status.Text = what == "reset"
-                ? "Свой выбор убран: снова действует правило из поставки. "
-                  + "Применится при следующем запуске движков."
-                : $"Записано: «{_target.Short}» → {Describe(Mode(what))}. "
-                  + "Применится при следующем запуске движков.";
-
-            // Здесь чаще всего и прибито: окно пина то же самое.
-            if (what == "proxy" && PinConflict.Offer(this, _target.Zones) is { } pinNote)
-            {
-                Status.Text += " " + pinNote;
-                ShowPins();
-            }
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось записать: " + ex.GetBaseException().Message;
-        }
-    }
-
-    private static RoutingMode Mode(string what) => what switch
-    {
-        "direct" => RoutingMode.Direct,
-        "desync" => RoutingMode.Desync,
-        _ => RoutingMode.Proxy,
-    };
-
-    private static string Describe(RoutingMode mode) => mode switch
-    {
-        RoutingMode.Direct => "напрямую",
-        RoutingMode.Desync => "десинк",
-        _ => "через VPN",
-    };
-
-    /// <summary>Собирает источники адреса и показывает второй шаг.</summary>
-    private void OnPin(object sender, RoutedEventArgs e)
+    /// <summary>Собирает источники адреса и показывает их.</summary>
+    private void ShowSources()
     {
         var own = OwnCatalog.Load();
 
@@ -523,9 +460,8 @@ public partial class PinWindow : Window
         SourceList.ItemsSource = rows;
 
         Checks.Visibility = Visibility.Collapsed;
-        Actions.Visibility = Visibility.Collapsed;
         Sources.Visibility = Visibility.Visible;
-        BackButton.Visibility = Visibility.Visible;
+        BackButton.Visibility = Visibility.Collapsed;
 
         _nowCancel?.Cancel();
         _nowCancel = new CancellationTokenSource();
@@ -661,12 +597,14 @@ public partial class PinWindow : Window
         public int GetHashCode(OwnCatalogEntry obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
+    /// <summary>Назад к источникам — от таблицы автоподбора или после неудачи.</summary>
+    /// <remarks>Ответы посредников остаются при пунктах: второй залп DoH ни к чему.</remarks>
     private void OnBack(object sender, RoutedEventArgs e)
     {
-        _nowCancel?.Cancel();
-        Sources.Visibility = Visibility.Collapsed;
-        Actions.Visibility = Visibility.Visible;
+        Checks.Visibility = Visibility.Collapsed;
+        Sources.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Collapsed;
+        PinChosenButton.Visibility = Visibility.Collapsed;
     }
 
     private async void OnSource(object sender, RoutedEventArgs e)
@@ -692,20 +630,19 @@ public partial class PinWindow : Window
                 Status.Text = _autoReport
                     + (any
                         ? "\n\nВыбранные отмечены ✓ — щелчок по строке выбирает другой адрес. "
-                          + "Записывает «Прибить выбранное»."
+                          + "Берёт «Выбрать отмеченное»."
                         : string.Empty);
 
                 PinChosenButton.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+                BackButton.Visibility = Visibility.Visible;
                 return;
             }
 
             if (id.StartsWith("now:", StringComparison.Ordinal))
             {
-                // Не вышло — шаг остаётся открытым: ответы посредников при нём, и
+                // Не вышло — список остаётся открытым: ответы посредников при нём, и
                 // можно выбрать другой пункт без нового залпа DoH ко всем шести.
-                if (await PinNowAsync(id[4..]))
-                    OnBack(sender, e);
-
+                await PinNowAsync(id[4..]);
                 return;
             }
 
@@ -728,7 +665,6 @@ public partial class PinWindow : Window
             }
 
             Pin(answers, Source(id));
-            OnBack(sender, e);
         }
         catch (OperationCanceledException) when (_life.IsCancellationRequested)
         {
@@ -736,7 +672,7 @@ public partial class PinWindow : Window
         }
         catch (Exception ex)
         {
-            Status.Text = "Не удалось закрепить: " + ex.GetBaseException().Message;
+            Status.Text = "Не удалось подобрать: " + ex.GetBaseException().Message;
             OnBack(sender, e);
         }
         finally
@@ -766,16 +702,7 @@ public partial class PinWindow : Window
             return;
         }
 
-        try
-        {
-            Pin(answers, "автоподбор", via);
-            PinChosenButton.Visibility = Visibility.Collapsed;
-            OnBack(sender, e);
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось закрепить: " + ex.GetBaseException().Message;
-        }
+        Pin(answers, "автоподбор", via);
     }
 
     /// <summary>Выбор в таблице сменился — заголовок блока говорит о новом.</summary>
@@ -796,38 +723,26 @@ public partial class PinWindow : Window
         block.TitleBrush = line.Address is null ? (Brush)FindResource("Muted") : line.Brush;
     }
 
-    /// <summary>Пишет пин и уводит маршрут части напрямую.</summary>
+    /// <summary>
+    /// Отдаёт выбранное окну пути и закрывается — ничего не пишет.
+    /// </summary>
+    /// <remarks>
+    /// Один посредник на все имена — его имя и есть «чей пин» (<c>pin:</c> в файле
+    /// маршрутов): по нему пин поставит и загрузка файла на другой машине.
+    /// </remarks>
     private void Pin(Dictionary<string, string> answers, string source, IReadOnlyDictionary<string, string>? via = null)
     {
         if (_life.IsCancellationRequested)
             return;
 
-        var result = HostsEditor.Pin(answers, note: $"{_target.Short} — {source}", via: via);
+        var relays = via?.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? [];
 
-        // Маршрут уводится напрямую тем же движением. Это не довесок,
-        // а условие работы пина: доменное правило срабатывает поверх
-        // прибитого адреса и уводит соединение мимо него.
-        var file = UserRulesFile.Load();
-        file.Set(_target.Match, _target.Value, RoutingMode.Direct);
-        file.Save();
-        _ = HostsEditor.FlushDnsAsync();
+        var label = relays is [var only] && via!.Count == answers.Count && IntermediaryDns.ByKey(only) is { } relay
+            ? relay.Name
+            : source;
 
-        Changed = true;
-        ShowPins();
-
-        // Откатили — говорим только это: «прибито» про несуществующее
-        // хуже молчания.
-        Status.Text = result.Reverted
-            ?? $"Прибито имён: {result.Pinned}. Маршрут части уведён напрямую — "
-            + "иначе правило сработало бы поверх адреса."
-            + (result.Backup is null ? string.Empty : $" Копия прежнего файла: {result.Backup}.")
-
-            // Чужая строка на то же имя никуда не делась: наш блок стоит
-            // выше и разбирается первым, но человек, снявший наш пин,
-            // получит её и решит, что снятие не сработало.
-            + (result.Shadowed.Count == 0
-                ? string.Empty
-                : $" Ниже в файле есть чужие строки на те же имена: {string.Join(", ", result.Shadowed.Take(3))}.");
+        Chosen = new PinPick(answers, via, label);
+        DialogResult = true;
     }
 
     private string Source(string id) =>
@@ -1172,30 +1087,6 @@ public partial class PinWindow : Window
         await Task.WhenAll(work).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         return found;
-    }
-
-    private void OnUnpin(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var ours = Pinned();
-
-            if (ours.Count == 0)
-                return;
-
-            var result = HostsEditor.Unpin(ours);
-            _ = HostsEditor.FlushDnsAsync();
-
-            Changed = true;
-            ShowPins();
-
-            Status.Text = $"Снято имён: {ours.Count}. Осталось прибитых: {result.Pinned}. "
-                + "Маршрут при этом не трогали — он остался «напрямую».";
-        }
-        catch (Exception ex)
-        {
-            Status.Text = "Не удалось снять: " + ex.GetBaseException().Message;
-        }
     }
 
     private void OnClose(object sender, RoutedEventArgs e) => Close();

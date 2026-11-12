@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using NetZapret.Core;
 using NetZapret.Core.Rules;
+using NetZapret.Proxy;
 using NetZapret.Supervisor;
 using NetZapret.Zapret;
 
@@ -21,6 +22,47 @@ public enum PathPick
 
     /// <summary>Выключить часть целиком (<see cref="NetZapret.Core.Rules.RoutingRule.Off"/>).</summary>
     Off,
+
+    /// <summary>Пин на адреса самого сервиса с десинком (<see cref="RouteSpecial.ServicePin"/>).</summary>
+    ServicePin,
+
+    /// <summary>Пин на посредника, напрямую (<see cref="RouteSpecial.RelayPin"/>).</summary>
+    RelayPin,
+
+    /// <summary>Приложение Telegram через свой прокси (<see cref="RouteSpecial.TgProxy"/>).</summary>
+    TgProxy,
+}
+
+/// <summary>Какие особые пути есть у маршрута и что стоит сейчас.</summary>
+/// <remarks>
+/// Владелец 12.11: пины сервиса, пины посредников и прокси Telegram — особыми
+/// режимами окна пути, а не разделом настроек, булавкой и вкладкой.
+/// </remarks>
+public sealed record PathSpecials
+{
+    /// <summary>Пин сервиса этой части (раздел «Напрямую» каталога Zapret GUI); <c>null</c> — нет.</summary>
+    public PinSolution? Solution { get; init; }
+
+    /// <summary>Почему пин сервиса нельзя поставить в этой сети; <c>null</c> — можно.</summary>
+    public string? SolutionBlocked { get; init; }
+
+    /// <summary>Окно подбора адреса посредника; <c>null</c> — части прибивать нечего (подсети).</summary>
+    public Func<PinWindow>? RelayPicker { get; init; }
+
+    /// <summary>Часть — приложение Telegram, и прокси есть в поставке.</summary>
+    public bool TgProxy { get; init; }
+
+    /// <summary>Особый путь, записанный сейчас.</summary>
+    public RouteSpecial Current { get; init; }
+
+    /// <summary>Чей пин записан сейчас.</summary>
+    public string? CurrentPin { get; init; }
+
+    /// <summary>Сколько имён записано у нынешнего пина посредника.</summary>
+    public int CurrentNames { get; init; }
+
+    /// <summary>Список маршрута — автоподбору: пин сервиса части и имена для пина посредника.</summary>
+    public string? List { get; init; }
 }
 
 /// <summary>
@@ -61,6 +103,11 @@ public partial class PathWindow : Window
     /// <summary>Рецепт, найденный автоподбором (идентификатор каталога); пишется при «десинке».</summary>
     public string? FoundRecipe { get; private set; }
 
+    /// <summary>Адрес посредника, подобранный в этом окне; <c>null</c> — не подбирали (остаётся прежний пин).</summary>
+    public PinPick? RelayChosen { get; private set; }
+
+    private readonly PathSpecials _specials;
+
     private readonly string? _defaultLabel;
     private readonly bool _canRecipe;
     private string _desyncNote;
@@ -89,6 +136,7 @@ public partial class PathWindow : Window
     /// Пулы серверов с вкладки VPN; <c>null</c> — «Selective Routing» выключен, и пул не выбирается.
     /// </param>
     /// <param name="probe">Имя-пример маршрута для автоподбора; <c>null</c> — подбирать не на чем.</param>
+    /// <param name="specials">Особые пути маршрута; <c>null</c> — их нет.</param>
     public PathWindow(
         string title,
         PathPick current,
@@ -97,9 +145,12 @@ public partial class PathWindow : Window
         bool canRecipe,
         string desyncNote,
         IReadOnlyList<ServerPool>? pools,
-        string? probe = null)
+        string? probe = null,
+        PathSpecials? specials = null)
     {
         InitializeComponent();
+
+        _specials = specials ?? new PathSpecials();
 
         // Окно растёт по содержимому вниз от места, где открылось: ход
         // автоподбора добавляет строки, и 03.11 у владельца (экран 1080
@@ -142,6 +193,12 @@ public partial class PathWindow : Window
             PickRow.Visibility = Visibility.Visible;
             PickNote.Text = $"Проверит {probe} — до минуты; движки должны быть запущены.";
         }
+        else if (_specials.TgProxy)
+        {
+            // У приложения Telegram имени нет — подбор проверяет пути самого прокси.
+            PickRow.Visibility = Visibility.Visible;
+            PickNote.Text = "Проверит пути прокси Telegram — прямой и через Cloudflare, несколько секунд.";
+        }
 
         Rebuild();
     }
@@ -155,11 +212,94 @@ public partial class PathWindow : Window
         Options.Children.Add(Card(PathPick.Desync, "Десинк", _desyncNote,
             Picked == PathPick.Desync && _canRecipe ? RecipeButton() : null));
 
+        // Особые пути — между десинком и VPN: дешевле туннеля (ни трафика
+        // подписки, ни выхода в другой стране), но пишут системный hosts.
+        if (_specials.Solution is { } solution)
+        {
+            var card = Card(PathPick.ServicePin, "Пин сервиса",
+                _specials.SolutionBlocked ?? $"{solution.Name}: адреса самого сервиса, {Names(solution.Names.Count)}; десинк поверх.",
+                tip: (solution.Note is { } note ? note + " " : string.Empty)
+                    + "Имена прибиваются в hosts к адресам самого сервиса (раздел «Напрямую» каталога Zapret GUI), "
+                    + "а рецепт десинка чинит их по имени. Строки остаются в hosts и после выхода из программы.");
+
+            card.IsEnabled = _specials.SolutionBlocked is null || Picked == PathPick.ServicePin;
+            Options.Children.Add(card);
+        }
+
+        if (_specials.RelayPicker is not null)
+        {
+            Options.Children.Add(Card(PathPick.RelayPin, "Пин посредника", RelayNote(),
+                Picked == PathPick.RelayPin ? RelayButton() : null,
+                tip: "Имена прибиваются в hosts к прокси посредника — Zapret DNS, Comss и других: сайт видит "
+                    + "чужую страну без VPN. Идёт напрямую, мимо рецептов; адрес раз в 6 часов сверяет автозамена."));
+        }
+
+        if (_specials.TgProxy)
+        {
+            Options.Children.Add(Card(PathPick.TgProxy, "TG Proxy",
+                "Telegram Desktop — через свой прокси на этой машине.",
+                tip: "Включает прокси Telegram (tg-ws-proxy) третьим движком. Telegram Desktop ходит через него, "
+                    + "когда прокси добавлен в нём один раз — ссылкой с вкладки «TG Proxy»."));
+        }
+
         Options.Children.Add(Card(PathPick.Proxy, "Через VPN", ProxyNote(),
             Picked == PathPick.Proxy && _poolsOn ? PoolList() : null));
 
         Options.Children.Add(Card(PathPick.Off, "Выключено", null,
             tip: "Не действует ни этот маршрут, ни заводское правило на тот же список — имена решают другие правила."));
+    }
+
+    private string RelayNote() =>
+        RelayChosen is { } chosen
+            ? $"Выбрано: {chosen.Source} — {Names(chosen.Hosts.Count)}, {string.Join(", ", chosen.Hosts.Values.Distinct().Take(2))}. Запишется по «Готово»."
+            : _specials.Current == RouteSpecial.RelayPin
+                ? $"Сейчас: {_specials.CurrentPin ?? "посредник"} — {Names(_specials.CurrentNames)}."
+                : "Прокси посредника по DoH — обходит отказ по стране.";
+
+    private static string Names(int count) => (count % 10, count % 100) switch
+    {
+        (1, not 11) => $"{count} имя",
+        (2 or 3 or 4, not (12 or 13 or 14)) => $"{count} имени",
+        _ => $"{count} имён",
+    };
+
+    /// <summary>«Подобрать адрес…» у пина посредника: окно подбора, выбранное — в карточку.</summary>
+    private UIElement RelayButton()
+    {
+        var button = new Button
+        {
+            Content = RelayChosen is null && _specials.Current != RouteSpecial.RelayPin ? "Подобрать адрес…" : "Подобрать заново…",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 10, 0, 0),
+        };
+        button.SetResourceReference(StyleProperty, "Ghost");
+        button.Click += (_, e) =>
+        {
+            e.Handled = true;
+            AskRelay();
+        };
+
+        return button;
+    }
+
+    /// <summary>Подбор адреса посредника; закрыли без выбора — путь остаётся прежним.</summary>
+    /// <returns>Выбран ли адрес.</returns>
+    private bool AskRelay()
+    {
+        if (_specials.RelayPicker is not { } make)
+            return false;
+
+        var window = make();
+        window.Owner = this;
+        window.ShowDialog();
+
+        if (window.Chosen is not { } chosen)
+            return false;
+
+        RelayChosen = chosen;
+        Picked = PathPick.RelayPin;
+        Rebuild();
+        return true;
     }
 
     private string ProxyNote() => ServerPools.Find(_pools, Pool) is { } pool
@@ -222,6 +362,14 @@ public partial class PathWindow : Window
             // Нажатие внутри раскрытого (пул, «Рецепт…») — их дело.
             if (e.OriginalSource != button)
                 return;
+
+            // Пин посредника без адреса — не путь: адрес подбирается сразу,
+            // закрыли подбор — выбор остаётся прежним.
+            if (pick == PathPick.RelayPin && RelayChosen is null && _specials.Current != RouteSpecial.RelayPin)
+            {
+                AskRelay();
+                return;
+            }
 
             Picked = pick;
             Rebuild();
@@ -314,8 +462,16 @@ public partial class PathWindow : Window
     /// </summary>
     private async void OnPick(object sender, RoutedEventArgs e)
     {
-        if (_probe is not { Length: > 0 } probe || _picking is not null)
+        if (_picking is not null)
             return;
+
+        if (_probe is not { Length: > 0 } probe)
+        {
+            if (_specials.TgProxy)
+                await PickTelegramAsync();
+
+            return;
+        }
 
         _picking = new CancellationTokenSource();
         var token = _picking.Token;
@@ -329,7 +485,8 @@ public partial class PathWindow : Window
 
         try
         {
-            var result = await Task.Run(() => SiteFixer.PickAsync(probe, _canRecipe, progress, token, stepDone), token);
+            var list = _specials.List;
+            var result = await Task.Run(() => SiteFixer.PickAsync(probe, _canRecipe, progress, token, stepDone, list), token);
 
             Fix.Finish(result.Steps);
             ShowPick(result);
@@ -337,12 +494,68 @@ public partial class PathWindow : Window
             Journal.Write("автоподбор", $"«{_title}» на {probe}: "
                 + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
                 + (result.Found is { } found
-                    ? $" → отмечен путь {found}{(result.RecipeId is { } id ? $", рецепт {id}" : string.Empty)}"
+                    ? $" → отмечен путь {(result.Special != RouteSpecial.None ? RouteSpecials.Describe(result.Special, result.PinSource) : found.ToString())}"
+                      + (result.RecipeId is { } id ? $", рецепт {id}" : string.Empty)
                     : " → путь не найден"));
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             // Окно закрыто посреди подбора — показывать некому.
+        }
+        catch (Exception ex)
+        {
+            Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", "Подбор не удался", ex.GetBaseException().Message);
+        }
+        finally
+        {
+            _picking?.Dispose();
+            _picking = null;
+
+            if (IsLoaded)
+            {
+                PickButton.IsEnabled = true;
+                PickButton.Content = "Автоподбор";
+            }
+        }
+    }
+
+    /// <summary>Автоподбор приложения Telegram: дотянется ли прокси до Telegram.</summary>
+    private async Task PickTelegramAsync()
+    {
+        _picking = new CancellationTokenSource();
+        var token = _picking.Token;
+
+        PickButton.IsEnabled = false;
+        PickButton.Content = "Проверяю…";
+        Fix.Start();
+
+        try
+        {
+            var progress = new Progress<string>(Fix.Now);
+            var stepDone = new Progress<SiteFixStep>(Fix.Add);
+
+            var result = await Task.Run(() => SiteFixer.PickTelegramAsync(progress, token, stepDone), token);
+
+            Fix.Finish(result.Steps);
+
+            Journal.Write("автоподбор", $"«{_title}»: "
+                + string.Join("; ", result.Steps.Select(s => $"{s.Path} — {(s.Works ? "да" : "нет")}, {s.Detail}"))
+                + (result.Special == RouteSpecial.TgProxy ? " → отмечен TG Proxy" : " → путь не найден"));
+
+            if (result.Special == RouteSpecial.TgProxy)
+            {
+                Picked = PathPick.TgProxy;
+                Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", "Прокси Telegram дотягивается до Telegram",
+                    "Отмечено ниже — запишется по «Готово». Сам Telegram Desktop не проверялся: прокси добавляется в нём ссылкой с вкладки «TG Proxy».");
+                Rebuild();
+            }
+            else
+            {
+                Fix.Outcome(FixProgress.Glyphs.No, "Danger", "Прокси Telegram не дотянулся", result.Summary);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
         }
         catch (Exception ex)
         {
@@ -379,6 +592,25 @@ public partial class PathWindow : Window
         if (result.Steps.Count == 0)
         {
             Fix.Outcome(FixProgress.Glyphs.Warning, "Warn", result.Summary, null);
+            return;
+        }
+
+        // Особый путь — своей отметкой: пин сервиса и пин посредника.
+        if (result.Special == RouteSpecial.ServicePin && _specials.Solution is not null)
+        {
+            Picked = PathPick.ServicePin;
+            Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", "Открывается с пином сервиса", apply);
+            Rebuild();
+            return;
+        }
+
+        if (result.Special == RouteSpecial.RelayPin && result.PinHosts is { Count: > 0 } hosts && _specials.RelayPicker is not null)
+        {
+            Picked = PathPick.RelayPin;
+            RelayChosen = new PinPick(hosts, null, result.PinSource ?? "автоподбор");
+            Fix.Outcome(FixProgress.Glyphs.Ok, "Accent", $"Открывается через посредника {result.PinSource}",
+                "Отмечено ниже — пин встанет в hosts по «Готово», действует сразу.");
+            Rebuild();
             return;
         }
 

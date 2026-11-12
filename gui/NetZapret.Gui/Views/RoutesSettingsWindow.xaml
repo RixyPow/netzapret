@@ -149,7 +149,7 @@
                 <StackPanel Orientation="Horizontal" Margin="4,19,0,4">
                     <TextBlock Text="ПИНЫ НАПРЯМУЮ" Style="{StaticResource GroupHead}" Margin="0" VerticalAlignment="Center" />
                     <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                    Content="Имя прибивается в hosts к адресу самого сервиса, а десинк продолжает работать: провайдер режет его имя и там. Из каталога Zapret GUI, раздел «Напрямую»." />
+                                    Content="Имя прибивается в hosts к адресу самого сервиса, а десинк продолжает работать: провайдер режет его имя и там. Из каталога Zapret GUI, раздел «Напрямую». Здесь — сервисы без своего маршрута; у остальных пин сервиса выбирается в окне пути маршрута." />
                 </StackPanel>
 
 

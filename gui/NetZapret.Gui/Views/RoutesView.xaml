@@ -542,7 +542,7 @@
                                                             Список — квадратной кнопкой, как пин (владелец 13.10):
                                                             открывает файл в Блокноте (с 26.09 — ссылкой «список»
                                                             во второй строке). Скрытая, а не убранная: иначе
-                                                            у строк без списка пин уезжал бы влево.
+                                                            у строк без списка кнопка «⋯» уезжала бы влево.
                                                         -->
                                                         <Button Style="{StaticResource RowGhost}"
                                                                 Padding="8,7" Margin="6,0,0,0"
@@ -552,21 +552,6 @@
                                                             <Path Data="{StaticResource NoteGlyph}" Stroke="{DynamicResource Text}"
                                                                   StrokeThickness="1.4" StrokeLineJoin="Round"
                                                                   StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                                                  Stretch="Uniform" Width="14" Height="14" />
-                                                        </Button>
-
-                                                        <!--
-                                                            Пин у маршрута, а не у папки: адрес прибивается
-                                                            конкретным именам. Что случится — в подсказке:
-                                                            «снять» от «поставить» по картинке не отличить.
-                                                        -->
-                                                        <Button Style="{StaticResource RowGhost}"
-                                                                Padding="8,7" Margin="6,0,0,0"
-                                                                Tag="{Binding Key}" Click="OnPin"
-                                                                IsEnabled="{Binding CanPin}"
-                                                                ToolTip="{Binding PinHint}">
-                                                            <Path Data="{StaticResource PinGlyph}"
-                                                                  Fill="{Binding PinColor}"
                                                                   Stretch="Uniform" Width="14" Height="14" />
                                                         </Button>
 
