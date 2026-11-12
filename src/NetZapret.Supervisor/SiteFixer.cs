@@ -548,7 +548,17 @@ public static class SiteFixer
             };
 
             using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
-            using var response = await http.GetAsync($"https://{host}/", HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+            // Без User-Agent защита сайта отказывает роботу откуда угодно, и 403
+            // через VPN читался как «тот же отказ, что и мимо туннеля». №59, замер
+            // 12.11 через туннель: game8.co (CloudFront) без заголовка — 403 2 из 2,
+            // с тем же, что у пробы проверки блокировок, — 200 2 из 2; мимо
+            // туннеля — 403 с любым (отказ России). Подбор не предлагал VPN.
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://{host}/");
+            request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            request.Headers.TryAddWithoutValidation("Accept", "text/html");
+
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
             int code = (int)response.StatusCode;
             bool works = TunnelOpens(code, here);
