@@ -77,7 +77,9 @@ public sealed class TunnelCaptureTests
             var empty = WinwsCommandLine.Build(preset, gameFilter: true, tunnelServers: []).ToList();
 
             Assert.Equal(plain, empty);
-            Assert.Equal("--wf-raw-filter=" + TunnelCapture.ProbeFilter, empty[0]);
+            Assert.Equal(
+                "--wf-raw-filter=" + (Own(preset) is { } own ? $"({own}) and " : string.Empty) + TunnelCapture.ProbeFilter,
+                empty[Raw(empty)]);
             Assert.True(TunnelCapture.KeepsProbesOut(empty));
         }
     }
@@ -95,8 +97,11 @@ public sealed class TunnelCaptureTests
             var plain = WinwsCommandLine.Build(preset, gameFilter: true).ToList();
             var bypass = WinwsCommandLine.Build(preset, gameFilter: true, tunnelServers: Servers).ToList();
 
-            Assert.Equal($"--wf-raw-filter=({Expected}) and {TunnelCapture.ProbeFilter}", bypass[0]);
-            Assert.Equal(plain.Skip(1), bypass.Skip(1));
+            var servers = Own(preset) is { } own ? $"({own}) and {Expected}" : Expected;
+            int raw = Raw(bypass);
+
+            Assert.Equal($"--wf-raw-filter=({servers}) and {TunnelCapture.ProbeFilter}", bypass[raw]);
+            Assert.Equal(plain.Where((_, i) => i != raw), bypass.Where((_, i) => i != raw));
             Assert.Equal(Servers.Count, TunnelCapture.Applied(bypass, Servers));
             Assert.True(TunnelCapture.KeepsProbesOut(bypass));
 
@@ -105,6 +110,17 @@ public sealed class TunnelCaptureTests
 
         Assert.True(checkedPresets > 0, "Пресеты из поставки не нашлись — проверять было нечего.");
     }
+
+    /// <summary>Где в строке единственный ключ сырого фильтра.</summary>
+    private static int Raw(List<string> arguments) =>
+        arguments.FindIndex(a => a.StartsWith("--wf-raw-filter=", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Свой сырой фильтр пресета (YT FIX с 14.11 — пустые подтверждения к узлам видео):
+    /// условия обхода сливаются с ним через «и», на его месте в строке.
+    /// </summary>
+    private static string? Own(ZapretPreset preset) => preset.GlobalArguments
+        .FirstOrDefault(a => a.StartsWith("--wf-raw-filter=", StringComparison.Ordinal))?["--wf-raw-filter=".Length..];
 
     /// <summary>
     /// Форма записи — единственная, которую принимает WinDivert (см. <see cref="TunnelCapture"/>):

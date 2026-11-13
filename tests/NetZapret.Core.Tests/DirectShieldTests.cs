@@ -313,6 +313,12 @@ public sealed class DirectShieldTests : IDisposable
             // ExcludePlacementTests.
             var rest = new List<string>(shielded);
             rest.RemoveRange(shield, 6);
+
+            // Пресет с заниженным множителем окна (YT FIX, 14.11): щит — тоже секция TCP,
+            // и пересчёт окна встаёт в конец и ему (ScaleRamp).
+            if (rest.Skip(shield).Take(ScaleRamp.Tail.Count).SequenceEqual(ScaleRamp.Tail))
+                rest.RemoveRange(shield, ScaleRamp.Tail.Count);
+
             rest.Remove("--new");
 
             static bool Copy(string a) => a.StartsWith("--hostlist-exclude=", StringComparison.Ordinal);

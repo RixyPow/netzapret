@@ -110,6 +110,9 @@ public static class WinwsCommandLine
     {
         var arguments = BuildPreset(preset, excludeList, own, keepList);
 
+        // Пересчёт окна — во все секции TCP, и в щит, и в свои профили (ScaleRamp).
+        ScaleRamp.Apply(arguments);
+
         PresetCapture.Apply(arguments, capture);
 
         if (gameFilter)

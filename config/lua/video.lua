@@ -89,6 +89,11 @@
 -- arg : hold2 - (с syn) на сколько — группа, закрытая наглухо (3600)
 -- arg : far - задержка в мс, выше которой группе прощается первый срез (в обоих шагах одна
 --             и та же); без него не прощается никому
+-- arg : scale - (с syn) множитель окна в SYN не убирать, а занизить до этого (1): окно до
+--               131 КБ вместо 64 КБ, вдвое быстрее; тогда каждое исходящее окно соединения
+--               пересчитывается — пустые подтверждения нужны в перехвате (--wf-tcp-empty=1
+--               с условием на сети узлов), а шаг ramp — в каждой секции TCP (его ставит код)
+-- arg : ramp - только пересчёт окна соединения с заниженным множителем, ничего больше
 -- arg : wsize - окно до первых байт ответа сервера (по умолчанию 2)
 -- arg : reset - (в шаге по имени) первое соединение, чей ответ срезан, не ждёт таймаута
 --               клиента: через resetafter с без ответа ему шлётся RST от имени сервера
@@ -150,6 +155,31 @@ function nz_first2_reset_fire(name, data)
 	if b_debug then DLOG("nz_first2: сброс зависшего соединения к клиенту; срез "..cuts..(spared and ", прощён: группа далеко" or ", группа помечена")) end
 end
 
+-- Сколько байт ответа сервера клиент подтвердил; 0 — ещё ни одного. Номер подтверждения
+-- значим только с флагом ACK: у сброса без него в поле ноль.
+local function nz_first2_acked(track, tcp)
+	local server = track.pos and track.pos.server and track.pos.server.tcp
+	if not (server and server.seq0 and bitand(tcp.th_flags, TH_ACK) ~= 0) then return 0 end
+	local acked = (tcp.th_ack - server.seq0 - 1) % 4294967296
+	if acked >= 2147483648 then return 0 end
+	return acked
+end
+
+-- Окно соединения с заниженным множителем (arg scale, с 14.11): до первых байт ответа —
+-- два байта, дальше — каждое окно Windows, умноженное обратно на 2^(настоящий-заниженный),
+-- не больше 65535. Windows о занижении не знает и шлёт окно в своём масштабе (×256), сервер
+-- читает его в нашем (×2): без пересчёта он видит окно в 128 раз меньше, и соединение
+-- почти встаёт — замер 11.11: 45 КБ за 30 с у имени, чья секция окно не пересчитывала.
+local function nz_first2_scaled(tcp, st, acked)
+	if acked == 0 then
+		tcp.th_win = st.nz_first2_first
+	else
+		local win = math.floor(tcp.th_win * 2^st.nz_first2_shift)
+		tcp.th_win = win > 65535 and 65535 or win
+	end
+	return VERDICT_MODIFY
+end
+
 function nz_first2(ctx, desync)
 	local dis = desync.dis
 	if not dis.tcp then
@@ -168,8 +198,25 @@ function nz_first2(ctx, desync)
 	end
 	local tcp = dis.tcp
 	local st = track.lua_state
+	-- Шаг ramp (arg ramp) код окна ставит последним в каждую секцию TCP, когда пресет занижает
+	-- множитель: после приветствия соединение уходит в секцию по своему имени — googlevideo,
+	-- youtube, «Google (сервисы)», щит «напрямую», свой рецепт, — и пересчитывать окно
+	-- должна она, иначе соединение с заниженным множителем почти встаёт. Остальным
+	-- соединениям шаг не делает ничего и выключается на первом же пакете.
+	if desync.arg.ramp then
+		if st.nz_first2 ~= "small" or not st.nz_first2_shift then
+			instance_cutoff_shim(ctx, desync)
+			return
+		end
+		return nz_first2_scaled(tcp, st, nz_first2_acked(track, tcp))
+	end
 	if desync.arg.syn then
 		if bitand(tcp.th_flags, TH_SYN) == 0 then
+			-- Имя без своей секции (или ещё без имени) остаётся в секции по адресам:
+			-- окно пересчитывает она.
+			if st.nz_first2 == "small" and st.nz_first2_shift then
+				return nz_first2_scaled(tcp, st, nz_first2_acked(track, tcp))
+			end
 			instance_cutoff_shim(ctx, desync)
 			return
 		end
@@ -213,6 +260,20 @@ function nz_first2(ctx, desync)
 		st.nz_first2 = "small"
 		local i = find_tcp_option(tcp.options, TCP_KIND_SCALE)
 		if not i then return end
+		-- arg scale: множитель занижается, а не убирается — окно до 65535×2^scale вместо
+		-- 65535, но каждый пакет соединения придётся пересчитывать (nz_first2_scaled).
+		-- Замер 11.11 на фронте Google (50 мс): 20 МБ на 18–20 Мбит/с против 9,6–10,6.
+		-- Два байта первого пакета при множителе 1 — окно 1: больше 1 его не поднять.
+		local keep = tonumber(desync.arg.scale)
+		if keep then
+			local real = u8(tcp.options[i].data)
+			if real <= keep then return end
+			tcp.options[i].data = bu8(keep)
+			st.nz_first2_shift = real - keep
+			st.nz_first2_first = math.max(1, math.floor((tonumber(desync.arg.wsize) or 2) / 2^keep))
+			if b_debug then DLOG("nz_first2: SYN, множитель "..real.." → "..keep) end
+			return VERDICT_MODIFY
+		end
 		table.remove(tcp.options, i)
 		if b_debug then DLOG("nz_first2: SYN без множителя окна") end
 		return VERDICT_MODIFY
@@ -222,13 +283,7 @@ function nz_first2(ctx, desync)
 		instance_cutoff_shim(ctx, desync)
 		return
 	end
-	local server = track.pos and track.pos.server and track.pos.server.tcp
-	local acked = 0
-	-- Номер подтверждения значим только с флагом ACK: у сброса без него в поле ноль.
-	if server and server.seq0 and bitand(tcp.th_flags, TH_ACK) ~= 0 then
-		acked = (tcp.th_ack - server.seq0 - 1) % 4294967296
-		if acked >= 2147483648 then acked = 0 end
-	end
+	local acked = nz_first2_acked(track, tcp)
 	if acked > 0 then
 		if mode == "watch" then
 			st.nz_first2_data_seen = true
@@ -290,7 +345,8 @@ function nz_first2(ctx, desync)
 		end
 		return
 	end
-	tcp.th_win = tonumber(desync.arg.wsize) or 2
+	-- С заниженным множителем окно в поле — в его масштабе (два байта при множителе 1 — это 1).
+	tcp.th_win = st.nz_first2_shift and st.nz_first2_first or (tonumber(desync.arg.wsize) or 2)
 	if b_debug then DLOG("nz_first2: окно "..tcp.th_win.." до первых байт ответа") end
 	return VERDICT_MODIFY
 end
