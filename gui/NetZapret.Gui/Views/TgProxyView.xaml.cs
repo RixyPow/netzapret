@@ -50,6 +50,17 @@ public partial class TgProxyView : UserControl
         Always.IsEnabled = settings.TelegramProxy;
         AlwaysWord.Text = settings.TelegramProxyAlways ? "вкл." : "выкл.";
 
+        Lan.IsChecked = settings.TelegramProxyLan;
+        LanWord.Text = settings.TelegramProxyLan ? "вкл." : "выкл.";
+        var lanLink = LanLink();
+        LanLinkBox.Visibility = settings.TelegramProxyLan && ready ? Visibility.Visible : Visibility.Collapsed;
+        LanLinkText.Text = lanLink ?? "нет сети — не нашёл адрес компьютера в Wi-Fi или по кабелю";
+        LanLinkText.ToolTip = lanLink;
+        LanLinkCopy.IsEnabled = lanLink is not null;
+
+        if (settings.TelegramProxyLan && NetZapret.Core.PhysicalNetwork.LocalAddress() is { } lanAddress)
+            AddressText.Text += "\nв сети: " + lanAddress + ":" + port;
+
         DirectMain.IsChecked = settings.TelegramProxyDirect;
         DirectMainWord.Text = settings.TelegramProxyDirect ? "вкл." : "выкл.";
         DirectOther.IsChecked = settings.TelegramProxyDirectOther;
@@ -368,6 +379,30 @@ public partial class TgProxyView : UserControl
             _tuning = false;
             TuneButton.IsEnabled = true;
         }
+    }
+
+    private void OnLan(object sender, RoutedEventArgs e)
+    {
+        bool on = Lan.IsChecked == true;
+        SaveRoutes(s => s with { TelegramProxyLan = on },
+            on ? "Прокси доступен из локальной сети." : "Прокси — только для этого компьютера.");
+    }
+
+    /// <summary>Ссылка для телефона: тот же секрет, адрес компьютера в домашней сети.</summary>
+    private static string? LanLink()
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+        return TgWsProxy.IsSecret(settings.TelegramProxySecret)
+               && NetZapret.Core.PhysicalNetwork.LocalAddress() is { } address
+            ? TgWsProxy.Link(settings.TelegramProxyPort, settings.TelegramProxySecret!, address.ToString())
+            : null;
+    }
+
+    private void OnCopyLan(object sender, RoutedEventArgs e)
+    {
+        if (LanLink() is { } link)
+            Copy(link, "Ссылка для телефона скопирована — отправьте её себе и откройте на телефоне.");
     }
 
     private void OnDirectOther(object sender, RoutedEventArgs e)

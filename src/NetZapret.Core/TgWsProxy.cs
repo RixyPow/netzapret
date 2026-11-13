@@ -58,8 +58,8 @@ public static class TgWsProxy
     /// Секрет с приставкой <c>dd</c> — режим «padded», в котором прокси
     /// принимает соединения (его вывод: «Inbound mode: padded MTProto dd»).
     /// </remarks>
-    public static string Link(int port, string secret) =>
-        $"tg://proxy?server=127.0.0.1&port={port}&secret=dd{secret}";
+    public static string Link(int port, string secret, string server = "127.0.0.1") =>
+        $"tg://proxy?server={server}&port={port}&secret=dd{secret}";
 
     /// <summary>
     /// Настройки с включённым или выключенным прокси.
@@ -87,12 +87,12 @@ public static class TgWsProxy
     /// </remarks>
     public static string Explain(Rules.WorkMode mode) => mode == Rules.WorkMode.Desync
         ? "В «Десинке» VPN нет, а адреса Telegram закрыты: без прокси Telegram Desktop "
-          + "не подключится. С ним работает целиком, с фото и видео. Только Telegram Desktop "
-          + "на этом компьютере — телефон через него не подключить. Подключить Telegram к нему — "
+          + "не подключится. С ним работает целиком, с фото и видео. Телефон в том же Wi-Fi — "
+          + "с выключателем «Доступ из локальной сети». Подключить Telegram к нему — "
           + "кнопкой на вкладке «TG Proxy»."
         : "В «Гибриде» и «Туннеле» Telegram идёт через VPN — прокси не обязателен, но и не мешает: "
-          + "Telegram Desktop, подключённый к нему, ходит мимо VPN. Только Telegram Desktop "
-          + "на этом компьютере. Подключить Telegram к нему — кнопкой на вкладке «TG Proxy».";
+          + "Telegram Desktop, подключённый к нему, ходит мимо VPN. Телефон в том же Wi-Fi — "
+          + "с выключателем «Доступ из локальной сети». Подключить Telegram к нему — кнопкой на вкладке «TG Proxy».";
 
     /// <summary>Ключи запуска; секрет — не здесь, а в <see cref="SecretVariable"/>.</summary>
     /// <remarks>
@@ -125,7 +125,12 @@ public static class TgWsProxy
 
         var arguments = new List<string>
         {
-            "--host", "127.0.0.1",
+            // Доступ из локальной сети (обсуждение №70) — все адреса машины, чтобы
+            // телефон в том же Wi-Fi подключился по домашнему адресу. Ссылку прокси
+            // по-прежнему с 127.0.0.1: свою ссылку для телефона окно собирает само
+            // (Link с PhysicalNetwork.LocalAddress), а адрес в ссылке прокси — это
+            // и был бы адрес TUN.
+            "--host", routes.Lan ? "0.0.0.0" : "127.0.0.1",
             "--link-ip", "127.0.0.1",
             "--port", port.ToString(System.Globalization.CultureInfo.InvariantCulture),
             "--default-domains",
@@ -245,16 +250,19 @@ public static class TgWsProxy
 /// <param name="CfConnectTimeout">Сколько ждать один домен Cloudflare, секунды.</param>
 /// <param name="WorkerDomains">Свои воркеры Cloudflare через запятую (<see cref="TgWsProxy.WorkerDomains"/>); пусто — нет.</param>
 /// <param name="CfDomains">Домены Cloudflare первыми, перед общим списком, — по замеру автонастройки.</param>
+/// <param name="Lan">Принимать соединения из локальной сети, а не только с этой машины.</param>
 public sealed record TgWsProxyRoutes(
     bool DirectMain = false,
     bool DirectOther = false,
     int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout,
     string? WorkerDomains = null,
-    IReadOnlyList<string>? CfDomains = null)
+    IReadOnlyList<string>? CfDomains = null,
+    bool Lan = false)
 {
     public static TgWsProxyRoutes From(AppSettings settings) => new(
         settings.TelegramProxyDirect,
         settings.TelegramProxyDirectOther,
         settings.TelegramProxyCfTimeout,
-        settings.TelegramProxyWorkerDomains);
+        settings.TelegramProxyWorkerDomains,
+        Lan: settings.TelegramProxyLan);
 }

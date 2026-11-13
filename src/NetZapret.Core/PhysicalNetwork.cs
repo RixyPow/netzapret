@@ -40,7 +40,26 @@ public static class PhysicalNetwork
     /// <summary>
     /// Индекс физического адаптера с маршрутом по умолчанию; <c>null</c> — не нашли.
     /// </summary>
-    public static int? Interface()
+    public static int? Interface() => Candidates() is { } candidates ? Pick(candidates) : null;
+
+    /// <summary>
+    /// Свой IPv4-адрес в домашней сети — у того же адаптера, что <see cref="Interface"/>;
+    /// <c>null</c> — сети нет.
+    /// </summary>
+    /// <remarks>
+    /// Для ссылки прокси Telegram с телефона (обсуждение №70): адрес TUN или
+    /// виртуальной локалки телефон в той же сети Wi-Fi не достанет.
+    /// </remarks>
+    public static IPAddress? LocalAddress()
+    {
+        if (Candidates() is not { } candidates || Pick(candidates) is not { } index)
+            return null;
+
+        return candidates.First(c => c.Index == index).Addresses.FirstOrDefault(a =>
+            a.AddressFamily == AddressFamily.InterNetwork && !a.ToString().StartsWith("169.254.", StringComparison.Ordinal));
+    }
+
+    private static List<Candidate>? Candidates()
     {
         var candidates = new List<Candidate>();
 
@@ -74,7 +93,7 @@ public static class PhysicalNetwork
             return null;
         }
 
-        return Pick(candidates);
+        return candidates;
     }
 
     /// <summary>Включённый адаптер-кандидат: индекс IPv4, шлюзы и свои адреса.</summary>

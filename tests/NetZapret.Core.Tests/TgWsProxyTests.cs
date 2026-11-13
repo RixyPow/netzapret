@@ -51,6 +51,28 @@ public sealed class TgWsProxyTests
         Assert.Contains("--no-h2", arguments);
     }
 
+    /// <summary>
+    /// Доступ из локальной сети (обсуждение №70): слушает все адреса, но ссылка
+    /// прокси — по-прежнему с 127.0.0.1; ссылку для телефона собирает окно.
+    /// </summary>
+    [Fact]
+    public void LanSwitchOpensTheProxyToTheNetworkOnlyWhenOn()
+    {
+        Assert.False(new AppSettings().TelegramProxyLan);
+
+        var lan = TgWsProxy.Arguments(1443, TgWsProxyRoutes.From(new AppSettings { TelegramProxyLan = true }));
+        Assert.Equal("0.0.0.0", lan[lan.ToList().IndexOf("--host") + 1]);
+        Assert.Equal("127.0.0.1", lan[lan.ToList().IndexOf("--link-ip") + 1]);
+
+        // Автонастройка правит пути, но не доступ.
+        var tuned = NetZapret.Proxy.TgProxyTune.Apply(TgWsProxyRoutes.From(new AppSettings { TelegramProxyLan = true }),
+            new NetZapret.Proxy.TgProxyTuning(DateTimeOffset.Now, true, 100, [], 1));
+        Assert.True(tuned.Lan);
+
+        var secret = TgWsProxy.NewSecret();
+        Assert.Equal($"tg://proxy?server=192.168.1.5&port=1443&secret=dd{secret}", TgWsProxy.Link(1443, secret, "192.168.1.5"));
+    }
+
     /// <summary>Все значения ключа: «--dc-ip 2:… --dc-ip 4:…» → [2:…, 4:…].</summary>
     private static List<string> Values(IReadOnlyList<string> arguments, string key) =>
         [.. arguments.Select((a, i) => (a, i)).Where(p => p.a == key).Select(p => arguments[p.i + 1])];

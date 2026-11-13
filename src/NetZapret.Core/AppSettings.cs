@@ -514,6 +514,17 @@ public sealed record AppSettings
     /// </remarks>
     public bool TelegramProxyAlways { get; init; }
 
+    /// <summary>
+    /// Прокси Telegram принимает соединения из локальной сети — для телефона
+    /// в том же Wi-Fi (обсуждение №70).
+    /// </summary>
+    /// <remarks>
+    /// Выключено по умолчанию: включённый прокси видит вся сеть — гостевой
+    /// Wi-Fi, общежитие, кафе. Чужого без секрета он не пустит, но и светить его
+    /// незачем, пока не нужен.
+    /// </remarks>
+    public bool TelegramProxyLan { get; init; }
+
     /// <summary>Прокси поднимает надзор движков — включён и не держится окном сам.</summary>
     [JsonIgnore]
     public bool TelegramProxyWithEngines => TelegramProxy && !TelegramProxyAlways;
