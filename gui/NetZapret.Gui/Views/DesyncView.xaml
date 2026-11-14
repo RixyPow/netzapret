@@ -372,8 +372,9 @@
 
                             <Border Grid.Column="0" Style="{StaticResource IconTile}" Margin="0,0,14,0"
                                     VerticalAlignment="Center">
-                                <TextBlock Style="{StaticResource TileGlyph}" Text="&#xE714;"
-                                           Foreground="{DynamicResource Accent}" />
+                                <!-- Официальный значок YouTube (YouTubeLogo, как CloudflareLogo у WARP). -->
+                                <Image Source="{StaticResource YouTubeLogo}" Width="28"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
 
                             <StackPanel Grid.Column="1" Margin="0,0,14,0" VerticalAlignment="Center">

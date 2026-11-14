@@ -22,6 +22,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <Image Source="{StaticResource YouTubeLogo}" Width="30" Margin="0,0,12,0" VerticalAlignment="Center" />
             <TextBlock Text="Автонастройка YouTube" Style="{StaticResource Title}" FontSize="20" VerticalAlignment="Center" />
             <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
                             Content="Редкие и старые ролики YouTube отдаёт с зарубежных узлов Google, а на них фильтр провайдера. Замер проходит десять узлов: пинг, сколько соединений проходит через обход по TCP и QUIC, отвечает ли узел мимо обхода, есть ли у провайдера свой кэш Google.&#x0a;&#x0a;По замеру поверх вашего пресета включается рецепт для узлов, расширяется его окно и решается, выбрасывать ли QUIC. После применения движки перезапускаются и замер повторяется: стало хуже — настройка откатывается сама.&#x0a;&#x0a;Скорость самого видео замер не видит — только соединения." />
