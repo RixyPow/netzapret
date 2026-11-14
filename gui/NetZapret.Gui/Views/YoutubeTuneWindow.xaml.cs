@@ -150,7 +150,7 @@ public partial class YoutubeTuneWindow : Window
 
             // Строка winws2 та же — движки не трогаем и не перемеряем: разница двух прогонов
             // одной строки — только разброс.
-            if (YoutubeAddon.SameLine(previous, tune))
+            if (YoutubeAddon.SameLine(previous, tune, VideoNodesRun.PresetHasRecipe(AppSettings.Load(AppSettings.DefaultPath))))
             {
                 ShowSteps(3);
                 Status.Text = "Записано. В работе десинка ничего не меняется — движки не перезапускались.";
@@ -187,7 +187,10 @@ public partial class YoutubeTuneWindow : Window
             if (!worse)
             {
                 ShowSteps(3);
-                Status.Text = "Готово: стало не хуже — настройка остаётся.";
+                Status.Text = after.Tcp >= before.Tcp
+                    ? "Готово: не хуже, чем было, — настройка остаётся."
+                    : $"Настройка остаётся: TCP {before.Tcp} → {after.Tcp} из 30 — в пределах разброса одинаковых прогонов (до {VideoNodesRun.Spread}), "
+                        + "отличить от случайности нельзя. Узлы без фильтра в таблице показывают, теряет ли сейчас сама сеть.";
                 CloseButton.Content = "Готово";
                 return;
             }

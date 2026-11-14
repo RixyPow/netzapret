@@ -181,6 +181,10 @@ public sealed class YoutubeTuneTests
         Assert.True(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true, FarMs = 41 }, new YoutubeTune { Nodes = true, FarMs = 41, Summary = "другой замер" }));
         Assert.False(YoutubeAddon.SameLine(null, new YoutubeTune { DropQuic = true }));
         Assert.False(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true, FarMs = 41 }, new YoutubeTune { Nodes = true, FarMs = 20 }));
+
+        // YT FIX: рецепт пресета, надстройка его не трогает — «рецепт, окно вдвое» и «ничего» одно.
+        Assert.True(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true, Doubled = true, FarMs = 41 }, new YoutubeTune(), presetHasRecipe: true));
+        Assert.False(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true }, new YoutubeTune { DropQuic = true }, presetHasRecipe: true));
     }
 
     [Fact]

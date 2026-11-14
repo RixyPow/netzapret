@@ -83,10 +83,17 @@ public static class YoutubeAddon
     /// ни к чему: 14.11 «Записать» без изменений перезапустило движки, перемерило, и разброс
     /// (27 → 21 из 30) читался как «стало хуже».
     /// </summary>
-    public static bool SameLine(YoutubeTune? a, YoutubeTune? b)
+    /// <param name="presetHasRecipe">
+    /// У пресета свой рецепт (YT FIX): рецепт, окно и порог надстройки не применяются, и
+    /// различаться может только выброс QUIC. Без этого 14.11 «рецепт, окно вдвое» → «ничего»
+    /// на YT FIX сочлось сменой строки, и окно снова перезапустило движки.
+    /// </param>
+    public static bool SameLine(YoutubeTune? a, YoutubeTune? b, bool presetHasRecipe = false)
     {
-        static (bool, bool, int, bool) Key(YoutubeTune? t) => t is { Active: true }
-            ? (t.Nodes, t.Nodes && t.Doubled, t.Nodes ? t.FarMs : 0, t.DropQuic)
+        (bool, bool, int, bool) Key(YoutubeTune? t) => t is { Active: true }
+            ? presetHasRecipe
+                ? (false, false, 0, t.DropQuic)
+                : (t.Nodes, t.Nodes && t.Doubled, t.Nodes ? t.FarMs : 0, t.DropQuic)
             : (false, false, 0, false);
 
         return Key(a) == Key(b);

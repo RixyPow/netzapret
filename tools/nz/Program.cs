@@ -670,7 +670,7 @@ async Task<int> YoutubeTune(List<string> options)
     var previous = settings.Youtube;
     VideoNodesRun.Save(tune);
 
-    if (NetZapret.Zapret.YoutubeAddon.SameLine(previous, tune))
+    if (NetZapret.Zapret.YoutubeAddon.SameLine(previous, tune, VideoNodesRun.PresetHasRecipe(settings)))
     {
         Console.WriteLine("записано; в работе десинка ничего не меняется — движки не перезапускаю");
         return 0;
