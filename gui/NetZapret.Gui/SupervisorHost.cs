@@ -620,6 +620,13 @@ internal static class SupervisorHost
         // выключатель части гасит и секцию, а не одно правило движка.
         var preset = AddressSectionsOff.Strip(new PresetReader().Load(presetPath), AddressSectionsOff.Read(), out var sectionsOff);
 
+        // Автонастройка YouTube «Десинка» — поверх пресета (YoutubeAddon).
+        var youtube = AppSettings.Load(AppSettings.DefaultPath).Youtube;
+        preset = YoutubeAddon.Apply(preset, youtube);
+
+        if (youtube is { Active: true })
+            Console.WriteLine($"YouTube: {YoutubeAddon.Describe(youtube)}.");
+
         foreach (var name in sectionsOff)
             Console.WriteLine($"Секция «{name}» не запущена: её список адресов выключен в «Маршрутах».");
 

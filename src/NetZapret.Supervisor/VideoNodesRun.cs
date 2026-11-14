@@ -74,8 +74,75 @@ public static class VideoNodesRun
             return $"Пресет: {name} (файл не прочитан).";
         }
 
-        return steps.Length == 0
+        var addon = settings.Youtube is { Active: true } tune ? $" Автонастройка YouTube: {Zapret.YoutubeAddon.Describe(tune)}." : string.Empty;
+
+        return (steps.Length == 0
             ? $"Пресет: {name}; рецепта узлов видео (малое окно по надобности) в нём нет."
-            : $"Пресет: {name}; рецепт узлов видео есть: {string.Join(", ", steps)}.";
+            : $"Пресет: {name}; рецепт узлов видео есть: {string.Join(", ", steps)}.") + addon;
+    }
+
+    /// <summary>Работал ли рецепт узлов во время замера: в пресете (YT FIX) или надстройкой.</summary>
+    public static bool RecipeOn(AppSettings settings)
+    {
+        if (settings.Youtube is { Nodes: true })
+            return true;
+
+        try
+        {
+            return settings.PresetName is { Length: > 0 } name
+                && File.ReadLines(Path.Combine(Zapret.ZapretPaths.PresetDirectory, name + ".txt"))
+                    .Any(line => line.TrimStart().StartsWith("--lua-desync=nz_first2", StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Автонастройка YouTube: замер узлов и решение по нему; <c>null</c> — мерить бессмысленно.
+    /// </summary>
+    public static async Task<(VideoNodesReport? Report, YoutubeDecision? Decision, string? Why)> TuneAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var (report, why) = await MeasureAsync(settings, cancellationToken);
+
+        if (report is null)
+            return (null, null, why);
+
+        if (!report.Desync)
+            return (report, null, "десинк не работает — настраивать нечего; запустите движки");
+
+        return (report, YoutubeTuner.Decide(report, RecipeOn(settings)), null);
+    }
+
+    /// <summary>Записывает настройку в файл настроек; <c>null</c> — снять, пресет как есть.</summary>
+    public static AppSettings Save(YoutubeTune? tune, string? path = null)
+    {
+        var file = path ?? AppSettings.DefaultPath;
+        var settings = AppSettings.Load(file) with { Youtube = tune };
+        settings.Save(file);
+        return settings;
+    }
+
+    /// <summary>
+    /// Было → стало после применения: стало ли хуже по TCP через обход.
+    /// </summary>
+    /// <remarks>
+    /// По TCP, а не по QUIC: выброшенный нарочно QUIC в перезамере — 0, и это не поломка.
+    /// Хуже — потеряно больше четырёх соединений из тридцати: дома в один час прогоны
+    /// расходятся на 2–4 (10.11, четыре прогона: 26–28 из 30).
+    /// </remarks>
+    public static (bool Worse, string Said) Compare(VideoNodesReport before, VideoNodesReport after)
+    {
+        int lost = before.Tcp - after.Tcp;
+        bool worse = before.Tries == after.Tries && lost > 4;
+        int lagBefore = before.Measured.Sum(n => n.Lagged), lagAfter = after.Measured.Sum(n => n.Lagged);
+
+        return (worse,
+            $"TCP через обход: было {before.Tcp} из {before.Tries}, стало {after.Tcp} из {after.Tries}; "
+            + $"QUIC: было {before.Quic} из {before.QuicTries}, стало {after.Quic} из {after.QuicTries}; "
+            + $"ответов с малым окном: было {lagBefore}, стало {lagAfter}");
     }
 }

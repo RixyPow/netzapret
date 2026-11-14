@@ -517,7 +517,7 @@ public static class SiteFixer
             return null;
         }
 
-        var preset = new PresetReader().Load(presetPath);
+        var preset = YoutubeAddon.Apply(new PresetReader().Load(presetPath), settings.Youtube);
         var bare = host.StartsWith("www.", StringComparison.Ordinal) ? host[4..] : host;
 
         if (step.Kind == RouteTry.Preset)
@@ -971,7 +971,8 @@ public static class SiteFixer
                 return null;
             }
 
-            var preset = AddressSectionsOff.Strip(new PresetReader().Load(presetPath), AddressSectionsOff.Read(), out _);
+            var preset = YoutubeAddon.Apply(
+                AddressSectionsOff.Strip(new PresetReader().Load(presetPath), AddressSectionsOff.Read(), out _), settings.Youtube);
 
             return SynSections.Find(preset, paths.Root, ip, 443);
         }

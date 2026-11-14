@@ -52,7 +52,9 @@ return command switch
     "report" or "отчёт" => Report(),
     "fix" or "починить" => await Fix(string.Join(' ', args.Skip(1))),
     "voice" or "голос" => Voice(),
-    "youtube" or "ютуб" => await Youtube(),
+    "youtube" or "ютуб" => args.ElementAtOrDefault(1) is "tune" or "настроить"
+        ? await YoutubeTune(args.Skip(2).ToList())
+        : await Youtube(),
     "doctor" or "диагностика" => DoctorCommand(),
     "watch" or "наблюдение" => await Watch(args.Skip(1).ToList()),
     null or "help" or "--help" or "-h" => Help(),
@@ -626,6 +628,73 @@ async Task<int> Youtube()
     return report.Verdict is NetZapret.Proxy.VideoNodesVerdict.Lossy or NetZapret.Proxy.VideoNodesVerdict.Closed ? 1 : 0;
 }
 
+// Автонастройка YouTube (14.11): замер узлов → решение; с apply — запись, перезапуск
+// движков, перезамер и откат, если стало хуже. С off — снять настройку.
+async Task<int> YoutubeTune(List<string> options)
+{
+    if (options.Contains("off"))
+    {
+        VideoNodesRun.Save(null);
+        Console.WriteLine("автонастройка YouTube снята — пресет как есть; перезапускаю движки…");
+        return await Engines(EngineVerb.Restart, []);
+    }
+
+    var settings = AppSettings.Load(AppSettings.DefaultPath);
+    Console.WriteLine("замер узлов видео, ~20 с…");
+
+    var (before, decision, why) = await VideoNodesRun.TuneAsync(settings, CancellationToken.None);
+
+    if (decision is null)
+    {
+        Console.WriteLine(why ?? before?.Summary ?? "судить не по чему");
+        return 1;
+    }
+
+    Console.WriteLine();
+
+    foreach (var reason in decision.Reasons)
+        Console.WriteLine("  " + reason);
+
+    if (decision.Tune is not { } tune)
+        return 1;
+
+    Console.WriteLine();
+    Console.WriteLine("итог: " + NetZapret.Zapret.YoutubeAddon.Describe(tune));
+
+    if (!options.Contains("apply"))
+    {
+        Console.WriteLine("применить — nz youtube tune apply");
+        return 0;
+    }
+
+    var previous = settings.Youtube;
+    VideoNodesRun.Save(tune);
+    Console.WriteLine("записано; перезапускаю движки…");
+
+    if (await Engines(EngineVerb.Restart, []) != 0)
+        return 1;
+
+    Console.WriteLine("перезамер, ~20 с…");
+    var (after, _) = await VideoNodesRun.MeasureAsync(AppSettings.Load(AppSettings.DefaultPath), CancellationToken.None);
+
+    if (after is null || before is null)
+        return 1;
+
+    var (worse, said) = VideoNodesRun.Compare(before, after);
+    Console.WriteLine(said);
+
+    if (!worse)
+    {
+        Console.WriteLine("стало не хуже — настройка остаётся");
+        return 0;
+    }
+
+    VideoNodesRun.Save(previous);
+    Console.WriteLine("стало хуже — возвращаю прежнее и перезапускаю движки…");
+    await Engines(EngineVerb.Restart, []);
+    return 1;
+}
+
 int Help()
 {
     Console.WriteLine("nz — разбор неисправностей NetZapret.");
@@ -647,6 +716,9 @@ int Help()
     Console.WriteLine("               что сторож окна дописал бы; ничего не пишет");
     Console.WriteLine("  nz youtube   зарубежные узлы видео YouTube — с них идёт то, чего нет в кэше провайдера:");
     Console.WriteLine("               TCP и QUIC своим именем узла и чужими именами мимо обхода; до полуминуты");
+    Console.WriteLine("  nz youtube tune [apply|off]");
+    Console.WriteLine("               автонастройка YouTube по замеру: рецепт узлов, ширина окна, QUIC;");
+    Console.WriteLine("               apply — записать, перезапустить движки, перемерить, откатить, если хуже");
     Console.WriteLine("  nz watch [--seconds N] [--process имя.exe] [--routed] [--no-log] [--force]");
     Console.WriteLine("               наблюдение: соединения и правило к каждому, как раздел окна;");
     Console.WriteLine("               пишет runtime\\watch.log; нужен терминал администратора");

@@ -319,6 +319,12 @@ public sealed record AppSettings
     public bool GameFilter { get; init; }
 
     /// <summary>
+    /// Автонастройка YouTube на вкладке «Десинк»: рецепт узлов видео и QUIC к ним поверх
+    /// выбранного пресета; <c>null</c> — не настраивалась, пресет как есть.
+    /// </summary>
+    public YoutubeTune? Youtube { get; init; }
+
+    /// <summary>
     /// Ширина перехвата десинка поверх пресета — см. <see cref="CaptureWidth"/>.
     /// </summary>
     /// <remarks>

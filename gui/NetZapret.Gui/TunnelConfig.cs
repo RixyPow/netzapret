@@ -490,7 +490,8 @@ internal static class TunnelConfig
                 return;
             }
 
-            var preset = new PresetReader().Load(presetPath);
+            // С надстройкой YouTube: свой рецепт уносит её шаг, как шаг самого YT FIX.
+            var preset = YoutubeAddon.Apply(new PresetReader().Load(presetPath), AppSettings.Load(AppSettings.DefaultPath).Youtube);
 
             // Приёмы, которые умеет движок, — чтобы отличить рецепт,
             // требующий неподключённого модуля, от исправного.
