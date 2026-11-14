@@ -18,6 +18,10 @@ public partial class YoutubeTuneWindow : Window
 
     private VideoNodesReport? _before;
     private YoutubeTune? _tune;
+
+    /// <summary>Что стояло до «Применить» — к нему откатывается; не применяли — пресет как есть.</summary>
+    private YoutubeTune? _previous;
+    private bool _applied;
     private CancellationTokenSource? _work;
 
     /// <summary>Настройку записали или сняли — «Десинку» обновить карточку.</summary>
@@ -26,6 +30,7 @@ public partial class YoutubeTuneWindow : Window
     public YoutubeTuneWindow()
     {
         InitializeComponent();
+        ShowRollback();
         Loaded += (_, _) => OnMeasure(this, new RoutedEventArgs());
         Closed += (_, _) => _work?.Cancel();
     }
@@ -131,6 +136,8 @@ public partial class YoutubeTuneWindow : Window
 
         var token = (_work ??= new CancellationTokenSource()).Token;
         var previous = AppSettings.Load(AppSettings.DefaultPath).Youtube;
+        _previous = previous;
+        _applied = true;
 
         Apply.IsEnabled = false;
         Remeasure.IsEnabled = false;
@@ -193,6 +200,41 @@ public partial class YoutubeTuneWindow : Window
         finally
         {
             Remeasure.IsEnabled = true;
+            ShowRollback();
+        }
+    }
+
+    /// <summary>«Откатить» видно, пока настройка стоит или её только что применили.</summary>
+    private void ShowRollback() => Rollback.Visibility =
+        _applied || AppSettings.Load(AppSettings.DefaultPath).Youtube is { Active: true } ? Visibility.Visible : Visibility.Collapsed;
+
+    private async void OnRollback(object sender, RoutedEventArgs e)
+    {
+        var back = _applied ? _previous : null;
+
+        Rollback.IsEnabled = false;
+        Apply.IsEnabled = false;
+
+        try
+        {
+            VideoNodesRun.Save(back);
+            Changed?.Invoke();
+            _applied = false;
+
+            var said = back is { Active: true } ? $"возвращено прежнее: {YoutubeAddon.Describe(back)}" : "автонастройка снята — пресет как есть";
+            Status.Text = $"Откат: {said}. Перезапускаю движки…";
+
+            var restarted = await EngineControl.RestartAsync("автонастройка YouTube: откат кнопкой", CancellationToken.None);
+            Status.Text = restarted.Ok ? $"Откат: {said}." : $"Откат записан ({said}), но движки не перезапустились: {restarted.Message}";
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Откат не вышел: " + ex.GetBaseException().Message;
+        }
+        finally
+        {
+            Rollback.IsEnabled = true;
+            ShowRollback();
         }
     }
 

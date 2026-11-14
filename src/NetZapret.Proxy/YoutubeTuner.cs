@@ -66,7 +66,12 @@ public static class YoutubeTuner
     /// <summary>Решает по замеру.</summary>
     /// <param name="report">Замер узлов видео.</param>
     /// <param name="recipeOn">Рецепт узлов уже работал во время замера (пресет YT FIX или надстройка).</param>
-    public static YoutubeDecision Decide(VideoNodesReport report, bool recipeOn)
+    /// <param name="presetHasRecipe">
+    /// Рецепт — в самом пресете (YT FIX). Надстройка его не трогает (YoutubeAddon), и обещать
+    /// «окно вдвое шире» или свой порог далёких нельзя: решает пресет. 14.11 автонастройка
+    /// на YT FIX показала владельцу три решения, а в строке winws2 не поменялось ничего.
+    /// </param>
+    public static YoutubeDecision Decide(VideoNodesReport report, bool recipeOn, bool presetHasRecipe = false)
     {
         var measured = report.Measured;
 
@@ -95,14 +100,20 @@ public static class YoutubeTuner
         // потерь он только тратит процессор и прибавляет срезанным 1 с на сброс.
         bool nodes = filtered.Count > 0 || tcpShare < VideoNodes.PassShare;
 
-        if (nodes)
+        if (nodes && presetHasRecipe)
+        {
+            Say("Рецепт узлов видео", "уже в пресете", $"под фильтром {filtered.Count} узлов из {measured.Count}, "
+                + $"TCP через обход {report.Tcp} из {report.Tries}; окно и порог далёких задаёт сам пресет", false);
+            nodes = false;
+        }
+        else if (nodes)
         {
             Say("Рецепт узлов видео", "нужен", $"под фильтром {filtered.Count} узлов из {measured.Count}"
                 + (closed.Count > 0 ? $", закрыты наглухо {closed.Count}" : string.Empty)
                 + $"; TCP через обход {report.Tcp} из {report.Tries}"
                 + (noCache ? "; кэша Google у провайдера нет — с этих узлов идёт всё видео" : string.Empty), true);
         }
-        else
+        else if (!presetHasRecipe)
         {
             Say("Рецепт узлов видео", "не нужен", $"фильтра нет, TCP {report.Tcp} из {report.Tries}", false);
         }

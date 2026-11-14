@@ -82,11 +82,11 @@ public static class VideoNodesRun
     }
 
     /// <summary>Работал ли рецепт узлов во время замера: в пресете (YT FIX) или надстройкой.</summary>
-    public static bool RecipeOn(AppSettings settings)
-    {
-        if (settings.Youtube is { Nodes: true })
-            return true;
+    public static bool RecipeOn(AppSettings settings) => settings.Youtube is { Nodes: true } || PresetHasRecipe(settings);
 
+    /// <summary>Рецепт узлов — в самом пресете (YT FIX): надстройка его не трогает.</summary>
+    public static bool PresetHasRecipe(AppSettings settings)
+    {
         try
         {
             return settings.PresetName is { Length: > 0 } name
@@ -114,7 +114,7 @@ public static class VideoNodesRun
         if (!report.Desync)
             return (report, null, "десинк не работает — настраивать нечего; запустите движки");
 
-        return (report, YoutubeTuner.Decide(report, RecipeOn(settings)), null);
+        return (report, YoutubeTuner.Decide(report, RecipeOn(settings), PresetHasRecipe(settings)), null);
     }
 
     /// <summary>Записывает настройку в файл настроек; <c>null</c> — снять, пресет как есть.</summary>
@@ -131,13 +131,15 @@ public static class VideoNodesRun
     /// </summary>
     /// <remarks>
     /// По TCP, а не по QUIC: выброшенный нарочно QUIC в перезамере — 0, и это не поломка.
-    /// Хуже — потеряно больше четырёх соединений из тридцати: дома в один час прогоны
-    /// расходятся на 2–4 (10.11, четыре прогона: 26–28 из 30).
+    /// Хуже — потеряно больше восьми соединений из тридцати. Порог — по разбросу: 14.11 дома
+    /// одна и та же строка за пять минут дала 22, 27, 27 и 24 из 30, а прогон до и после
+    /// «Применить», ничего в строке не менявшего, — 23 и 19; по прежнему порогу (4) такая
+    /// разница ещё сошла бы за «не хуже», но читалась владельцем как «стало хуже».
     /// </remarks>
     public static (bool Worse, string Said) Compare(VideoNodesReport before, VideoNodesReport after)
     {
         int lost = before.Tcp - after.Tcp;
-        bool worse = before.Tries == after.Tries && lost > 4;
+        bool worse = before.Tries == after.Tries && lost > 8;
         int lagBefore = before.Measured.Sum(n => n.Lagged), lagAfter = after.Measured.Sum(n => n.Lagged);
 
         return (worse,

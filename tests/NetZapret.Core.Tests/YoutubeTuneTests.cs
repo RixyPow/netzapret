@@ -87,6 +87,25 @@ public sealed class YoutubeTuneTests
         Assert.False(YoutubeTuner.Decide(Report(nodes), recipeOn: false).NothingLeft);
     }
 
+    /// <summary>
+    /// Рецепт в самом пресете (YT FIX): не обещать того, что надстройка не применит (14.11 —
+    /// три решения на экране, строка winws2 та же).
+    /// </summary>
+    [Fact]
+    public void APresetWithItsOwnRecipeIsNotPromisedAnything()
+    {
+        var decision = YoutubeTuner.Decide(Report(
+            Node(42, 3, 2), Node(43, 2, 2), Node(22, 3, 1), Node(22, 2, 1), Node(22, 2, 3),
+            Node(43, 3, 3, NodeFilter.Open), Node(43, 2, 3, NodeFilter.Open)), recipeOn: true, presetHasRecipe: true);
+
+        var tune = Assert.IsType<YoutubeTune>(decision.Tune);
+        Assert.False(tune.Nodes);
+        Assert.False(tune.Doubled);
+        Assert.False(tune.Active);
+        Assert.Contains(decision.Choices, c => c.Verdict == "уже в пресете");
+        Assert.DoesNotContain(decision.Choices, c => c.What == "Малое окно");
+    }
+
     [Fact]
     public void TooFewNodesDecideNothing() =>
         Assert.Null(YoutubeTuner.Decide(Report(Node(20, 3, 3), Node(21, 3, 3)), recipeOn: false).Tune);

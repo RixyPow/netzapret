@@ -49,8 +49,16 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Button Grid.Column="0" x:Name="Remeasure" Style="{StaticResource Ghost}" Padding="16,10"
-                    Content="Перемерить" Click="OnMeasure" IsEnabled="False" />
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button x:Name="Remeasure" Style="{StaticResource Ghost}" Padding="16,10"
+                        Content="Перемерить" Click="OnMeasure" IsEnabled="False" />
+                <!--
+                    Откат — всегда под рукой, пока настройка стоит (владелец 14.11): после
+                    «Применить» вернуть то, что было до него, иначе — пресет как есть.
+                -->
+                <Button x:Name="Rollback" Style="{StaticResource Ghost}" Padding="16,10" Margin="10,0,0,0"
+                        Content="Откатить" Click="OnRollback" Visibility="Collapsed" />
+            </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal">
                 <Button x:Name="CloseButton" Style="{StaticResource Ghost}" Padding="16,10" Margin="0,0,10,0"
