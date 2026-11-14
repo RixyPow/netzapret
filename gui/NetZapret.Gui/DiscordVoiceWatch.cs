@@ -83,7 +83,7 @@ internal static class DiscordVoiceWatch
 
     private static IReadOnlyList<string> Check()
     {
-        // Выключатель в «Ещё → Прочее» — читается на каждом круге, без перезапуска.
+        // Выключатель в «Настройках маршрутов» (до 05.10 — «Ещё → Прочее») — читается на каждом круге, без перезапуска.
         if (!Core.AppSettings.Load(Core.AppSettings.DefaultPath).LearnDiscordVoice)
             return [];
 

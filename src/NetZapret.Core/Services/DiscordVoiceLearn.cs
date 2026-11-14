@@ -233,7 +233,7 @@ public static class DiscordVoiceLearn
         bool learn = AppSettings.Load(At(AppSettings.DefaultPath)).LearnDiscordVoice;
 
         text.AppendLine($"  часть «Звук голоса (адреса)»: {(vpn ? "через VPN" : "не через VPN — сторож не дописывает")}");
-        text.AppendLine($"  «Дописывать адреса голоса Discord»: {(learn ? "включено" : "выключено (Ещё → Прочее)")}");
+        text.AppendLine($"  «Дописывать адреса голоса Discord»: {(learn ? "включено" : "выключено («Маршруты» → «Настройки»)")}");
         text.AppendLine();
 
         var survey = Survey(log.ToString(), list);
