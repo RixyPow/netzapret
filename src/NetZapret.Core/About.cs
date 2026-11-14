@@ -97,7 +97,7 @@ public static class About
 
         new("WinDivert",
             "Перехват пакетов для winws2",
-            "LGPL v3 / GPL v3",
+            "LGPL v3 / GPL v2",
             "https://github.com/basil00/WinDivert"),
 
         new("Wintun",
