@@ -1,0 +1,62 @@
+<Window x:Class="NetZapret.Gui.Views.YoutubeTuneWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:gui="clr-namespace:NetZapret.Gui"
+        Title="Автонастройка YouTube" Height="760" Width="1000" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Backdrop}"
+        ResizeMode="CanResize">
+
+    <!--
+        Автонастройка YouTube отдельным окном (14.11): шаги полосой сверху — замер, решение,
+        проверка, — под ними одна таблица текущего шага. Решает библиотека (VideoNodesRun,
+        YoutubeTuner); окно только показывает и просит перезапуск движков.
+    -->
+    <Grid LayoutTransform="{DynamicResource UiScaleTransform}" Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <TextBlock Text="Автонастройка YouTube" Style="{StaticResource Title}" FontSize="20" VerticalAlignment="Center" />
+            <ContentControl Style="{StaticResource Info}" Margin="4,0,0,0"
+                            Content="Редкие и старые ролики YouTube отдаёт с зарубежных узлов Google, а на них фильтр провайдера. Замер проходит десять узлов: пинг, сколько соединений проходит через обход по TCP и QUIC, отвечает ли узел мимо обхода, есть ли у провайдера свой кэш Google.&#x0a;&#x0a;По замеру поверх вашего пресета включается рецепт для узлов, расширяется его окно и решается, выбрасывать ли QUIC. После применения движки перезапускаются и замер повторяется: стало хуже — настройка откатывается сама.&#x0a;&#x0a;Скорость самого видео замер не видит — только соединения." />
+        </StackPanel>
+
+        <!-- Шаги: пройденный — галочка, текущий — цветом темы, следующие — бледно. -->
+        <StackPanel Grid.Row="1" x:Name="StepBar" Orientation="Horizontal" Margin="0,18,0,0" />
+
+        <Border Grid.Row="2" Margin="0,14,0,0" Padding="14,10" CornerRadius="10"
+                Background="{DynamicResource Raised}" BorderThickness="1.5" BorderBrush="{DynamicResource Border}">
+            <TextBlock x:Name="Status" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+        </Border>
+
+        <gui:Card Grid.Row="3" Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="16,12">
+                <StackPanel x:Name="Body" />
+            </ScrollViewer>
+        </gui:Card>
+
+        <Grid Grid.Row="4" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0" x:Name="Remeasure" Style="{StaticResource Ghost}" Padding="16,10"
+                    Content="Перемерить" Click="OnMeasure" IsEnabled="False" />
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="CloseButton" Style="{StaticResource Ghost}" Padding="16,10" Margin="0,0,10,0"
+                        Content="Закрыть" Click="OnClose" />
+                <Button x:Name="Apply" Style="{StaticResource Primary}" Padding="20,10"
+                        Content="Применить" Click="OnApply" IsEnabled="False" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

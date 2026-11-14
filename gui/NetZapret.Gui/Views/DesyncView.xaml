@@ -358,9 +358,8 @@
                 </gui:Card>
 
                 <!--
-                    Автонастройка YouTube (14.11): замер узлов видео → решение → перезапуск
-                    и перезамер. Шагами в одной карточке: следующий появляется, когда готов
-                    предыдущий. Логика — в библиотеке (VideoNodesRun, YoutubeTuner).
+                    Автонастройка YouTube (14.11): состояние, «Настроить» открывает окно
+                    с шагами и таблицами (YoutubeTuneWindow), «Снять» — пресет как есть.
                 -->
                 <gui:Card Style="{StaticResource Card}" Margin="0,12,0,0" Padding="16,14,16,16">
                     <StackPanel>
@@ -395,18 +394,6 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Шаги: замер, решение, применение и перезамер. -->
-                        <StackPanel x:Name="YoutubeSteps" Margin="0,14,0,0" Visibility="Collapsed">
-                            <TextBlock x:Name="YoutubeProgress" Style="{StaticResource Caption}" TextWrapping="Wrap" />
-                            <StackPanel x:Name="YoutubeReasons" Margin="0,4,0,0" />
-                            <StackPanel x:Name="YoutubeActions" Orientation="Horizontal" Margin="0,12,0,0"
-                                        Visibility="Collapsed">
-                                <Button x:Name="YoutubeApply" Style="{StaticResource Primary}" Padding="18,9"
-                                        Margin="0,0,8,0" Content="Применить" Click="OnYoutubeApply" />
-                                <Button Style="{StaticResource Ghost}" Padding="14,9" Content="Отмена"
-                                        Click="OnYoutubeCancel" />
-                            </StackPanel>
-                        </StackPanel>
                     </StackPanel>
                 </gui:Card>
 

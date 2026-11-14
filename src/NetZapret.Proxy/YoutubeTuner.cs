@@ -2,6 +2,13 @@ using NetZapret.Core;
 
 namespace NetZapret.Proxy;
 
+/// <summary>Одно решение автонастройки: что, как решено и почему — числами замера.</summary>
+/// <param name="What">Что решается: «Рецепт узлов видео», «Малое окно», «Далёкие узлы», «QUIC».</param>
+/// <param name="Verdict">Как решено: «нужен», «вдвое шире», «от 41 мс», «не трогать».</param>
+/// <param name="Why">Почему.</param>
+/// <param name="On">Решение что-то включает.</param>
+public sealed record YoutubeChoice(string What, string Verdict, string Why, bool On);
+
 /// <summary>Что автонастройка решила и почему.</summary>
 public sealed record YoutubeDecision
 {
@@ -10,6 +17,9 @@ public sealed record YoutubeDecision
 
     /// <summary>По строке на решение: что и почему — числами замера.</summary>
     public required IReadOnlyList<string> Reasons { get; init; }
+
+    /// <summary>Те же решения по частям — для таблицы окна.</summary>
+    public IReadOnlyList<YoutubeChoice> Choices { get; init; } = [];
 
     /// <summary>
     /// Узлы не открываются и с рецептом: десинку больше нечего предложить, остаётся VPN.
@@ -69,6 +79,13 @@ public static class YoutubeTuner
         }
 
         var reasons = new List<string>();
+        var choices = new List<YoutubeChoice>();
+
+        void Say(string what, string verdict, string why, bool on)
+        {
+            choices.Add(new YoutubeChoice(what, verdict, why, on));
+            reasons.Add($"{what.ToLowerInvariant()} — {verdict}: {why}");
+        }
         var filtered = measured.Where(n => n.Filter is NodeFilter.GoogleOnly or NodeFilter.Closed).ToList();
         var closed = measured.Where(n => n.Filter == NodeFilter.Closed).ToList();
         double tcpShare = report.Tries > 0 ? (double)report.Tcp / report.Tries : 0;
@@ -80,14 +97,14 @@ public static class YoutubeTuner
 
         if (nodes)
         {
-            reasons.Add($"рецепт узлов видео — нужен: под фильтром {filtered.Count} узлов из {measured.Count}"
+            Say("Рецепт узлов видео", "нужен", $"под фильтром {filtered.Count} узлов из {measured.Count}"
                 + (closed.Count > 0 ? $", закрыты наглухо {closed.Count}" : string.Empty)
                 + $"; TCP через обход {report.Tcp} из {report.Tries}"
-                + (noCache ? "; кэша Google у провайдера нет — с этих узлов идёт всё видео" : string.Empty));
+                + (noCache ? "; кэша Google у провайдера нет — с этих узлов идёт всё видео" : string.Empty), true);
         }
         else
         {
-            reasons.Add($"рецепт узлов видео — не нужен: фильтра нет, TCP {report.Tcp} из {report.Tries}");
+            Say("Рецепт узлов видео", "не нужен", $"фильтра нет, TCP {report.Tcp} из {report.Tries}", false);
         }
 
         // Окно: малое окно без множителя даёт 64 КБ на задержку. Узлы, до которых оно не
@@ -99,9 +116,10 @@ public static class YoutubeTuner
 
         if (nodes)
         {
-            reasons.Add(doubled
-                ? $"малое окно — вдвое шире: пинг до узлов {Span(pings)} мс, окно 64 КБ даёт меньше {TargetMbit:0} Мбит/с уже от {slow} мс"
-                : $"малое окно — обычное: пинг до узлов {Span(pings)} мс, 64 КБ хватает на {TargetMbit:0} Мбит/с");
+            if (doubled)
+                Say("Малое окно", "вдвое шире", $"пинг до узлов {Span(pings)} мс, окно 64 КБ даёт меньше {TargetMbit:0} Мбит/с уже от {slow} мс", true);
+            else
+                Say("Малое окно", "обычное", $"пинг до узлов {Span(pings)} мс, 64 КБ хватает на {TargetMbit:0} Мбит/с", false);
         }
 
         // «Далёкий» узел — тот, где и выбранное окно цели не даёт: ему первый срез прощается,
@@ -111,8 +129,8 @@ public static class YoutubeTuner
         if (nodes)
         {
             int distant = pings.Count(p => p > far);
-            reasons.Add($"далёкие узлы — от {far} мс: им первый срез прощается"
-                + (distant > 0 ? $" (таких узлов {distant} из {pings.Count})" : " (таких нет)"));
+            Say("Далёкие узлы", $"от {far} мс", "им первый срез прощается — повтор идёт обычным соединением"
+                + (distant > 0 ? $"; таких узлов {distant} из {pings.Count}" : "; таких нет"), distant > 0);
         }
 
         // QUIC: плеер пробует его первым. Мёртвый у узлов под фильтром — выбросить, чтобы плеер
@@ -122,15 +140,16 @@ public static class YoutubeTuner
 
         if (quicNodes.Count == 0)
         {
-            reasons.Add("QUIC — не трогать: на этой машине он не мерился");
+            Say("QUIC", "не трогать", "на этой машине он не мерился", false);
         }
         else
         {
             int quic = quicNodes.Sum(n => n.Quic), quicTries = quicNodes.Sum(n => n.QuicTries);
             dropQuic = quic < quicTries * QuicFloor;
-            reasons.Add(dropQuic
-                ? $"QUIC к узлам видео — выбросить: проходит {quic} из {quicTries}, плеер ждал бы его и потом шёл по TCP"
-                : $"QUIC — не трогать: проходит {quic} из {quicTries}, видео пойдёт по нему");
+            if (dropQuic)
+                Say("QUIC к узлам видео", "выбросить", $"проходит {quic} из {quicTries}, плеер ждал бы его и потом шёл по TCP", true);
+            else
+                Say("QUIC", "не трогать", $"проходит {quic} из {quicTries}, видео пойдёт по нему", false);
         }
 
         // Последний шаг — только когда рецепт уже работал и не помог: узлы под фильтром
@@ -141,8 +160,8 @@ public static class YoutubeTuner
 
         if (nothingLeft)
         {
-            reasons.Add($"узлы под фильтром не открываются и с рецептом: TCP {filteredTcp} из {filteredTries} — "
-                + "десинку больше нечего предложить; остаётся YouTube через VPN, и страница, и видео");
+            Say("Узлы под фильтром", "не открываются и с рецептом", $"TCP {filteredTcp} из {filteredTries} — "
+                + "десинку больше нечего предложить; остаётся YouTube через VPN, и страница, и видео", false);
         }
 
         return new YoutubeDecision
@@ -157,6 +176,7 @@ public static class YoutubeTuner
                 Summary = report.Totals,
             },
             Reasons = reasons,
+            Choices = choices,
             NothingLeft = nothingLeft,
         };
     }
