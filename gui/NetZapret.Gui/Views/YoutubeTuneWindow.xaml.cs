@@ -163,6 +163,7 @@ public partial class YoutubeTuneWindow : Window
 
             if (!restarted.Ok)
             {
+                YoutubeTuneLog.Failed("движки не перезапустились: " + restarted.Message, "окно");
                 Status.Text = "Движки не перезапустились: " + restarted.Message + " Настройка записана — подействует со следующего запуска.";
                 return;
             }
@@ -176,7 +177,8 @@ public partial class YoutubeTuneWindow : Window
                 return;
             }
 
-            var (worse, _) = VideoNodesRun.Compare(before, after);
+            var (worse, said) = VideoNodesRun.Compare(before, after);
+            YoutubeTuneLog.Compared(after, said, worse, "окно");
 
             Body.Children.Clear();
             Body.Children.Add(Head("Было и стало"));
@@ -195,7 +197,7 @@ public partial class YoutubeTuneWindow : Window
                 return;
             }
 
-            VideoNodesRun.Save(previous);
+            VideoNodesRun.Save(previous, who: "окно, откат после перезамера");
             Changed?.Invoke();
             Status.Text = "Стало хуже — возвращаю прежнее и перезапускаю движки…";
             var back = await EngineControl.RestartAsync("автонастройка YouTube: откат", token);
@@ -230,11 +232,18 @@ public partial class YoutubeTuneWindow : Window
 
         try
         {
-            VideoNodesRun.Save(back);
+            var current = AppSettings.Load(AppSettings.DefaultPath);
+            VideoNodesRun.Save(back, who: "окно, кнопка «Откатить»");
             Changed?.Invoke();
             _applied = false;
 
             var said = back is { Active: true } ? $"возвращено прежнее: {YoutubeAddon.Describe(back)}" : "автонастройка снята — пресет как есть";
+            if (YoutubeAddon.SameLine(current.Youtube, back, VideoNodesRun.PresetHasRecipe(current)))
+            {
+                Status.Text = $"Откат: {said}. В работе десинка ничего не меняется — движки не перезапускались.";
+                return;
+            }
+
             Status.Text = $"Откат: {said}. Перезапускаю движки…";
 
             var restarted = await EngineControl.RestartAsync("автонастройка YouTube: откат кнопкой", CancellationToken.None);

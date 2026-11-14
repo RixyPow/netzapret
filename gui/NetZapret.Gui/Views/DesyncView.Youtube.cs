@@ -44,8 +44,14 @@ public partial class DesyncView
     {
         try
         {
-            var saved = VideoNodesRun.Save(null);
+            var before = AppSettings.Load(AppSettings.DefaultPath);
+            var saved = VideoNodesRun.Save(null, who: "«Десинк», кнопка «Снять»");
             ShowYoutube(saved);
+
+            // Строка winws2 та же (у пресета свой рецепт) — движки не трогаем.
+            if (YoutubeAddon.SameLine(before.Youtube, null, VideoNodesRun.PresetHasRecipe(before)))
+                return;
+
             YoutubeState.Text = "Автонастройка снята — пресет как есть. Перезапуск движков…";
 
             var restarted = await EngineControl.RestartAsync("автонастройка YouTube снята на «Десинке»", CancellationToken.None);

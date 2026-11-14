@@ -634,7 +634,7 @@ async Task<int> YoutubeTune(List<string> options)
 {
     if (options.Contains("off"))
     {
-        VideoNodesRun.Save(null);
+        VideoNodesRun.Save(null, who: "nz youtube tune off");
         Console.WriteLine("автонастройка YouTube снята — пресет как есть; перезапускаю движки…");
         return await Engines(EngineVerb.Restart, []);
     }
@@ -642,7 +642,7 @@ async Task<int> YoutubeTune(List<string> options)
     var settings = AppSettings.Load(AppSettings.DefaultPath);
     Console.WriteLine("замер узлов видео, ~20 с…");
 
-    var (before, decision, why) = await VideoNodesRun.TuneAsync(settings, CancellationToken.None);
+    var (before, decision, why) = await VideoNodesRun.TuneAsync(settings, CancellationToken.None, "nz");
 
     if (decision is null)
     {
@@ -668,7 +668,7 @@ async Task<int> YoutubeTune(List<string> options)
     }
 
     var previous = settings.Youtube;
-    VideoNodesRun.Save(tune);
+    VideoNodesRun.Save(tune, who: "nz youtube tune apply");
 
     if (NetZapret.Zapret.YoutubeAddon.SameLine(previous, tune, VideoNodesRun.PresetHasRecipe(settings)))
     {
@@ -688,6 +688,7 @@ async Task<int> YoutubeTune(List<string> options)
         return 1;
 
     var (worse, said) = VideoNodesRun.Compare(before, after);
+    YoutubeTuneLog.Compared(after, said, worse, "nz");
     Console.WriteLine(said);
 
     if (!worse)
@@ -696,7 +697,7 @@ async Task<int> YoutubeTune(List<string> options)
         return 0;
     }
 
-    VideoNodesRun.Save(previous);
+    VideoNodesRun.Save(previous, who: "nz, откат после перезамера");
     Console.WriteLine("стало хуже — возвращаю прежнее и перезапускаю движки…");
     await Engines(EngineVerb.Restart, []);
     return 1;

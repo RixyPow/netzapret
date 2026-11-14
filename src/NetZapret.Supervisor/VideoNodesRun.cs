@@ -104,25 +104,39 @@ public static class VideoNodesRun
     /// </summary>
     public static async Task<(VideoNodesReport? Report, YoutubeDecision? Decision, string? Why)> TuneAsync(
         AppSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string who = "окно")
     {
         var (report, why) = await MeasureAsync(settings, cancellationToken);
 
         if (report is null)
+        {
+            YoutubeTuneLog.Failed("замер не вышел: " + why, who);
             return (null, null, why);
+        }
 
         if (!report.Desync)
+        {
+            YoutubeTuneLog.Measured(settings, report, null, who);
             return (report, null, "десинк не работает — настраивать нечего; запустите движки");
+        }
 
-        return (report, YoutubeTuner.Decide(report, RecipeOn(settings), PresetHasRecipe(settings)), null);
+        var decision = YoutubeTuner.Decide(report, RecipeOn(settings), PresetHasRecipe(settings));
+        YoutubeTuneLog.Measured(settings, report, decision, who);
+        return (report, decision, null);
     }
 
     /// <summary>Записывает настройку в файл настроек; <c>null</c> — снять, пресет как есть.</summary>
-    public static AppSettings Save(YoutubeTune? tune, string? path = null)
+    public static AppSettings Save(YoutubeTune? tune, string? path = null, string who = "окно")
     {
         var file = path ?? AppSettings.DefaultPath;
-        var settings = AppSettings.Load(file) with { Youtube = tune };
+        var before = AppSettings.Load(file);
+        var settings = before with { Youtube = tune };
         settings.Save(file);
+
+        if (path is null)
+            YoutubeTuneLog.Saved(before.Youtube, tune, !Zapret.YoutubeAddon.SameLine(before.Youtube, tune, PresetHasRecipe(settings)), who);
+
         return settings;
     }
 

@@ -177,6 +177,11 @@ public static class SupportReport
         AddFile(parts, "watch.1.log", watch + ".1");
         AddFile(parts, "watch.log", watch);
 
+        // Автонастройка YouTube: замеры с таблицей узлов, решения, записи, «было → стало»,
+        // откаты (YoutubeTuneLog, 14.11) — без него жалобу «после неё стало хуже» не разобрать.
+        AddFile(parts, "youtube-tune.1.log", At(root, YoutubeTuneLog.DefaultPath + ".1"));
+        AddFile(parts, "youtube-tune.log", At(root, YoutubeTuneLog.DefaultPath));
+
         AddFile(parts, "rules.user.yaml", At(root, Path.Combine("config", "rules.user.yaml")));
         AddFile(parts, "desync-exclude.txt", At(root, Path.Combine("runtime", "desync-exclude.txt")));
         AddFile(parts, "desync-keep.txt", At(root, Path.Combine("runtime", "desync-keep.txt")));
