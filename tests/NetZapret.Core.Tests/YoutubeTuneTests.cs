@@ -187,6 +187,21 @@ public sealed class YoutubeTuneTests
         Assert.False(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true }, new YoutubeTune { DropQuic = true }, presetHasRecipe: true));
     }
 
+    /// <summary>
+    /// Перезамер без десинка — голая сеть, а не настройка: не повод откатывать (14.11,
+    /// greyoceanx: перемерили до подъёма движков, 23 → 14, автонастройка откатилась).
+    /// </summary>
+    [Fact]
+    public void AMeasureWithoutDesyncIsNotWorse()
+    {
+        var nodes = Enumerable.Range(0, 10).Select(i => Node(50, 3, 0)).ToArray();
+        var before = Report(nodes);
+        var bare = new VideoNodesReport { Nodes = nodes.Select(n => n with { Tcp = 1 }).ToArray(), Desync = false };
+
+        Assert.False(Supervisor.VideoNodesRun.Compare(before, bare).Worse);
+        Assert.True(Supervisor.VideoNodesRun.Compare(before, bare with { Desync = true }).Worse);
+    }
+
     [Fact]
     public void NoTuneNoChange()
     {

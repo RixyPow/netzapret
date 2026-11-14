@@ -168,6 +168,15 @@ public partial class YoutubeTuneWindow : Window
                 return;
             }
 
+            Status.Text = "Жду, пока десинк поднимется…";
+
+            if (!await VideoNodesRun.WaitDesyncAsync(TimeSpan.FromSeconds(40), token))
+            {
+                YoutubeTuneLog.Failed("десинк не поднялся за 40 с после перезапуска — перезамер не делался", "окно");
+                Status.Text = "Десинк не поднялся за 40 секунд — перемерить нечем. Настройка записана; проверьте «Перемерить», когда движки поднимутся.";
+                return;
+            }
+
             Status.Text = "Перемеряю узлы, около 20 секунд…";
             var (after, _) = await Task.Run(() => VideoNodesRun.MeasureAsync(AppSettings.Load(AppSettings.DefaultPath), token), token);
 

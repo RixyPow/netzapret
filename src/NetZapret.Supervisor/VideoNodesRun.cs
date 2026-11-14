@@ -140,6 +140,38 @@ public static class VideoNodesRun
         return settings;
     }
 
+    /// <summary>
+    /// Ждёт, пока после перезапуска десинк поднят и работает: winws2 здоров у живого
+    /// надзора, плюс прогрев. <c>false</c> — не дождались за <paramref name="limit"/>.
+    /// </summary>
+    /// <remarks>
+    /// Окно перемеряло сразу после «перезапуск прошёл», когда надзор ещё не записал
+    /// состояние: замер шёл «без десинка», показал голую сеть (у greyoceanx 14.11 —
+    /// TCP 23 → 14 из 30, кэш провайдера «не ответил»), и автонастройка откатилась сама.
+    /// Прогрев — шесть секунд: сразу после подъёма первое соединение к каждому узлу
+    /// в том замере не прошло ни у одного.
+    /// </remarks>
+    public static async Task<bool> WaitDesyncAsync(TimeSpan limit, CancellationToken cancellationToken)
+    {
+        var until = DateTime.UtcNow + limit;
+
+        while (DateTime.UtcNow < until)
+        {
+            var state = SupervisorState.Load(SupervisorState.DefaultPath);
+
+            if (state is not null && state.IsSupervisorAlive()
+                && state.Services.FirstOrDefault(s => s.Name == "winws2") is { Health: ServiceHealth.Healthy })
+            {
+                await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
+                return true;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        }
+
+        return false;
+    }
+
     /// <summary>На сколько соединений из 30 расходятся одинаковые прогоны (14.11 дома: 22–27).</summary>
     public const int Spread = 8;
 
@@ -156,7 +188,9 @@ public static class VideoNodesRun
     public static (bool Worse, string Said) Compare(VideoNodesReport before, VideoNodesReport after)
     {
         int lost = before.Tcp - after.Tcp;
-        bool worse = before.Tries == after.Tries && lost > Spread;
+
+        // Перезамер без десинка — это голая сеть, а не настройка: сравнивать не с чем.
+        bool worse = after.Desync && before.Desync && before.Tries == after.Tries && lost > Spread;
         int lagBefore = before.Measured.Sum(n => n.Lagged), lagAfter = after.Measured.Sum(n => n.Lagged);
 
         return (worse,

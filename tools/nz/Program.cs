@@ -681,6 +681,13 @@ async Task<int> YoutubeTune(List<string> options)
     if (await Engines(EngineVerb.Restart, []) != 0)
         return 1;
 
+    if (!await VideoNodesRun.WaitDesyncAsync(TimeSpan.FromSeconds(40), CancellationToken.None))
+    {
+        YoutubeTuneLog.Failed("десинк не поднялся за 40 с после перезапуска — перезамер не делался", "nz");
+        Console.WriteLine("десинк не поднялся за 40 с — перемерить нечем; настройка записана");
+        return 1;
+    }
+
     Console.WriteLine("перезамер, ~20 с…");
     var (after, _) = await VideoNodesRun.MeasureAsync(AppSettings.Load(AppSettings.DefaultPath), CancellationToken.None);
 
