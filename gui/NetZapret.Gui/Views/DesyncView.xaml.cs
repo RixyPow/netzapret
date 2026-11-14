@@ -183,6 +183,7 @@ public partial class DesyncView : UserControl
 
         GameFilterSwitch.IsChecked = settings.GameFilter;
         ShowChosen(settings);
+        ShowYoutube(settings);
         ShowEngine();
 
         // До списка пресетов, а не после: список умеет уйти по короткому
