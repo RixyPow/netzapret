@@ -34,6 +34,9 @@ YouTube: с них идут редкие и старые ролики, кото�
 (game filter), V5 my, V6, V6 voicefix, V7 и V8 diag. Обновление новые файлы
 кладёт, а лишние не стирает — у тех, кто обновился, они остаются на диске.
 
+«Default + YouTube no QUIC + wssize» (с 14.11) — встроенный пресет Zapret GUI
+2.44 без изменений: YouTube без QUIC и видео с малым окном `wssize`.
+
 «white sni (circular)» и «shadow probes (circular)» (с 08.10) нужны модули
 lua Zapret GUI от 07.10 и новее (`shadow_probe`, `white_seqovl`, детекторы
 `white_*` в `custom_funcs.lua`): со старой установкой Zapret GUI winws2
