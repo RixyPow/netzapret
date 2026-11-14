@@ -148,6 +148,16 @@ public partial class YoutubeTuneWindow : Window
             VideoNodesRun.Save(tune);
             Changed?.Invoke();
 
+            // Строка winws2 та же — движки не трогаем и не перемеряем: разница двух прогонов
+            // одной строки — только разброс.
+            if (YoutubeAddon.SameLine(previous, tune))
+            {
+                ShowSteps(3);
+                Status.Text = "Записано. В работе десинка ничего не меняется — движки не перезапускались.";
+                CloseButton.Content = "Готово";
+                return;
+            }
+
             Status.Text = "Записано. Перезапускаю движки…";
             var restarted = await EngineControl.RestartAsync("автонастройка YouTube", token);
 
@@ -367,9 +377,9 @@ public partial class YoutubeTuneWindow : Window
 
         return Table([0, 0, 0, 1], ["", "Было", "Стало", ""],
         [
-            [("TCP через обход", null), (Share(before.Tcp, before.Tries), null), (Share(after.Tcp, after.Tries), after.Tcp < before.Tcp - 4 ? "Danger" : after.Tcp >= before.Tcp ? "Accent" : null), ("соединения к узлам видео", "Muted")],
-            [("QUIC", null), (Share(before.Quic, before.QuicTries), null), (Share(after.Quic, after.QuicTries), null), ("ноль после «выбросить QUIC» — так и задумано", "Muted")],
-            [("С малым окном", null), ($"{lagBefore}", null), ($"{lagAfter}", null), ("ответы на 0,2 с позже обычного: рецепт включил малое окно", "Muted")],
+            [("TCP через обход", null), (Share(before.Tcp, before.Tries), null), (Share(after.Tcp, after.Tries), after.Tcp < before.Tcp - VideoNodesRun.Spread ? "Danger" : after.Tcp >= before.Tcp ? "Accent" : null), ($"одинаковые прогоны расходятся до {VideoNodesRun.Spread} из 30 — меньше этого не в счёт", "Muted")],
+            [("QUIC", null), (Share(before.Quic, before.QuicTries), null), (Share(after.Quic, after.QuicTries), null), (after.QuicTries > 0 && after.Quic == 0 ? "ноль после «выбросить QUIC» — так и задумано" : string.Empty, "Muted")],
+            [("С малым окном", null), ($"{lagBefore}", null), ($"{lagAfter}", null), ("ответы на 0,2 с позже обычного — рецепт включил малое окно; сразу после перезапуска модуль ещё не помнит срезанные узлы, их меньше", "Muted")],
         ]);
     }
 }

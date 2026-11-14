@@ -78,6 +78,20 @@ public static class YoutubeAddon
         return preset with { GlobalArguments = globals, Sections = sections };
     }
 
+    /// <summary>
+    /// Даёт ли смена настройки другую строку winws2. Нет — перезапуск движков и перезамер
+    /// ни к чему: 14.11 «Записать» без изменений перезапустило движки, перемерило, и разброс
+    /// (27 → 21 из 30) читался как «стало хуже».
+    /// </summary>
+    public static bool SameLine(YoutubeTune? a, YoutubeTune? b)
+    {
+        static (bool, bool, int, bool) Key(YoutubeTune? t) => t is { Active: true }
+            ? (t.Nodes, t.Nodes && t.Doubled, t.Nodes ? t.FarMs : 0, t.DropQuic)
+            : (false, false, 0, false);
+
+        return Key(a) == Key(b);
+    }
+
     /// <summary>Что включено — словами, для журнала и карточки.</summary>
     public static string Describe(YoutubeTune tune)
     {

@@ -169,6 +169,20 @@ public sealed class YoutubeTuneTests
         Assert.Contains("--filter-udp=443", preset.Sections[0].RawArguments);
     }
 
+    /// <summary>
+    /// «Записать» без изменений строки — без перезапуска (14.11: перезапуск и перезамер
+    /// показали разброс 27 → 21 как «стало хуже»).
+    /// </summary>
+    [Fact]
+    public void OnlyARealChangeOfTheLineCounts()
+    {
+        Assert.True(YoutubeAddon.SameLine(null, new YoutubeTune()));
+        Assert.True(YoutubeAddon.SameLine(new YoutubeTune { Doubled = true, FarMs = 41 }, null));
+        Assert.True(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true, FarMs = 41 }, new YoutubeTune { Nodes = true, FarMs = 41, Summary = "другой замер" }));
+        Assert.False(YoutubeAddon.SameLine(null, new YoutubeTune { DropQuic = true }));
+        Assert.False(YoutubeAddon.SameLine(new YoutubeTune { Nodes = true, FarMs = 41 }, new YoutubeTune { Nodes = true, FarMs = 20 }));
+    }
+
     [Fact]
     public void NoTuneNoChange()
     {

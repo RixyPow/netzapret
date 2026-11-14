@@ -126,6 +126,9 @@ public static class VideoNodesRun
         return settings;
     }
 
+    /// <summary>На сколько соединений из 30 расходятся одинаковые прогоны (14.11 дома: 22–27).</summary>
+    public const int Spread = 8;
+
     /// <summary>
     /// Было → стало после применения: стало ли хуже по TCP через обход.
     /// </summary>
@@ -139,7 +142,7 @@ public static class VideoNodesRun
     public static (bool Worse, string Said) Compare(VideoNodesReport before, VideoNodesReport after)
     {
         int lost = before.Tcp - after.Tcp;
-        bool worse = before.Tries == after.Tries && lost > 8;
+        bool worse = before.Tries == after.Tries && lost > Spread;
         int lagBefore = before.Measured.Sum(n => n.Lagged), lagAfter = after.Measured.Sum(n => n.Lagged);
 
         return (worse,
