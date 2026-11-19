@@ -991,6 +991,10 @@ public partial class VpnView : UserControl
                 Journal.Write("подписка", $"«{row.Entry.Name}» ответила, но серверов 0: "
                     + string.Join("; ", info.Errors.Take(3)));
             }
+            else if (usable == 0 && info.StubNotice() is { } stub)
+            {
+                Journal.Write("подписка", $"«{row.Entry.Name}» отдала заглушки вместо серверов: {stub}");
+            }
 
             row.Detail = string.Join(" · ", parts);
             Redraw();
@@ -1056,9 +1060,15 @@ public partial class VpnView : UserControl
         row.SupportUrl = info.SupportUrl;
         row.WebPageUrl = info.WebPageUrl;
         row.Announce = info.Announce;
-        row.Warning = info.ExpiryWarningText(DateTimeOffset.Now);
 
-        return (usable.Count, info.Servers.Count - usable.Count);
+        var warnings = new List<string>();
+        if (info.ExpiryWarningText(DateTimeOffset.Now) is { } expiry)
+            warnings.Add(expiry);
+        if (info.StubNotice() is { } stub)
+            warnings.Add("Панель: " + stub);
+        row.Warning = warnings.Count > 0 ? string.Join(" · ", warnings) : null;
+
+        return (usable.Count, info.UnsupportedCount);
     }
 
     /// <summary>«14:05» сегодняшнее, «21.10 14:05» прежнее.</summary>

@@ -80,5 +80,41 @@ public sealed record SubscriptionInfo
             : $"подписка кончается через {(int)Math.Ceiling(left.TotalDays)} дн";
     }
 
+    /// <summary>Сколько серверов с настоящим адресом sing-box не поддерживает по протоколу или транспорту.</summary>
+    /// <remarks>
+    /// Заглушки без адреса (<c>0.0.0.0:1</c>, разделители и сообщения панели) сюда не входят:
+    /// писать про них «sing-box не поддерживает» неверно (обсуждение №69).
+    /// </remarks>
+    public int UnsupportedCount => Servers.Count(s => s.HasDialableAddress && !s.IsSupportedBySingBox);
+
+    /// <summary>
+    /// Текст сообщений-заглушек панели (серверы без адреса вроде <c>0.0.0.0:1</c>),
+    /// когда годных серверов в подписке не осталось ни одного; <c>null</c> — если есть рабочие
+    /// серверы или заглушек нет.
+    /// </summary>
+    /// <remarks>
+    /// Обсуждение №69 (14.11): панель при лимите устройств по HWID отдаёт вместо серверов
+    /// записи <c>0.0.0.0:1</c> с текстом «Вы достигли лимита устройств» в имени. Прежде
+    /// парсер отбрасывал их молча, и человек видел пустую подписку без объяснения.
+    /// </remarks>
+    public string? StubNotice()
+    {
+        if (Servers.Count == 0 || Servers.Any(s => s.IsUsableOutbound))
+            return null;
+
+        var notes = Servers
+            .Where(s => !s.HasDialableAddress && !string.IsNullOrWhiteSpace(s.Tag))
+            .Select(s => s.Tag.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToList();
+
+        if (notes.Count == 0)
+            return null;
+
+        var text = string.Join(" · ", notes);
+        return text.Length <= 220 ? text : text[..219].TrimEnd() + "…";
+    }
+
     public static SubscriptionInfo Empty { get; } = new() { Servers = Array.Empty<ProxyServer>() };
 }
