@@ -153,6 +153,24 @@ wscale больше 14, остальное — `zapret-lib.lua` и blockcheck2, 
 `--dry-run --debug=1` и фильтр `--wf-save` те же, код 0, фильтр 4,7–5,1 КБ.
 Контрольные суммы так не проверить — только на живых пакетах.
 
+С 19.11 — `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-67-ge2bb3c5-native`
+(SHA-256 `673fac55…94f40869c`, сверен с описанием выпуска 19.11 на зеркале
+`git2.zapret.moe`), в
+`tools\zapret2-native-v1.0.7-34-gfd8ae05-native-3-g0de505f-native-67-ge2bb3c5\`;
+`-39-g3be561a` (в 1.6.2) — в своей папке как `winws2-native.exe.bak`.
+В форке поверх `-39` — только подтяжки `upstream/master` bol-van, прослойка
+`winnative` не менялась. Правки самого движка (`nfq2/`) у bol-van, касающиеся
+и Windows: счётчики пакетов после переинициализации conntrack (`b259b93`),
+пересчёт L3-длин у фрагментированных пакетов `frag_off` (`4b4facb`), запрет
+нулевой UDP `badsum` (`d52269a`), копирование `filter_mark` и `filter_ssid_neg`
+в шаблонах (`6426026`), исправление порчи позиций conntrack из-за знаковости
+(`73f3510`), восстановление `hostname_is_ip` из `ipcache` (`eba8985`), отмена
+пересборки QUIC, если внутри не TLS (`97736bc`), `get_ifaddrs` (`fa1c594`) и
+скобки (`279bccf`); остальное — lua и документация. Сверка 19.11 на всех
+19 пресетах программой `artifacts\winwscmp`: вывод `--dry-run --debug=1`
+построчно тот же, кроме строки версии, код 0, фильтр `--wf-save` побайтно
+тот же (4,3–4,7 КБ). Вживую на пакетах не проверено.
+
 `winws2.exe` под `tools\` должен быть один: сборка берёт последний найденный.
 Прежний, `binaries\windows-x86_64\winws2.exe` из выпуска
 [bol-van/zapret2](https://github.com/bol-van/zapret2/releases), лежит
