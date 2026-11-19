@@ -331,7 +331,13 @@ public sealed record VideoNodesReport
                 lines.Add("  QUIC на этой машине не мерился — как пойдёт плеер, по нему не сказать");
             }
 
-            lines.Add("  скорость самого видео не мерилась: ссылку на поток выдаёт только плеер; потолок выше — расчёт (64 КБ окна на пинг)");
+            bool doubledWindow = Recipe is not null
+                && (Recipe.Contains("scale=1", StringComparison.OrdinalIgnoreCase)
+                    || Recipe.Contains("окно вдвое", StringComparison.OrdinalIgnoreCase));
+
+            lines.Add(doubledWindow
+                ? "  скорость самого видео не мерилась: ссылку на поток выдаёт только плеер; потолок выше — расчёт для окна 64 КБ (с удвоением окна в рецепте — вдвое выше, 131 КБ)"
+                : "  скорость самого видео не мерилась: ссылку на поток выдаёт только плеер; потолок выше — расчёт (64 КБ окна на пинг)");
 
             return lines;
         }

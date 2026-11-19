@@ -187,14 +187,17 @@ public static class YoutubeAddon
     }
 
     /// <summary>
-    /// QUIC к узлам видео — выбросить первые пакеты: плеер сразу уходит на TCP.
+    /// QUIC к зарубежным узлам видео — выбросить первые пакеты: плеер сразу уходит на TCP.
     /// </summary>
     /// <remarks>
     /// Так делает пресет loop-uh «Default + YouTube no QUIC + wssize» (Zapret GUI 2.44). Там,
     /// где QUIC к узлам мёртв (обсуждение №63: 8 из 30), браузер иначе ждёт его, прежде
     /// чем пойти по TCP. Где QUIC живой (дом владельца, 14.11: 21 из 30, видео 4K по h3) —
-    /// не включается: автонастройка решает по замеру. Только узлы видео, не страница:
-    /// QUIC к www.youtube.com не трогается.
+    /// не включается: автонастройка решает по замеру. Только зарубежные сети видео Google
+    /// (<see cref="MainCidr"/> и <see cref="SpareCidr"/>), а не весь <c>googlevideo.txt</c>:
+    /// в отчёте №63 (Aclerr, Ростелеком, 14.11) кэш провайдера <c>rostelecom-ovb5</c>
+    /// (79.133.76.44) отвечал только по QUIC (3 из 3 при TCP 0 из 3), и выброс QUIC по одному
+    /// списку имён закрыл его целиком. Страница <c>www.youtube.com</c> тоже не трогается.
     /// </remarks>
     private static ZapretSection DropQuicSection()
     {
@@ -211,6 +214,7 @@ public static class YoutubeAddon
             RawArguments =
             [
                 $"--name={name}", "--filter-udp=443", "--filter-l7=quic", "--hostlist=lists/googlevideo.txt",
+                $"--ipset-ip={MainCidr},{SpareCidr}",
                 "--out-range=-n8", "--payload=all", "--lua-desync=" + step,
             ],
         };

@@ -189,13 +189,22 @@ public static class VideoNodesRun
     {
         int lost = before.Tcp - after.Tcp;
 
+        // Если живой кэш провайдера (не площадка Google) после применения перестал
+        // отвечать и по TCP, и по QUIC — настройка его сломала (№63, Aclerr, 14.11:
+        // rostelecom-ovb5 жил только на QUIC 3 из 3, выброс QUIC убил его в 0 из 3).
+        bool cacheBroken = before.CacheNode is { GoogleSite: false, Measured: true } cb
+            && (cb.Tcp > 0 || cb.Quic > 0)
+            && after.CacheNode is { GoogleSite: false, Measured: true } ca
+            && ca.Tcp == 0 && ca.Quic == 0;
+
         // Перезамер без десинка — это голая сеть, а не настройка: сравнивать не с чем.
-        bool worse = after.Desync && before.Desync && before.Tries == after.Tries && lost > Spread;
+        bool worse = after.Desync && before.Desync && ((before.Tries == after.Tries && lost > Spread) || cacheBroken);
         int lagBefore = before.Measured.Sum(n => n.Lagged), lagAfter = after.Measured.Sum(n => n.Lagged);
 
         return (worse,
             $"TCP через обход: было {before.Tcp} из {before.Tries}, стало {after.Tcp} из {after.Tries}; "
             + $"QUIC: было {before.Quic} из {before.QuicTries}, стало {after.Quic} из {after.QuicTries}; "
-            + $"ответов с малым окном: было {lagBefore}, стало {lagAfter}");
+            + $"ответов с малым окном: было {lagBefore}, стало {lagAfter}"
+            + (cacheBroken ? "; кэш провайдера перестал отвечать" : string.Empty));
     }
 }

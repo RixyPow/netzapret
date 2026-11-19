@@ -167,6 +167,51 @@ public sealed class YoutubeTuneTests
         Assert.Equal(original.Sections.Count + 1, preset.Sections.Count);
         Assert.Equal(["drop"], preset.Sections[0].DesyncRecipes);
         Assert.Contains("--filter-udp=443", preset.Sections[0].RawArguments);
+        // Выброс QUIC ограничен зарубежными сетями видео Google — кэш провайдера не трогается (№63, Aclerr).
+        Assert.Contains("--ipset-ip=74.125.0.0/16,173.194.0.0/16,209.85.128.0/17,172.217.0.0/16", preset.Sections[0].RawArguments);
+    }
+
+    /// <summary>
+    /// Если после применения перестал отвечать живой кэш провайдера (№63, Aclerr, 14.11:
+    /// rostelecom-ovb5 жил на QUIC 3 из 3 и стал 0 из 3), перезамер обязан откатить настройку,
+    /// даже когда зарубежные узлы по TCP не просели.
+    /// </summary>
+    [Fact]
+    public void ABrokenProviderCacheTriggersRollback()
+    {
+        var foreign = Enumerable.Range(0, 10).Select(i => Node(65, 2, 0)).ToArray();
+        var cacheBefore = new VideoNode
+        {
+            Host = "rr1---rostelecom-ovb5" + VideoNodes.Zone,
+            Address = "79.133.76.44",
+            Cache = true,
+            Tries = 3,
+            Tcp = 0,
+            QuicTries = 3,
+            Quic = 3,
+            PingMs = 5,
+        };
+        var cacheAfter = cacheBefore with { Quic = 0 };
+
+        var before = Report(foreign) with { CacheNode = cacheBefore };
+        var after = Report(foreign) with { CacheNode = cacheAfter };
+
+        var (worse, said) = Supervisor.VideoNodesRun.Compare(before, after);
+
+        Assert.True(worse);
+        Assert.Contains("кэш провайдера перестал отвечать", said);
+    }
+
+    /// <summary>При рецепте с удвоением окна сводка честно указывает 131 КБ.</summary>
+    [Fact]
+    public void DoubledWindowRecipeIsNotedInDetails()
+    {
+        var report = Report(Node(50, 3, 0)) with
+        {
+            Recipe = "Пресет: Universal V13 YT FIX; рецепт узлов видео есть: nz_first2:syn:far=35:scale=1.",
+        };
+
+        Assert.Contains(report.Details, line => line.Contains("131 КБ", StringComparison.Ordinal));
     }
 
     /// <summary>
