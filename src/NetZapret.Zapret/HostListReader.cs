@@ -78,27 +78,10 @@ public static class HostListReader
             return found;
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = Parse(lines);
 
-        foreach (var raw in lines)
-        {
-            var line = raw.Trim();
-
-            if (line.Length == 0 || line.StartsWith('#'))
-                continue;
-
-            // Ведущая точка означает ту же зону: у winws2 это равнозначные записи.
-            if (line.StartsWith('.'))
-                line = line[1..];
-
-            if (line.Length > 0 && seen.Add(line))
-                found.Add(line);
-        }
-
-        if (found.Count == 0)
+        if (names.Length == 0)
             issues.Add($"{path}: список пуст");
-
-        var names = found.ToArray();
 
         // Только что записанный файл не запоминается: две записи подряд могут
         // лечь в одну отметку времени при той же длине, и вторая читалась бы
@@ -108,6 +91,54 @@ public static class HostListReader
 
         return names;
     }
+
+    /// <summary>
+    /// Разбирает строки списка доменов в формате <c>winws2</c>.
+    /// </summary>
+    /// <remarks>
+    /// Пропускает пустые строки и комментарии с <c>#</c> (в том числе в конце
+    /// строки), снимает ведущие <c>.</c> и <c>^</c> (точное совпадение без
+    /// поддоменов в <c>winws2</c>), а строки с <c>!</c> трактует как локальное
+    /// исключение внутри этого списка (с версии <c>zapret2 v1.0.6-49</c>).
+    /// </remarks>
+    public static string[] Parse(IEnumerable<string> lines)
+    {
+        var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string>? excluded = null;
+
+        foreach (var raw in lines)
+        {
+            var line = raw.Trim();
+
+            int comment = line.IndexOf('#');
+            if (comment >= 0)
+                line = line[..comment].Trim();
+
+            if (line.Length == 0)
+                continue;
+
+            if (line.StartsWith('!'))
+            {
+                var off = NormalizeDomain(line[1..]);
+                if (off.Length > 0)
+                    (excluded ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase)).Add(off);
+                continue;
+            }
+
+            var domain = NormalizeDomain(line);
+            if (domain.Length > 0 && seen.Add(domain))
+                candidates.Add(domain);
+        }
+
+        if (excluded is null)
+            return candidates.ToArray();
+
+        return candidates.Where(d => !excluded.Contains(d)).ToArray();
+    }
+
+    private static string NormalizeDomain(string value) =>
+        value.Trim().TrimStart('^', '.').TrimEnd('.');
 
     /// <summary>
     /// Прочитанный файл: когда он был записан, сколько весил и что в нём.

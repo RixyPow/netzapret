@@ -284,4 +284,40 @@ public sealed class PresetReaderTests : IDisposable
 
         Assert.Equal("Вторая", preset.Sections[1].Name);
     }
+
+    /// <summary>
+    /// Префиксы winws2 в списках доменов: <c>^</c> — без поддоменов, <c>!</c> —
+    /// локальное исключение для этого файла (bol-van, zapret2 v1.0.6-49).
+    /// </summary>
+    [Fact]
+    public void HostListModifiersCaratAndExclamationAreHandled()
+    {
+        WriteList("youtube.txt", """
+            youtube.com # комментарий
+            ^exact.example.com
+            .dotted.example.com
+            torrents.ru
+            !torrents.ru
+            !only-excluded.example.com
+            """);
+        WriteList("discord.txt", "discord.com\n");
+        WriteList("claude.txt", "claude.ai\n");
+
+        var reader = new PresetReader();
+        var preset = reader.Load(WritePreset("sample", SamplePreset));
+        var covered = reader.CollectCoveredDomains(preset, _root);
+
+        Assert.Contains("youtube.com", covered);
+        Assert.Contains("exact.example.com", covered);
+        Assert.Contains("dotted.example.com", covered);
+        Assert.DoesNotContain("^exact.example.com", covered);
+        Assert.DoesNotContain("torrents.ru", covered);
+        Assert.DoesNotContain("!torrents.ru", covered);
+        Assert.DoesNotContain("only-excluded.example.com", covered);
+        Assert.DoesNotContain("!only-excluded.example.com", covered);
+
+        var viaHostListReader = HostListReader.Read("lists/youtube.txt", _root, out var problems);
+        Assert.Empty(problems);
+        Assert.Equal(["youtube.com", "exact.example.com", "dotted.example.com"], viaHostListReader);
+    }
 }

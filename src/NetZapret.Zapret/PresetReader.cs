@@ -269,13 +269,13 @@ public sealed class PresetReader
 
         foreach (var section in sections)
         {
-            foreach (var domain in section.InlineDomains)
-                domains.Add(domain.Trim().TrimEnd('.'));
+            foreach (var domain in HostListReader.Parse(section.InlineDomains))
+                domains.Add(domain);
 
             foreach (var relative in section.HostListPaths)
             {
-                foreach (var line in ReadListFile(zapretRoot, relative))
-                    domains.Add(line.TrimEnd('.'));
+                foreach (var domain in HostListReader.Parse(ReadListFile(zapretRoot, relative)))
+                    domains.Add(domain);
             }
         }
 
