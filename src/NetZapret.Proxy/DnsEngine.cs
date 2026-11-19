@@ -54,13 +54,14 @@ public static class DnsEngine
         EngineKeys keys, string? routerInterface = null)
     {
         var provider = DnsSurvey.ByAddress(settings.DnsServer);
+        var dnsServer = provider?.TlsAddress ?? settings.DnsServer;
 
         return new SingBoxConfigCompiler().Compile(NoRoutes, [], new SingBoxOptions
         {
             Scope = TunnelScope.ProxyOnly,
             DnsServerAddresses = systemResolvers,
             DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress
-                : settings.DnsCryptActive is not null ? DnsCrypt.Address : settings.DnsServer,
+                : settings.DnsCryptActive is not null ? DnsCrypt.Address : dnsServer,
             DnsServerType = settings.UseRouterDns || settings.DnsCryptActive is not null ? "udp" : "https",
             DnsServerPort = settings.DnsCryptActive is not null ? DnsCrypt.Port : null,
             DnsCrypt = settings.DnsCryptActive is not null,
@@ -71,7 +72,7 @@ public static class DnsEngine
             DnsServerPath = provider?.DohPath,
 
             // Без туннеля резолвер и есть вся работа движка: молчит — молчит всё (25.10).
-            DnsSpare = DnsSpare.For(settings.DnsServer),
+            DnsSpare = DnsSpare.For(dnsServer),
 
             // Туннеля нет: «через туннель» в настройках здесь означает
             // «через движок», а сам запрос к резолверу идёт напрямую.

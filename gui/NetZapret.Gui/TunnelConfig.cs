@@ -212,13 +212,16 @@ internal static class TunnelConfig
                 ? AddressListReader.Expand(ProgramCapture.KeepOut(ruleSet), zapretRoot, out _)
                 : [];
 
+            var dnsProvider = DnsSurvey.ByAddress(settings.DnsServer);
+            var dnsServer = dnsProvider?.TlsAddress ?? settings.DnsServer;
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
                 DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress
-                    : settings.DnsCryptActive is not null ? DnsCrypt.Address : settings.DnsServer,
+                    : settings.DnsCryptActive is not null ? DnsCrypt.Address : dnsServer,
                 DnsServerType = settings.UseRouterDns || settings.DnsCryptActive is not null ? "udp" : "https",
                 DnsServerPort = settings.DnsCryptActive is not null ? DnsCrypt.Port : null,
                 DnsCrypt = settings.DnsCryptActive is not null,
@@ -227,14 +230,14 @@ internal static class TunnelConfig
 
                 // Имя сертификата и путь — у провайдера из списка выбора.
                 // Адрес, вписанный руками, идёт как прежде: без имени.
-                DnsServerName = DnsSurvey.ByAddress(settings.DnsServer)?.TlsName,
-                DnsServerPath = DnsSurvey.ByAddress(settings.DnsServer)?.DohPath,
+                DnsServerName = dnsProvider?.TlsName,
+                DnsServerPath = dnsProvider?.DohPath,
                 DnsThroughTunnel = !settings.UseRouterDns && settings.DnsCryptActive is null && settings.DnsVia == DnsRoute.Tunnel,
                 DnsViaAuto = !settings.UseRouterDns && settings.DnsCryptActive is null && settings.DnsVia == DnsRoute.Auto,
 
                 // Выбранный резолвер замолчит — надзор переведёт имена на запасной
                 // (25.10: умер Comss DNS, и при «напрямую» висело всё).
-                DnsSpare = DnsSpare.For(settings.DnsServer),
+                DnsSpare = DnsSpare.For(dnsServer),
 
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.

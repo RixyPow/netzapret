@@ -13,7 +13,7 @@ public sealed class ResolverRow
     public required string Name { get; init; }
 
     /// <summary>Ключ выбора: адрес DoH либо <c>dnscrypt:режим</c> (<see cref="DnsView.CryptTag"/>).</summary>
-    public required string Address { get; init; }
+    public required string Address { get; set; }
 
     /// <summary>Что написать под именем; <c>null</c> — сам адрес.</summary>
     public string? Display { get; init; }
@@ -480,7 +480,7 @@ public partial class DnsView : UserControl
                 Address = p.TlsAddress ?? p.Udp[0],
                 Note = p.Note ?? string.Empty,
                 Chosen = !settings.UseRouterDns && settings.DnsCryptActive is null && p.Choosable
-                    && string.Equals(p.TlsAddress, settings.DnsServer, StringComparison.Ordinal),
+                    && DnsProviderAddresses.Matches(p, settings.DnsServer),
                 Own = p.Own,
                 Choosable = p.Choosable,
                 Udp = p.Udp.Count > 0 ? p.Udp[0] : string.Empty,
@@ -879,10 +879,16 @@ public partial class DnsView : UserControl
     /// <summary>Задержка DoH из обзора — в строку списка выбора.</summary>
     private static void Fill(IReadOnlyList<ResolverRow> rows, DnsSurveyRow result)
     {
-        var row = rows.FirstOrDefault(r => r.Address == result.Provider.TlsAddress);
+        var row = rows.FirstOrDefault(r => r.Address == result.Provider.TlsAddress)
+            ?? rows.FirstOrDefault(r => !r.Address.StartsWith(CryptTag, StringComparison.Ordinal)
+                && string.Equals(r.Name, result.Provider.Name, StringComparison.Ordinal));
 
         if (row is null)
             return;
+
+        // Адрес провайдера мог обновиться по имени DoH во время обзора — обновляем карточку.
+        if (result.Provider.TlsAddress is { } address && !string.Equals(row.Address, address, StringComparison.Ordinal))
+            row.Address = address;
 
         if (result.DohMs is { } ms)
         {
@@ -1265,9 +1271,14 @@ public partial class DnsView : UserControl
         _work = new CancellationTokenSource();
 
         // Один список и для заготовки, и для обзора: строки ищутся по провайдеру.
+        // По имени, а не по ссылке: у провайдера с AddressesByName обзор может
+        // вернуть обновлённую запись с новым адресом DoH.
         var providers = DnsSurvey.All;
         var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>(providers.Select(SurveyRow.Waiting));
-        var place = providers.Select((p, i) => (p, i)).ToDictionary(x => (object)x.p, x => x.i, ReferenceEqualityComparer.Instance);
+        var place = providers
+            .Select((p, i) => (p, i))
+            .GroupBy(x => x.p.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().i, StringComparer.Ordinal);
         var done = new List<DnsSurveyRow>();
         Survey.ItemsSource = rows;
         SaySurvey("Проверяю… Запросы идут мимо туннеля, через адаптер.");
@@ -1299,13 +1310,17 @@ public partial class DnsView : UserControl
         {
             var progress = new Progress<DnsSurveyRow>(row =>
             {
-                if (place.TryGetValue(row.Provider, out var at))
+                if (place.TryGetValue(row.Provider.Name, out var at))
                     rows[at] = SurveyRow.From(row);
 
                 done.Add(row);
                 Fill(choices, row);
 
-                if (choices.FirstOrDefault(r => r.Address == ResolverVerdicts.Key(row.Provider)) is { } choice)
+                var choice = choices.FirstOrDefault(r => r.Address == ResolverVerdicts.Key(row.Provider))
+                    ?? choices.FirstOrDefault(r => !r.Address.StartsWith(CryptTag, StringComparison.Ordinal)
+                        && string.Equals(r.Name, row.Provider.Name, StringComparison.Ordinal));
+
+                if (choice is not null)
                     ShowVerdict(choice, ResolverVerdicts.Judge(row, DateTime.Now));
 
                 Redraw();

@@ -116,11 +116,11 @@ public static class IntermediaryDns
     /// <summary>Посредники в порядке доверия: кандидаты первого пробуются первыми.</summary>
     public static IReadOnlyList<Intermediary> Servers { get; } =
     [
-        new("Comss DNS", "comss", "dns.comss.one", ["212.109.221.20", "195.133.25.16", "212.109.195.93"]),
+        new("Comss DNS", "comss", "dns.comss.one", ["141.133.184.24", "141.133.183.77", "155.212.172.101", "212.109.221.20", "212.109.195.93"]),
 
         // relay.check — служебное имя Zapret DNS: сервер отвечает на него адресом
         // своего посредника (так узнаёт посредника Zapret GUI, config/zapret_dns.py).
-        new("Zapret DNS", "zapret", "dns.zapret.moe", ["188.114.96.1", "188.114.97.1"], RelayName: "relay.check.dns.zapret.moe"),
+        new("Zapret DNS", "zapret", "dns.zapret.moe", ["104.21.15.208", "172.67.164.60", "188.114.96.1", "188.114.97.1"], RelayName: "relay.check.dns.zapret.moe"),
         new("GeoHide EU", "geohide-eu", "eu.geohide.ru", ["5.175.161.3", "5.175.161.40", "143.20.64.192"]),
         new("GeoHide US", "geohide-us", "us.geohide.ru", ["192.255.159.240", "192.255.159.241"]),
 

@@ -24,6 +24,15 @@ namespace NetZapret.Proxy;
 /// Сайты сервисов, которые посредник открывает своим прокси, — их значки
 /// на карточке; у прочих пусто.
 /// </param>
+/// <param name="AddressesByName">
+/// Адреса сервера меняются без новой версии: программа сама узнаёт актуальный
+/// IPv4 по <paramref name="TlsName"/> через эталонный DoH и проверяет его
+/// сертификатом (<see cref="DnsProviderAddresses"/>).
+/// </param>
+/// <param name="FormerAddresses">
+/// Прежние адреса DoH этого провайдера: по ним программа узнаёт старый выбор
+/// в настройках и переводит на актуальный адрес.
+/// </param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
@@ -34,7 +43,9 @@ public sealed record DnsProvider(
     bool ForTunnel = true,
     bool Own = false,
     DnsGroup Group = DnsGroup.Popular,
-    IReadOnlyList<string>? Services = null)
+    IReadOnlyList<string>? Services = null,
+    bool AddressesByName = false,
+    IReadOnlyList<string>? FormerAddresses = null)
 {
     /// <summary>
     /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
@@ -159,8 +170,13 @@ public static class DnsSurvey
             Note: "фильтрация по категориям", Group: DnsGroup.Filtering),
         new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
             Note: "российский, быстрый"),
-        new("Comss.one", ["83.220.169.155", "212.109.195.93"], "83.220.169.155", "dns.comss.one",
-            Note: "российский, отвечает честно — для обхода подмены", Group: DnsGroup.Intermediary),
+        // Замер 19.11: старый 83.220.169.155 отдаёт недоверенный сертификат
+        // (SEC_E_UNTRUSTED_ROOT) и молчит по UDP; dns.comss.one ведёт на
+        // 141.133.184.24, .183.77 и 155.212.172.101 — DoH 40–60 мс, UDP отвечает.
+        // Имена обновляются сами по dns.comss.one (DnsProviderAddresses).
+        new("Comss.one", ["141.133.184.24", "212.109.195.93"], "141.133.184.24", "dns.comss.one",
+            Note: "российский, отвечает честно — для обхода подмены", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["83.220.169.155"]),
         // Mullvad (194.242.2.2) убран 10.10 по слову владельца: DoH не ответил
         // (TIMEOUT), UDP у него нет, а туннелю нужен именно DoH. Выбравших его
         // настройки переводят на Google (AppSettings, MullvadDns).
@@ -193,12 +209,14 @@ public static class DnsSurvey
         // 0,09 с. Не взяты: Яндекс Безопасный и Семейный (DoH пустым ответом,
         // как и у нашего Яндекса), DNS4EU 86.54.11.1 (TLS не сошёлся),
         // BI.ZONE 185.191.32.7 (сертификат не на dns.bi.zone, имени нет).
-        // Адрес Zapret DNS — Cloudflare: сменит его — карточка покажет
-        // «блокируется», адрес поправить здесь.
+        // Адрес Zapret DNS — Cloudflare: если сменится, DnsProviderAddresses
+        // узнает новый по dns.zapret.moe и проверит сертификатом.
         new("Zapret DNS", [], "104.21.15.208", "dns.zapret.moe",
             Note: "посредник проекта Zapret, ИИ и Spotify — через его прокси, действует на имена мимо VPN",
             Group: DnsGroup.Intermediary,
-            Services: ["chatgpt.com", "claude.ai", "gemini.google.com", "open.spotify.com"]),
+            Services: ["chatgpt.com", "claude.ai", "gemini.google.com", "open.spotify.com"],
+            AddressesByName: true,
+            FormerAddresses: ["144.31.82.230", "83.217.211.149", "38.180.241.191"]),
         new("AdGuard Семейный", ["94.140.14.15", "94.140.15.16"], "94.140.14.15", "family.adguard-dns.com",
             Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering),
         new("Control D без рекламы", ["76.76.2.2", "76.76.10.2"], "76.76.2.2", "freedns.controld.com", "/p2",
@@ -215,15 +233,27 @@ public static class DnsSurvey
     /// Свои — в конце: встроенный с тем же адресом DoH находится первым,
     /// и выбор, записанный до появления своего, читается как прежде.
     /// </remarks>
-    public static IReadOnlyList<DnsProvider> All => [.. Providers, .. CustomDns.Load()];
+    public static IReadOnlyList<DnsProvider> All =>
+        [.. Providers.Select(p => DnsProviderAddresses.Apply(p)), .. CustomDns.Load()];
 
     /// <summary>Провайдер по адресу DoH из настроек; <c>null</c> — не наш.</summary>
     /// <remarks>
     /// По всему списку, со своими: иначе выбранный свой резолвер туннель
     /// получал бы без имени для сертификата — и DoH к нему не поднимался.
+    /// Если адрес в настройках устарел (провайдер переехал), ищется также
+    /// среди его прежних адресов (<see cref="DnsProviderAddresses.Matches"/>)
+    /// и возвращается запись уже с актуальным <see cref="DnsProvider.TlsAddress"/>.
     /// </remarks>
-    public static DnsProvider? ByAddress(string? address) =>
-        All.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal));
+    public static DnsProvider? ByAddress(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            return null;
+
+        var all = All;
+
+        return all.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal))
+            ?? all.FirstOrDefault(p => p.Choosable && DnsProviderAddresses.Matches(p, address));
+    }
 
     /// <summary>
     /// Имена для проверки подмены: закрыты в России давно и адрес у них
@@ -598,35 +628,6 @@ public static class DnsSurvey
 
         return "TIMEOUT";
     }
-    /// <summary>Читает ответ HTTP/1.1 с Content-Length.</summary>
-    private static async Task<(int Status, byte[] Body)> ReadHttpAsync(Stream stream, CancellationToken cancellationToken)
-    {
-        var header = new List<byte>();
-        var one = new byte[1];
-
-        while (header.Count < 8192)
-        {
-            await stream.ReadExactlyAsync(one, cancellationToken);
-            header.Add(one[0]);
-
-            if (header.Count >= 4 && header[^4] == '\r' && header[^3] == '\n' && header[^2] == '\r' && header[^1] == '\n')
-                break;
-        }
-
-        var text = Encoding.ASCII.GetString([.. header]);
-        var lines = text.Split("\r\n");
-        int status = int.TryParse(lines[0].Split(' ').ElementAtOrDefault(1), out var code) ? code : 0;
-
-        int length = lines
-            .Where(l => l.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase))
-            .Select(l => int.TryParse(l[15..].Trim(), out var n) ? n : 0)
-            .FirstOrDefault();
-
-        var body = new byte[length];
-        await stream.ReadExactlyAsync(body, cancellationToken);
-
-        return (status, body);
-    }
 
     /// <summary>Имя для замера задержки: короткое и заведомо существующее.</summary>
     private const string DnsProbeName = "example.com";
@@ -683,8 +684,15 @@ public static class DnsSurvey
         return (space > 0 ? name[..space] : name).Trim();
     }
 
-    /// <summary>Честный резолвер для служебных вопросов: Cloudflare по DoH.</summary>
-    private static readonly DnsProvider Honest = Providers[1];
+    /// <summary>
+    /// Эталонные резолверы для служебных вопросов: Cloudflare, Google, Quad9 по DoH.
+    /// </summary>
+    /// <remarks>
+    /// Не один Cloudflare: у части провайдеров 1.1.1.1 закрыт, и на одном эталоне
+    /// перестают работать и узнавание адресов по имени, и опрос посредников.
+    /// Запасные идут по очереди — на чистой линии срабатывает первый.
+    /// </remarks>
+    private static readonly DnsProvider[] HonestChain = [Providers[1], Providers[0], Providers[2]];
 
     /// <summary>Запрос TXT через честный DoH.</summary>
     private static async Task<string?> HonestTxtAsync(string name, int? nic, CancellationToken cancellationToken)
@@ -694,40 +702,23 @@ public static class DnsSurvey
         return answer?.Texts.FirstOrDefault();
     }
 
-    /// <summary>Один запрос через честный DoH.</summary>
+    /// <summary>Один запрос через честный DoH (по цепочке эталонов).</summary>
     public static async Task<DnsWire.Answer?> HonestAsync(
         string name, ushort type, int? nic, CancellationToken cancellationToken)
     {
-        var (stream, _) = await TlsAsync(Honest.TlsAddress!, 443, Honest.TlsName!, nic, cancellationToken);
-
-        if (stream is null)
-            return null;
-
-        await using (stream)
+        foreach (var resolver in HonestChain)
         {
-            try
-            {
-                using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                limit.CancelAfter(Timeout);
+            if (resolver.TlsAddress is null || resolver.TlsName is null || resolver.DohPath is null)
+                continue;
 
-                var query = DnsWire.Query(name, type);
-                var head = Encoding.ASCII.GetBytes(
-                    $"POST {Honest.DohPath} HTTP/1.1\r\nHost: {Honest.TlsName}\r\n"
-                    + "Content-Type: application/dns-message\r\nAccept: application/dns-message\r\n"
-                    + $"Content-Length: {query.Length}\r\n\r\n");
+            var answer = await DohQueryAsync(
+                resolver.TlsAddress, resolver.TlsName, resolver.DohPath, name, type, nic, cancellationToken);
 
-                await stream.WriteAsync(head, limit.Token);
-                await stream.WriteAsync(query, limit.Token);
-
-                var (status, body) = await ReadHttpAsync(stream, limit.Token);
-
-                return status == 200 ? DnsWire.Parse(body) : null;
-            }
-            catch (Exception) when (!cancellationToken.IsCancellationRequested)
-            {
-                return null;
-            }
+            if (answer is not null)
+                return answer;
         }
+
+        return null;
     }
 
     /// <summary>
@@ -852,6 +843,22 @@ public static class DnsSurvey
 
         var (dohMs, dohFailure) = await doh;
         var (dotMs, dotFailure) = await dot;
+
+        // Провайдер, чей адрес живёт на имени DoH (Comss, Zapret DNS): если
+        // текущий адрес замолчал или пора перепроверить раз в сутки — узнаём
+        // свежий по имени и перемеряем на нём.
+        if (provider.AddressesByName
+            && (dohMs is null || DnsProviderAddresses.IsDue(provider, DateTimeOffset.Now)))
+        {
+            var (updated, changed) = await DnsProviderAddresses.RefreshAsync(provider, nic, cancellationToken);
+
+            if (changed)
+            {
+                provider = updated;
+                (dohMs, dohFailure) = await DohAsync(provider, nic, cancellationToken);
+                (dotMs, dotFailure) = await DotAsync(provider, nic, cancellationToken);
+            }
+        }
 
         return new DnsSurveyRow
         {
