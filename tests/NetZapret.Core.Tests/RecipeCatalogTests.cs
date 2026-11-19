@@ -43,6 +43,7 @@ public sealed class RecipeCatalogTests
     {
         ["multidisorder"] = "zapret-antidpi.lua",
         ["fake"] = "zapret-antidpi.lua",
+        ["tls_client_hello_clone"] = "zapret-antidpi.lua",
         ["flood_white"] = "zapret-16kb.lua",
     };
 
@@ -178,6 +179,26 @@ public sealed class RecipeCatalogTests
         // подделки, а чистые разрезы его переживают.
         Assert.False(RecipeCatalog.Find("multidisorder")!.Fakes);
         Assert.True(RecipeCatalog.Find("fake-multidisorder")!.Fakes);
+        Assert.True(RecipeCatalog.Find("clone-fake-multidisorder")!.Fakes);
         Assert.True(RecipeCatalog.Find("flood-white")!.Fakes);
+    }
+
+    [Fact]
+    public void A_cloned_hello_blob_is_not_required_in_preset_header_but_its_fallback_is()
+    {
+        var recipe = RecipeCatalog.Find("clone-fake-multidisorder");
+
+        Assert.NotNull(recipe);
+        Assert.Equal(["tls_google"], recipe.Blobs);
+
+        var ok = RecipeCatalog.Check(recipe, Preset(Header), Providers);
+        Assert.True(ok.Runnable, ok.Complaint);
+
+        var noFallback = Preset(
+            "--lua-init=@lua/zapret-lib.lua\n"
+            + "--lua-init=@lua/zapret-antidpi.lua");
+        var missing = RecipeCatalog.Check(recipe, noFallback, Providers);
+        Assert.False(missing.Runnable);
+        Assert.Equal(["tls_google"], missing.MissingBlobs);
     }
 }

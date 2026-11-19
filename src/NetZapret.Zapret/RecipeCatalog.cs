@@ -43,14 +43,46 @@ public sealed record CatalogRecipe
     public IReadOnlyList<string> Functions =>
         Steps.Select(step => Before(step, ':')).ToList();
 
-    /// <summary>Блобы, на которые рецепт ссылается.</summary>
-    public IReadOnlyList<string> Blobs => Steps
-        .SelectMany(step => step.Split(':'))
-        .Where(part => part.StartsWith("blob=", StringComparison.Ordinal)
-            || part.StartsWith("seqovl_pattern=", StringComparison.Ordinal))
-        .Select(part => part[(part.IndexOf('=') + 1)..])
-        .Distinct(StringComparer.Ordinal)
-        .ToList();
+    /// <summary>Блобы из шапки пресета, на которые рецепт ссылается.</summary>
+    /// <remarks>
+    /// Приём <c>tls_client_hello_clone</c> в параметре <c>blob=</c> называет
+    /// локальный блоб соединения, который сам и создаёт (не из <c>--blob=</c>
+    /// пресета), а имя из шапки может брать в <c>fallback=</c>.
+    /// </remarks>
+    public IReadOnlyList<string> Blobs
+    {
+        get
+        {
+            var created = new HashSet<string>(StringComparer.Ordinal);
+            var referenced = new List<string>();
+
+            foreach (var step in Steps)
+            {
+                bool createsBlob = Before(step, ':').Equals("tls_client_hello_clone", StringComparison.Ordinal);
+
+                foreach (var part in step.Split(':'))
+                {
+                    if (createsBlob && part.StartsWith("blob=", StringComparison.Ordinal))
+                    {
+                        created.Add(part[(part.IndexOf('=') + 1)..]);
+                        continue;
+                    }
+
+                    if (part.StartsWith("blob=", StringComparison.Ordinal)
+                        || part.StartsWith("seqovl_pattern=", StringComparison.Ordinal)
+                        || (createsBlob && part.StartsWith("fallback=", StringComparison.Ordinal)))
+                    {
+                        referenced.Add(part[(part.IndexOf('=') + 1)..]);
+                    }
+                }
+            }
+
+            return referenced
+                .Where(name => !created.Contains(name))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+    }
 
     /// <summary>
     /// Набор целиком — для тех, кто читает его глазами.
@@ -199,6 +231,22 @@ public static class RecipeCatalog
             ],
             Note = "Рабочая лошадь Universal V8. Под туннелем подделки ломаются — "
                 + "см. «Разрез по имени».",
+        },
+        new CatalogRecipe
+        {
+            Id = "clone-fake-multidisorder",
+            Title = "Подделка клоном приветствия",
+            What = "Клонирует настоящее приветствие программы с именем www.google.com "
+                + "и шлёт его как подделку перед разрезом по имени.",
+            Steps =
+            [
+                "tls_client_hello_clone:blob=cloned_hello:fallback=tls_google:sni_del:sni_first=www.google.com",
+                "fake:blob=cloned_hello:ip_autottl=-1,3-20:ip6_autottl=-1,3-20:repeats=6:tcp_ack=-66000",
+                "multidisorder:pos=1,host+2,sld+2,sld+5,sniext+1,sniext+2,endhost-2:seqovl=1",
+            ],
+            Note = "Повторяет отпечаток и формат приветствия самого клиента вместо "
+                + "общего файла tls_google. На замере 20.11 (SevenSky, curl) от статики "
+                + "не отличился — пригодится там, где фильтр сверяет формат фейка.",
         },
         new CatalogRecipe
         {

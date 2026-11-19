@@ -88,8 +88,8 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
     [
         "multidisorder", "fake-multidisorder", "tls-multisplit-sni", "hostfakesplit",
         "hostfakesplit-multi", "hostfakesplit-stealth", "seqovl-4pda", "syndata",
-        "fake-seqovl-awswaf", "fake-seqovl-steam-chat", "fake-seqovl-steamstatic", "fake-seqovl-teamspeak",
-        "seqovl-white", "white-sandwich", "flood-white", "ttl-ladder",
+        "clone-fake-multidisorder", "fake-seqovl-awswaf", "fake-seqovl-steam-chat", "fake-seqovl-steamstatic",
+        "fake-seqovl-teamspeak", "seqovl-white", "white-sandwich", "flood-white", "ttl-ladder",
     ];
 
     /// <summary>
@@ -106,7 +106,7 @@ public sealed record RoutePlan(IReadOnlyList<RoutePlanStep> Steps, string? Advic
         "seqovl-4pda", "hostfakesplit", "hostfakesplit-multi", "fake-seqovl-awswaf",
         "fake-seqovl-steam-chat", "fake-seqovl-steamstatic", "fake-seqovl-teamspeak", "seqovl-white",
         "white-sandwich", "hostfakesplit-stealth", "multidisorder", "fake-multidisorder",
-        "tls-multisplit-sni", "flood-white", "ttl-ladder", "syndata",
+        "clone-fake-multidisorder", "tls-multisplit-sni", "flood-white", "ttl-ladder", "syndata",
     ];
 
     /// <param name="route">Каким маршрутом имя идёт сейчас.</param>
