@@ -2780,9 +2780,22 @@ public sealed class SingBoxConfigCompiler
         if (options.Scope != TunnelScope.ProxyOnly || options.DnsServerAddresses.Count == 0)
             yield break;
 
+        // Домашние и частные адреса (роутер 192.168.1.1, локальный AdGuard Home
+        // 192.168.43.42, link-local / site-local IPv6) не отклоняются: Windows
+        // сама не поднимает их до DoH, а reject по порту 443 раньше ip_is_private
+        // ломал HTTPS-доступ к веб-панели роутера и локального DNS (issue #73).
+        // В route_address они остаются, поэтому UDP/53 по-прежнему идёт в hijack-dns.
         var addresses = new JsonArray();
         foreach (var address in options.DnsServerAddresses)
+        {
+            if (IsLocalResolver(address))
+                continue;
+
             addresses.Add(address);
+        }
+
+        if (addresses.Count == 0)
+            yield break;
 
         // Адрес DoH-эндпоинта совпадает с адресом обычного резолвера:
         // Windows поднимает 8.8.8.8 до https://dns.google/dns-query,
@@ -2794,6 +2807,13 @@ public sealed class SingBoxConfigCompiler
             ["port"] = new JsonArray { 443 },
             ["action"] = "reject",
         };
+    }
+
+    private static bool IsLocalResolver(string cidrOrAddress)
+    {
+        int slash = cidrOrAddress.IndexOf('/');
+        var host = (slash >= 0 ? cidrOrAddress[..slash] : cidrOrAddress).Trim();
+        return IPAddress.TryParse(host, out var ip) && LocalNetworks.IsLocal(ip);
     }
 
     private static JsonObject? BuildRule(

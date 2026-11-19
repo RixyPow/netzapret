@@ -721,6 +721,47 @@ public class SingBoxConfigCompilerTests
     }
 
     [Fact]
+    public void DohRejectSkipsPrivateAndLocalResolvers()
+    {
+        // Локальный AdGuard Home (192.168.43.42) или роутер (192.168.1.1) в системных DNS
+        // должны оставаться в route_address ради перехвата UDP/53, но их порт 443 не должен
+        // отклоняться — иначе в «Гибриде» не открываются их HTTPS-панели (issue #73).
+        var root = CompileProxyOnly(
+            ProxyOnlyRules,
+            "192.168.43.42/32",
+            "fe80::1/128",
+            "fec0:0:0:ffff::1/128",
+            "8.8.8.8/32",
+            "2606:4700:4700::1111/128");
+
+        var reject = Rules(root).Single(r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+
+        var rejected = reject.GetProperty("ip_cidr").EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+
+        Assert.Equal(["8.8.8.8/32", "2606:4700:4700::1111/128"], rejected);
+
+        // В route_address локальный DNS по-прежнему заведён, чтобы hijack-dns видел его UDP/53.
+        var captured = root.GetProperty("inbounds")[0].GetProperty("route_address")
+            .EnumerateArray()
+            .Select(e => e.GetString()!)
+            .ToArray();
+        Assert.Contains("192.168.43.42/32", captured);
+
+        // Если системные резолверы — только домашние, правило reject не создаётся вовсе.
+        var localOnly = CompileProxyOnly(ProxyOnlyRules, "192.168.1.1/32", "fec0:0:0:ffff::1/128");
+        Assert.DoesNotContain(Rules(localOnly), r =>
+            r.TryGetProperty("action", out var a) && a.GetString() == "reject");
+
+        var (okMixed, saidMixed) = SingBoxCheck.Run(root.GetRawText());
+        Assert.True(okMixed, saidMixed);
+        var (okLocal, saidLocal) = SingBoxCheck.Run(localOnly.GetRawText());
+        Assert.True(okLocal, saidLocal);
+    }
+
+    [Fact]
     public void DohRejectAppliesOnlyToTunnelTraffic()
     {
         // Наш собственный резолвер — тоже DoH и живёт по тем же адресам.
