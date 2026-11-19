@@ -35,7 +35,70 @@ public partial class UpdatePanel : UserControl
     {
         InitializeComponent();
 
-        Unloaded += (_, _) => _work?.Cancel();
+        Loaded += (_, _) =>
+        {
+            UpdateRun.StateChanged += OnRunStateChanged;
+            SyncRunState();
+        };
+
+        Unloaded += (_, _) =>
+        {
+            UpdateRun.StateChanged -= OnRunStateChanged;
+            _work?.Cancel();
+        };
+    }
+
+    private void OnRunStateChanged() => Dispatcher.InvokeAsync(SyncRunState);
+
+    /// <summary>
+    /// Подхватывает идущую или завершившуюся ошибкой установку из <see cref="UpdateRun"/>:
+    /// при уходе с «Главной» и возврате раздел создаётся заново, и без этого прогресс
+    /// пропадал, а кнопка «Обновить» снова становилась кликабельной (issue #78).
+    /// </summary>
+    internal void SyncRunState()
+    {
+        if (UpdateRun.Busy)
+        {
+            _installing = true;
+            Visibility = Visibility.Visible;
+
+            var version = UpdateRun.ActiveRelease?.Version ?? _release?.Version ?? string.Empty;
+            VersionValue.Text = version.Length > 0
+                ? $"{UpdateCheck.Current} → {version}"
+                : "Текущая версия: " + UpdateCheck.Current;
+
+            SetMessage(UpdateRun.StatusText ?? "Скачиваю обновление…", failed: false);
+            InstallButton.Visibility = Visibility.Visible;
+            InstallButton.IsEnabled = false;
+            InstallButton.Content = UpdateRun.Fraction is { } share ? $"{share * 100:0} %" : "Обновляется…";
+            UpdateButton.IsEnabled = false;
+            return;
+        }
+
+        if (UpdateRun.LastError is { } error)
+        {
+            _installing = true;
+            Visibility = Visibility.Visible;
+
+            if (_release is null && UpdateNotice.Available is { } found)
+                _release = found;
+
+            SetMessage("Обновиться не вышло: " + error, failed: true);
+            InstallButton.Content = "Обновить";
+            InstallButton.Visibility = _release is null ? Visibility.Collapsed : Visibility.Visible;
+            InstallButton.IsEnabled = true;
+            UpdateButton.IsEnabled = true;
+            return;
+        }
+
+        if (_installing)
+        {
+            _installing = false;
+            InstallButton.Content = "Обновить";
+            InstallButton.IsEnabled = true;
+            UpdateButton.IsEnabled = true;
+            ShowView(_advanced);
+        }
     }
 
     /// <summary>Вид «Главной»: в подробном карточка всегда, в простом — только при установке.</summary>
@@ -43,6 +106,12 @@ public partial class UpdatePanel : UserControl
     {
         _advanced = advanced;
         UpdateButton.Visibility = advanced ? Visibility.Visible : Visibility.Collapsed;
+
+        if (UpdateRun.Busy || UpdateRun.LastError is not null)
+        {
+            SyncRunState();
+            return;
+        }
 
         if (advanced && !_installing)
             ShowVersion(AppSettings.Load(AppSettings.DefaultPath));
@@ -155,7 +224,7 @@ public partial class UpdatePanel : UserControl
     /// на 0.8.1, 25.09). Теперь и строка у кнопок, и карточка прокручивается
     /// в видимое.
     /// </remarks>
-    private void Say(string text, bool failed = false)
+    private void SetMessage(string text, bool failed)
     {
         UpdateValue.Text = text;
 
@@ -163,7 +232,11 @@ public partial class UpdatePanel : UserControl
             UpdateValue.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
         else
             UpdateValue.ClearValue(TextBlock.ForegroundProperty);
+    }
 
+    private void Say(string text, bool failed = false)
+    {
+        SetMessage(text, failed);
         BringIntoView();
     }
 

@@ -79,6 +79,11 @@ public partial class UpdateWindow : Window
             SkipButton.Visibility = Visibility.Collapsed;
             LaterButton.Content = "Закрыть";
         }
+        else if (UpdateRun.Busy)
+        {
+            InstallButton.IsEnabled = false;
+            InstallButton.ToolTip = "Обновление уже скачивается.";
+        }
 
         BadgeVersion.Text = "v" + latest.Version;
         BadgeDate.Text = latest.Published is { } published

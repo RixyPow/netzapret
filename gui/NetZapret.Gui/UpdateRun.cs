@@ -28,6 +28,39 @@ internal static class UpdateRun
     /// <summary>Установка идёт — вторую не начинать и окно обновления не предлагать.</summary>
     public static bool Busy { get; private set; }
 
+    /// <summary>Выпуск, который сейчас скачивается; <c>null</c> — установка не идёт.</summary>
+    public static ReleaseInfo? ActiveRelease { get; private set; }
+
+    /// <summary>Последний шаг словами: чтобы пересозданная карточка показала ход закачки (issue #78).</summary>
+    public static string? StatusText { get; private set; }
+
+    /// <summary>Доля скачанного (0..1), пока идёт загрузка.</summary>
+    public static double? Fraction { get; private set; }
+
+    /// <summary>Ошибка последней неудавшейся установки; сбрасывается при следующем запуске.</summary>
+    public static string? LastError { get; private set; }
+
+    /// <summary>
+    /// Изменилось состояние или прогресс установки.
+    /// </summary>
+    /// <remarks>
+    /// Разделы главного окна пересоздаются при каждом переключении вкладки
+    /// (<see cref="MainWindow"/>): до этой подписки уход с «Главной» во время
+    /// закачки стирал проценты и снова делал кнопку «Обновить» доступной (issue #78).
+    /// </remarks>
+    public static event Action? StateChanged;
+
+    /// <summary>Выставляет состояние вручную — только для проверок окна.</summary>
+    internal static void SetStateForTest(ReleaseInfo? release, string? status, double? fraction, string? error = null)
+    {
+        Busy = release is not null;
+        ActiveRelease = release;
+        StatusText = status;
+        Fraction = fraction;
+        LastError = error;
+        StateChanged?.Invoke();
+    }
+
     /// <summary>
     /// Ставит <paramref name="release"/>; удалось — программа закрывается.
     /// </summary>
@@ -51,6 +84,18 @@ internal static class UpdateRun
             return false;
 
         Busy = true;
+        ActiveRelease = release;
+        StatusText = $"Скачиваю {release.Version}…";
+        Fraction = 0;
+        LastError = null;
+        StateChanged?.Invoke();
+
+        void Report(string text)
+        {
+            StatusText = text;
+            say.Report(text);
+            StateChanged?.Invoke();
+        }
 
         try
         {
@@ -58,8 +103,12 @@ internal static class UpdateRun
 
             var progress = new Progress<double>(share =>
             {
-                say.Report($"Скачиваю {release.Version}{via}… {share * 100:0} %");
+                Fraction = share;
+                var line = $"Скачиваю {release.Version}{via}… {share * 100:0} %";
+                StatusText = line;
+                say.Report(line);
                 fraction?.Report(share);
+                StateChanged?.Invoke();
             });
 
             var note = new Progress<string>(_ => via = " через туннель");
@@ -67,9 +116,12 @@ internal static class UpdateRun
             var plan = await UpdateInstaller.StageAsync(release, progress, CancellationToken.None, TunnelForDownload(), note);
 
             if (stillWanted is not null && !stillWanted())
+            {
+                StatusText = null;
                 return false;
+            }
 
-            say.Report("Останавливаю движки…");
+            Report("Останавливаю движки…");
             await EngineControl.StopAsync("обновление программы", CancellationToken.None);
 
             var installedAt = Path.GetFullPath(".");
@@ -82,7 +134,7 @@ internal static class UpdateRun
                 : " Ваши дописки в списки перенесены: "
                     + string.Join(", ", plan.CarriedLists.Select(c => $"{c.Key} — {c.Value}")) + ".";
 
-            say.Report($"Скачано {plan.Files} файлов.{carried} Закрываюсь для подмены…");
+            Report($"Скачано {plan.Files} файлов.{carried} Закрываюсь для подмены…");
 
             if (carried.Length > 0)
                 Journal.Write("обновление", $"{release.Version}:{carried}");
@@ -107,9 +159,17 @@ internal static class UpdateRun
             Application.Current.Shutdown();
             return true;
         }
+        catch (Exception ex)
+        {
+            LastError = ex.GetBaseException().Message;
+            throw;
+        }
         finally
         {
             Busy = false;
+            ActiveRelease = null;
+            Fraction = null;
+            StateChanged?.Invoke();
         }
     }
 

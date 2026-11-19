@@ -354,10 +354,15 @@ public partial class StatusView : UserControl
             // Отписка обязательна: событие статическое, а раздел пересоздаётся
             // при каждом возврате.
             UpdateNotice.Changed += OnUpdateChanged;
+            UpdateRun.StateChanged += OnUpdateChanged;
             ShowUpdate();
         };
 
-        Unloaded += (_, _) => UpdateNotice.Changed -= OnUpdateChanged;
+        Unloaded += (_, _) =>
+        {
+            UpdateNotice.Changed -= OnUpdateChanged;
+            UpdateRun.StateChanged -= OnUpdateChanged;
+        };
     }
 
     private void OnUpdateChanged() => Dispatcher.InvokeAsync(ShowUpdate);
@@ -404,6 +409,8 @@ public partial class StatusView : UserControl
             ? string.Join(" · ", highlights) + "."
             : "Установлена " + UpdateCheck.Current + ".";
 
+        UpdateNowButton.IsEnabled = !UpdateRun.Busy;
+        UpdateNowButton.Content = UpdateRun.Busy ? "Обновляется…" : "Обновить";
         UpdateCard.Visibility = Visibility.Visible;
     }
 

@@ -173,4 +173,49 @@ public sealed class UpdateWindowTests
             window.Close();
         });
     }
+
+    /// <summary>
+    /// При уходе с «Главной» и возврате во время скачивания пересозданная карточка
+    /// показывает текущий прогресс и не даёт нажать «Обновить» повторно (issue #78).
+    /// </summary>
+    [Fact]
+    public void ActiveDownloadSurvivesTabSwitchAndDisablesInstall()
+    {
+        var release = new ReleaseInfo
+        {
+            Version = "9.9.9",
+            Tag = "v9.9.9",
+            ArchiveUrl = "https://example/NetZapret-9.9.9.zip",
+            ArchiveSize = 1_000_000,
+            Notes = "## Новое:\n\n**Проверка.** Текст.",
+        };
+
+        Sta.Run(() =>
+        {
+            try
+            {
+                UpdateRun.SetStateForTest(release, "Скачиваю 9.9.9… 42 %", 0.42);
+
+                // Новая карточка в простом виде «Главной» (как после переключения вкладки).
+                var panel = new UpdatePanel();
+                panel.ShowView(advanced: false);
+
+                Assert.Equal(System.Windows.Visibility.Visible, panel.Visibility);
+                Assert.Equal(System.Windows.Visibility.Visible, panel.InstallButton.Visibility);
+                Assert.False(panel.InstallButton.IsEnabled);
+                Assert.Equal("42 %", panel.InstallButton.Content);
+                Assert.Equal("Скачиваю 9.9.9… 42 %", panel.UpdateValue.Text);
+                Assert.False(panel.UpdateButton.IsEnabled);
+
+                // В окне «Доступно обновление» кнопка «Обновить» тоже погашена.
+                var window = new UpdateWindow(release);
+                Assert.False(window.OffersInstall);
+                window.Close();
+            }
+            finally
+            {
+                UpdateRun.SetStateForTest(null, null, null, null);
+            }
+        });
+    }
 }

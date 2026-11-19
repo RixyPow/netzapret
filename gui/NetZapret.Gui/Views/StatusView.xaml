@@ -382,7 +382,7 @@
                                     Click="OnUpdateNotes" Margin="0,0,8,0" />
                             <Button Style="{StaticResource Ghost}" Content="Не сейчас"
                                     Click="OnUpdateLater" Margin="0,0,8,0" />
-                            <Button Style="{StaticResource Primary}" Content="Обновить"
+                            <Button x:Name="UpdateNowButton" Style="{StaticResource Primary}" Content="Обновить"
                                     Click="OnUpdateNow" />
                         </StackPanel>
                     </Grid>
