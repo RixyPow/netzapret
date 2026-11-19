@@ -73,6 +73,47 @@ public sealed class TgWsProxyTests
         Assert.Equal($"tg://proxy?server=192.168.1.5&port=1443&secret=dd{secret}", TgWsProxy.Link(1443, secret, "192.168.1.5"));
     }
 
+    /// <summary>
+    /// Вход SOCKS5 у прокси Telegram (обсуждение №70): выключен по умолчанию,
+    /// при включении слушает 127.0.0.1 или 0.0.0.0 вслед за Lan, переживает
+    /// автонастройку и ловит пересечение с локальным прокси VPN.
+    /// </summary>
+    [Fact]
+    public void SocksSwitchAddsSocksKeysAndFollowsLanSetting()
+    {
+        Assert.False(new AppSettings().TelegramProxySocks);
+        Assert.DoesNotContain("--socks-enabled", TgWsProxy.Arguments(1443));
+
+        var local = TgWsProxy.Arguments(1443, TgWsProxyRoutes.From(new AppSettings { TelegramProxySocks = true }));
+        Assert.Contains("--socks-enabled", local);
+        Assert.Equal("127.0.0.1", local[local.ToList().IndexOf("--socks-host") + 1]);
+        Assert.Equal("1080", local[local.ToList().IndexOf("--socks-port") + 1]);
+
+        var lan = TgWsProxy.Arguments(1443, TgWsProxyRoutes.From(new AppSettings
+        {
+            TelegramProxySocks = true,
+            TelegramProxyLan = true,
+            TelegramProxySocksPort = 1085,
+        }));
+        Assert.Contains("--socks-enabled", lan);
+        Assert.Equal("0.0.0.0", lan[lan.ToList().IndexOf("--socks-host") + 1]);
+        Assert.Equal("1085", lan[lan.ToList().IndexOf("--socks-port") + 1]);
+
+        var tuned = NetZapret.Proxy.TgProxyTune.Apply(
+            TgWsProxyRoutes.From(new AppSettings { TelegramProxySocks = true, TelegramProxyLan = true, TelegramProxySocksPort = 1085 }),
+            new NetZapret.Proxy.TgProxyTuning(DateTimeOffset.Now, true, 100, [], 1));
+        Assert.True(tuned.Socks);
+        Assert.True(tuned.Lan);
+        Assert.Equal(1085, tuned.SocksPort);
+
+        Assert.Equal(TgWsProxy.DefaultSocksPort, TgWsProxy.SocksPort(0, 1443));
+        Assert.NotEqual(1443, TgWsProxy.SocksPort(1443, 1443));
+
+        var clash = new AppSettings { LocalProxyOn = true, LocalProxyCard = true, LocalProxyPort = 1080 };
+        Assert.NotNull(TgWsProxy.SocksProblem(clash));
+        Assert.Null(TgWsProxy.SocksProblem(clash with { LocalProxyOn = false }));
+    }
+
     /// <summary>Все значения ключа: «--dc-ip 2:… --dc-ip 4:…» → [2:…, 4:…].</summary>
     private static List<string> Values(IReadOnlyList<string> arguments, string key) =>
         [.. arguments.Select((a, i) => (a, i)).Where(p => p.a == key).Select(p => arguments[p.i + 1])];

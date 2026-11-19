@@ -24,8 +24,11 @@ public static class LocalProxy
     /// <summary>Порт по умолчанию — привычный для клиентов sing-box и Xray.</summary>
     public const int DefaultPort = 2080;
 
-    /// <summary>Адрес для настроек программы.</summary>
-    public static string Address(int port) => $"127.0.0.1:{port}";
+    /// <summary>Адрес для настроек программы на этой машине.</summary>
+    public static string Address(int port) => Address(port, "127.0.0.1");
+
+    /// <summary>Адрес для настроек программы с указанным узлом (127.0.0.1 или адрес в локальной сети).</summary>
+    public static string Address(int port, string host) => $"{host}:{port}";
 
     /// <summary>
     /// Чем выбранный порт не годится; <c>null</c> — годится.
@@ -45,6 +48,12 @@ public static class LocalProxy
 
         if (port == settings.TelegramProxyPort)
             return "На этом порту прокси Telegram — выберите другой.";
+
+        if (settings.TelegramProxySocks
+            && port == TgWsProxy.SocksPort(settings.TelegramProxySocksPort, settings.TelegramProxyPort))
+        {
+            return "На этом порту SOCKS5 прокси Telegram — выберите другой.";
+        }
 
         // Порт держит наш же движок — не помеха. По настройкам этого не узнать:
         // 06.11 прокси был поднят, человек спрятал карточку (настройка

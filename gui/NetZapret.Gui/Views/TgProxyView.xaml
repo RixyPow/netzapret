@@ -212,7 +212,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Доступ из локальной сети" FontWeight="SemiBold" VerticalAlignment="Center" />
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="Телефон и другие устройства в том же Wi-Fi подключаются к прокси по ссылке ниже. Прокси видит вся сеть, но без секрета из ссылки не пускает. Windows может один раз спросить разрешение для сети — разрешите." />
+                                                Content="Телефон и другие устройства в том же Wi-Fi подключаются к прокси по ссылке ниже. MTProto без секрета из ссылки не пускает; если включён вход SOCKS5, он без пароля (только к дата-центрам Telegram). Windows может один раз спросить разрешение для сети — разрешите." />
                             </StackPanel>
                         </StackPanel>
 
@@ -236,6 +236,49 @@
 
                             <Border Grid.Column="1" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Border}">
                                 <Button x:Name="LanLinkCopy" Style="{StaticResource CopyGlyph}" Click="OnCopyLan"
+                                        FontSize="15" Padding="0" Margin="6,6,6,6" />
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource RowLine}" Margin="0,16,0,14" />
+
+                    <!-- Обсуждение №70: отдельный вход SOCKS5 у tg-ws-proxy-rs (ключ socks-enabled). -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Вход SOCKS5 (только Telegram)" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Отдельный вход SOCKS5 без пароля, но только к дата-центрам Telegram — для клиентов MTProto и юзерботов. HTTP Bot API (api.telegram.org) и обычные сайты через него не идут.&#x0a;&#x0a;Слушает 127.0.0.1, а при включённом «Доступ из локальной сети» — всю сеть (0.0.0.0)." />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="SocksWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="Socks" Style="{StaticResource Switch}"
+                                      Click="OnSocks" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border x:Name="SocksBox" Margin="0,12,0,0" CornerRadius="8" BorderThickness="1.5" Visibility="Collapsed"
+                            Background="{DynamicResource Raised}" BorderBrush="{DynamicResource Border}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock x:Name="SocksText" Margin="14,0,10,0" VerticalAlignment="Center" FontSize="13"
+                                       TextTrimming="CharacterEllipsis" />
+
+                            <Border Grid.Column="1" BorderThickness="1,0,0,0" BorderBrush="{DynamicResource Border}">
+                                <Button x:Name="SocksCopy" Style="{StaticResource CopyGlyph}" Click="OnCopySocks"
                                         FontSize="15" Padding="0" Margin="6,6,6,6" />
                             </Border>
                         </Grid>
@@ -303,7 +346,7 @@
 
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="Тип подключения" />
-                            <TextBlock Text="MTProto через WebSocket" FontWeight="SemiBold" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            <TextBlock x:Name="TypeText" Text="MTProto через WebSocket" FontWeight="SemiBold" FontSize="14" Margin="0,8,0,0" TextWrapping="Wrap" />
                         </StackPanel>
                     </Grid>
                 </gui:Card>

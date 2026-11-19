@@ -431,8 +431,18 @@ public sealed record AppSettings
     /// <remarks>Выключен по умолчанию: прокси нужен тому, кто его пропишет в программе.</remarks>
     public bool LocalProxyOn { get; init; }
 
-    /// <summary>Порт локального прокси на 127.0.0.1.</summary>
+    /// <summary>Порт локального прокси.</summary>
     public int LocalProxyPort { get; init; } = LocalProxy.DefaultPort;
+
+    /// <summary>
+    /// Локальный прокси принимает соединения из локальной сети (<c>0.0.0.0</c>),
+    /// а не только с этой машины (<c>127.0.0.1</c>) — обсуждение №70.
+    /// </summary>
+    /// <remarks>
+    /// Выключено по умолчанию: прокси без пароля (браузеры SOCKS с паролем не умеют),
+    /// поэтому при включении VPN становится доступен всем устройствам в той же сети.
+    /// </remarks>
+    public bool LocalProxyLan { get; init; }
 
     /// <summary>
     /// Карточка локального прокси на вкладке VPN — по выключателю в «Настройках туннеля».
@@ -536,6 +546,20 @@ public sealed record AppSettings
     /// незачем, пока не нужен.
     /// </remarks>
     public bool TelegramProxyLan { get; init; }
+
+    /// <summary>
+    /// Поднимать у прокси Telegram отдельный вход SOCKS5 без пароля (только к
+    /// дата-центрам Telegram, ключ <c>--socks-enabled</c> — обсуждение №70).
+    /// </summary>
+    /// <remarks>
+    /// Выключено по умолчанию: нужен не всем (MTProto-клиенты и юзерботы, не HTTP
+    /// Bot API), а при включённом <see cref="TelegramProxyLan"/> слушает всю сеть
+    /// без пароля.
+    /// </remarks>
+    public bool TelegramProxySocks { get; init; }
+
+    /// <summary>Порт входа SOCKS5 прокси Telegram (<see cref="TgWsProxy.DefaultSocksPort"/>).</summary>
+    public int TelegramProxySocksPort { get; init; } = TgWsProxy.DefaultSocksPort;
 
     /// <summary>Прокси поднимает надзор движков — включён и не держится окном сам.</summary>
     [JsonIgnore]

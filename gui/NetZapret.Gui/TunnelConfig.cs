@@ -262,8 +262,9 @@ internal static class TunnelConfig
                 // (SupervisorHost), — лишний вход ему не мешает.
                 HealthInbound = true,
 
-                // Локальный прокси для программ человека (обсуждение №42).
+                // Локальный прокси для программ человека (обсуждение №42; доступ из сети — №70).
                 LocalProxyPort = settings.LocalProxyActive ? settings.LocalProxyPort : null,
+                LocalProxyLan = settings.LocalProxyLan,
                 LocalProxyServer = settings.LocalProxyServer,
 
                 // Новые пароли служебных входов на каждую сборку: окно, nz

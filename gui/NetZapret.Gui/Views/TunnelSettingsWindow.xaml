@@ -200,7 +200,7 @@
                                 <TextBlock Text="Локальный прокси" VerticalAlignment="Center" TextWrapping="Wrap" />
 
                                 <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                                                Content="SOCKS5 и HTTP на одном порту, только для этого компьютера (127.0.0.1). Системный прокси Windows не меняется: прокси работает в программах, где он прописан, — браузере, Telegram, лаунчере.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN мимо правил «Маршрутов»; домашняя сеть открывается как есть. Включённый здесь — карточка на вкладке VPN: там прокси включается и там его адрес." />
+                                                Content="SOCKS5 и HTTP на одном порту, по умолчанию только для этого компьютера (127.0.0.1). Системный прокси Windows не меняется: прокси работает в программах, где он прописан, — браузере, Telegram, лаунчере.&#x0a;&#x0a;Всё, что пришло в прокси, идёт через VPN мимо правил «Маршрутов»; домашняя сеть открывается как есть. Включённый здесь — карточка на вкладке VPN: там прокси включается и там его адрес." />
                             </StackPanel>
                             <TextBlock x:Name="LocalProxyLine" Style="{StaticResource Caption}"
                                        Margin="0,4,0,0" TextWrapping="Wrap" />
@@ -234,6 +234,35 @@
                                  gui:Hint.Text="порт" KeyDown="OnLocalProxyPortKey" />
                         <Button Grid.Column="2" Style="{StaticResource Ghost}" Content="Сохранить"
                                 Click="OnLocalProxyPort" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </Grid>
+
+                    <Border Style="{StaticResource RowLine}" />
+
+                    <!-- Обсуждение №70: доступ к локальному прокси из домашней сети (0.0.0.0). -->
+                    <Grid Margin="16,13">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Доступ к прокси из локальной сети" VerticalAlignment="Center" TextWrapping="Wrap" />
+
+                                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                                Content="Другие устройства в том же Wi-Fi смогут ходить через ваш VPN по адресу компьютера и порту выше (0.0.0.0).&#x0a;&#x0a;Прокси без пароля — браузеры SOCKS с паролем не умеют, — поэтому в чужой или открытой сети включать не стоит. Windows может один раз спросить разрешение брандмауэра — разрешите. Применяется при следующем запуске движков." />
+                            </StackPanel>
+
+                            <TextBlock x:Name="LocalProxyLanLine" Style="{StaticResource Caption}"
+                                       Margin="0,4,0,0" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="1" x:Name="LocalProxyLanWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+
+                        <ToggleButton Grid.Column="2" x:Name="LocalProxyLanSwitch" Style="{StaticResource Switch}"
+                                      Click="OnLocalProxyLan" VerticalAlignment="Center" />
                     </Grid>
 
                     <!-- Пул — только при Selective Routing: без него пулов нет. -->

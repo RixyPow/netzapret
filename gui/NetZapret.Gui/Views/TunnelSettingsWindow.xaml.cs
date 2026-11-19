@@ -465,6 +465,16 @@ public partial class TunnelSettingsWindow : Window
             ? $"Прокси включён: {LocalProxy.Address(settings.LocalProxyPort)}."
             : string.Empty);
 
+        Word(LocalProxyLanWord, settings.LocalProxyLan);
+        LocalProxyLanSwitch.IsChecked = settings.LocalProxyLan;
+        Line(LocalProxyLanLine, !settings.LocalProxyLan
+            ? string.Empty
+            : !settings.LocalProxyActive
+                ? "Сейчас не действует: локальный прокси выключен."
+                : PhysicalNetwork.LocalAddress() is { } lanAddress
+                    ? $"В сети: {LocalProxy.Address(settings.LocalProxyPort, lanAddress.ToString())} (без пароля)."
+                    : $"В сети: 0.0.0.0:{settings.LocalProxyPort} (адрес компьютера в Wi-Fi или по кабелю не найден).");
+
         ShowProxyPool(settings);
 
         Word(HybridProxyOnlyWord, settings.HybridProxyOnly);
@@ -560,6 +570,16 @@ public partial class TunnelSettingsWindow : Window
             id.Length == 0
                 ? "Прокси пойдёт через пул по умолчанию."
                 : $"Прокси пойдёт через пул «{name}».");
+    }
+
+    private void OnLocalProxyLan(object sender, RoutedEventArgs e)
+    {
+        bool on = LocalProxyLanSwitch.IsChecked == true;
+
+        Save(s => s with { LocalProxyLan = on },
+            on
+                ? "Локальный прокси будет принимать соединения из локальной сети (0.0.0.0, без пароля)."
+                : "Локальный прокси снова доступен только с этого компьютера (127.0.0.1).");
     }
 
     private void OnHybridProxyOnly(object sender, RoutedEventArgs e)

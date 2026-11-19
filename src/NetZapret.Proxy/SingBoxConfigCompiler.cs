@@ -433,17 +433,23 @@ public sealed class SingBoxOptions
     public const string LocalProxyTag = "local-proxy";
 
     /// <summary>
-    /// Порт локального прокси (<c>mixed</c> на 127.0.0.1), который программы
-    /// человека прописывают у себя сами; <c>null</c> — прокси нет.
+    /// Порт локального прокси (<c>mixed</c>), который программы человека
+    /// прописывают у себя сами; <c>null</c> — прокси нет.
     /// </summary>
     /// <remarks>
     /// Обсуждение №42 и идея №18 (<c>docs/ideas.md</c>): «несистемный прокси» —
     /// его видят только программы, где он указан явно. Всё, что пришло в него,
     /// идёт в туннель мимо правил маршрутов: прокси указывают ради VPN.
-    /// Без пароля — браузеры SOCKS с паролем не умеют; и только петля, чтобы
-    /// VPN не раздавался в домашнюю сеть.
+    /// Без пароля — браузеры SOCKS с паролем не умеют; по умолчанию слушает
+    /// только петлю (<see cref="LocalProxyLan"/> открывает <c>0.0.0.0</c>).
     /// </remarks>
     public int? LocalProxyPort { get; init; }
+
+    /// <summary>
+    /// Принимать соединения локального прокси из локальной сети (<c>0.0.0.0</c>)
+    /// вместо только петли (<c>127.0.0.1</c>) — обсуждение №70.
+    /// </summary>
+    public bool LocalProxyLan { get; init; }
 
     /// <summary>
     /// Пул локального прокси — значением поля сервера правила (<c>pool:ключ</c>);
@@ -1461,7 +1467,7 @@ public sealed class SingBoxConfigCompiler
             {
                 ["type"] = "mixed",
                 ["tag"] = SingBoxOptions.LocalProxyTag,
-                ["listen"] = "127.0.0.1",
+                ["listen"] = options.LocalProxyLan ? "0.0.0.0" : "127.0.0.1",
                 ["listen_port"] = localPort,
             });
         }

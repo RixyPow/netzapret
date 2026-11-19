@@ -61,6 +61,29 @@ public partial class TgProxyView : UserControl
         if (settings.TelegramProxyLan && NetZapret.Core.PhysicalNetwork.LocalAddress() is { } lanAddress)
             AddressText.Text += "\nв сети: " + lanAddress + ":" + port;
 
+        int socksPort = TgWsProxy.SocksPort(settings.TelegramProxySocksPort, settings.TelegramProxyPort);
+        Socks.IsChecked = settings.TelegramProxySocks;
+        SocksWord.Text = settings.TelegramProxySocks ? "вкл." : "выкл.";
+        SocksBox.Visibility = settings.TelegramProxySocks ? Visibility.Visible : Visibility.Collapsed;
+
+        var socksLocal = TgWsProxy.SocksAddress(socksPort);
+        var socksLan = settings.TelegramProxyLan && NetZapret.Core.PhysicalNetwork.LocalAddress() is { } socksLanAddress
+            ? TgWsProxy.SocksAddress(socksPort, socksLanAddress.ToString())
+            : null;
+        SocksText.Text = socksLan is not null
+            ? $"{socksLocal}  ·  в сети: {socksLan}"
+            : settings.TelegramProxyLan
+                ? $"{socksLocal}  ·  в сети: 0.0.0.0:{socksPort}"
+                : socksLocal;
+        SocksText.ToolTip = socksLan ?? socksLocal;
+
+        if (settings.TelegramProxySocks)
+            AddressText.Text += "\nSOCKS5: " + (socksLan ?? socksLocal);
+
+        TypeText.Text = settings.TelegramProxySocks
+            ? "MTProto и SOCKS5 через WebSocket"
+            : "MTProto через WebSocket";
+
         DirectMain.IsChecked = settings.TelegramProxyDirect;
         DirectMainWord.Text = settings.TelegramProxyDirect ? "вкл." : "выкл.";
         DirectOther.IsChecked = settings.TelegramProxyDirectOther;
@@ -403,6 +426,37 @@ public partial class TgProxyView : UserControl
     {
         if (LanLink() is { } link)
             Copy(link, "Ссылка для телефона скопирована — отправьте её себе и откройте на телефоне.");
+    }
+
+    private void OnSocks(object sender, RoutedEventArgs e)
+    {
+        bool on = Socks.IsChecked == true;
+        var current = AppSettings.Load(AppSettings.DefaultPath);
+
+        if (on && TgWsProxy.SocksProblem(current) is { } problem)
+        {
+            Socks.IsChecked = false;
+            Status.Text = problem;
+            ShowState();
+            return;
+        }
+
+        int port = TgWsProxy.SocksPort(current.TelegramProxySocksPort, current.TelegramProxyPort);
+        SaveRoutes(s => s with { TelegramProxySocks = on },
+            on
+                ? $"Вход SOCKS5 (только Telegram) включён на порту {port}."
+                : "Вход SOCKS5 выключен.");
+    }
+
+    private void OnCopySocks(object sender, RoutedEventArgs e)
+    {
+        var settings = AppSettings.Load(AppSettings.DefaultPath);
+        int port = TgWsProxy.SocksPort(settings.TelegramProxySocksPort, settings.TelegramProxyPort);
+        var host = settings.TelegramProxyLan && NetZapret.Core.PhysicalNetwork.LocalAddress() is { } ip
+            ? ip.ToString()
+            : "127.0.0.1";
+        var address = TgWsProxy.SocksAddress(port, host);
+        Copy(address, $"Скопировано: {address}.");
     }
 
     private void OnDirectOther(object sender, RoutedEventArgs e)

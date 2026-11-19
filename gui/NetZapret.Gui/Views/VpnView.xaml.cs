@@ -3276,6 +3276,11 @@ public partial class VpnView : UserControl
 
         bool on = settings.LocalProxyOn;
         var address = LocalProxy.Address(settings.LocalProxyPort);
+        var lanNote = settings.LocalProxyLan
+            ? PhysicalNetwork.LocalAddress() is { } lanAddress
+                ? $" (в сети: {LocalProxy.Address(settings.LocalProxyPort, lanAddress.ToString())})"
+                : $" (в сети: 0.0.0.0:{settings.LocalProxyPort})"
+            : string.Empty;
 
         LocalProxySwitch.IsChecked = on;
         LocalProxyWord.Text = on ? "Включён" : "Выключен";
@@ -3285,10 +3290,10 @@ public partial class VpnView : UserControl
         LocalProxyLine.Text = !on
             ? string.Empty
             : !settings.Engines.Tunnel
-                ? $"{address} — поднимется, когда туннель включён."
+                ? $"{address}{lanNote} — поднимется, когда туннель включён."
                 : settings.HybridProxyOnlyActive
-                    ? $"SOCKS5 и HTTP на {address}. VPN только через прокси: маршруты «через VPN» — мимо туннеля."
-                    : $"SOCKS5 и HTTP на {address}: программы, где он прописан, идут через VPN.";
+                    ? $"SOCKS5 и HTTP на {address}{lanNote}. VPN только через прокси: маршруты «через VPN» — мимо туннеля."
+                    : $"SOCKS5 и HTTP на {address}{lanNote}: программы, где он прописан, идут через VPN.";
         LocalProxyLine.Visibility = LocalProxyLine.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 

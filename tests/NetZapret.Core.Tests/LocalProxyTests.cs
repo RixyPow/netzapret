@@ -261,4 +261,63 @@ public class LocalProxyTests
     {
         Assert.Null(LocalProxy.Problem(LocalProxy.DefaultPort, new AppSettings(), ownNow: true));
     }
+
+    [Fact]
+    public void Lan_switch_binds_local_proxy_to_all_interfaces_and_passes_sing_box_check()
+    {
+        Assert.False(new AppSettings().LocalProxyLan);
+
+        var engine = RuleSetLoader.Load("mode: selective\nrules: []");
+        var json = new SingBoxConfigCompiler().Compile(engine.RuleSet, [Vless], new SingBoxOptions
+        {
+            HealthInbound = true,
+            Keys = EngineKeys.Generate(),
+            LocalProxyPort = 2080,
+            LocalProxyLan = true,
+        }).Json;
+
+        var root = JsonDocument.Parse(json).RootElement;
+        var inbound = root.GetProperty("inbounds").EnumerateArray()
+            .Single(i => i.GetProperty("tag").GetString() == SingBoxOptions.LocalProxyTag);
+
+        Assert.Equal("0.0.0.0", inbound.GetProperty("listen").GetString());
+        Assert.Equal(2080, inbound.GetProperty("listen_port").GetInt32());
+        Assert.False(inbound.TryGetProperty("users", out _));
+
+        var (ok, said) = SingBoxCheck.Run(json);
+        Assert.True(ok, $"sing-box check не пройден: {said}");
+    }
+
+    [Fact]
+    public void Local_proxy_refuses_telegram_socks_port_only_when_socks_is_enabled()
+    {
+        Assert.Null(LocalProxy.Problem(1080, new AppSettings(), ownNow: true));
+        Assert.NotNull(LocalProxy.Problem(1080, new AppSettings { TelegramProxySocks = true }, ownNow: true));
+    }
+
+    [Fact]
+    public void Lan_and_telegram_socks_settings_survive_save_and_load()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nz-lan-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            new AppSettings
+            {
+                LocalProxyLan = true,
+                TelegramProxySocks = true,
+                TelegramProxySocksPort = 1085,
+            }.Save(path);
+
+            var back = AppSettings.Load(path);
+
+            Assert.True(back.LocalProxyLan);
+            Assert.True(back.TelegramProxySocks);
+            Assert.Equal(1085, back.TelegramProxySocksPort);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

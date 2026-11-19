@@ -34,6 +34,9 @@ public static class TgWsProxy
 {
     public const int DefaultPort = 1443;
 
+    /// <summary>Порт входа SOCKS5 у самого tg-ws-proxy-rs по умолчанию.</summary>
+    public const int DefaultSocksPort = 1080;
+
     /// <summary>Переменная, из которой прокси берёт секрет, — чтобы его не было в командной строке.</summary>
     public const string SecretVariable = "TG_SECRET";
 
@@ -60,6 +63,30 @@ public static class TgWsProxy
     /// </remarks>
     public static string Link(int port, string secret, string server = "127.0.0.1") =>
         $"tg://proxy?server={server}&port={port}&secret=dd{secret}";
+
+    /// <summary>Адрес входа SOCKS5 для клиентов и утилит.</summary>
+    public static string SocksAddress(int port, string server = "127.0.0.1") =>
+        $"socks5://{server}:{port}";
+
+    /// <summary>Порт входа SOCKS5 в допустимых пределах и не совпадающий с портом MTProto.</summary>
+    public static int SocksPort(int port, int mtprotoPort = DefaultPort)
+    {
+        int valid = port is >= 1024 and <= 65535 ? port : DefaultSocksPort;
+        return valid == mtprotoPort
+            ? (valid == DefaultSocksPort ? DefaultSocksPort + 1 : DefaultSocksPort)
+            : valid;
+    }
+
+    /// <summary>Не спорит ли порт SOCKS5 прокси Telegram с локальным прокси VPN.</summary>
+    public static string? SocksProblem(AppSettings settings)
+    {
+        int port = SocksPort(settings.TelegramProxySocksPort, settings.TelegramProxyPort);
+
+        if (settings.LocalProxyActive && port == settings.LocalProxyPort)
+            return $"Порт {port} занят локальным прокси VPN — смените его порт в «Настройках туннеля».";
+
+        return null;
+    }
 
     /// <summary>
     /// Настройки с включённым или выключенным прокси.
@@ -173,6 +200,17 @@ public static class TgWsProxy
         if (workers.Count > 0)
             arguments.AddRange(["--cf-worker-domain", string.Join(",", workers)]);
 
+        // Отдельный SOCKS5-вход только к DC Telegram (обсуждение №70). Слушает
+        // ту же область, что и MTProto: только 127.0.0.1 или 0.0.0.0 при Lan.
+        if (routes.Socks)
+        {
+            arguments.AddRange([
+                "--socks-enabled",
+                "--socks-host", routes.Lan ? "0.0.0.0" : "127.0.0.1",
+                "--socks-port", SocksPort(routes.SocksPort, port).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ]);
+        }
+
         return arguments;
     }
 
@@ -251,18 +289,24 @@ public static class TgWsProxy
 /// <param name="WorkerDomains">Свои воркеры Cloudflare через запятую (<see cref="TgWsProxy.WorkerDomains"/>); пусто — нет.</param>
 /// <param name="CfDomains">Домены Cloudflare первыми, перед общим списком, — по замеру автонастройки.</param>
 /// <param name="Lan">Принимать соединения из локальной сети, а не только с этой машины.</param>
+/// <param name="Socks">Поднимать отдельный вход SOCKS5 только к дата-центрам Telegram.</param>
+/// <param name="SocksPort">Порт входа SOCKS5 (<see cref="TgWsProxy.DefaultSocksPort"/>).</param>
 public sealed record TgWsProxyRoutes(
     bool DirectMain = false,
     bool DirectOther = false,
     int CfConnectTimeout = TgWsProxy.DefaultCfConnectTimeout,
     string? WorkerDomains = null,
     IReadOnlyList<string>? CfDomains = null,
-    bool Lan = false)
+    bool Lan = false,
+    bool Socks = false,
+    int SocksPort = TgWsProxy.DefaultSocksPort)
 {
     public static TgWsProxyRoutes From(AppSettings settings) => new(
         settings.TelegramProxyDirect,
         settings.TelegramProxyDirectOther,
         settings.TelegramProxyCfTimeout,
         settings.TelegramProxyWorkerDomains,
-        Lan: settings.TelegramProxyLan);
+        Lan: settings.TelegramProxyLan,
+        Socks: settings.TelegramProxySocks,
+        SocksPort: settings.TelegramProxySocksPort);
 }
