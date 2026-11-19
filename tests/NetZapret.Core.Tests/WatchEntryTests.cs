@@ -297,6 +297,33 @@ public sealed class WatchEntryTests
         Assert.Equal(hosts, WatchEntry.HostsOf(entries));
     }
 
+    /// <summary>
+    /// Прокси Telegram и dnscrypt-proxy — наши движки: в копию сайтами и доменами
+    /// их подставные домены Cloudflare попадать не должны, в том числе из старого журнала.
+    /// </summary>
+    [Fact]
+    public void ProxyEnginesDoNotLeakIntoCopiedSitesOrHosts()
+    {
+        var any = new RuleDecision { Mode = RoutingMode.Desync, Reason = "default" };
+
+        var tg = WatchEntry.From(Connection("tg-ws-proxy.exe", "kws2.pclead.co.uk", "104.18.1.2", 443), any, Engine);
+        var dns = WatchEntry.From(Connection("dnscrypt-proxy.exe", "dns.quad9.net", "9.9.9.9", 443), any, Engine);
+        var legacyTg = new WatchEntry(
+            DateTimeOffset.Now, WatchRoute.Desync, "tcp", "tg-ws-proxy.exe",
+            "kws2.offshor.co.uk:443", "104.18.1.3:443", "по умолчанию", Dropped: false);
+        var user = WatchEntry.From(Connection("chrome.exe", "example.org", "93.184.216.34", 443), any, Engine);
+
+        Assert.Equal(WatchRoute.Engine, tg.Mode);
+        Assert.Equal(WatchRoute.Engine, dns.Mode);
+        Assert.True(tg.Certain);
+        Assert.True(dns.Certain);
+
+        WatchEntry[] entries = [tg, dns, legacyTg, user];
+        Assert.Equal(["example.org"], WatchEntry.SitesOf(entries));
+        Assert.Equal(["example.org"], WatchEntry.HostsOf(entries));
+        Assert.Equal(["93.184.216.34"], WatchEntry.AddressesOf(entries));
+    }
+
     /// <summary>Правило коротко — для таблицы и отбора по правилу.</summary>
     [Theory]
     [InlineData("#47 domain www.google.com в списке config/lists/google.txt", "#47 google")]

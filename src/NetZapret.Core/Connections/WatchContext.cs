@@ -43,7 +43,12 @@ public enum WatchRoute
 public sealed class WatchContext
 {
     /// <summary>Программы движка: их соединения правилами не судятся.</summary>
-    private static readonly HashSet<string> EngineProcesses = new(StringComparer.OrdinalIgnoreCase) { "sing-box.exe" };
+    private static readonly HashSet<string> EngineProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sing-box.exe",
+        "tg-ws-proxy.exe",
+        "dnscrypt-proxy.exe",
+    };
 
     private readonly IReadOnlyList<IpCidrRange> _fake;
     private readonly HashSet<IPAddress> _servers;
@@ -118,6 +123,12 @@ public sealed class WatchContext
     public bool IsServer(IPAddress address) => _servers.Contains(Normal(address));
 
     public static bool IsEngine(string? executableName) => executableName is not null && EngineProcesses.Contains(executableName);
+
+    public static bool IsTgProxy(string? executableName) =>
+        string.Equals(executableName, "tg-ws-proxy.exe", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsDnsCrypt(string? executableName) =>
+        string.Equals(executableName, "dnscrypt-proxy.exe", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Мультикаст и широковещание — поиск устройств в сети, а не выход наружу.</summary>
     public static bool IsMulticast(IPAddress address)

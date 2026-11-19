@@ -53,6 +53,10 @@ public sealed record WatchEntry(
 
         var (route, rule) = remote switch
         {
+            _ when WatchContext.IsTgProxy(connection.ExecutableName) => (WatchRoute.Engine,
+                "движок: прокси Telegram — к серверу или через Cloudflare"),
+            _ when WatchContext.IsDnsCrypt(connection.ExecutableName) => (WatchRoute.Engine,
+                "движок: шифрованный DNS (dnscrypt-proxy)"),
             _ when WatchContext.IsEngine(connection.ExecutableName) => (WatchRoute.Engine,
                 remote is not null && context.IsServer(remote)
                     ? "движок: соединение с сервером VPN, мимо перехвата"
@@ -263,7 +267,9 @@ public sealed record WatchEntry(
             .ThenBy(x => x.Parsed is { } a ? Convert.ToHexString(a.GetAddressBytes()) : x.Text, StringComparer.Ordinal)
             .Select(x => x.Text)];
 
-    private static bool Outside(WatchEntry entry) => entry.Mode is not (WatchRoute.Local or WatchRoute.Engine);
+    private static bool Outside(WatchEntry entry) =>
+        entry.Mode is not (WatchRoute.Local or WatchRoute.Engine)
+        && !WatchContext.IsEngine(entry.Process);
 
     /// <summary>«Куда» словом — как в таблице окна.</summary>
     public string ModeWord => Word(Mode);
