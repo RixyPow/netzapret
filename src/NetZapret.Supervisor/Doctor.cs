@@ -651,7 +651,10 @@ public static class Doctor
             Ok(settings.UseRouterDns ? $"DNS роутера: {settings.RouterDnsAddress}:53, UDP напрямую через LAN."
                 : settings.DnsCryptActive is { } crypt
                     ? $"DNS движка: {DnsCrypt.Describe(crypt).Title} через dnscrypt-proxy, {DnsCrypt.Address}:{DnsCrypt.Port}."
-                    : $"DNS движка: {settings.DnsServer}, путь — {DnsRoutes.Word(settings.DnsVia)}."),
+                    : $"DNS движка: {settings.DnsServer}, путь — {DnsRoutes.Word(settings.DnsVia)}"
+                      + (settings.SpareDnsServer is { } spare && settings.DnsVia != DnsRoute.Tunnel
+                          ? $", запасной — {DnsSpare.Describe(spare)}."
+                          : ".")),
         };
 
         if (EngineDns(SupervisorState.Load(SupervisorState.DefaultPath)) is { } dns)

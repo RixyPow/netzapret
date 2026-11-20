@@ -21,6 +21,31 @@ public sealed class DnsSpareTests
         Assert.Equal(spare, DnsSpare.For(primary).TlsAddress);
 
     [Fact]
+    public void ChosenSpareOverridesAutoUnlessItMatchesPrimaryOrIsUnknown()
+    {
+        // Явно выбранный запасной берётся, пока он не совпадает с основным.
+        Assert.Equal("9.9.9.10", DnsSpare.For("8.8.4.4", "9.9.9.10").TlsAddress);
+        Assert.Equal("1.1.1.1", DnsSpare.For("9.9.9.10", "1.1.1.1").TlsAddress);
+
+        // Совпал с основным или неизвестен (нет в DnsSurvey с DoH) — откат на авто.
+        Assert.Equal("1.1.1.1", DnsSpare.For("8.8.4.4", "8.8.4.4").TlsAddress);
+        Assert.Equal("8.8.4.4", DnsSpare.For("9.9.9.10", "9.9.9.10").TlsAddress);
+        Assert.Equal("8.8.4.4", DnsSpare.For("9.9.9.10", "10.0.0.53").TlsAddress);
+
+        // DnsEngine с выбранным запасным кладёт его в remote-spare.
+        var compiled = DnsEngine.Compile(
+            new NetZapret.Core.AppSettings { DnsServer = "8.8.4.4", SpareDnsServer = "9.9.9.10" },
+            ["192.168.1.1/32"],
+            new Dictionary<string, string>(),
+            new EngineKeys("a", "b", "c"));
+        using var doc = System.Text.Json.JsonDocument.Parse(compiled.Json);
+        var spare = doc.RootElement.GetProperty("dns").GetProperty("servers").EnumerateArray()
+            .First(s => s.GetProperty("tag").GetString() == SingBoxOptions.DnsSpareTag);
+        Assert.Equal("9.9.9.10", spare.GetProperty("server").GetString());
+        Assert.Equal("dns10.quad9.net", spare.GetProperty("tls").GetProperty("server_name").GetString());
+    }
+
+    [Fact]
     public void AResolverIsNamedWithItsAddress()
     {
         Assert.Equal("Comss.one (83.220.169.155)", DnsSpare.Describe("83.220.169.155"));

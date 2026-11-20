@@ -262,6 +262,12 @@ public sealed record AppSettings
     public string DnsServer { get; init; } = GoogleDns;
 
     /// <summary>
+    /// Запасной резолвер движка по DoH (<c>DnsSpare</c>); <c>null</c> — подбирается
+    /// автоматически (Google <c>8.8.4.4</c>, или Cloudflare <c>1.1.1.1</c>, если основным выбран Google).
+    /// </summary>
+    public string? SpareDnsServer { get; init; }
+
+    /// <summary>
     /// Сама раз в 6 часов (до 05.11 — раз в сутки) менять мёртвые пины к посредникам на живые (<c>PinRefresh</c>).
     /// </summary>
     /// <remarks>
@@ -1483,6 +1489,9 @@ public sealed record AppSettings
             {
                 Mode = read.Engines.Mode,
                 DnsServer = read.DnsServer is "8.8.8.8" or MullvadDns ? GoogleDns : read.DnsServer,
+                SpareDnsServer = string.IsNullOrWhiteSpace(read.SpareDnsServer) || read.SpareDnsServer == MullvadDns
+                    ? null
+                    : read.SpareDnsServer.Trim() is "8.8.8.8" ? GoogleDns : read.SpareDnsServer.Trim(),
             }))))))));
         }
         catch (Exception)

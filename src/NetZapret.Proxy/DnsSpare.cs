@@ -21,9 +21,30 @@ namespace NetZapret.Proxy;
 /// </remarks>
 public static class DnsSpare
 {
-    /// <summary>Запасной к резолверу <paramref name="primary"/> (адрес из настроек).</summary>
-    public static DnsProvider For(string? primary) =>
-        primary is "8.8.4.4" or "8.8.8.8" ? Cloudflare : Google;
+    /// <summary>
+    /// Запасной к резолверу <paramref name="primary"/>: выбранный человеком <paramref name="spare"/>,
+    /// если он годится туннелю и не совпадает с основным, иначе <see cref="AutoFor"/>.
+    /// </summary>
+    public static DnsProvider For(string? primary, string? spare = null)
+    {
+        var primaryAddress = DnsSurvey.ByAddress(primary)?.TlsAddress ?? primary;
+
+        if (!string.IsNullOrWhiteSpace(spare)
+            && DnsSurvey.ByAddress(spare) is { Choosable: true } chosen
+            && !string.Equals(chosen.TlsAddress, primaryAddress, StringComparison.Ordinal))
+        {
+            return chosen;
+        }
+
+        return AutoFor(primaryAddress);
+    }
+
+    /// <summary>Запасной по умолчанию к резолверу <paramref name="primary"/>.</summary>
+    public static DnsProvider AutoFor(string? primary)
+    {
+        var primaryAddress = DnsSurvey.ByAddress(primary)?.TlsAddress ?? primary;
+        return primaryAddress is "8.8.4.4" or "8.8.8.8" ? Cloudflare : Google;
+    }
 
     private static DnsProvider Google => DnsSurvey.Providers.First(p => p.TlsAddress == "8.8.4.4");
 

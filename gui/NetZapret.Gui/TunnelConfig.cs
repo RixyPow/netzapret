@@ -237,7 +237,7 @@ internal static class TunnelConfig
 
                 // Выбранный резолвер замолчит — надзор переведёт имена на запасной
                 // (25.10: умер Comss DNS, и при «напрямую» висело всё).
-                DnsSpare = DnsSpare.For(dnsServer),
+                DnsSpare = DnsSpare.For(dnsServer, settings.SpareDnsServer),
 
                 // Все подписки из книги, а не одна действующая: переключаются
                 // на другую как раз тогда, когда выход текущей лёг.

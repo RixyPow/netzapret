@@ -72,7 +72,7 @@ public static class DnsEngine
             DnsServerPath = provider?.DohPath,
 
             // Без туннеля резолвер и есть вся работа движка: молчит — молчит всё (25.10).
-            DnsSpare = DnsSpare.For(dnsServer),
+            DnsSpare = DnsSpare.For(dnsServer, settings.SpareDnsServer),
 
             // Туннеля нет: «через туннель» в настройках здесь означает
             // «через движок», а сам запрос к резолверу идёт напрямую.

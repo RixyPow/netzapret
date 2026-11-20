@@ -606,6 +606,80 @@ public partial class DnsView : UserControl
         // Подпись «выбранного резолвера» зависит от выбора в списке ниже —
         // показывается здесь же, где и сам выбор.
         ShowAdapterDns(settings);
+        ShowSpareDns(settings);
+    }
+
+    /// <summary>Выбор запасного резолвера (<see cref="AppSettings.SpareDnsServer"/>).</summary>
+    private void ShowSpareDns(AppSettings settings)
+    {
+        var primaryAddress = !settings.UseRouterDns && settings.DnsCryptActive is null
+            ? DnsSurvey.ByAddress(settings.DnsServer)?.TlsAddress ?? settings.DnsServer
+            : null;
+
+        var auto = DnsSpare.AutoFor(primaryAddress);
+        var selected = !string.IsNullOrWhiteSpace(settings.SpareDnsServer)
+            && DnsSurvey.ByAddress(settings.SpareDnsServer) is { Choosable: true } chosen
+            && !string.Equals(chosen.TlsAddress, primaryAddress, StringComparison.Ordinal)
+                ? chosen.TlsAddress
+                : string.Empty;
+
+        _filling = true;
+        SpareDnsMode.Items.Clear();
+        SpareDnsMode.Items.Add(new ComboBoxItem
+        {
+            Content = $"запасной: авто ({auto.Name} · {auto.TlsAddress})",
+            Tag = string.Empty,
+        });
+
+        foreach (var provider in DnsSurvey.All.Where(p => p.Choosable
+            && !string.Equals(p.TlsAddress, primaryAddress, StringComparison.Ordinal)))
+        {
+            SpareDnsMode.Items.Add(new ComboBoxItem
+            {
+                Content = $"запасной: {provider.Name} · {provider.TlsAddress}",
+                Tag = provider.TlsAddress!,
+            });
+        }
+
+        SpareDnsMode.SelectedItem = SpareDnsMode.Items.OfType<ComboBoxItem>()
+            .FirstOrDefault(item => item.Tag is string tag && string.Equals(tag, selected, StringComparison.Ordinal))
+            ?? SpareDnsMode.Items[0];
+        SpareDnsMode.IsEnabled = settings.UseRouterDns || settings.DnsVia != DnsRoute.Tunnel;
+        _filling = false;
+    }
+
+    private void OnSpareDns(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsInitialized || _filling
+            || SpareDnsMode.SelectedItem is not ComboBoxItem { Tag: string tag })
+        {
+            return;
+        }
+
+        var chosen = string.IsNullOrEmpty(tag) ? null : tag;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+
+            if (string.Equals(settings.SpareDnsServer, chosen, StringComparison.Ordinal))
+                return;
+
+            var next = settings with { SpareDnsServer = chosen };
+            next.Save(AppSettings.DefaultPath);
+            ShowSpareDns(next);
+
+            var name = chosen is null
+                ? "автоматически"
+                : DnsSpare.Describe(chosen);
+
+            Status.Text = $"Запасной резолвер: {name}. Применится при следующем запуске движков.";
+            this.Offer("Запасной резолвер изменён");
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось записать выбор: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>Выбор DNS адаптеров (<see cref="AppSettings.AdapterDns"/>) и что он значит сейчас.</summary>
@@ -978,10 +1052,23 @@ public partial class DnsView : UserControl
             var settings = AppSettings.Load(AppSettings.DefaultPath);
 
             // Шифрованный — режим dnscrypt-proxy, адрес DoH при этом хранится:
-            // выбор обычного резолвера вернёт DoH.
+            // выбор обычного резолвера вернёт DoH. Если выбранный совпал с
+            // запасным, запасной сбрасывается на авто.
+            var sameAsSpare = !address.StartsWith(CryptTag, StringComparison.Ordinal)
+                && DnsSurvey.ByAddress(address) is { } primaryProvider
+                && settings.SpareDnsServer is not null
+                && DnsProviderAddresses.Matches(primaryProvider, settings.SpareDnsServer);
+
             settings = address.StartsWith(CryptTag, StringComparison.Ordinal)
                 ? settings with { DnsCrypt = address[CryptTag.Length..], DnsAuto = false, UseRouterDns = false }
-                : settings with { DnsServer = address, DnsCrypt = null, DnsAuto = false, UseRouterDns = false };
+                : settings with
+                {
+                    DnsServer = address,
+                    DnsCrypt = null,
+                    DnsAuto = false,
+                    UseRouterDns = false,
+                    SpareDnsServer = sameAsSpare ? null : settings.SpareDnsServer,
+                };
             settings.Save(AppSettings.DefaultPath);
 
             ShowChosen(settings);
@@ -1109,12 +1196,18 @@ public partial class DnsView : UserControl
             // Выбранный туннелю — остаётся в настройках адресом без имени,
             // и DoH к нему не поднимется. Сказать, а не молчать.
             var settings = AppSettings.Load(AppSettings.DefaultPath);
+            bool wasSpare = string.Equals(settings.SpareDnsServer, row.Address, StringComparison.Ordinal);
+
+            if (wasSpare)
+                (settings with { SpareDnsServer = null }).Save(AppSettings.DefaultPath);
 
             Reload();
 
             Status.Text = row.Chosen || settings.DnsServer == row.Address
                 ? $"Убран {row.Name}. Он был выбран туннелю — выберите другой, иначе DoH не поднимется."
-                : $"Убран {row.Name}.";
+                : wasSpare
+                    ? $"Убран {row.Name}. Он был выбран запасным — запасной возвращён на авто."
+                    : $"Убран {row.Name}.";
         }
         catch (Exception ex)
         {
@@ -1186,7 +1279,13 @@ public partial class DnsView : UserControl
             return;
         }
 
-        var next = settings with { DnsServer = address };
+        var sameAsSpare = settings.SpareDnsServer is not null
+            && DnsProviderAddresses.Matches(best, settings.SpareDnsServer);
+        var next = settings with
+        {
+            DnsServer = address,
+            SpareDnsServer = sameAsSpare ? null : settings.SpareDnsServer,
+        };
         next.Save(AppSettings.DefaultPath);
 
         foreach (var row in choices)

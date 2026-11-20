@@ -321,4 +321,17 @@ public sealed class TunnelConfigTests : IDisposable
         Assert.False(outcome.Ok);
         Assert.Contains("не собрался", outcome.Message, StringComparison.Ordinal);
     }
+
+    /// <summary>Выбранный запасной резолвер попадает в конфиг туннеля как remote-spare.</summary>
+    [Fact]
+    public async Task Chosen_spare_dns_reaches_the_tunnel_config()
+    {
+        var root = await BuildAsync(s => s with { DnsServer = "8.8.4.4", SpareDnsServer = "9.9.9.10" });
+
+        var spare = root.GetProperty("dns").GetProperty("servers").EnumerateArray()
+            .First(s => s.GetProperty("tag").GetString() == NetZapret.Proxy.SingBoxOptions.DnsSpareTag);
+
+        Assert.Equal("9.9.9.10", spare.GetProperty("server").GetString());
+        Assert.Equal("dns10.quad9.net", spare.GetProperty("tls").GetProperty("server_name").GetString());
+    }
 }
