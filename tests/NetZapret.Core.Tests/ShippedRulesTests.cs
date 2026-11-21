@@ -1,4 +1,5 @@
 using NetZapret.Core.Rules;
+using NetZapret.Core.Services;
 using Xunit;
 
 namespace NetZapret.Core.Tests;
@@ -289,5 +290,16 @@ public sealed class ShippedRulesTests
         {
             File.Delete(user);
         }
+    }
+
+    [Fact]
+    public void Gemini_and_Antigravity_share_their_own_folder()
+    {
+        var folder = Assert.Single(ServiceCatalog.All, s => s.Name == "Gemini и Antigravity");
+        Assert.False(folder.Grouping);
+        Assert.Equal(["config/lists/gemini.txt", "config/lists/antigravity.txt"], folder.Parts.Select(p => p.List));
+
+        var ai = Assert.Single(ServiceCatalog.All, s => s.Name == "Нейросети");
+        Assert.DoesNotContain(ai.Parts, p => p.List is "config/lists/gemini.txt" or "config/lists/antigravity.txt");
     }
 }

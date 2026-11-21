@@ -702,13 +702,6 @@ public static class ServiceCatalog
             Parts =
             [
                 new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
-                new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
-                new ServicePart
-                {
-                    Name = "Antigravity",
-                    List = "config/lists/antigravity.txt",
-                    Note = "редактор кода Google и Gemini Code Assist",
-                },
                 new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
                 new ServicePart { Name = "Perplexity", List = "config/lists/perplexity.txt" },
                 new ServicePart { Name = "Grok", List = "config/lists/grok.txt" },
@@ -718,6 +711,25 @@ public static class ServiceCatalog
                     Name = "Hugging Face",
                     List = "config/lists/huggingface.txt",
                     Note = "туда же ходят библиотеки при загрузке моделей",
+                },
+            ],
+        },
+
+        // Gemini и Antigravity — своей папкой, как Claude (21.11): обе части
+        // закрыты от России по стране, но редактор кода Antigravity и Gemini
+        // Code Assist удобно вести отдельным правилом или пулом. Список
+        // «Gemini» — прежний gemini.txt, прежние правила и пины сохраняются.
+        new ServiceDefinition
+        {
+            Name = "Gemini и Antigravity",
+            Parts =
+            [
+                new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
+                new ServicePart
+                {
+                    Name = "Antigravity",
+                    List = "config/lists/antigravity.txt",
+                    Note = "редактор кода Google и Gemini Code Assist",
                 },
             ],
         },
