@@ -170,17 +170,24 @@ public sealed class SubscriptionClient : IDisposable
 
                 var info = await ParseAsync(response, cancellationToken);
 
-                // Панель ответила «200», но заглушкой — список на один адрес
-                // без шифрования. Так отвечает часть панелей клиенту, которого
-                // не любят: замер 28.09 (подписка Trust у владельца) — под
-                // именем sing-box 48 «серверов» на convert-flow.net:443 без TLS,
-                // под Happ и v2rayN — 123 настоящих с Reality на десяти адресах.
-                // Прежде переспрашивали только при 404/403, и заглушка уходила
-                // в пул целиком.
-                if (LooksLikeStub(info) && i < agents.Length - 1)
+                // Панель ответила «200», но неразбираемым телом без серверов (например,
+                // HTML-страница на незнакомый User-Agent — обсуждение №80) или заглушкой
+                // (список на один адрес без шифрования: замер 28.09, Trust — под sing-box
+                // 48 «серверов» на convert-flow.net:443 без TLS, под Happ — 123 настоящих
+                // с Reality). Пробуем следующий User-Agent, сохраняя первый ответ на случай,
+                // если лучше ничего не вернётся.
+                if (((info.Servers.Count == 0 && info.Errors.Count > 0) || LooksLikeStub(info)) && i < agents.Length - 1)
                 {
                     stub ??= (info, LastBody ?? string.Empty, agent);
                     continue;
+                }
+
+                // Последний агент тоже не дал серверов — возвращаем первый ответ и не
+                // запоминаем запасной User-Agent: он ничем не помог.
+                if (info.Servers.Count == 0 && stub is { } emptyFallback)
+                {
+                    LastBody = emptyFallback.Body;
+                    return emptyFallback.Info;
                 }
 
                 // Сработало не имя по умолчанию — запомнить; сработало оно —

@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using NetZapret.Subscriptions;
 using Xunit;
 
@@ -64,5 +66,88 @@ public sealed class SubscriptionStubTests
 
         Assert.Equal(0, mixed.UnsupportedCount);
         Assert.Null(mixed.StubNotice());
+    }
+
+    private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) : HttpMessageHandler
+    {
+        public List<string> Agents { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Agents.Add(request.Headers.UserAgent.ToString());
+            return Task.FromResult(respond(request));
+        }
+    }
+
+    /// <summary>
+    /// Обсуждение №80: панель на User-Agent sing-box отдала 200 OK с HTML-страницей
+    /// (0 серверов), а под Happ отдаёт настоящую подписку — клиент должен переспросить.
+    /// </summary>
+    [Fact]
+    public async Task Unparseable_200_under_default_agent_retries_as_Happ_and_remembers_it()
+    {
+        var memory = Path.Combine(Path.GetTempPath(), $"nz-agent-{Guid.NewGuid():N}.json");
+        var url = new Uri("https://panel.example.test/sub/token");
+
+        try
+        {
+            var handler = new StubHandler(req =>
+            {
+                var ua = req.Headers.UserAgent.ToString();
+                var body = ua.StartsWith("Happ/", StringComparison.OrdinalIgnoreCase)
+                    ? "vless://11111111-1111-1111-1111-111111111111@de.example:443?security=tls&type=tcp#DE"
+                    : "<html><body>Open in Happ</body></html>";
+
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(body, Encoding.UTF8, "text/plain"),
+                };
+            });
+
+            using var http = new HttpClient(handler);
+            using var client = new SubscriptionClient(http, memoryPath: memory);
+
+            var info = await client.FetchAsync(url, CancellationToken.None);
+
+            Assert.Single(info.Servers);
+            Assert.Equal("DE", info.Servers[0].Tag);
+            Assert.Equal(2, handler.Agents.Count);
+            Assert.Equal(SubscriptionClient.FallbackUserAgent, AgentMemory.Get(url, memory));
+        }
+        finally
+        {
+            if (File.Exists(memory))
+                File.Delete(memory);
+        }
+    }
+
+    [Fact]
+    public async Task Unparseable_200_under_all_agents_keeps_first_error_without_remembering_Happ()
+    {
+        var memory = Path.Combine(Path.GetTempPath(), $"nz-agent-{Guid.NewGuid():N}.json");
+        var url = new Uri("https://panel.example.test/sub/broken");
+
+        try
+        {
+            var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("<html>broken</html>", Encoding.UTF8, "text/html"),
+            });
+
+            using var http = new HttpClient(handler);
+            using var client = new SubscriptionClient(http, memoryPath: memory);
+
+            var info = await client.FetchAsync(url, CancellationToken.None);
+
+            Assert.Empty(info.Servers);
+            Assert.NotEmpty(info.Errors);
+            Assert.Equal(2, handler.Agents.Count);
+            Assert.Null(AgentMemory.Get(url, memory));
+        }
+        finally
+        {
+            if (File.Exists(memory))
+                File.Delete(memory);
+        }
     }
 }

@@ -276,6 +276,11 @@ public sealed class TgWsProxyTests
         // Без «всегда» прежняя проверка: движки без прокси — оговорка.
         var withEngines = settings with { TelegramProxyAlways = false };
         Assert.Equal(DoctorLevel.Warn, Assert.Single(Doctor.TelegramProxy(withEngines, executable: here, state: engines, kept: window)).Level);
+
+        // Упавший прокси указывает путь к журналу без табуляции (\t вместо \tg-ws-proxy.log).
+        var dead = new ServiceState { Name = TgWsProxyService.ServiceName, Health = ServiceHealth.Dead };
+        var deadCheck = Assert.Single(Doctor.TelegramProxy(withEngines, executable: here, state: engines with { Services = [dead] }, kept: gone));
+        Assert.Contains(@"runtime\tg-ws-proxy.log", deadCheck.Text);
     }
 
     /// <summary>

@@ -393,7 +393,7 @@ public static class Doctor
     {
         ServiceHealth.Healthy => Ok($"Работает на 127.0.0.1:{settings.TelegramProxyPort}."),
         _ => Warn($"127.0.0.1:{settings.TelegramProxyPort}: {EngineHealth.Status(service)}. "
-            + "Частая причина — порт занят другим tg-ws-proxy; журнал — runtime\tg-ws-proxy.log."),
+            + @"Частая причина — порт занят другим tg-ws-proxy; журнал — runtime\tg-ws-proxy.log."),
     };
 
     private static IReadOnlyList<DoctorCheck> Engines()
