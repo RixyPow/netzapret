@@ -341,7 +341,9 @@ public partial class SubscriptionAddWindow : Window
 
         if (found.SubscriptionUrl is not { } url)
         {
-            Say("Это не похоже на ссылку подписки: нужна http, https либо обёртка happ, clash или sn.");
+            Say(SubscriptionClient.IsEncryptedHapp(input)
+                ? SubscriptionClient.EncryptedHappMessage
+                : "Это не похоже на ссылку подписки: нужна http, https либо обёртка happ, clash или sn.");
             return;
         }
 

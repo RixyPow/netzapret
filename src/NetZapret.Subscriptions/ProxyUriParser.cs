@@ -729,17 +729,36 @@ public static class Base64
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        var text = value.Trim().Replace('-', '+').Replace('_', '/');
+        // Убираем BOM и все пробелы/переносы строк до подсчёта остатка % 4:
+        // многострочный base64 (переносы каждые 76 знаков, стандарт MIME) раньше
+        // считал \r\n в длину, дописывал лишние '=' и падал в FormatException (№80).
+        var buffer = new StringBuilder(value.Length);
 
-        int padding = text.Length % 4;
+        foreach (var ch in value)
+        {
+            if (ch == '\uFEFF' || char.IsWhiteSpace(ch))
+                continue;
+
+            buffer.Append(ch switch
+            {
+                '-' => '+',
+                '_' => '/',
+                _ => ch,
+            });
+        }
+
+        if (buffer.Length == 0)
+            return null;
+
+        int padding = buffer.Length % 4;
         if (padding == 1)
             return null;
         if (padding > 0)
-            text = text.PadRight(text.Length + (4 - padding), '=');
+            buffer.Append('=', 4 - padding);
 
         try
         {
-            var bytes = Convert.FromBase64String(text);
+            var bytes = Convert.FromBase64String(buffer.ToString());
             return Encoding.UTF8.GetString(bytes);
         }
         catch (FormatException)

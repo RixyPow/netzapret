@@ -150,4 +150,38 @@ public sealed class SubscriptionStubTests
                 File.Delete(memory);
         }
     }
+
+    /// <summary>
+    /// Обсуждение №80: многострочный base64 (переносы каждые 76 знаков) и UTF-8 BOM
+    /// раньше ломали подсчёт остатка Length % 4 и падали с «ни корректного base64».
+    /// </summary>
+    [Fact]
+    public void Multiline_base64_and_bom_decode_into_servers()
+    {
+        var link = "vless://11111111-1111-1111-1111-111111111111@de.example:443?security=tls&type=tcp#DE\n"
+            + "vless://22222222-2222-2222-2222-222222222222@nl.example:443?security=tls&type=tcp#NL";
+        var raw = Convert.ToBase64String(Encoding.UTF8.GetBytes(link));
+
+        // Переносы каждые 76 знаков + BOM в начале.
+        var wrapped = "\uFEFF" + string.Join("\r\n", Enumerable.Range(0, (raw.Length + 75) / 76)
+            .Select(i => raw.Substring(i * 76, Math.Min(76, raw.Length - i * 76))));
+
+        var (servers, errors) = SubscriptionParser.ParseBody(wrapped);
+
+        Assert.Empty(errors);
+        Assert.Equal(2, servers.Count);
+        Assert.Equal("DE", servers[0].Tag);
+        Assert.Equal("NL", servers[1].Tag);
+    }
+
+    [Fact]
+    public void Encrypted_happ_link_explains_why_it_cannot_be_imported()
+    {
+        Assert.True(SubscriptionClient.IsEncryptedHapp("happ://crypt4/abc123"));
+        Assert.False(SubscriptionClient.IsEncryptedHapp("happ://add/https://panel.example/sub"));
+
+        var found = KeyImport.FromText("happ://crypt4/abc123");
+        Assert.Null(found.SubscriptionUrl);
+        Assert.Equal(SubscriptionClient.EncryptedHappMessage, found.Problem);
+    }
 }

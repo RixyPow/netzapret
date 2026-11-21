@@ -432,6 +432,12 @@ public partial class OnboardingView : UserControl
             return false;
         }
 
+        if (SubscriptionClient.IsEncryptedHapp(raw))
+        {
+            VpnStatus.Text = SubscriptionClient.EncryptedHappMessage;
+            return false;
+        }
+
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed))
         {
             VpnStatus.Text = "Это не похоже на ссылку.";

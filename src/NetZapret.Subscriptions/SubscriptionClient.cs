@@ -61,7 +61,10 @@ public sealed class SubscriptionClient : IDisposable
         _memory = memoryPath ?? AgentMemory.DefaultPath;
 
         _ownsClient = http is null;
-        _http = http ?? new HttpClient { Timeout = DefaultTimeout };
+        _http = http ?? new HttpClient(new HttpClientHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+        }) { Timeout = DefaultTimeout };
 
         // Имя — на каждый запрос, а не в заголовки клиента: при отказе
         // спрашиваем ещё раз под другим.
@@ -246,6 +249,15 @@ public sealed class SubscriptionClient : IDisposable
             Header(response, "profile-update-interval"),
             name => Header(response, name));
     }
+
+    /// <summary>Пояснение для шифрованных ссылок Happ (<c>happ://crypt…</c>).</summary>
+    public const string EncryptedHappMessage =
+        "Шифрованная ссылка happ://crypt… работает только в клиенте Happ — расшифровать её другие программы не могут. "
+        + "Попросите у продавца обычную ссылку подписки (https://…).";
+
+    /// <summary>Шифрованная ссылка Happ (<c>happ://crypt…</c>), которую может открыть только сам Happ.</summary>
+    public static bool IsEncryptedHapp(string? text) =>
+        text is not null && text.TrimStart().StartsWith("happ://crypt", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Разворачивает ссылку-обёртку клиента в обычный HTTP-адрес.

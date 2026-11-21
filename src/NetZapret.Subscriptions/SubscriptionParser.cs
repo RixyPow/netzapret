@@ -32,7 +32,7 @@ public static class SubscriptionParser
         if (string.IsNullOrWhiteSpace(body))
             return (servers, errors);
 
-        var text = body.Trim();
+        var text = body.Trim().TrimStart('\uFEFF').Trim();
 
         // Конфиг распознаётся до всего остального. Часть поставщиков отдаёт
         // готовый документ Xray, и серверы в нём лежат в outbounds: ссылок нет
@@ -52,7 +52,7 @@ public static class SubscriptionParser
                 return (servers, errors);
             }
 
-            text = decoded;
+            text = decoded.Trim().TrimStart('\uFEFF').Trim();
 
             // И ещё раз после раскодирования: конфиг попадается и запакованным
             // в base64, как обычный список ссылок.

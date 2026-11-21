@@ -72,6 +72,9 @@ public static class KeyImport
 
         var line = text.Trim();
 
+        if (SubscriptionClient.IsEncryptedHapp(line))
+            return new([], null, SubscriptionClient.EncryptedHappMessage);
+
         if (!line.Contains(' ') && Uri.TryCreate(line, UriKind.Absolute, out var uri))
         {
             var unwrapped = SubscriptionClient.Unwrap(uri);

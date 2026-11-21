@@ -76,6 +76,7 @@ internal static class PanelBypass
 
         return new HttpClient(new SocketsHttpHandler
         {
+            AutomaticDecompression = DecompressionMethods.All,
             ConnectTimeout = timeout,
             ConnectCallback = async (context, cancellationToken) =>
             {

@@ -54,6 +54,12 @@ public partial class SubscriptionEditWindow : Window
 
         if (raw.Length > 0)
         {
+            if (SubscriptionClient.IsEncryptedHapp(raw))
+            {
+                Say(SubscriptionClient.EncryptedHappMessage);
+                return;
+            }
+
             // Та же проверка, что при добавлении: обёртки клиентов разворачиваются.
             if (!Uri.TryCreate(raw, UriKind.Absolute, out var parsed)
                 || SubscriptionClient.Unwrap(parsed) is not { Scheme: "http" or "https" } unwrapped)
