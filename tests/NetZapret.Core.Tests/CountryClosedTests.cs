@@ -45,6 +45,8 @@ public class CountryClosedTests
 
         var zones = CountryClosed.Read(CountryClosed.Lists.Select(l => Path.Combine(root, l)));
         Assert.True(CountryClosed.Covers("gemini.google.com", zones));
+        Assert.True(CountryClosed.Covers("antigravity.google", zones));
+        Assert.True(CountryClosed.Covers("cloudcode-pa.googleapis.com", zones));
         Assert.True(CountryClosed.Covers("grok.com", zones));
     }
 

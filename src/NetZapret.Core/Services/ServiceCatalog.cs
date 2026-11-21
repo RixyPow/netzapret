@@ -703,6 +703,12 @@ public static class ServiceCatalog
             [
                 new ServicePart { Name = "ChatGPT", List = "config/lists/chatgpt.txt" },
                 new ServicePart { Name = "Gemini", List = "config/lists/gemini.txt" },
+                new ServicePart
+                {
+                    Name = "Antigravity",
+                    List = "config/lists/antigravity.txt",
+                    Note = "редактор кода Google и Gemini Code Assist",
+                },
                 new ServicePart { Name = "DeepSeek", List = "config/lists/deepseek.txt" },
                 new ServicePart { Name = "Perplexity", List = "config/lists/perplexity.txt" },
                 new ServicePart { Name = "Grok", List = "config/lists/grok.txt" },

@@ -8,7 +8,8 @@ ai.google.dev
 # Добавлено 01.10 по сверке с v2fly (google-deepmind), вживую не наблюдалось.
 # Gemini закрыт от России по стране, и любое его имя, ушедшее мимо туннеля,
 # получает отказ. Чат ходит к своим серверам на googleapis.com и clients6,
-# AI Studio и API — к своим; NotebookLM и Code Assist — те же модели.
+# AI Studio и API — к своим; NotebookLM — те же модели (Antigravity и
+# Code Assist вынесены в antigravity.txt).
 # Перенаправители (bard, makersuite, notebook.google) не взяты.
 gemini.google
 gemini.gstatic.com
@@ -26,5 +27,3 @@ notebooklm.google.com
 notebooklm.google
 notebooklm-pa.googleapis.com
 notebooklm.googleapis.com
-cloudaicompanion.googleapis.com
-cloudcode-pa.googleapis.com

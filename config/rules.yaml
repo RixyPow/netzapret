@@ -267,6 +267,10 @@ rules:
     mode: proxy
 
   - match: hostlist
+    value: config/lists/antigravity.txt
+    mode: proxy
+
+  - match: hostlist
     value: config/lists/grok.txt
     mode: proxy
 

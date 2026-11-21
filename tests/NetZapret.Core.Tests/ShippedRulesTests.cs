@@ -253,6 +253,7 @@ public sealed class ShippedRulesTests
             "chatgpt.com", "ab.chatgpt.com", "api.openai.com", "cdn.oaistatic.com", "files.oaiusercontent.com", "sora.com",
             "claude.ai", "api.anthropic.com", "www.claudeusercontent.com",
             "gemini.google.com", "aistudio.google.com", "generativelanguage.googleapis.com",
+            "antigravity.google", "cloudcode-pa.googleapis.com", "daily-cloudcode-pa.googleapis.com", "antigravity-unleash.goog",
             "grok.com", "api.x.ai",
         })
             Assert.True(engine.Evaluate(To(host)).Mode == RoutingMode.Proxy, host);
@@ -270,12 +271,18 @@ public sealed class ShippedRulesTests
                   - match: hostlist
                     value: "config/lists/claude.txt"
                     mode: desync
+                  - match: hostlist
+                    value: "config/lists/gemini.txt"
+                    mode: desync
                 """);
 
             var layered = RuleSetLoader.LoadLayered(Path.Combine(config, "rules.yaml"), user);
             NetZapret.Zapret.RuleSetExpander.Expand(layered.RuleSet, Path.GetDirectoryName(config));
 
             Assert.Equal(RoutingMode.Desync, layered.Evaluate(To("claude.ai")).Mode);
+            Assert.Equal(RoutingMode.Desync, layered.Evaluate(To("gemini.google.com")).Mode);
+            Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("antigravity.google")).Mode);
+            Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("cloudcode-pa.googleapis.com")).Mode);
             Assert.Equal(RoutingMode.Proxy, layered.Evaluate(To("grok.com")).Mode);
         }
         finally

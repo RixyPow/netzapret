@@ -27,6 +27,7 @@ public static class CountryClosed
         "config/lists/claude.txt",
         "config/lists/claude-content.txt",
         "config/lists/gemini.txt",
+        "config/lists/antigravity.txt",
         "config/lists/grok.txt",
     ];
 
