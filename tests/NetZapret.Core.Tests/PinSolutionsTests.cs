@@ -233,7 +233,7 @@ public sealed class PinSolutionsTests : IDisposable
 
             var all = PinSolutions.Load(path);
 
-            Assert.Equal(13, all.Count);
+            Assert.Equal(14, all.Count);
             Assert.Equal(["instagram", "x", "youtube", "discord", "discord-voice"], all.Take(5).Select(s => s.Id));
 
             // Мимо десинка — Supercell (посредники) и картинки Roblox (07.10:
@@ -241,6 +241,9 @@ public sealed class PinSolutionsTests : IDisposable
             Assert.Equal(["roblox-images", "supercell"], all.Where(s => !s.Desync).Select(s => s.Id));
             Assert.Equal(["whatsapp", "github-content"], all.Where(s => s.NeedsIpV6).Select(s => s.Id));
             Assert.Equal(348, all.Single(s => s.Id == "discord-voice").Names.Count);
+            Assert.Equal(3, all.Single(s => s.Id == "discord-images").Names.Count);
+            Assert.Equal("discord-images",
+                NetZapret.Supervisor.RouteSpecialPaths.SolutionFor("config/lists/discord-images.txt", d.FullName, path)?.Id);
             return;
         }
 
