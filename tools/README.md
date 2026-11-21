@@ -21,8 +21,9 @@
 Прокси Telegram с 07.10 — [valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs/releases),
 порт программы [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy) на Rust, MIT.
 Сборка `tg-ws-proxy-x86_64-pc-windows-gnu.zip`, распакованная с файлом `LICENSE`
-в `tools\tg-ws-proxy-rs-<версия>\`; сейчас — 2.7.0 (05.11, архив сверен с их
-`SHA256SUMS` и описанием выпуска: `607bd2db…5bafb311`, сам exe — `18917ecd…6801afad`).
+в `tools\tg-ws-proxy-rs-<версия>\`; сейчас — 2.7.2 (21.11, архив сверен с их
+`SHA256SUMS` и `digest` GitHub: `eeaa98e1…36f99546`, сам exe — `54b4c80e…0b5f2a1e`;
+до того 2.7.0 с 05.11 — `607bd2db…5bafb311`, exe `18917ecd…6801afad`).
 `tg-ws-proxy.exe` под `tools\` должен быть один: прежние лежат в своих папках
 как `tg-ws-proxy-<версия>.exe.bak`. Порт, а не оригинал: у оригинала
 под Windows есть только программа с треем и окнами, а этот консольный и встаёт
@@ -170,6 +171,25 @@ wscale больше 14, остальное — `zapret-lib.lua` и blockcheck2, 
 19 пресетах программой `artifacts\winwscmp`: вывод `--dry-run --debug=1`
 построчно тот же, кроме строки версии, код 0, фильтр `--wf-save` побайтно
 тот же (4,3–4,7 КБ). Вживую на пакетах не проверено.
+
+С 21.11 — `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-101-g928984d-native`
+(SHA-256 `90cfe5f8…b92a63ba`, сверен с описанием выпуска 21.11 на зеркале
+`git2.zapret.moe`), в
+`tools\zapret2-native-v1.0.7-34-gfd8ae05-native-3-g0de505f-native-101-g928984d\`;
+`-67-ge2bb3c5` — в своей папке как `winws2-native.exe.bak`.
+В форке поверх `-67` — только подтяжки `upstream/master` bol-van, прослойка
+`winnative` не менялась. Правки самого движка (`nfq2/`) у bol-van, касающиеся
+и Windows: переписана `skip_ipv6` (`20c6c5b`), очистка IPv6 при битом пакете
+(`fc19a39`), `ip6_preserve_next` без известных L4-таблиц (`692f98f`), обход
+возможных ограничений диапазона `lua_Integer` (`d4ca27d`), пропуск логики
+фрагментации для одиночных фрагментов (`db31cc2`), правка `autohostlist`
+с `--ipcache-hostname` (`fe6f49c`), поиск DPI-редиректа по имени без порта
+(`4773d8b`), правки `dp_rediscovery`, `ctrack dp` и проверки хостлиста для
+связанного ICMP (`1eb4fd8`, `b3af4b2`, `e5228e0`), чистка недостижимых отмен
+пересборки QUIC (`ad2ee62`), `const` (`de41f11`); остальное — lua и
+документация. Сверка 21.11 на всех 19 пресетах программой `artifacts\winwscmp`:
+вывод `--dry-run --debug=1` построчно тот же, кроме строки версии, код 0,
+фильтр `--wf-save` побайтно тот же (4,4–4,8 КБ). Вживую на пакетах не проверено.
 
 `winws2.exe` под `tools\` должен быть один: сборка берёт последний найденный.
 Прежний, `binaries\windows-x86_64\winws2.exe` из выпуска

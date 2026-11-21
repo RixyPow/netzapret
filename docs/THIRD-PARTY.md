@@ -111,9 +111,10 @@ Kaspersky, `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: средство
 
 `engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
 (автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
-после 1.6.2 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-67-ge2bb3c5-native`
-(SHA-256 `673fac55c6d6e89b85bde965a734b66020ff34a92c48be39587b32b94f40869c`,
-сверен с описанием выпуска), в 1.6.2 — `…-native-39-g3be561a-native` (`cbf227e8…ba40354e`),
+после 1.6.2 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-101-g928984d-native`
+(SHA-256 `90cfe5f8e7b461978470bc2556c8faa05a104b5674bc3dd512a67d43b92a63ba`,
+сверен с описанием выпуска), до него (19.11) — `…-native-67-ge2bb3c5-native` (`673fac55…94f40869c`),
+в 1.6.2 — `…-native-39-g3be561a-native` (`cbf227e8…ba40354e`),
 в 1.6.1 — `…-native-24-g7513f59-native` (`4a8a5579…b191030514`),
 в 1.6.0 — `…-native-10-gdd65679-native` (`28f55a11…c2da1b2f2e`),
 в 1.5.1–1.5.5 — `…-native-6-gd5f65b7-native`
@@ -126,7 +127,7 @@ Kaspersky, `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: средство
 (`b36e701abb1cb5f47382ec689e8a4369f6e427f6540fd6a1c23f76e5af7ed25a`), в 0.16.1–1.0.0 стоял `v1.0.5.2-41-g204fd66-native-5-gdc41b27-native`
 (`2151eabfd33562419b333eb6242bb3020cca524b218e54acadf4e4bd77642b63`), в 0.15.1–0.16.0 —
 `v1.0.5.2-41-g204fd66-native-3-g9528c5b-native`, в 0.14.2–0.15.0 —
-`v1.0.5.2-41-g204fd66-native`. Это исходники bol-van (у нынешнего — на 43 коммита
+`v1.0.5.2-41-g204fd66-native`. Это исходники bol-van (у нынешнего — на 64 коммита
 новее выпуска 1.0.7), а вместо Cygwin — своя прослойка (`nfq2/winnative/` форка):
 файлы, пути, разбор командной строки, сигналы, пакетная отправка пакетов.
 Поверх — правки самой прослойки и одна правка выхода движка (`839a5045`).
@@ -304,8 +305,8 @@ Flowseal** — обе строки стоят в его
 [github.com/valnesfjord/tg-ws-proxy-rs](https://github.com/valnesfjord/tg-ws-proxy-rs),
 порт на Rust программы **tg-ws-proxy** того же **Flowseal**:
 [github.com/Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy).
-Едет как есть, исполняемым файлом выпуска 2.7.0 (`engines/tg-ws-proxy/tg-ws-proxy.exe`,
-архив сверен с их `SHA256SUMS`); запускает его наш надзор. Список доменов
+Едет как есть, исполняемым файлом выпуска 2.7.2 (`engines/tg-ws-proxy/tg-ws-proxy.exe`,
+архив сверен с их `SHA256SUMS` и `digest` GitHub; в 1.4.0–1.6.2 стоял 2.7.0); запускает его наш надзор. Список доменов
 за Cloudflare, через которые прокси ведёт Telegram, ведёт проект Flowseal:
 прокси берёт его из `.github/cfproxy-domains.txt` репозитория tg-ws-proxy,
 а не ответил GitHub — из копии, зашитой в сам прокси.
