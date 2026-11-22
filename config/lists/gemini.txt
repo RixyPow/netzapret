@@ -27,3 +27,5 @@ notebooklm.google.com
 notebooklm.google
 notebooklm-pa.googleapis.com
 notebooklm.googleapis.com
+notebook.google.com
+notebook.google
