@@ -13,10 +13,14 @@ ai.google.dev
 # Перенаправители (bard, makersuite, notebook.google) не взяты.
 gemini.google
 gemini.gstatic.com
+jnn-pa.googleapis.com
 proactivebackend-pa.googleapis.com
 robinfrontend-pa.googleapis.com
 geminiweb-pa.clients.google.com
 geminiweb-pa.clients6.google.com
+waa-pa.clients6.google.com
+content-push.googleapis.com
+geller-pa.googleapis.com
 aistudio.google.com
 ai.studio
 alkalimakersuite-pa.clients6.google.com
@@ -27,3 +31,4 @@ notebooklm.google.com
 notebooklm.google
 notebooklm-pa.googleapis.com
 notebooklm.googleapis.com
+tailwind-pa.googleapis.com
