@@ -32,3 +32,5 @@ notebooklm.google
 notebooklm-pa.googleapis.com
 notebooklm.googleapis.com
 tailwind-pa.googleapis.com
+notebook.google.com
+notebook.google

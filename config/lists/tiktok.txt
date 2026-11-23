@@ -22,3 +22,6 @@ bytedanceapi.com
 bytecdn.cn
 byted.org
 isnssdk.com
+tiktokcdn-eu.com
+tiktokw.eu
+tiktokv.eu
