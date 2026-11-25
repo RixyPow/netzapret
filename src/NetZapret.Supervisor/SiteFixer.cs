@@ -691,7 +691,7 @@ public static class SiteFixer
         {
             using var handler = new HttpClientHandler
             {
-                Proxy = EngineKeys.Loopback(SingBoxOptions.DefaultHealthPort, EngineKeys.Current()),
+                Proxy = EngineKeys.Loopback(EnginePorts.CurrentHealthPort(), EngineKeys.Current()),
                 UseProxy = true,
                 AllowAutoRedirect = false,
             };

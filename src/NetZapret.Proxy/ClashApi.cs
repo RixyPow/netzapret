@@ -37,9 +37,9 @@ public sealed class ClashApi : IDisposable
     /// (<see cref="EngineKeys.Current"/>). С 27.09 Clash API под секретом,
     /// и запрос без него получает 401.
     /// </param>
-    public ClashApi(string listen = "127.0.0.1:9090", HttpClient? http = null, EngineKeys? keys = null)
+    public ClashApi(string? listen = null, HttpClient? http = null, EngineKeys? keys = null)
     {
-        Address = listen;
+        Address = listen ?? EnginePorts.CurrentClashListen();
         _ownsClient = http is null;
         _keys = keys ?? EngineKeys.Current();
 

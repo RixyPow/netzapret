@@ -51,13 +51,14 @@ public static class DnsEngine
         AppSettings settings,
         IReadOnlyList<string> systemResolvers,
         IReadOnlyDictionary<string, string> addressOverrides,
-        EngineKeys keys, string? routerInterface = null)
+        EngineKeys keys, string? routerInterface = null, string? clashApiListen = null)
     {
         var provider = DnsSurvey.ByAddress(settings.DnsServer);
         var dnsServer = provider?.TlsAddress ?? settings.DnsServer;
 
         return new SingBoxConfigCompiler().Compile(NoRoutes, [], new SingBoxOptions
         {
+            ClashApiListen = clashApiListen ?? $"127.0.0.1:{TunnelStatus.DefaultClashPort}",
             Scope = TunnelScope.ProxyOnly,
             DnsServerAddresses = systemResolvers,
             DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress

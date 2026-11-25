@@ -110,7 +110,7 @@ public static class TunnelStatus
     /// </remarks>
     public static async Task<string?> CurrentServerAsync(
         CancellationToken cancellationToken,
-        int clashPort = DefaultClashPort) =>
+        int? clashPort = null) =>
         (await CurrentExitAsync(cancellationToken, clashPort)).Server;
 
     /// <summary>
@@ -123,13 +123,15 @@ public static class TunnelStatus
     /// </remarks>
     public static async Task<(string? Server, bool Automatic)> CurrentExitAsync(
         CancellationToken cancellationToken,
-        int clashPort = DefaultClashPort)
+        int? clashPort = null)
     {
+        int port = clashPort ?? EnginePorts.CurrentClashPort();
+
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
 
-            var json = await GetAsync(http, $"http://127.0.0.1:{clashPort}/proxies/auto", cancellationToken);
+            var json = await GetAsync(http, $"http://127.0.0.1:{port}/proxies/auto", cancellationToken);
 
             using var document = JsonDocument.Parse(json);
 
@@ -226,8 +228,10 @@ public static class TunnelStatus
     public static async Task<TunnelState> StateAsync(
         string? server,
         CancellationToken cancellationToken,
-        int clashPort = DefaultClashPort)
+        int? clashPort = null)
     {
+        int port = clashPort ?? EnginePorts.CurrentClashPort();
+
         // Имени нет — спрашиваем селектор. Он есть всегда, пока движок жив,
         // и запрос задержки к нему заставляет группу выбрать. Прежде здесь
         // возвращалось «состояние не выяснено», и отчёт, снятый сразу после
@@ -238,7 +242,7 @@ public static class TunnelStatus
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
 
-            var url = $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(target)}/delay"
+            var url = $"http://127.0.0.1:{port}/proxies/{Uri.EscapeDataString(target)}/delay"
                 + "?timeout=5000&url=" + Uri.EscapeDataString("https://www.gstatic.com/generate_204");
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);

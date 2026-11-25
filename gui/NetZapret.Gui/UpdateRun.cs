@@ -191,7 +191,7 @@ internal static class UpdateRun
             if (!settings.NeedsProxy || !settings.HasTunnelExit || !EngineControl.IsRunning)
                 return null;
 
-            return Proxy.EngineKeys.Current()?.Proxy(Proxy.SingBoxOptions.DefaultHealthPort);
+            return Proxy.EngineKeys.Current()?.Proxy(Proxy.EnginePorts.CurrentHealthPort());
         }
         catch (Exception)
         {

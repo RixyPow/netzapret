@@ -2043,7 +2043,9 @@ public partial class CheckView : UserControl
 
         try
         {
-            if (!await TunnelProbe.IsUpAsync(SingBoxOptions.DefaultHealthPort, token))
+            int healthPort = EnginePorts.CurrentHealthPort();
+
+            if (!await TunnelProbe.IsUpAsync(healthPort, token))
             {
                 sections.Add(new SectionRow(
                     "Через туннель нарочно проверить нечем",
@@ -2070,7 +2072,7 @@ public partial class CheckView : UserControl
                 token.ThrowIfCancellationRequested();
 
                 var report = await BlockCheck.ProbeThroughTunnelAsync(
-                    host, null, SingBoxOptions.DefaultHealthPort, token);
+                    host, null, healthPort, token);
 
                 if (report.Kind == BlockKind.None)
                     opened++;
@@ -2633,7 +2635,9 @@ public partial class CheckView : UserControl
 
             if (path == "vpn")
             {
-                if (!await TunnelProbe.IsUpAsync(SingBoxOptions.DefaultHealthPort, CancellationToken.None))
+                int healthPort = EnginePorts.CurrentHealthPort();
+
+                if (!await TunnelProbe.IsUpAsync(healthPort, CancellationToken.None))
                 {
                     Settle(new DotLine(name,
                         "не проверить: служебный вход туннеля не поднят — движки остановлены или туннеля нет в этом режиме",
@@ -2641,7 +2645,7 @@ public partial class CheckView : UserControl
                     return;
                 }
 
-                report = await BlockCheck.ProbeThroughTunnelAsync(row.Host, null, SingBoxOptions.DefaultHealthPort, CancellationToken.None);
+                report = await BlockCheck.ProbeThroughTunnelAsync(row.Host, null, healthPort, CancellationToken.None);
             }
             else
             {

@@ -354,7 +354,7 @@ public partial class SpeedView : UserControl
         var options = new SpeedTestOptions
         {
             Proxy = tunnel
-                ? EngineKeys.Loopback(SingBoxOptions.DefaultHealthPort, EngineKeys.Current())
+                ? EngineKeys.Loopback(EnginePorts.CurrentHealthPort(), EngineKeys.Current())
                 : null,
         };
 

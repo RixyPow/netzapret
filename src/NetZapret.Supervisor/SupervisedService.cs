@@ -715,7 +715,7 @@ public sealed class SingBoxService : SupervisedService
             // Туннель спрашиваем, только когда не выручили ни TCP, ни запасной:
             // его проверка — запрос через сервер подписки.
             if (tunnel && DnsNeedsTunnel)
-                _dnsLastOk = await CheckTrafficAsync(SingBoxOptions.DefaultHealthPort, cancellationToken);
+                _dnsLastOk = await CheckTrafficAsync(EnginePorts.CurrentHealthPort(_configPath), cancellationToken);
         }
 
         await ApplyDnsPathAsync(tunnel && _dnsLastOk, cancellationToken);

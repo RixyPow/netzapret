@@ -525,6 +525,8 @@ internal static class SupervisorHost
             return false;
         }
 
+        var ports = EnginePorts.Current(options.ProxyConfig);
+
         // Только ради DNS: выхода нет, так что ни проверки трафика, ни обхода,
         // ни сторожа выхода — им нечего мерить (DnsEngine).
         if (options.DnsOnly)
@@ -532,7 +534,7 @@ internal static class SupervisorHost
             Console.WriteLine("Движок туннеля — только ради DNS: запросы Windows к её резолверам уходят на DoH, выхода VPN нет.");
 
             services.Add(new SingBoxService(
-                singBox, options.ProxyConfig, 9090,
+                singBox, options.ProxyConfig, ports.ClashPort,
                 trafficPort: null,
                 bypassWhenDead: false,
                 exitCheckSeconds: 0,
@@ -544,10 +546,9 @@ internal static class SupervisorHost
             return true;
         }
 
-        // Порт берётся оттуда же, откуда его берёт компилятор конфига:
-        // разъехавшись, эти два значения дают вечно проваливающуюся проверку,
-        // а выглядит она как неисправный движок.
-        int? trafficPort = options.VerifyTraffic ? SingBoxOptions.DefaultHealthPort : null;
+        // Порт берётся из собранного конфига (EnginePorts): при Hyper-V / WinNAT
+        // порт по умолчанию может попасть в резерв и быть сдвинут (#85).
+        int? trafficPort = options.VerifyTraffic ? ports.HealthPort : null;
 
         // Обход при мёртвых выходах читается из настроек, а не из ключей
         // запуска: решение это не про один запуск, а про то, чем человек
@@ -556,7 +557,7 @@ internal static class SupervisorHost
         var settings = AppSettings.Load(AppSettings.DefaultPath);
 
         var service = new SingBoxService(
-            singBox, options.ProxyConfig, 9090, trafficPort,
+            singBox, options.ProxyConfig, ports.ClashPort, trafficPort,
             // При kill switch обхода нет: он вёл бы трафик напрямую через сам
             // sing-box, а движку фильтры мимо туннеля пропускают.
             bypassWhenDead: settings.BypassWhenTunnelDead && !settings.KillSwitchActive,

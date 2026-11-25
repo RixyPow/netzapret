@@ -215,8 +215,26 @@ internal static class TunnelConfig
             var dnsProvider = DnsSurvey.ByAddress(settings.DnsServer);
             var dnsServer = dnsProvider?.TlsAddress ?? settings.DnsServer;
 
+            // При Hyper-V / WSL2 / Docker служба winnat резервирует случайные диапазоны
+            // портов: если 9090 или 21090 попал туда, sing-box падает с WSAEACCES (#85).
+            int[] busyPorts =
+            [
+                settings.LocalProxyPort,
+                settings.TelegramProxyPort,
+                TgWsProxy.SocksPort(settings.TelegramProxySocksPort, settings.TelegramProxyPort),
+            ];
+            int clashPort = EnginePorts.Pick(TunnelStatus.DefaultClashPort, settings.ProxyConfigPath, busyPorts);
+            int healthPort = EnginePorts.Pick(SingBoxOptions.DefaultHealthPort, settings.ProxyConfigPath, [.. busyPorts, clashPort]);
+
+            if (clashPort != TunnelStatus.DefaultClashPort || healthPort != SingBoxOptions.DefaultHealthPort)
+            {
+                Journal.Write("Туннель",
+                    $"служебные порты сдвинуты (резерв Windows/Hyper-V или заняты): Clash API {clashPort}, health-in {healthPort}");
+            }
+
             var result = new SingBoxConfigCompiler().Compile(ruleSet, servers, new SingBoxOptions
             {
+                ClashApiListen = $"127.0.0.1:{clashPort}",
                 Scope = narrow ? TunnelScope.ProxyOnly : TunnelScope.Everything,
                 Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
                 DnsServerAddresses = narrow ? SystemResolvers.Discover() : Array.Empty<string>(),
@@ -264,6 +282,7 @@ internal static class TunnelConfig
                 // в него сам супервизор, решает по-прежнему VerifyTraffic
                 // (SupervisorHost), — лишний вход ему не мешает.
                 HealthInbound = true,
+                HealthPort = healthPort,
 
                 // Локальный прокси для программ человека (обсуждение №42; доступ из сети — №70).
                 LocalProxyPort = settings.LocalProxyActive ? settings.LocalProxyPort : null,
@@ -367,7 +386,10 @@ internal static class TunnelConfig
                 return new BuildOutcome(false, "DNS через движок не поднят: резолверы Windows не нашлись.");
 
             var addresses = AddressOverrides.Merge(new Dictionary<string, string>(), AddressOverrides.Load());
-            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(), routerDns.Interface?.Name);
+            int clashPort = EnginePorts.Pick(TunnelStatus.DefaultClashPort, settings.ProxyConfigPath,
+                [settings.LocalProxyPort, settings.TelegramProxyPort]);
+            var result = DnsEngine.Compile(settings, resolvers, addresses, EngineKeys.Generate(),
+                routerDns.Interface?.Name, $"127.0.0.1:{clashPort}");
 
             SingBoxConfigCompiler.WriteToFile(settings.ProxyConfigPath, result.Json);
             RouterDnsBuildState.Save(settings.ProxyConfigPath, requestedDns, routerDns.Warning);
