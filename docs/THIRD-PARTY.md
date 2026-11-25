@@ -111,9 +111,10 @@ Kaspersky, `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: средство
 
 `engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
 (автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
-после 1.6.2 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-101-g928984d-native`
-(SHA-256 `90cfe5f8e7b461978470bc2556c8faa05a104b5674bc3dd512a67d43b92a63ba`,
-сверен с описанием выпуска), до него (19.11) — `…-native-67-ge2bb3c5-native` (`673fac55…94f40869c`),
+после 1.6.4 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-113-gbb02010-native`
+(SHA-256 `d3f878ee511aa81b7b6135bd0fef5e73931a7b55999aa28b30340a6dd53a1c1f`,
+сверен с описанием выпуска), в 1.6.4 — `…-native-101-g928984d-native` (`90cfe5f8…b92a63ba`),
+в 1.6.3 — `…-native-67-ge2bb3c5-native` (`673fac55…94f40869c`),
 в 1.6.2 — `…-native-39-g3be561a-native` (`cbf227e8…ba40354e`),
 в 1.6.1 — `…-native-24-g7513f59-native` (`4a8a5579…b191030514`),
 в 1.6.0 — `…-native-10-gdd65679-native` (`28f55a11…c2da1b2f2e`),
@@ -127,8 +128,8 @@ Kaspersky, `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: средство
 (`b36e701abb1cb5f47382ec689e8a4369f6e427f6540fd6a1c23f76e5af7ed25a`), в 0.16.1–1.0.0 стоял `v1.0.5.2-41-g204fd66-native-5-gdc41b27-native`
 (`2151eabfd33562419b333eb6242bb3020cca524b218e54acadf4e4bd77642b63`), в 0.15.1–0.16.0 —
 `v1.0.5.2-41-g204fd66-native-3-g9528c5b-native`, в 0.14.2–0.15.0 —
-`v1.0.5.2-41-g204fd66-native`. Это исходники bol-van (у нынешнего — на 64 коммита
-новее выпуска 1.0.7), а вместо Cygwin — своя прослойка (`nfq2/winnative/` форка):
+`v1.0.5.2-41-g204fd66-native`. Это исходники bol-van (у нынешнего — на 73 коммита
+новее выпуска 1.0.7; весь код движка для Windows из выпуска 1.0.8 входит), а вместо Cygwin — своя прослойка (`nfq2/winnative/` форка):
 файлы, пути, разбор командной строки, сигналы, пакетная отправка пакетов.
 Поверх — правки самой прослойки и одна правка выхода движка (`839a5045`).
 Внутри статически собраны LuaJIT и zlib.
@@ -320,9 +321,9 @@ Flowseal** — обе строки стоят в его
 Раздел «Шифрованные» вкладки DNS (с 04.11) — DNSCrypt, анонимный DNSCrypt и ODoH —
 держит **dnscrypt-proxy**, автор — **Frank Denis**:
 [github.com/DNSCrypt/dnscrypt-proxy](https://github.com/DNSCrypt/dnscrypt-proxy).
-Едет как есть, исполняемым файлом выпуска 2.1.20 (`engines/dnscrypt/dnscrypt-proxy.exe`,
-архив `dnscrypt-proxy-win64-2.1.20.zip` сверен с `digest` выпуска на GitHub:
-`9e498cb9…c489abc3`); запускает его наш надзор, конфиг собирает программа.
+Едет как есть, исполняемым файлом выпуска 2.1.21 (`engines/dnscrypt/dnscrypt-proxy.exe`,
+архив `dnscrypt-proxy-win64-2.1.21.zip` сверен с `digest` выпуска на GitHub:
+`d4eaf32b…132ee033`; в 1.4.0–1.6.4 стоял 2.1.20); запускает его наш надзор, конфиг собирает программа.
 Рядом — снимок списков серверов и релеев проекта
 [DNSCrypt/dnscrypt-resolvers](https://github.com/DNSCrypt/dnscrypt-resolvers)
 (`v3`, с подписями minisign): прокси стартует с них и обновляет сам. Файла лицензии
