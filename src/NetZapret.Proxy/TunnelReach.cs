@@ -21,6 +21,22 @@ public sealed record TunnelReading
     public string? Detail { get; init; }
 }
 
+/// <summary>Выход для контрольной пробы и совпал ли он с активным сервером туннеля.</summary>
+/// <param name="Server">Сервер подписки или WARP, через который пойдёт отдельная проба.</param>
+/// <param name="MatchesActiveServer">Правда, только если это тот же самый выход, что назвал живой движок.</param>
+/// <param name="ActiveServer">Конкретный сервер из ответа движка (не служебное имя вроде auto/direct).</param>
+public sealed record TunnelReachTarget(
+    ProxyServer Server,
+    bool MatchesActiveServer,
+    string? ActiveServer);
+
+/// <summary>Вывод контрольной пробы для карточки и отчёта.</summary>
+public sealed record TunnelReachVerdict(
+    string Title,
+    string Note,
+    string Cure,
+    bool IsFailure);
+
 /// <summary>
 /// Проверяет цель через сам туннель, минуя TUN.
 /// </summary>
@@ -55,6 +71,93 @@ public static class TunnelReach
 {
     /// <summary>Сколько ждать ответа от одной цели.</summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(8);
+
+    /// <summary>
+    /// Выбирает сервер для контрольной пробы и честно отмечает, совпал ли он с живым выходом.
+    /// </summary>
+    /// <remarks>
+    /// Не подменяет активный сервер молча: если тег из ответа движка отсутствует
+    /// в пуле (например, панель уже сменила список) либо движок назвал служебное
+    /// имя вроде <c>auto-latency</c>, проба всё равно может проверить запасной
+    /// сервер, но <see cref="TunnelReachTarget.MatchesActiveServer"/> останется
+    /// <c>false</c>, чтобы не обвинять сборку конфига по чужому выходу.
+    /// </remarks>
+    public static TunnelReachTarget? PickTarget(
+        IReadOnlyList<ProxyServer> servers,
+        string? live,
+        string? preferred)
+    {
+        var active = IsConcreteServer(live) ? live!.Trim() : null;
+
+        if (active is not null && FindUsable(servers, active) is { } exact)
+            return new TunnelReachTarget(exact, MatchesActiveServer: true, ActiveServer: active);
+
+        var fallback = FindUsable(servers, preferred)
+            ?? servers.FirstOrDefault(s => s.IsUsableOutbound);
+
+        return fallback is null
+            ? null
+            : new TunnelReachTarget(fallback, MatchesActiveServer: false, ActiveServer: active);
+    }
+
+    /// <summary>
+    /// Формулирует заголовок и вывод контрольной пробы с учётом того, тот ли это сервер.
+    /// </summary>
+    public static TunnelReachVerdict Summarize(
+        TunnelReachTarget target,
+        IReadOnlyList<TunnelReading> readings)
+    {
+        int reached = readings.Count(r => r.Reached);
+        bool all = readings.Count > 0 && reached == readings.Count;
+        bool any = reached > 0;
+
+        if (target.MatchesActiveServer)
+        {
+            return new TunnelReachVerdict(
+                Title: $"Через сервер «{target.Server.Tag}»",
+                Note: all
+                    ? "Сервер довозит их все, а туннель — нет: виноват не сервер, а то, как собран конфиг."
+                    : any
+                        ? "Часть сервер довозит: эти — беда конфига, остальные — сервера либо сайта."
+                        : "Сервер не довозит ни одного.",
+                Cure: any ? string.Empty : "Сменить сервер подписки",
+                IsFailure: !any);
+        }
+
+        // Другой сервер нельзя сравнивать с боевым конфигом: при успехе
+        // совет один — переключиться на проверенный выход.
+        string intro = target.ActiveServer is { } active
+            ? $"Активный выход «{active}» в текущем списке не найден — проверен другой сервер «{target.Server.Tag}»"
+            : $"Активный выход туннеля определить не удалось — проверен сервер «{target.Server.Tag}»";
+
+        return new TunnelReachVerdict(
+            Title: $"Через другой сервер «{target.Server.Tag}»",
+            Note: all
+                ? $"{intro}. Он довозит их все: переключитесь на него во вкладке «VPN»."
+                : any
+                    ? $"{intro}: часть он довозит, остальные — сервера либо сайта."
+                    : $"{intro}: он тоже не довозит ни одного.",
+            Cure: any
+                ? $"Переключиться на «{target.Server.Tag}» во вкладке «VPN»"
+                : "Сменить сервер подписки",
+            IsFailure: !any);
+    }
+
+    private static bool IsConcreteServer(string? tag) =>
+        !string.IsNullOrWhiteSpace(tag)
+        && !tag.Trim().StartsWith("auto", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(tag.Trim(), "direct", StringComparison.OrdinalIgnoreCase);
+
+    private static ProxyServer? FindUsable(IReadOnlyList<ProxyServer> servers, string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag))
+            return null;
+
+        var trimmed = tag.Trim();
+
+        return servers.FirstOrDefault(s => s.IsUsableOutbound && string.Equals(s.Tag, trimmed, StringComparison.Ordinal))
+            ?? servers.FirstOrDefault(s => s.IsUsableOutbound && string.Equals(s.Tag, trimmed, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Пробует достать каждое имя через выбранный сервер.

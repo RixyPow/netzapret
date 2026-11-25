@@ -275,4 +275,34 @@ public sealed class TunnelStatusTests
 
         Assert.Null(await clash.ModeAsync(CancellationToken.None));
     }
+
+    /// <summary>
+    /// При чтении порта из конфига (clashPort = null) вложенная группа автоподбора
+    /// должна запрашиваться по тому же порту, а не ломаться с пустым портом в URL.
+    /// </summary>
+    [Fact]
+    public async Task A_group_is_resolved_even_when_clash_port_comes_from_config()
+    {
+        await using var api = new FakeApi(path => path.Contains("auto-latency")
+            ? (200, """{"type":"URLTest","now":"🇳🇱 Нидерланды ALT #1"}""")
+            : (200, """{"type":"Selector","now":"auto-latency"}"""));
+
+        var configPath = Path.Combine(Path.GetTempPath(), $"nz-clash-{Guid.NewGuid():N}.json");
+        try
+        {
+            await File.WriteAllTextAsync(
+                configPath,
+                "{\"experimental\":{\"clash_api\":{\"external_controller\":\"127.0.0.1:" + api.Port + "\"}}}");
+
+            var (server, automatic) = await TunnelStatus.CurrentExitAsync(
+                CancellationToken.None, clashPort: null, configPath: configPath);
+
+            Assert.Equal("🇳🇱 Нидерланды ALT #1", server);
+            Assert.True(automatic);
+        }
+        finally
+        {
+            File.Delete(configPath);
+        }
+    }
 }

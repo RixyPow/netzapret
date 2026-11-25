@@ -123,9 +123,15 @@ public static class TunnelStatus
     /// </remarks>
     public static async Task<(string? Server, bool Automatic)> CurrentExitAsync(
         CancellationToken cancellationToken,
-        int? clashPort = null)
+        int? clashPort = null) =>
+        await CurrentExitAsync(cancellationToken, clashPort, configPath: null);
+
+    internal static async Task<(string? Server, bool Automatic)> CurrentExitAsync(
+        CancellationToken cancellationToken,
+        int? clashPort,
+        string? configPath)
     {
-        int port = clashPort ?? EnginePorts.CurrentClashPort();
+        int port = clashPort ?? EnginePorts.CurrentClashPort(configPath);
 
         try
         {
@@ -145,8 +151,11 @@ public static class TunnelStatus
             // что не ответ на вопрос «через что мы сейчас ходим».
             if (name is not null && name.StartsWith("auto", StringComparison.OrdinalIgnoreCase))
             {
+                // Прежде сюда подставлялся аргумент clashPort, и при null
+                // в URL уходило «127.0.0.1:/proxies/...» — в реальной работе
+                // (без тестового порта) движок при автоподборе казался молчащим.
                 var inner = await GetAsync(
-                    http, $"http://127.0.0.1:{clashPort}/proxies/{Uri.EscapeDataString(name)}", cancellationToken);
+                    http, $"http://127.0.0.1:{port}/proxies/{Uri.EscapeDataString(name)}", cancellationToken);
 
                 using var group = JsonDocument.Parse(inner);
 

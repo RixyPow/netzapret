@@ -1760,8 +1760,13 @@ public partial class CheckView : UserControl
             return;
 
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var book = SubscriptionBook.Load();
+        var sources = book.Pool.Select(e => new PoolSource(e.Name, e.Url)).ToList();
 
-        if (string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+        if (sources.Count == 0 && !string.IsNullOrWhiteSpace(settings.SubscriptionUrl))
+            sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
+
+        if (!settings.WarpEnabled && sources.Count == 0 && book.PoolKeys.Count == 0)
             return;
 
         if (TunnelStatus.FindSingBox() is not { } singBox)
@@ -1773,28 +1778,27 @@ public partial class CheckView : UserControl
         {
             Say($"Проверяю через сам туннель: {lost.Count}…");
 
-            // Тот же пул, что у движка (0.9.0): выход может быть из любой
-            // подписки в работе, и тег у него — тег пула, с меткой подписки
-            // при совпадении имён. По одной ссылке его было бы не найти.
-            var sources = SubscriptionBook.Load().Pool.Select(e => new PoolSource(e.Name, e.Url)).ToList();
+            IReadOnlyList<ProxyServer> fromSubscription = [];
 
-            if (sources.Count == 0)
-                sources.Add(new PoolSource("Основная", settings.SubscriptionUrl));
+            if (!settings.WarpEnabled)
+            {
+                // Тот же состав и порядок пула, что при сборке конфига (TunnelConfig):
+                // с отдельными ключами и с опорой на запас, чтобы теги « · подписка»
+                // и « #2» совпадали с именами у работающего sing-box.
+                var pool = await SubscriptionPool.BuildAsync(
+                    sources, token, keys: book.PoolKeys, deferPanels: true);
+                fromSubscription = pool.Servers;
+            }
 
-            var pool = await SubscriptionPool.BuildAsync(sources, token);
-
+            var servers = Warp.TunnelExits(settings, fromSubscription);
             var live = await TunnelStatus.CurrentServerAsync(token);
 
-            var server = pool.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == live)
-                ?? pool.Servers.FirstOrDefault(s => s.IsUsableOutbound && s.Tag == settings.PreferredServer)
-                ?? pool.Servers.FirstOrDefault(s => s.IsUsableOutbound);
-
-            if (server is null)
+            if (TunnelReach.PickTarget(servers, live, Warp.PreferredExit(settings)) is not { } target)
                 return;
 
             var readings = await TunnelReach.CheckAsync(
                 singBox,
-                server,
+                target.Server,
                 lost,
                 Path.Combine("runtime", "reach"),
 
@@ -1807,23 +1811,19 @@ public partial class CheckView : UserControl
             if (readings.Count == 0)
                 return;
 
-            var reached = readings.Where(r => r.Reached).ToList();
-
             var body = string.Join("\n", readings.Select(r => r.Reached
                 ? $"{r.Host}: дошло, ответ {r.Status}, {r.Elapsed.TotalSeconds:0.0} с"
                 : $"{r.Host}: не дошло — {r.Detail}"));
 
+            var verdict = TunnelReach.Summarize(target, readings);
+
             sections.Add(new SectionRow(
-                $"Через сервер «{server.Tag}»",
+                verdict.Title,
                 body,
-                (Brush)FindResource(reached.Count > 0 ? "Warn" : "Danger"))
+                (Brush)FindResource(verdict.IsFailure ? "Danger" : "Warn"))
             {
-                Note = reached.Count == readings.Count
-                    ? "Сервер довозит их все, а туннель — нет: виноват не сервер, а то, как собран конфиг."
-                    : reached.Count > 0
-                        ? "Часть сервер довозит: эти — беда конфига, остальные — сервера либо сайта."
-                        : "Сервер не довозит ни одного.",
-                Cure = reached.Count == 0 ? "Сменить сервер подписки" : string.Empty,
+                Note = verdict.Note,
+                Cure = verdict.Cure,
                 Tip = "Здесь поднимался отдельный движок с этим одним сервером, без TUN "
                     + "и без прав администратора — боевой обход при этом не трогался.",
             });
