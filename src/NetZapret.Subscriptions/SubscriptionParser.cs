@@ -41,6 +41,11 @@ public static class SubscriptionParser
         if (XrayConfigParser.LooksLikeConfig(text))
             return XrayConfigParser.Parse(text);
 
+        // Конфиг mihomo / Clash Meta (YAML с разделом proxies: — обсуждение №87):
+        // проверять до «://», потому что в proxy-groups / rule-providers бывают URL.
+        if (MihomoConfigParser.LooksLikeConfig(text))
+            return MihomoConfigParser.Parse(text);
+
         // Признак открытого вида — наличие схемы. Пробовать base64 первым нельзя:
         // список ссылок иногда случайно проходит проверку на base64-алфавит.
         if (!text.Contains("://", StringComparison.Ordinal))
@@ -58,6 +63,9 @@ public static class SubscriptionParser
             // в base64, как обычный список ссылок.
             if (XrayConfigParser.LooksLikeConfig(text))
                 return XrayConfigParser.Parse(text);
+
+            if (MihomoConfigParser.LooksLikeConfig(text))
+                return MihomoConfigParser.Parse(text);
         }
 
         foreach (var rawLine in text.Split('\n'))

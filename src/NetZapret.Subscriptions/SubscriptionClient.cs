@@ -264,9 +264,20 @@ public sealed class SubscriptionClient : IDisposable
     /// </summary>
     public static Uri Unwrap(Uri url)
     {
-        var text = url.ToString();
+        // OriginalString, а не ToString(): для custom-схем Uri вставляет «/»
+        // перед «?» («mihomo://install-config/?url=…»), и префикс без слеша не совпадал.
+        var text = url.OriginalString;
 
-        foreach (var prefix in new[] { "happ://add/", "clash://install-config?url=", "sn://subscription?url=" })
+        foreach (var prefix in new[]
+        {
+            "happ://add/",
+            "clash://install-config?url=",
+            "clash://install-config/?url=",
+            "mihomo://install-config?url=",
+            "mihomo://install-config/?url=",
+            "sn://subscription?url=",
+            "sn://subscription/?url=",
+        })
         {
             if (!text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 continue;
