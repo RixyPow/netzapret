@@ -243,6 +243,7 @@ internal static class TunnelConfig
                 DnsServerType = settings.UseRouterDns || settings.DnsCryptActive is not null ? "udp" : "https",
                 DnsServerPort = settings.DnsCryptActive is not null ? DnsCrypt.Port : null,
                 DnsCrypt = settings.DnsCryptActive is not null,
+                TelegramProxy = settings.TelegramProxy,
                 RouterDns = settings.UseRouterDns,
                 RouterDnsInterface = routerDns.Interface?.Name,
 

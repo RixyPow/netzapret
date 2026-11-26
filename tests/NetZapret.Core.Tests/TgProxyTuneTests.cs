@@ -1,4 +1,7 @@
+using System.Text.Json;
+using NetZapret.Core.Rules;
 using NetZapret.Proxy;
+using NetZapret.Subscriptions;
 using Xunit;
 
 namespace NetZapret.Core.Tests;
@@ -66,5 +69,74 @@ public sealed class TgProxyTuneTests
         {
             File.Delete(path);
         }
+    }
+
+    /// <summary>
+    /// Issue #88: tg-ws-proxy.exe идёт мимо туннеля раньше правила *.telegram.org → VPN,
+    /// но после hijack-dns (чтобы получать честный DoH), и не отменяет «Игнорировать исключения».
+    /// </summary>
+    [Fact]
+    public void Sing_box_routes_tg_ws_proxy_direct_before_telegram_vpn_rule_except_strict()
+    {
+        var server = new ProxyServer
+        {
+            Protocol = ProxyProtocol.Vless,
+            Tag = "DE",
+            Host = "de.example.com",
+            Port = 443,
+            Credential = "11111111-1111-1111-1111-111111111111",
+            Transport = "tcp",
+            Security = "tls",
+            Sni = "de.example.com",
+        };
+
+        var hybrid = RuleSetLoader.Load("""
+            mode: selective
+            rules:
+              - match: domain
+                value: "*.telegram.org"
+                mode: proxy
+            """);
+
+        var json = new SingBoxConfigCompiler().Compile(hybrid.RuleSet, [server], new SingBoxOptions
+        {
+            HealthInbound = true,
+            TelegramProxy = true,
+            Keys = EngineKeys.Generate(),
+        }).Json;
+
+        var rules = JsonDocument.Parse(json).RootElement
+            .GetProperty("route").GetProperty("rules").EnumerateArray().ToList();
+
+        int dnsIdx = rules.FindIndex(r => r.TryGetProperty("action", out var a) && a.GetString() == "hijack-dns");
+        int tgProcIdx = rules.FindIndex(r => r.TryGetProperty("process_name", out var p)
+            && p.EnumerateArray().Any(x => x.GetString() == "tg-ws-proxy.exe"));
+        int tgDomIdx = rules.FindIndex(r => r.TryGetProperty("domain_suffix", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "telegram.org"));
+
+        Assert.True(dnsIdx >= 0 && tgProcIdx > dnsIdx, "tg-ws-proxy.exe должен идти после hijack-dns");
+        Assert.True(tgDomIdx > tgProcIdx, "tg-ws-proxy.exe должен идти раньше правила *.telegram.org → VPN");
+        Assert.Equal("direct", rules[tgProcIdx].GetProperty("outbound").GetString());
+
+        var (ok, said) = SingBoxCheck.Run(json);
+        Assert.True(ok, $"sing-box check не пройден: {said}");
+
+        // Без включённого TG Proxy правило process_name не пишется.
+        var withoutTgJson = new SingBoxConfigCompiler().Compile(hybrid.RuleSet, [server], new SingBoxOptions
+        {
+            HealthInbound = true,
+            Keys = EngineKeys.Generate(),
+        }).Json;
+        Assert.DoesNotContain("tg-ws-proxy.exe", withoutTgJson);
+
+        // В режиме «Игнорировать исключения» исключений нет.
+        var strict = hybrid.RuleSet with { Operating = OperatingMode.ProxyStrict };
+        var strictJson = new SingBoxConfigCompiler().Compile(strict, [server], new SingBoxOptions
+        {
+            HealthInbound = true,
+            TelegramProxy = true,
+            Keys = EngineKeys.Generate(),
+        }).Json;
+        Assert.DoesNotContain("tg-ws-proxy.exe", strictJson);
     }
 }

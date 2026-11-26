@@ -130,6 +130,9 @@ public sealed class SingBoxOptions
     /// <summary>Апстрим — dnscrypt-proxy на петле: его собственные запросы идут мимо туннеля.</summary>
     public bool DnsCrypt { get; init; }
 
+    /// <summary>Включён встроенный прокси Telegram (tg-ws-proxy): его соединения идут мимо туннеля.</summary>
+    public bool TelegramProxy { get; init; }
+
     public bool RouterDns { get; init; }
     public string? RouterDnsInterface { get; init; }
 
@@ -2726,6 +2729,21 @@ public sealed class SingBoxConfigCompiler
                     ["inbound"] = new JsonArray { SingBoxOptions.LocalProxyTag },
                     ["action"] = "reject",
                 });
+        }
+
+        // Прокси Telegram (tg-ws-proxy.exe) ходит к DC Telegram и доменам Cloudflare
+        // мимо туннеля (через десинк). Без этого правила при «Сайт и веб-версия → VPN»
+        // или «*.telegram.org → VPN» (Issue #88) соединения tg-ws-proxy к
+        // 149.154.167.220:443 забирал TUN (capture ipset-telegram.txt), sniff узнавал
+        // kws*.web.telegram.org и уводил прокси в туннель — и при мёртвом VPN ломался TG Proxy.
+        // Ставится только при включённом TG Proxy, чтобы не включать поиск процессов зря.
+        if (options.TelegramProxy && ruleSet.Operating != OperatingMode.ProxyStrict)
+        {
+            rules.Add(new JsonObject
+            {
+                ["process_name"] = new JsonArray { "tg-ws-proxy.exe" },
+                ["outbound"] = "direct",
+            });
         }
 
         // В режиме «всё через VPN» правила не отбрасываются целиком, как было

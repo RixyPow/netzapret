@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Security;
@@ -69,7 +70,14 @@ public static class TgProxyTune
         "https://cdn.jsdelivr.net/gh/Flowseal/tg-ws-proxy@main/.github/cfproxy-domains.txt",
     ];
 
-    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(4);
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Общий предел автонастройки при запуске прокси: когда домены Cloudflare
+    /// перекрыты у провайдера (Issue #88, 32 с на 20 доменах), старт движков не
+    /// должен ждать полминуты.
+    /// </summary>
+    public static readonly TimeSpan StartBudget = TimeSpan.FromSeconds(10);
 
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
@@ -136,7 +144,10 @@ public static class TgProxyTune
 
         try
         {
-            var fresh = await RunAsync(cancellationToken);
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            budget.CancelAfter(StartBudget);
+
+            var fresh = await RunAsync(budget.Token);
 
             // Ни одного ответа — скорее сеть, чем Telegram: прежний итог честнее.
             if (fresh.Direct || fresh.Bridges.Count > 0 || tuning is null)
@@ -147,7 +158,7 @@ public static class TgProxyTune
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
-            // Не вышло — остаётся прежний итог или настройки.
+            // Не вышло или кончился бюджет времени — остаётся прежний итог или настройки.
         }
 
         return Apply(manual, tuning);
@@ -187,19 +198,33 @@ public static class TgProxyTune
             var domains = await DomainsAsync(cancellationToken);
 
             var direct = ProbeDirectAsync(cancellationToken);
-            using var slots = new SemaphoreSlim(6);
+            var found = new ConcurrentBag<TgBridge>();
+            using var slots = new SemaphoreSlim(10);
 
-            var probes = await Task.WhenAll(domains.Select(async domain =>
+            await Task.WhenAll(domains.Select(async domain =>
             {
-                await slots.WaitAsync(cancellationToken);
+                try
+                {
+                    await slots.WaitAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
 
                 try
                 {
-                    // Сначала kws2, затем kws4 — главные DC у Telegram Desktop.
-                    var ms = await UpgradeAsync(null, $"kws2.{domain}", cancellationToken)
-                             ?? await UpgradeAsync(null, $"kws4.{domain}", cancellationToken);
+                    // Сначала kws2; к kws4 идём только если до сервера достучались
+                    // (например, 503 на kws2), а не после сетевого таймаута — иначе
+                    // каждый заблокированный домен тратил два таймаута подряд (Issue #88).
+                    var first = await ProbeUpgradeAsync(null, $"kws2.{domain}", cancellationToken);
+                    int? ms = first.Ms;
 
-                    return ms is { } value ? new TgBridge(domain, value) : null;
+                    if (ms is null && first.ReachedServer && !cancellationToken.IsCancellationRequested)
+                        ms = (await ProbeUpgradeAsync(null, $"kws4.{domain}", cancellationToken)).Ms;
+
+                    if (ms is { } value)
+                        found.Add(new TgBridge(domain, value));
                 }
                 finally
                 {
@@ -207,13 +232,21 @@ public static class TgProxyTune
                 }
             }));
 
-            var directMs = await direct;
+            int? directMs = null;
+            try
+            {
+                directMs = await direct;
+            }
+            catch (OperationCanceledException)
+            {
+                // Бюджет истёк — оставляем то, что успело ответить.
+            }
 
             return new TgProxyTuning(
                 DateTimeOffset.Now,
                 directMs is not null,
                 directMs,
-                probes.OfType<TgBridge>().OrderBy(b => b.Ms).ToList(),
+                found.OrderBy(b => b.Ms).ToList(),
                 domains.Count);
         }
         finally
@@ -258,15 +291,24 @@ public static class TgProxyTune
             .ToList();
 
     /// <summary>Прямой путь: переход на WebSocket к kws2, затем kws4.web.telegram.org на адрес DC.</summary>
-    private static async Task<int?> ProbeDirectAsync(CancellationToken cancellationToken) =>
-        await UpgradeAsync(DirectAddress, "kws2.web.telegram.org", cancellationToken)
-        ?? await UpgradeAsync(DirectAddress, "kws4.web.telegram.org", cancellationToken);
+    private static async Task<int?> ProbeDirectAsync(CancellationToken cancellationToken)
+    {
+        var first = await ProbeUpgradeAsync(DirectAddress, "kws2.web.telegram.org", cancellationToken);
+        if (first.Ms is not null || !first.ReachedServer || cancellationToken.IsCancellationRequested)
+            return first.Ms;
+
+        return (await ProbeUpgradeAsync(DirectAddress, "kws4.web.telegram.org", cancellationToken)).Ms;
+    }
 
     /// <summary>
     /// Переход на WebSocket к <c>/apiws</c>, как у прокси; время до ответа 101 или <c>null</c>.
     /// </summary>
     /// <param name="address"><c>null</c> — адрес по имени через системный DNS.</param>
-    internal static async Task<int?> UpgradeAsync(string? address, string host, CancellationToken cancellationToken)
+    internal static async Task<int?> UpgradeAsync(string? address, string host, CancellationToken cancellationToken) =>
+        (await ProbeUpgradeAsync(address, host, cancellationToken)).Ms;
+
+    private static async Task<(int? Ms, bool ReachedServer)> ProbeUpgradeAsync(
+        string? address, string host, CancellationToken cancellationToken)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(ProbeTimeout);
@@ -280,7 +322,7 @@ public static class TgProxyTune
                 : (await Dns.GetHostAddressesAsync(host, AddressFamily.InterNetwork, limit.Token)).FirstOrDefault();
 
             if (target is null)
-                return null;
+                return (null, false);
 
             using var client = new TcpClient(AddressFamily.InterNetwork);
             await client.ConnectAsync(target, 443, limit.Token);
@@ -306,12 +348,16 @@ public static class TgProxyTune
             var head = Encoding.ASCII.GetString(buffer, 0, read);
 
             return head.StartsWith("HTTP/1.1 101", StringComparison.Ordinal)
-                ? (int)clock.ElapsedMilliseconds
-                : null;
+                ? ((int)clock.ElapsedMilliseconds, true)
+                : (null, read > 0);
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            return (null, false);
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, false);
         }
     }
 }
