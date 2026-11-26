@@ -96,10 +96,54 @@ public sealed class AdapterDnsTests
     [Fact]
     public void TheChosenResolverGivesItsPlainAddresses()
     {
-        var addresses = AdapterDns.ResolverAddresses(new AppSettings { DnsServer = "9.9.9.10" }, out var refusal);
+        var settings = new AppSettings { DnsServer = "9.9.9.10" };
+        var addresses = AdapterDns.ResolverAddresses(settings, out var refusal);
 
         Assert.Null(refusal);
         Assert.Equal(Quad9, addresses);
+        Assert.Equal(["2620:fe::10", "2620:fe::fe:10"], AdapterDns.ResolverAddressesV6(settings));
+    }
+
+    [Fact]
+    public void GlobalIpv6AdapterReceivesResolverIpv6Addresses()
+    {
+        var v6 = new[] { "2620:fe::10", "2620:fe::fe:10" };
+        var adapter = new DnsAdapter(22, "Беспроводная сеть", ["8.8.8.8"], [], GlobalIpv6: true);
+
+        var commands = AdapterDns.Commands(adapter, AdapterDnsMode.Resolver, Quad9, v6);
+
+        Assert.Equal(
+            [
+                "interface ipv4 set dnsservers name=22 source=static address=9.9.9.10 register=primary validate=no",
+                "interface ipv4 add dnsservers name=22 address=149.112.112.10 index=2 validate=no",
+                "interface ipv6 set dnsservers name=22 source=static address=2620:fe::10 register=primary validate=no",
+                "interface ipv6 add dnsservers name=22 address=2620:fe::fe:10 index=2 validate=no",
+            ],
+            commands.Select(c => string.Join(' ', c)));
+
+        var matched = new DnsAdapter(22, "Беспроводная сеть", Quad9, v6, GlobalIpv6: true);
+        Assert.True(AdapterDns.Matches(matched, AdapterDnsMode.Resolver, Quad9, v6));
+    }
+
+    [Fact]
+    public void RouterIpv6InDesyncWithoutEngineProducesAWarning()
+    {
+        var desyncOnly = new AppSettings
+        {
+            TunnelEnabled = false,
+            DesyncEnabled = true,
+            AdapterDns = AdapterDnsMode.Resolver,
+            DnsVia = DnsRoute.Direct,
+        };
+
+        var warning = AdapterDns.RouterIpv6Warning(desyncOnly, ["fd7d:8082:e90f::1/128", "141.133.184.24/32"]);
+        Assert.NotNull(warning);
+        Assert.Contains("fd7d:8082:e90f::1", warning);
+
+        // С движком DNS («через туннель») запросы забирает TUN + WFP — предупреждения нет.
+        Assert.Null(AdapterDns.RouterIpv6Warning(
+            desyncOnly with { DnsVia = DnsRoute.Tunnel },
+            ["fd7d:8082:e90f::1/128", "141.133.184.24/32"]));
     }
 
     /// <summary>У Zapret DNS только DoH за Cloudflare — адаптеру вписать нечего.</summary>

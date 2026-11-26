@@ -93,6 +93,9 @@ public sealed class ProcessSupervisor
     /// <summary>Вызывается при изменении состояния — для вывода в консоль.</summary>
     public Action<string>? OnEvent { get; set; }
 
+    /// <summary>Вызывается при смене здоровья службы.</summary>
+    public Action<SupervisedService, ServiceHealth>? OnHealthChanged { get; set; }
+
     /// <summary>
     /// Находит движки, оставшиеся от прошлых запусков.
     /// </summary>
@@ -295,7 +298,8 @@ public sealed class ProcessSupervisor
     /// </remarks>
     private void SetHealth(SupervisedService service, ServiceHealth health)
     {
-        if (!_health.TryGetValue(service.Name, out var was) || was != health)
+        bool changed = !_health.TryGetValue(service.Name, out var was) || was != health;
+        if (changed)
             _since[service.Name] = DateTimeOffset.Now;
 
         _health[service.Name] = health;
@@ -305,6 +309,9 @@ public sealed class ProcessSupervisor
         // 25.09 я на этой устаревшей строке объявил мёртвым живой VPN.
         if (health == ServiceHealth.Healthy)
             service.Recovered();
+
+        if (changed)
+            OnHealthChanged?.Invoke(service, health);
     }
 
     private TimeSpan ComputeBackoff(int restartCount)

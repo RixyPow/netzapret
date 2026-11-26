@@ -143,6 +143,34 @@ internal static class SupervisorHost
     /// запереть человеку сеть из-за сбоя WFP хуже, чем работать без защиты,
     /// которую он к тому же увидит в журнале.
     /// </remarks>
+    private static List<string> WfpAllowedApps(string singBox)
+    {
+        var apps = new List<string> { singBox };
+
+        // Сам NetZapret ходит мимо туннеля за подпиской, обновлением и прямыми
+        // проверками DNS — без этого при мёртвом выходе не прочесть даже подписку.
+        if (Environment.ProcessPath is { } self)
+            apps.Add(self);
+
+        // dnscrypt-proxy на старте спрашивает бутстрап-резолверы на порт 53.
+        if (NetZapret.Core.DnsCrypt.Executable() is var crypt && File.Exists(crypt))
+            apps.Add(crypt);
+
+        // Консольная утилита рядом с окном (nz dns, nz doctor).
+        if (Path.Combine(AppContext.BaseDirectory, "nz.exe") is var nz && File.Exists(nz))
+            apps.Add(nz);
+
+        return apps;
+    }
+
+    private static (System.Net.IPAddress V4, System.Net.IPAddress? V6) TunAddresses()
+    {
+        var tun = new SingBoxOptions();
+        var v4 = System.Net.IPAddress.Parse(tun.TunAddress.Split('/')[0]);
+        var v6 = NetZapret.Core.Diagnostics.WindowsIpv6.Disabled() ? null : System.Net.IPAddress.Parse(tun.TunAddressV6.Split('/')[0]);
+        return (v4, v6);
+    }
+
     private static KillSwitch? EngageKillSwitch(Options options)
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
@@ -161,20 +189,11 @@ internal static class SupervisorHost
         if (Engines.FindSingBox() is not { } singBox)
             return null;
 
-        var apps = new List<string> { singBox };
-
-        // Сам NetZapret ходит мимо туннеля за подпиской, обновлением и прямыми
-        // проверками DNS — без этого при мёртвом выходе не прочесть даже подписку.
-        if (Environment.ProcessPath is { } self)
-            apps.Add(self);
-
-        var tun = new SingBoxOptions();
-        var v4 = System.Net.IPAddress.Parse(tun.TunAddress.Split('/')[0]);
-        var v6 = NetZapret.Core.Diagnostics.WindowsIpv6.Disabled() ? null : System.Net.IPAddress.Parse(tun.TunAddressV6.Split('/')[0]);
+        var (v4, v6) = TunAddresses();
 
         try
         {
-            var engaged = KillSwitch.Engage(KillSwitch.Plan(apps, v4, v6));
+            var engaged = KillSwitch.Engage(KillSwitch.Plan(WfpAllowedApps(singBox), v4, v6));
             Console.WriteLine($"Kill switch: трафик мимо туннеля заблокирован ({engaged.RuleCount} правил WFP), снимется с остановкой движков.");
             return engaged;
         }
@@ -182,6 +201,78 @@ internal static class SupervisorHost
         {
             Console.Error.WriteLine($"Kill switch не включился ({ex.GetBaseException().Message}) — движки поднимаются без него.");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Управляет фильтрами WFP на порт 53 мимо TUN (<see cref="AppSettings.DnsLeakGuard"/>):
+    /// держит их, пока поднимается или работает sing-box, и снимает, если он упал,
+    /// чтобы в «Гибриде» и «Десинке» оставшийся десинк не потерял разрешение имён.
+    /// </summary>
+    private sealed class DnsGuardKeeper : IDisposable
+    {
+        private readonly IReadOnlyList<KillSwitchRule> _rules;
+        private KillSwitch? _active;
+        private bool _disposed;
+
+        private DnsGuardKeeper(IReadOnlyList<KillSwitchRule> rules) => _rules = rules;
+
+        public static DnsGuardKeeper? TryStart(Options options)
+        {
+            if (options.NoProxy)
+                return null;
+
+            var settings = AppSettings.Load(AppSettings.DefaultPath);
+            if (!settings.DnsLeakGuard || settings.KillSwitchActive)
+                return null;
+
+            if (Engines.FindSingBox() is not { } singBox)
+                return null;
+
+            var (v4, v6) = TunAddresses();
+            var keeper = new DnsGuardKeeper(KillSwitch.PlanDns(WfpAllowedApps(singBox), v4, v6));
+            keeper.Engage(initial: true);
+            return keeper;
+        }
+
+        public void OnHealthChanged(SupervisedService service, ServiceHealth health)
+        {
+            if (_disposed || (service.Name != "sing-box" && service.Name != DnsEngine.ServiceName))
+                return;
+
+            if (health is ServiceHealth.Dead or ServiceHealth.Faulted)
+            {
+                if (Interlocked.Exchange(ref _active, null) is { } was)
+                {
+                    was.Dispose();
+                    Console.WriteLine($"Защита DNS: {service.Name} не работает — блок порта 53 снят, чтобы не запирать сеть.");
+                }
+            }
+            else if (health is ServiceHealth.Healthy or ServiceHealth.Degraded && _active is null)
+            {
+                Engage(initial: false);
+            }
+        }
+
+        private void Engage(bool initial)
+        {
+            try
+            {
+                _active = KillSwitch.EngageDns(_rules);
+                Console.WriteLine(initial
+                    ? $"Защита DNS: порт 53 мимо туннеля заблокирован ({_active.RuleCount} правил WFP), снимется с остановкой движков."
+                    : "Защита DNS: движок снова работает — блок порта 53 возвращён.");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Защита DNS не включилась ({ex.GetBaseException().Message}) — движки работают без неё.");
+            }
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            Interlocked.Exchange(ref _active, null)?.Dispose();
         }
     }
 
@@ -253,9 +344,10 @@ internal static class SupervisorHost
                 return 2;
             }
 
-            // Kill switch — до движков: иначе первые секунды до TUN шли бы мимо
-            // него. Живёт, пока жив надзор (динамическая сессия WFP), — см. KillSwitch.
+            // Kill switch и защита DNS — до движков: иначе первые секунды до TUN шли бы мимо
+            // него. Живут, пока жив надзор (динамические сессии WFP), — см. KillSwitch.
             using var killSwitch = EngageKillSwitch(options);
+            using var dnsGuard = killSwitch is null ? DnsGuardKeeper.TryStart(options) : null;
 
             var services = new List<SupervisedService>();
 
@@ -338,6 +430,7 @@ internal static class SupervisorHost
             })
             {
                 OnEvent = Console.WriteLine,
+                OnHealthChanged = dnsGuard is null ? null : dnsGuard.OnHealthChanged,
             };
 
             Console.WriteLine(

@@ -98,6 +98,47 @@ public sealed class KillSwitchTests
         Assert.Equal(active, settings.KillSwitchActive);
     }
 
+    [Fact]
+    public void Dns_guard_blocks_only_port_53_and_leaves_all_other_traffic_untouched()
+    {
+        var rules = KillSwitch.PlanDns([@"C:\NZ\exe\sing-box.exe", @"C:\NZ\NetZapret.exe"], TunV4, TunV6);
+
+        foreach (bool v6 in new[] { false, true })
+        {
+            var family = rules.Where(r => r.V6 == v6).ToList();
+
+            // Общего запрета и правил по подсетям LAN здесь быть не должно: в «Гибриде»
+            // и «Десинке» весь трафик, кроме порта 53, обязан проходить свободно.
+            Assert.DoesNotContain(family, r => r.Condition is null);
+            Assert.DoesNotContain(family, r => r.Condition is KillSwitchCondition.RemoteAddress);
+
+            var dns = Assert.Single(family, r => !r.Permit);
+            Assert.Equal(new KillSwitchCondition.RemotePort(53), dns.Condition);
+
+            Assert.All(family.Where(r => r.Permit), r => Assert.True(r.Weight > dns.Weight));
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false, DnsRoute.Auto, true, true)]     // «Туннель»
+    [InlineData(true, true, DnsRoute.Auto, true, true)]      // «Гибрид» (при наличии выхода)
+    [InlineData(false, true, DnsRoute.Auto, true, false)]    // «Десинк» без DNS-движка
+    [InlineData(false, true, DnsRoute.Tunnel, true, true)]   // «Десинк» с DNS через движок
+    [InlineData(true, true, DnsRoute.Auto, false, false)]    // защита выключена человеком
+    public void Dns_guard_is_active_whenever_the_engine_handles_dns(bool tunnel, bool desync, DnsRoute via, bool guard, bool active)
+    {
+        var settings = new AppSettings
+        {
+            TunnelEnabled = tunnel,
+            DesyncEnabled = desync,
+            SubscriptionUrl = "https://example.invalid/sub",
+            DnsVia = via,
+            DnsLeakGuard = guard,
+        };
+
+        Assert.Equal(active, settings.DnsLeakGuardActive);
+    }
+
     /// <summary>
     /// Пробный прогон через сам WFP: с правами администратора (CI) Windows обязана
     /// принять все правила; без них — отказ на входе, и проверять нечем.
@@ -107,6 +148,7 @@ public sealed class KillSwitchTests
     {
         var self = Environment.ProcessPath!;
         var rules = KillSwitch.Plan([self], TunV4, TunV6);
+        var dnsRules = KillSwitch.PlanDns([self], TunV4, TunV6);
 
         // С правами администратора отказ — поломка правил: тест обязан пройти
         // без исключения. Без них WFP отказывает на начале транзакции (код 5,
@@ -114,6 +156,7 @@ public sealed class KillSwitchTests
         if (IsAdministrator())
         {
             KillSwitch.DryRun(rules);
+            KillSwitch.DryRun(dnsRules);
             return;
         }
 

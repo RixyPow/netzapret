@@ -33,6 +33,10 @@ namespace NetZapret.Proxy;
 /// Прежние адреса DoH этого провайдера: по ним программа узнаёт старый выбор
 /// в настройках и переводит на актуальный адрес.
 /// </param>
+/// <param name="UdpV6">
+/// Адреса IPv6 для обычного DNS на 53 порту: вписываются в адаптер (<see cref="AdapterDns"/>),
+/// когда в сети есть глобальный IPv6, чтобы роутер не перебивал выбранный резолвер своим IPv6 DNS.
+/// </param>
 public sealed record DnsProvider(
     string Name,
     IReadOnlyList<string> Udp,
@@ -45,7 +49,8 @@ public sealed record DnsProvider(
     DnsGroup Group = DnsGroup.Popular,
     IReadOnlyList<string>? Services = null,
     bool AddressesByName = false,
-    IReadOnlyList<string>? FormerAddresses = null)
+    IReadOnlyList<string>? FormerAddresses = null,
+    IReadOnlyList<string>? UdpV6 = null)
 {
     /// <summary>
     /// Годится ли в DNS туннеля: у sing-box апстрим — DoH по адресу.
@@ -152,24 +157,33 @@ public static class DnsSurvey
         // Шифрованный — на 8.8.4.4: 8.8.8.8 многие операторы с 3 июля
         // закрыли по TCP, и обзор мерил бы то, чем туннель не пользуется.
         new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.4.4", "dns.google",
-            Note: "надёжный, без фильтрации"),
+            Note: "надёжный, без фильтрации",
+            UdpV6: ["2001:4860:4860::8888", "2001:4860:4860::8844"]),
         new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com",
-            Note: "быстрый, без фильтрации"),
+            Note: "быстрый, без фильтрации",
+            UdpV6: ["2606:4700:4700::1111", "2606:4700:4700::1001"]),
         new("Quad9", ["9.9.9.9", "149.112.112.112"], "9.9.9.9", "dns.quad9.net",
-            Note: "отсекает вредоносные домены", Group: DnsGroup.Filtering),
+            Note: "отсекает вредоносные домены", Group: DnsGroup.Filtering,
+            UdpV6: ["2620:fe::fe", "2620:fe::9"]),
         new("AdGuard", ["94.140.14.14", "94.140.15.15"], "94.140.14.14", "dns.adguard-dns.com",
-            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering),
+            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering,
+            UdpV6: ["2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"]),
         new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com",
-            Note: "китайский, без фильтрации", Group: DnsGroup.Open),
+            Note: "китайский, без фильтрации", Group: DnsGroup.Open,
+            UdpV6: ["2400:3200::1", "2400:3200:baba::1"]),
         new("CleanBrowsing", ["185.228.168.9", "185.228.169.9"], "185.228.168.9",
             "security-filter-dns.cleanbrowsing.org", "/doh/security-filter/",
-            Note: "отсекает вредоносные и фишинговые", Group: DnsGroup.Filtering),
+            Note: "отсекает вредоносные и фишинговые", Group: DnsGroup.Filtering,
+            UdpV6: ["2a0d:2a00:1::2", "2a0d:2a00:2::2"]),
         new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "dns.sb",
-            Note: "без цензуры", Group: DnsGroup.Open),
+            Note: "без цензуры", Group: DnsGroup.Open,
+            UdpV6: ["2a09::", "2a11::"]),
         new("OpenDNS", ["208.67.222.222", "208.67.220.220"], "208.67.222.222", "doh.opendns.com",
-            Note: "фильтрация по категориям", Group: DnsGroup.Filtering),
+            Note: "фильтрация по категориям", Group: DnsGroup.Filtering,
+            UdpV6: ["2620:119:35::35", "2620:119:53::53"]),
         new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
-            Note: "российский, быстрый"),
+            Note: "российский, быстрый",
+            UdpV6: ["2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"]),
         // Замер 19.11: старый 83.220.169.155 отдаёт недоверенный сертификат
         // (SEC_E_UNTRUSTED_ROOT) и молчит по UDP; dns.comss.one ведёт на
         // 141.133.184.24, .183.77 и 155.212.172.101 — DoH 40–60 мс, UDP отвечает.
@@ -186,13 +200,17 @@ public static class DnsSurvey
         // Cloudflare Security — DoT 5, DoH 14; XBOX DNS — DoT 3, DoH 9.
         // AdGuard без фильтра (94.140.14.140) не ответил ничем — не взят.
         new("NextDNS", ["45.90.28.0", "45.90.30.0"], "45.90.28.0", "dns.nextdns.io",
-            Note: "без фильтрации, пока не заведён свой профиль", Group: DnsGroup.Open),
+            Note: "без фильтрации, пока не заведён свой профиль", Group: DnsGroup.Open,
+            UdpV6: ["2a07:a8c0::", "2a07:a8c1::"]),
         new("ControlD", ["76.76.2.0", "76.76.10.0"], "76.76.2.0", "freedns.controld.com", "/p0",
-            Note: "без фильтрации", Group: DnsGroup.Open),
+            Note: "без фильтрации", Group: DnsGroup.Open,
+            UdpV6: ["2606:1a40::", "2606:1a40:1::"]),
         new("Quad9 без фильтра", ["9.9.9.10", "149.112.112.10"], "9.9.9.10", "dns10.quad9.net",
-            Note: "как Quad9, но ничего не отсекает", Group: DnsGroup.Open),
+            Note: "как Quad9, но ничего не отсекает", Group: DnsGroup.Open,
+            UdpV6: ["2620:fe::10", "2620:fe::fe:10"]),
         new("Cloudflare Security", ["1.1.1.2", "1.0.0.2"], "1.1.1.2", "security.cloudflare-dns.com",
-            Note: "как Cloudflare, отсекает вредоносные", Group: DnsGroup.Filtering),
+            Note: "как Cloudflare, отсекает вредоносные", Group: DnsGroup.Filtering,
+            UdpV6: ["2606:4700:4700::1112", "2606:4700:4700::1002"]),
         // Адреса — как на xbox-dns.ru 08.10 (основной .54, дополнительный .55);
         // прежние .50 и .51 на сайте больше не названы, хотя ещё отвечают.
         // Замер 08.10 по одному запросу: отвечают все четыре и «XBOX v2»
@@ -218,9 +236,11 @@ public static class DnsSurvey
             AddressesByName: true,
             FormerAddresses: ["144.31.82.230", "83.217.211.149", "38.180.241.191"]),
         new("AdGuard Семейный", ["94.140.14.15", "94.140.15.16"], "94.140.14.15", "family.adguard-dns.com",
-            Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering),
+            Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering,
+            UdpV6: ["2a10:50c0::bad1:ff", "2a10:50c0::bad2:ff"]),
         new("Control D без рекламы", ["76.76.2.2", "76.76.10.2"], "76.76.2.2", "freedns.controld.com", "/p2",
-            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering),
+            Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering,
+            UdpV6: ["2606:1a40::2", "2606:1a40:1::2"]),
         new("MSK-IX", ["62.76.76.62", "62.76.62.76"]),
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];

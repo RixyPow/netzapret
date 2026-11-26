@@ -842,7 +842,7 @@ public class SingBoxConfigCompilerTests
             .ToArray();
 
         Assert.Equal(["8.8.8.8/32", "1.1.1.1/32"], addresses);
-        Assert.Equal(443, reject.GetProperty("port")[0].GetInt32());
+        Assert.Equal([443, 853], reject.GetProperty("port").EnumerateArray().Select(p => p.GetInt32()).ToArray());
     }
 
     [Fact]

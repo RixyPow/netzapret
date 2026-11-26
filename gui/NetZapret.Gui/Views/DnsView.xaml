@@ -388,6 +388,29 @@
             <gui:Card Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
                     <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Защита от утечки DNS" FontWeight="SemiBold" FontSize="16" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                            Content="Блокирует открытые запросы Windows на порт 53 мимо туннеля фильтрами WFP, пока работает движок (в «Гибриде», «Туннеле» и «Десинке» с путём «через туннель»). Закрывает параллельную отправку имён роутеру и провайдеру (SMHNR).&#x0a;&#x0a;С остановкой движков фильтры снимаются сами; настройки Windows и реестр не меняются.&#x0a;&#x0a;Оговорка: если не включён «DNS роутера», локальные имена домашней сети вида .lan у роутера открываться не будут." />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" x:Name="DnsLeakGuardWord" Style="{StaticResource Caption}"
+                                   VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <ToggleButton Grid.Column="2" x:Name="DnsLeakGuardSwitch" Style="{StaticResource Switch}"
+                                      VerticalAlignment="Center" Click="OnDnsLeakGuard" />
+                    </Grid>
+                    <TextBlock x:Name="BrowserDohWarning" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                               Foreground="{DynamicResource Warn}" TextWrapping="Wrap" Visibility="Collapsed" />
+                </StackPanel>
+            </gui:Card>
+
+            <gui:Card Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,16,0">
                             <StackPanel Orientation="Horizontal">

@@ -2897,14 +2897,14 @@ public sealed class SingBoxConfigCompiler
         if (addresses.Count == 0)
             yield break;
 
-        // Адрес DoH-эндпоинта совпадает с адресом обычного резолвера:
-        // Windows поднимает 8.8.8.8 до https://dns.google/dns-query,
-        // а тот живёт там же. Поэтому отдельного списка не требуется.
+        // Адрес DoH/DoT-эндпоинта совпадает с адресом обычного резолвера:
+        // Windows поднимает 8.8.8.8 до https://dns.google/dns-query (443),
+        // а DoT/DoQ-клиенты стучатся туда же на 853 (замер 26.11: 853 оставался открыт).
         yield return new JsonObject
         {
             ["inbound"] = new JsonArray { "tun-in" },
             ["ip_cidr"] = addresses,
-            ["port"] = new JsonArray { 443 },
+            ["port"] = new JsonArray { 443, 853 },
             ["action"] = "reject",
         };
     }

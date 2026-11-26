@@ -98,6 +98,40 @@ public sealed class KillSwitch : IDisposable
         return rules;
     }
 
+    /// <summary>
+    /// Правила защиты от утечки DNS: блокируется только порт 53 мимо TUN и наших движков,
+    /// весь остальной трафик (десинк, локальная сеть, игры, браузер) не затрагивается.
+    /// </summary>
+    /// <remarks>
+    /// Замер 26.11: служба Dnscache Windows при включённом SMHNR привязывает сокеты
+    /// прямо к физическому интерфейсу и отправляет копии запросов роутеру по локальной
+    /// сети в обход маршрутов TUN (/32, /128 и 0.0.0.0/1). Без общего запрета в конце
+    /// подслой WFP пропускает все прочие порты дальше без вмешательства.
+    /// </remarks>
+    /// <param name="apps">Программы, которым разрешён порт 53 мимо TUN (движки и сам NetZapret).</param>
+    /// <param name="tunV4">Адрес TUN по IPv4.</param>
+    /// <param name="tunV6">Адрес TUN по IPv6; <c>null</c> — IPv6 у TUN нет.</param>
+    public static IReadOnlyList<KillSwitchRule> PlanDns(IEnumerable<string> apps, IPAddress tunV4, IPAddress? tunV6)
+    {
+        var rules = new List<KillSwitchRule>();
+
+        foreach (bool v6 in new[] { false, true })
+        {
+            foreach (var app in apps)
+                rules.Add(new("программа " + Path.GetFileName(app), v6, true, 15, new KillSwitchCondition.App(app)));
+
+            if (!v6)
+                rules.Add(new("в туннель", false, true, 14, new KillSwitchCondition.LocalAddress(tunV4, 32)));
+            else if (tunV6 is not null)
+                rules.Add(new("в туннель", true, true, 14, new KillSwitchCondition.LocalAddress(tunV6, 128)));
+
+            rules.Add(new("loopback", v6, true, 13, new KillSwitchCondition.Loopback()));
+            rules.Add(new("DNS мимо туннеля", v6, false, 12, new KillSwitchCondition.RemotePort(53)));
+        }
+
+        return rules;
+    }
+
     /// <summary>Локальные сети: роутер, принтер, DHCP, широковещание и многоадресная рассылка.</summary>
     private static readonly (string, int)[] LocalNetworksV4 =
     [
@@ -112,7 +146,13 @@ public sealed class KillSwitch : IDisposable
 
     /// <summary>Ставит правила; не вышло — исключение, и не стоит ни одно.</summary>
     /// <exception cref="InvalidOperationException">WFP отказал; в тексте — шаг и код.</exception>
-    public static KillSwitch Engage(IReadOnlyList<KillSwitchRule> rules) => Apply(rules, commit: true);
+    public static KillSwitch Engage(IReadOnlyList<KillSwitchRule> rules) =>
+        Apply(rules, commit: true, "NetZapret kill switch", "Блокирует трафик мимо туннеля, пока работают движки NetZapret.");
+
+    /// <summary>Ставит правила защиты от утечки DNS (только порт 53 мимо TUN).</summary>
+    /// <exception cref="InvalidOperationException">WFP отказал; в тексте — шаг и код.</exception>
+    public static KillSwitch EngageDns(IReadOnlyList<KillSwitchRule> rules) =>
+        Apply(rules, commit: true, "NetZapret DNS guard", "Блокирует запросы DNS (порт 53) мимо туннеля, пока работает движок NetZapret.");
 
     /// <summary>
     /// Пробный прогон: те же вызовы WFP, но транзакция отменяется — сеть не трогается.
@@ -123,17 +163,17 @@ public sealed class KillSwitch : IDisposable
     /// </remarks>
     internal static void DryRun(IReadOnlyList<KillSwitchRule> rules)
     {
-        using var _ = Apply(rules, commit: false);
+        using var _ = Apply(rules, commit: false, "NetZapret kill switch", "Пробная проверка правил WFP.");
     }
 
-    private static KillSwitch Apply(IReadOnlyList<KillSwitchRule> rules, bool commit)
+    private static KillSwitch Apply(IReadOnlyList<KillSwitchRule> rules, bool commit, string title, string description)
     {
         using var memory = new Unmanaged();
 
         var session = new Native.Session
         {
             Key = Guid.NewGuid(),
-            Display = memory.Display("NetZapret kill switch", "Блокирует трафик мимо туннеля, пока работают движки NetZapret."),
+            Display = memory.Display(title, description),
             Flags = Native.SessionFlagDynamic,
         };
 
@@ -148,7 +188,7 @@ public sealed class KillSwitch : IDisposable
             var subLayer = new Native.SubLayer
             {
                 Key = Guid.NewGuid(),
-                Display = memory.Display("NetZapret kill switch", "Правила kill switch NetZapret."),
+                Display = memory.Display(title, description),
                 Weight = 0xFFFF,
             };
 
@@ -159,7 +199,7 @@ public sealed class KillSwitch : IDisposable
                 var filter = new Native.Filter
                 {
                     Key = Guid.NewGuid(),
-                    Display = memory.Display("NetZapret kill switch: " + rule.Name, null),
+                    Display = memory.Display(title + ": " + rule.Name, null),
                     LayerKey = rule.V6 ? Native.LayerConnectV6 : Native.LayerConnectV4,
                     SubLayerKey = subLayer.Key,
                     Weight = new Native.Value { Type = Native.TypeUInt8, Raw = rule.Weight },

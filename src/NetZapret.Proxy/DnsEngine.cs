@@ -60,6 +60,7 @@ public static class DnsEngine
         {
             ClashApiListen = clashApiListen ?? $"127.0.0.1:{TunnelStatus.DefaultClashPort}",
             Scope = TunnelScope.ProxyOnly,
+            Ipv6 = !NetZapret.Core.Diagnostics.WindowsIpv6.Disabled(),
             DnsServerAddresses = systemResolvers,
             DnsServer = settings.UseRouterDns ? settings.RouterDnsAddress
                 : settings.DnsCryptActive is not null ? DnsCrypt.Address : dnsServer,

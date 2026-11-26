@@ -715,6 +715,24 @@ public sealed record AppSettings
     public bool KillSwitchActive => KillSwitch && Engines.TunnelTakesAll;
 
     /// <summary>
+    /// Защита от утечки DNS: пока работает движок туннеля или DNS через движок,
+    /// запросы к порту 53 мимо TUN блокируются фильтрами Windows (WFP).
+    /// </summary>
+    /// <remarks>
+    /// Замер 26.11 (ipleak.net, параллельные запросы IPv4 + IPv6): служба DNS Windows
+    /// (SMHNR) привязывает второй сокет прямо к физическому адаптеру и шлёт запросы
+    /// роутеру в его локальную сеть в обход маршрутов TUN — провайдер видел 12–24
+    /// запроса и в «Десинке» с DNS через движок, и в «Гибриде», и в полном «Туннеле»
+    /// даже при пути DNS «через туннель». Фильтр WFP на порт 53 сводит их в ноль,
+    /// не трогая прочий трафик и настройки Windows.
+    /// </remarks>
+    public bool DnsLeakGuard { get; init; } = true;
+
+    /// <summary>Действует ли защита от утечки DNS при нынешних настройках.</summary>
+    [JsonIgnore]
+    public bool DnsLeakGuardActive => DnsLeakGuard && (NeedsProxy || NeedsDnsEngine);
+
+    /// <summary>
     /// Подменять выбранный руками сервер, пока он молчит.
     /// </summary>
     /// <remarks>

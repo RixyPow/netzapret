@@ -462,6 +462,8 @@ public partial class DnsView : UserControl
 
         ShowChosen(settings);
         ShowSystem();
+        ShowDnsLeakGuard(settings);
+        ShowBrowserDoh();
         ShowAutoRepin(settings);
         ShowPinWatch(settings.AutoRepin, PinRefresh.Watch());
 
@@ -607,6 +609,7 @@ public partial class DnsView : UserControl
         // показывается здесь же, где и сам выбор.
         ShowAdapterDns(settings);
         ShowSpareDns(settings);
+        ShowDnsLeakGuard(settings);
     }
 
     /// <summary>Выбор запасного резолвера (<see cref="AppSettings.SpareDnsServer"/>).</summary>
@@ -697,8 +700,31 @@ public partial class DnsView : UserControl
             .FirstOrDefault(item => item.Tag is string tag && tag == settings.AdapterDns.ToString());
         _filling = false;
 
-        // Строкой — только отказ: что значит каждый выбор, сказано в «i».
-        SayAdapterDns(settings.AdapterDns == AdapterDnsMode.Resolver && refusal is not null ? refusal : string.Empty);
+        // Строкой — только отказ или предупреждение о перехвате IPv6 роутером в «Десинке».
+        if (settings.AdapterDns == AdapterDnsMode.Resolver && refusal is not null)
+        {
+            SayAdapterDns(refusal, warn: false);
+        }
+        else if (AdapterDns.RouterIpv6Warning(settings, SafeDiscoverSystemResolvers()) is { } warning)
+        {
+            SayAdapterDns(warning, warn: true);
+        }
+        else
+        {
+            SayAdapterDns(string.Empty, warn: false);
+        }
+    }
+
+    private static IReadOnlyList<string> SafeDiscoverSystemResolvers()
+    {
+        try
+        {
+            return SystemResolvers.Discover();
+        }
+        catch (Exception)
+        {
+            return [];
+        }
     }
 
     private async void OnAdapterDns(object sender, SelectionChangedEventArgs e)
@@ -780,10 +806,79 @@ public partial class DnsView : UserControl
     }
 
     /// <summary>Строка под выбором DNS адаптеров: пустая не занимает места.</summary>
-    private void SayAdapterDns(string text)
+    private void SayAdapterDns(string text, bool warn = false)
     {
         AdapterDnsHint.Text = text;
         AdapterDnsHint.Visibility = text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        if (warn)
+            AdapterDnsHint.SetResourceReference(TextBlock.ForegroundProperty, "Warn");
+        else
+            AdapterDnsHint.ClearValue(TextBlock.ForegroundProperty);
+    }
+
+    private void ShowDnsLeakGuard(AppSettings settings)
+    {
+        DnsLeakGuardSwitch.IsChecked = settings.DnsLeakGuard;
+
+        if (!settings.DnsLeakGuard)
+        {
+            DnsLeakGuardWord.Text = "выкл.";
+            return;
+        }
+
+        DnsLeakGuardWord.Text = settings.NeedsProxy || settings.NeedsDnsEngine
+            ? "вкл."
+            : "вкл. · ждёт движка (в «Десинке» выберите путь «через туннель»)";
+    }
+
+    private void OnDnsLeakGuard(object sender, RoutedEventArgs e)
+    {
+        bool on = DnsLeakGuardSwitch.IsChecked == true;
+
+        try
+        {
+            var settings = AppSettings.Load(AppSettings.DefaultPath) with { DnsLeakGuard = on };
+            settings.Save(AppSettings.DefaultPath);
+            ShowDnsLeakGuard(settings);
+
+            Status.Text = (on
+                ? "Защита от утечки DNS включена: открытые запросы на порт 53 мимо туннеля будут блокироваться."
+                : "Защита от утечки DNS выключена.") + " Применится при следующем запуске движков.";
+            this.Offer(on ? "Защита от утечки DNS включена" : "Защита от утечки DNS выключена");
+        }
+        catch (Exception ex)
+        {
+            ShowDnsLeakGuard(AppSettings.Load(AppSettings.DefaultPath));
+            Status.Text = "Настройка не сохранилась: " + ex.GetBaseException().Message;
+        }
+    }
+
+    /// <summary>Напоминает прямо на вкладке DNS, если в браузере включён свой безопасный DNS мимо системы.</summary>
+    private void ShowBrowserDoh()
+    {
+        try
+        {
+            var found = NetZapret.Core.Diagnostics.BrowserDns.Scan();
+
+            if (found.Count == 0)
+            {
+                BrowserDohWarning.Text = string.Empty;
+                BrowserDohWarning.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var names = string.Join(", ", found.Select(f =>
+                string.IsNullOrWhiteSpace(f.Provider) ? f.Browser : $"{f.Browser} ({f.Provider})"));
+
+            BrowserDohWarning.Text = $"В браузере включён свой шифрованный DNS мимо системы: {names}. "
+                + "В «Гибриде» такие запросы обходят наш DNS и маршруты VPN.";
+            BrowserDohWarning.Visibility = Visibility.Visible;
+        }
+        catch (Exception)
+        {
+            BrowserDohWarning.Visibility = Visibility.Collapsed;
+        }
     }
 
     /// <summary>
