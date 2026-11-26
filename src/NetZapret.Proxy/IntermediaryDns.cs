@@ -116,25 +116,19 @@ public static class IntermediaryDns
     /// <summary>Посредники в порядке доверия: кандидаты первого пробуются первыми.</summary>
     public static IReadOnlyList<Intermediary> Servers { get; } =
     [
-        new("Comss DNS", "comss", "dns.comss.one", ["141.133.184.24", "141.133.183.77", "155.212.172.101", "212.109.221.20", "212.109.195.93"]),
-
         // relay.check — служебное имя Zapret DNS: сервер отвечает на него адресом
-        // своего посредника (так узнаёт посредника Zapret GUI, config/zapret_dns.py).
+        // своего посредника (с 26.11 — Нидерланды, 185.4.64.180; config/zapret_dns.py).
         new("Zapret DNS", "zapret", "dns.zapret.moe", ["104.21.15.208", "172.67.164.60", "188.114.96.1", "188.114.97.1"], RelayName: "relay.check.dns.zapret.moe"),
-        new("GeoHide EU", "geohide-eu", "eu.geohide.ru", ["5.175.161.3", "5.175.161.40", "143.20.64.192"]),
-        new("GeoHide US", "geohide-us", "us.geohide.ru", ["192.255.159.240", "192.255.159.241"]),
-
-        // Из списка посредников в обсуждении Flowseal №3423 (со слов админа GeoHide).
-        // Замер 06.11 у владельца по DoH: всем четырём контрольным именам — один свой
-        // прокси (wlrus — 191.217.212.16, dagami — 45.86.65.240), через него ChatGPT,
-        // Gemini и Grok — 200 с настоящим сертификатом, Claude — проверка на робота
-        // Cloudflare, как и у Zapret DNS. Прочие новые из того списка (malw, mafioznik,
-        // shecan, bezmezhau, magicdns) не ответили. Запасные адреса — честный DoH 06.11.
-        new("WLRUS DNS", "wlrus", "dns.wlrus.cfd", ["95.85.240.254", "138.124.254.134"]),
-        new("Dagami DNS", "dagami", "dns.dagami.ru", ["45.86.65.240"]),
-
+        new("Comss DNS", "comss", "dns.comss.one", ["141.133.183.77", "141.133.184.24", "155.212.172.101", "212.109.221.20", "212.109.195.93"]),
+        new("Malw.link", "malw", "dns.malw.link", ["179.254.166.171", "164.5.224.81"]),
         new("DNS-AI", "dns-ai", "dns.dns-ai.ru", ["194.87.196.13", "45.151.102.219"]),
         new("AstraCat", "astracat", "dns.astracat.network", ["135.106.217.200", "135.106.197.22"]),
+        new("GeoHide", "geohide", "geohide.ru", ["37.230.192.51", "193.233.112.88"]),
+        new("GeoHide EU", "geohide-eu", "eu.geohide.ru", ["5.175.161.3", "5.175.161.40", "143.20.64.192"]),
+        new("GeoHide US", "geohide-us", "us.geohide.ru", ["192.255.159.240", "192.255.159.241"]),
+        new("Bezmezhau", "bezmezhau", "dns.bezmezhau.com", ["31.58.216.201", "143.20.64.55"]),
+        new("Dagami DNS", "dagami", "dns.dagami.ru", ["45.86.72.85", "45.86.65.240"]),
+        new("WLRUS DNS", "wlrus", "dns.wlrus.cfd", ["95.85.240.254", "138.124.254.134"]),
     ];
 
     /// <summary>Посредник по ключу профиля; <c>null</c> — ключ незнакомый.</summary>

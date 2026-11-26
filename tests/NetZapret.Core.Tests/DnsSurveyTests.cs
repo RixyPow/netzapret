@@ -212,6 +212,27 @@ public sealed class DnsSurveyTests
     }
 
     [Fact]
+    public void Every_choosable_provider_has_unique_tls_address_and_valid_ips()
+    {
+        var choosable = DnsSurvey.Providers.Where(p => p.Choosable).ToList();
+        var primary = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var p in choosable)
+        {
+            Assert.True(IPAddress.TryParse(p.TlsAddress, out var tlsIp) && tlsIp.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork,
+                $"{p.Name}: TlsAddress {p.TlsAddress} не IPv4");
+            Assert.True(primary.Add(p.TlsAddress!), $"{p.Name}: повторяющийся TlsAddress {p.TlsAddress}");
+        }
+
+        foreach (var p in DnsSurvey.Providers)
+        {
+            Assert.All(p.Udp, a => Assert.True(IPAddress.TryParse(a, out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork, $"{p.Name}: Udp {a}"));
+            if (p.UdpV6 is not null)
+                Assert.All(p.UdpV6, a => Assert.True(IPAddress.TryParse(a, out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6, $"{p.Name}: UdpV6 {a}"));
+        }
+    }
+
+    [Fact]
     public void Without_an_honest_answer_nothing_is_claimed()
     {
         Assert.False(DnsSurvey.IsSpoofed([], [], new HashSet<IPAddress>()));

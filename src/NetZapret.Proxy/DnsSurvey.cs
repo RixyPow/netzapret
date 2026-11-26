@@ -154,93 +154,156 @@ public static class DnsSurvey
     /// </remarks>
     public static readonly IReadOnlyList<DnsProvider> Providers =
     [
-        // Шифрованный — на 8.8.4.4: 8.8.8.8 многие операторы с 3 июля
-        // закрыли по TCP, и обзор мерил бы то, чем туннель не пользуется.
+        // Популярные (как в Zapret GUI 21.1.7.314). Шифрованный Google — на 8.8.4.4:
+        // 8.8.8.8 часть операторов закрыла по TCP.
         new("Google", ["8.8.8.8", "8.8.4.4"], "8.8.4.4", "dns.google",
             Note: "надёжный, без фильтрации",
             UdpV6: ["2001:4860:4860::8888", "2001:4860:4860::8844"]),
         new("Cloudflare", ["1.1.1.1", "1.0.0.1"], "1.1.1.1", "cloudflare-dns.com",
             Note: "быстрый, без фильтрации",
             UdpV6: ["2606:4700:4700::1111", "2606:4700:4700::1001"]),
+        new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
+            Note: "российский, быстрый",
+            UdpV6: ["2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"]),
+
+        // С фильтрацией («Безопасные» в Zapret GUI 21.1.7.314).
         new("Quad9", ["9.9.9.9", "149.112.112.112"], "9.9.9.9", "dns.quad9.net",
             Note: "отсекает вредоносные домены", Group: DnsGroup.Filtering,
             UdpV6: ["2620:fe::fe", "2620:fe::9"]),
         new("AdGuard", ["94.140.14.14", "94.140.15.15"], "94.140.14.14", "dns.adguard-dns.com",
             Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering,
             UdpV6: ["2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff"]),
-        new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com",
-            Note: "китайский, без фильтрации", Group: DnsGroup.Open,
-            UdpV6: ["2400:3200::1", "2400:3200:baba::1"]),
-        new("CleanBrowsing", ["185.228.168.9", "185.228.169.9"], "185.228.168.9",
-            "security-filter-dns.cleanbrowsing.org", "/doh/security-filter/",
-            Note: "отсекает вредоносные и фишинговые", Group: DnsGroup.Filtering,
-            UdpV6: ["2a0d:2a00:1::2", "2a0d:2a00:2::2"]),
-        new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "dns.sb",
-            Note: "без цензуры", Group: DnsGroup.Open,
-            UdpV6: ["2a09::", "2a11::"]),
+        // Замер 26.11: 94.140.14.15 молчит по TCP 443, а 94.140.15.16 отвечает по DoH (h2).
+        new("AdGuard Семейный", ["94.140.14.15", "94.140.15.16"], "94.140.15.16", "family.adguard-dns.com",
+            Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering,
+            FormerAddresses: ["94.140.14.15"],
+            UdpV6: ["2a10:50c0::bad1:ff", "2a10:50c0::bad2:ff"]),
         new("OpenDNS", ["208.67.222.222", "208.67.220.220"], "208.67.222.222", "doh.opendns.com",
             Note: "фильтрация по категориям", Group: DnsGroup.Filtering,
+            FormerAddresses: ["146.112.41.2"],
             UdpV6: ["2620:119:35::35", "2620:119:53::53"]),
-        new("Yandex", ["77.88.8.8", "77.88.8.1"], "77.88.8.8", "common.dot.dns.yandex.net",
-            Note: "российский, быстрый",
-            UdpV6: ["2a02:6b8::feed:0ff", "2a02:6b8:0:1::feed:0ff"]),
-        // Замер 19.11: старый 83.220.169.155 отдаёт недоверенный сертификат
-        // (SEC_E_UNTRUSTED_ROOT) и молчит по UDP; dns.comss.one ведёт на
-        // 141.133.184.24, .183.77 и 155.212.172.101 — DoH 40–60 мс, UDP отвечает.
-        // Имена обновляются сами по dns.comss.one (DnsProviderAddresses).
-        new("Comss.one", ["141.133.184.24", "212.109.195.93"], "141.133.184.24", "dns.comss.one",
-            Note: "российский, отвечает честно — для обхода подмены", Group: DnsGroup.Intermediary,
-            AddressesByName: true, FormerAddresses: ["83.220.169.155"]),
-        // Mullvad (194.242.2.2) убран 10.10 по слову владельца: DoH не ответил
-        // (TIMEOUT), UDP у него нет, а туннелю нужен именно DoH. Выбравших его
-        // настройки переводят на Google (AppSettings, MullvadDns).
-        // Замер 23.09 с этой машины, по запросу владельца «добавь ещё DNS»:
-        // NextDNS — DoT 44 мс, DoH 88; ControlD — DoH 41 мс, DoT закрыт
-        // (туннелю нужен только DoH); Quad9 без фильтра — DoT 23, DoH 48;
-        // Cloudflare Security — DoT 5, DoH 14; XBOX DNS — DoT 3, DoH 9.
-        // AdGuard без фильтра (94.140.14.140) не ответил ничем — не взят.
-        new("NextDNS", ["45.90.28.0", "45.90.30.0"], "45.90.28.0", "dns.nextdns.io",
-            Note: "без фильтрации, пока не заведён свой профиль", Group: DnsGroup.Open,
-            UdpV6: ["2a07:a8c0::", "2a07:a8c1::"]),
-        new("ControlD", ["76.76.2.0", "76.76.10.0"], "76.76.2.0", "freedns.controld.com", "/p0",
-            Note: "без фильтрации", Group: DnsGroup.Open,
-            UdpV6: ["2606:1a40::", "2606:1a40:1::"]),
-        new("Quad9 без фильтра", ["9.9.9.10", "149.112.112.10"], "9.9.9.10", "dns10.quad9.net",
-            Note: "как Quad9, но ничего не отсекает", Group: DnsGroup.Open,
-            UdpV6: ["2620:fe::10", "2620:fe::fe:10"]),
-        new("Cloudflare Security", ["1.1.1.2", "1.0.0.2"], "1.1.1.2", "security.cloudflare-dns.com",
-            Note: "как Cloudflare, отсекает вредоносные", Group: DnsGroup.Filtering,
-            UdpV6: ["2606:4700:4700::1112", "2606:4700:4700::1002"]),
-        // Адреса — как на xbox-dns.ru 08.10 (основной .54, дополнительный .55);
-        // прежние .50 и .51 на сайте больше не названы, хотя ещё отвечают.
-        // Замер 08.10 по одному запросу: отвечают все четыре и «XBOX v2»
-        // 87.228.47.200, и все уже отдают новые прокси 188.68.214.x.
-        new("XBOX DNS", ["111.88.96.54", "111.88.96.55"], "111.88.96.54", "xbox-dns.ru",
-            Note: "российский посредник: закрытые сайты — через свои прокси",
-            ForTunnel: false, Group: DnsGroup.Intermediary),
-        // Добавлены 04.11 по образцу раздела DNS Zapret GUI 21.1.7.228. Замер
-        // DoH с этой машины мимо туннеля: Zapret DNS (dns.zapret.moe за
-        // Cloudflare, 104.21.15.208 и 172.67.164.60) — 0,25–1,3 с, на своём
-        // 5.129.221.64 DoH не отвечает; claude.ai, chatgpt.com, gemini и
-        // open.spotify.com он отдаёт на свой прокси 5.129.221.64, прочие имена —
-        // настоящими адресами. AdGuard Семейный — 0,17 с, Control D без рекламы —
-        // 0,09 с. Не взяты: Яндекс Безопасный и Семейный (DoH пустым ответом,
-        // как и у нашего Яндекса), DNS4EU 86.54.11.1 (TLS не сошёлся),
-        // BI.ZONE 185.191.32.7 (сертификат не на dns.bi.zone, имени нет).
-        // Адрес Zapret DNS — Cloudflare: если сменится, DnsProviderAddresses
-        // узнает новый по dns.zapret.moe и проверит сертификатом.
-        new("Zapret DNS", [], "104.21.15.208", "dns.zapret.moe",
-            Note: "посредник проекта Zapret, ИИ и Spotify — через его прокси, действует на имена мимо VPN",
-            Group: DnsGroup.Intermediary,
-            Services: ["chatgpt.com", "claude.ai", "gemini.google.com", "open.spotify.com"],
-            AddressesByName: true,
-            FormerAddresses: ["144.31.82.230", "83.217.211.149", "38.180.241.191"]),
-        new("AdGuard Семейный", ["94.140.14.15", "94.140.15.16"], "94.140.14.15", "family.adguard-dns.com",
-            Note: "отсекает рекламу и сайты 18+", Group: DnsGroup.Filtering,
-            UdpV6: ["2a10:50c0::bad1:ff", "2a10:50c0::bad2:ff"]),
+        new("Яндекс Безопасный", ["77.88.8.88", "77.88.8.2"], "77.88.8.88", "safe.dot.dns.yandex.net",
+            Note: "антивирус, российский", Group: DnsGroup.Filtering,
+            UdpV6: ["2a02:6b8::feed:bad", "2a02:6b8:0:1::feed:bad"]),
+        new("Яндекс Семейный", ["77.88.8.7", "77.88.8.3"], "77.88.8.7", "family.dot.dns.yandex.net",
+            Note: "без 18+, российский", Group: DnsGroup.Filtering,
+            UdpV6: ["2a02:6b8::feed:a11", "2a02:6b8:0:1::feed:a11"]),
+        // BI.ZONE (21.1.7.314): шаблон public.sdns.bi.zone; замер 26.11 — .32.7 молчит на 443, .32.8 отвечает (h2).
+        new("BI.ZONE", ["185.191.32.7", "185.191.32.8"], "185.191.32.8",
+            "public.sdns.bi.zone", "/9c0205cf-e32e-418e-adc0-e2575ebcf394",
+            Note: "антивирус, российский", Group: DnsGroup.Filtering,
+            AddressesByName: true, FormerAddresses: ["185.191.32.7"]),
+        new("DNS4EU Защитный", ["86.54.11.1", "86.54.11.201"], "86.54.11.1", "protective.joindns4.eu",
+            Note: "антивирус, Евросоюз", Group: DnsGroup.Filtering,
+            UdpV6: ["2a13:1001::86:54:11:1", "2a13:1001::86:54:11:201"]),
+        new("CleanBrowsing", ["185.228.168.9", "185.228.169.9"], "185.228.168.9",
+            "doh.cleanbrowsing.org", "/doh/security-filter/",
+            Note: "отсекает вредоносные и фишинговые", Group: DnsGroup.Filtering,
+            UdpV6: ["2a0d:2a00:1::2", "2a0d:2a00:2::2"]),
         new("Control D без рекламы", ["76.76.2.2", "76.76.10.2"], "76.76.2.2", "freedns.controld.com", "/p2",
             Note: "отсекает рекламу и слежку", Group: DnsGroup.Filtering,
             UdpV6: ["2606:1a40::2", "2606:1a40:1::2"]),
+        new("Cloudflare Security", ["1.1.1.2", "1.0.0.2"], "1.1.1.2", "security.cloudflare-dns.com",
+            Note: "как Cloudflare, отсекает вредоносные", Group: DnsGroup.Filtering,
+            UdpV6: ["2606:4700:4700::1112", "2606:4700:4700::1002"]),
+
+        // Без фильтрации и малоизвестные («Малоизвестные» в Zapret GUI 21.1.7.314).
+        new("DNS.SB", ["185.222.222.222", "45.11.45.11"], "185.222.222.222", "doh.sb",
+            Note: "без цензуры", Group: DnsGroup.Open,
+            UdpV6: ["2a09::", "2a11::"]),
+        new("dnsdoh.art", ["194.180.189.33"], "194.180.189.33", "dnsdoh.art",
+            Note: "без рекламы и записи", Group: DnsGroup.Open),
+        new("ControlD", ["76.76.2.0", "76.76.10.0"], "76.76.2.0", "freedns.controld.com", "/p0",
+            Note: "без фильтрации и записи", Group: DnsGroup.Open,
+            UdpV6: ["2606:1a40::", "2606:1a40:1::"]),
+        new("DNS4EU", ["86.54.11.100", "86.54.11.200"], "86.54.11.100", "unfiltered.joindns4.eu",
+            Note: "без фильтров, Евросоюз", Group: DnsGroup.Open,
+            UdpV6: ["2a13:1001::86:54:11:100", "2a13:1001::86:54:11:200"]),
+        // Gcore: замер 26.11 — 95.85.95.85 не проходит TLS на 443, а 2.56.220.2 отвечает (h2).
+        new("Gcore", ["95.85.95.85", "2.56.220.2"], "2.56.220.2", "gcoredns.com",
+            Note: "быстрый, без записи", Group: DnsGroup.Open,
+            AddressesByName: true, FormerAddresses: ["95.85.95.85"],
+            UdpV6: ["2a03:90c0:999d::1", "2a03:90c0:9992::1"]),
+        new("CZ.NIC", ["193.17.47.1", "185.43.135.1"], "193.17.47.1", "odvr.nic.cz",
+            Note: "без фильтров, Чехия", Group: DnsGroup.Open,
+            UdpV6: ["2001:148f:ffff::1", "2001:148f:fffe::1"]),
+        new("CIRA Canadian Shield", ["149.112.121.10", "149.112.122.10"], "149.112.121.10",
+            "private.canadianshield.cira.ca",
+            Note: "без фильтров, Канада", Group: DnsGroup.Open,
+            UdpV6: ["2620:10a:80bb::10", "2620:10a:80bc::10"]),
+        new("Freifunk München", ["5.1.66.255", "185.150.99.255"], "5.1.66.255", "doh.ffmuc.net",
+            Note: "без цензуры и записи", Group: DnsGroup.Open,
+            UdpV6: ["2001:678:e68:f000::", "2001:678:ed0:f000::"]),
+        // StormyCloud: шифрованный DNS принимает только 23.128.248.2 (.4 отвечает только по 53).
+        new("StormyCloud", ["23.128.248.2", "23.128.248.4"], "23.128.248.2", "dns.stormycloud.org",
+            Note: "без цензуры и записи", Group: DnsGroup.Open,
+            UdpV6: ["2602:fc05::2", "2602:fc05::4"]),
+        new("dnsforge.de", ["176.9.93.198", "176.9.1.117"], "49.12.67.122", "dnsforge.de",
+            Note: "без рекламы и записи", Group: DnsGroup.Open,
+            AddressesByName: true, FormerAddresses: ["176.9.93.198", "176.9.1.117", "91.99.154.175"],
+            UdpV6: ["2a01:4f8:151:34aa::198", "2a01:4f8:141:316d::117"]),
+        new("Surfshark DNS", ["194.169.169.169"], "194.169.169.169", "dns.surfsharkdns.com",
+            Note: "без записи запросов", Group: DnsGroup.Open,
+            UdpV6: ["2a09:a707:169::"]),
+        // Wikimedia DNS: обычный DNS на порту 53 закрыт намеренно (encrypted_only).
+        new("Wikimedia DNS", [], "185.71.138.138", "wikimedia-dns.org",
+            Note: "без фильтров, Википедия", Group: DnsGroup.Open),
+        new("NextDNS", ["45.90.28.0", "45.90.30.0"], "45.90.28.0", "dns.nextdns.io",
+            Note: "без фильтрации, пока не заведён свой профиль", Group: DnsGroup.Open,
+            UdpV6: ["2a07:a8c0::", "2a07:a8c1::"]),
+        new("Quad9 без фильтра", ["9.9.9.10", "149.112.112.10"], "9.9.9.10", "dns10.quad9.net",
+            Note: "как Quad9, но ничего не отсекает", Group: DnsGroup.Open,
+            UdpV6: ["2620:fe::10", "2620:fe::fe:10"]),
+        new("Alibaba", ["223.5.5.5", "223.6.6.6"], "223.5.5.5", "dns.alidns.com",
+            Note: "китайский, без фильтрации", Group: DnsGroup.Open,
+            UdpV6: ["2400:3200::1", "2400:3200:baba::1"]),
+
+        // Посредники («Для ИИ» в Zapret GUI 21.1.7.314 — все девять серверов с обновлением по имени DoH).
+        new("Zapret DNS", [], "104.21.15.208", "dns.zapret.moe",
+            Note: "сервер проекта Zapret, нейросети и Spotify — через его прокси",
+            Group: DnsGroup.Intermediary,
+            Services: ["chatgpt.com", "claude.ai", "gemini.google.com", "open.spotify.com", "grok.com", "twitch.tv"],
+            AddressesByName: true,
+            FormerAddresses: ["172.67.164.60", "144.31.82.230", "83.217.211.149", "38.180.241.191"]),
+        new("Comss.one", ["141.133.183.77", "141.133.184.24"], "141.133.183.77", "dns.comss.one",
+            Note: "нейросети, без рекламы", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["141.133.184.24", "83.220.169.155", "212.109.195.93", "155.212.172.101"]),
+        new("AstraCat", ["135.106.217.200", "135.106.197.22"], "135.106.217.200", "dns.astracat.network",
+            Note: "ChatGPT, без рекламы", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["135.106.197.22"]),
+        new("GeoHide", ["37.230.192.51", "193.233.112.88"], "37.230.192.51", "geohide.ru",
+            Note: "ChatGPT, Grok, Notion", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["193.233.112.67", "193.233.112.68", "193.233.112.88"]),
+        new("GeoHide EU", ["5.175.161.3", "5.175.161.40"], "5.175.161.40", "eu.geohide.ru",
+            Note: "ChatGPT, узлы в Европе", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["5.175.161.3", "37.221.93.128", "37.221.93.141", "45.13.237.213"]),
+        new("GeoHide US", ["192.255.159.240", "192.255.159.241"], "192.255.159.240", "us.geohide.ru",
+            Note: "ChatGPT, узлы в США", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["192.255.159.241"]),
+        new("Malw.link", ["179.254.166.171", "164.5.224.81"], "179.254.166.171", "dns.malw.link",
+            Note: "нейросети и сайты", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["164.5.224.81"],
+            UdpV6: ["2a12:bec4:1bb0:27dd::2", "2a13:82c0:0:d::3"]),
+        // Bezmezhau: DoH отвечает на втором адресе (31.58.216.201), а 143.20.64.55 — по DoT/UDP (замер 26.11).
+        new("Bezmezhau", ["31.58.216.201", "143.20.64.55"], "31.58.216.201", "dns.bezmezhau.com",
+            Note: "ChatGPT и Claude", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["143.20.64.55"]),
+        // DNS-AI: обычный DNS наружу не отдаёт (encrypted_only); DoH на 194.87.196.13 и 45.151.102.219.
+        new("DNS-AI", [], "194.87.196.13", "dns.dns-ai.ru",
+            Note: "нейросети, без рекламы", Group: DnsGroup.Intermediary,
+            AddressesByName: true, FormerAddresses: ["45.151.102.219", "192.144.59.14", "186.246.49.127"],
+            UdpV6: ["2a0d:8480:0:67c::14", "2a0a:2b41:0:500d::53"]),
+
+        // Только для обзора открытого DNS (без DoH или не годятся в апстрим туннеля).
+        new("DNS.Watch", ["84.200.69.80", "84.200.70.40"],
+            Note: "без цензуры и записи", Group: DnsGroup.Open,
+            UdpV6: ["2001:1608:10:25::1c04:b12f", "2001:1608:10:25::9249:d69b"]),
+        new("UltraDNS", ["64.6.64.6", "64.6.65.6"],
+            Note: "надёжный, без фильтров", Group: DnsGroup.Open,
+            UdpV6: ["2620:74:1b::1:1", "2620:74:1c::2:2"]),
+        new("XBOX DNS", ["111.88.96.54", "111.88.96.55"], "111.88.96.54", "xbox-dns.ru",
+            Note: "российский посредник: ИИ отключён с 08.10",
+            ForTunnel: false, Group: DnsGroup.Intermediary),
         new("MSK-IX", ["62.76.76.62", "62.76.62.76"]),
         new("НСДИ", ["195.208.4.1", "195.208.5.1"]),
     ];
@@ -712,7 +775,12 @@ public static class DnsSurvey
     /// перестают работать и узнавание адресов по имени, и опрос посредников.
     /// Запасные идут по очереди — на чистой линии срабатывает первый.
     /// </remarks>
-    private static readonly DnsProvider[] HonestChain = [Providers[1], Providers[0], Providers[2]];
+    private static readonly DnsProvider[] HonestChain =
+    [
+        Providers.First(p => p.Name == "Cloudflare"),
+        Providers.First(p => p.Name == "Google"),
+        Providers.First(p => p.Name == "Quad9"),
+    ];
 
     /// <summary>Запрос TXT через честный DoH.</summary>
     private static async Task<string?> HonestTxtAsync(string name, int? nic, CancellationToken cancellationToken)
@@ -945,7 +1013,7 @@ public static class DnsSurvey
         var nic = PhysicalInterface();
         var honest = await HonestAnswersAsync(nic, cancellationToken);
 
-        using var slots = new SemaphoreSlim(4);
+        using var slots = new SemaphoreSlim(8);
 
         var tasks = list.Select(async provider =>
         {

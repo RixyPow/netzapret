@@ -111,7 +111,7 @@ public sealed class ResolverGroup
     {
         DnsGroup.Intermediary => ("Посредники", "закрытые по стране сервисы отдают на свои прокси; автовыбор их не берёт"),
         DnsGroup.Popular => ("Популярные", string.Empty),
-        DnsGroup.Open => ("Без фильтрации", string.Empty),
+        DnsGroup.Open => ("Без фильтрации", "и малоизвестные — реже попадают под блокировки"),
         DnsGroup.Filtering => ("С фильтрацией", "отсекают рекламу, вредоносное или сайты 18+"),
         DnsGroup.Encrypted => ("Шифрованные", "DNSCrypt и ODoH: запрос не подменить и не закрыть по имени"),
         _ => ("Свои", string.Empty),
@@ -311,14 +311,20 @@ public partial class DnsView : UserControl
         if (name.StartsWith("Cloudflare", StringComparison.OrdinalIgnoreCase)) return "one.one.one.one";
         if (name.StartsWith("Quad9", StringComparison.OrdinalIgnoreCase)) return "quad9.net";
         if (name.StartsWith("AdGuard", StringComparison.OrdinalIgnoreCase)) return "adguard-dns.io";
-        if (name.StartsWith("Yandex", StringComparison.OrdinalIgnoreCase)) return "dns.yandex.ru";
+        if (name.StartsWith("Yandex", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("Яндекс", StringComparison.OrdinalIgnoreCase)) return "dns.yandex.ru";
         // С www: голый opendns.com переадресует на http://www… — с https на http
         // загрузчик не идёт, и логотипа не было (05.10).
         if (name.StartsWith("OpenDNS", StringComparison.OrdinalIgnoreCase)) return "www.opendns.com";
         if (name.StartsWith("CleanBrowsing", StringComparison.OrdinalIgnoreCase)) return "cleanbrowsing.org";
         if (name.StartsWith("NextDNS", StringComparison.OrdinalIgnoreCase)) return "nextdns.io";
-        if (name.StartsWith("ControlD", StringComparison.OrdinalIgnoreCase)) return "controld.com";
+        if (name.StartsWith("Control", StringComparison.OrdinalIgnoreCase)) return "controld.com";
         if (name.StartsWith("Alibaba", StringComparison.OrdinalIgnoreCase)) return "alidns.com";
+        if (name.StartsWith("DNS.SB", StringComparison.OrdinalIgnoreCase)) return "dns.sb";
+        if (name.StartsWith("Gcore", StringComparison.OrdinalIgnoreCase)) return "gcore.com";
+        if (name.StartsWith("Surfshark", StringComparison.OrdinalIgnoreCase)) return "surfshark.com";
+        if (name.StartsWith("Wikimedia", StringComparison.OrdinalIgnoreCase)) return "wikimedia.org";
+        if (name.StartsWith("StormyCloud", StringComparison.OrdinalIgnoreCase)) return "stormycloud.org";
 
         if (provider.TlsName is not { } tls)
             return null;

@@ -48,9 +48,9 @@ public sealed class PinWatchTests : IDisposable
     public void Pins_are_counted_by_intermediary_in_trust_order_with_bare_last()
     {
         Hosts(
-            "5.129.221.64 claude.ai # nz:via=zapret",
             "206.223.251.18 chatgpt.com # nz:via=comss",
             "206.223.251.18 openai.com # nz:via=comss",
+            "185.4.64.180 claude.ai # nz:via=zapret",
             "1.2.3.4 grok.com",
             "9.9.9.9 old.example # nz:via=gone",
             "157.240.0.1 instagram.com # " + HostsEditor.DesyncMark);
@@ -60,7 +60,7 @@ public sealed class PinWatchTests : IDisposable
         // Пин на адрес сервиса проверка не берёт — и под присмотром его нет;
         // незнакомый ключ — как без посредника; чужая строка вне блока не в счёт.
         Assert.Equal(
-            [new PinWatchGroup("Comss DNS", 2), new PinWatchGroup("Zapret DNS", 1), new PinWatchGroup(null, 2)],
+            [new PinWatchGroup("Zapret DNS", 1), new PinWatchGroup("Comss DNS", 2), new PinWatchGroup(null, 2)],
             watch.Groups);
         Assert.Equal(5, watch.Watched);
     }
