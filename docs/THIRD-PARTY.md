@@ -111,7 +111,7 @@ Kaspersky, `Not-a-virus:UDS:NetTool.Win64.CloudTunnel.a`: средство
 
 `engines/zapret/exe/winws2.exe` — с 07.10 родная сборка под Windows от loop-uh
 (автора Zapret GUI): [zapret2-fork](https://git.zapret.moe/zapretdiscordyoutube/zapret2-fork),
-после 1.6.4 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-113-gbb02010-native`
+с 1.6.5 — выпуск `v1.0.7-34-gfd8ae05-native-3-g0de505f-native-113-gbb02010-native`
 (SHA-256 `d3f878ee511aa81b7b6135bd0fef5e73931a7b55999aa28b30340a6dd53a1c1f`,
 сверен с описанием выпуска), в 1.6.4 — `…-native-101-g928984d-native` (`90cfe5f8…b92a63ba`),
 в 1.6.3 — `…-native-67-ge2bb3c5-native` (`673fac55…94f40869c`),
@@ -191,8 +191,8 @@ MIT разрешает распространение в любом виде, в
   `init_vars.lua`, `silent-drop-detector.lua`, `strategies.lua`,
   `strategy-lock-manager.lua`, `strategy-stats.lua`, `zapret-16kb.lua`,
   `zapret-multishake.lua`, `zapret-rst-flood.lua`, `zapret-wgobfs.lua` —
-  и шесть файлов со стратегиями рядом с ними (`circular-config.txt`,
-  `strategies-*-source.txt`). Наши пресеты Universal V10, V11, V11 Lite, V12, V12 Lite, V13 и V13 Lite грузят пять из этих
+  и файл со стратегиями `circular-config.txt` рядом с ними (пять устаревших
+  `strategies-*-source.txt` убраны с копии 21.1.7.313). Наши пресеты Universal V10, V11, V11 Lite, V12, V12 Lite, V13 и V13 Lite грузят пять из этих
   модулей: на одном winws2 от bol-van они бы не поднялись;
 * **списки доменов и адресов** в `engines/zapret/lists/` — мы их не изменяем
   и не дополняем, только читаем. Один из них, `ipset-all.txt`, в установку
