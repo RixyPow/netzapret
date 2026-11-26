@@ -635,6 +635,131 @@ public class SingBoxConfigCompilerTests
         Assert.True(fake >= 0 && fake < panel, "правило панели стоит раньше fakeip");
     }
 
+    [Theory]
+    [InlineData(true, "bootstrap")]
+    [InlineData(false, "remote")]
+    public void FullTunnelPanelHostnamesResolveBeforeFakeAndRouteDirectly(bool throughTunnel, string expectedDnsServer)
+    {
+        const string proxyAllYaml = """
+            mode: proxy_all
+            rules:
+              - match: domain
+                value: "*.ru"
+                mode: direct
+            """;
+
+        var root = CompileWith(proxyAllYaml, new SingBoxOptions
+        {
+            Scope = TunnelScope.Everything,
+            DnsThroughTunnel = throughTunnel,
+            PanelHosts = ["panel.example.net"],
+        });
+
+        var dnsRules = root.GetProperty("dns").GetProperty("rules").EnumerateArray().ToList();
+        int panelDns = dnsRules.FindIndex(r =>
+            r.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "panel.example.net"));
+        int catchAllFake = dnsRules.FindIndex(r =>
+            r.TryGetProperty("server", out var s) && s.GetString() == "fake"
+            && r.TryGetProperty("query_type", out _));
+
+        Assert.True(panelDns >= 0, "правила DNS для панели нет");
+        Assert.Equal(expectedDnsServer, dnsRules[panelDns].GetProperty("server").GetString());
+        Assert.True(catchAllFake > panelDns, "общий fakeip стоит раньше правила панели и перекрывает его");
+
+        var routeRules = root.GetProperty("route").GetProperty("rules").EnumerateArray().ToList();
+        Assert.Contains(routeRules, r =>
+            r.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "panel.example.net")
+            && r.TryGetProperty("outbound", out var o) && o.GetString() == "direct");
+    }
+
+    [Fact]
+    public void FullTunnelExplicitlyProxiedPanelStaysInTunnel()
+    {
+        const string proxyAllYaml = """
+            mode: proxy_all
+            rules:
+              - match: domain
+                value: "*.panel.example.net"
+                mode: proxy
+              - match: domain
+                value: "*.ru"
+                mode: direct
+            """;
+
+        var root = CompileWith(proxyAllYaml, new SingBoxOptions
+        {
+            Scope = TunnelScope.Everything,
+            DnsThroughTunnel = true,
+            PanelHosts = ["sub.panel.example.net", "open.example.org"],
+        });
+
+        var routeRules = root.GetProperty("route").GetProperty("rules").EnumerateArray().ToList();
+
+        Assert.DoesNotContain(routeRules, r =>
+            r.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "sub.panel.example.net")
+            && r.TryGetProperty("outbound", out var o) && o.GetString() == "direct");
+
+        Assert.Contains(routeRules, r =>
+            r.TryGetProperty("domain", out var d)
+            && d.EnumerateArray().Any(x => x.GetString() == "open.example.org")
+            && r.TryGetProperty("outbound", out var o) && o.GetString() == "direct");
+    }
+
+    [Fact]
+    public void FullTunnelWithPanelBypassPassesSingBoxCheck()
+    {
+        var singBox = FindSingBox();
+        if (singBox is null)
+            return;
+
+        const string proxyAllYaml = """
+            mode: proxy_all
+            rules:
+              - match: domain
+                value: "*.ru"
+                mode: direct
+            """;
+
+        var engine = RuleSetLoader.Load(proxyAllYaml);
+        var result = new SingBoxConfigCompiler().Compile(
+            engine.RuleSet,
+            [Server("vl", ProxyProtocol.Vless, "tcp")],
+            new SingBoxOptions
+            {
+                Scope = TunnelScope.Everything,
+                DnsThroughTunnel = true,
+                PanelHosts = ["panel.example.net", "sub.example.org"],
+            });
+
+        var path = Path.Combine(Path.GetTempPath(), $"netzapret-check-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            SingBoxConfigCompiler.WriteToFile(path, result.Json);
+
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = singBox,
+                ArgumentList = { "check", "-c", path },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            })!;
+
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+
+            Assert.True(process.ExitCode == 0, $"sing-box check не пройден: {stderr}");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void WithoutTunnelDnsPanelHostnamesNeedNoRule()
     {

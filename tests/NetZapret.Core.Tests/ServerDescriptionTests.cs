@@ -106,4 +106,16 @@ public sealed class ServerDescriptionTests
     {
         Assert.Equal(fake, PanelBypass.IsFake(IPAddress.Parse(address)));
     }
+
+    [Fact]
+    public void Panel_bypass_has_multiple_ip_doh_resolvers()
+    {
+        Assert.True(PanelBypass.DohServers.Length >= 2);
+        Assert.All(PanelBypass.DohServers, s =>
+        {
+            Assert.True(IPAddress.TryParse(s.Address, out _));
+            Assert.True(s.Port > 0);
+            Assert.StartsWith("/", s.Path);
+        });
+    }
 }

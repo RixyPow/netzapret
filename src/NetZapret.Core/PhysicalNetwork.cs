@@ -120,6 +120,27 @@ public static class PhysicalNetwork
     /// <summary>Подключена ли машина к сети.</summary>
     public static bool Up() => Interface() is not null;
 
+    /// <summary>Поднят ли наш TUN-адаптер (движок туннеля сейчас перехватывает трафик).</summary>
+    public static bool TunnelActive()
+    {
+        try
+        {
+            foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.OperationalStatus == OperationalStatus.Up
+                    && nic.Name.StartsWith("netzapret", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (NetworkInformationException)
+        {
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Ждёт сети не дольше <paramref name="limit"/>; <c>true</c> — появилась.
     /// </summary>

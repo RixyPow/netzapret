@@ -36,9 +36,27 @@ internal static class PanelBypass
 {
     private static readonly TimeSpan ResolveTimeout = TimeSpan.FromSeconds(4);
 
-    /// <summary>Отдала ли система имени подставной адрес движка — то есть ушёл ли запрос в туннель.</summary>
+    /// <summary>
+    /// Цепочка DoH-резолверов по IP для обхода туннеля: если Cloudflare (1.1.1.1)
+    /// закрыт у провайдера, пробуем Google (8.8.4.4) и Quad9 (9.9.9.9).
+    /// </summary>
+    internal static readonly (string Address, int Port, string Path)[] DohServers =
+    [
+        ("1.1.1.1", 443, "/dns-query"),
+        ("8.8.4.4", 443, "/resolve"),
+        ("9.9.9.9", 5053, "/dns-query"),
+    ];
+
+    /// <summary>
+    /// Мог ли запрос уйти в туннель: либо поднят наш TUN-адаптер (в полном
+    /// перехвате туда попадают и настоящие адреса, и голые IP), либо система
+    /// отдала имени подставной адрес движка.
+    /// </summary>
     public static async Task<bool> TunnelledAsync(string host, CancellationToken cancellationToken)
     {
+        if (PhysicalNetwork.TunnelActive())
+            return true;
+
         if (IPAddress.TryParse(host, out _))
             return false;
 
@@ -76,6 +94,7 @@ internal static class PanelBypass
 
         return new HttpClient(new SocketsHttpHandler
         {
+            UseProxy = false,
             AutomaticDecompression = DecompressionMethods.All,
             ConnectTimeout = timeout,
             ConnectCallback = async (context, cancellationToken) =>
@@ -103,22 +122,35 @@ internal static class PanelBypass
         };
     }
 
-    /// <summary>Настоящий адрес IPv4 по DoH Cloudflare, тоже мимо туннеля.</summary>
+    /// <summary>Настоящий адрес IPv4 по DoH, мимо туннеля и с запасными резолверами.</summary>
     private static async Task<IPAddress?> ResolveAsync(string host, int nic, CancellationToken cancellationToken)
     {
         if (IPAddress.TryParse(host, out var literal))
             return literal;
 
+        foreach (var (server, port, path) in DohServers)
+        {
+            if (await QueryDohAsync(server, port, path, host, nic, cancellationToken) is { } address)
+                return address;
+        }
+
+        return null;
+    }
+
+    private static async Task<IPAddress?> QueryDohAsync(
+        string server, int port, string path, string host, int nic, CancellationToken cancellationToken)
+    {
         using var doh = new HttpClient(new SocketsHttpHandler
         {
-            ConnectCallback = async (context, token) =>
+            UseProxy = false,
+            ConnectCallback = async (_, token) =>
             {
                 var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
                 try
                 {
                     Bind(socket, nic);
-                    await socket.ConnectAsync(IPAddress.Parse("1.1.1.1"), context.DnsEndPoint.Port, token);
+                    await socket.ConnectAsync(IPAddress.Parse(server), port, token);
                     return new NetworkStream(socket, ownsSocket: true);
                 }
                 catch
@@ -136,8 +168,9 @@ internal static class PanelBypass
 
         try
         {
+            var authority = port == 443 ? server : $"{server}:{port}";
             using var answer = await doh.GetFromJsonAsync<JsonDocument>(
-                $"https://1.1.1.1/dns-query?name={Uri.EscapeDataString(host)}&type=A", cancellationToken);
+                $"https://{authority}{path}?name={Uri.EscapeDataString(host)}&type=A", cancellationToken);
 
             if (answer is null || !answer.RootElement.TryGetProperty("Answer", out var records))
                 return null;

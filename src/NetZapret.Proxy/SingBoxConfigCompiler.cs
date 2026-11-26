@@ -1124,11 +1124,21 @@ public sealed class SingBoxConfigCompiler
             });
         }
 
+        var directPanels = options.Scope != TunnelScope.ProxyOnly && ruleSet.Operating != OperatingMode.ProxyStrict
+            ? DirectPanelHosts(options.PanelHosts, ruleSet)
+            : [];
+
         if (options.RouterDns)
         {
             // Сохраняем порядок доменных правил: прямым доменам нужны реальные ответы роутера,
             // в том числе прямым исключениям полного туннеля; проксируемым оставляем FakeIP.
             foreach (var rule in OrderedDomainRules(ruleSet, haveServers)) rules.Add(rule);
+
+            // Панели подписок — до общего fakeip полного перехвата, иначе при мёртвом
+            // выходе обновление подписки уходит в тот же мёртвый туннель (26.11).
+            if (directPanels.Count > 0)
+                rules.Add(PanelDnsRule(directPanels, bootstrap ? BootstrapTag : "remote"));
+
             if (options.Scope != TunnelScope.ProxyOnly && haveServers
                 && ruleSet.Operating is OperatingMode.ProxyAll or OperatingMode.ProxyStrict)
                 rules.Add(new JsonObject { ["query_type"] = new JsonArray { "A", "AAAA" }, ["server"] = "fake" });
@@ -1155,6 +1165,13 @@ public sealed class SingBoxConfigCompiler
         }
         else if (options.Scope != TunnelScope.ProxyOnly)
         {
+            // В «Всё через VPN» общее правило fake стоит на все A/AAAA: правило
+            // для панелей после него никогда не срабатывало, и при мёртвом выходе
+            // повторное обновление подписки упиралось в мёртвый туннель (26.11).
+            // Панели, не отправленные человеком в VPN явно, разрешаются до fake.
+            if (directPanels.Count > 0)
+                rules.Add(PanelDnsRule(directPanels, bootstrap ? BootstrapTag : "remote"));
+
             rules.Add(new JsonObject
             {
                 ["query_type"] = new JsonArray { "A", "AAAA" },
@@ -1165,23 +1182,12 @@ public sealed class SingBoxConfigCompiler
         // Панели подписок — мимо туннеля, иначе при мёртвом выходе за новыми
         // серверами не сходить: «Этот хост неизвестен» (жалоба 24.09).
         //
-        // После fakeip, а не раньше. Панель, которую человек сам отправил
-        // в VPN, — а часть панелей в РФ закрыта, — должна получить fakeip
-        // и уйти в туннель, как он решил; иначе мы молча отменили бы его
+        // В «Гибриде» после fakeip, а не раньше. Панель, которую человек сам
+        // отправил в VPN, — а часть панелей в РФ закрыта, — должна получить
+        // fakeip и уйти в туннель, как он решил; иначе мы молча отменили бы его
         // выбор ради случая, когда этот выбор и так не работает.
-        if (bootstrap && options.PanelHosts.Count > 0)
-        {
-            var panels = new JsonArray();
-
-            foreach (var host in options.PanelHosts)
-                panels.Add(host);
-
-            rules.Add(new JsonObject
-            {
-                ["domain"] = panels,
-                ["server"] = BootstrapTag,
-            });
-        }
+        if (bootstrap && options.PanelHosts.Count > 0 && options.Scope == TunnelScope.ProxyOnly)
+            rules.Add(PanelDnsRule(options.PanelHosts, BootstrapTag));
 
         // Последним, перед final: всё, что иначе ушло бы в remote, в режиме
         // dns-tcp идёт по TCP. Правила выше — fakeip, подставные адреса,
@@ -1213,6 +1219,68 @@ public sealed class SingBoxConfigCompiler
         dns["final"] = "remote";
 
         return dns;
+    }
+
+    private static JsonObject PanelDnsRule(IReadOnlyList<string> hosts, string server)
+    {
+        var domains = new JsonArray();
+        foreach (var host in hosts)
+            domains.Add(host);
+
+        return new JsonObject
+        {
+            ["domain"] = domains,
+            ["server"] = server,
+        };
+    }
+
+    /// <summary>
+    /// Панели подписок, которые человек не отправил в VPN явным доменным правилом
+    /// (учитывается первое совпадение в очереди правил).
+    /// </summary>
+    private static List<string> DirectPanelHosts(IReadOnlyList<string> panelHosts, RuleSet ruleSet)
+    {
+        if (panelHosts.Count == 0)
+            return [];
+
+        var activeDomainRules = ruleSet.Rules
+            .Where(r => r.Enabled && !r.Off && r.Match == MatchKind.Domain)
+            .ToArray();
+
+        var result = new List<string>(panelHosts.Count);
+
+        foreach (var host in panelHosts)
+        {
+            var matched = activeDomainRules.FirstOrDefault(r => DomainRuleMatches(r.Value, host));
+
+            if (matched is not { Mode: RoutingMode.Proxy })
+                result.Add(host);
+        }
+
+        return result;
+    }
+
+    private static bool DomainRuleMatches(string pattern, string host)
+    {
+        var value = pattern.Trim().TrimEnd('.');
+        if (value.Length == 0)
+            return false;
+
+        if (value.StartsWith("*.", StringComparison.Ordinal))
+        {
+            var suffix = value[2..];
+            return host.Equals(suffix, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (value.StartsWith('.'))
+        {
+            var suffix = value[1..];
+            return host.Equals(suffix, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return host.Equals(value, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -2734,6 +2802,26 @@ public sealed class SingBoxConfigCompiler
                 rules.Add(node);
         }
 
+        // В режиме полного перехвата («Всё через VPN») панели подписок, не
+        // отправленные в VPN явно, должны идти напрямую — иначе при падении
+        // всех выходов подписку не обновить, пока движок не остановлен (26.11).
+        if (options.Scope != TunnelScope.ProxyOnly && ruleSet.Operating != OperatingMode.ProxyStrict && haveServers)
+        {
+            var directPanels = DirectPanelHosts(options.PanelHosts, ruleSet);
+
+            if (directPanels.Count > 0)
+            {
+                var domains = new JsonArray();
+                foreach (var host in directPanels)
+                    domains.Add(host);
+
+                rules.Add(new JsonObject
+                {
+                    ["domain"] = domains,
+                    ["outbound"] = "direct",
+                });
+            }
+        }
 
         return new JsonObject
         {
