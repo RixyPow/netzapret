@@ -73,9 +73,13 @@ public static class BrowserDns
 
         if (Directory.Exists(profiles))
         {
-            foreach (var prefs in Directory.EnumerateFiles(profiles, "prefs.js", SearchOption.AllDirectories))
+            // prefs.js лежит прямо в корне каждой папки профиля; SearchOption.AllDirectories
+            // обходил бы тысячи файлов кэша и расширений Firefox.
+            foreach (var dir in Directory.EnumerateDirectories(profiles))
             {
-                if (FirefoxTrr(SafeRead(prefs)) is { } trr)
+                var prefs = Path.Combine(dir, "prefs.js");
+
+                if (File.Exists(prefs) && FirefoxTrr(SafeRead(prefs)) is { } trr)
                 {
                     found.Add(new("Firefox", trr, "Настройки → Приватность и защита → DNS через HTTPS"));
                     break;

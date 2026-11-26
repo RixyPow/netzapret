@@ -1,33 +1,108 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using NetZapret.Core;
+using NetZapret.Core.Diagnostics;
 using NetZapret.Proxy;
 using NetZapret.Supervisor;
 
 namespace NetZapret.Gui.Views;
 
 /// <summary>Резолвер в списке выбора.</summary>
-public sealed class ResolverRow
+/// <remarks>
+/// Извещает окно о смене полей на месте (<see cref="INotifyPropertyChanged"/>):
+/// до 27.11 каждое изменение значка, задержки, пометки или выбора сносило весь
+/// список через <c>ItemsSource = null</c> — при ~44 резолверах одно такое
+/// пересоздание занимало ~0,7–0,8 с потока окна, а за обзор накапливалось
+/// десятки подвисаний до 2,2 с.
+/// </remarks>
+public sealed class ResolverRow : INotifyPropertyChanged
 {
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void Notify(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private string _address = string.Empty;
+    private string _latency = "—";
+    private string _key = "Faint";
+    private bool _chosen;
+    private BitmapImage? _icon;
+    private string? _badge;
+    private string _badgeKey = "Danger";
+    private string? _badgeTip;
+    private IReadOnlyList<BitmapImage> _serviceIcons = [];
+    private IReadOnlyList<string>? _tags;
+
     public required string Name { get; init; }
 
     /// <summary>Ключ выбора: адрес DoH либо <c>dnscrypt:режим</c> (<see cref="DnsView.CryptTag"/>).</summary>
-    public required string Address { get; set; }
+    public required string Address
+    {
+        get => _address;
+        set
+        {
+            if (string.Equals(_address, value, StringComparison.Ordinal))
+                return;
+
+            _address = value;
+            Notify(nameof(Address));
+            Notify(nameof(Shown));
+        }
+    }
 
     /// <summary>Что написать под именем; <c>null</c> — сам адрес.</summary>
     public string? Display { get; init; }
 
-    public string Shown => Display ?? Address;
+    public string Shown => Display ?? _address;
 
     public required string Note { get; init; }
 
     /// <summary>Отклик либо причина молчания; до замера — прочерк.</summary>
-    public string Latency { get; set; } = "—";
+    public string Latency
+    {
+        get => _latency;
+        set
+        {
+            if (string.Equals(_latency, value, StringComparison.Ordinal))
+                return;
 
-    public string Key { get; set; } = "Faint";
+            _latency = value;
+            Notify(nameof(Latency));
+        }
+    }
 
-    public bool Chosen { get; set; }
+    public string Key
+    {
+        get => _key;
+        set
+        {
+            if (string.Equals(_key, value, StringComparison.Ordinal))
+                return;
+
+            _key = value;
+            Notify(nameof(Key));
+            Notify(nameof(Color));
+        }
+    }
+
+    public bool Chosen
+    {
+        get => _chosen;
+        set
+        {
+            if (_chosen == value)
+                return;
+
+            _chosen = value;
+            Notify(nameof(Chosen));
+            Notify(nameof(Edge));
+            Notify(nameof(MarkShown));
+        }
+    }
 
     /// <summary>Свой резолвер (<see cref="CustomDns"/>) — его можно убрать.</summary>
     public bool Own { get; init; }
@@ -40,31 +115,44 @@ public sealed class ResolverRow
 
     public Visibility RemoveShown => Own ? Visibility.Visible : Visibility.Collapsed;
 
-    public Brush Color => (Brush)Application.Current.FindResource(Key);
+    public Brush Color => (Brush)Application.Current.FindResource(_key);
 
-    public Brush Edge => (Brush)Application.Current.FindResource(Chosen ? "Accent" : "Border");
+    public Brush Edge => (Brush)Application.Current.FindResource(_chosen ? "Accent" : "Border");
 
-    public Visibility MarkShown => Chosen ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility MarkShown => _chosen ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Ярлыки из пояснения провайдера: «надёжный, без фильтрации» — два ярлыка.
     /// </summary>
-    public IReadOnlyList<string> Tags => Note
+    public IReadOnlyList<string> Tags => _tags ??= Note
         .Split(", ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
         .Select(tag => char.ToUpper(tag[0]) + tag[1..])
         .ToList();
 
     /// <summary>Логотип с сайта резолвера; <c>null</c> — вместо него буква.</summary>
-    public System.Windows.Media.Imaging.BitmapImage? Icon { get; set; }
+    public BitmapImage? Icon
+    {
+        get => _icon;
+        set
+        {
+            if (ReferenceEquals(_icon, value))
+                return;
+
+            _icon = value;
+            Notify(nameof(Icon));
+            Notify(nameof(IconShown));
+            Notify(nameof(LetterShown));
+        }
+    }
 
     /// <summary>Сайт, с которого берётся логотип; <c>null</c> — брать неоткуда.</summary>
     public string? Site { get; init; }
 
     public string Letter => Name.Length > 0 ? Name[..1].ToUpperInvariant() : "·";
 
-    public Visibility IconShown => Icon is null ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility IconShown => _icon is null ? Visibility.Collapsed : Visibility.Visible;
 
-    public Visibility LetterShown => Icon is null ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility LetterShown => _icon is null ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     /// Пометка по обзору у этого человека: «блокируется» — DoH не прошёл,
@@ -77,21 +165,73 @@ public sealed class ResolverRow
     /// отвечали честно, подменялся только UDP. Поэтому — по замеру, а не
     /// заранее: туннелю важен DoH, системе Windows с этим адресом — UDP.
     /// </remarks>
-    public string? Badge { get; set; }
+    public string? Badge
+    {
+        get => _badge;
+        set
+        {
+            if (string.Equals(_badge, value, StringComparison.Ordinal))
+                return;
 
-    public string BadgeKey { get; set; } = "Danger";
+            _badge = value;
+            Notify(nameof(Badge));
+            Notify(nameof(BadgeShown));
+        }
+    }
 
-    public string? BadgeTip { get; set; }
+    public string BadgeKey
+    {
+        get => _badgeKey;
+        set
+        {
+            if (string.Equals(_badgeKey, value, StringComparison.Ordinal))
+                return;
 
-    public Brush BadgeBrush => (Brush)Application.Current.FindResource(BadgeKey);
+            _badgeKey = value;
+            Notify(nameof(BadgeKey));
+            Notify(nameof(BadgeBrush));
+        }
+    }
 
-    public Visibility BadgeShown => Badge is null ? Visibility.Hidden : Visibility.Visible;
+    public string? BadgeTip
+    {
+        get => _badgeTip;
+        set
+        {
+            if (string.Equals(_badgeTip, value, StringComparison.Ordinal))
+                return;
+
+            _badgeTip = value;
+            Notify(nameof(BadgeTip));
+        }
+    }
+
+    public Brush BadgeBrush => (Brush)Application.Current.FindResource(_badgeKey);
+
+    public Visibility BadgeShown => _badge is null ? Visibility.Hidden : Visibility.Visible;
 
     /// <summary>Сайты сервисов посредника (<see cref="DnsProvider.Services"/>).</summary>
     public IReadOnlyList<string> ServiceSites { get; init; } = [];
 
     /// <summary>Значки этих сервисов — из кэша значков сайтов, по мере загрузки.</summary>
-    public IReadOnlyList<System.Windows.Media.Imaging.BitmapImage> ServiceIcons { get; set; } = [];
+    public IReadOnlyList<BitmapImage> ServiceIcons
+    {
+        get => _serviceIcons;
+        set
+        {
+            if (ReferenceEquals(_serviceIcons, value)
+                || (_serviceIcons.Count == value.Count && _serviceIcons.SequenceEqual(value)))
+            {
+                return;
+            }
+
+            _serviceIcons = value;
+            Notify(nameof(ServiceIcons));
+            Notify(nameof(ServiceIconsShown));
+        }
+    }
+
+    public Visibility ServiceIconsShown => _serviceIcons.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 }
 
 /// <summary>Раздел списка резолверов (<see cref="DnsGroup"/>).</summary>
@@ -101,9 +241,12 @@ public sealed class ResolverGroup
 
     public string Caption { get; init; } = string.Empty;
 
-    public required IReadOnlyList<ResolverRow> Rows { get; init; }
+    /// <summary>Полное число резолверов раздела — известно сразу, пока строки достраиваются порциями.</summary>
+    public required int TotalCount { get; init; }
 
-    public string Count => Rows.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    public ObservableCollection<ResolverRow> Rows { get; } = [];
+
+    public string Count => TotalCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     public Visibility CaptionShown => Caption.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
 
@@ -233,7 +376,7 @@ public partial class DnsView : UserControl
     private static LastSurvey? _last;
 
     /// <summary>Показывает последний обзор: таблицу и задержки в списке.</summary>
-    private void ShowLast()
+    private void ShowLast(bool updateStatus = true)
     {
         if (_last is not { } last)
             return;
@@ -246,12 +389,14 @@ public partial class DnsView : UserControl
         foreach (var crypt in last.Crypt)
             FillCrypt(choices, crypt);
 
-        Survey.ItemsSource = last.Rows.Select(SurveyRow.From).ToList();
+        var surveyRows = new ObservableCollection<SurveyRow>();
+        Survey.ItemsSource = surveyRows;
         SurveyHead.Visibility = Visibility.Visible;
+        StartSurveyFill(surveyRows, last.Rows.Select(SurveyRow.From).ToArray());
         SaySurvey($"{last.Status} Проверено в {last.At:HH:mm}.");
-        Status.Text = $"Задержка — из обзора в {last.At:HH:mm}.";
 
-        Redraw();
+        if (updateStatus)
+            Status.Text = $"Задержка — из обзора в {last.At:HH:mm}.";
     }
 
     /// <summary>Две строки под итогом обзора: когда мерилось и кто быстрее всех по DoH.</summary>
@@ -334,7 +479,11 @@ public partial class DnsView : UserControl
         return labels.Length > 2 ? string.Join('.', labels[^2..]) : tls;
     }
 
-    /// <summary>Логотипы: из кэша сразу, остальные — в фоне, по одному.</summary>
+    /// <summary>
+    /// Докачка отсутствующих логотипов в фоне, по одному.
+    /// Кэшированные уже прочитаны в фоновом <see cref="ReadSnapshot"/> до показа списка;
+    /// пришедшие из сети меняют свойства одной строки на месте без перестройки списка.
+    /// </summary>
     private void StartLogos()
     {
         _logos?.Cancel();
@@ -342,14 +491,6 @@ public partial class DnsView : UserControl
 
         var token = _logos.Token;
         var rows = _rows;
-
-        foreach (var row in rows)
-        {
-            row.Icon = row.Site is { } site ? SiteIcons.Cached(site) : null;
-            row.ServiceIcons = ServiceIconsOf(row);
-        }
-
-        Redraw();
 
         _ = Task.Run(async () =>
         {
@@ -366,13 +507,14 @@ public partial class DnsView : UserControl
                     if (await SiteIcons.ForAsync(service, token) is null || token.IsCancellationRequested)
                         continue;
 
-                    _ = Dispatcher.BeginInvoke(() =>
+                    var icons = ServiceIconsOf(row);
+
+                    _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                     {
                         if (token.IsCancellationRequested)
                             return;
 
-                        row.ServiceIcons = ServiceIconsOf(row);
-                        Redraw();
+                        row.ServiceIcons = icons;
                     });
                 }
 
@@ -384,38 +526,50 @@ public partial class DnsView : UserControl
                 if (icon is null || token.IsCancellationRequested)
                     continue;
 
-                _ = Dispatcher.BeginInvoke(() =>
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
                 {
                     if (token.IsCancellationRequested)
                         return;
 
                     row.Icon = icon;
-                    Redraw();
                 });
             }
         }, token);
     }
 
-    private static IReadOnlyList<System.Windows.Media.Imaging.BitmapImage> ServiceIconsOf(ResolverRow row) =>
-        row.ServiceSites.Select(SiteIcons.Cached).OfType<System.Windows.Media.Imaging.BitmapImage>().ToList();
+    private static IReadOnlyList<BitmapImage> ServiceIconsOf(ResolverRow row) =>
+        row.ServiceSites.Select(SiteIcons.Cached).OfType<BitmapImage>().ToList();
 
     public DnsView()
     {
         InitializeComponent();
 
+        Resolvers.ItemsSource = _groups;
+
         _dnsNowTimer.Tick += (_, _) => _ = ShowDnsNowAsync();
 
-        Loaded += (_, _) =>
+        // Опрос «Сейчас» идёт, только пока вкладка на экране (не в свёрнутом окне).
+        OnScreen.Watch(this, visible =>
         {
-            Reload();
-            _ = ShowDnsNowAsync();
-            _dnsNowTimer.Start();
-        };
+            if (visible)
+            {
+                _ = Dispatcher.BeginInvoke(() => _ = ShowDnsNowAsync());
+                _dnsNowTimer.Start();
+            }
+            else
+            {
+                _dnsNowTimer.Stop();
+            }
+        });
+
+        Loaded += (_, _) => Reload();
         Unloaded += (_, _) =>
         {
+            _loadGen++;
+            _fillGen++;
+            _surveyFillGen++;
             _work?.Cancel();
             _logos?.Cancel();
-            _dnsNowTimer.Stop();
         };
     }
 
@@ -423,7 +577,7 @@ public partial class DnsView : UserControl
     /// Строка «Сейчас» (<see cref="DnsNow"/>) — раз в 3 с, пока вкладка на экране:
     /// ступень DNS надзор меняет сам, не спрашивая окно.
     /// </summary>
-    private readonly System.Windows.Threading.DispatcherTimer _dnsNowTimer = new() { Interval = TimeSpan.FromSeconds(3) };
+    private readonly DispatcherTimer _dnsNowTimer = new() { Interval = TimeSpan.FromSeconds(3) };
 
     private bool _dnsNowBusy;
 
@@ -462,25 +616,142 @@ public partial class DnsView : UserControl
         }
     }
 
-    private void Reload()
+    /// <summary>Показанные группы резолверов — наполняются порциями (<see cref="FillLater"/>).</summary>
+    private readonly ObservableCollection<ResolverGroup> _groups = [];
+
+    /// <summary>Номер фоновой загрузки и порционной достройки: новый вход или уход с вкладки отменяют прежнюю.</summary>
+    private int _loadGen;
+    private int _fillGen;
+    private int _surveyFillGen;
+
+    /// <summary>Последний снимок системных резолверов и списка провайдеров, чтобы не дёргать адаптеры повторно на клике.</summary>
+    private IReadOnlyList<string> _systemResolvers = [];
+    private IReadOnlyList<DnsProvider> _allProviders = [];
+    private string? _spareKey;
+
+    /// <summary>Сколько карточек резолверов строить сразу — верх вкладки занят шестью карточками.</summary>
+    private const int FirstRows = 4;
+
+    /// <summary>Сколько карточек достраивать за один фоновый тик очереди окна.</summary>
+    private const int LaterRows = 5;
+
+    /// <summary>Сколько строк таблицы обзора добавлять за один тик (все 44 разом занимали ~370 мс, замер 27.11).</summary>
+    private const int SurveyBatch = 10;
+
+    /// <summary>
+    /// Наполняет таблицу обзора порциями, чтобы открытие сорока с лишним строк
+    /// не вешало поток окна в одном кадре.
+    /// </summary>
+    private void StartSurveyFill(ObservableCollection<SurveyRow> target, SurveyRow[] planned)
+    {
+        int gen = ++_surveyFillGen;
+        int index = 0;
+
+        void Step()
+        {
+            if (gen != _surveyFillGen || !IsLoaded)
+                return;
+
+            int end = Math.Min(index + SurveyBatch, planned.Length);
+
+            while (index < end)
+                target.Add(planned[index++]);
+
+            if (index < planned.Length)
+                Dispatcher.BeginInvoke(Step, DispatcherPriority.Background);
+        }
+
+        Step();
+    }
+
+    private sealed record DnsSnapshot(
+        AppSettings Settings,
+        IReadOnlyList<DnsProvider> AllProviders,
+        IReadOnlyList<string>? SystemResolvers,
+        string? SystemError,
+        IReadOnlyList<BrowserDnsBypass> BrowserBypasses,
+        PinWatch PinWatch,
+        IReadOnlyDictionary<string, ResolverVerdict> Verdicts,
+        IReadOnlyList<ResolverRow> Rows,
+        IReadOnlyList<(ResolverGroup Group, IReadOnlyList<ResolverRow> Rows)> Plan);
+
+    private void Reload(bool clearStatus = true)
+    {
+        int gen = ++_loadGen;
+        _fillGen++;
+        _logos?.Cancel();
+
+        if (clearStatus)
+            Status.Text = string.Empty;
+
+        _ = ReloadAsync(gen, clearStatus);
+    }
+
+    /// <summary>
+    /// Читает настройки, адаптеры, браузеры, hosts, пометки и кэш значков в фоне,
+    /// затем применяет в потоке окна и достраивает карточки резолверов порциями.
+    /// </summary>
+    /// <remarks>
+    /// Замер 27.11: синхронное чтение (SystemResolvers дважды, BrowserDns, PinRefresh,
+    /// ResolverVerdicts, DnsSurvey.All шесть раз, ~40 файлов кэша иконок) плюс
+    /// одновременная раскладка всех 44 карточек держали поток окна 733–1359 мс на заходе.
+    /// </remarks>
+    private async Task ReloadAsync(int gen, bool clearStatus)
+    {
+        DnsSnapshot snapshot;
+
+        try
+        {
+            snapshot = await Task.Run(ReadSnapshot);
+        }
+        catch (Exception ex)
+        {
+            if (gen == _loadGen)
+                Status.Text = "Не удалось прочитать настройки DNS: " + ex.GetBaseException().Message;
+
+            return;
+        }
+
+        if (gen != _loadGen || !IsLoaded)
+            return;
+
+        ApplySnapshot(snapshot, clearStatus);
+    }
+
+    private static DnsSnapshot ReadSnapshot()
     {
         var settings = AppSettings.Load(AppSettings.DefaultPath);
+        var all = DnsSurvey.All;
 
-        ShowChosen(settings);
-        ShowSystem();
-        ShowDnsLeakGuard(settings);
-        ShowBrowserDoh();
-        ShowAutoRepin(settings);
-        ShowPinWatch(settings.AutoRepin, PinRefresh.Watch());
+        IReadOnlyList<string>? systemResolvers = null;
+        string? systemError = null;
+
+        try
+        {
+            systemResolvers = SystemResolvers.Discover();
+        }
+        catch (Exception ex)
+        {
+            systemError = ex.GetBaseException().Message;
+        }
+
+        IReadOnlyList<BrowserDnsBypass> browserBypasses;
+
+        try
+        {
+            browserBypasses = BrowserDns.Scan();
+        }
+        catch (Exception)
+        {
+            browserBypasses = [];
+        }
+
+        var pinWatch = PinRefresh.Watch();
+        var verdicts = ResolverVerdicts.Load();
 
         // Те же провайдеры, что в обзоре, — все, кого sing-box может
-        // спрашивать по DoH. Прежде список был своим, из шести, и мерился
-        // своей кнопкой: две «Проверить» на одной вкладке, и чем они
-        // отличаются, было не понять.
-        //
-        // Свои — и без DoH тоже: выбрать такой туннелю нельзя, но убрать
-        // надо где-то уметь, а спрятанный он остался бы в файле навсегда.
-        var shown = DnsSurvey.All
+        // спрашивать по DoH. Свои — и без DoH тоже, чтобы их можно было убрать.
+        var shown = all
             .Where(p => p.Choosable || p.Own)
             .Select(p => (Group: p.Own ? DnsGroup.Own : p.Group, Row: new ResolverRow
             {
@@ -516,41 +787,122 @@ public partial class DnsView : UserControl
             });
         }));
 
-        _rows = shown.Select(x => x.Row).ToList();
+        var rows = shown.Select(x => x.Row).ToList();
 
-        // Пометки — с прошлых обзоров, и после перезапуска тоже (ResolverVerdicts);
-        // задержки — только из обзора в этом запуске (ShowLast). До привязки
-        // списка: строки об изменениях не извещают.
-        ShowVerdicts(ResolverVerdicts.Load());
+        // Пометки и уже закэшированные на диске значки — до показа списка в окне:
+        // Decode в SiteIcons замораживает BitmapImage, так что чтение потокобезопасно.
+        foreach (var row in rows)
+        {
+            ShowVerdict(row, verdicts.GetValueOrDefault(row.Address));
+            row.Icon = row.Site is { } site ? SiteIcons.Cached(site) : null;
+            row.ServiceIcons = ServiceIconsOf(row);
+        }
 
         // Разделами, как у Zapret GUI: посредники наверху, свои внизу.
-        Resolvers.ItemsSource = shown
+        var plan = shown
             .GroupBy(x => x.Group)
             .OrderBy(g => g.Key)
             .Select(g =>
             {
                 var (title, caption) = ResolverGroup.Describe(g.Key);
                 // Посредник со своими сервисами (Zapret DNS) — первым, как «сервер проекта» у Zapret GUI.
-                return new ResolverGroup
+                var groupRows = g.OrderBy(x => x.Row.ServiceSites.Count == 0).Select(x => x.Row).ToList();
+                var group = new ResolverGroup
                 {
                     Title = title,
                     Caption = caption,
-                    Rows = g.OrderBy(x => x.Row.ServiceSites.Count == 0).Select(x => x.Row).ToList(),
+                    TotalCount = groupRows.Count,
                 };
+                return (Group: group, Rows: (IReadOnlyList<ResolverRow>)groupRows);
             })
             .ToList();
 
-        Status.Text = string.Empty;
+        return new DnsSnapshot(settings, all, systemResolvers, systemError, browserBypasses, pinWatch, verdicts, rows, plan);
+    }
 
-        ShowLast();
+    private void ApplySnapshot(DnsSnapshot snapshot, bool clearStatus)
+    {
+        _allProviders = snapshot.AllProviders;
+        _systemResolvers = snapshot.SystemResolvers ?? [];
+
+        ShowChosen(snapshot.Settings, snapshot.AllProviders, _systemResolvers);
+        ShowSystem(snapshot.SystemResolvers, snapshot.SystemError);
+        ShowBrowserDoh(snapshot.BrowserBypasses);
+        ShowAutoRepin(snapshot.Settings);
+        ShowPinWatch(snapshot.Settings.AutoRepin, snapshot.PinWatch);
+
+        _rows = snapshot.Rows;
+        _verdictsAt = snapshot.Verdicts.Count == 0 ? null : snapshot.Verdicts.Values.Max(v => v.At);
+
+        ShowLast(updateStatus: clearStatus);
         ShowSurveyWhen();
+
+        // Первую маленькую порцию кладём сразу, остальные — фоновыми тиками очереди:
+        // верхние 6 карточек показываются мгновенно, без секундного фриза на раскладке 44 строк.
+        int fillGen = ++_fillGen;
+        _groups.Clear();
+
+        int groupIndex = 0;
+        int rowIndex = 0;
+
+        if (StepGroups(snapshot.Plan, ref groupIndex, ref rowIndex, FirstRows))
+            FillLater(snapshot.Plan, groupIndex, rowIndex, fillGen);
 
         StartLogos();
     }
 
-    private void ShowChosen(AppSettings settings)
+    private bool StepGroups(
+        IReadOnlyList<(ResolverGroup Group, IReadOnlyList<ResolverRow> Rows)> plan,
+        ref int groupIndex,
+        ref int rowIndex,
+        int budget)
     {
-        var known = DnsSurvey.ByAddress(settings.DnsServer);
+        while (groupIndex < plan.Count && budget > 0)
+        {
+            var (group, groupRows) = plan[groupIndex];
+
+            if (!_groups.Contains(group))
+                _groups.Add(group);
+
+            while (rowIndex < groupRows.Count && budget > 0)
+            {
+                group.Rows.Add(groupRows[rowIndex++]);
+                budget--;
+            }
+
+            if (rowIndex >= groupRows.Count)
+            {
+                groupIndex++;
+                rowIndex = 0;
+            }
+        }
+
+        return groupIndex < plan.Count;
+    }
+
+    private void FillLater(
+        IReadOnlyList<(ResolverGroup Group, IReadOnlyList<ResolverRow> Rows)> plan,
+        int groupIndex,
+        int rowIndex,
+        int generation)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (generation != _fillGen || !IsLoaded)
+                return;
+
+            if (StepGroups(plan, ref groupIndex, ref rowIndex, LaterRows))
+                FillLater(plan, groupIndex, rowIndex, generation);
+        }, DispatcherPriority.Background);
+    }
+
+    private void ShowChosen(
+        AppSettings settings,
+        IReadOnlyList<DnsProvider>? all = null,
+        IReadOnlyList<string>? systemResolvers = null)
+    {
+        var providers = all ?? (_allProviders.Count > 0 ? _allProviders : DnsSurvey.All);
+        var known = FindProviderByAddress(providers, settings.DnsServer);
 
         ChosenName.Text = known is null
             ? settings.DnsServer
@@ -613,41 +965,58 @@ public partial class DnsView : UserControl
 
         // Подпись «выбранного резолвера» зависит от выбора в списке ниже —
         // показывается здесь же, где и сам выбор.
-        ShowAdapterDns(settings);
-        ShowSpareDns(settings);
+        ShowAdapterDns(settings, systemResolvers ?? _systemResolvers);
+        ShowSpareDns(settings, providers);
         ShowDnsLeakGuard(settings);
     }
 
-    /// <summary>Выбор запасного резолвера (<see cref="AppSettings.SpareDnsServer"/>).</summary>
-    private void ShowSpareDns(AppSettings settings)
+    private static DnsProvider? FindProviderByAddress(IReadOnlyList<DnsProvider> providers, string? address)
     {
+        if (string.IsNullOrWhiteSpace(address))
+            return null;
+
+        return providers.FirstOrDefault(p => p.Choosable && string.Equals(p.TlsAddress, address, StringComparison.Ordinal))
+            ?? providers.FirstOrDefault(p => p.Choosable && DnsProviderAddresses.Matches(p, address));
+    }
+
+    /// <summary>Выбор запасного резолвера (<see cref="AppSettings.SpareDnsServer"/>).</summary>
+    private void ShowSpareDns(AppSettings settings, IReadOnlyList<DnsProvider>? all = null)
+    {
+        var providers = all ?? (_allProviders.Count > 0 ? _allProviders : DnsSurvey.All);
         var primaryAddress = !settings.UseRouterDns && settings.DnsCryptActive is null
-            ? DnsSurvey.ByAddress(settings.DnsServer)?.TlsAddress ?? settings.DnsServer
+            ? FindProviderByAddress(providers, settings.DnsServer)?.TlsAddress ?? settings.DnsServer
             : null;
 
         var auto = DnsSpare.AutoFor(primaryAddress);
         var selected = !string.IsNullOrWhiteSpace(settings.SpareDnsServer)
-            && DnsSurvey.ByAddress(settings.SpareDnsServer) is { Choosable: true } chosen
+            && FindProviderByAddress(providers, settings.SpareDnsServer) is { Choosable: true } chosen
             && !string.Equals(chosen.TlsAddress, primaryAddress, StringComparison.Ordinal)
                 ? chosen.TlsAddress
                 : string.Empty;
 
-        _filling = true;
-        SpareDnsMode.Items.Clear();
-        SpareDnsMode.Items.Add(new ComboBoxItem
-        {
-            Content = $"запасной: авто ({auto.Name} · {auto.TlsAddress})",
-            Tag = string.Empty,
-        });
+        var listKey = $"{primaryAddress}|{auto.TlsAddress}|{providers.Count}";
 
-        foreach (var provider in DnsSurvey.All.Where(p => p.Choosable
-            && !string.Equals(p.TlsAddress, primaryAddress, StringComparison.Ordinal)))
+        _filling = true;
+
+        if (!string.Equals(_spareKey, listKey, StringComparison.Ordinal) || SpareDnsMode.Items.Count == 0)
         {
+            _spareKey = listKey;
+            SpareDnsMode.Items.Clear();
             SpareDnsMode.Items.Add(new ComboBoxItem
             {
-                Content = $"запасной: {provider.Name} · {provider.TlsAddress}",
-                Tag = provider.TlsAddress!,
+                Content = $"запасной: авто ({auto.Name} · {auto.TlsAddress})",
+                Tag = string.Empty,
             });
+
+            foreach (var provider in providers.Where(p => p.Choosable
+                && !string.Equals(p.TlsAddress, primaryAddress, StringComparison.Ordinal)))
+            {
+                SpareDnsMode.Items.Add(new ComboBoxItem
+                {
+                    Content = $"запасной: {provider.Name} · {provider.TlsAddress}",
+                    Tag = provider.TlsAddress!,
+                });
+            }
         }
 
         SpareDnsMode.SelectedItem = SpareDnsMode.Items.OfType<ComboBoxItem>()
@@ -692,7 +1061,7 @@ public partial class DnsView : UserControl
     }
 
     /// <summary>Выбор DNS адаптеров (<see cref="AppSettings.AdapterDns"/>) и что он значит сейчас.</summary>
-    private void ShowAdapterDns(AppSettings settings)
+    private void ShowAdapterDns(AppSettings settings, IReadOnlyList<string>? systemResolvers = null)
     {
         var addresses = AdapterDns.ResolverAddresses(settings, out var refusal);
 
@@ -711,25 +1080,13 @@ public partial class DnsView : UserControl
         {
             SayAdapterDns(refusal, warn: false);
         }
-        else if (AdapterDns.RouterIpv6Warning(settings, SafeDiscoverSystemResolvers()) is { } warning)
+        else if (AdapterDns.RouterIpv6Warning(settings, systemResolvers ?? _systemResolvers) is { } warning)
         {
             SayAdapterDns(warning, warn: true);
         }
         else
         {
             SayAdapterDns(string.Empty, warn: false);
-        }
-    }
-
-    private static IReadOnlyList<string> SafeDiscoverSystemResolvers()
-    {
-        try
-        {
-            return SystemResolvers.Discover();
-        }
-        catch (Exception)
-        {
-            return [];
         }
     }
 
@@ -797,7 +1154,16 @@ public partial class DnsView : UserControl
         if (result.Changed.Count > 0 || result.Failed.Count > 0)
             Journal.Write("DNS", "адаптеры: " + said);
 
-        ShowSystem();
+        try
+        {
+            var found = await Task.Run(SystemResolvers.Discover);
+            _systemResolvers = found;
+            ShowSystem(found, error: null);
+        }
+        catch (Exception ex)
+        {
+            ShowSystem(null, ex.GetBaseException().Message);
+        }
 
         if (result.Changed.Count > 0)
         {
@@ -861,30 +1227,21 @@ public partial class DnsView : UserControl
     }
 
     /// <summary>Напоминает прямо на вкладке DNS, если в браузере включён свой безопасный DNS мимо системы.</summary>
-    private void ShowBrowserDoh()
+    private void ShowBrowserDoh(IReadOnlyList<BrowserDnsBypass> found)
     {
-        try
+        if (found.Count == 0)
         {
-            var found = NetZapret.Core.Diagnostics.BrowserDns.Scan();
-
-            if (found.Count == 0)
-            {
-                BrowserDohWarning.Text = string.Empty;
-                BrowserDohWarning.Visibility = Visibility.Collapsed;
-                return;
-            }
-
-            var names = string.Join(", ", found.Select(f =>
-                string.IsNullOrWhiteSpace(f.Provider) ? f.Browser : $"{f.Browser} ({f.Provider})"));
-
-            BrowserDohWarning.Text = $"В браузере включён свой шифрованный DNS мимо системы: {names}. "
-                + "В «Гибриде» такие запросы обходят наш DNS и маршруты VPN.";
-            BrowserDohWarning.Visibility = Visibility.Visible;
-        }
-        catch (Exception)
-        {
+            BrowserDohWarning.Text = string.Empty;
             BrowserDohWarning.Visibility = Visibility.Collapsed;
+            return;
         }
+
+        var names = string.Join(", ", found.Select(f =>
+            string.IsNullOrWhiteSpace(f.Provider) ? f.Browser : $"{f.Browser} ({f.Provider})"));
+
+        BrowserDohWarning.Text = $"В браузере включён свой шифрованный DNS мимо системы: {names}. "
+            + "В «Гибриде» такие запросы обходят наш DNS и маршруты VPN.";
+        BrowserDohWarning.Visibility = Visibility.Visible;
     }
 
     /// <summary>
@@ -1016,20 +1373,17 @@ public partial class DnsView : UserControl
     }
 
     /// <summary>Показывает, кого спрашивает сама Windows.</summary>
-    private void ShowSystem()
+    private void ShowSystem(IReadOnlyList<string>? found, string? error)
     {
-        try
+        if (error is not null)
         {
-            var found = SystemResolvers.Discover();
+            SystemValue.Text = "не читаются: " + error;
+            return;
+        }
 
-            SystemValue.Text = found.Count == 0
-                ? "не нашлись"
-                : string.Join(", ", found);
-        }
-        catch (Exception ex)
-        {
-            SystemValue.Text = "не читаются: " + ex.GetBaseException().Message;
-        }
+        SystemValue.Text = found is null || found.Count == 0
+            ? "не нашлись"
+            : string.Join(", ", found);
     }
 
     /// <summary>Задержка шифрованного режима (<see cref="DnsCryptProbe"/>) — в его строку.</summary>
@@ -1128,14 +1482,6 @@ public partial class DnsView : UserControl
         : at.Date == DateTime.Today.AddDays(-1) ? $"вчера в {at:HH:mm}"
         : $"{at:dd.MM} в {at:HH:mm}";
 
-    private void Redraw()
-    {
-        var shown = Resolvers.ItemsSource;
-
-        Resolvers.ItemsSource = null;
-        Resolvers.ItemsSource = shown;
-    }
-
     private void OnChoose(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string address })
@@ -1155,8 +1501,9 @@ public partial class DnsView : UserControl
             // Шифрованный — режим dnscrypt-proxy, адрес DoH при этом хранится:
             // выбор обычного резолвера вернёт DoH. Если выбранный совпал с
             // запасным, запасной сбрасывается на авто.
+            var providers = _allProviders.Count > 0 ? _allProviders : DnsSurvey.All;
             var sameAsSpare = !address.StartsWith(CryptTag, StringComparison.Ordinal)
-                && DnsSurvey.ByAddress(address) is { } primaryProvider
+                && FindProviderByAddress(providers, address) is { } primaryProvider
                 && settings.SpareDnsServer is not null
                 && DnsProviderAddresses.Matches(primaryProvider, settings.SpareDnsServer);
 
@@ -1172,12 +1519,10 @@ public partial class DnsView : UserControl
                 };
             settings.Save(AppSettings.DefaultPath);
 
-            ShowChosen(settings);
+            ShowChosen(settings, providers);
 
             foreach (var row in _rows)
                 row.Chosen = row.Address == address;
-
-            Redraw();
 
             var name = _rows.FirstOrDefault(r => r.Address == address)?.Name ?? address;
 
@@ -1302,7 +1647,7 @@ public partial class DnsView : UserControl
             if (wasSpare)
                 (settings with { SpareDnsServer = null }).Save(AppSettings.DefaultPath);
 
-            Reload();
+            Reload(clearStatus: false);
 
             Status.Text = row.Chosen || settings.DnsServer == row.Address
                 ? $"Убран {row.Name}. Он был выбран туннелю — выберите другой, иначе DoH не поднимется."
@@ -1392,7 +1737,6 @@ public partial class DnsView : UserControl
         foreach (var row in choices)
             row.Chosen = row.Address == address;
 
-        Redraw();
         ShowChosen(next);
 
         Status.Text = $"Автовыбор: {best.Name} · {address}. Применится при следующем запуске движков.";
@@ -1474,13 +1818,15 @@ public partial class DnsView : UserControl
         // По имени, а не по ссылке: у провайдера с AddressesByName обзор может
         // вернуть обновлённую запись с новым адресом DoH.
         var providers = DnsSurvey.All;
-        var rows = new System.Collections.ObjectModel.ObservableCollection<SurveyRow>(providers.Select(SurveyRow.Waiting));
+        var planned = providers.Select(SurveyRow.Waiting).ToArray();
+        var rows = new ObservableCollection<SurveyRow>();
         var place = providers
             .Select((p, i) => (p, i))
             .GroupBy(x => x.p.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First().i, StringComparer.Ordinal);
         var done = new List<DnsSurveyRow>();
         Survey.ItemsSource = rows;
+        StartSurveyFill(rows, planned);
         SaySurvey("Проверяю… Запросы идут мимо туннеля, через адаптер.");
 
         var choices = _rows;
@@ -1490,8 +1836,6 @@ public partial class DnsView : UserControl
             choice.Latency = "…";
             choice.Key = "Faint";
         }
-
-        Redraw();
 
         // Шифрованные обзор не меряет — это dnscrypt-proxy, а не адрес DoH;
         // их меряет свой замер, параллельно (DnsCryptProbe).
@@ -1503,7 +1847,6 @@ public partial class DnsView : UserControl
             var result = await Task.Run(() => DnsCryptProbe.MeasureAsync(mode, mode == active, token), token);
             measured.Add(result);
             FillCrypt(choices, result);
-            Redraw();
         }));
 
         try
@@ -1511,7 +1854,13 @@ public partial class DnsView : UserControl
             var progress = new Progress<DnsSurveyRow>(row =>
             {
                 if (place.TryGetValue(row.Provider.Name, out var at))
-                    rows[at] = SurveyRow.From(row);
+                {
+                    var updated = SurveyRow.From(row);
+                    planned[at] = updated;
+
+                    if (at < rows.Count)
+                        rows[at] = updated;
+                }
 
                 done.Add(row);
                 Fill(choices, row);
@@ -1522,14 +1871,32 @@ public partial class DnsView : UserControl
 
                 if (choice is not null)
                     ShowVerdict(choice, ResolverVerdicts.Judge(row, DateTime.Now));
-
-                Redraw();
             });
 
             var all = await DnsSurvey.SurveyAllAsync(providers, progress, _work.Token);
 
-            // Порядок — как в списке провайдеров, а не как пришли ответы.
-            Survey.ItemsSource = all.Select(SurveyRow.From).ToList();
+            // Порядок — как в списке провайдеров: обновляем на месте только отличающиеся строки,
+            // чтобы не перестраивать таблицу из сорока с лишним записей целиком.
+            if (planned.Length == all.Count)
+            {
+                for (int i = 0; i < all.Count; i++)
+                {
+                    if (!ReferenceEquals(planned[i].Source, all[i]))
+                    {
+                        var updated = SurveyRow.From(all[i]);
+                        planned[i] = updated;
+
+                        if (i < rows.Count)
+                            rows[i] = updated;
+                    }
+                }
+            }
+            else
+            {
+                var fresh = new ObservableCollection<SurveyRow>();
+                Survey.ItemsSource = fresh;
+                StartSurveyFill(fresh, all.Select(SurveyRow.From).ToArray());
+            }
 
             PickFastest(all, choices);
 
@@ -1543,8 +1910,7 @@ public partial class DnsView : UserControl
                   + "Обычный DNS к ним перехвачен по дороге — пользуйтесь DoH или DoT.");
 
             _last = new LastSurvey(all, SurveyStatus.Text, DateTime.Now) { Crypt = measured };
-            ShowVerdicts(ResolverVerdicts.Remember(all, _last.At));
-            Redraw();
+            ShowVerdicts(await Task.Run(() => ResolverVerdicts.Remember(all, _last.At)));
         }
         catch (OperationCanceledException)
         {
@@ -1553,9 +1919,10 @@ public partial class DnsView : UserControl
             // Прерван уходом с вкладки — что успели, то и запомнили.
             if (done.Count > 0)
             {
-                _last = new LastSurvey(done.ToList(), $"Обзор прерван: проверено {done.Count} из {DnsSurvey.All.Count}.", DateTime.Now);
-                ShowVerdicts(ResolverVerdicts.Remember(done, _last.At));
-                Redraw();
+                var snapshot = done.ToList();
+                var at = DateTime.Now;
+                _last = new LastSurvey(snapshot, $"Обзор прерван: проверено {snapshot.Count} из {providers.Count}.", at);
+                ShowVerdicts(await Task.Run(() => ResolverVerdicts.Remember(snapshot, at)));
             }
         }
         catch (Exception ex)

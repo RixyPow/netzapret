@@ -342,7 +342,7 @@
                 <StackPanel>
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="120" />
+                            <ColumnDefinition Width="170" />
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="80" />
                             <ColumnDefinition Width="92" />
@@ -363,7 +363,7 @@
                             <DataTemplate>
                                 <Grid Margin="0,3,0,3">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="170" />
                                         <ColumnDefinition Width="80" />
                                         <ColumnDefinition Width="80" />
                                         <ColumnDefinition Width="92" />
@@ -371,7 +371,8 @@
                                         <ColumnDefinition Width="64" />
                                     </Grid.ColumnDefinitions>
 
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" />
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}" Margin="0,0,8,0" />
                                     <TextBlock Grid.Column="1" Text="{Binding Doh}" Style="{StaticResource Mono}" Foreground="{Binding DohColor}" />
                                     <TextBlock Grid.Column="2" Text="{Binding Dot}" Style="{StaticResource Mono}" Foreground="{Binding DotColor}" />
                                     <TextBlock Grid.Column="3" Text="{Binding Udp}" Style="{StaticResource Mono}" Foreground="{Binding UdpColor}" />
@@ -500,7 +501,8 @@
                                                 <!-- Чем он отличается — ярлыками, из пояснения провайдера;
                                                      у посредника перед ними — значки сервисов, которые он открывает. -->
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                                                <ItemsControl ItemsSource="{Binding ServiceIcons}" Margin="0,0,0,4">
+                                                <ItemsControl ItemsSource="{Binding ServiceIcons}" Margin="0,0,0,4"
+                                                              Visibility="{Binding ServiceIconsShown}">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate>
                                                             <StackPanel Orientation="Horizontal" />
