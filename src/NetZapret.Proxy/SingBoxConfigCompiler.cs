@@ -300,6 +300,12 @@ public sealed class SingBoxOptions
     public TlsFragment TlsFragment { get; init; }
 
     /// <summary>
+    /// Включать постквантовый обмен ключами (<c>support_x25519mlkem768</c>) и отпечаток
+    /// <c>chrome</c> для серверов REALITY (<see cref="AppSettings.RealityMlkem"/>).
+    /// </summary>
+    public bool RealityMlkem { get; init; } = true;
+
+    /// <summary>
     /// Как часто перезамерять задержку.
     /// </summary>
     /// <remarks>
@@ -760,7 +766,8 @@ public sealed class SingBoxConfigCompiler
         string logLevel = "debug",
         string? resolvedAddress = null,
         EngineKeys? keys = null,
-        TlsFragment fragment = TlsFragment.Off)
+        TlsFragment fragment = TlsFragment.Off,
+        bool realityMlkem = true)
     {
         var log = new JsonObject { ["level"] = logLevel, ["timestamp"] = true };
 
@@ -795,7 +802,7 @@ public sealed class SingBoxConfigCompiler
                 ? new JsonArray { new JsonObject { ["type"] = "direct", ["tag"] = "direct" } }
                 : new JsonArray
                 {
-                    Fragment(PinAddress(BuildOutbound(server, "probe-out"), server, resolvedAddress), fragment),
+                    Fragment(PinAddress(BuildOutbound(server, "probe-out", realityMlkem), server, resolvedAddress), fragment),
                     new JsonObject { ["type"] = "direct", ["tag"] = "direct" },
                 },
             ["route"] = new JsonObject
@@ -1694,7 +1701,7 @@ public sealed class SingBoxConfigCompiler
         // Endpoint'ы описаны отдельным разделом, но в группы входят наравне
         // с исходящими: для urltest и селектора это такой же тег.
         foreach (var server in servers.Where(s => !s.IsEndpoint))
-            outbounds.Add(Fragment(BuildOutbound(server, tags[server]), options.TlsFragment));
+            outbounds.Add(Fragment(BuildOutbound(server, tags[server], options.RealityMlkem), options.TlsFragment));
 
         if (servers.Count == 0)
             return outbounds;
@@ -1961,7 +1968,7 @@ public sealed class SingBoxConfigCompiler
         return outbound;
     }
 
-    private static JsonObject BuildOutbound(ProxyServer server, string tag)
+    private static JsonObject BuildOutbound(ProxyServer server, string tag, bool realityMlkem = true)
     {
         // MASQUE поверх HTTP/2, а не QUIC, — так WARP ожил 23.09, на движке
         // 1.14.1-extended-2.7.2. Замер на машине владельца, отдельный
@@ -2118,7 +2125,7 @@ public sealed class SingBoxConfigCompiler
                 throw new NotSupportedException($"Протокол {server.Protocol} не поддерживается генератором.");
         }
 
-        var tls = BuildTls(server);
+        var tls = BuildTls(server, realityMlkem);
         if (tls is not null)
             outbound["tls"] = tls;
 
@@ -2174,7 +2181,7 @@ public sealed class SingBoxConfigCompiler
         return outbound;
     }
 
-    private static JsonObject? BuildTls(ProxyServer server)
+    private static JsonObject? BuildTls(ProxyServer server, bool realityMlkem)
     {
         bool reality = server.Security.Equals("reality", StringComparison.OrdinalIgnoreCase);
         // TUIC, Hysteria и AnyTLS без TLS не бывают — он у них в протоколе.
@@ -2212,21 +2219,33 @@ public sealed class SingBoxConfigCompiler
         }
 
         // uTLS подделывает отпечаток клиента. Для REALITY он обязателен:
-        // без него сервер не отвечает. Ссылке без отпечатка — firefox, не
-        // chrome: замер 29.10 (наш sing-box на loopback, ClientHello снят)
-        // дал у REALITY «chrome» JA4 t13d1516h1_8daaf6152771_d8a2da3f94cd —
-        // те же хэши, что у отпечатка, который ТСПУ режет к дата-центрам
-        // (вики zapret.moe, DPI/browser-ja4-fingerprint-block; разница только
-        // в ALPN), и без ключа ML-KEM, которым шлёт настоящий Chrome.
-        // REALITY отпечаток клиента не сверяет; у владельца 27 серверов
-        // REALITY с firefox из подписки работают.
+        // без него сервер не отвечает.
+        //
+        // При realityMlkem = true (по умолчанию с 27.11) серверу REALITY
+        // передаётся support_x25519mlkem768: true и отпечаток семейства chrome.
+        // Замер 27.11 (sing-box 1.14.3-extended-2.7.3 против локального
+        // Xray 26.11.9 и 26.7.28): Xray с 26.9.8 требует в ClientHello долю
+        // X25519MLKEM768 перед X25519; без флага sing-box-extended её вырезает,
+        // а в metacubex/utls v1.8.7 стабильно её шлют только все шесть профилей
+        // chrome* (firefox/edge/safari/ios не шлют вовсе, randomized — через раз).
+        //
+        // При realityMlkem = false сохраняется прежнее поведение для старых
+        // серверов REALITY: без support_x25519mlkem768, а ссылке без отпечатка —
+        // firefox (замер 29.10: у chrome без ML-KEM JA4 совпадал по хэшам
+        // с отпечатком, который ТСПУ режет к дата-центрам).
         string? fingerprint = Fingerprint(server.Fingerprint);
         if (fingerprint is not null || reality)
         {
+            string chosen = reality
+                ? realityMlkem
+                    ? (IsChromeFingerprint(fingerprint) ? fingerprint! : "chrome")
+                    : (fingerprint ?? "firefox")
+                : fingerprint!;
+
             block["utls"] = new JsonObject
             {
                 ["enabled"] = true,
-                ["fingerprint"] = fingerprint ?? "firefox",
+                ["fingerprint"] = chosen,
             };
         }
 
@@ -2239,6 +2258,9 @@ public sealed class SingBoxConfigCompiler
 
             if (!string.IsNullOrEmpty(server.RealityShortId))
                 realityBlock["short_id"] = server.RealityShortId;
+
+            if (realityMlkem)
+                realityBlock["support_x25519mlkem768"] = true;
 
             block["reality"] = realityBlock;
         }
@@ -2255,6 +2277,15 @@ public sealed class SingBoxConfigCompiler
         "chrome_pq", "chrome_pq_psk", "firefox", "edge", "safari", "360", "qq",
         "ios", "android", "random", "randomized",
     };
+
+    /// <summary>
+    /// Семейство отпечатков Chrome в sing-box: только эти шесть имён в
+    /// <c>metacubex/utls v1.8.7</c> стабильно кладут в ClientHello долю
+    /// <c>X25519MLKEM768</c> (замер 27.11 на sing-box 1.14.3-extended-2.7.3).
+    /// </summary>
+    private static bool IsChromeFingerprint(string? name) =>
+        name is "chrome" or "chrome_psk" or "chrome_psk_shuffle"
+            or "chrome_padding_psk_shuffle" or "chrome_pq" or "chrome_pq_psk";
 
     /// <summary>
     /// Отпечаток из ссылки в имя sing-box; null — родной отпечаток, без uTLS.

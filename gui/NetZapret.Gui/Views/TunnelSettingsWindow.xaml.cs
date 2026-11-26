@@ -131,6 +131,9 @@ public partial class TunnelSettingsWindow : Window
 
         ShowLocalProxy(settings);
 
+        Word(RealityMlkemWord, settings.RealityMlkem);
+        RealityMlkem.IsChecked = settings.RealityMlkem;
+
         Word(FakeIpMemoryWord, settings.FakeIpMemory);
         FakeIpMemory.IsChecked = settings.FakeIpMemory;
 
@@ -304,6 +307,12 @@ public partial class TunnelSettingsWindow : Window
             Replace.IsChecked == true
                 ? "Выбранному серверу будет искаться замена, пока он молчит."
                 : "Выбранный сервер не подменяется: молчит — туннель ждёт его.");
+
+    private void OnRealityMlkem(object sender, RoutedEventArgs e) =>
+        Save(s => s with { RealityMlkem = RealityMlkem.IsChecked == true },
+            RealityMlkem.IsChecked == true
+                ? "Для REALITY включён X25519MLKEM768 и отпечаток Chrome (для Xray 26.9+)."
+                : "Постквантовый REALITY выключен: используются прежний отпечаток и рукопожатие для старых серверов.");
 
     private void OnFakeIpMemory(object sender, RoutedEventArgs e) =>
         Save(s => s with { FakeIpMemory = FakeIpMemory.IsChecked == true },

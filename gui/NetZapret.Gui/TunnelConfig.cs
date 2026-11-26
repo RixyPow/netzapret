@@ -323,6 +323,7 @@ internal static class TunnelConfig
                 // на http://cp.cloudflare.com.
                 LatencyTestUrl = Ping.UrlOf(settings),
                 TlsFragment = settings.TlsFragment,
+                RealityMlkem = settings.RealityMlkem,
                 StoreFakeIp = settings.FakeIpMemory,
                 AutoPickPerEntry = Math.Max(0, settings.AutoPickPerEntry),
                 KnownLatency = ServerHealthCache.Load().Latencies(),

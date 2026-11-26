@@ -334,4 +334,29 @@ public sealed class TunnelConfigTests : IDisposable
         Assert.Equal("9.9.9.10", spare.GetProperty("server").GetString());
         Assert.Equal("dns10.quad9.net", spare.GetProperty("tls").GetProperty("server_name").GetString());
     }
+
+    /// <summary>
+    /// Постквантовый REALITY — настройка: по умолчанию включена и добавляет
+    /// <c>support_x25519mlkem768: true</c> к выходу REALITY, выключенная — убирает.
+    /// </summary>
+    [Fact]
+    public async Task Reality_mlkem_follows_the_setting()
+    {
+        Assert.True(new AppSettings().RealityMlkem);
+
+        var on = await BuildAsync();
+        var onUsa = on.GetProperty("outbounds").EnumerateArray()
+            .Single(o => (o.GetProperty("tag").GetString() ?? string.Empty).Contains("USA", StringComparison.Ordinal));
+        var onReality = onUsa.GetProperty("tls").GetProperty("reality");
+
+        Assert.True(onReality.GetProperty("support_x25519mlkem768").GetBoolean());
+        Assert.Equal("chrome", onUsa.GetProperty("tls").GetProperty("utls").GetProperty("fingerprint").GetString());
+
+        var off = await BuildAsync(s => s with { RealityMlkem = false });
+        var offUsa = off.GetProperty("outbounds").EnumerateArray()
+            .Single(o => (o.GetProperty("tag").GetString() ?? string.Empty).Contains("USA", StringComparison.Ordinal));
+        var offReality = offUsa.GetProperty("tls").GetProperty("reality");
+
+        Assert.False(offReality.TryGetProperty("support_x25519mlkem768", out _));
+    }
 }

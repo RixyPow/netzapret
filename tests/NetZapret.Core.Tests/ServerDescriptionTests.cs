@@ -81,7 +81,7 @@ public sealed class ServerDescriptionTests
     public void Digest_names_why_a_server_is_dropped_and_shows_no_keys()
     {
         var body = string.Join('\n',
-            $"vless://{Uuid}@203.0.113.7:8443?security=reality&type=xhttp&pbk=&sni=example.com#Пустой%20ключ",
+            $"vless://{Uuid}@203.0.113.7:8443?security=reality&type=xhttp&mode=packet-up&fp=firefox&pbk=&sni=example.com#Пустой%20ключ",
             $"vless://{Uuid}@0.0.0.0:1#━━ ОБХОД ━━",
             $"vless://{Uuid}@203.0.113.8:443?security=tls&type=tcp&sni=example.com#Живой");
 
@@ -89,6 +89,8 @@ public sealed class ServerDescriptionTests
 
         Assert.Contains("отброшен: у REALITY нет годного открытого ключа", lines[0]);
         Assert.Contains("xhttp", lines[0]);
+        Assert.Contains("mode packet-up", lines[0]);
+        Assert.Contains("fp firefox", lines[0]);
         Assert.Contains("отброшен: адреса нет", lines[1]);
         Assert.DoesNotContain("отброшен", lines[2]);
         Assert.Contains("203.0.113.8:443", lines[2]);

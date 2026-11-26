@@ -84,13 +84,14 @@ public sealed class RealityRefusalTests : IDisposable
 
     /// <summary>
     /// Те же слова sing-box пишет и при устаревшем ключе — объяснение называет
-    /// обе причины и не уверяет, что подписка ни при чём.
+    /// все возможные причины (ключ, выключенный постквантовый REALITY, требование
+    /// версии Xray новее 26.7.11) и не уверяет, что подписка ни при чём.
     /// </summary>
     [Fact]
     public void TheExplanationNamesBothCausesAndTheWayOut()
     {
-        Assert.Contains("26.7.28", RealityRefusal.Explanation);
-        Assert.Contains("26.6.27", RealityRefusal.Explanation);
+        Assert.Contains("Постквантовый REALITY (Xray 26.9+)", RealityRefusal.Explanation);
+        Assert.Contains("26.7.11", RealityRefusal.Explanation);
         Assert.Contains("TLS", RealityRefusal.Explanation);
         Assert.Contains("ключ в подписке устарел", RealityRefusal.Explanation);
         Assert.Contains("Обновите подписку", RealityRefusal.Explanation);

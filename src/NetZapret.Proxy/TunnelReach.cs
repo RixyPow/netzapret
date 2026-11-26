@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using NetZapret.Core;
 using NetZapret.Subscriptions;
 
 namespace NetZapret.Proxy;
@@ -173,7 +174,9 @@ public static class TunnelReach
         IReadOnlyList<string> hosts,
         string workDirectory,
         int listenPort,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TlsFragment fragment = TlsFragment.Off,
+        bool realityMlkem = true)
     {
         if (hosts.Count == 0)
             return [];
@@ -200,7 +203,7 @@ public static class TunnelReach
         var keys = EngineKeys.Generate();
 
         var json = new SingBoxConfigCompiler()
-            .CompileProbeConfig(server, listenPort, logPath, "warn", address, keys);
+            .CompileProbeConfig(server, listenPort, logPath, "warn", address, keys, fragment, realityMlkem);
 
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 

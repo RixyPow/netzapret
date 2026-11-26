@@ -82,8 +82,14 @@ public static class SubscriptionDigest
         if (!string.IsNullOrWhiteSpace(server.Transport))
             words.Add(server.Transport.ToLowerInvariant());
 
+        if (!string.IsNullOrWhiteSpace(server.XhttpMode))
+            words.Add("mode " + server.XhttpMode);
+
         if (!string.IsNullOrWhiteSpace(server.Flow))
             words.Add(server.Flow);
+
+        if (!string.IsNullOrWhiteSpace(server.Fingerprint))
+            words.Add("fp " + server.Fingerprint);
 
         if (!string.IsNullOrWhiteSpace(server.Sni))
             words.Add("sni " + server.Sni);

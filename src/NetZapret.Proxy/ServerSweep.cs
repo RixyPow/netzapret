@@ -133,6 +133,7 @@ public static class ServerSweep
             LogLevel = "warn",
             ConnectivityUrls = [url, .. defaults.ConnectivityUrls.Where(u => !string.Equals(u, url, StringComparison.OrdinalIgnoreCase))],
             Fragment = settings.TlsFragment,
+            RealityMlkem = settings.RealityMlkem,
             RequestTimeout = timeout,
             TotalTimeout = defaults.StartupTimeout + timeout,
         };

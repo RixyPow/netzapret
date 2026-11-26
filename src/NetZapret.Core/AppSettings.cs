@@ -808,6 +808,26 @@ public sealed record AppSettings
     public TlsFragment TlsFragment { get; init; }
 
     /// <summary>
+    /// Постквантовый обмен ключами (<c>X25519MLKEM768</c>) и отпечаток Chrome для серверов REALITY.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Начиная с Xray 26.9.8 (XTLS/REALITY, 08.09.2026) сервер REALITY отвергает
+    /// ClientHello без доли ключа X25519MLKEM768 перед X25519 и молча уводит клиента
+    /// на сайт маскировки. Сборка sing-box-extended 2.7.3 по умолчанию вырезает эту
+    /// долю, пока в блоке <c>tls.reality</c> не задано <c>support_x25519mlkem768: true</c>,
+    /// а стабильно её шлёт только отпечаток Chrome (замер 27.11 против локального
+    /// Xray 26.11.9 и 26.7.28).
+    /// </para>
+    /// <para>
+    /// Включено по умолчанию; выключатель — в настройках туннеля на случай старых
+    /// серверов REALITY (Xray до 25.4.30 / sing-box до 1.11), которые не принимают
+    /// постквантовый ClientHello.
+    /// </para>
+    /// </remarks>
+    public bool RealityMlkem { get; init; } = true;
+
+    /// <summary>
     /// Помнить подставные адреса между перезапусками движка: таблица
     /// «fakeip → имя» хранится в файле кэша sing-box.
     /// </summary>

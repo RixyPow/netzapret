@@ -1806,7 +1806,9 @@ public partial class CheckView : UserControl
                 // столкнуться с собственным движком значило бы проверить
                 // не то и объявить об этом уверенно.
                 listenPort: 24081,
-                token);
+                token,
+                fragment: settings.TlsFragment,
+                realityMlkem: settings.RealityMlkem);
 
             if (readings.Count == 0)
                 return;

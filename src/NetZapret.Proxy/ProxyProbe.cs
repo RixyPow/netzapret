@@ -112,6 +112,9 @@ public sealed record ProbeOptions
     /// <summary>Фрагментация рукопожатия с сервером — та же, что в конфиге туннеля.</summary>
     public TlsFragment Fragment { get; init; }
 
+    /// <summary>Постквантовый REALITY (<c>support_x25519mlkem768</c> и Chrome) — как в конфиге туннеля.</summary>
+    public bool RealityMlkem { get; init; } = true;
+
     /// <summary>
     /// Службы, возвращающие внешний адрес открытым текстом.
     /// </summary>
@@ -294,7 +297,8 @@ public sealed class ProxyProbe
         // журнал неудачной проверки был пуст, и в отчёте №40 (28.10) не было видно,
         // дошёл ли сервер хоть до ответа. Ключей wireguard-go в журнал не пишет.
         var level = server.IsEndpoint ? "debug" : options.LogLevel;
-        var json = _compiler.CompileProbeConfig(server, options.ListenPort, logPath, level, address, keys, options.Fragment);
+        var json = _compiler.CompileProbeConfig(
+            server, options.ListenPort, logPath, level, address, keys, options.Fragment, options.RealityMlkem);
         SingBoxConfigCompiler.WriteToFile(configPath, json);
 
         var stopwatch = Stopwatch.StartNew();
