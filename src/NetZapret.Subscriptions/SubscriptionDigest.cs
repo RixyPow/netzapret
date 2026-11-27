@@ -23,7 +23,7 @@ namespace NetZapret.Subscriptions;
 public static class SubscriptionDigest
 {
     /// <summary>По подписке на ссылку из книги, по порядку; запаса нет — так и сказано.</summary>
-    public static string Describe(IReadOnlyList<string> urls, string? reserveDirectory = null)
+    public static string Describe(IReadOnlyList<string> urls, string? reserveDirectory = null, string? localDirectory = null)
     {
         var text = new StringBuilder();
 
@@ -36,16 +36,21 @@ public static class SubscriptionDigest
         {
             text.AppendLine();
 
-            if (SubscriptionPool.Kept(urls[i], reserveDirectory) is not { } kept)
+            bool local = LocalSubscriptions.IsLocal(urls[i]);
+
+            if (SubscriptionPool.Kept(urls[i], reserveDirectory, localDirectory) is not { } kept)
             {
-                text.AppendLine($"Подписка {i + 1}: запаса нет — панель ни разу не ответила или подписку только добавили");
+                text.AppendLine(local
+                    ? $"Подписка {i + 1}: локальный файл не найден"
+                    : $"Подписка {i + 1}: запаса нет — панель ни разу не ответила или подписку только добавили");
                 continue;
             }
 
             var servers = kept.Info.Servers;
             var title = string.IsNullOrWhiteSpace(kept.Info.Title) ? string.Empty : $" «{kept.Info.Title.Trim()}»";
+            var kind = local ? "локальный файл от" : "запас от";
 
-            text.AppendLine($"Подписка {i + 1}{title}: запас от {kept.At.ToLocalTime():dd.MM HH:mm}, "
+            text.AppendLine($"Подписка {i + 1}{title}: {kind} {kept.At.ToLocalTime():dd.MM HH:mm}, "
                 + $"серверов {servers.Count}, годных {servers.Count(s => s.IsUsableOutbound)}");
 
             foreach (var server in servers)

@@ -18,12 +18,25 @@
         <TextBlock Text="Имя" FontWeight="SemiBold" Margin="0,18,0,6" />
         <TextBox x:Name="NameBox" gui:Hint.Text="Имя для себя" />
 
-        <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
-            <TextBlock Text="Новая ссылка" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
-                            Content="Прежняя ссылка не показывается: она равносильна паролю. Вставьте новую, если продавец её сменил." />
+        <StackPanel x:Name="UrlSection">
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+                <TextBlock Text="Новая ссылка" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                Content="Прежняя ссылка не показывается: она равносильна паролю. Вставьте новую, если продавец её сменил." />
+            </StackPanel>
+            <PasswordBox x:Name="UrlBox" gui:Hint.Text="Пусто — оставить прежнюю" />
         </StackPanel>
-        <PasswordBox x:Name="UrlBox" gui:Hint.Text="Пусто — оставить прежнюю" />
+
+        <StackPanel x:Name="FileSection" Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal" Margin="0,16,0,6">
+                <TextBlock Text="Новый файл подписки" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <ContentControl Style="{StaticResource Info}" Margin="2,0,0,0"
+                                Content="Выберите обновлённый .yaml, .json или .txt, чтобы заменить серверы на месте — без пересоздания подписки." />
+            </StackPanel>
+            <Button Style="{StaticResource Ghost}" HorizontalAlignment="Left" Content="Выбрать файл…" Click="OnPickFile" />
+            <TextBlock x:Name="FilePicked" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                       TextWrapping="Wrap" Foreground="{DynamicResource Accent}" Visibility="Collapsed" />
+        </StackPanel>
 
 
         <TextBlock x:Name="Problem" Style="{StaticResource Caption}" Margin="0,8,0,0"

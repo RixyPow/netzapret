@@ -332,6 +332,12 @@ for %%F in ("%STAGE%\config\netzapret.json" "%STAGE%\config\subscriptions.json" 
     )
 )
 
+if exist "%STAGE%\config\subscriptions" (
+    echo.
+    echo Refusing to archive: config\subscriptions holds local subscription files with server keys.
+    exit /b 1
+)
+
 if exist "%STAGE%\runtime" (
     echo.
     echo Refusing to archive: runtime\ holds generated configs with server

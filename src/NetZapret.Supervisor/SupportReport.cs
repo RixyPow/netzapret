@@ -147,7 +147,9 @@ public static class SupportReport
         // знает только проверенные серверы, а вопрос был, нет ли у нас тех,
         // через которые работает Happ. Ключей тут нет (SubscriptionDigest).
         parts.Add(("subscriptions.txt", Section(() => Subscriptions.SubscriptionDigest.Describe(
-            book, At(root, Subscriptions.SubscriptionPool.DefaultReserveDirectory)))));
+            book,
+            At(root, Subscriptions.SubscriptionPool.DefaultReserveDirectory),
+            At(root, Subscriptions.LocalSubscriptions.DefaultDirectory)))));
 
         // Журналы сменяются по размеру (RollingLog, 4 МБ), а не по запуску:
         // winws2 пишет строку на соединение, и начало запуска с его первой

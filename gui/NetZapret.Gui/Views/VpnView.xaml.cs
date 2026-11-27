@@ -840,7 +840,10 @@ public partial class VpnView : UserControl
             // не говорит даже того, которая не отвечает. Их серверы из запаса
             // видны в строках уже сейчас (FillAsync).
             bool everyRead = true;
-            var waiting = _rows.Where(r => !r.IsKeys).Select(r => r.Entry.Name).ToList();
+            var waiting = _rows
+                .Where(r => !r.IsKeys && !LocalSubscriptions.IsLocal(r.Entry.Url))
+                .Select(r => r.Entry.Name)
+                .ToList();
 
             void ShowWaiting() => Status.Text = waiting.Count switch
             {
@@ -960,7 +963,9 @@ public partial class VpnView : UserControl
             {
                 read.Source == SubscriptionReadSource.Reserve
                     ? $"{read.Error ?? "панель подвела"} — серверы из запаса {when}"
-                    : $"обновлена {when}",
+                    : read.Source == SubscriptionReadSource.Local
+                        ? $"из файла ({when})"
+                        : $"обновлена {when}",
                 $"{usable} серверов",
             };
 
@@ -972,7 +977,7 @@ public partial class VpnView : UserControl
 
             // Поставщик перенёс подписку — ссылка в книге новая, и в этой
             // книге тоже: вкладка держит свою и записала бы старую обратно.
-            if (read.Source != SubscriptionReadSource.Reserve)
+            if (read.Source is not (SubscriptionReadSource.Reserve or SubscriptionReadSource.Local))
             {
                 SubscriptionBook.Follow(_book, row.Entry.Url, info.NewUrl);
                 SubscriptionNotices.RemindExpiry(row.Entry.Name, row.Entry.Url, info);
@@ -1922,8 +1927,33 @@ public partial class VpnView : UserControl
 
         if (request.Kind == AddKind.Keys)
             AddKeys(request.Input, request.InPool);
+        else if (request.Kind == AddKind.LocalSubscription)
+            AddLocalSubscription(request.Input, request.Name, request.InPool);
         else
             AddSubscription(request.Input, request.Name, request.InPool);
+    }
+
+    /// <summary>Локальный файл подписки — копией в config\subscriptions\ и отдельной записью в книгу.</summary>
+    private void AddLocalSubscription(string body, string? name, bool inPool)
+    {
+        try
+        {
+            var book = SubscriptionBook.Load();
+            name ??= book.FreeName();
+
+            if (book.Entries.Any(entry => string.Equals(entry.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                Status.Text = $"Подписка с именем «{name}» уже есть. Дайте другое.";
+                return;
+            }
+
+            var url = LocalSubscriptions.Save(body);
+            AddSubscription(url, name, inPool);
+        }
+        catch (Exception ex)
+        {
+            Status.Text = "Не удалось сохранить файл подписки: " + ex.GetBaseException().Message;
+        }
     }
 
     /// <summary>Ссылку подписки — в книгу; обёртки клиентов уже развёрнуты окном.</summary>
@@ -2248,7 +2278,8 @@ public partial class VpnView : UserControl
         menu.Items.Add(Item("", "Очистить память замеров", () => ForgetMeasures(row)));
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(Item("", first ? "Уже первая" : "Закрепить наверху", () => MoveToTop(name), !first));
-        menu.Items.Add(Item("", "Копировать ссылку", () => CopyUrl(row)));
+        if (!LocalSubscriptions.IsLocal(row.Entry.Url))
+            menu.Items.Add(Item("", "Копировать ссылку", () => CopyUrl(row)));
         menu.Items.Add(Item("", "Изменить…", () => Edit(row)));
         menu.Items.Add(new Separator { Style = (Style)FindResource("MenuLine") });
         menu.Items.Add(Item("", "Удалить…", () => ConfirmRemove(name)));
@@ -2355,8 +2386,9 @@ public partial class VpnView : UserControl
 
     private void Edit(SubRow row)
     {
+        bool isLocal = LocalSubscriptions.IsLocal(row.Entry.Url);
         var taken = _rows.Where(r => !ReferenceEquals(r, row)).Select(r => r.Entry.Name).ToList();
-        var window = new SubscriptionEditWindow(row.Entry.Name, taken) { Owner = Window.GetWindow(this) };
+        var window = new SubscriptionEditWindow(row.Entry.Name, taken, isLocal) { Owner = Window.GetWindow(this) };
 
         if (window.ShowDialog() != true || window.ChosenName is not { } name)
             return;
@@ -2369,10 +2401,11 @@ public partial class VpnView : UserControl
             if (entry is null)
                 return;
 
-            var oldUrl = entry.Url;
             entry.Name = name;
 
-            if (window.ChosenUrl is { } url)
+            if (window.ChosenBody is { } body && isLocal)
+                LocalSubscriptions.Replace(entry.Url, body);
+            else if (window.ChosenUrl is { } url)
                 entry.Url = url;
 
             book.Save();
@@ -2383,12 +2416,14 @@ public partial class VpnView : UserControl
 
             _ = LoadAsync();
 
-            Status.Text = window.ChosenUrl is null
-                ? $"Подписка переименована: «{name}»."
-                : $"«{name}»: ссылка заменена. Применится при следующем запуске движков.";
+            Status.Text = window.ChosenBody is not null
+                ? $"«{name}»: файл подписки обновлён. Применится при следующем запуске движков."
+                : window.ChosenUrl is null
+                    ? $"Подписка переименована: «{name}»."
+                    : $"«{name}»: ссылка заменена. Применится при следующем запуске движков.";
 
-            if (window.ChosenUrl is not null && entry.Working)
-                this.Offer($"У подписки «{name}» новая ссылка");
+            if ((window.ChosenUrl is not null || window.ChosenBody is not null) && entry.Working)
+                this.Offer(window.ChosenBody is not null ? $"У подписки «{name}» обновлён файл" : $"У подписки «{name}» новая ссылка");
         }
         catch (Exception ex)
         {
@@ -2415,8 +2450,12 @@ public partial class VpnView : UserControl
 
     private void ConfirmRemove(string name)
     {
+        bool isLocal = _rows.FirstOrDefault(r => r.Entry.Name == name) is { } row
+            && LocalSubscriptions.IsLocal(row.Entry.Url);
+
         var answer = MessageBox.Show(
-            $"Удалить подписку «{name}»? Её серверы уйдут из пула, а ссылку придётся вставлять заново.",
+            $"Удалить подписку «{name}»? Её серверы уйдут из пула, а "
+            + (isLocal ? "файл придётся загрузить заново." : "ссылку придётся вставлять заново."),
             "Удалить подписку",
             MessageBoxButton.OKCancel,
             MessageBoxImage.Question);
@@ -2481,7 +2520,9 @@ public partial class VpnView : UserControl
     {
         try
         {
-            SubscriptionPool.KeepReserves(book.Entries.Select(e => e.Url).Append(settings.SubscriptionUrl));
+            var urls = book.Entries.Select(e => e.Url).Append(settings.SubscriptionUrl).ToList();
+            SubscriptionPool.KeepReserves(urls);
+            LocalSubscriptions.KeepOnly(urls);
         }
         catch (Exception)
         {

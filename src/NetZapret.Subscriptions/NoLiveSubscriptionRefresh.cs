@@ -33,7 +33,9 @@ public sealed class NoLiveSubscriptionRefresh
         if (!await _gate.WaitAsync(0, ct)) return new(false, false, false);
         try
         {
-            var urls = activeUrls.Where(u => !string.IsNullOrWhiteSpace(u)).Distinct(StringComparer.Ordinal).ToArray();
+            var urls = activeUrls
+                .Where(u => !string.IsNullOrWhiteSpace(u) && !LocalSubscriptions.IsLocal(u))
+                .Distinct(StringComparer.Ordinal).ToArray();
             if (urls.Length == 0) return new(false, false, false);
             var state = Load(); var now = _now();
             if (now < state.NextAttemptAt) return new(false, false, false);

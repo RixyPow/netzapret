@@ -6,16 +6,17 @@ using NetZapret.Subscriptions;
 
 namespace NetZapret.Gui.Views;
 
-/// <summary>Что добавлять: подписку или ключи.</summary>
+/// <summary>Что добавлять: подписку по ссылке, локальный файл подписки или ключи.</summary>
 public enum AddKind
 {
     Subscription,
     Keys,
+    LocalSubscription,
 }
 
 /// <summary>Выбор в окне добавления.</summary>
 /// <param name="Name">Имя подписки; <c>null</c> — придумать. У ключей не бывает.</param>
-/// <param name="Input">Ссылка подписки (обёртки развёрнуты) либо ключи строками.</param>
+/// <param name="Input">Ссылка подписки (обёртки развёрнуты), тело локальной подписки либо ключи строками.</param>
 /// <param name="InPool">Сразу в работу.</param>
 public sealed record AddRequest(AddKind Kind, string? Name, string Input, bool InPool);
 
@@ -121,8 +122,11 @@ public partial class SubscriptionAddWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Ключ из файла",
-            Filter = "Ключ или QR-код|*.conf;*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|Все файлы|*.*",
+            Title = "Подписка или ключ из файла",
+            Filter = "Подписка, ключ или QR-код|*.yaml;*.yml;*.json;*.conf;*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|"
+                + "Файлы подписок|*.yaml;*.yml;*.json;*.txt|"
+                + "Ключи и QR-коды|*.conf;*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.webp|"
+                + "Все файлы|*.*",
         };
 
         if (dialog.ShowDialog(this) == true)
@@ -155,11 +159,10 @@ public partial class SubscriptionAddWindow : Window
                 return;
             }
 
-            // Ключ или файл .conf — это килобайты. Больше — не тот файл,
-            // и читать его целиком в память незачем.
-            if (new FileInfo(path).Length > 1_000_000)
+            // Файл подписки или ключ — килобайты, редко до нескольких мегабайт.
+            if (new FileInfo(path).Length > LocalSubscriptions.MaxFileBytes)
             {
-                Say("Файл слишком большой для ключа.");
+                Say("Файл слишком большой для подписки или ключа.");
                 return;
             }
 
@@ -169,6 +172,23 @@ public partial class SubscriptionAddWindow : Window
         {
             Say("Файл не читается: " + ex.GetBaseException().Message);
         }
+    }
+
+    /// <summary>Тело локальной подписки из файла или буфера (mihomo YAML, Xray JSON, base64).</summary>
+    private string? _localBody;
+
+    private void SetLocalBody(string? body)
+    {
+        _localBody = body;
+        UrlSection.Visibility = body is null ? Visibility.Visible : Visibility.Collapsed;
+        LocalSection.Visibility = body is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void OnUseUrlInstead(object sender, RoutedEventArgs e)
+    {
+        SetLocalBody(null);
+        Found.Visibility = Visibility.Collapsed;
+        UrlBox.Focus();
     }
 
     /// <summary>
@@ -183,8 +203,33 @@ public partial class SubscriptionAddWindow : Window
     {
         var found = KeyImport.FromText(text, name);
 
+        if (found.SubscriptionBody is { } body)
+        {
+            _lookup?.Cancel();
+            KindBox.SelectedIndex = 0;
+            UrlBox.Password = string.Empty;
+            SetLocalBody(body);
+
+            var current = NameBox.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(name) && (current.Length == 0 || current == _autoName))
+            {
+                _autoName = Unique(name.Trim());
+                NameBox.Text = _autoName;
+            }
+
+            var label = found.SubscriptionFormat is { } fmt ? $"подписка ({fmt})" : "подписка";
+            var count = Count(found.ServerCount, "сервер", "сервера", "серверов");
+            var extra = found.UsableCount < found.ServerCount
+                ? $" (sing-box поддерживает {found.UsableCount})"
+                : string.Empty;
+
+            Show($"{where}: {label}, {count}{extra}. Нажмите «Добавить».");
+            return;
+        }
+
         if (found.Keys.Count > 0)
         {
+            SetLocalBody(null);
             KindBox.SelectedIndex = 1;
             KeysBox.Password = string.Join(" ", found.Keys);
             Show($"{where}: {Count(found.Keys.Count, "ключ", "ключа", "ключей")}. "
@@ -195,11 +240,12 @@ public partial class SubscriptionAddWindow : Window
 
         if (found.SubscriptionUrl is { } url)
         {
+            SetLocalBody(null);
             KindBox.SelectedIndex = 0;
             UrlBox.Password = url;
 
             if (NameBox.Text.Trim().Length == 0 && name is not null)
-                NameBox.Text = name;
+                NameBox.Text = Unique(name.Trim());
 
             Show($"{where}: ссылка подписки. Спрашиваю у панели название…");
             _ = LookupAsync(url);
@@ -305,10 +351,40 @@ public partial class SubscriptionAddWindow : Window
     {
         bool inPool = InPool.IsChecked == true;
 
+        if (!KeysChosen && _localBody is { } localBody)
+        {
+            var localName = NameBox.Text.Trim();
+
+            if (localName.Length > 0 && _taken.Contains(localName, StringComparer.OrdinalIgnoreCase))
+            {
+                Say($"Подписка «{localName}» уже есть. Дайте другое имя.");
+                return;
+            }
+
+            Request = new AddRequest(AddKind.LocalSubscription, localName.Length == 0 ? null : localName, localBody, inPool);
+            DialogResult = true;
+            return;
+        }
+
         // Ключи, вставленные в поле ссылки, — тоже ключи: прежде одно поле
         // принимало и то и другое, и люди так и будут вставлять.
         var input = KeysChosen ? KeysBox.Password : UrlBox.Password;
         var found = KeyImport.FromText(input);
+
+        if (found.SubscriptionBody is { } pastedBody)
+        {
+            var localName = NameBox.Text.Trim();
+
+            if (localName.Length > 0 && _taken.Contains(localName, StringComparer.OrdinalIgnoreCase))
+            {
+                Say($"Подписка «{localName}» уже есть. Дайте другое имя.");
+                return;
+            }
+
+            Request = new AddRequest(AddKind.LocalSubscription, localName.Length == 0 ? null : localName, pastedBody, inPool);
+            DialogResult = true;
+            return;
+        }
 
         if (found.Keys.Count > 0)
         {

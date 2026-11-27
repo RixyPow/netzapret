@@ -73,7 +73,8 @@ public static class SubscriptionPool
         CancellationToken cancellationToken,
         string? reserveDirectory = null,
         IReadOnlyList<string>? keys = null,
-        bool deferPanels = false)
+        bool deferPanels = false,
+        string? localDirectory = null)
     {
         var folder = reserveDirectory ?? DefaultReserveDirectory;
         var raw = new PoolPart[sources.Count];
@@ -82,7 +83,7 @@ public static class SubscriptionPool
             sources.Select((source, index) => (source, index)).ToList(),
             x => x.source.Url,
             async x => raw[x.index] = (deferPanels ? Deferred(x.source, folder, DateTimeOffset.Now) : null)
-                ?? await ReadAsync(x.source, folder, cancellationToken));
+                ?? await ReadAsync(x.source, folder, cancellationToken, localDirectory));
 
         // Отдельные ключи — последним источником: читать их не надо, они уже
         // здесь. Разобрались не все — это видно в папке ключей, пул берёт
@@ -189,6 +190,9 @@ public static class SubscriptionPool
     /// <summary>Подписка из запаса без панели — для запуска; <c>null</c> — запас не годится, читать как обычно.</summary>
     internal static PoolPart? Deferred(PoolSource source, string folder, DateTimeOffset now)
     {
+        if (LocalSubscriptions.IsLocal(source.Url))
+            return null;
+
         if (LoadReserve(folder, source.Url) is not { } kept || kept.Info.Servers.Count == 0)
             return null;
 
@@ -213,14 +217,22 @@ public static class SubscriptionPool
         return Of(before).SetEquals(Of(after));
     }
 
-    /// <summary>Одна подписка: свежий запас без сети, иначе панель, при отказе — запас любой давности.</summary>
+    /// <summary>Одна подписка: локальный файл, свежий запас без сети, иначе панель, при отказе — запас любой давности.</summary>
     /// <param name="force">Идти к панели, даже если запас свежий: ⟳ и «Обновить».</param>
     public static async Task<SubscriptionRead> ReadOneAsync(
         string url,
         bool force,
         CancellationToken cancellationToken,
-        string? reserveDirectory = null)
+        string? reserveDirectory = null,
+        string? localDirectory = null)
     {
+        if (LocalSubscriptions.IsLocal(url))
+        {
+            return LocalSubscriptions.Read(url, localDirectory) is { } local
+                ? new SubscriptionRead(local.Info, local.At, SubscriptionReadSource.Local, null)
+                : new SubscriptionRead(null, null, SubscriptionReadSource.None, "файл подписки не найден");
+        }
+
         var folder = reserveDirectory ?? DefaultReserveDirectory;
 
         if (!force && LoadReserve(folder, url) is { } fresh
@@ -320,17 +332,18 @@ public static class SubscriptionPool
         }
     }
 
-    private static async Task<PoolPart> ReadAsync(PoolSource source, string folder, CancellationToken cancellationToken)
+    private static async Task<PoolPart> ReadAsync(
+        PoolSource source, string folder, CancellationToken cancellationToken, string? localDirectory = null)
     {
-        var read = await ReadOneAsync(source.Url, force: false, cancellationToken, folder);
+        var read = await ReadOneAsync(source.Url, force: false, cancellationToken, folder, localDirectory);
 
         return read.Source switch
         {
-            SubscriptionReadSource.Fresh or SubscriptionReadSource.Panel when read.Info!.Servers.Count > 0
+            SubscriptionReadSource.Fresh or SubscriptionReadSource.Panel or SubscriptionReadSource.Local when read.Info!.Servers.Count > 0
                 => new PoolPart(source, read.Info.Servers, false, null, null, read.Info),
             SubscriptionReadSource.Reserve
                 => new PoolPart(source, read.Info!.Servers, true, read.At, null, null),
-            SubscriptionReadSource.Panel
+            SubscriptionReadSource.Panel or SubscriptionReadSource.Local
                 => new PoolPart(source, [], false, null,
                     read.Info!.Errors.Count > 0 ? "не разобралась: " + read.Info.Errors[0] : "серверов нет", read.Info),
             _ => new PoolPart(source, [], false, null, read.Error, null),
@@ -618,8 +631,11 @@ public static class SubscriptionPool
     /// Для тех, кому нужен только остаток трафика (предупреждение перед замером
     /// скорости, 30.09): ходить ради него к панели незачем.
     /// </remarks>
-    public static (SubscriptionInfo Info, DateTimeOffset At)? Kept(string url, string? reserveDirectory = null) =>
-        LoadReserve(reserveDirectory ?? DefaultReserveDirectory, url);
+    public static (SubscriptionInfo Info, DateTimeOffset At)? Kept(
+        string url, string? reserveDirectory = null, string? localDirectory = null) =>
+        LocalSubscriptions.IsLocal(url)
+            ? LocalSubscriptions.Read(url, localDirectory)
+            : LoadReserve(reserveDirectory ?? DefaultReserveDirectory, url);
 
     /// <summary>
     /// Запас, который вкладке VPN показать, пока спрашивается панель; <c>null</c> —
@@ -636,6 +652,9 @@ public static class SubscriptionPool
     public static (SubscriptionInfo Info, DateTimeOffset At)? KeptWhileAsking(
         string url, bool force, DateTimeOffset now, string? reserveDirectory = null)
     {
+        if (LocalSubscriptions.IsLocal(url))
+            return null;
+
         if (Kept(url, reserveDirectory) is not { } kept || kept.Info.Servers.Count == 0)
             return null;
 
@@ -704,6 +723,9 @@ public enum SubscriptionReadSource
 
     /// <summary>Панель подвела — запас прошлого удачного чтения.</summary>
     Reserve,
+
+    /// <summary>Локальный файл подписки, к панели не ходили.</summary>
+    Local,
 }
 
 /// <summary>Чтение одной подписки.</summary>

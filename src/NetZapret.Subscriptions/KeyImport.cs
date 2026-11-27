@@ -3,12 +3,24 @@ using ZXing.Common;
 
 namespace NetZapret.Subscriptions;
 
-/// <summary>Что нашлось во вставленном: ключи, ссылка подписки или ничего.</summary>
+/// <summary>Что нашлось во вставленном: ключи, ссылка подписки, тело файла подписки или ничего.</summary>
 /// <param name="Keys">Ключи — уже в виде строк для «Отдельных ключей».</param>
 /// <param name="SubscriptionUrl">Ссылка подписки, обёртки клиентов уже развёрнуты.</param>
 /// <param name="Problem">Почему не нашлось ничего — словами для строки состояния, без самой ссылки.</param>
 /// <param name="Note">Оговорка к найденным ключам — например, маскировка AmneziaWG, которой движок не знает.</param>
-public sealed record ImportFound(IReadOnlyList<string> Keys, string? SubscriptionUrl, string? Problem, string? Note = null);
+/// <param name="SubscriptionBody">Готовое тело подписки (mihomo YAML, Xray JSON, base64) — кладётся отдельной локальной подпиской.</param>
+/// <param name="ServerCount">Сколько всего серверов нашлось в <paramref name="SubscriptionBody"/>.</param>
+/// <param name="UsableCount">Сколько серверов из <paramref name="SubscriptionBody"/> поддерживает sing-box.</param>
+/// <param name="SubscriptionFormat">Короткое имя формата для подписи в окне добавления.</param>
+public sealed record ImportFound(
+    IReadOnlyList<string> Keys,
+    string? SubscriptionUrl,
+    string? Problem,
+    string? Note = null,
+    string? SubscriptionBody = null,
+    int ServerCount = 0,
+    int UsableCount = 0,
+    string? SubscriptionFormat = null);
 
 /// <summary>
 /// Ключи и подписки из буфера, файла и QR-кода.
@@ -65,12 +77,22 @@ public static class KeyImport
                 : new([], null, "ключ AmneziaVPN не разбирается: " + (problem ?? "ключа vpn:// не нашлось"));
         }
 
+        var trimmed = text.Trim().TrimStart('\uFEFF').Trim();
+
+        // Готовые файлы подписок (mihomo / Clash Meta YAML, Xray JSON) проверяются до
+        // разбора ключей и ссылок: внутри rules / proxy-groups могут встречаться URL.
+        if (XrayConfigParser.LooksLikeConfig(trimmed))
+            return ParseLocalSubscription(trimmed, "Xray JSON");
+
+        if (MihomoConfigParser.LooksLikeConfig(trimmed))
+            return ParseLocalSubscription(trimmed, "mihomo / Clash Meta");
+
         var keys = KeyRing.Split(text);
 
         if (keys.Count > 0)
             return Found(keys);
 
-        var line = text.Trim();
+        var line = trimmed;
 
         if (SubscriptionClient.IsEncryptedHapp(line))
             return new([], null, SubscriptionClient.EncryptedHappMessage);
@@ -83,7 +105,39 @@ public static class KeyImport
                 return new([], unwrapped.ToString(), null);
         }
 
+        // Base64-подписка файлом или из буфера (без «://» в открытом виде).
+        if (!trimmed.Contains("://", StringComparison.Ordinal))
+        {
+            var (servers, _) = SubscriptionParser.ParseBody(trimmed);
+
+            if (servers.Count > 0)
+            {
+                return new([], null, null,
+                    SubscriptionBody: trimmed,
+                    ServerCount: servers.Count,
+                    UsableCount: servers.Count(s => s.IsUsableOutbound),
+                    SubscriptionFormat: "подписка");
+            }
+        }
+
         return new([], null, "ни ключей, ни ссылки подписки");
+    }
+
+    private static ImportFound ParseLocalSubscription(string body, string format)
+    {
+        var (servers, errors) = SubscriptionParser.ParseBody(body);
+
+        if (servers.Count == 0)
+        {
+            return new([], null,
+                $"файл {format} не разбирается: " + (errors.FirstOrDefault() ?? "серверов нет"));
+        }
+
+        return new([], null, null,
+            SubscriptionBody: body,
+            ServerCount: servers.Count,
+            UsableCount: servers.Count(s => s.IsUsableOutbound),
+            SubscriptionFormat: format);
     }
 
     /// <summary>
